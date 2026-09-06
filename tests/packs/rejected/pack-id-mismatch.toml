@@ -1,14 +1,15 @@
-# expect: E001
+# expect: E010
 #
-# The whole point of the format field: a tool that meets a newer file refuses to
-# read it and says so, instead of guessing and reading it wrongly.
+# A pack is addressed by its file name and cited by the identifier inside it.
+# When the two disagree, a report written two years ago cites a pack that the
+# tool cannot find, and nothing says why.
 
-format = 2
+format = 1
 
 [pack]
-id          = "future-format"
-name        = "Future format"
-description = "Declares a file format version newer than this tool understands."
+id          = "somewhere-else"
+name        = "Pack id mismatch"
+description = "Declares an identifier that is not this file's name."
 version     = "1.0"
 updated     = 2026-09-06
 license     = "CC-BY-4.0"

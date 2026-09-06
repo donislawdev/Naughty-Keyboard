@@ -16,6 +16,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod description;
+pub mod identity;
 pub mod lint;
 pub mod metrics;
 pub mod source_text;
@@ -23,6 +25,8 @@ pub mod text;
 pub mod value;
 pub mod written_form;
 
+pub use description::{BreaksFault, MIN_BREAKS_CODE_POINTS, check_breaks, looks_english};
+pub use identity::{is_pack_id, is_value_id};
 pub use lint::{
     LintProblem, LintReport, LintRule, RULES, RuleCode, RuleCoverage, RuleStatus, Severity,
     rule_for,

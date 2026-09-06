@@ -73,7 +73,15 @@ pub trait PackFormat {
     /// Reports all of them rather than the first, with the single exception of a
     /// file that does not parse - there is nothing to look inside, so that one
     /// problem comes back alone.
-    fn check(&self, text: &str) -> Vec<LintProblem>;
+    ///
+    /// `expected_id` is the identifier the pack was read under, which for every
+    /// implementation of [`PackSource`] that exists is the file name without its
+    /// extension. The format requires a pack to declare that same identifier, so
+    /// the check needs both halves - and only this layer knows the first one,
+    /// while only the implementation below knows where in the file the second one
+    /// is written. Splitting the rule between them would leave the line number
+    /// behind, which is the difference between a report and a shrug.
+    fn check(&self, text: &str, expected_id: &str) -> Vec<LintProblem>;
 }
 
 #[cfg(test)]

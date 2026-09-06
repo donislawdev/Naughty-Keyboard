@@ -1,0 +1,27 @@
+# expect: W032
+#
+# A warning rather than a refusal, and the file is here to prove the difference:
+# every code below begins with W, so this pack loads and carries its warning.
+#
+# What is lost without `expect` is the tester's ability to judge what they see.
+# The value goes in, something happens, and nothing on the screen says whether
+# that something was the bug or the correct behaviour.
+
+format = 1
+
+[pack]
+id          = "missing-expect"
+name        = "Missing expect"
+description = "Holds a value that never says what a correct application would do."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "no-oracle"
+name   = "No oracle"
+value  = "anything"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+since  = "1.0"

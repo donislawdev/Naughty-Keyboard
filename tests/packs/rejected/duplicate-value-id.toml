@@ -1,0 +1,33 @@
+# expect: E011
+#
+# An identifier is assigned once and never reused. Two values sharing one means a
+# citation resolves to two different values, and which one a reader gets depends
+# on how the loader happened to be written.
+
+format = 1
+
+[pack]
+id          = "duplicate-value-id"
+name        = "Duplicate value id"
+description = "Holds two values that claim the same identifier."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "twice"
+name   = "First"
+value  = "first"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "twice"
+name   = "Second"
+value  = "second"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"

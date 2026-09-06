@@ -1,0 +1,26 @@
+# expect: E031
+#
+# The sentence rule, in its first half. Forty characters is not a style
+# preference: it is the shortest text in which somebody has managed to say both
+# what a value breaks and why, and a description that fits in less has usually
+# only named the value again.
+
+format = 1
+
+[pack]
+id          = "breaks-too-short"
+name        = "Breaks too short"
+description = "Holds a value whose description stops before it explains anything."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "half-a-sentence"
+name   = "Half a sentence"
+value  = "anything"
+breaks = "It breaks the export."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"

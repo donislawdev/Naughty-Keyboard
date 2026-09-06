@@ -1,0 +1,35 @@
+# expect: W034
+#
+# A source pack is written in English and translated in a file of its own. This
+# one carries a Polish description, which is the mistake a contributor makes when
+# the values themselves are in their own language and the description follows.
+#
+# The description below is deliberately not English. It is test data, and test
+# data is the one thing in this repository that may be written in any language -
+# the same exemption the file with a byte order mark and the file with
+# two-character line endings already rely on.
+#
+# What the check is: a description carrying not one word from a closed list of
+# English function words. What it misses: German and Dutch, which share several
+# of those words with English, and any description that sprinkles English into
+# another language. It is a warning for exactly that reason.
+
+format = 1
+
+[pack]
+id          = "breaks-not-english"
+name        = "Breaks not English"
+description = "Holds a value described in a language the source format does not use."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "opisany-po-polsku"
+name   = "Described in Polish"
+value  = "no"
+breaks = "Parsery czytają niecytowane no jako wartość logiczną fałsz, przez co lista krajów zamienia Norwegię w wartość false."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"

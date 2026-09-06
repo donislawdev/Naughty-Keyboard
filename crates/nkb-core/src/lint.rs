@@ -204,12 +204,12 @@ pub const RULES: [LintRule; 41] = [
     rule(C::LineEndingNotNewline, Error, Checked),
     rule(C::TabUsedForIndentation, Error, Checked),
     rule(C::PackWithoutValues, Error, Checked),
-    rule(C::PackIdMismatch, Error, NotImplemented),
-    rule(C::DuplicateValueId, Error, NotImplemented),
-    rule(C::ValueIdMalformed, Error, NotImplemented),
+    rule(C::PackIdMismatch, Error, Checked),
+    rule(C::DuplicateValueId, Error, Checked),
+    rule(C::ValueIdMalformed, Error, Checked),
     rule(C::PublishedValueChanged, Error, RequiresPublishedVersion),
     rule(C::ValueIdVanished, Error, RequiresPublishedVersion),
-    rule(C::ReplacedByUnknownId, Error, NotImplemented),
+    rule(C::ReplacedByUnknownId, Error, Checked),
     // Control characters, format characters, whitespace other than a plain space
     // and a space at either edge are checked. The look-alike half needs a
     // published set of confusable characters pinned to a Unicode version, and
@@ -230,11 +230,11 @@ pub const RULES: [LintRule; 41] = [
     rule(C::FieldOutsideVocabulary, Error, Checked),
     rule(C::EscapeOutsideCommonSubset, Error, Checked),
     rule(C::LiteralValueVeryLong, Warning, Checked),
-    rule(C::MissingBreaks, Error, NotImplemented),
-    rule(C::BreaksTooShortOrEchoesName, Error, NotImplemented),
-    rule(C::MissingExpect, Warning, NotImplemented),
-    rule(C::ValueWithoutSourceInSourcedPack, Warning, NotImplemented),
-    rule(C::BreaksProbablyNotEnglish, Warning, NotImplemented),
+    rule(C::MissingBreaks, Error, Checked),
+    rule(C::BreaksTooShortOrEchoesName, Error, Checked),
+    rule(C::MissingExpect, Warning, Checked),
+    rule(C::ValueWithoutSourceInSourcedPack, Warning, Checked),
+    rule(C::BreaksProbablyNotEnglish, Warning, Checked),
     rule(C::PairEndpointUnknown, Error, NotImplemented),
     rule(C::UnknownRelation, Error, NotImplemented),
     rule(C::PairEndpointsIdentical, Error, NotImplemented),
@@ -485,7 +485,7 @@ mod tests {
             coverage.checked + coverage.partly + coverage.unchecked(),
             coverage.total
         );
-        assert_eq!(coverage.checked, 16);
+        assert_eq!(coverage.checked, 25);
         assert_eq!(coverage.partly, 1);
     }
 

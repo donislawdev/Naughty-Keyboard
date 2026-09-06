@@ -21,11 +21,14 @@
 //! of the file that a span points at - which was measured to be faithful.
 
 use nkb_app::PackFormat;
+use nkb_core::description::{self, BreaksFault};
+use nkb_core::identity::{is_pack_id, is_value_id};
 use nkb_core::lint::{LintProblem, RuleCode};
 use nkb_core::source_text::line_of;
 use nkb_core::text::LiteralText;
 use nkb_core::value::ValueBody;
 use nkb_core::written_form;
+use std::collections::HashSet;
 use toml_edit::{Document, Item, Table};
 
 /// The file format version this build understands.
@@ -65,8 +68,7 @@ const REQUIRED_PACK_FIELDS: [&str; 8] = [
 /// Fields every value must declare, whatever its type.
 ///
 /// `breaks` is deliberately absent from this list: the format gives it a rule of
-/// its own, which is registered and not yet written. Reporting it here as well
-/// would give one mistake two codes.
+/// its own, E030, and reporting it here as well would give one mistake two codes.
 const REQUIRED_VALUE_FIELDS: [&str; 3] = ["id", "name", "since"];
 
 /// The kinds of value this build understands.
@@ -114,7 +116,7 @@ const FIELD_VOCABULARY: [&str; 22] = [
 /// it. The single exception is a file that does not parse: there is nothing to
 /// look inside, so that one problem is returned alone.
 #[must_use]
-pub fn check(text: &str) -> Vec<LintProblem> {
+pub fn check(text: &str, expected_id: &str) -> Vec<LintProblem> {
     let document: Document<String> = match text.parse() {
         Ok(document) => document,
         Err(error) => {
@@ -141,7 +143,8 @@ pub fn check(text: &str) -> Vec<LintProblem> {
     }
 
     problems.extend(check_pack_table(text, root));
-    problems.extend(check_values(text, root));
+    problems.extend(check_pack_id(text, root, expected_id));
+    problems.extend(check_values(text, root, &pack_context(root)));
     problems
 }
 
@@ -203,13 +206,124 @@ fn check_pack_table(text: &str, root: &Table) -> Vec<LintProblem> {
         .collect()
 }
 
+/// What the pack table says that its values are judged against.
+///
+/// Gathered once rather than per value: these are properties of the file, and
+/// reading them thirty four times invites two readings of one file to disagree.
+struct PackContext<'a> {
+    /// Whether `[pack]` names where its values came from. Only a pack that does
+    /// can raise W033 at all.
+    declares_source: bool,
+    /// The language the descriptions in this file claim to be written in.
+    language: Option<&'a str>,
+}
+
+fn pack_context(root: &Table) -> PackContext<'_> {
+    let pack = root.get("pack").and_then(Item::as_table_like);
+    PackContext {
+        declares_source: pack.is_some_and(|pack| pack.contains_key("source")),
+        language: pack
+            .and_then(|pack| pack.get("language"))
+            .and_then(Item::as_str),
+    }
+}
+
+/// E010: the pack identifier, against its own pattern and against the file name.
+///
+/// Silent when there is no `[pack]` table and when it declares no `id`. Both are
+/// already E003's finding, and one mistake wearing two codes sends a contributor
+/// hunting for a second problem that is not there.
+fn check_pack_id(text: &str, root: &Table, expected_id: &str) -> Vec<LintProblem> {
+    let Some(item) = root
+        .get("pack")
+        .and_then(Item::as_table_like)
+        .and_then(|pack| pack.get("id"))
+    else {
+        return Vec::new();
+    };
+    let Some(declared) = item.as_str() else {
+        return Vec::new();
+    };
+
+    // One problem for both halves of the rule. An identifier outside the alphabet
+    // cannot match a file name either, so reporting them separately would put the
+    // same repair on the screen twice. Which half failed is decided again where
+    // the sentence is written, by the same function that decided it here.
+    if is_pack_id(declared) && declared == expected_id {
+        return Vec::new();
+    }
+    vec![
+        LintProblem::new(RuleCode::PackIdMismatch)
+            .at(span_line(text, item))
+            .about(declared),
+    ]
+}
+
+/// E030, E031, W032, W033 and W034: the half of a value that explains it.
+///
+/// 🔴 E031 is the sentence rule from `product-spec.md`, and it is the reason this
+/// module exists at all. Everywhere else that rule is editorial policy, which is
+/// another way of saying it holds while somebody remembers it.
+fn check_description(
+    table: &Table,
+    pack: &PackContext,
+    values_are_attributed_one_by_one: bool,
+) -> Vec<LintProblem> {
+    let mut problems = Vec::new();
+
+    if table.contains_key("breaks") {
+        // A `breaks` that is present but is not text goes unjudged here. No rule
+        // in the set covers a field of the wrong type, for any field, and
+        // inventing a code for this one would be inventing a rule.
+        if let Some(breaks) = table.get("breaks").and_then(Item::as_str) {
+            let name = table.get("name").and_then(Item::as_str);
+            match description::check_breaks(breaks, name) {
+                Some(BreaksFault::TooShort { code_points }) => problems.push(
+                    LintProblem::new(RuleCode::BreaksTooShortOrEchoesName)
+                        .about(code_points.to_string()),
+                ),
+                Some(BreaksFault::EchoesName) => problems
+                    .push(LintProblem::new(RuleCode::BreaksTooShortOrEchoesName).about("name")),
+                None => {}
+            }
+
+            // A file that declares another language has already said its
+            // descriptions are not English. Warning there would be arguing with
+            // the author about something the author already told us.
+            if pack.language.is_none_or(|language| language == "en")
+                && !description::looks_english(breaks)
+            {
+                problems.push(LintProblem::new(RuleCode::BreaksProbablyNotEnglish).about("breaks"));
+            }
+        }
+    } else {
+        problems.push(LintProblem::new(RuleCode::MissingBreaks).about("breaks"));
+    }
+
+    if !table.contains_key("expect") {
+        problems.push(LintProblem::new(RuleCode::MissingExpect).about("expect"));
+    }
+
+    // W033 asks about attribution that has gone patchy. A pack naming one source
+    // for everything is already attributed, and the format says so: an absent
+    // `source` on a value inherits the pack's. Warning on every value of such a
+    // pack would argue with that default. Warning is worth it once the pack has
+    // started attributing values one by one, because from that point inheritance
+    // credits somebody's work for values that may not have come from them.
+    if pack.declares_source && values_are_attributed_one_by_one && !table.contains_key("source") {
+        problems.push(LintProblem::new(RuleCode::ValueWithoutSourceInSourcedPack).about("source"));
+    }
+
+    problems
+}
+
 /// E008 and E003, value half.
 ///
 /// The format lists five required fields for a value and the rule set names only
 /// one of them. Until that gap is settled the other four are reported under the
 /// rule that already means "a required field is missing", which is recorded as an
 /// observation rather than decided here.
-fn check_values(text: &str, root: &Table) -> Vec<LintProblem> {
+fn check_values(text: &str, root: &Table, pack: &PackContext) -> Vec<LintProblem> {
     let values = root.get("values").and_then(Item::as_array_of_tables);
 
     let Some(values) = values.filter(|values| !values.is_empty()) else {
@@ -218,13 +332,47 @@ fn check_values(text: &str, root: &Table) -> Vec<LintProblem> {
         return vec![LintProblem::new(RuleCode::PackWithoutValues)];
     };
 
+    // Every identifier in the file, gathered before the walk. A retired value may
+    // point at a successor written below it, and a check that only looked
+    // backwards would report a correct file as broken.
+    let known: HashSet<&str> = values
+        .iter()
+        .filter_map(|table| table.get("id").and_then(Item::as_str))
+        .collect();
+
+    // Whether this pack has begun crediting its values one at a time - the
+    // condition W033 turns on. See the reasoning where that rule is applied.
+    let attributed_one_by_one = values.iter().any(|table| table.contains_key("source"));
+
+    let mut seen: HashSet<&str> = HashSet::new();
     let mut problems = Vec::new();
-    for table in values {
+    for (index, table) in values.iter().enumerate() {
         let line = table.span().map_or(1, |span| line_of(text, span.start));
-        let identity = table
-            .get("id")
-            .and_then(Item::as_str)
-            .map_or_else(|| format!("values[{}]", problems.len()), ToOwned::to_owned);
+        let declared_id = table.get("id").and_then(Item::as_str);
+        // A value with no identifier is named by its place in the file. Counting
+        // problems here instead of values, as this once did, produces a number
+        // that looks like a position and is not one.
+        let identity = declared_id.map_or_else(|| format!("values[{index}]"), ToOwned::to_owned);
+
+        let mut identity_problems = Vec::new();
+        if let Some(id) = declared_id {
+            if !seen.insert(id) {
+                identity_problems.push(LintProblem::new(RuleCode::DuplicateValueId).about(id));
+            }
+            if !is_value_id(id) {
+                identity_problems.push(LintProblem::new(RuleCode::ValueIdMalformed).about(id));
+            }
+        }
+
+        // The successor of a retired value is named by a bare identifier from this
+        // same pack. The format defines succession nowhere else, so a reference
+        // carrying a pack name is an unknown identifier here rather than a
+        // reference this build silently declines to follow.
+        if let Some(target) = table.get("replaced_by").and_then(Item::as_str)
+            && !known.contains(target)
+        {
+            identity_problems.push(LintProblem::new(RuleCode::ReplacedByUnknownId).about(target));
+        }
 
         for field in REQUIRED_VALUE_FIELDS {
             if !table.contains_key(field) {
@@ -253,9 +401,11 @@ fn check_values(text: &str, root: &Table) -> Vec<LintProblem> {
             );
         }
 
-        for mut problem in check_body(text, table)
+        for mut problem in identity_problems
             .into_iter()
+            .chain(check_body(text, table))
             .chain(check_fields(table))
+            .chain(check_description(table, pack, attributed_one_by_one))
         {
             problem.line = problem.line.or(Some(line));
             problem.owner = Some(identity.clone());
@@ -385,8 +535,8 @@ fn raw_slice<'a>(text: &'a str, item: &Item) -> &'a str {
 pub struct TomlPackFormat;
 
 impl PackFormat for TomlPackFormat {
-    fn check(&self, text: &str) -> Vec<LintProblem> {
-        check(text)
+    fn check(&self, text: &str, expected_id: &str) -> Vec<LintProblem> {
+        check(text, expected_id)
     }
 }
 
@@ -398,10 +548,16 @@ fn span_line(text: &str, item: &Item) -> u32 {
 #[cfg(test)]
 #[allow(
     clippy::expect_used,
+    clippy::panic,
     reason = "a failed expectation in a test is a failed test"
 )]
 mod tests {
     use super::*;
+
+    /// The name the good file below is read under. Every test here reads a file
+    /// whose pack identifier is this one, so the identity rules stay silent and
+    /// each test breaks the single thing it is about.
+    const PACK_ID: &str = "whitespace";
 
     /// A file that passes every rule this module checks, used as the base for
     /// tests that break exactly one thing.
@@ -422,23 +578,28 @@ mod tests {
         "id = \"trailing-space\"\n",
         "name = \"Trailing space\"\n",
         "value = \"Kowalski\\u0020\"\n",
+        "breaks = \"Sorting puts the record at the top of every list, and an exact match against the trimmed name finds nothing.\"\n",
+        "expect = \"Trimmed on save, or preserved and found by a search for the trimmed name.\"\n",
         "since = \"1.0\"\n",
     );
 
     fn codes(text: &str) -> Vec<&'static str> {
-        check(text).iter().map(|p| p.code.as_str()).collect()
+        check(text, PACK_ID)
+            .iter()
+            .map(|p| p.code.as_str())
+            .collect()
     }
 
     #[test]
     fn a_complete_file_produces_nothing() {
-        assert!(codes(GOOD).is_empty(), "{:?}", check(GOOD));
+        assert!(codes(GOOD).is_empty(), "{:?}", check(GOOD, PACK_ID));
     }
 
     #[test]
     fn a_file_that_does_not_parse_reports_that_alone_and_says_where() {
         // The one rule that stops the run: there is nothing to look inside.
         let text = "format = 1\n\n[[values]]\nvalue = no\n";
-        let problems = check(text);
+        let problems = check(text, PACK_ID);
         assert_eq!(problems.len(), 1);
         assert_eq!(problems[0].code.as_str(), "E004");
         assert_eq!(problems[0].line, Some(4));
@@ -448,7 +609,7 @@ mod tests {
     #[test]
     fn a_missing_format_key_is_reported_against_the_file_not_a_line() {
         let text = GOOD.replace("format = 1\n", "");
-        let problems = check(&text);
+        let problems = check(&text, PACK_ID);
         let format_problem = problems
             .iter()
             .find(|p| p.code == RuleCode::MissingOrUnsupportedFormat)
@@ -459,7 +620,7 @@ mod tests {
     #[test]
     fn a_newer_format_is_refused_and_the_number_is_kept() {
         let text = GOOD.replace("format = 1", "format = 2");
-        let problems = check(&text);
+        let problems = check(&text, PACK_ID);
         let found = problems
             .iter()
             .find(|p| p.code == RuleCode::MissingOrUnsupportedFormat)
@@ -480,7 +641,7 @@ mod tests {
     #[test]
     fn an_unknown_top_level_key_is_named() {
         let text = GOOD.replace("format = 1\n", "format = 1\npacks = \"typo\"\n");
-        let problems = check(&text);
+        let problems = check(&text, PACK_ID);
         let found = problems
             .iter()
             .find(|p| p.code == RuleCode::UnknownTopLevelKey)
@@ -492,7 +653,7 @@ mod tests {
     #[test]
     fn a_missing_pack_field_names_the_field_and_its_owner() {
         let text = GOOD.replace("license = \"CC-BY-4.0\"\n", "");
-        let problems = check(&text);
+        let problems = check(&text, PACK_ID);
         let found = problems
             .iter()
             .find(|p| p.subject.as_deref() == Some("license"))
@@ -506,7 +667,7 @@ mod tests {
         // Reporting every field of a table that is not there would bury the one
         // fact that matters behind seven repetitions of it.
         let text = "format = 1\n";
-        let missing: Vec<_> = check(text)
+        let missing: Vec<_> = check(text, PACK_ID)
             .into_iter()
             .filter(|p| p.code == RuleCode::MissingRequiredField)
             .collect();
@@ -544,13 +705,13 @@ mod tests {
             "authors = [\"Naughty Keyboard\"]\n",
             "language = \"en\"\n",
         );
-        assert_eq!(codes(text), vec!["E008"], "{:?}", check(text));
+        assert_eq!(codes(text), vec!["E008"], "{:?}", check(text, PACK_ID));
     }
 
     #[test]
     fn a_value_missing_a_required_field_is_reported_against_its_id() {
         let text = GOOD.replace("name = \"Trailing space\"\n", "");
-        let problems = check(&text);
+        let problems = check(&text, PACK_ID);
         let found = problems
             .iter()
             .find(|p| p.owner.as_deref() == Some("trailing-space"))
@@ -562,7 +723,7 @@ mod tests {
     #[test]
     fn a_literal_value_without_the_value_field_is_reported() {
         let text = GOOD.replace("value = \"Kowalski\\u0020\"\n", "");
-        let problems = check(&text);
+        let problems = check(&text, PACK_ID);
         assert!(
             problems
                 .iter()
@@ -577,7 +738,7 @@ mod tests {
         // confused things in validation, which makes the empty string a real test
         // case. A validator written by reflex rejects it.
         let text = GOOD.replace("value = \"Kowalski\\u0020\"", "value = \"\"");
-        assert!(codes(&text).is_empty(), "{:?}", check(&text));
+        assert!(codes(&text).is_empty(), "{:?}", check(&text, PACK_ID));
     }
 
     #[test]
@@ -588,7 +749,7 @@ mod tests {
             "value = \"Kowalski\\u0020\"\n",
             "type = \"repeat\"\nunit = \"a\"\ncount = 100000\n",
         );
-        assert!(codes(&text).is_empty(), "{:?}", check(&text));
+        assert!(codes(&text).is_empty(), "{:?}", check(&text, PACK_ID));
     }
 
     #[test]
@@ -597,7 +758,7 @@ mod tests {
         // missing exactly that field is the case where a naive implementation
         // reports nothing at all.
         let text = GOOD.replace("id = \"trailing-space\"\n", "");
-        let problems = check(&text);
+        let problems = check(&text, PACK_ID);
         assert!(
             problems.iter().any(|p| p.subject.as_deref() == Some("id")),
             "{problems:?}"
@@ -617,7 +778,7 @@ mod tests {
             "[pack]\n",
             "name = \"Unicode i tekst\"\n",
         );
-        assert!(codes(text).is_empty(), "{:?}", check(text));
+        assert!(codes(text).is_empty(), "{:?}", check(text, PACK_ID));
     }
 
     #[test]
@@ -633,7 +794,8 @@ mod tests {
         let mut found = codes(text);
         found.sort_unstable();
         found.dedup();
-        assert_eq!(found, vec!["E001", "E002", "E003"]);
+        // Six rules from four different families, out of one file, in one run.
+        assert_eq!(found, vec!["E001", "E002", "E003", "E010", "E030", "W032"]);
     }
     /// Replaces the value line of GOOD with whatever a test needs.
     fn with_value(replacement: &str) -> String {
@@ -645,7 +807,7 @@ mod tests {
         // To this build a reserved name and a typo are the same thing: a kind it
         // cannot produce.
         let text = with_value("type   = \"random\"\n");
-        let problems = check(&text);
+        let problems = check(&text, PACK_ID);
         let found = problems
             .iter()
             .find(|p| p.code == RuleCode::UnknownValueType)
@@ -660,13 +822,13 @@ mod tests {
         // to it, so every further rule would be guessing about a shape that does
         // not exist. One clear problem beats five speculative ones.
         let text = with_value("type   = \"random\"\nvalue  = \"a\"\ncount  = 0\n");
-        assert_eq!(codes(&text), vec!["E023"], "{:?}", check(&text));
+        assert_eq!(codes(&text), vec!["E023"], "{:?}", check(&text, PACK_ID));
     }
 
     #[test]
     fn a_recipe_missing_half_of_itself_is_out_of_range() {
         let text = with_value("type   = \"repeat\"\nunit   = \"a\"\n");
-        let problems = check(&text);
+        let problems = check(&text, PACK_ID);
         let found = problems
             .iter()
             .find(|p| p.code == RuleCode::RepeatCountOutOfRange)
@@ -679,10 +841,18 @@ mod tests {
         // A conversion turning this into a large positive number is the exact
         // class of quiet wrap this catalogue exists to find in other software.
         let text = with_value("type   = \"repeat\"\nunit   = \"a\"\ncount  = -5\n");
-        assert!(codes(&text).contains(&"E024"), "{:?}", check(&text));
+        assert!(
+            codes(&text).contains(&"E024"),
+            "{:?}",
+            check(&text, PACK_ID)
+        );
 
         let huge = with_value("type   = \"repeat\"\nunit   = \"a\"\ncount  = 5000000000\n");
-        assert!(codes(&huge).contains(&"E024"), "{:?}", check(&huge));
+        assert!(
+            codes(&huge).contains(&"E024"),
+            "{:?}",
+            check(&huge, PACK_ID)
+        );
     }
 
     #[test]
@@ -694,7 +864,11 @@ mod tests {
     #[test]
     fn a_recipe_that_also_carries_text_has_two_answers_to_one_question() {
         let text = with_value("type   = \"repeat\"\nunit   = \"a\"\ncount  = 5\nvalue  = \"b\"\n");
-        assert!(codes(&text).contains(&"E025"), "{:?}", check(&text));
+        assert!(
+            codes(&text).contains(&"E025"),
+            "{:?}",
+            check(&text, PACK_ID)
+        );
     }
 
     #[test]
@@ -706,7 +880,11 @@ mod tests {
         let text = with_value(&format!(
             "type   = \"repeat\"\nunit   = \"{unit}\"\ncount  = 1000000\n"
         ));
-        assert!(codes(&text).contains(&"E026"), "{:?}", check(&text));
+        assert!(
+            codes(&text).contains(&"E026"),
+            "{:?}",
+            check(&text, PACK_ID)
+        );
     }
 
     #[test]
@@ -714,7 +892,7 @@ mod tests {
         // `len-100000`, ten times below the ceiling. If this ever fails, a size
         // rule broke the catalogue it was written to protect.
         let text = with_value("type   = \"repeat\"\nunit   = \"a\"\ncount  = 100000\n");
-        assert!(codes(&text).is_empty(), "{:?}", check(&text));
+        assert!(codes(&text).is_empty(), "{:?}", check(&text, PACK_ID));
     }
 
     #[test]
@@ -723,7 +901,7 @@ mod tests {
             "since = \"1.0\"\n",
             "fields = [\"e-mail\"]\nsince = \"1.0\"\n",
         );
-        let problems = check(&text);
+        let problems = check(&text, PACK_ID);
         let found = problems
             .iter()
             .find(|p| p.code == RuleCode::FieldOutsideVocabulary)
@@ -737,7 +915,7 @@ mod tests {
             "since = \"1.0\"\n",
             "fields = [\"email\", \"any\"]\nsince = \"1.0\"\n",
         );
-        assert!(codes(&text).is_empty(), "{:?}", check(&text));
+        assert!(codes(&text).is_empty(), "{:?}", check(&text, PACK_ID));
     }
 
     #[test]
@@ -751,7 +929,7 @@ mod tests {
         // rather than the sequence the rule is about - which is how this very
         // test passed for the wrong reason once already.
         let text = with_value("value  = \"A\\x41\"\n");
-        let problems = check(&text);
+        let problems = check(&text, PACK_ID);
         let found = problems
             .iter()
             .find(|p| p.code == RuleCode::EscapeOutsideCommonSubset)
@@ -763,7 +941,7 @@ mod tests {
     #[test]
     fn an_invisible_character_written_out_is_caught_and_attributed_to_its_value() {
         let text = with_value("value  = \"ab\u{200B}cd\"\n");
-        let problems = check(&text);
+        let problems = check(&text, PACK_ID);
         let found = problems
             .iter()
             .find(|p| p.code == RuleCode::UnescapedCharacter)
@@ -776,7 +954,11 @@ mod tests {
     #[test]
     fn the_same_character_inside_single_quotes_is_e022_instead() {
         let text = with_value("value  = 'ab\u{200B}cd'\n");
-        assert!(codes(&text).contains(&"E022"), "{:?}", check(&text));
+        assert!(
+            codes(&text).contains(&"E022"),
+            "{:?}",
+            check(&text, PACK_ID)
+        );
         assert!(!codes(&text).contains(&"E020"), "one fault, one code");
     }
 
@@ -784,7 +966,7 @@ mod tests {
     fn a_long_written_out_value_is_a_warning_and_does_not_block_the_pack() {
         let long = "a".repeat(2001);
         let text = with_value(&format!("value  = \"{long}\"\n"));
-        assert_eq!(codes(&text), vec!["W026"], "{:?}", check(&text));
+        assert_eq!(codes(&text), vec!["W026"], "{:?}", check(&text, PACK_ID));
     }
 
     #[test]
@@ -793,7 +975,11 @@ mod tests {
         // Checking only the `value` field would leave every generated value
         // unspelled.
         let text = with_value("type   = \"repeat\"\nunit   = \"\u{200B}\"\ncount  = 5\n");
-        assert!(codes(&text).contains(&"E020"), "{:?}", check(&text));
+        assert!(
+            codes(&text).contains(&"E020"),
+            "{:?}",
+            check(&text, PACK_ID)
+        );
     }
 
     #[test]
@@ -801,6 +987,161 @@ mod tests {
         // `len-100000-spaces` repeats an escaped plain space. Written this way it
         // is correct, and a rule that could not tell would break the catalogue.
         let text = with_value("type   = \"repeat\"\nunit   = \"\\u0020\"\ncount  = 100000\n");
-        assert!(codes(&text).is_empty(), "{:?}", check(&text));
+        assert!(codes(&text).is_empty(), "{:?}", check(&text, PACK_ID));
+    }
+
+    /// Fragments of a pack file, kept here so that each test below reads as
+    /// the one thing it changes rather than as a wall of quoting.
+    const QID: &str = "id = \"";
+    const QQ: &str = "\"";
+    const QLANG: &str = "language = \"";
+    const NL: &str = "\n";
+    const SINCE: &str = "since = \"1.0\"\n";
+    const LANG_LINE: &str = "language = \"en\"\n";
+    const BREAKS_LINE: &str = "breaks = \"Sorting puts the record at the top of every list, and an exact match against the trimmed name finds nothing.\"\n";
+    const SHORT_BREAKS: &str = "breaks = \"It breaks the export.\"\n";
+    const POLISH_BREAKS: &str = "breaks = \"Parsery czytaja niecytowane no jako wartosc logiczna falsz, przez co lista krajow zamienia Norwegie.\"\n";
+    const NUMERIC_BREAKS: &str = "breaks = 42\n";
+    const PACK_SOURCE: &str = "source = \"https://example.invalid/collection\"\n";
+    const REPLACED_BY_LATER: &str = "replaced_by = \"successor\"\n";
+    const REPLACED_BY_OTHER_PACK: &str = "replaced_by = \"other-pack/successor\"\n";
+    const SECOND_VALUE: &str = "\n[[values]]\nid = \"trailing-space\"\nname = \"Again\"\nvalue = \"again\"\nbreaks = \"Nothing on its own - this value only exists so the file is otherwise complete.\"\nexpect = \"Nothing at all.\"\nsince = \"1.0\"\n";
+    const SECOND_VALUE_WITH_SOURCE: &str = "\n[[values]]\nid = \"credited\"\nname = \"Credited\"\nvalue = \"credited\"\nbreaks = \"Nothing on its own - this value only exists so the file is otherwise complete.\"\nexpect = \"Nothing at all.\"\nsince = \"1.0\"\nsource = \"https://example.invalid/other\"\n";
+    const LATER_VALUE: &str = "\n[[values]]\nid = \"successor\"\nname = \"Successor\"\nvalue = \"successor\"\nbreaks = \"Nothing on its own - this value only exists so the file is otherwise complete.\"\nexpect = \"Nothing at all.\"\nsince = \"1.0\"\n";
+
+    /// The one problem of a given code, or a failure naming what was found.
+    fn one_of(text: &str, code: RuleCode) -> LintProblem {
+        let problems = check(text, PACK_ID);
+        problems
+            .into_iter()
+            .find(|problem| problem.code == code)
+            .unwrap_or_else(|| {
+                panic!(
+                    "{} must be reported, found {:?}",
+                    code.as_str(),
+                    check(text, PACK_ID)
+                )
+            })
+    }
+
+    #[test]
+    fn a_pack_identifier_that_is_not_the_file_name_is_reported_where_it_stands() {
+        let text = GOOD.replace(
+            &format!("{QID}whitespace{QQ}"),
+            &format!("{QID}elsewhere{QQ}"),
+        );
+        let found = one_of(&text, RuleCode::PackIdMismatch);
+        assert_eq!(found.subject.as_deref(), Some("elsewhere"));
+        assert_eq!(found.line, Some(4), "the line of the id, not of the table");
+    }
+
+    #[test]
+    fn a_pack_identifier_outside_the_alphabet_is_one_problem_and_not_two() {
+        // It fails the pattern and fails to match the file name at once. Two
+        // lines would send a contributor looking for a second mistake.
+        let text = GOOD.replace(
+            &format!("{QID}whitespace{QQ}"),
+            &format!("{QID}Whitespace{QQ}"),
+        );
+        assert_eq!(codes(&text), vec!["E010"], "{:?}", check(&text, PACK_ID));
+    }
+
+    #[test]
+    fn a_pack_with_no_identifier_is_reported_once_by_the_rule_about_missing_fields() {
+        // E003 already says the field is absent. E010 saying it again would give
+        // one mistake two codes and two different repairs.
+        let text = GOOD.replace(&format!("{QID}whitespace{QQ}{NL}"), "");
+        assert_eq!(codes(&text), vec!["E003"], "{:?}", check(&text, PACK_ID));
+    }
+
+    #[test]
+    fn the_second_value_to_take_an_identifier_is_the_one_reported() {
+        // The first use is not the mistake. Reporting it would send the reader to
+        // rename the value that was there first.
+        let text = GOOD.to_owned() + SECOND_VALUE;
+        let found = one_of(&text, RuleCode::DuplicateValueId);
+        assert_eq!(found.subject.as_deref(), Some("trailing-space"));
+        assert!(found.line.is_some_and(|line| line > 15), "{found:?}");
+    }
+
+    #[test]
+    fn a_successor_declared_further_down_the_file_resolves() {
+        // The reason the identifiers are gathered before the walk. A check that
+        // only looked backwards would report a correct file as broken.
+        let text = GOOD.replace(SINCE, &format!("{SINCE}{REPLACED_BY_LATER}")) + LATER_VALUE;
+        assert!(
+            !codes(&text).contains(&"E015"),
+            "{:?}",
+            check(&text, PACK_ID)
+        );
+    }
+
+    #[test]
+    fn a_successor_named_with_another_pack_is_an_unknown_identifier_here() {
+        // The format defines succession within a pack and nowhere else. Letting
+        // this form through would make the rule unenforceable in silence, which
+        // is the failure this tool exists to find in other people's software.
+        let text = GOOD.replace(SINCE, &format!("{SINCE}{REPLACED_BY_OTHER_PACK}"));
+        let found = one_of(&text, RuleCode::ReplacedByUnknownId);
+        assert_eq!(found.subject.as_deref(), Some("other-pack/successor"));
+    }
+
+    #[test]
+    fn a_description_too_short_names_the_value_and_the_length_it_found() {
+        let text = GOOD.replace(BREAKS_LINE, SHORT_BREAKS);
+        let found = one_of(&text, RuleCode::BreaksTooShortOrEchoesName);
+        assert_eq!(found.owner.as_deref(), Some("trailing-space"));
+        assert_eq!(found.subject.as_deref(), Some("21"));
+    }
+
+    #[test]
+    fn a_description_is_only_judged_for_english_where_the_pack_claims_english() {
+        // A file declaring another language has already said its descriptions are
+        // not English. Warning there argues with the author about something the
+        // author already told us.
+        let text = GOOD.replace(BREAKS_LINE, POLISH_BREAKS);
+        assert!(
+            codes(&text).contains(&"W034"),
+            "{:?}",
+            check(&text, PACK_ID)
+        );
+
+        let declared = text.replace(&format!("{QLANG}en{QQ}"), &format!("{QLANG}pl{QQ}"));
+        assert!(
+            !codes(&declared).contains(&"W034"),
+            "{:?}",
+            check(&declared, PACK_ID)
+        );
+    }
+
+    #[test]
+    fn a_pack_naming_one_source_for_everything_is_not_warned_about() {
+        // The format says an absent `source` on a value inherits the pack's.
+        // Warning on every value of such a pack would argue with that default.
+        let text = GOOD.replace(LANG_LINE, &format!("{LANG_LINE}{PACK_SOURCE}"));
+        assert!(
+            !codes(&text).contains(&"W033"),
+            "{:?}",
+            check(&text, PACK_ID)
+        );
+
+        // Once one value is credited on its own, inheritance starts crediting
+        // somebody for work that may not be theirs, and the warning earns itself.
+        let patchy = text.clone() + SECOND_VALUE_WITH_SOURCE;
+        assert!(
+            codes(&patchy).contains(&"W033"),
+            "{:?}",
+            check(&patchy, PACK_ID)
+        );
+    }
+
+    #[test]
+    fn a_description_that_is_not_text_goes_unjudged_and_that_is_a_gap() {
+        // Recorded rather than desired. No rule in the set covers a field of the
+        // wrong type, for any field, and inventing a code for this one would be
+        // inventing a rule. The register is where that question lives.
+        let text = GOOD.replace(BREAKS_LINE, NUMERIC_BREAKS);
+        let reported = codes(&text);
+        assert!(reported.is_empty(), "{reported:?}");
     }
 }

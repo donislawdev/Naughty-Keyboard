@@ -1,0 +1,39 @@
+# expect: W033
+#
+# Attribution that has gone patchy. The pack names one source, and one of its
+# values names a different one - so the value that names nothing inherits the
+# pack's, and credits somebody with work that is not theirs.
+#
+# A pack naming a single source for everything is not warned about: the format
+# says an absent `source` inherits the pack's, and warning on every value there
+# would argue with the format's own default.
+
+format = 1
+
+[pack]
+id          = "value-without-source"
+name        = "Value without source"
+description = "Credits one source for the pack and another for one value."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+source      = "https://example.invalid/first-collection"
+
+[[values]]
+id     = "credited"
+name   = "Credited"
+value  = "credited"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+source = "https://example.invalid/second-collection"
+
+[[values]]
+id     = "uncredited"
+name   = "Uncredited"
+value  = "uncredited"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"

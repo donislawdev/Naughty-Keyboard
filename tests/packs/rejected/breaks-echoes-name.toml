@@ -1,0 +1,26 @@
+# expect: E031
+#
+# The sentence rule, in its second half - the one length alone cannot catch. A
+# name long enough to clear forty characters, copied into the field that was
+# supposed to explain it, leaves the reader with the label twice and the
+# explanation never.
+
+format = 1
+
+[pack]
+id          = "breaks-echoes-name"
+name        = "Breaks echoes name"
+description = "Holds a value whose description is its own name again."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "said-twice"
+name   = "A byte order mark in the middle of a value"
+value  = "anything"
+breaks = "A byte order mark in the middle of a value."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"

@@ -1,0 +1,24 @@
+# expect: E030
+#
+# The field the catalogue exists for. A value that arrives without it is a string
+# somebody found interesting, and the difference between this project and a list
+# of strings is exactly this sentence.
+
+format = 1
+
+[pack]
+id          = "missing-breaks"
+name        = "Missing breaks"
+description = "Holds a value that says nothing about what it breaks."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "undescribed"
+name   = "Undescribed"
+value  = "anything"
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"

@@ -55,7 +55,7 @@ pub fn lint_pack(source: &dyn PackSource, format: &dyn PackFormat, id: &str) -> 
     // measured accepts without a word, so nothing downstream would ever raise
     // them on our behalf.
     report.extend(source_text::check(&text));
-    report.extend(format.check(&text));
+    report.extend(format.check(&text, id));
 
     report.sort();
     LintOutcome::Judged(report)
@@ -101,7 +101,7 @@ mod tests {
     struct Says(Vec<RuleCode>);
 
     impl PackFormat for Says {
-        fn check(&self, _text: &str) -> Vec<LintProblem> {
+        fn check(&self, _text: &str, _expected_id: &str) -> Vec<LintProblem> {
             self.0
                 .iter()
                 .map(|code| LintProblem::new(*code).at(5))

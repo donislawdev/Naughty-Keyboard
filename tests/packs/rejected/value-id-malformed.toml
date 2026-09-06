@@ -1,0 +1,25 @@
+# expect: E012
+#
+# Identifiers travel into report blocks, session files and other people's issue
+# trackers. Keeping them to one alphabet is what makes a citation survive being
+# copied through all three.
+
+format = 1
+
+[pack]
+id          = "value-id-malformed"
+name        = "Value id malformed"
+description = "Holds a value whose identifier is outside the format's alphabet."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "Zero_Width"
+name   = "Zero width"
+value  = "anything"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"

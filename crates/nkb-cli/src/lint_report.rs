@@ -17,6 +17,8 @@
 //! how to jump to. Getting that right costs nothing and saves a contributor from
 //! searching a file by eye.
 
+use nkb_core::description::MIN_BREAKS_CODE_POINTS;
+use nkb_core::identity::is_pack_id;
 use nkb_core::lint::{
     LintProblem, LintReport, RULES, RuleCode, RuleCoverage, RuleStatus, Severity,
 };
@@ -183,6 +185,42 @@ pub fn sentence(problem: &LintProblem) -> String {
         ),
         RuleCode::LiteralValueVeryLong => format!(
             "value `{owner}` writes out {subject} characters. Consider `type = \"repeat\"` - a recipe stays reviewable where a wall of text does not."
+        ),
+        // E010 carries one code for two faults, and they send the reader to do
+        // different things. Which one it is comes from the same function that
+        // decided it in the adapter, so the two cannot drift apart.
+        RuleCode::PackIdMismatch if !is_pack_id(subject) => format!(
+            "the pack declares id `{subject}`, which is not the shape of a pack identifier. Use lower case letters, digits and hyphens, two to forty characters, starting with a letter."
+        ),
+        RuleCode::PackIdMismatch => format!(
+            "the pack declares id `{subject}`, which is not this file's name. A pack is addressed by its file name, so rename one of the two to match the other."
+        ),
+        RuleCode::DuplicateValueId => format!(
+            "value `{owner}` takes an id a value above it already uses. Ids are unique within a pack and are never reused, or a report citing `{subject}` resolves to two different values."
+        ),
+        RuleCode::ValueIdMalformed => format!(
+            "value `{owner}` has an id outside the format's alphabet. Use lower case letters, digits and hyphens, up to forty eight characters, starting with a letter or a digit."
+        ),
+        RuleCode::ReplacedByUnknownId => format!(
+            "value `{owner}` names `{subject}` as its successor and no value in this pack has that id. A retired value is still cited by reports written years ago, so its successor has to resolve."
+        ),
+        RuleCode::MissingBreaks => format!(
+            "value `{owner}` declares no `breaks`. It is the field this catalogue exists for: say what this value usually breaks and why, or the value is a curiosity rather than a test case."
+        ),
+        RuleCode::BreaksTooShortOrEchoesName if subject == "name" => format!(
+            "value `{owner}` has a `breaks` that only says its name again. The name is already on the screen beside it, so this value arrives with no explanation at all."
+        ),
+        RuleCode::BreaksTooShortOrEchoesName => format!(
+            "value `{owner}` has a `breaks` of {subject} characters, where the format asks for {MIN_BREAKS_CODE_POINTS}. Say what this value usually breaks and why - the sentence is the work this catalogue is made of."
+        ),
+        RuleCode::MissingExpect => format!(
+            "value `{owner}` declares no `expect`. Without it a tester sees what happened and has nothing to compare it against, so a bug and correct behaviour look the same."
+        ),
+        RuleCode::ValueWithoutSourceInSourcedPack => format!(
+            "value `{owner}` names no `source`, in a pack whose other values name theirs. It inherits the pack's, which credits somebody with work that may not be theirs."
+        ),
+        RuleCode::BreaksProbablyNotEnglish => format!(
+            "value `{owner}` has a `breaks` carrying no English word. A source pack is written in English and translated in a file of its own - if this one is English after all, this line is the whole cost."
         ),
         // Every other rule is registered and not yet run, so no problem carrying
         // its code can reach this point. Answering with the code rather than with

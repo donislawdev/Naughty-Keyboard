@@ -1,0 +1,27 @@
+# expect: E015
+#
+# A value is never deleted, only retired with a pointer to what replaced it. A
+# pointer at an identifier nobody declared leaves the reader of a two-year-old
+# report at a dead end, which is the one thing retirement exists to prevent.
+
+format = 1
+
+[pack]
+id          = "replaced-by-unknown"
+name        = "Replaced by unknown"
+description = "Retires a value and points it at a successor that does not exist."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id          = "retired"
+name        = "Retired"
+value       = "anything"
+breaks      = "Nothing on its own - this value only exists so the file is otherwise complete."
+expect      = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since       = "1.0"
+deprecated  = true
+replaced_by = "no-such-successor"

@@ -22,4 +22,5 @@ id     = "zero-width-in-quotes"
 name   = "Test value"
 value  = 'ab​​cd'
 breaks = "Nothing on its own - this value exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
 since  = "1.0"
