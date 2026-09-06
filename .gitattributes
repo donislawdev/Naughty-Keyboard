@@ -1,0 +1,24 @@
+# Line endings. One file, two audiences, and the order below matters:
+# a later rule wins, so the general case comes first and the exceptions after.
+
+# PRODUCT CODE - normalised to LF, in the repository and in the working copy.
+#
+# This project is built on Windows, macOS and Linux, and the same tag has to
+# produce the same bytes on all three. The machine used here has a global
+# core.autocrlf=true, which would otherwise hand each platform a different
+# working copy and make "reproducible build" quietly untrue.
+* text=auto eol=lf
+
+# PROJECT MEMORY - no conversion at all.
+#
+# These documents contain escaped invisible characters and examples where every
+# byte counts. Measured, not assumed: with conversion left on, a fresh clone came
+# back with different bytes in four files.
+#
+# Deliberately narrow. This must never impose "no normalisation" on source code,
+# which is the separate decision made above.
+/CLAUDE.md      -text
+/.gitignore     -text
+/.gitattributes -text
+docs/**         -text
+tools/**        -text
