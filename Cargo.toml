@@ -1,0 +1,47 @@
+# Naughty Keyboard - workspace root.
+#
+# The layer split below is not a convention, it is enforced by the compiler.
+# Each layer is its own package, so reaching upwards is a compile error rather
+# than a style violation. See docs for the architecture that describes why.
+#
+# Dependency direction, and nothing else:
+#
+#   nkb-cli ---.
+#              +--> nkb-adapters --> nkb-app --> nkb-core
+#   nkb-gui ---'                          (later)
+#
+# nkb-core depends on nothing. That is the whole rule in one line.
+
+[workspace]
+resolver = "3"
+members = [
+    "crates/nkb-core",
+    "crates/nkb-app",
+    "crates/nkb-adapters",
+    "crates/nkb-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+repository = "https://github.com/donislawdev/Naughty-Keyboard"
+rust-version = "1.98"
+
+[workspace.dependencies]
+nkb-core = { path = "crates/nkb-core" }
+nkb-app = { path = "crates/nkb-app" }
+nkb-adapters = { path = "crates/nkb-adapters" }
+
+# Pinned deliberately. Versions were checked against the registry on 2026-09-06,
+# not recalled from memory - see the untouchable rule about dependency versions.
+toml_edit = "0.25.13"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+# Denied because a panic in a validator is a crash in someone else's CI.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"

@@ -1,0 +1,22 @@
+[package]
+name = "nkb-cli"
+description = "The nkb command line tool. A full product in its own right, not a windowless GUI."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+# The binary is named `nkb`, not `nkb-cli`. That name is a public contract:
+# it goes into other people's scripts and pipelines.
+[[bin]]
+name = "nkb"
+path = "src/main.rs"
+
+[dependencies]
+nkb-core.workspace = true
+nkb-app.workspace = true
+nkb-adapters.workspace = true
+
+[lints]
+workspace = true

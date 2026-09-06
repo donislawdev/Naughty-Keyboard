@@ -1,0 +1,16 @@
+[package]
+name = "nkb-adapters"
+description = "Adapters: TOML reading and writing, file system layout. Implements the ports declared by nkb-app."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+nkb-core.workspace = true
+nkb-app.workspace = true
+toml_edit.workspace = true
+
+[lints]
+workspace = true

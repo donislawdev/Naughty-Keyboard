@@ -1,0 +1,16 @@
+[package]
+name = "nkb-app"
+description = "Use cases of Naughty Keyboard. Takes ports as parameters and returns results."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+# Depends on the core and on nothing else. Ports are defined here as traits and
+# implemented further out, so this layer never learns where data comes from.
+[dependencies]
+nkb-core.workspace = true
+
+[lints]
+workspace = true
