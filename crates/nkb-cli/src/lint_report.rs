@@ -116,7 +116,7 @@ fn count(n: usize, noun: &str) -> String {
 
 /// The sentence for one problem. Says what happened and what to do next - a
 /// message with only the first half is unfinished.
-fn sentence(problem: &LintProblem) -> String {
+pub fn sentence(problem: &LintProblem) -> String {
     let subject = problem.subject.as_deref().unwrap_or("");
     let owner = problem.owner.as_deref().unwrap_or("");
 

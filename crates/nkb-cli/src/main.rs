@@ -11,6 +11,8 @@
 #![forbid(unsafe_code)]
 
 mod exit;
+mod json;
+mod lint_json;
 mod lint_report;
 
 use exit::ExitCode;
@@ -66,10 +68,12 @@ fn run(args: &[String]) -> ExitCode {
 fn lint(args: &[String]) -> ExitCode {
     let mut path: Option<&str> = None;
     let mut explain = false;
+    let mut json = false;
 
     for arg in args {
         match arg.as_str() {
             "--explain" => explain = true,
+            "--json" => json = true,
             "-h" | "--help" => {
                 print_lint_help();
                 return ExitCode::Ok;
@@ -84,14 +88,26 @@ fn lint(args: &[String]) -> ExitCode {
         }
     }
 
-    if explain {
+    // Explaining the rules is a question about the tool rather than about a file,
+    // so it answers on its own. Asked for machine readable output it answers in
+    // the same document as everything else, with no files in it - a second shape
+    // for this one case would double the work of every consumer.
+    if explain && path.is_none() {
+        if json {
+            print!("{}", lint_json::document(&[], VERSION).render());
+        } else {
+            for line in lint_report::explanation() {
+                println!("{line}");
+            }
+        }
+        return ExitCode::Ok;
+    }
+
+    // In machine readable mode standard output carries the document and nothing
+    // else. One stray line of prose beside it and the consumer's parse fails.
+    if explain && !json {
         for line in lint_report::explanation() {
             println!("{line}");
-        }
-        // Explaining the rules is a question about the tool, not about a file, so
-        // it answers on its own and does not require one.
-        if path.is_none() {
-            return ExitCode::Ok;
         }
         println!();
     }
@@ -99,7 +115,7 @@ fn lint(args: &[String]) -> ExitCode {
     let Some(path) = path else {
         let mut err = std::io::stderr();
         let _ = writeln!(err, "nkb lint: name a pack file to check.");
-        let _ = writeln!(err, "Usage: nkb lint <file.toml> [--explain]");
+        let _ = writeln!(err, "Usage: nkb lint <file.toml> [--json] [--explain]");
         return ExitCode::Usage;
     };
 
@@ -109,7 +125,21 @@ fn lint(args: &[String]) -> ExitCode {
         return ExitCode::Usage;
     };
 
-    match lint_pack(&source, &TomlPackFormat, &id) {
+    let outcome = lint_pack(&source, &TomlPackFormat, &id);
+
+    if json {
+        print!(
+            "{}",
+            lint_json::document(&[(path.to_owned(), outcome.clone())], VERSION).render()
+        );
+        return match &outcome {
+            LintOutcome::Judged(report) if report.accepted() => ExitCode::Ok,
+            LintOutcome::Judged(_) => ExitCode::ValidationFailed,
+            _ => ExitCode::NotFound,
+        };
+    }
+
+    match outcome {
         LintOutcome::Judged(report) => {
             for line in lint_report::lines(&report, path) {
                 println!("{line}");
@@ -167,9 +197,10 @@ fn print_lint_help() {
     println!("nkb lint - check a pack file against the format rules");
     println!();
     println!("Usage:");
-    println!("  nkb lint <file.toml> [--explain]");
+    println!("  nkb lint <file.toml> [--json] [--explain]");
     println!();
     println!("Options:");
+    println!("      --json     Write the verdict as JSON, and nothing else");
     println!("      --explain  List every rule and whether this build checks it");
     println!("  -h, --help     Show this help and exit with 0");
     println!();
@@ -181,6 +212,10 @@ fn print_lint_help() {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::panic,
+    reason = "a failed expectation in a test is a failed test"
+)]
 mod tests {
     use super::*;
 
@@ -266,5 +301,129 @@ mod tests {
     #[test]
     fn asking_lint_for_help_is_a_success() {
         assert_eq!(run(&args(&["lint", "--help"])), ExitCode::Ok);
+    }
+    #[test]
+    fn machine_readable_output_keeps_the_same_exit_codes() {
+        // The codes are the contract continuous integration reads. Asking for a
+        // different output format must not change the verdict it carries.
+        assert_eq!(
+            run(&args(&[
+                "lint",
+                &pack("accepted", "magic-values"),
+                "--json"
+            ])),
+            ExitCode::Ok
+        );
+        assert_eq!(
+            run(&args(&["lint", &pack("rejected", "no-format"), "--json"])),
+            ExitCode::ValidationFailed
+        );
+        assert_eq!(
+            run(&args(&["lint", "no-such-file-anywhere.toml", "--json"])),
+            ExitCode::NotFound
+        );
+    }
+
+    #[test]
+    fn a_warning_only_pack_exits_zero_in_both_output_formats() {
+        // A warning is reported and passed through. If the two formats disagreed
+        // about that, one of them would be lying about what the pack is.
+        let path = pack("rejected", "long-literal-value");
+        assert_eq!(run(&args(&["lint", &path])), ExitCode::Ok);
+        assert_eq!(run(&args(&["lint", &path, "--json"])), ExitCode::Ok);
+    }
+
+    #[test]
+    fn explaining_the_rules_as_json_needs_no_file() {
+        assert_eq!(run(&args(&["lint", "--explain", "--json"])), ExitCode::Ok);
+    }
+    /// Reports raw control characters found **inside** a JSON string.
+    ///
+    /// A writer put together by hand is judged on exactly this. JSON forbids
+    /// unescaped control characters, and every one of them is a value in this
+    /// catalogue - so the output is the place they are most likely to appear and
+    /// least likely to be noticed.
+    fn control_characters_inside_strings(json: &str) -> Vec<u32> {
+        let mut inside = false;
+        let mut escaped = false;
+        let mut found = Vec::new();
+
+        for character in json.chars() {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            match character {
+                '\\' if inside => escaped = true,
+                '\"' => inside = !inside,
+                other if inside && (other as u32) < 0x20 => found.push(other as u32),
+                _ => {}
+            }
+        }
+        found
+    }
+
+    #[test]
+    fn the_verifier_in_the_next_test_can_actually_fail() {
+        // A check nobody has seen fail is indistinguishable from a broken one,
+        // and this one is written here rather than taken from a library.
+        assert!(control_characters_inside_strings("{\"a\": \"plain\"}").is_empty());
+
+        // A raw control character inside a string is the fault being looked for.
+        let raw = format!("{{\"a\": \"x{}y\"}}", '\u{1}');
+        assert_eq!(control_characters_inside_strings(&raw), vec![1]);
+
+        // The same character written as an escape is correct output, and calling
+        // that broken would make the guard worse than useless.
+        assert!(control_characters_inside_strings("{\"a\": \"x\\u0001y\"}").is_empty());
+
+        // A newline between members is structure rather than content.
+        assert!(control_characters_inside_strings("{\n  \"a\": 1\n}").is_empty());
+    }
+
+    #[test]
+    fn every_pack_in_the_test_suite_survives_the_json_writer() {
+        // End to end over the whole suite: a real file, a real parse, a real
+        // document. The suite deliberately holds a pack whose key names carry
+        // every character that breaks a writer put together by hand.
+        let root = format!("{}/../../tests/packs", env!("CARGO_MANIFEST_DIR"));
+        let mut checked = 0;
+
+        for kind in ["accepted", "rejected"] {
+            let dir = std::fs::read_dir(format!("{root}/{kind}"))
+                .unwrap_or_else(|e| panic!("the {kind} set must exist: {e}"));
+
+            for entry in dir.filter_map(Result::ok) {
+                let path = entry.path();
+                if path.extension().is_none_or(|ext| ext != "toml") {
+                    continue;
+                }
+                let Some((source, id)) = DirectoryPackSource::split(&path) else {
+                    continue;
+                };
+
+                let outcome = lint_pack(&source, &TomlPackFormat, &id);
+                let text =
+                    lint_json::document(&[(path.display().to_string(), outcome)], VERSION).render();
+
+                let raw = control_characters_inside_strings(&text);
+                assert!(
+                    raw.is_empty(),
+                    "{} produced raw control characters inside a JSON string: {raw:?}",
+                    path.display()
+                );
+                assert!(
+                    text.ends_with("}\n"),
+                    "{} produced a document that does not close",
+                    path.display()
+                );
+                checked += 1;
+            }
+        }
+
+        assert!(
+            checked >= 19,
+            "the suite should not shrink without somebody noticing: {checked}"
+        );
     }
 }

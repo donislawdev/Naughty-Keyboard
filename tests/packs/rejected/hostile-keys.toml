@@ -1,0 +1,44 @@
+# expect: E002
+#
+# Seven unknown top level keys, each carrying a character that breaks a writer
+# somebody wrote by hand. The rule they trip is incidental - what this file is
+# for is the journey those names take on the way out of `nkb lint --json`,
+# because a key name goes into the report verbatim.
+#
+# A tool whose subject is data that breaks parsers cannot ship a writer that
+# breaks on its own subject matter.
+#
+#   quote\"inside          a quotation mark, which ends the string early
+#   back\\slash            a backslash, which starts an escape that is not there
+#   new\nline              a newline, which JSON forbids raw inside a string
+#   tab\there              a tab, same reason
+#   zero\u200Bwidth        a zero width space, carried rather than cleaned up
+#   sep\u2028line          a line separator, legal in JSON and fatal in JavaScript
+#   ctrl\u0001x            a control character with no short escape of its own
+
+format = 1
+
+"quote\"inside" = 1
+"back\\slash" = 1
+"new\nline" = 1
+"tab\there" = 1
+"zero\u200Bwidth" = 1
+"sep\u2028line" = 1
+"ctrl\u0001x" = 1
+
+[pack]
+id          = "hostile-keys"
+name        = "Hostile keys"
+description = "Top level keys carrying every character that breaks a naive writer."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "placeholder"
+name   = "Placeholder"
+value  = "a"
+breaks = "Nothing on its own - everything this file tests is in its key names."
+since  = "1.0"

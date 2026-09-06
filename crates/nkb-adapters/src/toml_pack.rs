@@ -32,7 +32,7 @@ use toml_edit::{Document, Item, Table};
 ///
 /// A file declaring a newer one is refused rather than read hopefully. That is
 /// the entire purpose of the field, and it costs one line to honour.
-const SUPPORTED_FORMAT: i64 = 1;
+pub const SUPPORTED_FORMAT: i64 = 1;
 
 /// Keys allowed at the top level of any pack file.
 ///
