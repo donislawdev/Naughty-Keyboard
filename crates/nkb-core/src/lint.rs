@@ -255,10 +255,10 @@ pub const RULES: [LintRule; 42] = [
     rule(C::MissingExpect, Warning, Checked),
     rule(C::ValueWithoutSourceInSourcedPack, Warning, Checked),
     rule(C::BreaksProbablyNotEnglish, Warning, Checked),
-    rule(C::PairEndpointUnknown, Error, NotImplemented),
-    rule(C::UnknownRelation, Error, NotImplemented),
-    rule(C::PairEndpointsIdentical, Error, NotImplemented),
-    rule(C::TranslationCarriesValue, Error, NotImplemented),
+    rule(C::PairEndpointUnknown, Error, Checked),
+    rule(C::UnknownRelation, Error, Checked),
+    rule(C::PairEndpointsIdentical, Error, Checked),
+    rule(C::TranslationCarriesValue, Error, Checked),
     rule(C::TranslatesUnknownPack, Error, NotImplemented),
     rule(C::TranslationRefersToMissingId, Warning, NotImplemented),
     rule(C::RedundantShape, Warning, NotImplemented),
@@ -505,7 +505,7 @@ mod tests {
             coverage.checked + coverage.partly + coverage.unchecked(),
             coverage.total
         );
-        assert_eq!(coverage.checked, 26);
+        assert_eq!(coverage.checked, 30);
         assert_eq!(coverage.partly, 1);
     }
 

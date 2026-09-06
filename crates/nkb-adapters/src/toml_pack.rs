@@ -66,6 +66,31 @@ const REQUIRED_PACK_FIELDS: [&str; 8] = [
     "language",
 ];
 
+/// Fields every pair must declare.
+///
+/// A pair names two values that already exist, so `a` and `b` are as necessary
+/// as the identifier: without them there is no pair, only a description of one.
+const REQUIRED_PAIR_FIELDS: [&str; 6] = ["id", "name", "since", "relation", "a", "b"];
+
+/// The three relations the format defines.
+///
+/// Closed for the same reason the field vocabulary is closed: left open, the
+/// palette cannot tell a contributor what a pair will do, and neither can the
+/// contributor.
+const RELATIONS: [&str; 3] = ["look-alike", "range", "identity"];
+
+/// The fields that decide what the tool sends into somebody else's application.
+///
+/// A translation file may carry none of them. That is a safety property rather
+/// than a tidiness rule: a reviewer reading a translation is reading prose, and
+/// nothing in that file can change what a tester inserts somewhere.
+///
+/// Wider than the specification's wording, which names `value` alone. `unit`,
+/// `count` and `type` decide the same thing for a generated value, so a rule
+/// covering only the first would state a safety property and leave three doors
+/// open. Recorded as a widening rather than made quietly - `decision-log.md` D35.
+const INSERTION_FIELDS: [&str; 4] = ["value", "unit", "count", "type"];
+
 /// Fields every value must declare, whatever its type.
 ///
 /// `breaks` is deliberately absent from this list: the format gives it a rule of
@@ -138,8 +163,10 @@ pub fn check(text: &str, expected_id: &str) -> Vec<LintProblem> {
 
     // A translation file has a different shape on purpose: it carries no values
     // and only the prose half of the pack table. Applying the source pack rules
-    // to it would report a correct file as broken.
+    // to it would report a correct file as broken - a partial translation is
+    // normal, and a missing description falls back to English in silence.
     if root.contains_key("translates") {
+        problems.extend(check_translation(text, root));
         return problems;
     }
 
@@ -154,7 +181,13 @@ pub fn check(text: &str, expected_id: &str) -> Vec<LintProblem> {
     problems.extend(check_pack_table(text, root));
     problems.extend(check_pack_kinds(text, root));
     problems.extend(check_pack_id(text, root, expected_id));
-    problems.extend(check_values(text, root, &pack_context(root)));
+    let context = pack_context(root);
+    // One namespace for both, gathered before either walk. A pair is cited the
+    // same way a value is, so an identifier taken by one may not be taken by the
+    // other - and a pair may be written above the values it joins.
+    let mut seen: HashSet<&str> = HashSet::new();
+    problems.extend(check_values(text, root, &context, &mut seen));
+    problems.extend(check_pairs(text, root, &context, &mut seen));
     problems
 }
 
@@ -381,7 +414,12 @@ fn check_description(
 /// one of them. Until that gap is settled the other four are reported under the
 /// rule that already means "a required field is missing", which is recorded as an
 /// observation rather than decided here.
-fn check_values(text: &str, root: &Table, pack: &PackContext) -> Vec<LintProblem> {
+fn check_values<'a>(
+    text: &str,
+    root: &'a Table,
+    pack: &PackContext,
+    seen: &mut HashSet<&'a str>,
+) -> Vec<LintProblem> {
     let values = root.get("values").and_then(Item::as_array_of_tables);
 
     let Some(values) = values.filter(|values| !values.is_empty()) else {
@@ -402,7 +440,6 @@ fn check_values(text: &str, root: &Table, pack: &PackContext) -> Vec<LintProblem
     // condition W033 turns on. See the reasoning where that rule is applied.
     let attributed_one_by_one = values.iter().any(|table| table.contains_key("source"));
 
-    let mut seen: HashSet<&str> = HashSet::new();
     let mut problems = Vec::new();
     for (index, table) in values.iter().enumerate() {
         let line = table.span().map_or(1, |span| line_of(text, span.start));
@@ -559,6 +596,144 @@ fn check_repeat(text: &str, table: &Table) -> Vec<LintProblem> {
         problems.extend(written_form::check(raw_slice(text, item), unit));
     }
     problems
+}
+
+/// E040, E041 and E042, and the rules a pair shares with a value.
+///
+/// A pair is two values that already exist, joined by a relation. It defines no
+/// value of its own, so that each half keeps its own description and can be
+/// cited on its own - which is why the endpoints are checked against the values
+/// this file declares rather than taken on trust.
+fn check_pairs<'a>(
+    text: &str,
+    root: &'a Table,
+    pack: &PackContext,
+    seen: &mut HashSet<&'a str>,
+) -> Vec<LintProblem> {
+    let Some(pairs) = root.get("pairs").and_then(Item::as_array_of_tables) else {
+        // Pairs are optional. A pack without them is the ordinary case.
+        return Vec::new();
+    };
+
+    // The endpoints must name values, not other pairs: a pair joining two pairs
+    // is a shape the format does not define and the palette could not present.
+    let values: HashSet<&str> = root
+        .get("values")
+        .and_then(Item::as_array_of_tables)
+        .into_iter()
+        .flat_map(|values| values.iter())
+        .filter_map(|table| table.get("id").and_then(Item::as_str))
+        .collect();
+
+    let mut problems = Vec::new();
+    for (index, table) in pairs.iter().enumerate() {
+        let line = table.span().map_or(1, |span| line_of(text, span.start));
+        let declared_id = table.get("id").and_then(Item::as_str);
+        let identity = declared_id.map_or_else(|| format!("pairs[{index}]"), ToOwned::to_owned);
+
+        let mut found = check_field_kinds(text, table.iter());
+
+        if let Some(id) = declared_id {
+            if !seen.insert(id) {
+                found.push(LintProblem::new(RuleCode::DuplicateValueId).about(id));
+            }
+            if !is_value_id(id) {
+                found.push(LintProblem::new(RuleCode::ValueIdMalformed).about(id));
+            }
+        }
+
+        for field in REQUIRED_PAIR_FIELDS {
+            if !table.contains_key(field) {
+                found.push(LintProblem::new(RuleCode::MissingRequiredField).about(field));
+            }
+        }
+
+        if let Some(relation) = table.get("relation").and_then(Item::as_str)
+            && !RELATIONS.contains(&relation)
+        {
+            found.push(LintProblem::new(RuleCode::UnknownRelation).about(relation));
+        }
+
+        let a = table.get("a").and_then(Item::as_str);
+        let b = table.get("b").and_then(Item::as_str);
+        if let Some(endpoint) = a
+            && a == b
+        {
+            // Reported before the endpoints are looked up, and the lookup below
+            // then sees one endpoint rather than the same one twice.
+            found.push(LintProblem::new(RuleCode::PairEndpointsIdentical).about(endpoint));
+        }
+
+        for endpoint in [a, b].into_iter().flatten().collect::<HashSet<&str>>() {
+            if !values.contains(endpoint) {
+                found.push(LintProblem::new(RuleCode::PairEndpointUnknown).about(endpoint));
+            }
+        }
+
+        // A pair carries a description for the same reason a value does, and the
+        // sentence rule reaches it for the same reason. W033 does not: crediting
+        // a source belongs to the values a pair joins, not to the joining.
+        found.extend(check_description(table, pack, false));
+
+        for mut problem in found {
+            problem.line = problem.line.or(Some(line));
+            problem.owner = Some(identity.clone());
+            problems.push(problem);
+        }
+    }
+    problems
+}
+
+/// E050, and the field kinds, over a translation file.
+///
+/// Walked by shape rather than by searching the whole document for a key name:
+/// a value whose identifier happens to be `count` would make a blind search
+/// report a rule violation that is not there.
+fn check_translation(text: &str, root: &Table) -> Vec<LintProblem> {
+    let mut problems = Vec::new();
+
+    if let Some(pack) = root.get("pack").and_then(Item::as_table_like) {
+        problems.extend(
+            check_field_kinds(text, pack.iter())
+                .into_iter()
+                .chain(check_insertion_fields(text, pack.iter()))
+                .map(|problem| problem.owned_by("pack")),
+        );
+    }
+
+    let Some(values) = root.get("values").and_then(Item::as_table_like) else {
+        return problems;
+    };
+
+    for (id, item) in values.iter() {
+        let Some(table) = item.as_table_like() else {
+            continue;
+        };
+        for mut problem in check_field_kinds(text, table.iter())
+            .into_iter()
+            .chain(check_insertion_fields(text, table.iter()))
+        {
+            problem.owner = Some(id.to_owned());
+            problems.push(problem);
+        }
+    }
+    problems
+}
+
+/// E050: a field that decides what gets inserted, in a file that may only carry
+/// prose.
+fn check_insertion_fields<'a>(
+    text: &str,
+    fields: impl Iterator<Item = (&'a str, &'a Item)>,
+) -> Vec<LintProblem> {
+    fields
+        .filter(|(key, _)| INSERTION_FIELDS.contains(key))
+        .map(|(key, item)| {
+            LintProblem::new(RuleCode::TranslationCarriesValue)
+                .at(span_line(text, item))
+                .about(key)
+        })
+        .collect()
 }
 
 /// E028: field kinds outside the closed vocabulary.
@@ -1256,5 +1431,100 @@ mod tests {
         let text = GOOD.replace(LANG_LINE, &format!("{LANG_LINE}{TAGS_AS_TEXT}"));
         let found = one_of(&text, RuleCode::FieldOfUnusableType);
         assert_eq!(found.subject.as_deref(), Some("tags"));
+    }
+
+    const A_PAIR: &str = "\n[[pairs]]\nid = \"the-pair\"\nname = \"The pair\"\nrelation = \"look-alike\"\na = \"trailing-space\"\nb = \"trailing-space\"\nbreaks = \"Nothing on its own - this pair only exists so the file is otherwise complete.\"\nexpect = \"Nothing at all.\"\nsince = \"1.0\"\n";
+    const PAIR_TAKING_A_VALUE_ID: &str = "\n[[pairs]]\nid = \"trailing-space\"\nname = \"The pair\"\nrelation = \"look-alike\"\na = \"trailing-space\"\nb = \"trailing-space\"\nbreaks = \"Nothing on its own - this pair only exists so the file is otherwise complete.\"\nexpect = \"Nothing at all.\"\nsince = \"1.0\"\n";
+    const PAIR_WITHOUT_AN_ENDPOINT: &str = "\n[[pairs]]\nid = \"half-a-pair\"\nname = \"Half a pair\"\nrelation = \"look-alike\"\nb = \"trailing-space\"\nbreaks = \"Nothing on its own - this pair only exists so the file is otherwise complete.\"\nexpect = \"Nothing at all.\"\nsince = \"1.0\"\n";
+    const PAIR_WITHOUT_A_DESCRIPTION: &str = "\n[[pairs]]\nid = \"undescribed-pair\"\nname = \"Undescribed pair\"\nrelation = \"look-alike\"\na = \"trailing-space\"\nb = \"trailing-space\"\nexpect = \"Nothing at all.\"\nsince = \"1.0\"\n";
+    const A_TRANSLATION: &str = "format = 1\ntranslates = \"whitespace\"\nlanguage = \"pl\"\n\n[pack]\nname = \"Biale znaki\"\ndescription = \"Znaki, ktore zajmuja miejsce.\"\n\n[values.trailing-space]\nname = \"Spacja na koncu\"\nbreaks = \"Sortowanie stawia rekord na poczatku listy.\"\n";
+    const TRANSLATION_OF_A_VALUE_CALLED_COUNT: &str = "format = 1\ntranslates = \"whitespace\"\nlanguage = \"pl\"\n\n[values.count]\nname = \"Licznik\"\nbreaks = \"Opis wartosci o takim wlasnie identyfikatorze.\"\n";
+
+    #[test]
+    fn a_pair_endpoint_must_name_a_value_and_not_another_pair() {
+        // The endpoints are looked up among the values on purpose. A pair joining
+        // two pairs is a shape the format does not define and the palette could
+        // not present, and taking the identifier on trust would let one in.
+        let text = GOOD.to_owned()
+            + A_PAIR
+            + &A_PAIR
+                .replace("the-pair", "second-pair")
+                .replace("a = \"trailing-space\"", "a = \"the-pair\"");
+        let found = one_of(&text, RuleCode::PairEndpointUnknown);
+        assert_eq!(found.subject.as_deref(), Some("the-pair"));
+        assert_eq!(found.owner.as_deref(), Some("second-pair"));
+    }
+
+    #[test]
+    fn a_pair_may_not_take_an_identifier_a_value_already_uses() {
+        // One namespace for both, because a pair is cited exactly the way a value
+        // is. Two namespaces would give the report block two syntaxes.
+        let text = GOOD.to_owned() + PAIR_TAKING_A_VALUE_ID;
+        let found = one_of(&text, RuleCode::DuplicateValueId);
+        assert_eq!(found.subject.as_deref(), Some("trailing-space"));
+    }
+
+    #[test]
+    fn a_pair_missing_an_endpoint_is_told_that_and_not_that_the_endpoint_is_unknown() {
+        // E040 would say "names something nobody declared" about a field the
+        // author never wrote. Two different repairs, so two different rules.
+        let text = GOOD.to_owned() + PAIR_WITHOUT_AN_ENDPOINT;
+        let reported = codes(&text);
+        assert!(reported.contains(&"E003"), "{reported:?}");
+        assert!(!reported.contains(&"E040"), "{reported:?}");
+    }
+
+    #[test]
+    fn the_sentence_rule_reaches_a_pair_as_well_as_a_value() {
+        // A pair without a sentence is a curiosity for the same reason a value
+        // without one is - and a pair exists only for the sentence that a single
+        // value cannot carry.
+        let text = GOOD.to_owned() + PAIR_WITHOUT_A_DESCRIPTION;
+        let found = one_of(&text, RuleCode::MissingBreaks);
+        assert_eq!(found.owner.as_deref(), Some("undescribed-pair"));
+    }
+
+    #[test]
+    fn a_translation_is_not_judged_by_the_rules_of_a_source_pack() {
+        // It carries no identifier, no licence and no values of its own, and a
+        // partial translation is the normal case rather than a broken file.
+        assert!(
+            codes(A_TRANSLATION).is_empty(),
+            "{:?}",
+            check(A_TRANSLATION, "whitespace.pl")
+        );
+    }
+
+    #[test]
+    fn a_translation_carrying_a_field_that_decides_what_is_inserted_is_refused() {
+        let text = A_TRANSLATION.to_owned() + "value = \"anything\"\n";
+        let found = one_of(&text, RuleCode::TranslationCarriesValue);
+        assert_eq!(found.subject.as_deref(), Some("value"));
+        assert_eq!(found.owner.as_deref(), Some("trailing-space"));
+    }
+
+    #[test]
+    fn a_translation_carrying_only_a_count_is_refused_just_the_same() {
+        // The guard on the widening. The specification names `value` alone, and a
+        // rule covering only that would state a safety property while leaving
+        // `unit`, `count` and `type` able to change what a tester inserts.
+        //
+        // The file in the rejected set cannot prove this on its own: it carries
+        // both fields, so it reports E050 either way and a narrowing would pass
+        // it unnoticed.
+        let text = A_TRANSLATION.to_owned()
+            + "count = 5
+";
+        let found = one_of(&text, RuleCode::TranslationCarriesValue);
+        assert_eq!(found.subject.as_deref(), Some("count"));
+    }
+
+    #[test]
+    fn a_translated_value_whose_identifier_is_a_field_name_is_not_a_false_alarm() {
+        // The trap the structural walk exists to avoid. Searching the document
+        // for a key called `count` would find this value's own identifier and
+        // report a rule violation that is not there - on a file that is correct.
+        let reported = codes(TRANSLATION_OF_A_VALUE_CALLED_COUNT);
+        assert!(reported.is_empty(), "{reported:?}");
     }
 }

@@ -1,0 +1,44 @@
+# expect: E041
+#
+# The relation decides what the palette says about a pair and what a tester is
+# meant to do with it. Left open, a contribution would invent `similar`, another
+# would invent `same-looking`, and the palette would have nothing to say about
+# either.
+
+format = 1
+
+[pack]
+id          = "pair-unknown-relation"
+name        = "Pair unknown relation"
+description = "Declares a relation the format does not define."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "first-half"
+name   = "First half"
+value  = "first"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "second-half"
+name   = "Second half"
+value  = "second"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[pairs]]
+id       = "invented-relation"
+name     = "Invented relation"
+relation = "similar"
+a        = "first-half"
+b        = "second-half"
+breaks   = "Nothing on its own - this pair only exists so the file is otherwise complete."
+expect   = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since    = "1.0"

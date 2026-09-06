@@ -1,0 +1,54 @@
+# The happy path for pairs, which the rejected set cannot show.
+#
+# Two values that render identically and differ in storage, joined by the
+# relation that says so. Both halves carry their own description, because a pair
+# defines no value of its own - that is what lets either half be cited alone in a
+# report written two years from now.
+#
+# 🔴 The Cyrillic letter below is written escaped, and that is not decoration.
+# E020 requires a look-alike of an ASCII character to be escaped, and the
+# look-alike half of that rule is registered and not yet written. Writing this
+# value literally would produce a file that passes today and fails the day the
+# rule grows its second half - in the accepted set, which is the last place a
+# surprise like that should live.
+
+format = 1
+
+[pack]
+id          = "look-alikes"
+name        = "Look-alikes"
+description = "Characters that render identically and differ in storage."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["uniqueness", "deduplication", "search"]
+
+[[values]]
+id     = "latin-small-a"
+name   = "Latin a"
+value  = "pawel"
+breaks = "The control half of a pair - only meaningful next to the Cyrillic spelling below it."
+expect = "Stored as typed."
+fields = ["username", "name"]
+since  = "1.0"
+
+[[values]]
+id     = "cyrillic-small-a"
+name   = "Cyrillic a"
+value  = "p\u0430wel"
+breaks = "A Cyrillic letter identical in shape to the Latin one, so two accounts look the same to every human and differ to every machine."
+expect = "Either both accepted as distinct and shown as distinct, or the second rejected as a duplicate."
+fields = ["username", "name"]
+since  = "1.0"
+
+[[pairs]]
+id       = "latin-vs-cyrillic-a"
+name     = "Latin a against Cyrillic a"
+relation = "look-alike"
+a        = "latin-small-a"
+b        = "cyrillic-small-a"
+breaks   = "Uniqueness checks, deduplication and search treat two visually identical usernames as two different accounts."
+expect   = "Either both accepted as distinct and shown as distinct, or the second rejected as a duplicate."
+since    = "1.0"

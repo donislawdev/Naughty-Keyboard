@@ -54,7 +54,7 @@ use FieldKind::{Date, List, Text, TrueOrFalse, WholeNumber};
 /// `format` is absent on purpose: E001 owns it. A file declaring `format = "1"`
 /// is refused by the rule about the format version, which arrives with the
 /// better message, and two codes for one mistake help nobody.
-const FIELDS: [(&str, FieldKind); 22] = [
+const FIELDS: [(&str, FieldKind); 25] = [
     ("id", Text),
     ("name", Text),
     ("description", Text),
@@ -77,6 +77,9 @@ const FIELDS: [(&str, FieldKind); 22] = [
     ("type", Text),
     ("unit", Text),
     ("count", WholeNumber),
+    ("relation", Text),
+    ("a", Text),
+    ("b", Text),
 ];
 
 /// The kind a field holds, or nothing for a name the format does not define.
@@ -119,6 +122,9 @@ mod tests {
             "type",
             "deprecated",
             "replaced_by",
+            "relation",
+            "a",
+            "b",
         ] {
             assert!(kind_of(field).is_some(), "{field}");
         }

@@ -1,0 +1,35 @@
+# expect: E040
+#
+# A pair joins two values that already exist. It defines none of its own, so that
+# each half keeps its own description and can be cited on its own - and so an
+# endpoint naming an identifier nobody declared is a pair with one leg.
+
+format = 1
+
+[pack]
+id          = "pair-endpoint-unknown"
+name        = "Pair endpoint unknown"
+description = "Joins a value that exists to one that does not."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "latin-small-a"
+name   = "Latin a"
+value  = "pawel"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[pairs]]
+id       = "latin-vs-missing"
+name     = "Latin a against nothing"
+relation = "look-alike"
+a        = "latin-small-a"
+b        = "cyrillic-small-a"
+breaks   = "Nothing on its own - this pair only exists so the file is otherwise complete."
+expect   = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since    = "1.0"

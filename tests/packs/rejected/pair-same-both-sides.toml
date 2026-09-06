@@ -1,0 +1,35 @@
+# expect: E042
+#
+# A pair exists to put two values next to each other. One value twice compares
+# nothing with nothing, and the palette would offer a second half identical to
+# the first - which reads as a tool that lost track of where it was.
+
+format = 1
+
+[pack]
+id          = "pair-same-both-sides"
+name        = "Pair same both sides"
+description = "Names one value on both halves of a pair."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "only-value"
+name   = "Only value"
+value  = "once"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[pairs]]
+id       = "itself-against-itself"
+name     = "Itself against itself"
+relation = "identity"
+a        = "only-value"
+b        = "only-value"
+breaks   = "Nothing on its own - this pair only exists so the file is otherwise complete."
+expect   = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since    = "1.0"

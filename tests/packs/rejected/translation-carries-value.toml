@@ -1,0 +1,27 @@
+# expect: E050
+#
+# The safety property of the whole translation mechanism. A reviewer reading a
+# translation is reading prose, and nothing in that file may change what a tester
+# inserts into somebody else's application.
+#
+# This file breaks it twice on purpose, with two different fields: `value` names
+# the text directly, `count` decides how much of it there is. The rule covers
+# every field that answers "what gets sent", not only the first of them - a
+# safety property with three doors left open is not a safety property.
+
+format     = 1
+translates = "unicode-text"
+language   = "pl"
+
+[pack]
+name        = "Unicode i tekst"
+description = "Znaki, ktore wygladaja niewinnie i psuja liczenie oraz porownywanie."
+
+[values.zero-width-space-x3]
+name   = "Trzy znaki zerowej szerokosci"
+breaks = "Liczniki znakow i deduplikacja widza inna wartosc, niz widzi czlowiek."
+value  = "abc"
+
+[values.len-1000-spaces]
+name  = "Tysiac spacji"
+count = 5

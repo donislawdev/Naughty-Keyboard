@@ -241,6 +241,21 @@ pub fn sentence(problem: &LintProblem) -> String {
         RuleCode::BreaksProbablyNotEnglish => format!(
             "value `{owner}` has a `breaks` carrying no English word. A source pack is written in English and translated in a file of its own - if this one is English after all, this line is the whole cost."
         ),
+        RuleCode::PairEndpointUnknown => format!(
+            "pair `{owner}` names `{subject}` as one of its two halves, and no value in this pack has that id. A pair joins values that already exist, so that each half keeps its own description and can be cited on its own."
+        ),
+        RuleCode::UnknownRelation => format!(
+            "pair `{owner}` declares relation `{subject}`. The format has look-alike, range and identity - a relation nothing recognises is a pair the palette cannot present."
+        ),
+        RuleCode::PairEndpointsIdentical => format!(
+            "pair `{owner}` names `{subject}` on both sides. A pair is two values put next to each other, and one value twice compares nothing with nothing."
+        ),
+        RuleCode::TranslationCarriesValue if owner.is_empty() => format!(
+            "this translation carries `{subject}`, which decides what gets inserted into somebody else's application. A translation may change prose and nothing else - that is a safety property of the format, not a matter of tidiness."
+        ),
+        RuleCode::TranslationCarriesValue => format!(
+            "the translation of `{owner}` carries `{subject}`, which decides what gets inserted into somebody else's application. A translation may change prose and nothing else - that is a safety property of the format, not a matter of tidiness."
+        ),
         // Every other rule is registered and not yet run, so no problem carrying
         // its code can reach this point. Answering with the code rather than with
         // a crash keeps a validator from taking somebody's build down with it.
