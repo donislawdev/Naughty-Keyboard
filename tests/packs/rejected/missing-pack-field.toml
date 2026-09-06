@@ -1,0 +1,22 @@
+# expect: E003
+#
+# The licence of the data is separate from the licence of the code, and a pack
+# without one cannot be redistributed by anybody who receives it.
+
+format = 1
+
+[pack]
+id          = "missing-pack-field"
+name        = "Missing pack field"
+description = "Declares no licence for its data."
+version     = "1.0"
+updated     = 2026-09-06
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "anything"
+name   = "Anything"
+value  = "anything"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+since  = "1.0"

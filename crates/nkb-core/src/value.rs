@@ -102,7 +102,10 @@ impl ValueBody {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, reason = "a failed expectation in a test is a failed test")]
+#[allow(
+    clippy::expect_used,
+    reason = "a failed expectation in a test is a failed test"
+)]
 mod tests {
     use super::*;
 

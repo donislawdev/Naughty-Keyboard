@@ -1,0 +1,24 @@
+# expect: E004
+#
+# The argument against YAML, turned into a test: an unquoted no is not a boolean
+# here, it is a syntax error. The file either parses correctly or not at all, and
+# there is no third possibility for a reviewer to miss.
+
+format = 1
+
+[pack]
+id          = "broken-syntax"
+name        = "Broken syntax"
+description = "Carries an unquoted value that no TOML parser will accept."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "bool-no"
+name   = "no"
+value  = no
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+since  = "1.0"

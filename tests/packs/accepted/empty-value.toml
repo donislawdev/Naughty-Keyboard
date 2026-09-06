@@ -1,0 +1,25 @@
+# An empty string is a legal value, and this file exists to keep it that way.
+#
+# The boundary between "field left blank" and "field filled in" is one of the most
+# frequently confused things in validation, which makes the empty string a real test
+# case rather than a missing one. A validator written by reflex rejects it.
+
+format = 1
+
+[pack]
+id          = "empty-value"
+name        = "Empty value"
+description = "The empty string, which is a test case rather than an absent one."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "empty-string"
+name   = "Empty string"
+value  = ""
+breaks = "Forms that treat an empty string and a missing key as the same thing, so a field cleared on purpose comes back holding its old content."
+expect = "Stored as an empty value and returned as one, distinct from the field never having been filled in."
+since  = "1.0"

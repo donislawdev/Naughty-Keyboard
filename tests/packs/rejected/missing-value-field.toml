@@ -1,0 +1,22 @@
+# expect: E003
+#
+# A value with no name cannot be shown in the palette or named in a report block.
+# The format lists it as required, and until this file existed nothing checked it.
+
+format = 1
+
+[pack]
+id          = "missing-value-field"
+name        = "Missing value field"
+description = "Holds a value that declares no name."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "nameless"
+value  = "anything"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+since  = "1.0"

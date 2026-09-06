@@ -9,6 +9,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod lint_pack;
 pub mod ports;
 
-pub use ports::{PackSource, SourceError};
+pub use lint_pack::{LintOutcome, lint_pack};
+pub use ports::{PackFormat, PackSource, SourceError};

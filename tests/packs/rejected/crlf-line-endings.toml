@@ -1,0 +1,25 @@
+# expect: E006
+#
+# Every line here ends with two characters instead of one. The repository
+# normalises that away for every other tracked file, so this one path carries
+# an exception in .gitattributes - without it the file would be repaired on
+# checkout and would pass while testing nothing.
+
+format = 1
+
+[pack]
+id          = "crlf-line-endings"
+name        = "Two-character line endings"
+description = "Uses the two-character line ending, which is a test value and not a file style."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "anything"
+name   = "Anything"
+value  = "anything"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+since  = "1.0"

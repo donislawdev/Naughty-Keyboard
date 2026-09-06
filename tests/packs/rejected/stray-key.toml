@@ -1,0 +1,25 @@
+# expect: E002
+#
+# An unknown top level key is most often a typo in a known one, and a parser has
+# no reason to complain about it. Silently ignoring it means the field the author
+# meant to set was never set.
+
+format = 1
+packs = "typo for the pack table"
+
+[pack]
+id          = "stray-key"
+name        = "Stray key"
+description = "Carries a top level key that is not part of the format."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "anything"
+name   = "Anything"
+value  = "anything"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+since  = "1.0"

@@ -1,0 +1,23 @@
+# expect: E007
+#
+# A tab is one of the values in the catalogue, so it has no business being the
+# whitespace of a source file. Telling the two apart needs an explicit rule.
+
+format = 1
+
+[pack]
+id          = "tab-indent"
+name        = "Tab indent"
+description = "Uses a tab character to indent a key."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+	id     = "anything"
+	name   = "Anything"
+	value  = "anything"
+	breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+	since  = "1.0"

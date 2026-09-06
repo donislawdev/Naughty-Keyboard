@@ -16,7 +16,10 @@
 /// of a breaking change here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
-#[allow(dead_code, reason = "the published set must be complete from version one")]
+#[allow(
+    dead_code,
+    reason = "the published set must be complete from version one"
+)]
 pub enum ExitCode {
     /// The run did what it promised.
     Ok = 0,

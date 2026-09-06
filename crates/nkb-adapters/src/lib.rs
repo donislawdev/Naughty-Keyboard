@@ -5,3 +5,9 @@
 //! points this way and not the other.
 
 #![forbid(unsafe_code)]
+
+pub mod fs;
+pub mod toml_pack;
+
+pub use fs::DirectoryPackSource;
+pub use toml_pack::TomlPackFormat;

@@ -10,6 +10,7 @@
 //! blind until the version that introduces the input oracle, and leaving the
 //! capability undeclared means it cannot be reached for by accident.
 
+use nkb_core::lint::LintProblem;
 use std::fmt;
 
 /// Why a pack could not be provided. Carries no path and no free text, because
@@ -51,6 +52,28 @@ pub trait PackSource {
     /// Returns [`SourceError`] when the pack is missing, unreadable, or not
     /// valid UTF-8.
     fn read(&self, id: &str) -> Result<String, SourceError>;
+}
+
+/// Answers the questions that only a parsed pack file can answer.
+///
+/// # Why this is a port and not a function call
+///
+/// The layer above owns the order of the checks and the shape of the verdict.
+/// The file format belongs one layer out: which parser, which syntax, and where
+/// a line number comes from. Stating that boundary as a trait is what lets this
+/// use case be exercised with no parser at all, and what keeps the dependency
+/// arrow pointing one way rather than resting on somebody remembering it.
+///
+/// Note what this port does **not** do: it does not return a pack. A validator
+/// has to see a file as it actually is, including the parts a lenient reader
+/// would forgive, so it asks for problems rather than for a tidy model.
+pub trait PackFormat {
+    /// Returns every problem the parsed file reveals.
+    ///
+    /// Reports all of them rather than the first, with the single exception of a
+    /// file that does not parse - there is nothing to look inside, so that one
+    /// problem comes back alone.
+    fn check(&self, text: &str) -> Vec<LintProblem>;
 }
 
 #[cfg(test)]

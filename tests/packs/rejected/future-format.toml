@@ -1,0 +1,23 @@
+# expect: E001
+#
+# The whole point of the format field: a tool that meets a newer file refuses to
+# read it and says so, instead of guessing and reading it wrongly.
+
+format = 2
+
+[pack]
+id          = "future-format"
+name        = "Future format"
+description = "Declares a file format version newer than this tool understands."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "anything"
+name   = "Anything"
+value  = "anything"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+since  = "1.0"

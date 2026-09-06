@@ -9,6 +9,23 @@
 # working copy and make "reproducible build" quietly untrue.
 * text=auto eol=lf
 
+# ONE TEST FILE MUST KEEP THE BYTES THIS REPOSITORY OTHERWISE NORMALISES AWAY.
+#
+# The pack format forbids the two-character line ending, and the format test
+# suite is required to hold a file breaking every rule. Under the setting above
+# that file would be converted on checkout and would keep passing while testing
+# nothing - a guard that is green and blind, which is the exact failure this
+# product exists to find elsewhere.
+#
+# Measured on 2026-09-06, not assumed: the byte order mark survives `text=auto`
+# untouched, so the file covering that rule needs no exception and does not have
+# one. Only the line ending is rewritten, so only this single path is listed.
+#
+# Deliberately one path and not a pattern. If a second such file ever appears it
+# gets its own line, so that nothing else in the suite quietly stops being
+# normalised alongside it.
+/tests/packs/rejected/crlf-line-endings.toml -text
+
 # PROJECT MEMORY - no conversion at all.
 #
 # These documents contain escaped invisible characters and examples where every

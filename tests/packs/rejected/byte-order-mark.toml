@@ -1,0 +1,24 @@
+﻿# expect: E005
+#
+# The mark that opens this file is a value in the catalogue, so it has no
+# business being the punctuation of a source file. No TOML parser complains
+# about it, which is why the rule has to exist here.
+
+format = 1
+
+[pack]
+id          = "byte-order-mark"
+name        = "Byte order mark"
+description = "Opens with a byte order mark, which no parser objects to."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "anything"
+name   = "Anything"
+value  = "anything"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+since  = "1.0"

@@ -1,0 +1,16 @@
+# expect: E008
+#
+# A pack with no values loads, shows up in the palette and inserts nothing. The
+# counter would read 0/0 and the tool would be silently useless for that pack.
+
+format = 1
+
+[pack]
+id          = "empty-pack"
+name        = "Empty pack"
+description = "Declares everything correctly and holds no values at all."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"

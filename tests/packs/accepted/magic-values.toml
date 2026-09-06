@@ -1,0 +1,41 @@
+format = 1
+
+[pack]
+id          = "magic-values"
+name        = "Magic values"
+description = "Words a human reads as text and a parser reads as a boolean, null or a number."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["parsing", "config", "serialization"]
+fields      = ["text", "name", "country-code"]
+risk        = "normal"
+
+[[values]]
+id     = "bool-no"
+name   = "no"
+value  = "no"
+breaks = "YAML 1.1 and several config parsers read an unquoted `no` as boolean false. Norway's ISO country code is NO, so a country list can silently turn Norway into 'false'."
+expect = "Stored and returned as the two-character string 'no'."
+fields = ["text", "country-code"]
+tags   = ["yaml", "boolean", "country-code"]
+since  = "1.0"
+
+[[values]]
+id     = "word-null"
+name   = "null"
+value  = "null"
+breaks = "Serializers and loosely typed APIs turn the string into an absent value; the field looks saved but comes back empty."
+expect = "Stored and returned as the four-character string 'null', distinct from an empty field."
+since  = "1.0"
+
+[[values]]
+id     = "word-nan"
+name   = "NaN"
+value  = "NaN"
+breaks = "Numeric parsers accept it, then every comparison against it is false - filters and sorting quietly drop the row."
+expect = "Rejected in a numeric field; kept verbatim in a text field."
+fields = ["text", "number"]
+since  = "1.0"

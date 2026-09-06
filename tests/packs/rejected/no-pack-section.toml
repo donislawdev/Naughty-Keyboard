@@ -1,0 +1,6 @@
+# expect: E003, E008
+#
+# Without the pack table there is no identity, no version and no licence, so the
+# file describes values that cannot be cited, shipped or attributed.
+
+format = 1

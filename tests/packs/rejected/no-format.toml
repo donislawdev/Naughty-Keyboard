@@ -1,0 +1,21 @@
+# expect: E001
+#
+# A pack file without a format version cannot be refused politely by a future
+# version of the tool, because there is nothing for it to compare against.
+
+[pack]
+id          = "no-format"
+name        = "No format key"
+description = "Declares no file format version."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "anything"
+name   = "Anything"
+value  = "anything"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+since  = "1.0"

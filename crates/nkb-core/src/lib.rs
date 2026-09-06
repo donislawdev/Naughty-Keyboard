@@ -16,10 +16,17 @@
 
 #![forbid(unsafe_code)]
 
+pub mod lint;
 pub mod metrics;
+pub mod source_text;
 pub mod text;
 pub mod value;
 
+pub use lint::{
+    LintProblem, LintReport, LintRule, RULES, RuleCode, RuleCoverage, RuleStatus, Severity,
+    rule_for,
+};
 pub use metrics::TextMetrics;
+pub use source_text::line_of;
 pub use text::{EscapedText, LiteralText};
 pub use value::{MAX_REPEAT_COUNT, MAX_VALUE_CODE_POINTS, ValueBody, ValueProblem};
