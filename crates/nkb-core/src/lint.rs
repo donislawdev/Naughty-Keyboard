@@ -61,6 +61,16 @@ pub enum RuleStatus {
     /// Needs the previously published pack to compare against, which does not
     /// exist on a local disk. Checked where the main branch is available.
     RequiresPublishedVersion,
+    /// A rule of the format that this build can never raise, because another
+    /// rule always reports the same file first. Today: a parser that follows the
+    /// specification refuses a malformed escape as a syntax error, so E004
+    /// arrives instead of E021, and no file exists that would produce E021 here.
+    ///
+    /// Kept apart from every neighbour on purpose. It is not unwritten work, it
+    /// is not waiting on a decision, and it is not a rule needing the published
+    /// pack - it is a constraint of the format that a different implementation,
+    /// with a more forgiving parser, would have to check itself.
+    PreemptedByEarlierRule,
 }
 
 /// Every rule the pack format defines. The names are ours, the codes are public.
@@ -79,6 +89,7 @@ pub enum RuleCode {
     LineEndingNotNewline,
     TabUsedForIndentation,
     PackWithoutValues,
+    FieldOfUnusableType,
     // Identity.
     PackIdMismatch,
     DuplicateValueId,
@@ -133,6 +144,7 @@ impl RuleCode {
             Self::LineEndingNotNewline => "E006",
             Self::TabUsedForIndentation => "E007",
             Self::PackWithoutValues => "E008",
+            Self::FieldOfUnusableType => "E009",
             Self::PackIdMismatch => "E010",
             Self::DuplicateValueId => "E011",
             Self::ValueIdMalformed => "E012",
@@ -181,7 +193,8 @@ pub struct LintRule {
 
 use RuleCode as C;
 use RuleStatus::{
-    AwaitingDecision, Checked, NotImplemented, PartlyChecked, RequiresPublishedVersion,
+    AwaitingDecision, Checked, NotImplemented, PartlyChecked, PreemptedByEarlierRule,
+    RequiresPublishedVersion,
 };
 use Severity::{Error, Warning};
 
@@ -195,7 +208,7 @@ const fn rule(code: RuleCode, severity: Severity, status: RuleStatus) -> LintRul
 
 /// The complete register. Its length is the number the specification states, and
 /// the test below is what keeps the two from drifting apart.
-pub const RULES: [LintRule; 41] = [
+pub const RULES: [LintRule; 42] = [
     rule(C::MissingOrUnsupportedFormat, Error, Checked),
     rule(C::UnknownTopLevelKey, Error, Checked),
     rule(C::MissingRequiredField, Error, Checked),
@@ -204,6 +217,11 @@ pub const RULES: [LintRule; 41] = [
     rule(C::LineEndingNotNewline, Error, Checked),
     rule(C::TabUsedForIndentation, Error, Checked),
     rule(C::PackWithoutValues, Error, Checked),
+    // Cuts across every table rather than belonging to one, which is why it sits
+    // with the file and structure rules: a field of the wrong kind is read as
+    // absent by everything downstream, so the setting the author wrote is one
+    // nobody applied.
+    rule(C::FieldOfUnusableType, Error, Checked),
     rule(C::PackIdMismatch, Error, Checked),
     rule(C::DuplicateValueId, Error, Checked),
     rule(C::ValueIdMalformed, Error, Checked),
@@ -215,10 +233,12 @@ pub const RULES: [LintRule; 41] = [
     // published set of confusable characters pinned to a Unicode version, and
     // that set has not been chosen - so the rule runs, but not in full.
     rule(C::UnescapedCharacter, Error, PartlyChecked),
-    // Unreachable rather than unwritten: a parser that follows the specification
-    // rejects a malformed escape as a syntax error, so E004 always arrives first.
-    // Whether this rule should exist at all is a question for the format.
-    rule(C::InvalidEscapeSequence, Error, AwaitingDecision),
+    // Stays in the set, and can never fire here. The set describes the format,
+    // not this validator: "a malformed escape makes the file invalid" is a
+    // constraint of the format, while "our parser refuses the file first" is a
+    // property of our parser. An implementation with a more forgiving parser has
+    // to check this itself. Decided rather than deferred - `decision-log.md` D29.
+    rule(C::InvalidEscapeSequence, Error, PreemptedByEarlierRule),
     rule(C::LiteralStringForEscapableValue, Error, Checked),
     rule(C::UnknownValueType, Error, Checked),
     rule(C::RepeatCountOutOfRange, Error, Checked),
@@ -440,9 +460,9 @@ mod tests {
 
     #[test]
     fn the_register_holds_the_number_of_rules_the_specification_states() {
-        // The specification says forty one. If this number has to change, the
+        // The specification says forty two. If this number has to change, the
         // specification changed too, and that is a decision rather than a tidy up.
-        assert_eq!(RULES.len(), 41);
+        assert_eq!(RULES.len(), 42);
     }
 
     #[test]
@@ -477,7 +497,7 @@ mod tests {
     #[test]
     fn coverage_counts_the_register_rather_than_repeating_a_stored_number() {
         let coverage = RuleCoverage::measure();
-        assert_eq!(coverage.total, 41);
+        assert_eq!(coverage.total, 42);
         // Every rule falls in exactly one bucket. If this ever fails, some rule
         // is being counted twice or not at all, and the summary that a reader
         // trusts to say what was not looked at has quietly stopped adding up.
@@ -485,7 +505,7 @@ mod tests {
             coverage.checked + coverage.partly + coverage.unchecked(),
             coverage.total
         );
-        assert_eq!(coverage.checked, 25);
+        assert_eq!(coverage.checked, 26);
         assert_eq!(coverage.partly, 1);
     }
 
@@ -506,17 +526,23 @@ mod tests {
         // Not waiting for somebody to type them out - waiting for a decision.
         // Reporting them as merely unimplemented hides a blocked question behind
         // a to-do, and nobody goes looking for a to-do.
-        for code in [
-            RuleCode::UnescapedAmbiguousCharacter,
-            RuleCode::InvalidEscapeSequence,
-        ] {
-            assert_eq!(
-                rule_for(code).status,
-                RuleStatus::AwaitingDecision,
-                "{}",
-                code.as_str()
-            );
-        }
+        assert_eq!(
+            rule_for(RuleCode::UnescapedAmbiguousCharacter).status,
+            RuleStatus::AwaitingDecision
+        );
+    }
+
+    #[test]
+    fn the_rule_another_rule_always_beats_says_that_rather_than_looking_deferred() {
+        // E021 waits for nothing. A parser that follows the specification refuses
+        // a malformed escape outright, so E004 arrives in its place and no file
+        // can be written that would produce E021 here. Reporting it as waiting on
+        // a decision would be a sentence that stopped being true the day the
+        // decision was taken.
+        assert_eq!(
+            rule_for(RuleCode::InvalidEscapeSequence).status,
+            RuleStatus::PreemptedByEarlierRule
+        );
     }
 
     #[test]

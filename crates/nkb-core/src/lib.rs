@@ -20,6 +20,7 @@ pub mod description;
 pub mod identity;
 pub mod lint;
 pub mod metrics;
+pub mod schema;
 pub mod source_text;
 pub mod text;
 pub mod value;
@@ -32,6 +33,7 @@ pub use lint::{
     rule_for,
 };
 pub use metrics::TextMetrics;
+pub use schema::{FieldKind, kind_of};
 pub use source_text::line_of;
 pub use text::{EscapedText, LiteralText};
 pub use value::{MAX_REPEAT_COUNT, MAX_VALUE_CODE_POINTS, ValueBody, ValueProblem};

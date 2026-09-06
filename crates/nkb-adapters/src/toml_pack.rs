@@ -24,6 +24,7 @@ use nkb_app::PackFormat;
 use nkb_core::description::{self, BreaksFault};
 use nkb_core::identity::{is_pack_id, is_value_id};
 use nkb_core::lint::{LintProblem, RuleCode};
+use nkb_core::schema::{FieldKind, kind_of};
 use nkb_core::source_text::line_of;
 use nkb_core::text::LiteralText;
 use nkb_core::value::ValueBody;
@@ -142,7 +143,16 @@ pub fn check(text: &str, expected_id: &str) -> Vec<LintProblem> {
         return problems;
     }
 
+    // The kinds first, and the reason is the ordering rather than the rule. A
+    // field of a kind the format cannot read is invisible to every check after
+    // this one, so without E009 those checks would either stay silent or report
+    // the field as missing - and a field written down is not a field forgotten.
+    problems.extend(check_field_kinds(
+        text,
+        root.iter().filter(|(key, _)| TOP_LEVEL_KEYS.contains(key)),
+    ));
     problems.extend(check_pack_table(text, root));
+    problems.extend(check_pack_kinds(text, root));
     problems.extend(check_pack_id(text, root, expected_id));
     problems.extend(check_values(text, root, &pack_context(root)));
     problems
@@ -225,6 +235,54 @@ fn pack_context(root: &Table) -> PackContext<'_> {
         language: pack
             .and_then(|pack| pack.get("language"))
             .and_then(Item::as_str),
+    }
+}
+
+/// E009: fields whose value is of a kind the format cannot use.
+///
+/// Takes an iterator rather than a table so that the top level can be filtered
+/// down to the keys that belong there. A stray top level key is E002's finding,
+/// and judging its kind as well would put two codes on one typo.
+fn check_field_kinds<'a>(
+    text: &str,
+    fields: impl Iterator<Item = (&'a str, &'a Item)>,
+) -> Vec<LintProblem> {
+    fields
+        .filter(|(key, item)| kind_of(key).is_some_and(|kind| !holds(item, kind)))
+        .map(|(key, item)| {
+            LintProblem::new(RuleCode::FieldOfUnusableType)
+                .at(span_line(text, item))
+                .about(key)
+        })
+        .collect()
+}
+
+/// The same rule over the pack table, which needs an owner the value tables get
+/// from the walk that visits them.
+fn check_pack_kinds(text: &str, root: &Table) -> Vec<LintProblem> {
+    let Some(pack) = root.get("pack").and_then(Item::as_table_like) else {
+        return Vec::new();
+    };
+    check_field_kinds(text, pack.iter())
+        .into_iter()
+        .map(|problem| problem.owned_by("pack"))
+        .collect()
+}
+
+/// Whether an item is of the kind the format gives that field.
+///
+/// A field holding a table rather than a value fails every kind, which is the
+/// answer wanted: `id = { }` is not an identifier by any reading.
+fn holds(item: &Item, kind: FieldKind) -> bool {
+    let Some(value) = item.as_value() else {
+        return false;
+    };
+    match kind {
+        FieldKind::Text => value.as_str().is_some(),
+        FieldKind::WholeNumber => value.as_integer().is_some(),
+        FieldKind::Date => value.as_datetime().is_some(),
+        FieldKind::List => value.as_array().is_some(),
+        FieldKind::TrueOrFalse => value.as_bool().is_some(),
     }
 }
 
@@ -401,8 +459,9 @@ fn check_values(text: &str, root: &Table, pack: &PackContext) -> Vec<LintProblem
             );
         }
 
-        for mut problem in identity_problems
+        for mut problem in check_field_kinds(text, table.iter())
             .into_iter()
+            .chain(identity_problems)
             .chain(check_body(text, table))
             .chain(check_fields(table))
             .chain(check_description(table, pack, attributed_one_by_one))
@@ -468,14 +527,13 @@ fn check_repeat(text: &str, table: &Table) -> Vec<LintProblem> {
         .and_then(|item| item.as_value()?.as_integer());
 
     let (Some(unit), Some(count)) = (unit, count) else {
-        // Either part missing leaves a recipe that describes nothing.
-        problems.push(
-            LintProblem::new(RuleCode::RepeatCountOutOfRange).about(if unit.is_none() {
-                "unit"
-            } else {
-                "count"
-            }),
-        );
+        // Either part missing leaves a recipe that describes nothing. A part that
+        // is present but of the wrong kind is E009's finding, and reporting it
+        // here as well would tell the reader to add a field they can see.
+        let absent = if unit.is_none() { "unit" } else { "count" };
+        if !table.contains_key(absent) {
+            problems.push(LintProblem::new(RuleCode::RepeatCountOutOfRange).about(absent));
+        }
         return problems;
     };
 
@@ -1001,6 +1059,11 @@ mod tests {
     const BREAKS_LINE: &str = "breaks = \"Sorting puts the record at the top of every list, and an exact match against the trimmed name finds nothing.\"\n";
     const SHORT_BREAKS: &str = "breaks = \"It breaks the export.\"\n";
     const POLISH_BREAKS: &str = "breaks = \"Parsery czytaja niecytowane no jako wartosc logiczna falsz, przez co lista krajow zamienia Norwegie.\"\n";
+    const UPDATED_LINE: &str = "updated = 2026-09-06\n";
+    const UPDATED_AS_TEXT: &str = "updated = \"2026-09-06\"\n";
+    const TAGS_AS_TEXT: &str = "tags = \"yaml\"\n";
+    const RECIPE_WITH_TEXT_COUNT: &str = "type   = \"repeat\"\nunit   = \"a\"\ncount  = \"5\"\n";
+    const RECIPE_WITHOUT_COUNT: &str = "type   = \"repeat\"\nunit   = \"a\"\n";
     const NUMERIC_BREAKS: &str = "breaks = 42\n";
     const PACK_SOURCE: &str = "source = \"https://example.invalid/collection\"\n";
     const REPLACED_BY_LATER: &str = "replaced_by = \"successor\"\n";
@@ -1136,12 +1199,62 @@ mod tests {
     }
 
     #[test]
-    fn a_description_that_is_not_text_goes_unjudged_and_that_is_a_gap() {
-        // Recorded rather than desired. No rule in the set covers a field of the
-        // wrong type, for any field, and inventing a code for this one would be
-        // inventing a rule. The register is where that question lives.
+    fn a_description_that_is_not_text_is_reported_instead_of_passed_over() {
+        // This test used to record a silence: `breaks = 42` produced nothing at
+        // all. A field written down and unreadable is worse than a field left
+        // out, because it looks filled in.
         let text = GOOD.replace(BREAKS_LINE, NUMERIC_BREAKS);
+        let found = one_of(&text, RuleCode::FieldOfUnusableType);
+        assert_eq!(found.subject.as_deref(), Some("breaks"));
+        assert_eq!(found.owner.as_deref(), Some("trailing-space"));
+
+        // And the rule that reads the field stays quiet, because as far as it
+        // can tell the field is not there. One mistake, one code.
+        assert!(
+            !codes(&text).contains(&"E030"),
+            "{:?}",
+            check(&text, PACK_ID)
+        );
+    }
+
+    #[test]
+    fn a_pack_field_of_the_wrong_kind_is_named_against_the_pack() {
+        // Same code, two owners. Without the owner a reader cannot tell which
+        // half of the file to open.
+        let text = GOOD.replace(UPDATED_LINE, UPDATED_AS_TEXT);
+        let found = one_of(&text, RuleCode::FieldOfUnusableType);
+        assert_eq!(found.subject.as_deref(), Some("updated"));
+        assert_eq!(found.owner.as_deref(), Some("pack"));
+    }
+
+    #[test]
+    fn a_recipe_count_written_as_text_is_one_finding_and_not_two() {
+        // E024 would say "declares no count" about a count the author can see on
+        // the screen. E009 says the true thing, and E024 stays out of it.
+        let text = with_value(RECIPE_WITH_TEXT_COUNT);
         let reported = codes(&text);
-        assert!(reported.is_empty(), "{reported:?}");
+        assert!(reported.contains(&"E009"), "{reported:?}");
+        assert!(!reported.contains(&"E024"), "{reported:?}");
+    }
+
+    #[test]
+    fn a_recipe_that_really_is_missing_a_part_still_says_so() {
+        // The other side of the precedence above. Suppressing E024 for a part
+        // that is absent rather than mistyped would trade one silence for another.
+        let text = with_value(RECIPE_WITHOUT_COUNT);
+        assert!(
+            codes(&text).contains(&"E024"),
+            "{:?}",
+            check(&text, PACK_ID)
+        );
+    }
+
+    #[test]
+    fn a_list_written_as_a_single_word_is_refused() {
+        // The quietest of them all: `tags = "yaml"` reads as a tag list of one
+        // in no parser, so the tags simply vanish.
+        let text = GOOD.replace(LANG_LINE, &format!("{LANG_LINE}{TAGS_AS_TEXT}"));
+        let found = one_of(&text, RuleCode::FieldOfUnusableType);
+        assert_eq!(found.subject.as_deref(), Some("tags"));
     }
 }

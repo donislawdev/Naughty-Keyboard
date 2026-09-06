@@ -22,6 +22,7 @@ use nkb_core::identity::is_pack_id;
 use nkb_core::lint::{
     LintProblem, LintReport, RULES, RuleCode, RuleCoverage, RuleStatus, Severity,
 };
+use nkb_core::schema::kind_of;
 
 /// The format version this build reads, quoted in the message about newer ones.
 const SUPPORTED_FORMAT: &str = "1";
@@ -101,10 +102,20 @@ pub fn explanation() -> Vec<String> {
                     "not checked - waiting on an unsettled question in the format",
                 RuleStatus::RequiresPublishedVersion =>
                     "not checked here - needs the published pack to compare against",
+                RuleStatus::PreemptedByEarlierRule =>
+                    "not checked here - a parser following the specification refuses the file first, so E004 arrives instead",
             }
         )
     }));
     lines
+}
+
+/// What a field should have held, in words rather than in parser vocabulary.
+///
+/// Looked up in the core rather than repeated here, so that the message and the
+/// check cannot disagree about what the format says.
+fn expected(field: &str) -> &'static str {
+    kind_of(field).map_or("a value of another kind", |kind| kind.as_str())
 }
 
 /// English plural, used only for the two words this module counts.
@@ -153,6 +164,14 @@ pub fn sentence(problem: &LintProblem) -> String {
         RuleCode::TabUsedForIndentation => {
             "a tab is used to indent. Indent with spaces - the tab character is a value in this catalogue and must not also be its punctuation.".to_owned()
         }
+        RuleCode::FieldOfUnusableType if owner == "pack" => format!(
+            "the pack gives `{subject}` a value the format cannot read as {}. A field of the wrong kind is read as absent everywhere after this, so the setting written here is one nobody applied.",
+            expected(subject)
+        ),
+        RuleCode::FieldOfUnusableType => format!(
+            "value `{owner}` gives `{subject}` a value the format cannot read as {}. A field of the wrong kind is read as absent everywhere after this, so what was written here is silently missing.",
+            expected(subject)
+        ),
         RuleCode::PackWithoutValues => {
             "the pack declares no values. It would load, appear in the palette and insert nothing.".to_owned()
         }

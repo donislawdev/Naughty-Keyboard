@@ -192,6 +192,7 @@ fn status_name(status: RuleStatus) -> &'static str {
         RuleStatus::NotImplemented => "not-implemented",
         RuleStatus::AwaitingDecision => "awaiting-decision",
         RuleStatus::RequiresPublishedVersion => "requires-published-version",
+        RuleStatus::PreemptedByEarlierRule => "preempted-by-earlier-rule",
     }
 }
 

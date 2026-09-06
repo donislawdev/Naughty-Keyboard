@@ -1,0 +1,30 @@
+# expect: E009
+#
+# The quietest mistake in the format. `tags` holds a list, and a contributor who
+# writes one tag naturally writes it as a word. Nothing crashes: the field is
+# simply unreadable, so the tags vanish and the value never appears in a search
+# that should have found it.
+#
+# A field of the wrong kind is worse than a field left out, because it looks
+# filled in. That is the whole reason this rule exists rather than a silence.
+
+format = 1
+
+[pack]
+id          = "field-of-unusable-type"
+name        = "Field of unusable type"
+description = "Writes a list field as a single word."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "one-tag"
+name   = "One tag"
+value  = "anything"
+tags   = "unicode"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
