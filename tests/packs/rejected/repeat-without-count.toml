@@ -1,0 +1,25 @@
+# expect: E024
+#
+# A recipe needs both a unit and a count. With one of them missing it describes
+# nothing, and a validator that let it through would ship a value that cannot be
+# produced.
+
+format = 1
+
+[pack]
+id          = "repeat-without-count"
+name        = "Recipe missing its count"
+description = "Declares a repeated value and no count."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "half-a-recipe"
+name   = "Test value"
+type   = "repeat"
+unit   = "a"
+breaks = "Nothing on its own - this value exists so the file is otherwise complete."
+since  = "1.0"

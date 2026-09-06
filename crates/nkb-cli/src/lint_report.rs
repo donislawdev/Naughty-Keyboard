@@ -54,9 +54,14 @@ pub fn summary(report: &LintReport) -> Vec<String> {
             count(report.warnings(), "warning")
         ),
         format!(
-            "Checked {} of {} rules. {} not checked - run `nkb lint --explain` to see which and why.",
+            "Checked {} of {} rules{}. {} not checked - run `nkb lint --explain` to see which and why.",
             coverage.checked,
             coverage.total,
+            if coverage.partly == 0 {
+                String::new()
+            } else {
+                format!(", {} of them only in part", coverage.partly)
+            },
             coverage.unchecked()
         ),
     ];
@@ -87,6 +92,8 @@ pub fn explanation() -> Vec<String> {
             },
             match rule.status {
                 RuleStatus::Checked => "checked",
+                RuleStatus::PartlyChecked =>
+                    "checked in part - one half of the rule waits on an unsettled question",
                 RuleStatus::NotImplemented => "not checked - not implemented yet",
                 RuleStatus::AwaitingDecision =>
                     "not checked - waiting on an unsettled question in the format",
@@ -147,6 +154,36 @@ fn sentence(problem: &LintProblem) -> String {
         RuleCode::PackWithoutValues => {
             "the pack declares no values. It would load, appear in the palette and insert nothing.".to_owned()
         }
+        RuleCode::UnescapedCharacter => format!(
+            "value `{owner}` writes {subject} out instead of escaping it. A reviewer cannot see it and an editor can drop it - write it as {subject}."
+        ),
+        RuleCode::LiteralStringForEscapableValue => format!(
+            "value `{owner}` needs {subject} escaped, but is written in single quotes where nothing is an escape. Use double quotes and write {subject}."
+        ),
+        RuleCode::UnknownValueType => format!(
+            "value `{owner}` declares type `{subject}`. This build produces `literal` and `repeat` - the other names are reserved and not yet defined."
+        ),
+        RuleCode::RepeatCountOutOfRange if subject.parse::<i64>().is_err() => format!(
+            "value `{owner}` repeats and declares no `{subject}`. A recipe needs both a unit and a count to describe anything."
+        ),
+        RuleCode::RepeatCountOutOfRange => format!(
+            "value `{owner}` repeats {subject} times, outside the range 1 to 1000000. Above that, inserting takes longer than a tester will wait."
+        ),
+        RuleCode::ValuePresentForNonLiteralType => format!(
+            "value `{owner}` carries a recipe and a `{subject}` at once. Remove one - nothing says which of the two the tool would send."
+        ),
+        RuleCode::RepeatProductTooLarge => format!(
+            "value `{owner}` describes more than 1000000 code points. The count alone is in range - it is the unit multiplied by the count that is not."
+        ),
+        RuleCode::FieldOutsideVocabulary => format!(
+            "value `{owner}` names field kind `{subject}`, which is not in the format's closed list. Pick the nearest listed kind rather than coining one."
+        ),
+        RuleCode::EscapeOutsideCommonSubset => format!(
+            "value `{owner}` uses the escape `{subject}`, which is valid in TOML 1.1.0 and an error in 1.0.0. Write the character itself, so the pack parses for everyone who receives it."
+        ),
+        RuleCode::LiteralValueVeryLong => format!(
+            "value `{owner}` writes out {subject} characters. Consider `type = \"repeat\"` - a recipe stays reviewable where a wall of text does not."
+        ),
         // Every other rule is registered and not yet run, so no problem carrying
         // its code can reach this point. Answering with the code rather than with
         // a crash keeps a validator from taking somebody's build down with it.
@@ -234,10 +271,30 @@ mod tests {
     #[test]
     fn the_summary_says_how_much_was_not_even_looked_at() {
         // The half that keeps a clean verdict honest.
+        //
+        // Checked against the register rather than against a number written here.
+        // A remembered number turns every new rule into a red test for the wrong
+        // reason, and worse, it can stay green while the sentence and the
+        // register disagree - which is the one failure this line exists to stop.
+        let coverage = RuleCoverage::measure();
         let text = summary(&LintReport::default()).join("\n");
+
         assert!(text.contains("0 errors, 0 warnings."), "{text}");
-        assert!(text.contains("Checked 8 of 41 rules"), "{text}");
-        assert!(text.contains("33 not checked"), "{text}");
+        assert!(
+            text.contains(&format!(
+                "Checked {} of {} rules",
+                coverage.checked, coverage.total
+            )),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!("{} not checked", coverage.unchecked())),
+            "{text}"
+        );
+        assert!(
+            text.contains(&format!("{} of them only in part", coverage.partly)),
+            "a rule that runs in part must be visible in the summary: {text}"
+        );
     }
 
     #[test]
@@ -276,10 +333,17 @@ mod tests {
     }
 
     #[test]
-    fn every_checked_rule_has_a_sentence_written_for_it() {
+    fn every_rule_that_can_report_has_a_sentence_written_for_it() {
         // The guard that keeps the fallback from becoming a hiding place: a rule
         // this build runs must be able to say what it found.
-        for rule in RULES.iter().filter(|r| r.status == RuleStatus::Checked) {
+        //
+        // A rule running only in part belongs here too, and did not at first.
+        // It reports findings like any other, so leaving it out let a whole
+        // status slip past the check that exists to catch exactly this.
+        for rule in RULES
+            .iter()
+            .filter(|r| matches!(r.status, RuleStatus::Checked | RuleStatus::PartlyChecked))
+        {
             let text = sentence(&LintProblem::new(rule.code));
             assert!(
                 !text.contains("no message written yet"),

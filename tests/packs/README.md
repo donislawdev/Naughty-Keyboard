@@ -21,6 +21,17 @@ A file may name more than one code, separated by commas. The test asserts the se
 not the order: a validator reports everything it finds in one run rather than
 stopping at the first problem, so ordering is not part of the contract.
 
+## Not every file in `rejected/` is refused, and that is the point
+
+A code beginning with `W` is a warning. The pack it appears in **loads normally**
+and its contents are unchanged - the file is merely harder to review than it needs
+to be. `long-literal-value.toml` is such a file: it produces a code and exits zero.
+
+The suite checks that too. A file whose codes all begin with `W` must be accepted,
+and one carrying any `E` must not be, because otherwise the letter in front of a
+code is decoration rather than a promise. The directory is named for the common
+case and the assertion is named for the actual rule.
+
 ## Two files are about bytes rather than about text
 
 `E005` (byte order mark) and `E006` (line endings other than a single newline) do

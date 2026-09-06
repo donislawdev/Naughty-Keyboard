@@ -1,0 +1,25 @@
+# expect: E028
+#
+# The vocabulary is closed on purpose. Left open, fifty contributions would bring
+# `email`, `e-mail`, `mail` and `email-address` for one thing, matching packs to
+# a field would stop working, and the repair would mean editing every pack.
+
+format = 1
+
+[pack]
+id          = "unknown-field-kind"
+name        = "Field kind outside the vocabulary"
+description = "Names a field kind the format does not define."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "coined-field"
+name   = "Test value"
+value  = "test"
+fields = ["e-mail"]
+breaks = "Nothing on its own - this value exists so the file is otherwise complete."
+since  = "1.0"

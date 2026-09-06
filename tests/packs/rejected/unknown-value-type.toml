@@ -1,0 +1,24 @@
+# expect: E023
+#
+# `random` is one of six names the format reserves and does not define. A file
+# using one is refused with the same code as a typo, because to a build that
+# cannot produce either, the two are the same thing.
+
+format = 1
+
+[pack]
+id          = "unknown-value-type"
+name        = "Unknown value type"
+description = "Declares a kind of value this build cannot produce."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "reserved-kind"
+name   = "Test value"
+type   = "random"
+breaks = "Nothing on its own - this value exists so the file is otherwise complete."
+since  = "1.0"

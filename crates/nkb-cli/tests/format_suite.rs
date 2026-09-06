@@ -39,16 +39,20 @@ fn toml_files(kind: &str) -> Vec<PathBuf> {
     files
 }
 
-fn judge(path: &Path) -> BTreeSet<String> {
+/// The codes a file produces, and whether the pack would be loaded.
+fn judge(path: &Path) -> (BTreeSet<String>, bool) {
     let (source, id) = DirectoryPackSource::split(path)
         .unwrap_or_else(|| panic!("{} must name a file", path.display()));
 
     match lint_pack(&source, &TomlPackFormat, &id) {
-        LintOutcome::Judged(report) => report
-            .problems
-            .iter()
-            .map(|p| p.code.as_str().to_owned())
-            .collect(),
+        LintOutcome::Judged(report) => (
+            report
+                .problems
+                .iter()
+                .map(|p| p.code.as_str().to_owned())
+                .collect(),
+            report.accepted(),
+        ),
         other => panic!("{} could not be read: {other:?}", path.display()),
     }
 }
@@ -86,12 +90,13 @@ fn every_accepted_pack_passes_every_rule_this_build_checks() {
     assert!(!files.is_empty(), "the accepted set must not be empty");
 
     for path in files {
-        let found = judge(&path);
+        let (found, accepted) = judge(&path);
         assert!(
             found.is_empty(),
             "{} must be accepted, but produced {found:?}",
             path.display()
         );
+        assert!(accepted, "{} must load", path.display());
     }
 }
 
@@ -102,12 +107,25 @@ fn every_rejected_pack_produces_exactly_the_codes_it_declares() {
 
     for path in files {
         let expected = expected_codes(&path);
-        let found = judge(&path);
+        let (found, accepted) = judge(&path);
         assert_eq!(
             found,
             expected,
             "{} declares {expected:?} and produced {found:?}",
             path.display()
+        );
+
+        // The severity of a rule has to reach the verdict, or the letter in front
+        // of a code becomes decoration. A file whose codes all begin with W is a
+        // pack that loads and carries warnings - one starting with E is a pack
+        // that does not load at all, whole or absent.
+        let blocking = expected.iter().any(|code| code.starts_with('E'));
+        assert_eq!(
+            accepted,
+            !blocking,
+            "{} declares {expected:?}, so accepted should be {}",
+            path.display(),
+            !blocking
         );
     }
 }

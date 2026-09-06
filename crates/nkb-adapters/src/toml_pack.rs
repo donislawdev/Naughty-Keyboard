@@ -23,6 +23,9 @@
 use nkb_app::PackFormat;
 use nkb_core::lint::{LintProblem, RuleCode};
 use nkb_core::source_text::line_of;
+use nkb_core::text::LiteralText;
+use nkb_core::value::ValueBody;
+use nkb_core::written_form;
 use toml_edit::{Document, Item, Table};
 
 /// The file format version this build understands.
@@ -65,6 +68,44 @@ const REQUIRED_PACK_FIELDS: [&str; 8] = [
 /// its own, which is registered and not yet written. Reporting it here as well
 /// would give one mistake two codes.
 const REQUIRED_VALUE_FIELDS: [&str; 3] = ["id", "name", "since"];
+
+/// The kinds of value this build understands.
+///
+/// Six more names are reserved by the format and deliberately unsupported, so
+/// that nobody claims them for something else before they are designed. A file
+/// using one is refused with the same code as a typo, because to this build the
+/// two are the same thing: a kind it cannot produce.
+const SUPPORTED_TYPES: [&str; 2] = ["literal", "repeat"];
+
+/// The closed vocabulary of field kinds.
+///
+/// Closed on purpose. Left open, fifty contributions would bring `email`,
+/// `e-mail`, `mail` and `email-address` for one thing, matching packs to a field
+/// would stop working, and the repair would mean editing every pack at once.
+const FIELD_VOCABULARY: [&str; 22] = [
+    "any",
+    "text",
+    "multiline",
+    "name",
+    "username",
+    "password",
+    "email",
+    "url",
+    "search",
+    "number",
+    "integer",
+    "money",
+    "date",
+    "time",
+    "datetime",
+    "phone",
+    "postal-code",
+    "country-code",
+    "address",
+    "filename",
+    "path",
+    "id-number",
+];
 
 /// Checks everything that needs the file parsed.
 ///
@@ -208,11 +249,130 @@ fn check_values(text: &str, root: &Table) -> Vec<LintProblem> {
                 LintProblem::new(RuleCode::MissingRequiredField)
                     .at(line)
                     .about("value")
-                    .owned_by(identity),
+                    .owned_by(identity.clone()),
             );
+        }
+
+        for mut problem in check_body(text, table)
+            .into_iter()
+            .chain(check_fields(table))
+        {
+            problem.line = problem.line.or(Some(line));
+            problem.owner = Some(identity.clone());
+            problems.push(problem);
         }
     }
     problems
+}
+
+/// The rules about what one value is and how it is written.
+///
+/// E023 comes first and stops the rest: for a kind this build does not know,
+/// there is no telling which fields belong to it, so every further rule would be
+/// guessing about a shape nobody has defined.
+fn check_body(text: &str, table: &Table) -> Vec<LintProblem> {
+    let declared = table.get("type").and_then(Item::as_str);
+
+    if let Some(kind) = declared
+        && !SUPPORTED_TYPES.contains(&kind)
+    {
+        return vec![LintProblem::new(RuleCode::UnknownValueType).about(kind)];
+    }
+
+    if declared == Some("repeat") {
+        return check_repeat(text, table);
+    }
+    check_literal(text, table)
+}
+
+/// A value written out in the file: how it is spelled, and how long it is.
+fn check_literal(text: &str, table: &Table) -> Vec<LintProblem> {
+    let Some(item) = table.get("value") else {
+        // Its absence is already reported as a missing required field. Saying so
+        // twice would give one mistake two codes.
+        return Vec::new();
+    };
+    let Some(expanded) = item.as_str() else {
+        return Vec::new();
+    };
+
+    let mut problems = written_form::check(raw_slice(text, item), expanded);
+    problems.extend(written_form::check_length(expanded));
+    problems
+}
+
+/// A value described by a recipe: the recipe's parts, its size, and the spelling
+/// of the unit it repeats.
+fn check_repeat(text: &str, table: &Table) -> Vec<LintProblem> {
+    let mut problems = Vec::new();
+
+    if table.contains_key("value") {
+        // A recipe that also carries text has two answers to the same question,
+        // and nothing says which one the tool would send.
+        problems.push(LintProblem::new(RuleCode::ValuePresentForNonLiteralType).about("value"));
+    }
+
+    let unit = table.get("unit").and_then(Item::as_str);
+    let count = table
+        .get("count")
+        .and_then(|item| item.as_value()?.as_integer());
+
+    let (Some(unit), Some(count)) = (unit, count) else {
+        // Either part missing leaves a recipe that describes nothing.
+        problems.push(
+            LintProblem::new(RuleCode::RepeatCountOutOfRange).about(if unit.is_none() {
+                "unit"
+            } else {
+                "count"
+            }),
+        );
+        return problems;
+    };
+
+    // A count outside the machine word is out of range like any other, and saying
+    // so beats a silent conversion that turns a negative number into a large
+    // positive one - the kind of quiet wrap this catalogue exists to find.
+    let Ok(count) = u32::try_from(count) else {
+        problems.push(LintProblem::new(RuleCode::RepeatCountOutOfRange).about(count.to_string()));
+        return problems;
+    };
+
+    let body = ValueBody::Repeat {
+        unit: LiteralText::new(unit),
+        count,
+    };
+    if let Err(problem) = body.check_size() {
+        // The code travels from where the fault was found rather than being
+        // guessed back here, so E024 and E026 keep meaning what they mean.
+        problems.push(LintProblem::from(problem).about(count.to_string()));
+    }
+
+    if let Some(item) = table.get("unit") {
+        problems.extend(written_form::check(raw_slice(text, item), unit));
+    }
+    problems
+}
+
+/// E028: field kinds outside the closed vocabulary.
+fn check_fields(table: &Table) -> Vec<LintProblem> {
+    let Some(fields) = table.get("fields").and_then(Item::as_array) else {
+        return Vec::new();
+    };
+
+    fields
+        .iter()
+        .filter_map(|entry| entry.as_str())
+        .filter(|kind| !FIELD_VOCABULARY.contains(kind))
+        .map(|kind| LintProblem::new(RuleCode::FieldOutsideVocabulary).about(kind))
+        .collect()
+}
+
+/// The slice of the file an item occupies, quotes and all.
+///
+/// Empty when the parser kept no span, which loses the spelling rules for that
+/// one value rather than reporting a fault that is not there.
+fn raw_slice<'a>(text: &'a str, item: &Item) -> &'a str {
+    item.span().and_then(|span| text.get(span)).unwrap_or("")
 }
 
 /// The pack format as this build reads it, satisfying the port the layer above
@@ -474,5 +634,173 @@ mod tests {
         found.sort_unstable();
         found.dedup();
         assert_eq!(found, vec!["E001", "E002", "E003"]);
+    }
+    /// Replaces the value line of GOOD with whatever a test needs.
+    fn with_value(replacement: &str) -> String {
+        GOOD.replace("value = \"Kowalski\\u0020\"\n", replacement)
+    }
+
+    #[test]
+    fn a_reserved_type_is_refused_with_the_same_code_as_a_typo() {
+        // To this build a reserved name and a typo are the same thing: a kind it
+        // cannot produce.
+        let text = with_value("type   = \"random\"\n");
+        let problems = check(&text);
+        let found = problems
+            .iter()
+            .find(|p| p.code == RuleCode::UnknownValueType)
+            .expect("E023 must be reported");
+        assert_eq!(found.subject.as_deref(), Some("random"));
+        assert_eq!(found.owner.as_deref(), Some("trailing-space"));
+    }
+
+    #[test]
+    fn an_unknown_type_stops_the_other_body_rules() {
+        // For a kind nobody has defined there is no telling which fields belong
+        // to it, so every further rule would be guessing about a shape that does
+        // not exist. One clear problem beats five speculative ones.
+        let text = with_value("type   = \"random\"\nvalue  = \"a\"\ncount  = 0\n");
+        assert_eq!(codes(&text), vec!["E023"], "{:?}", check(&text));
+    }
+
+    #[test]
+    fn a_recipe_missing_half_of_itself_is_out_of_range() {
+        let text = with_value("type   = \"repeat\"\nunit   = \"a\"\n");
+        let problems = check(&text);
+        let found = problems
+            .iter()
+            .find(|p| p.code == RuleCode::RepeatCountOutOfRange)
+            .expect("E024 must be reported");
+        assert_eq!(found.subject.as_deref(), Some("count"));
+    }
+
+    #[test]
+    fn a_negative_count_is_out_of_range_rather_than_a_silent_wrap() {
+        // A conversion turning this into a large positive number is the exact
+        // class of quiet wrap this catalogue exists to find in other software.
+        let text = with_value("type   = \"repeat\"\nunit   = \"a\"\ncount  = -5\n");
+        assert!(codes(&text).contains(&"E024"), "{:?}", check(&text));
+
+        let huge = with_value("type   = \"repeat\"\nunit   = \"a\"\ncount  = 5000000000\n");
+        assert!(codes(&huge).contains(&"E024"), "{:?}", check(&huge));
+    }
+
+    #[test]
+    fn a_zero_count_is_out_of_range() {
+        let text = with_value("type   = \"repeat\"\nunit   = \"a\"\ncount  = 0\n");
+        assert!(codes(&text).contains(&"E024"));
+    }
+
+    #[test]
+    fn a_recipe_that_also_carries_text_has_two_answers_to_one_question() {
+        let text = with_value("type   = \"repeat\"\nunit   = \"a\"\ncount  = 5\nvalue  = \"b\"\n");
+        assert!(codes(&text).contains(&"E025"), "{:?}", check(&text));
+    }
+
+    #[test]
+    fn the_two_billion_character_bomb_is_caught_by_the_product_rule() {
+        // The count alone is inside the range E024 allows. Only the product rule
+        // sees this, and the code travels from the core rather than being guessed
+        // back here.
+        let unit = "a".repeat(2000);
+        let text = with_value(&format!(
+            "type   = \"repeat\"\nunit   = \"{unit}\"\ncount  = 1000000\n"
+        ));
+        assert!(codes(&text).contains(&"E026"), "{:?}", check(&text));
+    }
+
+    #[test]
+    fn the_largest_recipe_in_the_shipped_catalogue_still_passes() {
+        // `len-100000`, ten times below the ceiling. If this ever fails, a size
+        // rule broke the catalogue it was written to protect.
+        let text = with_value("type   = \"repeat\"\nunit   = \"a\"\ncount  = 100000\n");
+        assert!(codes(&text).is_empty(), "{:?}", check(&text));
+    }
+
+    #[test]
+    fn a_field_kind_outside_the_closed_list_is_refused() {
+        let text = GOOD.replace(
+            "since = \"1.0\"\n",
+            "fields = [\"e-mail\"]\nsince = \"1.0\"\n",
+        );
+        let problems = check(&text);
+        let found = problems
+            .iter()
+            .find(|p| p.code == RuleCode::FieldOutsideVocabulary)
+            .expect("E028 must be reported");
+        assert_eq!(found.subject.as_deref(), Some("e-mail"));
+    }
+
+    #[test]
+    fn a_field_kind_inside_the_list_passes() {
+        let text = GOOD.replace(
+            "since = \"1.0\"\n",
+            "fields = [\"email\", \"any\"]\nsince = \"1.0\"\n",
+        );
+        assert!(codes(&text).is_empty(), "{:?}", check(&text));
+    }
+
+    #[test]
+    fn an_escape_outside_the_common_subset_is_caught_where_the_parser_accepts_it() {
+        // Measured: this parser reads TOML 1.1.0 and takes this escape without a
+        // word. Nothing but this rule stands between it and a pack that fails to
+        // parse in somebody else's continuous integration.
+        //
+        // The doubled backslash below is deliberate. A single one would be an
+        // escape of this source file, and the pack would then hold the letter A
+        // rather than the sequence the rule is about - which is how this very
+        // test passed for the wrong reason once already.
+        let text = with_value("value  = \"A\\x41\"\n");
+        let problems = check(&text);
+        let found = problems
+            .iter()
+            .find(|p| p.code == RuleCode::EscapeOutsideCommonSubset)
+            .expect("E029 must be reported");
+        assert_eq!(found.subject.as_deref(), Some("\\x"));
+        assert_eq!(found.owner.as_deref(), Some("trailing-space"));
+    }
+
+    #[test]
+    fn an_invisible_character_written_out_is_caught_and_attributed_to_its_value() {
+        let text = with_value("value  = \"ab\u{200B}cd\"\n");
+        let problems = check(&text);
+        let found = problems
+            .iter()
+            .find(|p| p.code == RuleCode::UnescapedCharacter)
+            .expect("E020 must be reported");
+        assert_eq!(found.subject.as_deref(), Some("\\u200B"));
+        assert_eq!(found.owner.as_deref(), Some("trailing-space"));
+        assert!(found.line.is_some(), "a problem must say where it is");
+    }
+
+    #[test]
+    fn the_same_character_inside_single_quotes_is_e022_instead() {
+        let text = with_value("value  = 'ab\u{200B}cd'\n");
+        assert!(codes(&text).contains(&"E022"), "{:?}", check(&text));
+        assert!(!codes(&text).contains(&"E020"), "one fault, one code");
+    }
+
+    #[test]
+    fn a_long_written_out_value_is_a_warning_and_does_not_block_the_pack() {
+        let long = "a".repeat(2001);
+        let text = with_value(&format!("value  = \"{long}\"\n"));
+        assert_eq!(codes(&text), vec!["W026"], "{:?}", check(&text));
+    }
+
+    #[test]
+    fn the_unit_of_a_recipe_is_spelled_by_the_same_rules_as_a_value() {
+        // A recipe repeating an invisible character has to escape it too.
+        // Checking only the `value` field would leave every generated value
+        // unspelled.
+        let text = with_value("type   = \"repeat\"\nunit   = \"\u{200B}\"\ncount  = 5\n");
+        assert!(codes(&text).contains(&"E020"), "{:?}", check(&text));
+    }
+
+    #[test]
+    fn the_escaped_unit_in_the_shipped_catalogue_passes() {
+        // `len-100000-spaces` repeats an escaped plain space. Written this way it
+        // is correct, and a rule that could not tell would break the catalogue.
+        let text = with_value("type   = \"repeat\"\nunit   = \"\\u0020\"\ncount  = 100000\n");
+        assert!(codes(&text).is_empty(), "{:?}", check(&text));
     }
 }

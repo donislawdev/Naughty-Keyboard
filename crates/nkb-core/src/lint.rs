@@ -45,6 +45,13 @@ pub enum Severity {
 pub enum RuleStatus {
     /// Run against every pack.
     Checked,
+    /// Run, but not in full: one part of the rule needs something that has not
+    /// been decided, while the rest works today. Kept apart from both of its
+    /// neighbours because reporting it as checked would overstate the verdict
+    /// and reporting it as unchecked would contradict the findings it produces -
+    /// a reader seeing the code in the output and "not checked" in the register
+    /// learns only that one of the two is lying.
+    PartlyChecked,
     /// Not implemented yet. Nothing blocks it beyond the work itself.
     NotImplemented,
     /// Cannot be implemented until an open question is settled. Today: which
@@ -173,7 +180,9 @@ pub struct LintRule {
 }
 
 use RuleCode as C;
-use RuleStatus::{AwaitingDecision, Checked, NotImplemented, RequiresPublishedVersion};
+use RuleStatus::{
+    AwaitingDecision, Checked, NotImplemented, PartlyChecked, RequiresPublishedVersion,
+};
 use Severity::{Error, Warning};
 
 const fn rule(code: RuleCode, severity: Severity, status: RuleStatus) -> LintRule {
@@ -201,23 +210,26 @@ pub const RULES: [LintRule; 41] = [
     rule(C::PublishedValueChanged, Error, RequiresPublishedVersion),
     rule(C::ValueIdVanished, Error, RequiresPublishedVersion),
     rule(C::ReplacedByUnknownId, Error, NotImplemented),
-    // The part of E020 that needs no external data - control characters, format
-    // characters, whitespace other than a plain space, a space at either edge -
-    // is already written. The look-alike half needs a published set of confusable
-    // characters pinned to a Unicode version, and that set has not been chosen.
-    rule(C::UnescapedCharacter, Error, AwaitingDecision),
-    rule(C::InvalidEscapeSequence, Error, NotImplemented),
-    rule(C::LiteralStringForEscapableValue, Error, NotImplemented),
-    rule(C::UnknownValueType, Error, NotImplemented),
-    rule(C::RepeatCountOutOfRange, Error, NotImplemented),
-    rule(C::ValuePresentForNonLiteralType, Error, NotImplemented),
-    rule(C::RepeatProductTooLarge, Error, NotImplemented),
+    // Control characters, format characters, whitespace other than a plain space
+    // and a space at either edge are checked. The look-alike half needs a
+    // published set of confusable characters pinned to a Unicode version, and
+    // that set has not been chosen - so the rule runs, but not in full.
+    rule(C::UnescapedCharacter, Error, PartlyChecked),
+    // Unreachable rather than unwritten: a parser that follows the specification
+    // rejects a malformed escape as a syntax error, so E004 always arrives first.
+    // Whether this rule should exist at all is a question for the format.
+    rule(C::InvalidEscapeSequence, Error, AwaitingDecision),
+    rule(C::LiteralStringForEscapableValue, Error, Checked),
+    rule(C::UnknownValueType, Error, Checked),
+    rule(C::RepeatCountOutOfRange, Error, Checked),
+    rule(C::ValuePresentForNonLiteralType, Error, Checked),
+    rule(C::RepeatProductTooLarge, Error, Checked),
     // Needs canonical decomposition data, which is either a dependency or a
     // generated table pinned to a Unicode version. Neither has been decided.
     rule(C::UnescapedAmbiguousCharacter, Error, AwaitingDecision),
-    rule(C::FieldOutsideVocabulary, Error, NotImplemented),
-    rule(C::EscapeOutsideCommonSubset, Error, NotImplemented),
-    rule(C::LiteralValueVeryLong, Warning, NotImplemented),
+    rule(C::FieldOutsideVocabulary, Error, Checked),
+    rule(C::EscapeOutsideCommonSubset, Error, Checked),
+    rule(C::LiteralValueVeryLong, Warning, Checked),
     rule(C::MissingBreaks, Error, NotImplemented),
     rule(C::BreaksTooShortOrEchoesName, Error, NotImplemented),
     rule(C::MissingExpect, Warning, NotImplemented),
@@ -260,6 +272,10 @@ pub fn rule_for(code: RuleCode) -> LintRule {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RuleCoverage {
     pub checked: usize,
+    /// Rules that run but not in full. Counted apart from both neighbours:
+    /// folding them into `checked` overstates the verdict, folding them into the
+    /// remainder contradicts the findings they produce.
+    pub partly: usize,
     pub total: usize,
 }
 
@@ -269,22 +285,26 @@ impl RuleCoverage {
     #[must_use]
     pub fn measure() -> Self {
         let mut checked = 0;
+        let mut partly = 0;
         let mut index = 0;
         while index < RULES.len() {
-            if matches!(RULES[index].status, RuleStatus::Checked) {
-                checked += 1;
+            match RULES[index].status {
+                RuleStatus::Checked => checked += 1,
+                RuleStatus::PartlyChecked => partly += 1,
+                _ => {}
             }
             index += 1;
         }
         Self {
             checked,
+            partly,
             total: RULES.len(),
         }
     }
 
     #[must_use]
     pub fn unchecked(self) -> usize {
-        self.total - self.checked
+        self.total - self.checked - self.partly
     }
 }
 
@@ -458,24 +478,45 @@ mod tests {
     fn coverage_counts_the_register_rather_than_repeating_a_stored_number() {
         let coverage = RuleCoverage::measure();
         assert_eq!(coverage.total, 41);
-        assert_eq!(coverage.checked + coverage.unchecked(), coverage.total);
-        // This build runs the file and structure rules and nothing else yet.
-        assert_eq!(coverage.checked, 8);
+        // Every rule falls in exactly one bucket. If this ever fails, some rule
+        // is being counted twice or not at all, and the summary that a reader
+        // trusts to say what was not looked at has quietly stopped adding up.
+        assert_eq!(
+            coverage.checked + coverage.partly + coverage.unchecked(),
+            coverage.total
+        );
+        assert_eq!(coverage.checked, 16);
+        assert_eq!(coverage.partly, 1);
     }
 
     #[test]
-    fn the_two_rules_blocked_on_an_open_question_say_so_rather_than_looking_unwritten() {
-        // E020 and E027 are not waiting for somebody to type them out - they are
-        // waiting for a decision that has not been made. Reporting them as merely
-        // unimplemented would hide a blocked question behind a to-do.
+    fn a_rule_that_runs_only_in_part_is_not_reported_as_either_neighbour() {
+        // E020 finds control characters, format characters and edge spaces today,
+        // and cannot find look-alikes until a confusable set is chosen. Calling it
+        // checked would overstate the verdict; calling it unchecked would
+        // contradict every E020 the tool actually reports.
         assert_eq!(
             rule_for(RuleCode::UnescapedCharacter).status,
-            RuleStatus::AwaitingDecision
+            RuleStatus::PartlyChecked
         );
-        assert_eq!(
-            rule_for(RuleCode::UnescapedAmbiguousCharacter).status,
-            RuleStatus::AwaitingDecision
-        );
+    }
+
+    #[test]
+    fn the_rules_blocked_on_an_open_question_say_so_rather_than_looking_unwritten() {
+        // Not waiting for somebody to type them out - waiting for a decision.
+        // Reporting them as merely unimplemented hides a blocked question behind
+        // a to-do, and nobody goes looking for a to-do.
+        for code in [
+            RuleCode::UnescapedAmbiguousCharacter,
+            RuleCode::InvalidEscapeSequence,
+        ] {
+            assert_eq!(
+                rule_for(code).status,
+                RuleStatus::AwaitingDecision,
+                "{}",
+                code.as_str()
+            );
+        }
     }
 
     #[test]

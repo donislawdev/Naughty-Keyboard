@@ -1,0 +1,25 @@
+# expect: E022
+#
+# Inside single quotes nothing is an escape, so this value cannot be written
+# correctly in this form at all. The repair is to change the quoting, which is
+# why this is E022 and not E020 - naming the latter would point at a fix that
+# does not exist here.
+
+format = 1
+
+[pack]
+id          = "literal-string-escapable"
+name        = "Literal string holding something invisible"
+description = "Uses single quotes for a value that needs an escape."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "zero-width-in-quotes"
+name   = "Test value"
+value  = 'ab​​cd'
+breaks = "Nothing on its own - this value exists so the file is otherwise complete."
+since  = "1.0"

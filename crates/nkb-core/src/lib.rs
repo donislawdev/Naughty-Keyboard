@@ -21,6 +21,7 @@ pub mod metrics;
 pub mod source_text;
 pub mod text;
 pub mod value;
+pub mod written_form;
 
 pub use lint::{
     LintProblem, LintReport, LintRule, RULES, RuleCode, RuleCoverage, RuleStatus, Severity,
@@ -30,3 +31,4 @@ pub use metrics::TextMetrics;
 pub use source_text::line_of;
 pub use text::{EscapedText, LiteralText};
 pub use value::{MAX_REPEAT_COUNT, MAX_VALUE_CODE_POINTS, ValueBody, ValueProblem};
+pub use written_form::{LITERAL_LENGTH_HINT, Quoting};

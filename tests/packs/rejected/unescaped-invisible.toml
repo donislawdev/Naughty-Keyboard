@@ -1,0 +1,28 @@
+# expect: E020
+#
+# The value below holds three zero-width spaces written out instead of escaped.
+# A reviewer reading this file sees `abcd` and has no way to tell. An editor that
+# trims or normalises on save can drop them without a trace.
+#
+# The correct spelling of the same value is "ab\u200B\u200B\u200Bcd", and the
+# whole reason the format insists on it is visible here: the two lines look the
+# same in a diff and are not.
+
+format = 1
+
+[pack]
+id          = "unescaped-invisible"
+name        = "Unescaped invisible characters"
+description = "Writes zero-width characters out rather than escaping them."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "zero-width-space-x3"
+name   = "Three zero-width spaces"
+value  = "ab​​​cd"
+breaks = "Character counters, comparison and deduplication see a different value than the human does."
+since  = "1.0"

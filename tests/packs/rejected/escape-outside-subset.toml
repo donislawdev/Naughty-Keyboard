@@ -1,0 +1,24 @@
+# expect: E029
+#
+# This parser accepts it without a word - measured. A pack carrying it would
+# fail to parse for a receiver on an older reader, which is a pack that works
+# here and nowhere else.
+
+format = 1
+
+[pack]
+id          = "escape-outside-subset"
+name        = "Escape outside the common subset"
+description = "Uses an escape that is valid in TOML 1.1.0 and an error in 1.0.0."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "hex-escape"
+name   = "Test value"
+value  = "A\x41"
+breaks = "Nothing on its own - this value exists so the file is otherwise complete."
+since  = "1.0"

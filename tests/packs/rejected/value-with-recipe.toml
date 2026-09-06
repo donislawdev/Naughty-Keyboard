@@ -1,0 +1,26 @@
+# expect: E025
+#
+# Two answers to the same question, and nothing in the format says which one the
+# tool would send. Refused rather than resolved by a rule nobody wrote down.
+
+format = 1
+
+[pack]
+id          = "value-with-recipe"
+name        = "Recipe carrying text as well"
+description = "Declares a recipe and a written out value at once."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "two-answers"
+name   = "Test value"
+type   = "repeat"
+unit   = "a"
+count  = 5
+value  = "b"
+breaks = "Nothing on its own - this value exists so the file is otherwise complete."
+since  = "1.0"
