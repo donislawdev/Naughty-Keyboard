@@ -125,6 +125,26 @@ fn resolve_translation(
         }
     };
 
+    // 🔴 Before comparing anything: is the thing being translated a pack at all?
+    //
+    // A translation names its entries by key and a source pack names them in a
+    // field, so a file that is itself a translation offers no identifiers to
+    // compare against - and the comparison would come back saying every entry had
+    // vanished. That sentence is not merely unhelpful, it is false, and it sends a
+    // contributor to delete entries which are correct. A tool that guesses wrong
+    // out loud is worse than one that says nothing, so this is checked first.
+    if format.translated_pack(&translated) != TranslationTarget::NotATranslation {
+        report.push(LintProblem::new(RuleCode::TranslatesNonPack).about(&target));
+        report.skip(
+            SkippedRule::new(
+                RuleCode::TranslationRefersToMissingId,
+                SkipReason::TranslatedPackIsATranslation,
+            )
+            .about(&target),
+        );
+        return;
+    }
+
     match format.check_translation(text, &translated) {
         TranslationCheck::Compared(problems) => report.extend(problems),
         TranslationCheck::TranslatedPackDidNotParse => report.skip(
@@ -176,6 +196,14 @@ mod tests {
     /// can be exercised without a real one. That is the reason the port exists.
     struct Says {
         codes: Vec<RuleCode>,
+        /// The text of the file under check.
+        ///
+        /// Kept so the double can answer `translated_pack` differently for the
+        /// two texts it is asked about. `lint_pack` asks once about the file in
+        /// hand and once about the pack that file translates, and an answer
+        /// shared between them would make every translated pack look like a
+        /// translation of its own - hiding the very rule that asks whether it is.
+        under_check: String,
         target: TranslationTarget,
         comparison: TranslationCheck,
     }
@@ -184,6 +212,7 @@ mod tests {
         fn nothing() -> Self {
             Self {
                 codes: Vec::new(),
+                under_check: String::new(),
                 target: TranslationTarget::NotATranslation,
                 comparison: TranslationCheck::Compared(Vec::new()),
             }
@@ -196,8 +225,9 @@ mod tests {
             }
         }
 
-        fn translating(target: TranslationTarget) -> Self {
+        fn translating(under_check: &str, target: TranslationTarget) -> Self {
             Self {
+                under_check: under_check.to_owned(),
                 target,
                 ..Self::nothing()
             }
@@ -217,8 +247,12 @@ mod tests {
                 .collect()
         }
 
-        fn translated_pack(&self, _text: &str) -> TranslationTarget {
-            self.target.clone()
+        fn translated_pack(&self, text: &str) -> TranslationTarget {
+            if text == self.under_check {
+                self.target.clone()
+            } else {
+                TranslationTarget::NotATranslation
+            }
         }
 
         fn check_translation(&self, _text: &str, _translated: &str) -> TranslationCheck {
@@ -335,7 +369,10 @@ mod tests {
         // W052, which this build runs and could not run here. Reporting only the
         // first leaves a summary saying every rule was checked.
         let source = InMemory::holding("unicode-text.pl", "format = 1\n");
-        let format = Says::translating(TranslationTarget::Pack("unicode-text".to_owned()));
+        let format = Says::translating(
+            "format = 1\n",
+            TranslationTarget::Pack("unicode-text".to_owned()),
+        );
 
         let report = judged(lint_pack(&source, &format, "unicode-text.pl"));
         assert_eq!(codes(&report), vec!["E051"]);
@@ -357,7 +394,10 @@ mod tests {
         packs.insert("locale-cz.pl".to_owned(), Ok("format = 1\n".to_owned()));
         packs.insert("locale-cz".to_owned(), Err(SourceError::Unreadable));
         let source = InMemory(packs);
-        let format = Says::translating(TranslationTarget::Pack("locale-cz".to_owned()));
+        let format = Says::translating(
+            "format = 1\n",
+            TranslationTarget::Pack("locale-cz".to_owned()),
+        );
 
         let report = judged(lint_pack(&source, &format, "locale-cz.pl"));
         assert_eq!(codes(&report).len(), 0, "the neighbour is the broken one");
@@ -371,7 +411,10 @@ mod tests {
         packs.insert("mojibake.pl".to_owned(), Ok("format = 1\n".to_owned()));
         packs.insert("mojibake".to_owned(), Err(SourceError::NotUtf8));
         let source = InMemory(packs);
-        let format = Says::translating(TranslationTarget::Pack("mojibake".to_owned()));
+        let format = Says::translating(
+            "format = 1\n",
+            TranslationTarget::Pack("mojibake".to_owned()),
+        );
 
         let report = judged(lint_pack(&source, &format, "mojibake.pl"));
         assert_eq!(skips(&report), vec![("W052", "translated-pack-not-utf8")]);
@@ -386,8 +429,9 @@ mod tests {
         packs.insert("broken.pl".to_owned(), Ok("format = 1\n".to_owned()));
         packs.insert("broken".to_owned(), Ok("format = = 1\n".to_owned()));
         let source = InMemory(packs);
-        let format = Says::translating(TranslationTarget::Pack("broken".to_owned()))
-            .comparing(TranslationCheck::TranslatedPackDidNotParse);
+        let format =
+            Says::translating("format = 1\n", TranslationTarget::Pack("broken".to_owned()))
+                .comparing(TranslationCheck::TranslatedPackDidNotParse);
 
         let report = judged(lint_pack(&source, &format, "broken.pl"));
         assert_eq!(
@@ -410,7 +454,7 @@ mod tests {
         }
 
         let source = Counting(std::cell::Cell::new(0));
-        let format = Says::translating(TranslationTarget::Unusable);
+        let format = Says::translating("format = 1\n", TranslationTarget::Unusable);
         let report = judged(lint_pack(&source, &format, "hostile.pl"));
 
         assert_eq!(
@@ -431,15 +475,66 @@ mod tests {
         // rule ran, so the report says nothing at all - and a mechanism that
         // recorded a skip here would make every correct translation look partly
         // unchecked.
+        // The two files carry different text on purpose. They are two different
+        // files - a translation and the pack it follows - and giving them the same
+        // bytes would make the double answer the same for both, which is the one
+        // thing the rule about a translation of a translation asks about.
         let mut packs = HashMap::new();
-        packs.insert("good.pl".to_owned(), Ok("format = 1\n".to_owned()));
-        packs.insert("good".to_owned(), Ok("format = 1\n".to_owned()));
+        packs.insert("good.pl".to_owned(), Ok("the translation\n".to_owned()));
+        packs.insert("good".to_owned(), Ok("the pack it follows\n".to_owned()));
         let source = InMemory(packs);
-        let format = Says::translating(TranslationTarget::Pack("good".to_owned()));
+        let format = Says::translating(
+            "the translation\n",
+            TranslationTarget::Pack("good".to_owned()),
+        );
 
         let report = judged(lint_pack(&source, &format, "good.pl"));
         assert_eq!(codes(&report).len(), 0);
         assert_eq!(skips(&report).len(), 0);
+    }
+
+    #[test]
+    fn a_translation_of_a_translation_is_refused_rather_than_answered_wrongly() {
+        // 🔴 The case where this build used to say something untrue. A chain of
+        // translations has no pack at the end, so the comparison would report
+        // every entry as vanished - and that sentence sends a contributor to
+        // delete entries which are correct.
+        //
+        // Both halves matter: the finding says what is wrong, and the skip says
+        // that the rule needing the pack did not run. Reporting only the first
+        // would leave a summary claiming every rule was checked.
+        let mut packs = HashMap::new();
+        packs.insert(
+            "chain.cs".to_owned(),
+            Ok("the outer translation\n".to_owned()),
+        );
+        packs.insert(
+            "chain.pl".to_owned(),
+            Ok("the inner translation\n".to_owned()),
+        );
+        let source = InMemory(packs);
+
+        // The double answers for both texts here, which is exactly the shape of a
+        // chain: each file names something that is itself a translation.
+        struct EverythingTranslates;
+        impl PackFormat for EverythingTranslates {
+            fn check(&self, _text: &str, _expected_id: &str) -> Vec<LintProblem> {
+                Vec::new()
+            }
+            fn translated_pack(&self, _text: &str) -> TranslationTarget {
+                TranslationTarget::Pack("chain.pl".to_owned())
+            }
+            fn check_translation(&self, _text: &str, _translated: &str) -> TranslationCheck {
+                panic!("a chain must be refused before anything is compared")
+            }
+        }
+
+        let report = judged(lint_pack(&source, &EverythingTranslates, "chain.cs"));
+        assert_eq!(codes(&report), vec!["E053"]);
+        assert_eq!(
+            skips(&report),
+            vec![("W052", "translated-pack-is-a-translation")]
+        );
     }
 
     #[test]

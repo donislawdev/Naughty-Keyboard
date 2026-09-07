@@ -1,0 +1,34 @@
+# expect: E017
+#
+# The fourth closed vocabulary in the format, and until 2026-09-07 the only one
+# with no rule behind it.
+#
+# What makes this one different from a misspelled field kind: `risk` decides
+# whether a value is marked before a tester sends it. Anything the tool does not
+# recognise falls back to `normal`, so a pack meaning to warn about its values
+# would ship them unmarked - and nothing on screen would say so. A closed set
+# whose fallback is the safe-looking half is the one that most needs checking.
+#
+# Written at the value level here. The pack level carries the same rule, because
+# the format defines the field in both places.
+
+format = 1
+
+[pack]
+id          = "risk-outside-vocabulary"
+name        = "Risk outside the vocabulary"
+description = "A value claiming a risk level the format does not define."
+version     = "1.0"
+updated     = 2026-09-07
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "unknown-risk"
+name   = "Unknown risk level"
+value  = "harmless enough"
+risk   = "dangerous"
+breaks = "Nothing on its own - this value exists to claim a risk level that the format has no reading for."
+expect = "Refused, because a level nobody recognises is read as the harmless one."
+since  = "1.0"

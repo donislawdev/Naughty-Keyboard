@@ -335,7 +335,7 @@ mod tests {
             ),
             (
                 "b.toml".to_owned(),
-                judged(vec![LintProblem::new(RuleCode::UnknownTopLevelKey)]),
+                judged(vec![LintProblem::new(RuleCode::UnknownKey)]),
             ),
         ]);
         assert!(text.contains("\"errors\": 2"), "top level sum: {text}");

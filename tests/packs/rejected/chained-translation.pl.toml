@@ -1,0 +1,31 @@
+# expect: E053
+# skipped: W052=translated-pack-is-a-translation
+#
+# 🔴 The one case where this build used to say something that was not true.
+#
+# Before 2026-09-07 a translation naming another translation produced W052 on
+# every entry: "the pack it translates does not have it". Every one of those
+# sentences was false - the entries exist in the pack at the end of the chain.
+# The tool sent a contributor to delete correct lines, which is worse than saying
+# nothing at all.
+#
+# The mechanical reason: a source pack names its entries in an `id` field and a
+# translation names them by key, so reading a translation as if it were a pack
+# finds no identifiers, and everything looks like it vanished. A wrong answer
+# from a confident tool is the failure this product exists to find in other
+# people's software.
+#
+# The second line matters as much as the first: the rule that needed the pack did
+# not run, and the run says so rather than leaving a summary claiming otherwise.
+
+format     = 1
+translates = "middle-translation"
+language   = "cs"
+
+[pack]
+name        = "Retez prekladu"
+description = "Preklad, ktery ukazuje na jiny preklad misto na balicek."
+
+[values.short-run]
+name   = "Kratky retezec"
+breaks = "Blizsi konec rozsahu, ktery ma smysl jen vedle toho vzdalenejsiho."

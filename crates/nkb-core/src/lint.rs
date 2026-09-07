@@ -82,7 +82,7 @@ pub enum RuleStatus {
 pub enum RuleCode {
     // File and structure.
     MissingOrUnsupportedFormat,
-    UnknownTopLevelKey,
+    UnknownKey,
     MissingRequiredField,
     NotValidToml,
     NotUtf8OrByteOrderMark,
@@ -98,6 +98,7 @@ pub enum RuleCode {
     ValueIdVanished,
     ReplacedByUnknownId,
     DuplicateValueBody,
+    RiskOutsideVocabulary,
     // Value.
     UnescapedCharacter,
     InvalidEscapeSequence,
@@ -124,6 +125,7 @@ pub enum RuleCode {
     TranslationCarriesValue,
     TranslatesUnknownPack,
     TranslationRefersToMissingId,
+    TranslatesNonPack,
     // Style.
     RedundantShape,
     PackWithoutTags,
@@ -138,7 +140,7 @@ impl RuleCode {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::MissingOrUnsupportedFormat => "E001",
-            Self::UnknownTopLevelKey => "E002",
+            Self::UnknownKey => "E002",
             Self::MissingRequiredField => "E003",
             Self::NotValidToml => "E004",
             Self::NotUtf8OrByteOrderMark => "E005",
@@ -153,6 +155,7 @@ impl RuleCode {
             Self::ValueIdVanished => "E014",
             Self::ReplacedByUnknownId => "E015",
             Self::DuplicateValueBody => "E016",
+            Self::RiskOutsideVocabulary => "E017",
             Self::UnescapedCharacter => "E020",
             Self::InvalidEscapeSequence => "E021",
             Self::LiteralStringForEscapableValue => "E022",
@@ -175,6 +178,7 @@ impl RuleCode {
             Self::TranslationCarriesValue => "E050",
             Self::TranslatesUnknownPack => "E051",
             Self::TranslationRefersToMissingId => "W052",
+            Self::TranslatesNonPack => "E053",
             Self::RedundantShape => "W060",
             Self::PackWithoutTags => "W061",
             Self::PackTooLarge => "W062",
@@ -210,9 +214,9 @@ const fn rule(code: RuleCode, severity: Severity, status: RuleStatus) -> LintRul
 
 /// The complete register. Its length is the number the specification states, and
 /// the test below is what keeps the two from drifting apart.
-pub const RULES: [LintRule; 43] = [
+pub const RULES: [LintRule; 45] = [
     rule(C::MissingOrUnsupportedFormat, Error, Checked),
-    rule(C::UnknownTopLevelKey, Error, Checked),
+    rule(C::UnknownKey, Error, Checked),
     rule(C::MissingRequiredField, Error, Checked),
     rule(C::NotValidToml, Error, Checked),
     rule(C::NotUtf8OrByteOrderMark, Error, Checked),
@@ -234,6 +238,12 @@ pub const RULES: [LintRule; 43] = [
     // ask whether two entries in one pack are really one entry: E011 about the
     // name, this one about what the name stands for.
     rule(C::DuplicateValueBody, Error, Checked),
+    // A value rule carrying an identity band number, because E020-E029 filled
+    // up. Only two things about a code are contract: that it is unique and that
+    // it is never reused. Which ten it falls in was a reading aid, and this is
+    // the point where it stopped being achievable - said out loud rather than
+    // left for the next reader to puzzle over.
+    rule(C::RiskOutsideVocabulary, Error, Checked),
     // Control characters, format characters, whitespace other than a plain space
     // and a space at either edge are checked. The look-alike half needs a
     // published set of confusable characters pinned to a Unicode version, and
@@ -267,6 +277,11 @@ pub const RULES: [LintRule; 43] = [
     rule(C::TranslationCarriesValue, Error, Checked),
     rule(C::TranslatesUnknownPack, Error, Checked),
     rule(C::TranslationRefersToMissingId, Warning, Checked),
+    // The rule that stops this build from saying something untrue. Without it a
+    // translation of a translation is reported as a translation of a pack that
+    // lost every one of its values - a sentence that is false, and that sends a
+    // contributor to delete entries which are correct.
+    rule(C::TranslatesNonPack, Error, Checked),
     rule(C::RedundantShape, Warning, NotImplemented),
     rule(C::PackWithoutTags, Warning, NotImplemented),
     rule(C::PackTooLarge, Warning, NotImplemented),
@@ -443,6 +458,11 @@ pub enum SkipReason {
     TranslatedPackNotUtf8,
     /// It is text and is not TOML, so nothing could be read out of it.
     TranslatedPackDidNotParse,
+    /// It parses and is itself a translation, so it holds no identifiers of its
+    /// own to be followed. Kept apart from the four above because the repair is
+    /// in **this** file - point `translates` at the pack, not at a translation
+    /// of it - while the others are repairs to the neighbour.
+    TranslatedPackIsATranslation,
 }
 
 impl SkipReason {
@@ -455,6 +475,7 @@ impl SkipReason {
             Self::TranslatedPackUnreadable => "translated-pack-unreadable",
             Self::TranslatedPackNotUtf8 => "translated-pack-not-utf8",
             Self::TranslatedPackDidNotParse => "translated-pack-did-not-parse",
+            Self::TranslatedPackIsATranslation => "translated-pack-is-a-translation",
         }
     }
 }
@@ -557,9 +578,9 @@ mod tests {
 
     #[test]
     fn the_register_holds_the_number_of_rules_the_specification_states() {
-        // The specification says forty three. If this number has to change, the
+        // The specification says forty five. If this number has to change, the
         // specification changed too, and that is a decision rather than a tidy up.
-        assert_eq!(RULES.len(), 43);
+        assert_eq!(RULES.len(), 45);
     }
 
     #[test]
@@ -594,7 +615,7 @@ mod tests {
     #[test]
     fn coverage_counts_the_register_rather_than_repeating_a_stored_number() {
         let coverage = RuleCoverage::measure();
-        assert_eq!(coverage.total, 43);
+        assert_eq!(coverage.total, 45);
         // Every rule falls in exactly one bucket. If this ever fails, some rule
         // is being counted twice or not at all, and the summary that a reader
         // trusts to say what was not looked at has quietly stopped adding up.
@@ -602,7 +623,7 @@ mod tests {
             coverage.checked + coverage.partly + coverage.unchecked(),
             coverage.total
         );
-        assert_eq!(coverage.checked, 33);
+        assert_eq!(coverage.checked, 35);
         assert_eq!(coverage.partly, 1);
     }
 
@@ -621,6 +642,7 @@ mod tests {
             SkipReason::TranslatedPackUnreadable,
             SkipReason::TranslatedPackNotUtf8,
             SkipReason::TranslatedPackDidNotParse,
+            SkipReason::TranslatedPackIsATranslation,
         ] {
             let skipped = SkippedRule::new(RuleCode::TranslationRefersToMissingId, reason);
             let status = rule_for(skipped.code).status;
@@ -643,6 +665,7 @@ mod tests {
             SkipReason::TranslatedPackUnreadable,
             SkipReason::TranslatedPackNotUtf8,
             SkipReason::TranslatedPackDidNotParse,
+            SkipReason::TranslatedPackIsATranslation,
         ];
         let names: HashSet<&str> = reasons.iter().map(|r| r.as_str()).collect();
         assert_eq!(names.len(), reasons.len());
@@ -751,7 +774,7 @@ mod tests {
         let mut report = LintReport::default();
         report.push(LintProblem::new(RuleCode::PackWithoutValues).at(9));
         report.push(LintProblem::new(RuleCode::NotValidToml).at(2));
-        report.push(LintProblem::new(RuleCode::UnknownTopLevelKey));
+        report.push(LintProblem::new(RuleCode::UnknownKey));
         report.sort();
 
         let order: Vec<Option<u32>> = report.problems.iter().map(|p| p.line).collect();

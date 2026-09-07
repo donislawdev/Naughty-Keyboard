@@ -53,6 +53,84 @@ const TOP_LEVEL_KEYS: [&str; 6] = [
     "language",
 ];
 
+/// Every key the format defines inside `[pack]`, from the data model in
+/// `pack-format.md` 4.
+///
+/// # Why these lists exist at all
+///
+/// E002 used to ask its question only at the top of the file, and a misspelling
+/// is more likely the deeper it sits: `verison` in a pack header and `tgas`
+/// beside a value are the same mistake, and neither was reported. Measured
+/// 2026-09-07 across all six key spaces the format has - five were silent.
+///
+/// 🔴 The lists are taken from the specification's tables, not from what the code
+/// happens to read. A list short by one field turns a correct pack into a refused
+/// one, which is a worse failure than the silence it replaces.
+const PACK_KEYS: [&str; 12] = [
+    "id",
+    "name",
+    "description",
+    "version",
+    "updated",
+    "license",
+    "authors",
+    "language",
+    "tags",
+    "fields",
+    "risk",
+    "source",
+];
+
+/// Every key the format defines inside a value: the data model in
+/// `pack-format.md` 5, plus the three that describe a generated value from 6, and
+/// `source` from the inheritance rule in 5.
+const VALUE_KEYS: [&str; 16] = [
+    "id",
+    "name",
+    "value",
+    "breaks",
+    "expect",
+    "fields",
+    "tags",
+    "risk",
+    "since",
+    "shape",
+    "deprecated",
+    "replaced_by",
+    "source",
+    "type",
+    "unit",
+    "count",
+];
+
+/// Every key the format defines inside a pair, from `pack-format.md` 9.
+///
+/// Shorter than a value's on purpose: a pair names two values and carries no
+/// value of its own, so the fields that describe one are absent rather than
+/// optional.
+const PAIR_KEYS: [&str; 8] = [
+    "id", "name", "relation", "a", "b", "breaks", "expect", "since",
+];
+
+/// What a translation may carry in `[pack]`, from `pack-format.md` 10.
+const TRANSLATION_PACK_KEYS: [&str; 2] = ["name", "description"];
+
+/// What a translation may carry per entry.
+///
+/// Three, and the shortness is the rule rather than an oversight: a translation
+/// changes prose and nothing else. E050 refuses the four fields that decide what
+/// gets inserted; this refuses everything else the format did not put here,
+/// including fields that are harmless in a source pack.
+const TRANSLATION_ENTRY_KEYS: [&str; 3] = ["name", "breaks", "expect"];
+
+/// The two values `risk` may hold, from `pack-format.md` 4 and 5.
+///
+/// Closed like the field vocabulary, and until 2026-09-07 the only closed set in
+/// the format with no rule behind it. It decides whether a value is marked as
+/// offensive before a tester sends it, so a misspelling here does not degrade to
+/// a smaller feature - it degrades to no warning at all.
+const RISK_LEVELS: [&str; 2] = ["normal", "offensive"];
+
 /// Fields a source pack must declare. Absent means the pack cannot be cited,
 /// versioned, or redistributed by whoever receives it.
 const REQUIRED_PACK_FIELDS: [&str; 8] = [
@@ -222,7 +300,7 @@ fn check_top_level_keys(text: &str, root: &Table) -> Vec<LintProblem> {
     root.iter()
         .filter(|(key, _)| !TOP_LEVEL_KEYS.contains(key))
         .map(|(key, item)| {
-            LintProblem::new(RuleCode::UnknownTopLevelKey)
+            LintProblem::new(RuleCode::UnknownKey)
                 .at(span_line(text, item))
                 .about(key)
         })
@@ -310,11 +388,15 @@ fn check_pack_kinds(text: &str, root: &Table) -> Vec<LintProblem> {
     let Some(pack) = root.get("pack").and_then(Item::as_table_like) else {
         return Vec::new();
     };
-    check_field_kinds(text, pack.iter())
-        .into_iter()
-        .chain(check_fields_of(pack))
-        .map(|problem| problem.owned_by("pack"))
-        .collect()
+    let mut problems = check_keys(text, pack, &PACK_KEYS, "pack");
+    problems.extend(
+        check_field_kinds(text, pack.iter())
+            .into_iter()
+            .chain(check_fields_of(pack))
+            .chain(check_risk(text, pack))
+            .map(|problem| problem.owned_by("pack")),
+    );
+    problems
 }
 
 /// Whether an item is of the kind the format gives that field.
@@ -528,6 +610,8 @@ fn check_values<'a>(
             .chain(identity_problems)
             .chain(check_body(text, table))
             .chain(check_fields(table))
+            .chain(check_keys(text, table, &VALUE_KEYS, ""))
+            .chain(check_risk(text, table))
             .chain(check_description(table, pack, attributed_one_by_one))
         {
             problem.line = problem.line.or(Some(line));
@@ -703,6 +787,7 @@ fn check_pairs<'a>(
         let identity = declared_id.map_or_else(|| format!("pairs[{index}]"), ToOwned::to_owned);
 
         let mut found = check_field_kinds(text, table.iter());
+        found.extend(check_keys(text, table, &PAIR_KEYS, ""));
 
         if let Some(id) = declared_id {
             if !seen.insert(id) {
@@ -787,6 +872,7 @@ fn check_translation_file(text: &str, root: &Table) -> Vec<LintProblem> {
             check_field_kinds(text, pack.iter())
                 .into_iter()
                 .chain(check_insertion_fields(text, pack.iter()))
+                .chain(check_translation_keys(text, pack, &TRANSLATION_PACK_KEYS))
                 .map(|problem| problem.owned_by("pack")),
         );
     }
@@ -795,6 +881,7 @@ fn check_translation_file(text: &str, root: &Table) -> Vec<LintProblem> {
         for mut problem in check_field_kinds(text, table.iter())
             .into_iter()
             .chain(check_insertion_fields(text, table.iter()))
+            .chain(check_translation_keys(text, table, &TRANSLATION_ENTRY_KEYS))
         {
             problem.owner = Some(owner.clone());
             problems.push(problem);
@@ -942,6 +1029,72 @@ fn check_insertion_fields<'a>(
                 .about(key)
         })
         .collect()
+}
+
+/// E002: a key the format does not define, inside a table.
+///
+/// Reported against the table it sits in rather than the file, so that `owner` in
+/// the machine readable output says where - the same shape E003 uses for its two
+/// levels, and the reason neither of them needed a second code (`D30`).
+fn check_keys(
+    text: &str,
+    table: &dyn TableLike,
+    allowed: &[&str],
+    owner: &str,
+) -> Vec<LintProblem> {
+    table
+        .iter()
+        .filter(|(key, _)| !allowed.contains(key))
+        .map(|(key, item)| {
+            LintProblem::new(RuleCode::UnknownKey)
+                .at(span_line(text, item))
+                .about(key)
+                .owned_by(owner)
+        })
+        .collect()
+}
+
+/// E002 over a translation table, minus the keys E050 already speaks about.
+///
+/// A `value` in a translation is both "a field that decides what gets inserted"
+/// and "a key a translation may not carry", and they are one mistake with one
+/// repair: delete the field. Reporting both would hand a contributor two codes
+/// and one thing to do, which is the objection that kept E003 from splitting in
+/// two (`D30`). E050 keeps it, because it is the one that says why it matters.
+fn check_translation_keys(text: &str, table: &dyn TableLike, allowed: &[&str]) -> Vec<LintProblem> {
+    check_keys(text, table, allowed, "")
+        .into_iter()
+        .filter(|problem| {
+            problem
+                .subject
+                .as_deref()
+                .is_none_or(|key| !INSERTION_FIELDS.contains(&key))
+        })
+        .collect()
+}
+
+/// E017: `risk` outside the two levels the format defines.
+///
+/// Anything unrecognised is read as `normal`, which is the quiet answer: a pack
+/// that meant to warn about its values ships them unmarked, and nothing on screen
+/// says so.
+fn check_risk(text: &str, table: &dyn TableLike) -> Vec<LintProblem> {
+    let Some(item) = table.get("risk") else {
+        return Vec::new();
+    };
+    // A `risk` of the wrong kind is E009's, and two codes for one mistake help
+    // nobody.
+    let Some(level) = item.as_str() else {
+        return Vec::new();
+    };
+    if RISK_LEVELS.contains(&level) {
+        return Vec::new();
+    }
+    vec![
+        LintProblem::new(RuleCode::RiskOutsideVocabulary)
+            .at(span_line(text, item))
+            .about(level),
+    ]
 }
 
 /// E028: field kinds outside the closed vocabulary, in a value table.
@@ -1132,7 +1285,7 @@ mod tests {
         let problems = check(&text, PACK_ID);
         let found = problems
             .iter()
-            .find(|p| p.code == RuleCode::UnknownTopLevelKey)
+            .find(|p| p.code == RuleCode::UnknownKey)
             .expect("E002 must be reported");
         assert_eq!(found.subject.as_deref(), Some("packs"));
         assert_eq!(found.line, Some(2));
@@ -1528,6 +1681,64 @@ mod tests {
             "{:?}",
             check(&text, PACK_ID)
         );
+    }
+
+    #[test]
+    fn an_unknown_key_is_refused_in_every_table_the_format_defines() {
+        // 🔴 One test per level, and the reason is the blind spot rather than
+        // thoroughness. The file suite compares a set of codes, and E002 already
+        // fires from the value level in another file - so narrowing this rule back
+        // to one table would pass the whole suite unnoticed. Measured by mutation:
+        // three of the four levels survived until this test existed.
+        //
+        // The vocabularies come from the specification's own tables. A list short
+        // by one field turns a correct pack into a refused one, which is the worse
+        // of the two failures.
+        let pack_level = with_pack_field("verison = \"1.0\"\n");
+        let found = one_of(&pack_level, RuleCode::UnknownKey);
+        assert_eq!(found.subject.as_deref(), Some("verison"));
+        assert_eq!(found.owner.as_deref(), Some("pack"));
+
+        let value_level = GOOD.replace("since = \"1.0\"\n", "tgas = [\"yaml\"]\nsince = \"1.0\"\n");
+        let found = one_of(&value_level, RuleCode::UnknownKey);
+        assert_eq!(found.subject.as_deref(), Some("tgas"));
+        assert_eq!(found.owner.as_deref(), Some("trailing-space"));
+
+        let pair_level = format!(
+            "{GOOD}\n[[pairs]]\nid = \"the-pair\"\nname = \"The pair\"\nrelation = \"identity\"\n\
+             a = \"trailing-space\"\nb = \"trailing-space\"\nsince = \"1.0\"\nnotes = \"x\"\n\
+             breaks = \"Two spellings that nobody can tell apart anywhere in the interface.\"\n\
+             expect = \"Refused, or kept apart consistently.\"\n"
+        );
+        let found = one_of(&pair_level, RuleCode::UnknownKey);
+        assert_eq!(found.subject.as_deref(), Some("notes"));
+        assert_eq!(found.owner.as_deref(), Some("the-pair"));
+    }
+
+    #[test]
+    fn an_unknown_key_is_refused_in_both_tables_of_a_translation() {
+        // A translation carries prose and nothing else, so its vocabulary is the
+        // shortest in the format - which makes a stray key there the easiest to
+        // miss and the least excusable to allow.
+        let pack_level = A_TRANSLATION.replace(
+            "description = \"Znaki, ktore zajmuja miejsce.\"\n",
+            "description = \"Znaki, ktore zajmuja miejsce.\"\nversion = \"1.0\"\n",
+        );
+        let found = one_of(&pack_level, RuleCode::UnknownKey);
+        assert_eq!(found.subject.as_deref(), Some("version"));
+        assert_eq!(found.owner.as_deref(), Some("pack"));
+
+        let entry_level = A_TRANSLATION.replace(
+            "name = \"Spacja na koncu\"\n",
+            "name = \"Spacja na koncu\"\nsince = \"1.0\"\n",
+        );
+        let found = one_of(&entry_level, RuleCode::UnknownKey);
+        assert_eq!(
+            found.subject.as_deref(),
+            Some("since"),
+            "a field that is ordinary in a source pack is still not prose"
+        );
+        assert_eq!(found.owner.as_deref(), Some("trailing-space"));
     }
 
     #[test]

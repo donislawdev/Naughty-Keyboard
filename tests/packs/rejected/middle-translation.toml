@@ -1,0 +1,26 @@
+# expect: W052
+#
+# A translation, and the middle link of the chain that `chained-translation.pl`
+# beside it points at. Named without a language suffix on purpose, because a
+# stem carrying a dot is not a pack identifier and `translates` would refuse it
+# before reaching the disk - so a chain can only be built out of a file named
+# like a pack.
+#
+# It earns its place in this set on its own: it describes an entry the pack it
+# follows does not have.
+
+format     = 1
+translates = "translated-pack"
+language   = "pl"
+
+[pack]
+name        = "Ogniwo posrednie"
+description = "Tlumaczenie, na ktore wskazuje inne tlumaczenie."
+
+[values.short-run]
+name   = "Krotki ciag"
+breaks = "Bliski koniec zakresu, znaczacy wylacznie obok dalekiego konca."
+
+[values.gone-from-the-pack]
+name   = "Wpis wycofany"
+breaks = "Opis wpisu, ktorego paczka juz nie zawiera - powod, dla ktorego ten plik jest w tym zestawie."

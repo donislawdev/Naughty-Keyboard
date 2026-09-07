@@ -121,6 +121,9 @@ pub fn skip_sentence(skipped: &SkippedRule) -> String {
         SkipReason::TranslatedPackDidNotParse => format!(
             "`{subject}.toml` is not valid TOML, so nothing could be read out of it. Lint that file first."
         ),
+        SkipReason::TranslatedPackIsATranslation => format!(
+            "`{subject}` is a translation and not a pack, so it names no entries of its own to compare against. Point `translates` at the pack itself."
+        ),
     }
 }
 
@@ -186,8 +189,23 @@ pub fn sentence(problem: &LintProblem) -> String {
         RuleCode::MissingOrUnsupportedFormat => format!(
             "format {subject} is newer than this build reads ({SUPPORTED_FORMAT}). Update Naughty Keyboard, or write the pack in format {SUPPORTED_FORMAT}."
         ),
-        RuleCode::UnknownTopLevelKey => format!(
+        RuleCode::UnknownKey if owner.is_empty() => format!(
             "unknown top level key `{subject}`. The format has format, pack, values and pairs - check for a typo, because a key nobody reads is a setting nobody applied."
+        ),
+        RuleCode::UnknownKey if owner == "pack" => format!(
+            "the pack declares `{subject}`, which the format does not define. A key nobody reads is a setting nobody applied - check for a typo."
+        ),
+        RuleCode::UnknownKey => format!(
+            "`{owner}` declares `{subject}`, which the format does not define. A key nobody reads is a setting nobody applied - check for a typo."
+        ),
+        RuleCode::RiskOutsideVocabulary if owner == "pack" => format!(
+            "the pack sets `risk` to `{subject}`. The format has normal and offensive, and anything else is read as normal - so a pack meaning to warn about its values would ship them unmarked."
+        ),
+        RuleCode::RiskOutsideVocabulary => format!(
+            "value `{owner}` sets `risk` to `{subject}`. The format has normal and offensive, and anything else is read as normal - so a value meaning to warn would be inserted with no warning shown."
+        ),
+        RuleCode::TranslatesNonPack => format!(
+            "`translates` names `{subject}`, which is itself a translation rather than a source pack. A translation follows a pack, and a chain of them has no pack at the end to follow."
         ),
         RuleCode::MissingRequiredField if owner.is_empty() => format!(
             "no `[{subject}]` table. A pack declares its identity, version and licence there."
@@ -441,7 +459,7 @@ mod tests {
         report.push(LintProblem::new(RuleCode::PackWithoutValues));
         assert!(summary(&report).join("\n").contains("1 error,"));
 
-        report.push(LintProblem::new(RuleCode::UnknownTopLevelKey));
+        report.push(LintProblem::new(RuleCode::UnknownKey));
         assert!(summary(&report).join("\n").contains("2 errors,"));
     }
 
@@ -475,6 +493,7 @@ mod tests {
             SkipReason::TranslatedPackUnreadable,
             SkipReason::TranslatedPackNotUtf8,
             SkipReason::TranslatedPackDidNotParse,
+            SkipReason::TranslatedPackIsATranslation,
         ];
         let mut written = std::collections::HashSet::new();
         for reason in reasons {
@@ -509,7 +528,7 @@ mod tests {
             .about("unicode-text"),
         );
         let text = summary(&report).join("\n");
-        assert!(text.contains("Checked 33 of 43 rules"), "{text}");
+        assert!(text.contains("Checked 35 of 45 rules"), "{text}");
         assert!(
             text.contains("1 more rule could not be checked for this file"),
             "{text}"

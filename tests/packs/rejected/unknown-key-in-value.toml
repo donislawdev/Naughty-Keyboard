@@ -1,0 +1,34 @@
+# expect: E002
+#
+# The same rule as `stray-key.toml` beside this one, one level down.
+#
+# Until 2026-09-07 E002 asked its question only at the top of the file, and a
+# misspelling is more likely the deeper it sits: nobody mistypes `format`, and
+# `tgas` for `tags` is a slip anyone makes. Measured across all six key spaces the
+# format has - five of them were silent, and this was the one that produced the
+# observation.
+#
+# One code rather than a second one, because the machine readable output already
+# says which table a finding belongs to. Splitting it would have handed a reader
+# two codes for one question.
+
+format = 1
+
+[pack]
+id          = "unknown-key-in-value"
+name        = "Unknown key in a value"
+description = "A value carrying a key the format does not define."
+version     = "1.0"
+updated     = 2026-09-07
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "misspelled-tags"
+name   = "Tags, misspelled"
+value  = "anything at all"
+tgas   = ["yaml", "boolean"]
+breaks = "Nothing on its own - the point is the key above, which the author meant as tags and nothing reads."
+expect = "Refused, because a key nobody reads is a setting nobody applied."
+since  = "1.0"
