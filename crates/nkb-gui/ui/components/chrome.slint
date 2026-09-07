@@ -42,9 +42,16 @@ export component Pill inherits Rectangle {
     // off-screen render caught it immediately: the border cut straight through
     // the word "offensive", because a hand-computed width and a centred label
     // disagree about what the text actually measures. Let the layout decide.
+    // ⚠️ The horizontal padding is one step wider than looks necessary on the
+    // machine this was designed on, and that is the point. Rendered on macOS
+    // and on Linux the same pill is wider, because the fallback typeface has
+    // different metrics - at the narrow step the border ran through the word.
+    // Measured 2026-09-07 on all three systems, not guessed from one.
     HorizontalLayout {
-        padding-left: Tokens.space-1;
-        padding-right: Tokens.space-1;
+        padding-left: Tokens.space-2;
+        padding-right: Tokens.space-2;
+        padding-top: Tokens.space-1;
+        padding-bottom: Tokens.space-1;
         alignment: center;
 
         TextHint {
