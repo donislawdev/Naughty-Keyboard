@@ -1,0 +1,105 @@
+// The design dictionary. THE ONLY FILE ALLOWED TO HOLD A RAW VALUE.
+//
+// Document 13 section 2.1: appearance is DATA, in one place, and a view refers
+// to a name and never to a number. Everything below is that one place, and
+// `ui_guard.rs` is what keeps it that way.
+//
+// # The scales are CLOSED, and that is the point
+//
+// Section 2.3: a session that wants seven CANNOT HAVE IT - it takes the nearest
+// named step. A table of values without a closed scale is not a dictionary, it
+// is a register of excuses, because a new name may be added for every new
+// number. So: adding a step here requires saying out loud why the existing ones
+// did not fit, and that sentence belongs in the commit message.
+//
+// # Where the numbers came from
+//
+// The colours are not taste. Every foreground-background pair a screen may use
+// was measured against WCAG contrast before this file existed; the tightest
+// pair that carries meaning is `text-muted` on `surface` at 5.00, against a 4.5
+// bar. The measurement is recorded in ADR-4.
+//
+// ⚠️ Those ratios hold for the OPAQUE window state. The resting state is
+// translucent by ux-spec.md 2, so its effective contrast depends on whatever
+// window sits behind the palette - which we neither control nor know. That is
+// OBS-68 and it is unresolved; nothing here may be read as covering it.
+//
+// # The third source that is not here yet
+//
+// ADR-4 measured that no graphical toolkit consults the system's high-contrast
+// setting - not Slint, not the alternatives, and winit reads it only to pick a
+// title-bar theme. So high contrast is ours to handle, and this dictionary will
+// need a third set of values beside the ordinary one. Document 13 section 7
+// listed that as a possibility; the measurement turned it into a certainty.
+
+export global Tokens {
+    // ---- surfaces ----------------------------------------------------------
+    out property <color> surface: #14161A;
+    out property <color> surface-raised: #1C1F26;
+    // The preview sits on a darker ground than the window so that a value made
+    // of invisible characters still reads as an object with edges.
+    out property <color> surface-sample: #0E1014;
+    out property <color> border: #2A2F3A;
+
+    // ---- text --------------------------------------------------------------
+    out property <color> text-primary: #E6E9EF;
+    out property <color> text-secondary: #9AA4B4;
+    out property <color> text-muted: #7E8797;
+
+    // ---- meaning -----------------------------------------------------------
+    // Document 13 section 9: meaning never hangs on colour alone. Each of these
+    // is always accompanied by a shape or a label at the point of use; the
+    // colour is the third carrier, never the only one.
+    out property <color> accent: #7AA2F7;
+    out property <color> risk: #E0AF68;
+    out property <color> ok: #9ECE6A;
+    // Stand-ins printed where an invisible character sits in a value.
+    out property <color> invisible: #BB9AF7;
+
+    // ---- spacing: a closed scale, six steps, nothing between them -----------
+    out property <length> space-1: 4px;
+    out property <length> space-2: 8px;
+    out property <length> space-3: 12px;
+    out property <length> space-4: 16px;
+    out property <length> space-5: 24px;
+    out property <length> space-6: 32px;
+
+    // ---- type: sizes are steps, and they are PAIRED WITH A WEIGHT ----------
+    // Section 2.3 asks for a fixed set of size-weight pairs rather than two
+    // independent axes. The pairing is enforced one level up, by the text
+    // components in ui/components/: a screen picks `Body`, never a size.
+    out property <length> type-hint: 11px;
+    out property <length> type-small: 12px;
+    out property <length> type-body: 13px;
+    out property <length> type-name: 15px;
+    out property <length> type-preview: 17px;
+
+    out property <int> weight-regular: 400;
+    out property <int> weight-strong: 500;
+
+    // ⚠️ Italic is deliberately absent, not forgotten. It measurably lowers
+    // legibility and does so more sharply for dyslexic readers, so emphasis
+    // goes through weight - document 13, section 2.3.
+
+    // ---- window geometry ---------------------------------------------------
+    // Named rather than written into the screen, because section 2.1 calls hard
+    // geometry out separately: it does not merely drift, it BREAKS at another
+    // system scale, another font size and a longer translation - and it breaks
+    // on someone else's machine, never on the author's.
+    out property <length> palette-width: 420px;
+    out property <length> sample-height: 40px;
+
+    // ---- shape -------------------------------------------------------------
+    out property <length> radius-small: 4px;
+    out property <length> radius: 6px;
+    out property <length> radius-window: 10px;
+    out property <length> hairline: 1px;
+
+    // ---- the preview typeface ----------------------------------------------
+    // ⚠️ Naming a family here is a stopgap and OBS-66 says why: the system
+    // fallback is a lottery. Measured 2026-09-07 on one machine, one string:
+    // Slint rendered two of four Chinese glyphs where iced rendered four. The
+    // product has to SHIP a typeface; until that decision is made, this name is
+    // a request, not a guarantee.
+    out property <string> font-mono: "Consolas";
+}

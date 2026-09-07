@@ -1,0 +1,95 @@
+// The structural vocabulary: the pieces a screen arranges but never draws.
+//
+// Every one of these exists because a screen would otherwise reach for a raw
+// `Rectangle`, and `ui_guard.rs` refuses that. The refusal is only fair if the
+// replacement is here, so this file is the other half of the guard.
+
+import { Tokens } from "../tokens.slint";
+import { TextHint, TextSmallMuted } from "typography.slint";
+
+// A one-pixel divider between zones.
+export component Hairline inherits Rectangle {
+    height: Tokens.hairline;
+    background: Tokens.border;
+}
+
+// Pushes its neighbours apart inside a layout. Without this a screen would use
+// a bare `Rectangle { horizontal-stretch: 1; }`, which is the exact habit the
+// guard is there to break.
+export component Spacer inherits Rectangle {
+    background: transparent;
+    horizontal-stretch: 1;
+    vertical-stretch: 1;
+}
+
+// A small bordered label: the field kind, a state marker.
+//
+// Document 13 section 9: meaning never rests on colour alone. A pill always
+// carries text, so the shape and the word are both present before the colour
+// is.
+export component Pill inherits Rectangle {
+    in property <string> text;
+    in property <color> tint: Tokens.text-muted;
+
+    border-width: Tokens.hairline;
+    border-color: root.tint;
+    border-radius: Tokens.radius-small;
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+
+    // ⚠️ The size comes from an inner layout, not from arithmetic on the
+    // label's preferred size. The arithmetic version shipped first and the
+    // off-screen render caught it immediately: the border cut straight through
+    // the word "offensive", because a hand-computed width and a centred label
+    // disagree about what the text actually measures. Let the layout decide.
+    HorizontalLayout {
+        padding-left: Tokens.space-1;
+        padding-right: Tokens.space-1;
+        alignment: center;
+
+        TextHint {
+            text: root.text;
+            color: root.tint;
+        }
+    }
+}
+
+// The liveness marker beside the target.
+//
+// ⚠️ On its own this dot breaks section 9, because a disc is a disc whatever
+// its colour. It is only ever placed next to the label it qualifies, and the
+// gallery shows it that way so the pairing cannot quietly come apart.
+export component StatusDot inherits Rectangle {
+    in property <color> tint: Tokens.ok;
+    width: Tokens.space-2;
+    height: Tokens.space-2;
+    border-radius: self.width / 2;
+    background: root.tint;
+}
+
+// The inset ground the value is previewed on.
+//
+// Darker than the window on purpose: a value made entirely of invisible
+// characters still has to read as an object with edges, otherwise an empty
+// preview and a broken preview look the same.
+export component SampleSurface inherits Rectangle {
+    background: Tokens.surface-sample;
+    border-width: Tokens.hairline;
+    border-color: Tokens.border;
+    border-radius: Tokens.radius;
+}
+
+// One row of the hint bar: the key, then what it does.
+export component Hint inherits HorizontalLayout {
+    in property <string> key;
+    in property <string> action;
+    spacing: Tokens.space-1;
+
+    TextSmallMuted {
+        text: root.key;
+        font-family: Tokens.font-mono;
+    }
+    TextHint {
+        text: root.action;
+    }
+}

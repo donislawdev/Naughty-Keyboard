@@ -1,0 +1,95 @@
+// The type vocabulary.
+//
+// Document 13 section 2.3 asks for a fixed set of SIZE-WEIGHT PAIRS rather than
+// two independent axes, and section 2.4 asks for the right look to come from a
+// default rather than from remembering to apply one. Both are the same shape:
+// a screen picks a ROLE - `Body`, `Hint` - and never picks a size.
+//
+// Adding a role here means saying why the existing ones did not fit. That
+// sentence belongs in the commit message, not in this comment.
+
+import { Tokens } from "../tokens.slint";
+
+// The value's own name. The one line the tester actually reads, so it is the
+// only role that carries the strong weight.
+export component TextName inherits Text {
+    color: Tokens.text-primary;
+    font-size: Tokens.type-name;
+    font-weight: Tokens.weight-strong;
+    vertical-alignment: center;
+}
+
+// Ordinary interface prose: pack name, the shape line under a preview.
+export component TextBody inherits Text {
+    color: Tokens.text-secondary;
+    font-size: Tokens.type-body;
+    font-weight: Tokens.weight-regular;
+    vertical-alignment: center;
+}
+
+// Supporting detail that must be readable but must not compete: the target
+// application, the window title.
+export component TextSmall inherits Text {
+    color: Tokens.text-primary;
+    font-size: Tokens.type-small;
+    font-weight: Tokens.weight-regular;
+    vertical-alignment: center;
+}
+
+// The same size, dimmed. Split from TextSmall so the choice between "this
+// matters" and "this is context" is made once here rather than per screen.
+export component TextSmallMuted inherits Text {
+    color: Tokens.text-muted;
+    font-size: Tokens.type-small;
+    font-weight: Tokens.weight-regular;
+    vertical-alignment: center;
+}
+
+// The hint bar. Smallest role in the product and the only one allowed to be,
+// because it disappears after twenty uses and returns on demand.
+export component TextHint inherits Text {
+    color: Tokens.text-muted;
+    font-size: Tokens.type-hint;
+    font-weight: Tokens.weight-regular;
+    vertical-alignment: center;
+}
+
+// Counts and positions. Monospaced so that a changing number does not shift the
+// characters around it - the counter is glanced at, not read.
+export component TextMono inherits Text {
+    color: Tokens.text-muted;
+    font-size: Tokens.type-hint;
+    font-family: Tokens.font-mono;
+    vertical-alignment: center;
+}
+
+// The position within the pack. Accent-coloured, and it is the only accent on
+// the screen: one accent per view, or it stops meaning anything.
+export component TextCounter inherits Text {
+    color: Tokens.accent;
+    font-size: Tokens.type-body;
+    font-family: Tokens.font-mono;
+    vertical-alignment: center;
+}
+
+// The value itself, inside the preview surface. Larger than everything else
+// because half the catalogue is only legible at size.
+//
+// ⚠️ ux-spec.md 2 requires this size to be ADJUSTABLE by the tester, since some
+// values are unreadable at interface size. Not built yet; when it is, the
+// adjustment multiplies this role and no other.
+export component TextPreview inherits Text {
+    color: Tokens.text-primary;
+    font-size: Tokens.type-preview;
+    font-family: Tokens.font-mono;
+    vertical-alignment: center;
+}
+
+// Stand-ins printed where an invisible character sits. Same size as the
+// preview so the substitution does not change the value's apparent length.
+export component TextPreviewInvisible inherits Text {
+    color: Tokens.invisible;
+    font-size: Tokens.type-preview;
+    font-family: Tokens.font-mono;
+    vertical-alignment: center;
+}

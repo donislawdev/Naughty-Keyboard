@@ -19,6 +19,7 @@ members = [
     "crates/nkb-app",
     "crates/nkb-adapters",
     "crates/nkb-cli",
+    "crates/nkb-gui",
 ]
 
 [workspace.package]
@@ -36,6 +37,21 @@ nkb-adapters = { path = "crates/nkb-adapters" }
 # Pinned deliberately. Versions were checked against the registry on 2026-09-06,
 # not recalled from memory - see the untouchable rule about dependency versions.
 toml_edit = "0.25.13"
+
+# The graphical toolkit. Chosen in ADR-4 on 2026-09-07 after probes, not after
+# reading. Version checked against the registry on the same day.
+#
+# Licence sieve, both questions:
+#   (a) Slint is offered under GPL-3.0-only OR two proprietary options. We take
+#       GPL-3.0-only, which is exactly this workspace's `license` field, so the
+#       combination needs no argument. The price is one-way: nkb-gui can never be
+#       relicensed without buying a Slint licence.
+#   (b) not applicable - a library, not a reference dataset.
+#
+# Only nkb-gui depends on this. `nkb` links no graphical toolkit at all, and that
+# is a property of the artefact rather than of anyone's discipline - D25.
+slint = "1.17.1"
+slint-build = "1.17.1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -1,0 +1,18 @@
+// The build entry point: one file, so that `slint_build::compile` is called
+// once and every screen reaches Rust through the same generated module.
+//
+// ⚠️ Calling `compile` twice silently OVERWRITES the first result rather than
+// merging - measured 2026-09-07, and the symptom is a screen that simply is not
+// in scope with no error naming the cause. One entry point, always.
+//
+// This is not the same file as `components.slint`. That one is the door a
+// SCREEN sees; this one is the door RUST sees, and they point in opposite
+// directions:
+//
+//     tokens  ->  components/*  ->  components.slint  ->  screens/*  ->  all
+//
+// Keeping them apart is what stops the import cycle a single door would create.
+
+import { Gallery } from "screens/gallery.slint";
+
+export { Gallery }

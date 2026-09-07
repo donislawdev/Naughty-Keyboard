@@ -1,0 +1,126 @@
+// Every component, in every state, on one screen.
+//
+// Document 13 section 3 asks for this so that drift becomes visible in a single
+// look instead of being discovered after five screens. It has a second job the
+// document does not name: it is THE CATALOGUE. A session that wants to know
+// what already exists opens `ui/components.slint` for the list and renders this
+// for the picture, and it takes half a minute rather than a search that has to
+// guess the right word.
+//
+// So: a component missing from here is a component the next session will write
+// again. Adding one is three steps - the file, the line in the door, the entry
+// here - and the guard only catches the second.
+
+import {
+    Tokens,
+    TextName,
+    TextBody,
+    TextSmall,
+    TextSmallMuted,
+    TextHint,
+    TextMono,
+    TextCounter,
+    TextPreview,
+    TextPreviewInvisible,
+    Hairline,
+    Spacer,
+    Pill,
+    StatusDot,
+    SampleSurface,
+    Hint,
+} from "../components.slint";
+
+export component Gallery inherits Window {
+    title: "Naughty Keyboard - gallery";
+    background: Tokens.surface;
+    width: Tokens.palette-width;
+
+    VerticalLayout {
+        padding: Tokens.space-3;
+        spacing: Tokens.space-2;
+
+        TextName { text: "TextName - the value's own name"; }
+        TextBody { text: "TextBody - pack name, the shape line"; }
+        TextSmall { text: "TextSmall - target application"; }
+        TextSmallMuted { text: "TextSmallMuted - window title, context"; }
+        TextHint { text: "TextHint - the hint bar, smallest role there is"; }
+        TextMono { text: "TextMono - 4 graphemes . 7 code points . 13 bytes"; }
+        TextCounter { text: "TextCounter - 7 / 34"; }
+
+        Hairline {}
+
+        // The preview surface, holding the case it exists for: a value whose
+        // content is invisible. If this reads as an empty box, the substitution
+        // markers have stopped working.
+        SampleSurface {
+            height: Tokens.sample-height;
+            HorizontalLayout {
+                padding: Tokens.space-2;
+                spacing: Tokens.space-1;
+                alignment: start;
+                TextPreview { text: "ab"; }
+                TextPreviewInvisible { text: "___"; }
+                TextPreview { text: "cd"; }
+            }
+        }
+
+        Hairline {}
+
+        // Pills in all three tints. The tint never carries the meaning by
+        // itself - the word inside each one says the same thing.
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            alignment: start;
+            Pill { text: "text field"; }
+            Pill { text: "offensive"; tint: Tokens.risk; }
+            Pill { text: "clipboard mode"; tint: Tokens.accent; }
+        }
+
+        // The dot is always shown with the label it qualifies, because on its
+        // own a disc is a disc whatever its colour.
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            alignment: start;
+            StatusDot {}
+            TextSmall { text: "target alive"; }
+            StatusDot { tint: Tokens.text-muted; }
+            TextSmallMuted { text: "no target"; }
+            StatusDot { tint: Tokens.risk; }
+            TextSmall { text: "degraded"; }
+        }
+
+        Hairline {}
+
+        // The hint bar, with the spacer doing the job a bare Rectangle would
+        // otherwise be asked to do.
+        HorizontalLayout {
+            spacing: Tokens.space-3;
+            Hint { key: "Ctrl+Alt+N"; action: "next"; }
+            Hint { key: "Ctrl+Alt+P"; action: "prev"; }
+            Spacer {}
+            Hint { key: "?"; action: "help"; }
+        }
+
+        Hairline {}
+
+        // The two cases document 13 section 3 asks for by name and that never
+        // appear on a screen in the author's own language: text that is far too
+        // long, and text that is absent.
+        TextSmallMuted { text: "the two cases that only break on someone else's machine:"; }
+        TextName {
+            text: "A value name long enough to leave the window, which is what the longest translation will do";
+            wrap: word-wrap;
+        }
+        // The empty pill sits inside a row rather than directly in the column,
+        // and that is not cosmetic. Placed in the column it stretched to the
+        // full window width, which said more about the gallery's own layout
+        // than about the component - a catalogue that misrepresents its entries
+        // is worse than one that omits them.
+        HorizontalLayout {
+            alignment: start;
+            spacing: Tokens.space-2;
+            Pill { text: ""; }
+            TextSmallMuted { text: "an empty pill, which should never occur"; }
+        }
+    }
+}

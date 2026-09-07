@@ -1,0 +1,56 @@
+// THE DOOR.
+//
+// A screen sees the vocabulary through this file and through nothing else, and
+// `ui_guard.rs` enforces both halves of that: a screen may import only from
+// here, and every file in `ui/components/` must be listed here.
+//
+// # Why a door rather than a convention
+//
+// The failure this prevents is specific and it is the normal case, not the
+// exception: a session begins with no memory of this project, so it does not
+// know that a pill, a hairline or a spacer already exists. Told to add a screen,
+// it writes its own - and the second pill is never quite the first one.
+//
+// Searching does not fix that, because the session has to know what to search
+// for. A single door does fix it: the question "what already exists" has ONE
+// file as its answer, and the routing table in CLAUDE.md points at it.
+//
+// # Adding to the vocabulary
+//
+// New file in `ui/components/`, one line here, one entry in the gallery screen.
+// The guard fails if the second step is skipped and the gallery is where the
+// third is noticed. Say in the commit message why the existing components did
+// not fit - document 13, section 8.
+
+import { Tokens } from "tokens.slint";
+import {
+    TextName,
+    TextBody,
+    TextSmall,
+    TextSmallMuted,
+    TextHint,
+    TextMono,
+    TextCounter,
+    TextPreview,
+    TextPreviewInvisible,
+} from "components/typography.slint";
+import { Hairline, Spacer, Pill, StatusDot, SampleSurface, Hint } from "components/chrome.slint";
+
+export {
+    Tokens,
+    TextName,
+    TextBody,
+    TextSmall,
+    TextSmallMuted,
+    TextHint,
+    TextMono,
+    TextCounter,
+    TextPreview,
+    TextPreviewInvisible,
+    Hairline,
+    Spacer,
+    Pill,
+    StatusDot,
+    SampleSurface,
+    Hint,
+}

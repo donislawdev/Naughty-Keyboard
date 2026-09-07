@@ -1,0 +1,61 @@
+[package]
+name = "nkb-gui"
+description = "The nkb palette. A full product in its own right, not a CLI with a window."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+# The binary is named `nkb-gui`. That name is a public contract: it goes into
+# installation instructions and into other people's scripts, and D25 froze both
+# the number and the names of the executables.
+[[bin]]
+name = "nkb-gui"
+path = "src/main.rs"
+
+[dependencies]
+nkb-core.workspace = true
+nkb-app.workspace = true
+nkb-adapters.workspace = true
+
+# `renderer-software` is not decoration. It is what lets tests/appearance.rs
+# render a screen WITHOUT A SCREEN, which is the only mechanism this project has
+# for judging its own looks - ADR-4, criterion 4, and document 13 section 4.
+#
+# Cargo unifies features across dev and normal dependencies, so this renderer
+# ships inside nkb-gui whether or not a test asked for it. That is accepted
+# rather than worked around: a QA tool gets run over remote desktops and inside
+# virtual machines, where a software fallback is the difference between a window
+# and no window.
+slint = { workspace = true, features = ["renderer-software"] }
+
+[build-dependencies]
+slint-build.workspace = true
+
+# Test-only, never linked into a released artefact. Document 09 section 10 puts
+# that in the lighter tier: pin the version, read the licence, no registry entry.
+# Checked against the registry 2026-09-07: 0.25.10, MIT OR Apache-2.0.
+[dev-dependencies]
+image = "0.25.10"
+
+# This package does NOT inherit the workspace lints, and the reason is one
+# single word. The workspace sets `unsafe_code = "forbid"`, and `forbid` cannot
+# be lifted by anything downstream - not even by the code that Slint generates
+# from ui/all.slint, which carries its own `allow(unsafe_code)` around a vtable
+# macro. The build fails with E0453 before any of our own code is reached.
+#
+# So this package says `deny` instead. The difference is narrow and it is worth
+# stating: `deny` still refuses unsafe in hand-written code, but it lets a
+# deliberate `#[allow]` through, and a deliberate allow is visible in review
+# whereas `forbid` simply makes the crate unbuildable.
+#
+# Recorded as a deviation in docs/00-ODSTEPSTWA.md, with the condition under
+# which it goes back. Everything else is copied from the workspace unchanged.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
