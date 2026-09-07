@@ -290,14 +290,29 @@ fn check_field_kinds<'a>(
         .collect()
 }
 
-/// The same rule over the pack table, which needs an owner the value tables get
+/// E009 and E028 over the pack table, which needs an owner the value tables get
 /// from the walk that visits them.
+///
+/// # Why E028 belongs here as well as in the value walk
+///
+/// `fields` is declared in both places, and the pack table is where the
+/// catalogue actually uses it - twenty packs out of twenty, measured 2026-09-07.
+/// The value level is the exception, written only where one value differs from
+/// the pack's default.
+///
+/// So a rule that walked only the values was blind at the wider of the two
+/// scopes: a misspelling in the pack table mislabels every value in the pack at
+/// once. The whole argument for a closed vocabulary is that `email`, `e-mail`
+/// and `mail` must not all become field kinds, and a rule that does not look
+/// where the vocabulary is used does not close it. Found by writing the first
+/// real pack - `D41`.
 fn check_pack_kinds(text: &str, root: &Table) -> Vec<LintProblem> {
     let Some(pack) = root.get("pack").and_then(Item::as_table_like) else {
         return Vec::new();
     };
     check_field_kinds(text, pack.iter())
         .into_iter()
+        .chain(check_fields_of(pack))
         .map(|problem| problem.owned_by("pack"))
         .collect()
 }
@@ -873,8 +888,17 @@ fn check_insertion_fields<'a>(
         .collect()
 }
 
-/// E028: field kinds outside the closed vocabulary.
+/// E028: field kinds outside the closed vocabulary, in a value table.
 fn check_fields(table: &Table) -> Vec<LintProblem> {
+    check_fields_of(table)
+}
+
+/// The same rule over anything that carries a `fields` array.
+///
+/// Written against the shared trait rather than the concrete table so that the
+/// pack table and a value table cannot drift into two readings of one rule - the
+/// drift that let the pack table go unchecked in the first place.
+fn check_fields_of(table: &dyn TableLike) -> Vec<LintProblem> {
     let Some(fields) = table.get("fields").and_then(Item::as_array) else {
         return Vec::new();
     };
@@ -1210,6 +1234,22 @@ mod tests {
         GOOD.replace("value = \"Kowalski\\u0020\"\n", replacement)
     }
 
+    /// Adds one line to the `[pack]` table, and refuses to hand back a string it
+    /// did not actually change.
+    ///
+    /// A `replace` that matches nothing is silent, and a test built on one passes
+    /// or fails for a reason that has nothing to do with the rule it names. That
+    /// happened here: the anchor carried padding the constant does not, so the
+    /// test ran against a file with no `fields` at all.
+    fn with_pack_field(line: &str) -> String {
+        const ANCHOR: &str = "language = \"en\"\n";
+        assert!(
+            GOOD.contains(ANCHOR),
+            "the pack table anchor moved - fix this helper rather than the tests using it"
+        );
+        GOOD.replace(ANCHOR, &format!("{ANCHOR}{line}"))
+    }
+
     #[test]
     fn a_reserved_type_is_refused_with_the_same_code_as_a_typo() {
         // To this build a reserved name and a typo are the same thing: a kind it
@@ -1315,6 +1355,37 @@ mod tests {
             .find(|p| p.code == RuleCode::FieldOutsideVocabulary)
             .expect("E028 must be reported");
         assert_eq!(found.subject.as_deref(), Some("e-mail"));
+    }
+
+    #[test]
+    fn a_field_kind_outside_the_closed_list_is_refused_in_the_pack_table_too() {
+        // 🔴 Found by writing the first real pack, 2026-09-07. The rule walked
+        // the values and not the pack table - and the pack table is where the
+        // catalogue actually declares this: twenty packs out of twenty, measured.
+        // A typo there mislabels every value in the pack at once, which is the
+        // wider mistake of the two, not the narrower one.
+        //
+        // The whole argument for a closed vocabulary is that `email`, `e-mail`
+        // and `mail` must not all become field kinds. A rule blind to the place
+        // the vocabulary is used is not a closed vocabulary.
+        let text = with_pack_field("fields = [\"e-mail\"]\n");
+        let problems = check(&text, PACK_ID);
+        let found = problems
+            .iter()
+            .find(|p| p.code == RuleCode::FieldOutsideVocabulary)
+            .expect("E028 must be reported for the pack table");
+        assert_eq!(found.subject.as_deref(), Some("e-mail"));
+        assert_eq!(
+            found.owner.as_deref(),
+            Some("pack"),
+            "the reader has to be told which of the two places carries it"
+        );
+    }
+
+    #[test]
+    fn a_field_kind_inside_the_list_passes_in_the_pack_table_too() {
+        let text = with_pack_field("fields = [\"any\"]\n");
+        assert!(codes(&text).is_empty(), "{:?}", check(&text, PACK_ID));
     }
 
     #[test]

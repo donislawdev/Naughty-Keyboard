@@ -1,0 +1,112 @@
+format = 1
+
+[pack]
+id          = "whitespace"
+name        = "Whitespace"
+description = "Characters that take up space, or claim to, and are impossible to see in a form."
+version     = "1.0"
+updated     = 2026-09-07
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["trimming", "comparison", "unicode"]
+fields      = ["any"]
+risk        = "normal"
+
+[[values]]
+id     = "trailing-space"
+name   = "Trailing space"
+value  = "Kowalski\u0020"
+breaks = "Login and e-mail comparisons differ between browser and server; the account is created but cannot be found."
+expect = "Trimmed everywhere or preserved everywhere - never one on sign-up and the other on sign-in."
+since  = "1.0"
+
+[[values]]
+id     = "leading-space"
+name   = "Leading space"
+value  = "\u0020Kowalski"
+breaks = "Sorting puts the record at the top of every list, and exact-match search never finds it."
+expect = "Same trimming rule as everywhere else in the application."
+since  = "1.0"
+
+[[values]]
+id     = "space-only"
+name   = "A single space"
+value  = "\u0020"
+breaks = "The browser counts the field as filled and the server counts it as empty, or the other way round."
+expect = "One consistent verdict on both sides about whether this field is empty."
+since  = "1.0"
+
+[[values]]
+id     = "zero-width-space-x3"
+name   = "Three zero-width spaces"
+value  = "ab\u200B\u200B\u200Bcd"
+breaks = "Character counters, comparison and deduplication see a different value than the human does."
+expect = "Stored and returned unchanged, or rejected with a message that names the characters."
+since  = "1.0"
+
+[[values]]
+id     = "nbsp-between-words"
+name   = "Non-breaking space between words"
+value  = "Jan\u00A0Kowalski"
+breaks = "Search for a plain-space spelling never finds the record; exports and mail merges keep the invisible difference forever."
+expect = "Treated as a space by search, or normalised on save - consistently."
+since  = "1.0"
+
+[[values]]
+id     = "newline-in-single-line"
+name   = "Newline in a single-line field"
+value  = "Jan\u000AKowalski"
+breaks = "A single-line field that accepts a line break breaks CSV export, log lines and every list view below it."
+expect = "Rejected, or stored with the break preserved and escaped on export."
+since  = "1.0"
+
+[[values]]
+id     = "tab-inside"
+name   = "Tab inside a value"
+value  = "Jan\u0009Kowalski"
+breaks = "Tab-separated exports split one record into two columns; column alignment in reports collapses."
+expect = "Rejected or escaped on export - never passed through raw into a delimited format."
+since  = "1.0"
+
+[[values]]
+id     = "crlf-in-value"
+name   = "Carriage return and newline inside a value"
+value  = "Jan\u000D\u000AKowalski"
+breaks = "Two line-ending conventions in one field make the same text compare as different across systems."
+expect = "Normalised to one convention on save, or preserved and escaped consistently."
+since  = "1.0"
+
+[[values]]
+id     = "zwsp-only"
+name   = "A single zero-width space"
+value  = "\u200B"
+breaks = "A field that looks empty but is not: required-field validation passes, and the record has no usable name."
+expect = "Treated as empty by validation, or shown in a way that reveals the field is not empty."
+since  = "1.0"
+
+[[values]]
+id     = "ogham-space"
+name   = "Ogham space mark"
+value  = "ab\u1680cd"
+breaks = "A character in the space category that renders as a visible line - it breaks both trimming and layout assumptions."
+expect = "Handled like any other whitespace character, or rejected with a message."
+since  = "1.0"
+
+[[values]]
+id     = "many-spaces-between"
+name   = "Three spaces between words"
+value  = "Jan\u0020\u0020\u0020Kowalski"
+breaks = "Search, deduplication and printed output treat runs of spaces inconsistently between layers."
+expect = "Collapsed on save or preserved on save - one rule, applied everywhere."
+since  = "1.0"
+
+[[values]]
+id     = "len-1000-spaces"
+name   = "A thousand spaces"
+type   = "repeat"
+unit   = "\u0020"
+count  = 1000
+breaks = "Character-by-character trimming and layouts that do not wrap; a thousand spaces is still a short value by character count."
+expect = "Rejected or trimmed - never accepted and stored in full."
+since  = "1.0"
