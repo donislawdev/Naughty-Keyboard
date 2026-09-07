@@ -20,10 +20,11 @@
 //! rules about how a value is *written*. Those rules therefore read the raw slice
 //! of the file that a span points at - which was measured to be faithful.
 
+use crate::canonical;
 use nkb_app::{Date, PackFormat, TranslationCheck, TranslationTarget};
 use nkb_core::description::{self, BreaksFault};
 use nkb_core::identity::{is_pack_id, is_value_id};
-use nkb_core::lint::{LintProblem, RuleCode};
+use nkb_core::lint::{LintProblem, MAX_VALUES_PER_PACK, RuleCode};
 use nkb_core::schema::{FieldKind, kind_of};
 use nkb_core::source_text::line_of;
 use nkb_core::text::LiteralText;
@@ -66,7 +67,7 @@ const TOP_LEVEL_KEYS: [&str; 6] = [
 /// 🔴 The lists are taken from the specification's tables, not from what the code
 /// happens to read. A list short by one field turns a correct pack into a refused
 /// one, which is a worse failure than the silence it replaces.
-const PACK_KEYS: [&str; 12] = [
+pub(crate) const PACK_KEYS: [&str; 12] = [
     "id",
     "name",
     "description",
@@ -84,7 +85,7 @@ const PACK_KEYS: [&str; 12] = [
 /// Every key the format defines inside a value: the data model in
 /// `pack-format.md` 5, plus the three that describe a generated value from 6, and
 /// `source` from the inheritance rule in 5.
-const VALUE_KEYS: [&str; 16] = [
+pub(crate) const VALUE_KEYS: [&str; 16] = [
     "id",
     "name",
     "value",
@@ -108,7 +109,7 @@ const VALUE_KEYS: [&str; 16] = [
 /// Shorter than a value's on purpose: a pair names two values and carries no
 /// value of its own, so the fields that describe one are absent rather than
 /// optional.
-const PAIR_KEYS: [&str; 8] = [
+pub(crate) const PAIR_KEYS: [&str; 8] = [
     "id", "name", "relation", "a", "b", "breaks", "expect", "since",
 ];
 
@@ -130,6 +131,12 @@ const TRANSLATION_ENTRY_KEYS: [&str; 3] = ["name", "breaks", "expect"];
 /// offensive before a tester sends it, so a misspelling here does not degrade to
 /// a smaller feature - it degrades to no warning at all.
 const RISK_LEVELS: [&str; 2] = ["normal", "offensive"];
+
+/// The risk level that marks a value in the palette before a tester sends it.
+///
+/// Named rather than spelled out at each use: W063 and the vocabulary above have
+/// to mean the same word, and two literals eventually stop doing that.
+const OFFENSIVE: &str = "offensive";
 
 /// Fields a source pack must declare. Absent means the pack cannot be cited,
 /// versioned, or redistributed by whoever receives it.
@@ -239,6 +246,12 @@ pub fn check(text: &str, expected_id: &str) -> Vec<LintProblem> {
     problems.extend(check_format(text, root));
     problems.extend(check_top_level_keys(text, root));
 
+    // W064 asks about the file rather than about the pack inside it, so it is
+    // answered before the shapes part company: a translation is written by the
+    // same people, reviewed in the same pull request, and formatted by the same
+    // command.
+    problems.extend(check_canonical(text));
+
     // A translation file has a different shape on purpose: it carries no values
     // and only the prose half of the pack table. Applying the source pack rules
     // to it would report a correct file as broken - a partial translation is
@@ -259,6 +272,7 @@ pub fn check(text: &str, expected_id: &str) -> Vec<LintProblem> {
     problems.extend(check_pack_table(text, root));
     problems.extend(check_pack_kinds(text, root));
     problems.extend(check_pack_id(text, root, expected_id));
+    problems.extend(check_style(text, root));
     let context = pack_context(root);
     // One namespace for both, gathered before either walk. A pair is cited the
     // same way a value is, so an identifier taken by one may not be taken by the
@@ -325,6 +339,114 @@ fn check_pack_table(text: &str, root: &Table) -> Vec<LintProblem> {
                 .owned_by("pack")
         })
         .collect()
+}
+
+/// W064: the file is not written the way `nkb fmt` writes it.
+///
+/// The point is what it buys a reviewer, not tidiness: with it, a difference in
+/// a pull request is always a difference of content. Without it, half the
+/// comments on a contribution are about where an equals sign sits.
+///
+/// Reported against the first line that differs rather than against the file, so
+/// a build log stays jumpable - and because "somewhere in this file" is the kind
+/// of message people learn to skip.
+fn check_canonical(text: &str) -> Vec<LintProblem> {
+    let Some(canonical) = canonical::render(text) else {
+        // Not TOML at all. E004 has already said so, and calling a file nobody
+        // could read badly formatted would invent a second finding out of the
+        // first one.
+        return Vec::new();
+    };
+    if canonical == text {
+        return Vec::new();
+    }
+
+    // Counting from one, like every other line number in this validator. A file
+    // that only differs past its last common line points at that line: the
+    // difference is there, in what does or does not follow it.
+    let line = text
+        .lines()
+        .zip(canonical.lines())
+        .position(|(had, wanted)| had != wanted)
+        .unwrap_or_else(|| text.lines().count().saturating_sub(1));
+
+    vec![LintProblem::new(RuleCode::FileNotCanonical).at(u32::try_from(line + 1).unwrap_or(1))]
+}
+
+/// W061, W062 and W063: the style rules that need the pack as a whole.
+///
+/// # Why W063 asks about the pack and not about the prose
+///
+/// The specification worded it as "marked offensive with no mention of it in
+/// `breaks`", and that rule cannot be written. Measured on 2026-09-07 across the
+/// catalogue's 242 descriptions: a word list narrow enough to raise no false
+/// alarm matched **none** of the twelve offensive values, and the widest list
+/// tried still missed a third of them while flagging three ordinary ones. The
+/// cause is not a poor list. The catalogue's own editorial rule says a
+/// description states what should happen to a value and not what can be done
+/// with it, so the rule was asking for the sentence the catalogue forbids.
+///
+/// What is left is the case that actually costs something and is decidable
+/// without reading prose: a value marked offensive inside a pack that is not.
+/// There the pack around it says nothing about danger, so the mark arrives in
+/// the palette with no explanation anywhere near it. Same shape as W033, which
+/// warns about attribution that has become inconsistent rather than about
+/// inheritance - `decision-log.md` D27.
+fn check_style(text: &str, root: &Table) -> Vec<LintProblem> {
+    let Some(pack) = root.get("pack").and_then(Item::as_table_like) else {
+        // No pack table at all is E003's finding. Style questions about a table
+        // that is not there would be noise on top of it.
+        return Vec::new();
+    };
+    let pack_line = root.get("pack").map_or(1, |item| span_line(text, item));
+    let mut problems = Vec::new();
+
+    // W061. Asks whether the pack declares tags, not whether they are usable: a
+    // `tags` of the wrong kind is E009's finding, and two codes for one mistake
+    // send a contributor to fix it twice.
+    if !pack.contains_key("tags") {
+        problems.push(LintProblem::new(RuleCode::PackWithoutTags).at(pack_line));
+    }
+
+    let values = root.get("values").and_then(Item::as_array_of_tables);
+
+    let Some(values) = values else {
+        // No values array at all is E008's finding. The two style rules below
+        // are both about the values, so there is nothing left to say.
+        return problems;
+    };
+
+    // W062.
+    if values.len() > MAX_VALUES_PER_PACK {
+        problems.push(
+            LintProblem::new(RuleCode::PackTooLarge)
+                .at(pack_line)
+                .about(values.len().to_string()),
+        );
+    }
+
+    // W063. Silent when the pack itself is already offensive: a pack that
+    // declares it has said so in the one place a reader looks first.
+    if pack.get("risk").and_then(Item::as_str) == Some(OFFENSIVE) {
+        return problems;
+    }
+
+    for (index, table) in values.iter().enumerate() {
+        if table.get("risk").and_then(Item::as_str) != Some(OFFENSIVE) {
+            continue;
+        }
+        let identity = table
+            .get("id")
+            .and_then(Item::as_str)
+            .map_or_else(|| format!("values[{index}]"), ToOwned::to_owned);
+        problems.push(
+            LintProblem::new(RuleCode::OffensiveValueInOrdinaryPack)
+                .at(table.span().map_or(1, |span| line_of(text, span.start)))
+                .owned_by(identity),
+        );
+    }
+
+    problems
 }
 
 /// What the pack table says that its values are judged against.
@@ -1164,6 +1286,14 @@ impl PackFormat for TomlPackFormat {
         }
     }
 
+    fn canonical(&self, text: &str) -> Option<String> {
+        canonical::render(text)
+    }
+
+    fn same_insertions(&self, before: &str, after: &str) -> bool {
+        canonical::same_insertions(before, after)
+    }
+
     fn skeleton(&self, id: &str, today: Date) -> String {
         crate::skeleton::for_pack(id, today)
     }
@@ -1218,6 +1348,7 @@ mod tests {
         "license = \"CC-BY-4.0\"\n",
         "authors = [\"Naughty Keyboard\"]\n",
         "language = \"en\"\n",
+        "tags = [\"probe\"]\n",
         "\n",
         "[[values]]\n",
         "id = \"trailing-space\"\n",
@@ -1228,11 +1359,55 @@ mod tests {
         "since = \"1.0\"\n",
     );
 
+    /// Every rule the file breaks, apart from the one about its shape.
+    ///
+    /// # Why W064 is dropped here and nowhere else
+    ///
+    /// The fixtures in this module are snippets: one good file and a substitution
+    /// that breaks a single thing. Their **shape** is not the subject, and
+    /// requiring each of them to be lined up would make every test about a rule
+    /// carry a second claim it was never written to make.
+    ///
+    /// This is a filter, so it is the kind of thing that hides a dead rule. It
+    /// does not, and the reason is that W064 is covered where it belongs: the
+    /// `canonical` module tests it directly, the format suite carries a file
+    /// written for it, and two more files there declare it because their bytes
+    /// can never be canonical. The test below keeps this honest by asserting the
+    /// rule still fires through the unfiltered path.
     fn codes(text: &str) -> Vec<&'static str> {
         check(text, PACK_ID)
             .iter()
             .map(|p| p.code.as_str())
+            .filter(|code| *code != "W064")
             .collect()
+    }
+
+    /// Every rule, W064 included. Used by the tests that are about the shape.
+    fn all_codes(text: &str) -> Vec<&'static str> {
+        check(text, PACK_ID)
+            .iter()
+            .map(|p| p.code.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn the_filter_above_hides_a_rule_that_is_still_alive() {
+        // 🔴 The guard on the helper. A filter in a test helper is exactly how a
+        // rule quietly stops working, so the rule it filters is asserted here
+        // through the path that does not filter.
+        //
+        // GOOD is written with one space before each equals sign rather than
+        // lined up, so it is not canonical - which is what makes it usable as a
+        // fixture for everything else and what makes it the right witness here.
+        assert!(
+            all_codes(GOOD).contains(&"W064"),
+            "GOOD stopped being a witness for W064: {:?}",
+            all_codes(GOOD)
+        );
+        assert!(
+            !codes(GOOD).contains(&"W064"),
+            "the filter stopped filtering"
+        );
     }
 
     #[test]
@@ -1349,6 +1524,7 @@ mod tests {
             "license = \"CC-BY-4.0\"\n",
             "authors = [\"Naughty Keyboard\"]\n",
             "language = \"en\"\n",
+            "tags = [\"probe\"]\n",
         );
         assert_eq!(codes(text), vec!["E008"], "{:?}", check(text, PACK_ID));
     }
@@ -1439,8 +1615,11 @@ mod tests {
         let mut found = codes(text);
         found.sort_unstable();
         found.dedup();
-        // Six rules from four different families, out of one file, in one run.
-        assert_eq!(found, vec!["E001", "E002", "E003", "E010", "E030", "W032"]);
+        // Seven rules from five different families, out of one file, in one run.
+        assert_eq!(
+            found,
+            vec!["E001", "E002", "E003", "E010", "E030", "W032", "W061"]
+        );
     }
     /// Replaces the value line of GOOD with whatever a test needs.
     fn with_value(replacement: &str) -> String {
@@ -1871,6 +2050,9 @@ mod tests {
     const UPDATED_LINE: &str = "updated = 2026-09-06\n";
     const UPDATED_AS_TEXT: &str = "updated = \"2026-09-06\"\n";
     const TAGS_AS_TEXT: &str = "tags = \"yaml\"\n";
+    /// The tags line the good file carries, so a test can swap it rather than
+    /// add a second one.
+    const GOOD_TAGS: &str = "tags = [\"probe\"]\n";
     const RECIPE_WITH_TEXT_COUNT: &str = "type   = \"repeat\"\nunit   = \"a\"\ncount  = \"5\"\n";
     const RECIPE_WITHOUT_COUNT: &str = "type   = \"repeat\"\nunit   = \"a\"\n";
     const NUMERIC_BREAKS: &str = "breaks = 42\n";
@@ -2062,7 +2244,11 @@ mod tests {
     fn a_list_written_as_a_single_word_is_refused() {
         // The quietest of them all: `tags = "yaml"` reads as a tag list of one
         // in no parser, so the tags simply vanish.
-        let text = GOOD.replace(LANG_LINE, &format!("{LANG_LINE}{TAGS_AS_TEXT}"));
+        // Replaces the good file's tags rather than adding a second line: two
+        // `tags` keys in one table is a duplicate key, which the parser refuses
+        // before any rule about kinds gets a look at it.
+        let text = GOOD.replace(GOOD_TAGS, TAGS_AS_TEXT);
+        assert_ne!(text, GOOD, "the tags line of GOOD moved");
         let found = one_of(&text, RuleCode::FieldOfUnusableType);
         assert_eq!(found.subject.as_deref(), Some("tags"));
     }

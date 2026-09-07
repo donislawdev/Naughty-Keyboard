@@ -364,13 +364,44 @@ mod tests {
         // may be that two dozen rules never ran.
         let text = one(judged(Vec::new()));
         assert!(text.contains("\"not_fully_checked\""), "{text}");
-        assert!(text.contains("\"status\": \"partly-checked\""), "{text}");
-        assert!(text.contains("\"status\": \"awaiting-decision\""), "{text}");
-        assert!(
-            text.contains("\"status\": \"requires-published-version\""),
-            "{text}"
-        );
-        assert!(text.contains("\"status\": \"not-implemented\""), "{text}");
+
+        // Driven from the register rather than from a list written here. The
+        // list version broke the day the last unimplemented rule was written:
+        // it asserted that a status with no members still showed up, which is a
+        // claim about this week's register rather than about the document.
+        for rule in RULES.iter().filter(|r| r.status != RuleStatus::Checked) {
+            let expected = format!("\"status\": \"{}\"", status_name(rule.status));
+            assert!(
+                text.contains(&expected),
+                "{} is not fully checked and its status is missing: {text}",
+                rule.code.as_str()
+            );
+        }
+    }
+
+    #[test]
+    fn every_status_the_contract_publishes_has_a_name_of_its_own() {
+        // The half the test above cannot cover once a status has no members. A
+        // name that is in the published contract and nowhere in the register is
+        // still a name consumers parse, and two statuses sharing a spelling
+        // would be indistinguishable to them.
+        let names = [
+            RuleStatus::Checked,
+            RuleStatus::PartlyChecked,
+            RuleStatus::NotImplemented,
+            RuleStatus::AwaitingDecision,
+            RuleStatus::RequiresPublishedVersion,
+            RuleStatus::PreemptedByEarlierRule,
+        ]
+        .map(status_name);
+
+        for (index, name) in names.iter().enumerate() {
+            assert!(!name.is_empty());
+            assert!(
+                !names[index + 1..].contains(name),
+                "two statuses are both called {name}"
+            );
+        }
     }
 
     #[test]

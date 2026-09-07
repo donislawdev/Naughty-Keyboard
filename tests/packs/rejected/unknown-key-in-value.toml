@@ -23,12 +23,13 @@ updated     = 2026-09-07
 license     = "CC-BY-4.0"
 authors     = ["Naughty Keyboard"]
 language    = "en"
+tags        = ["format-suite"]
 
 [[values]]
 id     = "misspelled-tags"
 name   = "Tags, misspelled"
 value  = "anything at all"
-tgas   = ["yaml", "boolean"]
 breaks = "Nothing on its own - the point is the key above, which the author meant as tags and nothing reads."
 expect = "Refused, because a key nobody reads is a setting nobody applied."
 since  = "1.0"
+tgas   = ["yaml", "boolean"]

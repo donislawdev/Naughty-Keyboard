@@ -19,12 +19,13 @@ updated     = 2026-09-06
 license     = "CC-BY-4.0"
 authors     = ["Naughty Keyboard"]
 language    = "en"
+tags        = ["format-suite"]
 
 [[values]]
 id     = "one-tag"
 name   = "One tag"
 value  = "anything"
-tags   = "unicode"
 breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
 expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+tags   = "unicode"
 since  = "1.0"

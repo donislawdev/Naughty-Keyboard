@@ -23,12 +23,13 @@ updated     = 2026-09-07
 license     = "CC-BY-4.0"
 authors     = ["Naughty Keyboard"]
 language    = "en"
+tags        = ["format-suite"]
 
 [[values]]
 id     = "unknown-risk"
 name   = "Unknown risk level"
 value  = "harmless enough"
-risk   = "dangerous"
 breaks = "Nothing on its own - this value exists to claim a risk level that the format has no reading for."
 expect = "Refused, because a level nobody recognises is read as the harmless one."
+risk   = "dangerous"
 since  = "1.0"

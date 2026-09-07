@@ -5,7 +5,7 @@
 # meant to set was never set.
 
 format = 1
-packs = "typo for the pack table"
+packs  = "typo for the pack table"
 
 [pack]
 id          = "stray-key"
@@ -16,6 +16,7 @@ updated     = 2026-09-06
 license     = "CC-BY-4.0"
 authors     = ["Naughty Keyboard"]
 language    = "en"
+tags        = ["format-suite"]
 
 [[values]]
 id     = "anything"

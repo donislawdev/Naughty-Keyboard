@@ -99,6 +99,14 @@ mod tests {
         fn skeleton(&self, id: &str, today: Date) -> String {
             format!("id = {id}, written on {today:?}")
         }
+
+        fn canonical(&self, _text: &str) -> Option<String> {
+            unreachable!("starting a pack never asks for the canonical form")
+        }
+
+        fn same_insertions(&self, _before: &str, _after: &str) -> bool {
+            unreachable!("starting a pack rewrites nothing")
+        }
     }
 
     /// Remembers what it was handed, and can be told to fail.
@@ -129,6 +137,14 @@ mod tests {
                 .borrow_mut()
                 .push((id.to_owned(), text.to_owned()));
             self.answer
+        }
+
+        /// 🔴 The guard that says this use case never overwrites anything. It is
+        /// not a stub for something unwritten: reaching it would mean `new-pack`
+        /// had found a way to replace a file, which is the one thing it must not
+        /// be able to do.
+        fn replace(&self, _id: &str, _text: &str) -> Result<(), SinkError> {
+            unreachable!("starting a pack never replaces an existing file")
         }
     }
 

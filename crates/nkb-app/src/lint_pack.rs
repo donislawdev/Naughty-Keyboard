@@ -262,6 +262,14 @@ mod tests {
         fn skeleton(&self, _id: &str, _today: crate::ports::Date) -> String {
             unreachable!("linting never asks for a skeleton")
         }
+
+        fn canonical(&self, _text: &str) -> Option<String> {
+            unreachable!("linting never asks for the canonical form")
+        }
+
+        fn same_insertions(&self, _before: &str, _after: &str) -> bool {
+            unreachable!("linting never writes a file back")
+        }
     }
 
     fn nothing() -> Says {
@@ -533,6 +541,12 @@ mod tests {
             }
             fn skeleton(&self, _id: &str, _today: crate::ports::Date) -> String {
                 unreachable!("linting never asks for a skeleton")
+            }
+            fn canonical(&self, _text: &str) -> Option<String> {
+                unreachable!("linting never asks for the canonical form")
+            }
+            fn same_insertions(&self, _before: &str, _after: &str) -> bool {
+                unreachable!("linting never writes a file back")
             }
         }
 

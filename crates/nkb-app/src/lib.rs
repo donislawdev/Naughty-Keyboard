@@ -9,10 +9,12 @@
 
 #![forbid(unsafe_code)]
 
+pub mod format_pack;
 pub mod lint_pack;
 pub mod new_pack;
 pub mod ports;
 
+pub use format_pack::{FormatOutcome, format_pack};
 pub use lint_pack::{LintOutcome, lint_pack};
 pub use new_pack::{NewPackOutcome, new_pack};
 pub use ports::{

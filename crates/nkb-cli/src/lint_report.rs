@@ -20,8 +20,8 @@
 use nkb_core::description::MIN_BREAKS_CODE_POINTS;
 use nkb_core::identity::is_pack_id;
 use nkb_core::lint::{
-    LintProblem, LintReport, RULES, RuleCode, RuleCoverage, RuleStatus, Severity, SkipReason,
-    SkippedRule,
+    LintProblem, LintReport, LintRule, MAX_VALUES_PER_PACK, RULES, RuleCode, RuleCoverage,
+    RuleStatus, Severity, SkipReason, SkippedRule,
 };
 use nkb_core::schema::kind_of;
 
@@ -142,21 +142,34 @@ pub fn explanation() -> Vec<String> {
                 Severity::Error => "blocking",
                 Severity::Warning => "warning",
             },
-            match rule.status {
-                RuleStatus::Checked => "checked",
-                RuleStatus::PartlyChecked =>
-                    "checked in part - one half of the rule waits on an unsettled question",
-                RuleStatus::NotImplemented => "not checked - not implemented yet",
-                RuleStatus::AwaitingDecision =>
-                    "not checked - waiting on an unsettled question in the format",
-                RuleStatus::RequiresPublishedVersion =>
-                    "not checked here - needs the published pack to compare against",
-                RuleStatus::PreemptedByEarlierRule =>
-                    "not checked here - a parser following the specification refuses the file first, so E004 arrives instead",
-            }
+            explanation_for(*rule)
         )
     }));
     lines
+}
+
+/// What this build does with one rule, in a phrase.
+///
+/// Pulled out of the loop above so a test can ask it about a status the register
+/// currently has no member of. A status with nothing behind it today is still a
+/// name in the published contract, and a rule written next month will carry it.
+fn explanation_for(rule: LintRule) -> &'static str {
+    match rule.status {
+        RuleStatus::Checked => "checked",
+        RuleStatus::PartlyChecked => {
+            "checked in part - one half of the rule waits on an unsettled question"
+        }
+        RuleStatus::NotImplemented => "not checked - not implemented yet",
+        RuleStatus::AwaitingDecision => {
+            "not checked - waiting on an unsettled question in the format"
+        }
+        RuleStatus::RequiresPublishedVersion => {
+            "not checked here - needs the published pack to compare against"
+        }
+        RuleStatus::PreemptedByEarlierRule => {
+            "not checked here - a parser following the specification refuses the file first, so E004 arrives instead"
+        }
+    }
 }
 
 /// What a field should have held, in words rather than in parser vocabulary.
@@ -329,6 +342,22 @@ pub fn sentence(problem: &LintProblem) -> String {
         RuleCode::TranslatesUnknownPack => format!(
             "`translates` is set to `{subject}`, which is not the shape a pack identifier has: lower case letters, digits and hyphens, starting with a letter. Nothing was looked for on disk under that name."
         ),
+        RuleCode::PackWithoutTags => {
+            "the pack declares no `tags`. Search in the palette reads them, so without any the pack is reachable only by somebody who already knows its name - which is nobody, the first time.".to_owned()
+        }
+        RuleCode::PackTooLarge => format!(
+            "the pack holds {subject} values, where the format suggests at most {MAX_VALUES_PER_PACK}. A tester meets them in the order they are written, so a pack this long has a tail nobody reaches - split it by what the values are for."
+        ),
+        RuleCode::OffensiveValueInOrdinaryPack => format!(
+            "value `{owner}` marks itself offensive inside a pack that does not. The palette flags it before a tester sends it, and nothing around it explains why - mark the pack, or move this value to one that is already marked."
+        ),
+        // Names no particular cause. Field order and the gap before an equals
+        // sign are the usual two, and this rule also catches a file whose bytes
+        // are wrong in a way the formatter would settle - so a sentence that
+        // listed the usual two would be wrong exactly where it was most specific.
+        RuleCode::FileNotCanonical => {
+            "this file is not in the shape `nkb fmt` writes. Run `nkb fmt` on it, and a difference in a pull request stays a difference of content rather than of style.".to_owned()
+        }
         RuleCode::TranslationRefersToMissingId => format!(
             "this translation describes `{subject}`, which the pack it translates does not have. Translations carry no version of their own, so an entry outlives whatever it described - delete it, or point it at the identifier that replaced it."
         ),
@@ -473,11 +502,45 @@ mod tests {
                 rule.code.as_str()
             );
         }
-        // The three reasons a rule is not run must read differently, or the
-        // register collapses back into one undifferentiated silence.
-        assert!(text.contains("not implemented yet"), "{text}");
-        assert!(text.contains("waiting on an unsettled question"), "{text}");
-        assert!(text.contains("needs the published pack"), "{text}");
+        // Every reason a rule is not run must read differently, or the register
+        // collapses back into one undifferentiated silence.
+        //
+        // Asked of the rendering rather than of the register. Written the other
+        // way it asserted that "not implemented yet" appears in the output, and
+        // that stopped being true the day the last unwritten rule was written -
+        // failing for the one reason that is good news.
+        let phrases = [
+            RuleStatus::Checked,
+            RuleStatus::PartlyChecked,
+            RuleStatus::NotImplemented,
+            RuleStatus::AwaitingDecision,
+            RuleStatus::RequiresPublishedVersion,
+            RuleStatus::PreemptedByEarlierRule,
+        ]
+        .map(|status| {
+            explanation_for(LintRule {
+                code: RuleCode::PackWithoutTags,
+                severity: Severity::Warning,
+                status,
+            })
+        });
+        for (index, phrase) in phrases.iter().enumerate() {
+            assert!(!phrase.is_empty());
+            assert!(
+                !phrases[index + 1..].contains(phrase),
+                "two statuses read the same: {phrase}"
+            );
+        }
+
+        // And the reasons that a rule in today's register actually carries have
+        // to reach the page a person reads.
+        for rule in RULES.iter().filter(|r| r.status != RuleStatus::Checked) {
+            assert!(
+                text.contains(explanation_for(*rule)),
+                "{} is not fully checked and says nothing about why: {text}",
+                rule.code.as_str()
+            );
+        }
     }
 
     #[test]
@@ -528,7 +591,7 @@ mod tests {
             .about("unicode-text"),
         );
         let text = summary(&report).join("\n");
-        assert!(text.contains("Checked 35 of 45 rules"), "{text}");
+        assert!(text.contains("Checked 39 of 45 rules"), "{text}");
         assert!(
             text.contains("1 more rule could not be checked for this file"),
             "{text}"

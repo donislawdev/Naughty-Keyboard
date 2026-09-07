@@ -1,0 +1,28 @@
+# expect: W061
+#
+# A pack nobody can find. Search in the palette reads the tags, so a pack
+# with none is reachable only by somebody who already knows its name - and
+# the first time, nobody does.
+#
+# A warning rather than a refusal: the pack is complete and usable, it is
+# merely invisible to the one thing people use to look for packs.
+
+format = 1
+
+[pack]
+id          = "pack-without-tags"
+name        = "Pack without tags"
+description = "Declares no tags, so nothing but its own name will find it."
+version     = "1.0"
+updated     = 2026-09-07
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "untagged"
+name   = "Untagged"
+value  = "anything"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"

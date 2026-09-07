@@ -32,6 +32,21 @@ pub enum ExitCode {
     NotFound = 3,
     /// The value could not be inserted.
     InsertFailed = 4,
+    /// A file could not be read or written: permissions, a device, a full disk.
+    ///
+    /// # Why reading and writing share one number
+    ///
+    /// The rule set says to split codes by the **repair** they force rather than
+    /// by the resemblance of their causes, and both of these force the same one:
+    /// read the message, then fix something about the file or the folder. What
+    /// distinguishes them is wording, and wording is what the report is for.
+    ///
+    /// Added before the first release deliberately. Three commands were already
+    /// reporting a read or write failure under a number that meant something
+    /// else, with the message carrying what the number could not - and after a
+    /// release, adding a code turns somebody's green pipeline red with no change
+    /// on their side. Owner's decision, 2026-09-07.
+    IoFailed = 5,
 }
 
 impl ExitCode {
@@ -54,5 +69,25 @@ mod tests {
         assert_eq!(ExitCode::Usage.as_i32(), 2);
         assert_eq!(ExitCode::NotFound.as_i32(), 3);
         assert_eq!(ExitCode::InsertFailed.as_i32(), 4);
+        assert_eq!(ExitCode::IoFailed.as_i32(), 5);
+    }
+
+    #[test]
+    fn no_two_ways_of_ending_share_a_number() {
+        // The property that makes these readable by a script at all. Two names
+        // on one number would make a pipeline branch on a coin toss.
+        let all = [
+            ExitCode::Ok,
+            ExitCode::ValidationFailed,
+            ExitCode::Usage,
+            ExitCode::NotFound,
+            ExitCode::InsertFailed,
+            ExitCode::IoFailed,
+        ];
+        for (index, code) in all.iter().enumerate() {
+            for other in &all[index + 1..] {
+                assert_ne!(code.as_i32(), other.as_i32(), "{code:?} and {other:?}");
+            }
+        }
     }
 }

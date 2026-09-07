@@ -24,8 +24,8 @@ description = "Dlugosci ciagow, ktore psuja uklad, zanim ktokolwiek to zauwazy."
 
 [values.short-run]
 name   = "Krotki ciag"
-breaks = "Bliski koniec zakresu, znaczacy wylacznie obok dalekiego konca."
 value  = "abc"
+breaks = "Bliski koniec zakresu, znaczacy wylacznie obok dalekiego konca."
 
 [values.long-run]
 name  = "Dlugi ciag"

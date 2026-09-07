@@ -1,0 +1,42 @@
+# expect: W063
+#
+# One value marks itself offensive inside a pack that does not. The palette
+# flags it before a tester sends it, and everything around it - the pack's
+# own risk level, its description, its other values - says the opposite.
+#
+# The rule deliberately does NOT read the description looking for a mention
+# of danger. Measured on the catalogue: a word list narrow enough to raise
+# no false alarm matched none of the twelve offensive values, because the
+# catalogue's own editorial rule is that a description says what should
+# happen to a value rather than what can be done with it.
+
+format = 1
+
+[pack]
+id          = "offensive-value-in-normal-pack"
+name        = "Offensive value in a normal pack"
+description = "Carries one value that marks itself offensive while the pack does not."
+version     = "1.0"
+updated     = 2026-09-07
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["format-suite"]
+risk        = "normal"
+
+[[values]]
+id     = "ordinary"
+name   = "Ordinary value"
+value  = "anything"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "marked-alone"
+name   = "Marked on its own"
+value  = "admin"
+breaks = "Nothing on its own - this value carries the risk level that the rule is about."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+risk   = "offensive"
+since  = "1.0"

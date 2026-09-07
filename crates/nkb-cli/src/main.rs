@@ -17,7 +17,7 @@ mod lint_report;
 
 use exit::ExitCode;
 use nkb_adapters::{DirectoryPackSink, DirectoryPackSource, SystemClock, TomlPackFormat};
-use nkb_app::{LintOutcome, NewPackOutcome, lint_pack, new_pack};
+use nkb_app::{FormatOutcome, LintOutcome, NewPackOutcome, format_pack, lint_pack, new_pack};
 use std::io::Write;
 use std::path::Path;
 
@@ -49,6 +49,7 @@ fn run(args: &[String]) -> ExitCode {
             ExitCode::Ok
         }
         "lint" => lint(&args[1..]),
+        "fmt" => fmt(&args[1..]),
         "new-pack" => new_pack_command(&args[1..]),
         unknown => {
             let mut err = std::io::stderr();
@@ -160,17 +161,118 @@ fn lint(args: &[String]) -> ExitCode {
             ExitCode::NotFound
         }
         LintOutcome::Unreadable => {
-            // The published set of exit codes has no code for a read failure, so
-            // this reports the nearest one and says plainly that the file is there
-            // - the wording carries what the number cannot. Adding a code after
-            // release is a breaking change, so it is the owner's call, and it is
-            // recorded as an open observation rather than decided here.
             let mut err = std::io::stderr();
             let _ = writeln!(
                 err,
                 "nkb lint: '{path}' is there and could not be read. Check the file's permissions."
             );
+            ExitCode::IoFailed
+        }
+    }
+}
+
+/// `nkb fmt <file>` - write one pack file in canonical shape.
+///
+/// # Why this exists instead of a style guide
+///
+/// A pack file is edited by people and rewritten by this tool, and a format in
+/// that position needs one canonical shape or every machine write produces a
+/// whole-file difference. With it, a difference in a pull request is always a
+/// difference of content, and review is about the value and the sentence beside
+/// it rather than about the column an equals sign sits in.
+fn fmt(args: &[String]) -> ExitCode {
+    let mut path: Option<&str> = None;
+    let mut dry_run = false;
+
+    for arg in args {
+        match arg.as_str() {
+            "--dry-run" => dry_run = true,
+            "-h" | "--help" => {
+                print_fmt_help();
+                return ExitCode::Ok;
+            }
+            other if other.starts_with('-') => {
+                let mut err = std::io::stderr();
+                let _ = writeln!(err, "nkb fmt: unknown option '{other}'");
+                let _ = writeln!(err, "Run 'nkb fmt --help' to see what is available.");
+                return ExitCode::Usage;
+            }
+            other => path = Some(other),
+        }
+    }
+
+    let Some(path) = path else {
+        let mut err = std::io::stderr();
+        let _ = writeln!(err, "nkb fmt: name a pack file to format.");
+        let _ = writeln!(err, "Usage: nkb fmt <file.toml> [--dry-run]");
+        return ExitCode::Usage;
+    };
+
+    let Some((source, id)) = DirectoryPackSource::split(Path::new(path)) else {
+        let mut err = std::io::stderr();
+        let _ = writeln!(err, "nkb fmt: '{path}' does not name a file.");
+        return ExitCode::Usage;
+    };
+    let sink = DirectoryPackSink::new(source.folder());
+
+    match format_pack(&source, &sink, &TomlPackFormat, &id, dry_run) {
+        FormatOutcome::AlreadyCanonical => {
+            println!("{path} is already in shape. Nothing was written.");
+            ExitCode::Ok
+        }
+        FormatOutcome::Formatted => {
+            println!("Wrote {path} in canonical shape.");
+            ExitCode::Ok
+        }
+        FormatOutcome::WouldFormat => {
+            // A dry run reports on standard output because the report is what it
+            // was asked for. It is the product of this run, not a complaint.
+            println!("{path} is not in shape. Run without --dry-run to rewrite it.");
+            ExitCode::Ok
+        }
+        FormatOutcome::DidNotParse => {
+            let mut err = std::io::stderr();
+            let _ = writeln!(
+                err,
+                "nkb fmt: '{path}' is not a pack file this tool can read, so there is nothing to put in order."
+            );
+            let _ = writeln!(err, "Run `nkb lint {path}` to see what is wrong with it.");
+            ExitCode::ValidationFailed
+        }
+        FormatOutcome::NotFound => {
+            let mut err = std::io::stderr();
+            let _ = writeln!(err, "nkb fmt: no pack file at '{path}'.");
             ExitCode::NotFound
+        }
+        FormatOutcome::Unreadable => {
+            let mut err = std::io::stderr();
+            let _ = writeln!(
+                err,
+                "nkb fmt: '{path}' is there and could not be read. Check the file's permissions."
+            );
+            ExitCode::IoFailed
+        }
+        FormatOutcome::Unwritable => {
+            let mut err = std::io::stderr();
+            let _ = writeln!(
+                err,
+                "nkb fmt: '{path}' could not be written. Check that you can write to this folder - the file has not been changed."
+            );
+            ExitCode::IoFailed
+        }
+        FormatOutcome::WouldChangeValues => {
+            // 🔴 A fault in this tool, not in the file, and the loudest thing the
+            // command can say. Nothing was written.
+            let mut err = std::io::stderr();
+            let _ = writeln!(
+                err,
+                "nkb fmt: formatting '{path}' would change what one of its values inserts, so nothing was written."
+            );
+            let _ = writeln!(
+                err,
+                "This is a fault in Naughty Keyboard rather than in your pack. Please report it with the file attached."
+            );
+            ExitCode::InsertFailed
         }
     }
 }
@@ -241,15 +343,12 @@ fn new_pack_command(args: &[String]) -> ExitCode {
             ExitCode::Usage
         }
         NewPackOutcome::Unwritable { file } => {
-            // The published set of exit codes has no code for a write failure, so
-            // the wording carries what the number cannot - the same compromise
-            // `nkb lint` makes for an unreadable file, and recorded the same way.
             let mut err = std::io::stderr();
             let _ = writeln!(
                 err,
                 "nkb new-pack: {file} could not be written here. Check that this folder exists and that you can write to it."
             );
-            ExitCode::Usage
+            ExitCode::IoFailed
         }
     }
 }
@@ -265,6 +364,7 @@ fn print_help() {
     println!();
     println!("Commands:");
     println!("  lint <file>       Check a pack file against the format rules");
+    println!("  fmt <file>        Rewrite a pack file in canonical shape");
     println!("  new-pack <name>   Write the skeleton for a new pack");
     println!();
     println!("Options:");
@@ -304,6 +404,31 @@ fn print_lint_help() {
     println!("  1  the pack broke at least one blocking rule");
     println!("  2  the command was called wrongly");
     println!("  3  there is no pack file to read at that path");
+    println!("  5  the file is there and could not be read");
+}
+
+fn print_fmt_help() {
+    println!("nkb fmt - rewrite a pack file in canonical shape");
+    println!();
+    println!("Usage:");
+    println!("  nkb fmt <file.toml> [--dry-run]");
+    println!();
+    println!("Puts the fields of each table in the order the format defines and lines");
+    println!("up the equals signs. Comments, blank lines and the order of the values");
+    println!("themselves are left exactly as they are - the order of the values is the");
+    println!("order a tester meets them.");
+    println!();
+    println!("Options:");
+    println!("      --dry-run  Say what would change and write nothing");
+    println!("  -h, --help     Show this help and exit with 0");
+    println!();
+    println!("Exit codes:");
+    println!("  0  the file is in shape, or was put in shape");
+    println!("  1  the file is not TOML, so there was nothing to put in order");
+    println!("  2  the command was called wrongly");
+    println!("  3  there is no pack file to read at that path");
+    println!("  4  formatting would have changed a value, so nothing was written");
+    println!("  5  the file could not be read or written");
 }
 
 #[cfg(test)]

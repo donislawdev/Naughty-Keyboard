@@ -1,0 +1,29 @@
+# expect: W064
+#
+# A correct pack written in the wrong shape: the fields of its one value are
+# in an order the format does not use, and the equals signs do not line up.
+#
+# Nothing here is wrong with the pack. That is the point - without this rule
+# half the comments on a contribution are about where an equals sign sits,
+# and the value and the sentence beside it get read last.
+
+format = 1
+
+[pack]
+id          = "not-canonical"
+name        = "Not canonical"
+description = "Correct in every way except the shape it is written in."
+version     = "1.0"
+updated     = 2026-09-07
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["format-suite"]
+
+[[values]]
+since = "1.0"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+id = "out-of-order"
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+name = "Out of order"
+value = "anything"

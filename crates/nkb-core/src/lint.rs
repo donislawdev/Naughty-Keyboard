@@ -22,6 +22,20 @@
 
 use crate::value::ValueProblem;
 
+/// How many values a pack may hold before the format suggests splitting it.
+///
+/// A warning and never a refusal: a large pack is awkward, not wrong.
+///
+/// The specification called this number a hunch and asked for it to be confirmed
+/// or dropped. Measured against the catalogue on 2026-09-07: the packs hold
+/// between ten and seventeen values, median twelve, and the largest is
+/// `look-alike-pairs`. Sixty is three and a half times that - far enough not to
+/// nag a curator, close enough to catch the failure it exists for, which is a
+/// word list emptied into one file.
+///
+/// Counts `[[values]]` only. A pair joins two values that are already counted.
+pub const MAX_VALUES_PER_PACK: usize = 60;
+
 /// Whether a rule blocks a pack or merely reports on it.
 ///
 /// This decides the exit code and nothing else. It is not a priority and not an
@@ -54,9 +68,10 @@ pub enum RuleStatus {
     PartlyChecked,
     /// Not implemented yet. Nothing blocks it beyond the work itself.
     NotImplemented,
-    /// Cannot be implemented until an open question is settled. Today: which
-    /// published set defines a look-alike character, and which Unicode version
-    /// it is pinned to.
+    /// Cannot be implemented until an open question is settled. Today two of
+    /// them: which published set defines a look-alike character and which
+    /// Unicode version it is pinned to, and what the description a tool works
+    /// out for an invisible character actually says.
     AwaitingDecision,
     /// Needs the previously published pack to compare against, which does not
     /// exist on a local disk. Checked where the main branch is available.
@@ -130,7 +145,7 @@ pub enum RuleCode {
     RedundantShape,
     PackWithoutTags,
     PackTooLarge,
-    OffensiveRiskNotMentionedInBreaks,
+    OffensiveValueInOrdinaryPack,
     FileNotCanonical,
 }
 
@@ -182,7 +197,7 @@ impl RuleCode {
             Self::RedundantShape => "W060",
             Self::PackWithoutTags => "W061",
             Self::PackTooLarge => "W062",
-            Self::OffensiveRiskNotMentionedInBreaks => "W063",
+            Self::OffensiveValueInOrdinaryPack => "W063",
             Self::FileNotCanonical => "W064",
         }
     }
@@ -282,15 +297,18 @@ pub const RULES: [LintRule; 45] = [
     // lost every one of its values - a sentence that is false, and that sends a
     // contributor to delete entries which are correct.
     rule(C::TranslatesNonPack, Error, Checked),
-    rule(C::RedundantShape, Warning, NotImplemented),
-    rule(C::PackWithoutTags, Warning, NotImplemented),
-    rule(C::PackTooLarge, Warning, NotImplemented),
-    rule(
-        C::OffensiveRiskNotMentionedInBreaks,
-        Warning,
-        NotImplemented,
-    ),
-    rule(C::FileNotCanonical, Warning, NotImplemented),
+    // Compares `shape` against the description the tool works out on its own,
+    // and that description does not exist: nothing in this build turns a value
+    // into "three zero width spaces and a trailing space". Writing one here
+    // would be designing user facing text - a translated surface, with a wording
+    // nobody has settled - inside a set of style rules. Registered as waiting on
+    // a question rather than as unwritten work, because the work is not the part
+    // that is missing.
+    rule(C::RedundantShape, Warning, AwaitingDecision),
+    rule(C::PackWithoutTags, Warning, Checked),
+    rule(C::PackTooLarge, Warning, Checked),
+    rule(C::OffensiveValueInOrdinaryPack, Warning, Checked),
+    rule(C::FileNotCanonical, Warning, Checked),
 ];
 
 /// Looks a rule up by its code.
@@ -623,7 +641,10 @@ mod tests {
             coverage.checked + coverage.partly + coverage.unchecked(),
             coverage.total
         );
-        assert_eq!(coverage.checked, 35);
+        // Written out rather than computed, deliberately. A number derived from
+        // the register would agree with the register whatever the register said,
+        // and this is the line that makes somebody look when coverage moves.
+        assert_eq!(coverage.checked, 39);
         assert_eq!(coverage.partly, 1);
     }
 

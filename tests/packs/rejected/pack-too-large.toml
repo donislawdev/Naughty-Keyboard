@@ -1,0 +1,509 @@
+# expect: W062
+#
+# Sixty one values, where the format suggests at most sixty. A tester meets
+# them in the order they are written, so a pack this long has a tail nobody
+# reaches - the values at the bottom are shipped and never seen.
+#
+# The values below are deliberately dull and deliberately numerous. The
+# count is the whole test.
+
+format = 1
+
+[pack]
+id          = "pack-too-large"
+name        = "Pack too large"
+description = "Holds more values than a tester will ever reach by pressing the shortcut."
+version     = "1.0"
+updated     = 2026-09-07
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["format-suite"]
+
+[[values]]
+id     = "filler-01"
+name   = "Filler 01"
+value  = "filler-01"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-02"
+name   = "Filler 02"
+value  = "filler-02"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-03"
+name   = "Filler 03"
+value  = "filler-03"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-04"
+name   = "Filler 04"
+value  = "filler-04"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-05"
+name   = "Filler 05"
+value  = "filler-05"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-06"
+name   = "Filler 06"
+value  = "filler-06"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-07"
+name   = "Filler 07"
+value  = "filler-07"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-08"
+name   = "Filler 08"
+value  = "filler-08"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-09"
+name   = "Filler 09"
+value  = "filler-09"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-10"
+name   = "Filler 10"
+value  = "filler-10"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-11"
+name   = "Filler 11"
+value  = "filler-11"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-12"
+name   = "Filler 12"
+value  = "filler-12"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-13"
+name   = "Filler 13"
+value  = "filler-13"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-14"
+name   = "Filler 14"
+value  = "filler-14"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-15"
+name   = "Filler 15"
+value  = "filler-15"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-16"
+name   = "Filler 16"
+value  = "filler-16"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-17"
+name   = "Filler 17"
+value  = "filler-17"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-18"
+name   = "Filler 18"
+value  = "filler-18"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-19"
+name   = "Filler 19"
+value  = "filler-19"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-20"
+name   = "Filler 20"
+value  = "filler-20"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-21"
+name   = "Filler 21"
+value  = "filler-21"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-22"
+name   = "Filler 22"
+value  = "filler-22"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-23"
+name   = "Filler 23"
+value  = "filler-23"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-24"
+name   = "Filler 24"
+value  = "filler-24"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-25"
+name   = "Filler 25"
+value  = "filler-25"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-26"
+name   = "Filler 26"
+value  = "filler-26"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-27"
+name   = "Filler 27"
+value  = "filler-27"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-28"
+name   = "Filler 28"
+value  = "filler-28"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-29"
+name   = "Filler 29"
+value  = "filler-29"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-30"
+name   = "Filler 30"
+value  = "filler-30"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-31"
+name   = "Filler 31"
+value  = "filler-31"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-32"
+name   = "Filler 32"
+value  = "filler-32"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-33"
+name   = "Filler 33"
+value  = "filler-33"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-34"
+name   = "Filler 34"
+value  = "filler-34"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-35"
+name   = "Filler 35"
+value  = "filler-35"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-36"
+name   = "Filler 36"
+value  = "filler-36"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-37"
+name   = "Filler 37"
+value  = "filler-37"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-38"
+name   = "Filler 38"
+value  = "filler-38"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-39"
+name   = "Filler 39"
+value  = "filler-39"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-40"
+name   = "Filler 40"
+value  = "filler-40"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-41"
+name   = "Filler 41"
+value  = "filler-41"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-42"
+name   = "Filler 42"
+value  = "filler-42"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-43"
+name   = "Filler 43"
+value  = "filler-43"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-44"
+name   = "Filler 44"
+value  = "filler-44"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-45"
+name   = "Filler 45"
+value  = "filler-45"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-46"
+name   = "Filler 46"
+value  = "filler-46"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-47"
+name   = "Filler 47"
+value  = "filler-47"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-48"
+name   = "Filler 48"
+value  = "filler-48"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-49"
+name   = "Filler 49"
+value  = "filler-49"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-50"
+name   = "Filler 50"
+value  = "filler-50"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-51"
+name   = "Filler 51"
+value  = "filler-51"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-52"
+name   = "Filler 52"
+value  = "filler-52"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-53"
+name   = "Filler 53"
+value  = "filler-53"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-54"
+name   = "Filler 54"
+value  = "filler-54"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-55"
+name   = "Filler 55"
+value  = "filler-55"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-56"
+name   = "Filler 56"
+value  = "filler-56"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-57"
+name   = "Filler 57"
+value  = "filler-57"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-58"
+name   = "Filler 58"
+value  = "filler-58"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-59"
+name   = "Filler 59"
+value  = "filler-59"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-60"
+name   = "Filler 60"
+value  = "filler-60"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "filler-61"
+name   = "Filler 61"
+value  = "filler-61"
+breaks = "Nothing on its own - this value is here so that the pack has more values than the format suggests."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"

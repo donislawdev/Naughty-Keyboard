@@ -56,6 +56,16 @@ impl DirectoryPackSource {
     pub fn path_of(&self, id: &str) -> PathBuf {
         self.directory.join(format!("{id}.toml"))
     }
+
+    /// The folder this reads from.
+    ///
+    /// Exists so a command that both reads and writes one file can put its sink
+    /// in the same place, without splitting the path a second time and risking
+    /// two answers to one question.
+    #[must_use]
+    pub fn folder(&self) -> &Path {
+        &self.directory
+    }
 }
 
 impl PackSource for DirectoryPackSource {
@@ -116,6 +126,49 @@ impl PackSink for DirectoryPackSink {
             Err(_) => return Err(SinkError::Unwritable),
         };
         std::io::Write::write_all(&mut file, text.as_bytes()).map_err(|_| SinkError::Unwritable)
+    }
+
+    /// # Why the content goes somewhere else first
+    ///
+    /// 🔴 A plain write truncates the file and then fills it. Interrupted in
+    /// between - a full disk, a killed process, a machine losing power - it
+    /// leaves a pack that is half a pack and still looks like one, and the file
+    /// it destroyed was the contributor's only copy.
+    ///
+    /// So the text lands under a neighbouring name and the file gets its real
+    /// name by a rename, which the operating system does in one step. Either the
+    /// old content is there or the new content is; there is no third state.
+    ///
+    /// The temporary file sits in the same folder deliberately. A rename across
+    /// folders is a copy, and a copy is not atomic.
+    fn replace(&self, id: &str, text: &str) -> Result<(), SinkError> {
+        let path = self.directory.join(format!("{id}.toml"));
+        let temporary = self.directory.join(format!("{id}.toml.nkb-new"));
+
+        // Written with create_new for the same reason `create` uses it: if
+        // something is already sitting under the temporary name, it belongs to
+        // another run and must not be trampled.
+        let outcome = (|| -> std::io::Result<()> {
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&temporary)?;
+            std::io::Write::write_all(&mut file, text.as_bytes())?;
+            // Before the rename, not after: a rename that publishes content the
+            // operating system has not committed yet is a rename that publishes
+            // an empty file on the next power cut.
+            file.sync_all()?;
+            drop(file);
+            std::fs::rename(&temporary, &path)
+        })();
+
+        if outcome.is_err() {
+            // Nothing half written is left behind under a name a person might
+            // later mistake for a pack.
+            let _ = std::fs::remove_file(&temporary);
+            return Err(SinkError::Unwritable);
+        }
+        Ok(())
     }
 }
 

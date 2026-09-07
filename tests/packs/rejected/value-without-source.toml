@@ -19,6 +19,7 @@ updated     = 2026-09-06
 license     = "CC-BY-4.0"
 authors     = ["Naughty Keyboard"]
 language    = "en"
+tags        = ["format-suite"]
 source      = "https://example.invalid/first-collection"
 
 [[values]]
@@ -27,8 +28,8 @@ name   = "Credited"
 value  = "credited"
 breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
 expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
-since  = "1.0"
 source = "https://example.invalid/second-collection"
+since  = "1.0"
 
 [[values]]
 id     = "uncredited"

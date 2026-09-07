@@ -29,6 +29,7 @@ updated     = 2026-09-07
 license     = "CC-BY-4.0"
 authors     = ["Naughty Keyboard"]
 language    = "en"
+tags        = ["format-suite"]
 
 [[values]]
 id     = "comma-first"

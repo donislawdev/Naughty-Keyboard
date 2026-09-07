@@ -117,6 +117,23 @@ pub trait PackFormat {
     /// through the linter's verdict - so the two disagreeing is the two halves of
     /// the published contract disagreeing in front of a stranger.
     fn skeleton(&self, id: &str, today: Date) -> String;
+
+    /// The same file, written the one way the format writes it.
+    ///
+    /// `None` when the text is not a pack file at all: there is nothing inside to
+    /// put in order, and E004 already says so. Told apart from `Some(unchanged)`,
+    /// which means the file was read and is already in shape.
+    fn canonical(&self, text: &str) -> Option<String>;
+
+    /// Whether two versions of a file would insert the same things.
+    ///
+    /// 🔴 The guard on the only write path in this tool that touches a file
+    /// somebody else wrote. It is asked **after** formatting and **before**
+    /// saving, so that a fault in the formatter becomes a refusal instead of a
+    /// silently emptied pack. The pack it would damage first is the one made of
+    /// characters nobody can see, where a lost escape leaves a value that still
+    /// parses and no longer tests anything.
+    fn same_insertions(&self, before: &str, after: &str) -> bool;
 }
 
 /// A calendar date as year, month and day.
@@ -150,11 +167,18 @@ pub enum SinkError {
     Unwritable,
 }
 
-/// Writes a new pack file.
+/// Writes pack files.
 ///
 /// Separate from [`PackSource`] because the two carry opposite risks: reading a
 /// pack that is not there costs a message, and writing over one that is costs
 /// somebody's work.
+///
+/// # Two methods, because there are two kinds of write and only one is safe
+///
+/// [`PackSink::create`] refuses when the name is taken, and [`PackSink::replace`]
+/// rewrites a file that is already there. They are separate names rather than a
+/// flag on one, so that overwriting somebody's pack is something a caller has to
+/// ask for by name and cannot reach by leaving a parameter at its default.
 pub trait PackSink {
     /// Creates a pack file under this identifier, and refuses if one is there.
     ///
@@ -168,6 +192,20 @@ pub trait PackSink {
     /// operations with a gap in between, and something can arrive in that gap -
     /// the shape of race the architecture notes call TOCTOU.
     fn create(&self, id: &str, text: &str) -> Result<(), SinkError>;
+
+    /// Rewrites a pack file that is already there.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SinkError::Unwritable`] when the write fails, and
+    /// [`SinkError::AlreadyExists`] never - the file existing is the point here
+    /// rather than the obstacle.
+    ///
+    /// 🔴 The write has to be atomic: content under a temporary name, then a
+    /// rename into place. A formatter interrupted halfway through a plain write
+    /// leaves a truncated pack that still looks like a pack, and the file it was
+    /// rewriting is the only copy the contributor had.
+    fn replace(&self, id: &str, text: &str) -> Result<(), SinkError>;
 }
 
 /// What a file's `translates` field points at.

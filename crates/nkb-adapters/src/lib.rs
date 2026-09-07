@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod canonical;
 pub mod fs;
 pub mod skeleton;
 pub mod toml_pack;
