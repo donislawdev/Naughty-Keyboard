@@ -8,20 +8,25 @@
 # the text directly, `count` decides how much of it there is. The rule covers
 # every field that answers "what gets sent", not only the first of them - a
 # safety property with three doors left open is not a safety property.
+#
+# It translates a pack that is in this directory, and names entries that pack
+# really has, so that E050 arrives on its own. Until 2026-09-07 it pointed at a
+# pack nobody could resolve, which cost nothing while E051 was unwritten and
+# would have made this file report two rules the day it was.
 
 format     = 1
-translates = "unicode-text"
+translates = "translated-pack"
 language   = "pl"
 
 [pack]
-name        = "Unicode i tekst"
-description = "Znaki, ktore wygladaja niewinnie i psuja liczenie oraz porownywanie."
+name        = "Paczka tlumaczona"
+description = "Dlugosci ciagow, ktore psuja uklad, zanim ktokolwiek to zauwazy."
 
-[values.zero-width-space-x3]
-name   = "Trzy znaki zerowej szerokosci"
-breaks = "Liczniki znakow i deduplikacja widza inna wartosc, niz widzi czlowiek."
+[values.short-run]
+name   = "Krotki ciag"
+breaks = "Bliski koniec zakresu, znaczacy wylacznie obok dalekiego konca."
 value  = "abc"
 
-[values.len-1000-spaces]
-name  = "Tysiac spacji"
+[values.long-run]
+name  = "Dlugi ciag"
 count = 5

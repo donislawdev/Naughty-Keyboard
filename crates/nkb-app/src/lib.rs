@@ -13,4 +13,4 @@ pub mod lint_pack;
 pub mod ports;
 
 pub use lint_pack::{LintOutcome, lint_pack};
-pub use ports::{PackFormat, PackSource, SourceError};
+pub use ports::{PackFormat, PackSource, SourceError, TranslationCheck, TranslationTarget};

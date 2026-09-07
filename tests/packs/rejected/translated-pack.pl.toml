@@ -1,0 +1,31 @@
+# expect: W052
+#
+# A translation describing an entry that the pack it follows does not have.
+#
+# A warning rather than a refusal, and the reason is in the format: a translation
+# carries no version of its own, so it drifts behind the pack it follows without
+# anybody doing anything wrong. Stale prose is not a broken pack.
+#
+# Two of the three entries below are correct, which is the point - the check has
+# to find the one that is not, rather than object to the file as a whole. The
+# prose is Polish because that is what a translation is for.
+
+format     = 1
+translates = "translated-pack"
+language   = "pl"
+
+[pack]
+name        = "Paczka tlumaczona"
+description = "Paczka, na ktora wskazuja pliki tlumaczen z tego zestawu."
+
+[values.short-run]
+name   = "Krotki ciag"
+breaks = "Bliski koniec zakresu, znaczacy wylacznie obok dalekiego konca ponizej."
+
+[values.long-run]
+name   = "Dlugi ciag"
+breaks = "Pole o szerokosci, ktorej nikt nie zapisal, przycina te wartosc i zostawia krotka."
+
+[values.removed-last-year]
+name   = "Wartosc wycofana"
+breaks = "Opis wpisu, ktorego paczka juz nie zawiera - i to jest to, czego szuka regula."

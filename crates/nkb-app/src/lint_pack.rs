@@ -9,8 +9,8 @@
 //! Nothing here knows what a path is, which parser exists, or how a problem will
 //! be worded. It knows the order of the checks and what the verdict means.
 
-use crate::ports::{PackFormat, PackSource, SourceError};
-use nkb_core::lint::{LintProblem, LintReport, RuleCode};
+use crate::ports::{PackFormat, PackSource, SourceError, TranslationCheck, TranslationTarget};
+use nkb_core::lint::{LintProblem, LintReport, RuleCode, SkipReason, SkippedRule};
 use nkb_core::source_text;
 
 /// What came of asking about one pack.
@@ -57,8 +57,84 @@ pub fn lint_pack(source: &dyn PackSource, format: &dyn PackFormat, id: &str) -> 
     report.extend(source_text::check(&text));
     report.extend(format.check(&text, id));
 
+    // Everything above needed one file. This needs two, and it is the only place
+    // in the validator that does.
+    resolve_translation(source, format, &text, &mut report);
+
     report.sort();
     LintOutcome::Judged(report)
+}
+
+/// Resolves the pack a translation names, and reports what could not be checked.
+///
+/// # Why the layer above the parser owns this
+///
+/// Reading a second file is addressing, and addressing belongs to the source
+/// port. The parser knows what `translates` says; only this layer knows how to
+/// turn an identifier into a pack. Letting the parser fetch the file would put a
+/// file system behind a trait that is supposed to be satisfiable by a string.
+///
+/// # Every way this can fail, written out
+///
+/// Four, and they can be listed rather than generalised: the three variants of
+/// [`SourceError`] plus a pack that does not parse. Each sends the reader to a
+/// different repair, so each keeps its own reason. Only the first is a finding
+/// about **this** file - the rest are findings about the neighbour, and reporting
+/// them against this file would send a contributor to fix the wrong one.
+fn resolve_translation(
+    source: &dyn PackSource,
+    format: &dyn PackFormat,
+    text: &str,
+    report: &mut LintReport,
+) {
+    let target = match format.translated_pack(text) {
+        // Not a translation, so the translation rules had nothing to look at.
+        // That is a rule that ran and found nothing, not a rule that was skipped.
+        TranslationTarget::NotATranslation => return,
+        TranslationTarget::Unusable => {
+            // E051 has already been reported against the file itself: a name
+            // outside the identifier alphabet names no pack. What is left to say
+            // is that the rule needing that pack could not run.
+            report.skip(SkippedRule::new(
+                RuleCode::TranslationRefersToMissingId,
+                SkipReason::TranslatedPackNotNamed,
+            ));
+            return;
+        }
+        TranslationTarget::Pack(id) => id,
+    };
+
+    let translated = match source.read(&target) {
+        Ok(translated) => translated,
+        Err(error) => {
+            if error == SourceError::NotFound {
+                report.push(LintProblem::new(RuleCode::TranslatesUnknownPack).about(&target));
+            }
+            report.skip(
+                SkippedRule::new(
+                    RuleCode::TranslationRefersToMissingId,
+                    match error {
+                        SourceError::NotFound => SkipReason::TranslatedPackNotFound,
+                        SourceError::Unreadable => SkipReason::TranslatedPackUnreadable,
+                        SourceError::NotUtf8 => SkipReason::TranslatedPackNotUtf8,
+                    },
+                )
+                .about(&target),
+            );
+            return;
+        }
+    };
+
+    match format.check_translation(text, &translated) {
+        TranslationCheck::Compared(problems) => report.extend(problems),
+        TranslationCheck::TranslatedPackDidNotParse => report.skip(
+            SkippedRule::new(
+                RuleCode::TranslationRefersToMissingId,
+                SkipReason::TranslatedPackDidNotParse,
+            )
+            .about(&target),
+        ),
+    }
 }
 
 #[cfg(test)]
@@ -98,19 +174,60 @@ mod tests {
 
     /// A parser that finds whatever the test tells it to, so that this use case
     /// can be exercised without a real one. That is the reason the port exists.
-    struct Says(Vec<RuleCode>);
+    struct Says {
+        codes: Vec<RuleCode>,
+        target: TranslationTarget,
+        comparison: TranslationCheck,
+    }
+
+    impl Says {
+        fn nothing() -> Self {
+            Self {
+                codes: Vec::new(),
+                target: TranslationTarget::NotATranslation,
+                comparison: TranslationCheck::Compared(Vec::new()),
+            }
+        }
+
+        fn finding(codes: Vec<RuleCode>) -> Self {
+            Self {
+                codes,
+                ..Self::nothing()
+            }
+        }
+
+        fn translating(target: TranslationTarget) -> Self {
+            Self {
+                target,
+                ..Self::nothing()
+            }
+        }
+
+        fn comparing(mut self, comparison: TranslationCheck) -> Self {
+            self.comparison = comparison;
+            self
+        }
+    }
 
     impl PackFormat for Says {
         fn check(&self, _text: &str, _expected_id: &str) -> Vec<LintProblem> {
-            self.0
+            self.codes
                 .iter()
                 .map(|code| LintProblem::new(*code).at(5))
                 .collect()
         }
+
+        fn translated_pack(&self, _text: &str) -> TranslationTarget {
+            self.target.clone()
+        }
+
+        fn check_translation(&self, _text: &str, _translated: &str) -> TranslationCheck {
+            self.comparison.clone()
+        }
     }
 
     fn nothing() -> Says {
-        Says(Vec::new())
+        Says::nothing()
     }
 
     #[test]
@@ -158,7 +275,7 @@ mod tests {
         // rounds of it - and the rules come from two different places, so this is
         // where a naive implementation returns only half of them.
         let source = InMemory::holding("mixed", "[pack]\r\nid = \"a\"\n");
-        let format = Says(vec![RuleCode::PackWithoutValues]);
+        let format = Says::finding(vec![RuleCode::PackWithoutValues]);
 
         let LintOutcome::Judged(report) = lint_pack(&source, &format, "mixed") else {
             panic!("must be judged");
@@ -172,7 +289,7 @@ mod tests {
         // Two runs over one file must agree, or a contribution check that diffs
         // its own output turns red for no reason.
         let source = InMemory::holding("ordered", "\u{FEFF}format = 1\n");
-        let format = Says(vec![RuleCode::PackWithoutValues]);
+        let format = Says::finding(vec![RuleCode::PackWithoutValues]);
 
         let LintOutcome::Judged(report) = lint_pack(&source, &format, "ordered") else {
             panic!("must be judged");
@@ -181,12 +298,156 @@ mod tests {
         assert_eq!(lines, vec![Some(1), Some(5)]);
     }
 
+    /// The whole of a report in one shape, so a test can assert on both halves.
+    fn judged(outcome: LintOutcome) -> LintReport {
+        let LintOutcome::Judged(report) = outcome else {
+            panic!("must be judged");
+        };
+        report
+    }
+
+    fn codes(report: &LintReport) -> Vec<&str> {
+        report.problems.iter().map(|p| p.code.as_str()).collect()
+    }
+
+    fn skips(report: &LintReport) -> Vec<(&str, &str)> {
+        report
+            .skipped
+            .iter()
+            .map(|s| (s.code.as_str(), s.reason.as_str()))
+            .collect()
+    }
+
+    #[test]
+    fn a_pack_that_is_not_a_translation_skips_nothing() {
+        // The boundary that keeps the record meaningful. A rule about
+        // translations looked at an ordinary pack and had nothing to judge, which
+        // is "somebody looked and found nothing" - already the quiet answer. A
+        // skip here would put a line in every report the tool ever writes.
+        let source = InMemory::holding("ordinary", "format = 1\n");
+        let report = judged(lint_pack(&source, &nothing(), "ordinary"));
+        assert_eq!(skips(&report).len(), 0);
+    }
+
+    #[test]
+    fn a_translation_of_a_pack_that_is_not_there_reports_it_and_records_what_it_could_not_check() {
+        // Two answers, not one. E051 is the finding; the skip is the honesty about
+        // W052, which this build runs and could not run here. Reporting only the
+        // first leaves a summary saying every rule was checked.
+        let source = InMemory::holding("unicode-text.pl", "format = 1\n");
+        let format = Says::translating(TranslationTarget::Pack("unicode-text".to_owned()));
+
+        let report = judged(lint_pack(&source, &format, "unicode-text.pl"));
+        assert_eq!(codes(&report), vec!["E051"]);
+        assert_eq!(skips(&report), vec![("W052", "translated-pack-not-found")]);
+        assert_eq!(
+            report.skipped[0].subject.as_deref(),
+            Some("unicode-text"),
+            "the record has to name what was missing, or it sends nobody anywhere"
+        );
+    }
+
+    #[test]
+    fn a_translated_pack_that_will_not_open_is_not_reported_as_missing() {
+        // The distinction the source port already draws, carried all the way to
+        // the record. A pack that exists and will not open is a permission to fix,
+        // not a name to correct - and it is a fault of that file, not this one, so
+        // no E051 is raised against the file in hand.
+        let mut packs = HashMap::new();
+        packs.insert("locale-cz.pl".to_owned(), Ok("format = 1\n".to_owned()));
+        packs.insert("locale-cz".to_owned(), Err(SourceError::Unreadable));
+        let source = InMemory(packs);
+        let format = Says::translating(TranslationTarget::Pack("locale-cz".to_owned()));
+
+        let report = judged(lint_pack(&source, &format, "locale-cz.pl"));
+        assert_eq!(codes(&report).len(), 0, "the neighbour is the broken one");
+        assert_eq!(skips(&report), vec![("W052", "translated-pack-unreadable")]);
+        assert!(report.accepted(), "nothing here blocks this pack");
+    }
+
+    #[test]
+    fn a_translated_pack_that_is_not_text_is_told_apart_from_one_that_will_not_open() {
+        let mut packs = HashMap::new();
+        packs.insert("mojibake.pl".to_owned(), Ok("format = 1\n".to_owned()));
+        packs.insert("mojibake".to_owned(), Err(SourceError::NotUtf8));
+        let source = InMemory(packs);
+        let format = Says::translating(TranslationTarget::Pack("mojibake".to_owned()));
+
+        let report = judged(lint_pack(&source, &format, "mojibake.pl"));
+        assert_eq!(skips(&report), vec![("W052", "translated-pack-not-utf8")]);
+    }
+
+    #[test]
+    fn a_translated_pack_that_does_not_parse_records_that_nothing_was_compared() {
+        // The fourth failure, and the only one the source port cannot see: the
+        // file read fine and holds no identifiers. Told apart from an empty
+        // comparison, which is the pair of answers this mechanism exists for.
+        let mut packs = HashMap::new();
+        packs.insert("broken.pl".to_owned(), Ok("format = 1\n".to_owned()));
+        packs.insert("broken".to_owned(), Ok("format = = 1\n".to_owned()));
+        let source = InMemory(packs);
+        let format = Says::translating(TranslationTarget::Pack("broken".to_owned()))
+            .comparing(TranslationCheck::TranslatedPackDidNotParse);
+
+        let report = judged(lint_pack(&source, &format, "broken.pl"));
+        assert_eq!(
+            skips(&report),
+            vec![("W052", "translated-pack-did-not-parse")]
+        );
+    }
+
+    #[test]
+    fn a_translation_naming_something_that_is_not_a_pack_never_reaches_the_source() {
+        // 🔴 The security half. A name outside the identifier alphabet is refused
+        // by the port before it becomes a path, so no read is attempted at all -
+        // and this test proves the absence rather than trusting the comment.
+        struct Counting(std::cell::Cell<usize>);
+        impl PackSource for Counting {
+            fn read(&self, _id: &str) -> Result<String, SourceError> {
+                self.0.set(self.0.get() + 1);
+                Ok("format = 1\n".to_owned())
+            }
+        }
+
+        let source = Counting(std::cell::Cell::new(0));
+        let format = Says::translating(TranslationTarget::Unusable);
+        let report = judged(lint_pack(&source, &format, "hostile.pl"));
+
+        assert_eq!(
+            source.0.get(),
+            1,
+            "exactly the one read of the file under check, and none for the name it carried"
+        );
+        assert_eq!(skips(&report), vec![("W052", "translated-pack-not-named")]);
+        assert_eq!(
+            report.skipped[0].subject, None,
+            "there is no usable name to repeat back, and echoing the raw one would put a stranger's text where a pack identifier belongs"
+        );
+    }
+
+    #[test]
+    fn a_comparison_that_happened_and_found_nothing_is_not_a_skip() {
+        // The pair of answers, from the other side. An empty comparison means the
+        // rule ran, so the report says nothing at all - and a mechanism that
+        // recorded a skip here would make every correct translation look partly
+        // unchecked.
+        let mut packs = HashMap::new();
+        packs.insert("good.pl".to_owned(), Ok("format = 1\n".to_owned()));
+        packs.insert("good".to_owned(), Ok("format = 1\n".to_owned()));
+        let source = InMemory(packs);
+        let format = Says::translating(TranslationTarget::Pack("good".to_owned()));
+
+        let report = judged(lint_pack(&source, &format, "good.pl"));
+        assert_eq!(codes(&report).len(), 0);
+        assert_eq!(skips(&report).len(), 0);
+    }
+
     #[test]
     fn a_warning_alone_leaves_the_pack_acceptable() {
         // Warnings are reported and passed through: a pack with warnings loads
         // normally and its contents are unchanged.
         let source = InMemory::holding("warned", "format = 1\n");
-        let format = Says(vec![RuleCode::PackWithoutTags]);
+        let format = Says::finding(vec![RuleCode::PackWithoutTags]);
 
         let LintOutcome::Judged(report) = lint_pack(&source, &format, "warned") else {
             panic!("must be judged");

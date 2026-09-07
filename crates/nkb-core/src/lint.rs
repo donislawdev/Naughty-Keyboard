@@ -259,8 +259,8 @@ pub const RULES: [LintRule; 42] = [
     rule(C::UnknownRelation, Error, Checked),
     rule(C::PairEndpointsIdentical, Error, Checked),
     rule(C::TranslationCarriesValue, Error, Checked),
-    rule(C::TranslatesUnknownPack, Error, NotImplemented),
-    rule(C::TranslationRefersToMissingId, Warning, NotImplemented),
+    rule(C::TranslatesUnknownPack, Error, Checked),
+    rule(C::TranslationRefersToMissingId, Warning, Checked),
     rule(C::RedundantShape, Warning, NotImplemented),
     rule(C::PackWithoutTags, Warning, NotImplemented),
     rule(C::PackTooLarge, Warning, NotImplemented),
@@ -403,10 +403,96 @@ impl From<ValueProblem> for LintProblem {
     }
 }
 
+/// Why one rule could not be checked **for one particular file**.
+///
+/// # Why this is not a seventh `RuleStatus`
+///
+/// The two types answer questions on different axes and only look alike. A
+/// [`RuleStatus`] is a property of this build: it is the same for every file and
+/// is known before any file is read. A `SkipReason` is a property of one run over
+/// one file, decided by something outside that file - whether the pack it needs
+/// is there, opens, and parses.
+///
+/// Folding them together would force one of two lies. Either a rule this build
+/// runs is registered as unchecked because one file could not be compared, or a
+/// file that was never compared is reported under a status that says the rule
+/// runs everywhere. Both are the silence that rule 1 of the project forbids, in
+/// the one place nobody would go looking for it.
+///
+/// 🔴 These names are published in `--json`. A consumer must treat a reason it
+/// does not recognise as "not checked" rather than stop, and the list grows only
+/// by addition - `ux-spec.md` 10.1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkipReason {
+    /// `translates` names no pack at all: not text, or text outside the pack
+    /// identifier alphabet. Nothing can be resolved from it, and no file system
+    /// is touched - a pack file comes from a stranger, and a name that is not an
+    /// identifier is not a name we go looking for on a disk.
+    TranslatedPackNotNamed,
+    /// The pack named by `translates` is not beside this file.
+    TranslatedPackNotFound,
+    /// It is there and will not open: permissions, a device, a handle.
+    TranslatedPackUnreadable,
+    /// It opened and is not UTF-8, so it holds no identifiers to compare against.
+    TranslatedPackNotUtf8,
+    /// It is text and is not TOML, so nothing could be read out of it.
+    TranslatedPackDidNotParse,
+}
+
+impl SkipReason {
+    /// The published name of a reason. Part of the contract, like a rule code.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::TranslatedPackNotNamed => "translated-pack-not-named",
+            Self::TranslatedPackNotFound => "translated-pack-not-found",
+            Self::TranslatedPackUnreadable => "translated-pack-unreadable",
+            Self::TranslatedPackNotUtf8 => "translated-pack-not-utf8",
+            Self::TranslatedPackDidNotParse => "translated-pack-did-not-parse",
+        }
+    }
+}
+
+/// One rule that this build runs and could not run over one file.
+///
+/// Recorded only when the rule **had something to check and could not**, never
+/// when it had nothing to say. A rule about translations is not skipped over a
+/// source pack: it looked, and there was no translation to judge. That is
+/// "somebody looked and found nothing", which is already the quiet answer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkippedRule {
+    pub code: RuleCode,
+    pub reason: SkipReason,
+    /// What the rule needed and did not get - the pack identifier, when there
+    /// was a usable one. Absent when the file named nothing that could be looked
+    /// for.
+    pub subject: Option<String>,
+}
+
+impl SkippedRule {
+    #[must_use]
+    pub fn new(code: RuleCode, reason: SkipReason) -> Self {
+        Self {
+            code,
+            reason,
+            subject: None,
+        }
+    }
+
+    #[must_use]
+    pub fn about(mut self, subject: impl Into<String>) -> Self {
+        self.subject = Some(subject.into());
+        self
+    }
+}
+
 /// The verdict on one pack file.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LintReport {
     pub problems: Vec<LintProblem>,
+    /// Rules this build runs that could not be run over this file. Empty for
+    /// almost every file, and the whole point of the type when it is not.
+    pub skipped: Vec<SkippedRule>,
 }
 
 impl LintReport {
@@ -439,6 +525,11 @@ impl LintReport {
 
     pub fn extend(&mut self, problems: impl IntoIterator<Item = LintProblem>) {
         self.problems.extend(problems);
+    }
+
+    /// Records that a rule this build runs could not be run over this file.
+    pub fn skip(&mut self, skipped: SkippedRule) {
+        self.skipped.push(skipped);
     }
 
     /// Orders problems the way a person reads a file: top to bottom, and within
@@ -505,8 +596,79 @@ mod tests {
             coverage.checked + coverage.partly + coverage.unchecked(),
             coverage.total
         );
-        assert_eq!(coverage.checked, 30);
+        assert_eq!(coverage.checked, 32);
         assert_eq!(coverage.partly, 1);
+    }
+
+    #[test]
+    fn a_skipped_rule_is_only_ever_one_this_build_actually_runs() {
+        // The invariant that keeps the two axes from collapsing into one. A rule
+        // nobody wrote is unchecked for every file, and saying so per file would
+        // be the same silence recorded twice - while a rule this build runs and
+        // could not run here is the one case the per file record exists for.
+        //
+        // Written as a check over the register rather than over a sample, because
+        // the mistake it guards against arrives with a rule added later.
+        for reason in [
+            SkipReason::TranslatedPackNotNamed,
+            SkipReason::TranslatedPackNotFound,
+            SkipReason::TranslatedPackUnreadable,
+            SkipReason::TranslatedPackNotUtf8,
+            SkipReason::TranslatedPackDidNotParse,
+        ] {
+            let skipped = SkippedRule::new(RuleCode::TranslationRefersToMissingId, reason);
+            let status = rule_for(skipped.code).status;
+            assert!(
+                matches!(status, RuleStatus::Checked | RuleStatus::PartlyChecked),
+                "{} is registered as {status:?}, so it cannot be skipped for one file",
+                skipped.code.as_str()
+            );
+        }
+    }
+
+    #[test]
+    fn every_skip_reason_has_a_published_name_and_no_two_share_one() {
+        // The names travel into `--json` beside the rule codes and are read the
+        // same way. Two reasons rendering as one string would make two different
+        // repairs indistinguishable to a check that matches on the field.
+        let reasons = [
+            SkipReason::TranslatedPackNotNamed,
+            SkipReason::TranslatedPackNotFound,
+            SkipReason::TranslatedPackUnreadable,
+            SkipReason::TranslatedPackNotUtf8,
+            SkipReason::TranslatedPackDidNotParse,
+        ];
+        let names: HashSet<&str> = reasons.iter().map(|r| r.as_str()).collect();
+        assert_eq!(names.len(), reasons.len());
+        for name in names {
+            assert!(!name.is_empty());
+            assert!(
+                name.chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
+                "{name} is not in the shape the other published names use"
+            );
+        }
+    }
+
+    #[test]
+    fn a_report_with_no_findings_and_a_skipped_rule_is_not_a_clean_report() {
+        // The failure this whole mechanism exists to prevent: empty `problems`
+        // reading as "the pack is fine" when the truth is that a rule never ran.
+        // The verdict is still acceptance - a rule that could not run has found
+        // nothing to block on - so the skip has to be visible beside it or it is
+        // invisible altogether.
+        let mut report = LintReport::default();
+        report.skip(
+            SkippedRule::new(
+                RuleCode::TranslationRefersToMissingId,
+                SkipReason::TranslatedPackNotFound,
+            )
+            .about("unicode-text"),
+        );
+        assert!(report.accepted());
+        assert_eq!(report.problems.len(), 0);
+        assert_eq!(report.skipped.len(), 1);
+        assert_eq!(report.skipped[0].subject.as_deref(), Some("unicode-text"));
     }
 
     #[test]

@@ -54,7 +54,7 @@ use FieldKind::{Date, List, Text, TrueOrFalse, WholeNumber};
 /// `format` is absent on purpose: E001 owns it. A file declaring `format = "1"`
 /// is refused by the rule about the format version, which arrives with the
 /// better message, and two codes for one mistake help nobody.
-const FIELDS: [(&str, FieldKind); 25] = [
+const FIELDS: [(&str, FieldKind); 26] = [
     ("id", Text),
     ("name", Text),
     ("description", Text),
@@ -80,6 +80,11 @@ const FIELDS: [(&str, FieldKind); 25] = [
     ("relation", Text),
     ("a", Text),
     ("b", Text),
+    // A translation names the pack it translates here. Registered so that E009
+    // reaches it before E051 does: the rule that resolves this field turns its
+    // content into a path, and a field of the wrong kind must be refused by the
+    // rule that owns kinds rather than misread by the rule that owns packs.
+    ("translates", Text),
 ];
 
 /// The kind a field holds, or nothing for a name the format does not define.
@@ -125,6 +130,7 @@ mod tests {
             "relation",
             "a",
             "b",
+            "translates",
         ] {
             assert!(kind_of(field).is_some(), "{field}");
         }

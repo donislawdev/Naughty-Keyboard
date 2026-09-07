@@ -1,0 +1,30 @@
+# expect: E051
+# skipped: W052=translated-pack-not-named
+#
+# 🔴 A pack file is a file from a stranger, and this is the field that would let
+# one reach outside the folder it lives in.
+#
+# The tool turns `translates` into a path by joining it to the directory the pack
+# was read from. A value shaped like the one below would climb out of that
+# directory, which would make a validator into a way of asking whether an
+# arbitrary file exists on somebody else's machine.
+#
+# The refusal is not an escaping step and not a sanitisation: a pack identifier
+# is lower case letters, digits and hyphens starting with a letter, and nothing
+# here is one. The name is rejected before any of it reaches a file system, and
+# the second line above records that the rule needing that pack never ran.
+#
+# If this file ever starts producing something other than E051, do not adjust the
+# expectation. Find out what read the field first.
+
+format     = 1
+translates = "../../../etc/passwd"
+language   = "pl"
+
+[pack]
+name        = "Tlumaczenie wskazujace poza katalog"
+description = "Plik tlumaczenia, ktorego pole translates nie jest nazwa paczki."
+
+[values.anything]
+name   = "Cokolwiek"
+breaks = "Nie ma paczki o takiej nazwie, bo taka nazwa nie jest nazwa zadnej paczki."

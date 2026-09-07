@@ -1,0 +1,50 @@
+# expect: W032
+#
+# The other half of three files in this set, and the reason it exists.
+#
+# A translation cannot be judged on its own: W052 asks whether the entries a
+# translation describes are still in the pack it follows, and the answer lives
+# here rather than in the translation. Two files, one question.
+#
+# It earns its place among the rejected files honestly - one of its values never
+# says what a correct application would do - so this set still contains no pack
+# that passes. Do not repair that warning: it is what keeps this file from being
+# an accepted pack filed in the wrong directory.
+
+format = 1
+
+[pack]
+id          = "translated-pack"
+name        = "Translated pack"
+description = "The pack that the translation files in this set point at."
+version     = "1.0"
+updated     = 2026-09-06
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["length"]
+
+[[values]]
+id     = "short-run"
+name   = "Short run"
+value  = "aaa"
+breaks = "The near end of a range, and only meaningful beside the far end of it below."
+expect = "Stored and returned as typed."
+since  = "1.0"
+
+[[values]]
+id     = "long-run"
+name   = "Long run"
+value  = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+breaks = "A field with a column width nobody wrote down truncates this and keeps the short one, so the loss is invisible in a list."
+since  = "1.0"
+
+[[pairs]]
+id       = "run-length-range"
+name     = "Run length range"
+relation = "range"
+a        = "short-run"
+b        = "long-run"
+breaks   = "Layouts that survive the near end of a range and break at the far end of it, with nothing in between to warn anybody."
+expect   = "Both ends stored whole, or the far end refused with a message that says so."
+since    = "1.0"

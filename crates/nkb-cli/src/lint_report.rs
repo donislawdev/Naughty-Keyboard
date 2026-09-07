@@ -20,7 +20,8 @@
 use nkb_core::description::MIN_BREAKS_CODE_POINTS;
 use nkb_core::identity::is_pack_id;
 use nkb_core::lint::{
-    LintProblem, LintReport, RULES, RuleCode, RuleCoverage, RuleStatus, Severity,
+    LintProblem, LintReport, RULES, RuleCode, RuleCoverage, RuleStatus, Severity, SkipReason,
+    SkippedRule,
 };
 use nkb_core::schema::kind_of;
 
@@ -69,6 +70,24 @@ pub fn summary(report: &LintReport) -> Vec<String> {
         ),
     ];
 
+    // The line above counts what this build does with the rules, which is the
+    // same number for every file. It stops being the whole truth the moment a
+    // rule this build runs could not be run over the file in hand, and the
+    // difference is invisible unless it is said here, next to the claim it
+    // qualifies.
+    if !report.skipped.is_empty() {
+        lines.push(format!(
+            "{} could not be checked for this file:",
+            count(report.skipped.len(), "more rule")
+        ));
+        lines.extend(
+            report
+                .skipped
+                .iter()
+                .map(|skipped| format!("  {}  {}", skipped.code.as_str(), skip_sentence(skipped))),
+        );
+    }
+
     // Required by the format specification, which asks the tool to say this out
     // loud rather than let silence read as stability.
     lines.push(
@@ -76,6 +95,33 @@ pub fn summary(report: &LintReport) -> Vec<String> {
             .to_owned(),
     );
     lines
+}
+
+/// Why one rule could not be run over the file in hand.
+///
+/// Each reason names a different repair, which is the whole argument for keeping
+/// them apart: a reader told only "not checked" learns that something is wrong
+/// and nothing about what to do next.
+#[must_use]
+pub fn skip_sentence(skipped: &SkippedRule) -> String {
+    let subject = skipped.subject.as_deref().unwrap_or("");
+    match skipped.reason {
+        SkipReason::TranslatedPackNotNamed => {
+            "`translates` names no pack, so there was nothing to compare against.".to_owned()
+        }
+        SkipReason::TranslatedPackNotFound => format!(
+            "the pack this file translates, `{subject}`, is not beside it, so its identifiers could not be read."
+        ),
+        SkipReason::TranslatedPackUnreadable => format!(
+            "`{subject}.toml` is there and would not open. Check its permissions - this is about that file, not this one."
+        ),
+        SkipReason::TranslatedPackNotUtf8 => format!(
+            "`{subject}.toml` is not UTF-8, so it holds no identifiers to compare against. Fix that file, then run this one again."
+        ),
+        SkipReason::TranslatedPackDidNotParse => format!(
+            "`{subject}.toml` is not valid TOML, so nothing could be read out of it. Lint that file first."
+        ),
+    }
 }
 
 /// Every rule, its code, and whether this build runs it.
@@ -256,6 +302,15 @@ pub fn sentence(problem: &LintProblem) -> String {
         RuleCode::TranslationCarriesValue => format!(
             "the translation of `{owner}` carries `{subject}`, which decides what gets inserted into somebody else's application. A translation may change prose and nothing else - that is a safety property of the format, not a matter of tidiness."
         ),
+        RuleCode::TranslatesUnknownPack if is_pack_id(subject) => format!(
+            "this file translates `{subject}`, and there is no `{subject}.toml` beside it. A translation follows its pack and cannot be read on its own."
+        ),
+        RuleCode::TranslatesUnknownPack => format!(
+            "`translates` is set to `{subject}`, which is not the shape a pack identifier has: lower case letters, digits and hyphens, starting with a letter. Nothing was looked for on disk under that name."
+        ),
+        RuleCode::TranslationRefersToMissingId => format!(
+            "this translation describes `{subject}`, which the pack it translates does not have. Translations carry no version of their own, so an entry outlives whatever it described - delete it, or point it at the identifier that replaced it."
+        ),
         // Every other rule is registered and not yet run, so no problem carrying
         // its code can reach this point. Answering with the code rather than with
         // a crash keeps a validator from taking somebody's build down with it.
@@ -402,6 +457,69 @@ mod tests {
         assert!(text.contains("not implemented yet"), "{text}");
         assert!(text.contains("waiting on an unsettled question"), "{text}");
         assert!(text.contains("needs the published pack"), "{text}");
+    }
+
+    #[test]
+    fn every_reason_a_rule_can_be_skipped_for_says_something_different() {
+        // The same guard as the one below, for the other half of the mechanism.
+        // A reason added later with no sentence would print an empty line where
+        // the explanation belongs, and a reason that reused an existing sentence
+        // would send the reader to the wrong repair - which is the only thing
+        // these reasons exist to get right.
+        let reasons = [
+            SkipReason::TranslatedPackNotNamed,
+            SkipReason::TranslatedPackNotFound,
+            SkipReason::TranslatedPackUnreadable,
+            SkipReason::TranslatedPackNotUtf8,
+            SkipReason::TranslatedPackDidNotParse,
+        ];
+        let mut written = std::collections::HashSet::new();
+        for reason in reasons {
+            let text = skip_sentence(
+                &SkippedRule::new(RuleCode::TranslationRefersToMissingId, reason)
+                    .about("unicode-text"),
+            );
+            assert!(
+                text.len() > 20,
+                "{} has no sentence worth reading",
+                reason.as_str()
+            );
+            assert!(
+                written.insert(text.clone()),
+                "{} repeats a sentence another reason already uses: {text}",
+                reason.as_str()
+            );
+        }
+    }
+
+    #[test]
+    fn the_summary_qualifies_its_own_count_when_a_rule_could_not_be_run_here() {
+        // The count above it is a property of the build and is the same in every
+        // report. Left alone beside a skipped rule it overstates what happened to
+        // the file in hand, which is the one place the overstatement is invisible.
+        let mut report = LintReport::default();
+        report.skip(
+            SkippedRule::new(
+                RuleCode::TranslationRefersToMissingId,
+                SkipReason::TranslatedPackNotFound,
+            )
+            .about("unicode-text"),
+        );
+        let text = summary(&report).join("\n");
+        assert!(text.contains("Checked 32 of 42 rules"), "{text}");
+        assert!(
+            text.contains("1 more rule could not be checked for this file"),
+            "{text}"
+        );
+        assert!(text.contains("W052"), "{text}");
+
+        // And an ordinary report says none of that, or every run would carry a
+        // line about nothing.
+        let quiet = summary(&LintReport::default()).join("\n");
+        assert!(
+            !quiet.contains("could not be checked for this file"),
+            "{quiet}"
+        );
     }
 
     #[test]

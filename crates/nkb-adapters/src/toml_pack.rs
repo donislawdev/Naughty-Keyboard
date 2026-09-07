@@ -20,7 +20,7 @@
 //! rules about how a value is *written*. Those rules therefore read the raw slice
 //! of the file that a span points at - which was measured to be faithful.
 
-use nkb_app::PackFormat;
+use nkb_app::{PackFormat, TranslationCheck, TranslationTarget};
 use nkb_core::description::{self, BreaksFault};
 use nkb_core::identity::{is_pack_id, is_value_id};
 use nkb_core::lint::{LintProblem, RuleCode};
@@ -30,7 +30,7 @@ use nkb_core::text::LiteralText;
 use nkb_core::value::ValueBody;
 use nkb_core::written_form;
 use std::collections::HashSet;
-use toml_edit::{Document, Item, Table};
+use toml_edit::{Document, Item, Table, TableLike};
 
 /// The file format version this build understands.
 ///
@@ -166,7 +166,7 @@ pub fn check(text: &str, expected_id: &str) -> Vec<LintProblem> {
     // to it would report a correct file as broken - a partial translation is
     // normal, and a missing description falls back to English in silence.
     if root.contains_key("translates") {
-        problems.extend(check_translation(text, root));
+        problems.extend(check_translation_file(text, root));
         return problems;
     }
 
@@ -684,13 +684,32 @@ fn check_pairs<'a>(
     problems
 }
 
-/// E050, and the field kinds, over a translation file.
+/// E050, E051 and the field kinds, over a translation file.
 ///
 /// Walked by shape rather than by searching the whole document for a key name:
 /// a value whose identifier happens to be `count` would make a blind search
 /// report a rule violation that is not there.
-fn check_translation(text: &str, root: &Table) -> Vec<LintProblem> {
-    let mut problems = Vec::new();
+///
+/// # Both tables, not only `values`
+///
+/// A pair carries prose of its own, so a translation may carry a `[pairs]` table
+/// too, and E050 has to reach it. Until 2026-09-07 it did not: a `value` beside a
+/// translated pair passed in silence, measured. A pair holds no value to insert
+/// today, so nothing was reachable through that gap - but the rule is written
+/// without a condition, the reviewer's guarantee is that only prose can change,
+/// and a format that is not frozen may yet give a pair something to carry.
+/// Closing a door while it is still inert is the cheap moment - `D40`.
+fn check_translation_file(text: &str, root: &Table) -> Vec<LintProblem> {
+    // The root of a translation is the one table nothing walked, so `language`
+    // and `translates` were never judged for their kind. E009 has to arrive
+    // before the rule that reads a field, or that rule reads a field the format
+    // cannot use - `D32`, and the reason this call is first.
+    let mut problems: Vec<LintProblem> = check_field_kinds(
+        text,
+        root.iter().filter(|(key, _)| TOP_LEVEL_KEYS.contains(key)),
+    );
+
+    problems.extend(check_translates_names_a_pack(text, root));
 
     if let Some(pack) = root.get("pack").and_then(Item::as_table_like) {
         problems.extend(
@@ -701,20 +720,138 @@ fn check_translation(text: &str, root: &Table) -> Vec<LintProblem> {
         );
     }
 
-    let Some(values) = root.get("values").and_then(Item::as_table_like) else {
-        return problems;
-    };
-
-    for (id, item) in values.iter() {
-        let Some(table) = item.as_table_like() else {
-            continue;
-        };
+    for (owner, table) in entries_of(root, "values").chain(entries_of(root, "pairs")) {
         for mut problem in check_field_kinds(text, table.iter())
             .into_iter()
             .chain(check_insertion_fields(text, table.iter()))
         {
-            problem.owner = Some(id.to_owned());
+            problem.owner = Some(owner.clone());
             problems.push(problem);
+        }
+    }
+    problems
+}
+
+/// Every entry under `values` or `pairs`, whichever of the two shapes was used.
+///
+/// # Why both shapes, when the format defines one for each kind of file
+///
+/// A source pack writes `[[values]]` and a translation writes `[values.<id>]`.
+/// Nothing in the format lets a translation use the array shape - but E050 is a
+/// safety property, and a safety rule that only looks where the format says a
+/// field should be is a rule anybody can step around by putting the field
+/// somewhere else. So the walk covers both, and a translation written in the
+/// wrong shape is caught rather than skipped in silence.
+///
+/// The identity rules do the opposite and follow the format exactly, because
+/// there the question is what the file means rather than what it could smuggle.
+fn entries_of<'a>(
+    root: &'a Table,
+    table_name: &str,
+) -> Box<dyn Iterator<Item = (String, &'a dyn TableLike)> + 'a> {
+    let Some(item) = root.get(table_name) else {
+        return Box::new(std::iter::empty());
+    };
+
+    if let Some(keyed) = item.as_table_like() {
+        return Box::new(
+            keyed
+                .iter()
+                .filter_map(|(id, entry)| entry.as_table_like().map(|t| (id.to_owned(), t))),
+        );
+    }
+
+    if let Some(listed) = item.as_array_of_tables() {
+        return Box::new(listed.iter().enumerate().map(|(index, table)| {
+            let id = table
+                .get("id")
+                .and_then(Item::as_str)
+                .map_or_else(|| format!("#{}", index + 1), ToOwned::to_owned);
+            (id, table as &dyn TableLike)
+        }));
+    }
+
+    Box::new(std::iter::empty())
+}
+
+/// E051, the half that needs no second file: a `translates` naming nothing that
+/// could be a pack.
+///
+/// 🔴 This runs before anything goes looking on a disk, and that ordering is the
+/// rule rather than an implementation detail. The content of this field comes
+/// from a stranger and is turned into a path by joining it to a directory, so a
+/// value like `../../secrets` would read outside the folder the pack lives in.
+/// The pack identifier alphabet has no dot and no separator in it, which is what
+/// makes the check a refusal rather than a sanitisation.
+fn check_translates_names_a_pack(text: &str, root: &Table) -> Vec<LintProblem> {
+    let Some(item) = root.get("translates") else {
+        return Vec::new();
+    };
+
+    // A field of the wrong kind is E009's to report, and two codes for one
+    // mistake help nobody.
+    let Some(named) = item.as_str() else {
+        return Vec::new();
+    };
+
+    if is_pack_id(named) {
+        return Vec::new();
+    }
+    vec![
+        LintProblem::new(RuleCode::TranslatesUnknownPack)
+            .at(span_line(text, item))
+            .about(named),
+    ]
+}
+
+/// The identifiers a pack file offers a translation to translate.
+///
+/// Values and pairs together, because the two share one namespace (`D34`): a
+/// translation citing a pair cites it exactly the way it cites a value, so a
+/// check that knew only about values would report every translated pair as
+/// vanished.
+/// Read from the shape a **source pack** uses: `[[values]]` and `[[pairs]]`,
+/// each carrying its identifier in an `id` field. A translation keys its tables
+/// by the identifier instead, and reading one shape as the other would report
+/// every translated entry as vanished.
+fn translatable_ids(root: &Table) -> HashSet<String> {
+    let mut ids = HashSet::new();
+    for table_name in ["values", "pairs"] {
+        let Some(entries) = root.get(table_name).and_then(Item::as_array_of_tables) else {
+            continue;
+        };
+        ids.extend(
+            entries
+                .iter()
+                .filter_map(|table| table.get("id").and_then(Item::as_str))
+                .map(ToOwned::to_owned),
+        );
+    }
+    ids
+}
+
+/// W052: a translation describing an identifier the pack no longer has.
+///
+/// A warning rather than an error, and deliberately so: a translation follows the
+/// pack without a version of its own, so a stale entry is stale prose, not a
+/// broken pack. It is reported and passed through.
+fn check_translated_ids(text: &str, root: &Table, known: &HashSet<String>) -> Vec<LintProblem> {
+    let mut problems = Vec::new();
+    for table_name in ["values", "pairs"] {
+        // The keyed shape only. This is an identity question rather than a safety
+        // one: a file written in the other shape declares no identifiers a
+        // translation could be following, so there is nothing here to compare.
+        let Some(entries) = root.get(table_name).and_then(Item::as_table_like) else {
+            continue;
+        };
+        for (id, item) in entries.iter() {
+            if !known.contains(id) {
+                problems.push(
+                    LintProblem::new(RuleCode::TranslationRefersToMissingId)
+                        .at(span_line(text, item))
+                        .about(id),
+                );
+            }
         }
     }
     problems
@@ -770,6 +907,44 @@ pub struct TomlPackFormat;
 impl PackFormat for TomlPackFormat {
     fn check(&self, text: &str, expected_id: &str) -> Vec<LintProblem> {
         check(text, expected_id)
+    }
+
+    fn translated_pack(&self, text: &str) -> TranslationTarget {
+        let Ok(document) = text.parse::<Document<String>>() else {
+            // A file that does not parse is reported as E004 and returned alone,
+            // and the sentence for E004 already says nothing else in the file
+            // could be checked. Recording a skip per rule on top of that would
+            // repeat one answer forty times.
+            return TranslationTarget::NotATranslation;
+        };
+        let root = document.as_table();
+        let Some(item) = root.get("translates") else {
+            return TranslationTarget::NotATranslation;
+        };
+
+        // The shape is checked here rather than by the caller, so that no name
+        // leaves this port unless it is one the format could have written. The
+        // caller joins it to a directory.
+        match item.as_str() {
+            Some(named) if is_pack_id(named) => TranslationTarget::Pack(named.to_owned()),
+            _ => TranslationTarget::Unusable,
+        }
+    }
+
+    fn check_translation(&self, text: &str, translated: &str) -> TranslationCheck {
+        let Ok(translated_document) = translated.parse::<Document<String>>() else {
+            return TranslationCheck::TranslatedPackDidNotParse;
+        };
+        let Ok(document) = text.parse::<Document<String>>() else {
+            // Unreachable in the flow that calls this - the caller has already
+            // parsed this file. Written as an answer rather than as a panic
+            // because a crash inside a validator is a crash inside somebody
+            // else's continuous integration.
+            return TranslationCheck::Compared(Vec::new());
+        };
+
+        let known = translatable_ids(translated_document.as_table());
+        TranslationCheck::Compared(check_translated_ids(text, document.as_table(), &known))
     }
 }
 
@@ -1526,5 +1701,163 @@ mod tests {
         // report a rule violation that is not there - on a file that is correct.
         let reported = codes(TRANSLATION_OF_A_VALUE_CALLED_COUNT);
         assert!(reported.is_empty(), "{reported:?}");
+    }
+
+    /// A source pack in the shape the format defines: entries in an array of
+    /// tables, each carrying its identifier in an `id` field. Deliberately not
+    /// the shape a translation uses, because reading one as the other is the
+    /// mistake these tests exist to catch.
+    const A_PACK_WITH_TWO_ENTRIES: &str = concat!(
+        "format = 1\n\n[pack]\nid = \"whitespace\"\nname = \"Whitespace\"\n",
+        "description = \"Characters that take up room.\"\nversion = \"1.0\"\n",
+        "updated = 2026-09-06\nlicense = \"CC-BY-4.0\"\nauthors = [\"n\"]\n",
+        "language = \"en\"\n\n",
+        "[[values]]\nid = \"trailing-space\"\nname = \"Trailing space\"\nvalue = \"a \"\n",
+        "breaks = \"Sorting puts the record at the top of the list, where nobody looks.\"\n",
+        "since = \"1.0\"\n\n",
+        "[[pairs]]\nid = \"space-pair\"\nname = \"Space pair\"\nrelation = \"identity\"\n",
+        "a = \"trailing-space\"\nb = \"trailing-space\"\n",
+        "breaks = \"Two spellings that a person cannot tell apart in any list.\"\nsince = \"1.0\"\n"
+    );
+
+    #[test]
+    fn the_pack_a_translation_names_is_read_only_when_it_could_be_a_pack() {
+        // The name leaves this port or it does not, and nothing in between. What
+        // makes this a refusal rather than a cleaning step is that the identifier
+        // alphabet has no dot and no separator in it.
+        assert_eq!(
+            TomlPackFormat.translated_pack(A_TRANSLATION),
+            TranslationTarget::Pack("whitespace".to_owned())
+        );
+        assert_eq!(
+            TomlPackFormat.translated_pack(A_PACK_WITH_TWO_ENTRIES),
+            TranslationTarget::NotATranslation
+        );
+
+        for hostile in [
+            "../../../etc/passwd",
+            "..",
+            "/etc/passwd",
+            "whitespace.pl",
+            "C:/Windows/win.ini",
+            "",
+        ] {
+            let text = format!("format = 1\ntranslates = \"{hostile}\"\nlanguage = \"pl\"\n");
+            assert_eq!(
+                TomlPackFormat.translated_pack(&text),
+                TranslationTarget::Unusable,
+                "{hostile} must never become a path"
+            );
+        }
+    }
+
+    #[test]
+    fn a_translates_that_names_no_pack_is_reported_rather_than_passed_along() {
+        // E051 has a half that needs no second file, and this is it. Reported here
+        // so that the reader is told why nothing was looked for, instead of seeing
+        // a rule quietly do nothing.
+        let text = "format = 1\ntranslates = \"../secrets\"\nlanguage = \"pl\"\n";
+        let found = one_of(text, RuleCode::TranslatesUnknownPack);
+        assert_eq!(found.subject.as_deref(), Some("../secrets"));
+        assert_eq!(found.line, Some(2), "the line the field is written on");
+    }
+
+    #[test]
+    fn a_translates_of_the_wrong_kind_is_the_field_kind_rule_and_not_two_rules() {
+        // E009 runs before the rules that read a field, so a `translates` that is
+        // not text is refused by the rule that owns kinds. Reporting E051 as well
+        // would be two codes for one mistake, and the second would be wrong: the
+        // file does not name a pack that is missing, it names nothing at all.
+        let text = "format = 1\ntranslates = 123\nlanguage = \"pl\"\n";
+        let reported = codes(text);
+        assert_eq!(reported, vec!["E009"], "{reported:?}");
+    }
+
+    #[test]
+    fn the_insertion_fields_are_refused_in_a_translated_pair_as_well_as_a_value() {
+        // 🔴 The fourth door. Until 2026-09-07 the walk covered `values` and not
+        // `pairs`, so both fields below passed in silence - measured, not
+        // suspected. Narrowing the walk back to one table has to fail here.
+        //
+        // The file suite cannot see this: it compares a set of codes, and E050
+        // fires from the `values` table of another file either way.
+        let text = concat!(
+            "format = 1\ntranslates = \"whitespace\"\nlanguage = \"pl\"\n\n",
+            "[pairs.space-pair]\nname = \"Para spacji\"\n",
+            "breaks = \"Dwa zapisy, ktorych nikt nie odroznia na liscie.\"\n",
+            "value = \"podstawiona wartosc\"\ncount = 9\n"
+        );
+        let reported = codes(text);
+        assert_eq!(reported, vec!["E050", "E050"], "{reported:?}");
+
+        let found = one_of(text, RuleCode::TranslationCarriesValue);
+        assert_eq!(found.owner.as_deref(), Some("space-pair"));
+    }
+
+    #[test]
+    fn an_insertion_field_is_refused_in_a_translation_written_in_the_other_shape() {
+        // A translation writes `[values.<id>]`, so `[[values]]` is a shape the
+        // format does not define for one - which is exactly why the safety rule
+        // has to look there too. A rule that only checks where a field is supposed
+        // to be is a rule anybody can step around by moving the field.
+        let text = concat!(
+            "format = 1\ntranslates = \"whitespace\"\nlanguage = \"pl\"\n\n",
+            "[[values]]\nid = \"trailing-space\"\nname = \"Spacja\"\n",
+            "value = \"podstawiona wartosc\"\n"
+        );
+        let found = one_of(text, RuleCode::TranslationCarriesValue);
+        assert_eq!(found.subject.as_deref(), Some("value"));
+        assert_eq!(found.owner.as_deref(), Some("trailing-space"));
+    }
+
+    #[test]
+    fn a_translation_is_compared_against_the_shape_a_source_pack_actually_uses() {
+        // The two files are written differently and the comparison has to know it.
+        // Reading the pack in the translation's own shape would find no
+        // identifiers at all and report every entry as vanished - a check that is
+        // wrong in the direction nobody questions, because it only ever fires.
+        let text = concat!(
+            "format = 1\ntranslates = \"whitespace\"\nlanguage = \"pl\"\n\n",
+            "[values.trailing-space]\nname = \"Spacja na koncu\"\n",
+            "breaks = \"Sortowanie stawia rekord na poczatku listy.\"\n\n",
+            "[pairs.space-pair]\nname = \"Para spacji\"\n",
+            "breaks = \"Dwa zapisy, ktorych nikt nie odroznia.\"\n\n",
+            "[values.gone-last-year]\nname = \"Wycofana\"\n",
+            "breaks = \"Wpis, ktorego paczka juz nie ma.\"\n"
+        );
+
+        let TranslationCheck::Compared(problems) =
+            TomlPackFormat.check_translation(text, A_PACK_WITH_TWO_ENTRIES)
+        else {
+            panic!("the pack parses, so the two must be compared");
+        };
+
+        let reported: Vec<&str> = problems
+            .iter()
+            .map(|p| p.subject.as_deref().unwrap_or(""))
+            .collect();
+        assert_eq!(
+            reported,
+            vec!["gone-last-year"],
+            "the value and the pair that exist must both be recognised"
+        );
+        assert_eq!(problems[0].code, RuleCode::TranslationRefersToMissingId);
+    }
+
+    #[test]
+    fn a_pack_that_does_not_parse_is_an_impossible_comparison_and_not_an_empty_one() {
+        // The pair of answers this whole mechanism turns on. An empty list would
+        // say the translation was checked and is fine, when nothing was read.
+        assert_eq!(
+            TomlPackFormat.check_translation(A_TRANSLATION, "format = = 1\n"),
+            TranslationCheck::TranslatedPackDidNotParse
+        );
+
+        let TranslationCheck::Compared(problems) =
+            TomlPackFormat.check_translation(A_TRANSLATION, A_PACK_WITH_TWO_ENTRIES)
+        else {
+            panic!("a pack that parses is compared");
+        };
+        assert!(problems.is_empty(), "{problems:?}");
     }
 }

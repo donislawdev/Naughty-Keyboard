@@ -28,7 +28,9 @@ use crate::json::Json;
 use crate::lint_report;
 use nkb_adapters::toml_pack::SUPPORTED_FORMAT;
 use nkb_app::LintOutcome;
-use nkb_core::lint::{LintProblem, LintReport, RULES, RuleCoverage, RuleStatus, Severity};
+use nkb_core::lint::{
+    LintProblem, LintReport, RULES, RuleCoverage, RuleStatus, Severity, SkippedRule,
+};
 
 /// Version of **this** output, not of the tool and not of the pack format.
 ///
@@ -113,6 +115,42 @@ fn file(path: &str, outcome: &LintOutcome) -> Json {
                     .map(|r| r.problems.iter().map(|p| problem(p, path)).collect())
                     .unwrap_or_default(),
             ),
+        ),
+        (
+            "rules_not_checked_here".to_owned(),
+            Json::Array(
+                report
+                    .map(|r| r.skipped.iter().map(skipped_rule).collect())
+                    .unwrap_or_default(),
+            ),
+        ),
+    ])
+}
+
+/// One rule this build runs and could not run over this file.
+///
+/// # Why this is not folded into `rules.not_fully_checked`
+///
+/// That list is about the build and is identical in every document this build
+/// writes. This one is about the file beside it. A consumer reading the wrong one
+/// would conclude that this build checks all but one rule, which is the failure
+/// the whole `rules` block exists to prevent.
+///
+/// So the two are told apart by shape as well as by position: an entry here
+/// carries `reason` and `subject`, an entry there carries `status`. A consumer
+/// that reaches for the wrong member fails where it can be seen, rather than
+/// reading a plausible wrong answer.
+fn skipped_rule(skipped: &SkippedRule) -> Json {
+    Json::Object(vec![
+        ("rule".to_owned(), Json::text(skipped.code.as_str())),
+        ("reason".to_owned(), Json::text(skipped.reason.as_str())),
+        (
+            "subject".to_owned(),
+            skipped.subject.as_deref().map_or(Json::Null, Json::text),
+        ),
+        (
+            "message".to_owned(),
+            Json::text(lint_report::skip_sentence(skipped)),
         ),
     ])
 }
@@ -203,7 +241,7 @@ fn status_name(status: RuleStatus) -> &'static str {
 )]
 mod tests {
     use super::*;
-    use nkb_core::lint::RuleCode;
+    use nkb_core::lint::{RuleCode, SkipReason};
 
     fn judged(problems: Vec<LintProblem>) -> LintOutcome {
         let mut report = LintReport::default();
@@ -369,6 +407,65 @@ mod tests {
         let first = one(judged(vec![LintProblem::new(RuleCode::PackWithoutValues)]));
         let second = one(judged(vec![LintProblem::new(RuleCode::PackWithoutValues)]));
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn a_file_says_which_rules_could_not_be_checked_over_it() {
+        // The half `rules` at the top cannot carry. That block is identical in
+        // every document this build writes, so a rule that gave up on this one
+        // file would be invisible there - and an empty `problems` beside a
+        // "checked 32 of 42" would read as a clean pack.
+        let mut report = LintReport::default();
+        report.skip(
+            SkippedRule::new(
+                RuleCode::TranslationRefersToMissingId,
+                SkipReason::TranslatedPackNotFound,
+            )
+            .about("unicode-text"),
+        );
+        let text = one(LintOutcome::Judged(report));
+
+        assert!(text.contains("\"rules_not_checked_here\""), "{text}");
+        assert!(text.contains("\"rule\": \"W052\""), "{text}");
+        assert!(
+            text.contains("\"reason\": \"translated-pack-not-found\""),
+            "{text}"
+        );
+        assert!(text.contains("\"subject\": \"unicode-text\""), "{text}");
+        // Acceptance is untouched: a rule that could not run has found nothing to
+        // block on. That is exactly why the record has to be visible beside it.
+        assert!(text.contains("\"accepted\": true"), "{text}");
+    }
+
+    #[test]
+    fn the_per_file_list_and_the_build_wide_list_cannot_be_read_as_each_other() {
+        // Two lists of rules in one document, and a consumer reaching for the
+        // wrong one would conclude this build checks all but one rule. They are
+        // told apart by shape as well as by position: `reason` here, `status`
+        // there. Reading the wrong member fails where it can be seen.
+        let mut report = LintReport::default();
+        report.skip(SkippedRule::new(
+            RuleCode::TranslationRefersToMissingId,
+            SkipReason::TranslatedPackNotNamed,
+        ));
+        let text = one(LintOutcome::Judged(report));
+
+        let (per_file, build_wide) = text
+            .split_once("\"rules\":")
+            .expect("the document carries both lists");
+        assert!(per_file.contains("\"reason\":"), "{per_file}");
+        assert!(!per_file.contains("\"status\": \"not-implemented\""));
+        assert!(build_wide.contains("\"status\":"), "{build_wide}");
+        assert!(!build_wide.contains("\"reason\":"), "{build_wide}");
+    }
+
+    #[test]
+    fn a_file_with_nothing_skipped_still_carries_the_member_as_an_empty_list() {
+        // A member that appears only sometimes makes a consumer write a presence
+        // check before it can write anything else, and the one that forgets reads
+        // an absent member as a value it never saw.
+        let text = one(judged(Vec::new()));
+        assert!(text.contains("\"rules_not_checked_here\": []"), "{text}");
     }
 
     #[test]

@@ -1,0 +1,29 @@
+# expect: E050
+#
+# The fourth door, closed 2026-09-07.
+#
+# E050 says a translation may not carry a field that decides what gets inserted
+# into somebody else's application. Until this file existed the rule walked the
+# `values` table and not the `pairs` one, so the two fields below passed in
+# silence - measured, not suspected.
+#
+# Nothing was reachable through that gap: a pair names two values and carries no
+# value of its own, so there was nothing for the loader to insert. That is an
+# argument for closing it now rather than for leaving it open. The rule is
+# written without a condition, the guarantee it gives a reviewer is that only
+# prose can change, and the format is not frozen - a pair may yet be given
+# something to carry.
+#
+# Both fields are here because the rule covers four of them and a check that
+# stopped at the first would leave three doors ajar - the same reasoning that
+# widened this rule from one field to four in the first place.
+
+format     = 1
+translates = "translated-pack"
+language   = "pl"
+
+[pairs.run-length-range]
+name   = "Zakres dlugosci ciagu"
+breaks = "Uklady, ktore przezywaja bliski koniec zakresu i pekaja na dalekim koncu."
+value  = "wartosc podstawiona przez plik tlumaczenia"
+count  = 99

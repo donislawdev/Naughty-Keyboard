@@ -1,0 +1,26 @@
+# expect: E051
+# skipped: W052=translated-pack-not-found
+#
+# A translation of a pack that is not beside it.
+#
+# The second line above is the half this file exists for. E051 is easy to see -
+# the pack is missing and the tool says so. W052 is the quiet part: it is a rule
+# this build runs, and over this one file it could not run at all, because the
+# identifiers it compares against live in the file that is not there.
+#
+# Without that line the tool would report one error and a summary saying thirty
+# two of forty two rules were checked, which is true of the build and false of
+# this file. A validator that overstates what it looked at is the exact failure
+# this product exists to find in other people's software.
+
+format     = 1
+translates = "no-such-pack-in-this-set"
+language   = "pl"
+
+[pack]
+name        = "Tlumaczenie bez paczki"
+description = "Plik tlumaczenia wskazujacy na paczke, ktorej obok nie ma."
+
+[values.anything]
+name   = "Cokolwiek"
+breaks = "Nie da sie stwierdzic, czy ten identyfikator jeszcze istnieje, bo paczki nie ma."

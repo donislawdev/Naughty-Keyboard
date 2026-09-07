@@ -82,6 +82,60 @@ pub trait PackFormat {
     /// is written. Splitting the rule between them would leave the line number
     /// behind, which is the difference between a report and a shrug.
     fn check(&self, text: &str, expected_id: &str) -> Vec<LintProblem>;
+
+    /// Which pack this file translates, when it is a translation at all.
+    ///
+    /// Three answers rather than two, and the third is the reason this is not an
+    /// `Option`. "Not a translation" and "a translation naming something that is
+    /// not a pack identifier" send the layer above to do different things: the
+    /// first means the translation rules do not apply, the second means they
+    /// apply and cannot be run. An `Option` would render both as nothing and lose
+    /// the second, which is exactly the silence the per file record exists for.
+    fn translated_pack(&self, text: &str) -> TranslationTarget;
+
+    /// The problems that only appear when the translation and the pack it
+    /// translates are seen together.
+    ///
+    /// Takes both as text because the layer above holds no parser and the layer
+    /// below holds no file system: one of them has to carry the bytes across, and
+    /// text is what the source port already deals in.
+    fn check_translation(&self, text: &str, translated: &str) -> TranslationCheck;
+}
+
+/// What a file's `translates` field points at.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TranslationTarget {
+    /// Not a translation: the file declares no `translates`.
+    NotATranslation,
+    /// A translation of the pack with this identifier, which is known to have the
+    /// shape the format requires - so it may be looked for on a disk.
+    ///
+    /// 🔴 That guarantee is load bearing rather than tidy. A pack file comes from
+    /// a stranger, and this identifier is joined to a directory to make a path.
+    /// An implementation that returned raw text here would let a pack file reach
+    /// outside the folder it lives in, so the shape is checked before the name
+    /// leaves this port and never after.
+    Pack(String),
+    /// A translation whose `translates` names no pack: not text, or text outside
+    /// the pack identifier alphabet. The rule about that has already been
+    /// reported by [`PackFormat::check`]; nothing here can be resolved.
+    Unusable,
+}
+
+/// What came of comparing a translation against the pack it translates.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TranslationCheck {
+    /// The two were compared. Whatever was wrong is in the list, and an empty
+    /// list means the comparison happened and found nothing.
+    Compared(Vec<LintProblem>),
+    /// The pack being translated does not parse, so it holds no identifiers to
+    /// compare against and nothing was compared.
+    ///
+    /// Told apart from `Compared(vec![])` on purpose: an empty comparison and an
+    /// impossible one are the two answers this whole mechanism exists to keep
+    /// apart. The problem is reported against **that** file when somebody lints
+    /// it, not against this one.
+    TranslatedPackDidNotParse,
 }
 
 #[cfg(test)]
