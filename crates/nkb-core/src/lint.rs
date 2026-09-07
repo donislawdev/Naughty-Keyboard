@@ -97,6 +97,7 @@ pub enum RuleCode {
     PublishedValueChanged,
     ValueIdVanished,
     ReplacedByUnknownId,
+    DuplicateValueBody,
     // Value.
     UnescapedCharacter,
     InvalidEscapeSequence,
@@ -151,6 +152,7 @@ impl RuleCode {
             Self::PublishedValueChanged => "E013",
             Self::ValueIdVanished => "E014",
             Self::ReplacedByUnknownId => "E015",
+            Self::DuplicateValueBody => "E016",
             Self::UnescapedCharacter => "E020",
             Self::InvalidEscapeSequence => "E021",
             Self::LiteralStringForEscapableValue => "E022",
@@ -208,7 +210,7 @@ const fn rule(code: RuleCode, severity: Severity, status: RuleStatus) -> LintRul
 
 /// The complete register. Its length is the number the specification states, and
 /// the test below is what keeps the two from drifting apart.
-pub const RULES: [LintRule; 42] = [
+pub const RULES: [LintRule; 43] = [
     rule(C::MissingOrUnsupportedFormat, Error, Checked),
     rule(C::UnknownTopLevelKey, Error, Checked),
     rule(C::MissingRequiredField, Error, Checked),
@@ -228,6 +230,10 @@ pub const RULES: [LintRule; 42] = [
     rule(C::PublishedValueChanged, Error, RequiresPublishedVersion),
     rule(C::ValueIdVanished, Error, RequiresPublishedVersion),
     rule(C::ReplacedByUnknownId, Error, Checked),
+    // Sits with identity rather than with the value rules, beside E011. Both
+    // ask whether two entries in one pack are really one entry: E011 about the
+    // name, this one about what the name stands for.
+    rule(C::DuplicateValueBody, Error, Checked),
     // Control characters, format characters, whitespace other than a plain space
     // and a space at either edge are checked. The look-alike half needs a
     // published set of confusable characters pinned to a Unicode version, and
@@ -551,9 +557,9 @@ mod tests {
 
     #[test]
     fn the_register_holds_the_number_of_rules_the_specification_states() {
-        // The specification says forty two. If this number has to change, the
+        // The specification says forty three. If this number has to change, the
         // specification changed too, and that is a decision rather than a tidy up.
-        assert_eq!(RULES.len(), 42);
+        assert_eq!(RULES.len(), 43);
     }
 
     #[test]
@@ -588,7 +594,7 @@ mod tests {
     #[test]
     fn coverage_counts_the_register_rather_than_repeating_a_stored_number() {
         let coverage = RuleCoverage::measure();
-        assert_eq!(coverage.total, 42);
+        assert_eq!(coverage.total, 43);
         // Every rule falls in exactly one bucket. If this ever fails, some rule
         // is being counted twice or not at all, and the summary that a reader
         // trusts to say what was not looked at has quietly stopped adding up.
@@ -596,7 +602,7 @@ mod tests {
             coverage.checked + coverage.partly + coverage.unchecked(),
             coverage.total
         );
-        assert_eq!(coverage.checked, 32);
+        assert_eq!(coverage.checked, 33);
         assert_eq!(coverage.partly, 1);
     }
 

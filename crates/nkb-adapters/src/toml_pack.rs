@@ -29,7 +29,7 @@ use nkb_core::source_text::line_of;
 use nkb_core::text::LiteralText;
 use nkb_core::value::ValueBody;
 use nkb_core::written_form;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use toml_edit::{Document, Item, Table, TableLike};
 
 /// The file format version this build understands.
@@ -455,6 +455,11 @@ fn check_values<'a>(
     // condition W033 turns on. See the reasoning where that rule is applied.
     let attributed_one_by_one = values.iter().any(|table| table.contains_key("source"));
 
+    // What each value inserts, against the first value that inserted it. Filled
+    // as the walk goes, so the value reported is always the later of the two -
+    // the one somebody added, rather than the one that was already right.
+    let mut bodies: HashMap<BodyKey, String> = HashMap::new();
+
     let mut problems = Vec::new();
     for (index, table) in values.iter().enumerate() {
         let line = table.span().map_or(1, |span| line_of(text, span.start));
@@ -482,6 +487,13 @@ fn check_values<'a>(
             && !known.contains(target)
         {
             identity_problems.push(LintProblem::new(RuleCode::ReplacedByUnknownId).about(target));
+        }
+
+        // E016: this value inserts exactly what an earlier one inserts.
+        if let Some(key) = body_key(table)
+            && let Some(earlier) = bodies.insert(key, identity.clone())
+        {
+            identity_problems.push(LintProblem::new(RuleCode::DuplicateValueBody).about(earlier));
         }
 
         for field in REQUIRED_VALUE_FIELDS {
@@ -544,6 +556,50 @@ fn check_body(text: &str, table: &Table) -> Vec<LintProblem> {
         return check_repeat(text, table);
     }
     check_literal(text, table)
+}
+
+/// What a value inserts, in a form two values can be compared by.
+///
+/// Three parts rather than one string, so that no separator has to be invented
+/// and no value can be built that collides with another by containing it: the
+/// kind, the text, and the repeat count (zero for a literal, which is not a
+/// legal count and so cannot be confused with one).
+type BodyKey = (&'static str, String, i64);
+
+/// The key for one value, or nothing when the body is not usable.
+///
+/// # Why this compares the recipe and not the text it produces
+///
+/// A value is a recipe, not a piece of text - a repeat can describe a million
+/// characters from one line, and building it in order to compare it would defeat
+/// the promise that the tool measures a length bomb without setting it off
+/// (`architektura.md` 6.1). So two values are the same when they are *written*
+/// the same, after parsing. A newline written as a four digit escape and the
+/// same newline written as the one letter escape are one value spelled two
+/// ways, and do compare equal. A literal `aaa` and a repeat of `a` three times
+/// produce the same text and do not: comparing those would mean building them.
+/// The rule says what it checks rather than claiming the wider thing and doing
+/// the narrower one.
+///
+/// Nothing is returned for a body some other rule already refuses. A value with
+/// no `value` is E003's, a bad `count` is E024's, an unknown `type` is E023's -
+/// and a rule that also spoke there would give one mistake two codes.
+fn body_key(table: &Table) -> Option<BodyKey> {
+    let declared = table.get("type").and_then(Item::as_str);
+    if let Some(kind) = declared
+        && !SUPPORTED_TYPES.contains(&kind)
+    {
+        return None;
+    }
+
+    if declared == Some("repeat") {
+        let unit = table.get("unit").and_then(Item::as_str)?;
+        let count = table.get("count").and_then(Item::as_integer)?;
+        return Some(("repeat", unit.to_owned(), count));
+    }
+
+    let value = table.get("value").and_then(Item::as_str)?;
+    Some(("literal", value.to_owned(), 0))
 }
 
 /// A value written out in the file: how it is spelled, and how long it is.
@@ -1355,6 +1411,123 @@ mod tests {
             .find(|p| p.code == RuleCode::FieldOutsideVocabulary)
             .expect("E028 must be reported");
         assert_eq!(found.subject.as_deref(), Some("e-mail"));
+    }
+
+    /// Appends a second value to the good pack, so two bodies can be compared.
+    fn with_second_value(body: &str) -> String {
+        format!(
+            "{GOOD}\n[[values]]\nid = \"second\"\nname = \"Second\"\n{body}\
+             breaks = \"A second entry, present so that two bodies exist to compare with each other.\"\n\
+             expect = \"Whatever the rule under test says about it.\"\n\
+             since = \"1.0\"\n"
+        )
+    }
+
+    #[test]
+    fn two_values_that_insert_the_same_thing_are_refused_and_the_later_one_is_named() {
+        // 🔴 Found by accident rather than by review: writing the first real pack,
+        // one value lost an escape and became byte-identical to the value above
+        // it. The validator said nothing, and a pack claiming twelve test values
+        // carried eleven. E011 is about identifiers; this is about what they
+        // stand for.
+        let text = with_second_value("value = \"Kowalski\\u0020\"\n");
+        let problems = check(&text, PACK_ID);
+        let found = problems
+            .iter()
+            .find(|p| p.code == RuleCode::DuplicateValueBody)
+            .expect("E016 must be reported");
+        assert_eq!(
+            found.owner.as_deref(),
+            Some("second"),
+            "the later value is the one somebody added, so it is the one to fix"
+        );
+        assert_eq!(found.subject.as_deref(), Some("trailing-space"));
+    }
+
+    #[test]
+    fn the_same_value_written_two_ways_is_still_the_same_value() {
+        // The decision this test exists for: the comparison happens after
+        // parsing. What reaches somebody else's field is what decides, not how it
+        // was typed - so the four digit escape for a newline and the one letter
+        // escape for the same newline are one value spelled twice.
+        //
+        // Both spellings are escapes, so nothing else fires and the E016 below is
+        // the only reason this file is refused.
+        let text = with_second_value("value = \"a\\nb\"\n")
+            .replace("value = \"Kowalski\\u0020\"\n", "value = \"a\\u000Ab\"\n");
+        assert_eq!(codes(&text), vec!["E016"], "{:?}", check(&text, PACK_ID));
+    }
+
+    #[test]
+    fn two_generated_values_are_compared_by_their_recipe() {
+        let same = with_second_value("type = \"repeat\"\nunit = \"a\"\ncount = 5\n").replace(
+            "value = \"Kowalski\\u0020\"\n",
+            "type = \"repeat\"\nunit = \"a\"\ncount = 5\n",
+        );
+        assert!(
+            codes(&same).contains(&"E016"),
+            "{:?}",
+            check(&same, PACK_ID)
+        );
+
+        let different = with_second_value("type = \"repeat\"\nunit = \"a\"\ncount = 6\n").replace(
+            "value = \"Kowalski\\u0020\"\n",
+            "type = \"repeat\"\nunit = \"a\"\ncount = 5\n",
+        );
+        assert!(
+            !codes(&different).contains(&"E016"),
+            "{:?}",
+            check(&different, PACK_ID)
+        );
+    }
+
+    #[test]
+    fn a_literal_and_a_generator_producing_the_same_text_are_not_compared() {
+        // The limit of the rule, stated as a test rather than left to be
+        // discovered. Comparing these would mean building the text, and a
+        // generator describes up to a million characters from one line - the tool
+        // measures a length bomb without setting it off, and this rule does not
+        // get to be the exception.
+        let text = with_second_value("type = \"repeat\"\nunit = \"a\"\ncount = 3\n")
+            .replace("value = \"Kowalski\\u0020\"\n", "value = \"aaa\"\n");
+        assert!(
+            !codes(&text).contains(&"E016"),
+            "{:?}",
+            check(&text, PACK_ID)
+        );
+    }
+
+    #[test]
+    fn two_values_with_no_body_are_two_missing_fields_and_not_a_duplicate() {
+        // Both of them, not one. A single bodiless value has nothing to collide
+        // with, so a test written that way passes even when the rule treats an
+        // absent value as an empty one - measured by mutation, which survived it.
+        //
+        // The distinction matters because the repairs are opposite: E003 says
+        // fill this in, E016 says delete one of the two. A reader sent to delete
+        // a value that only needed writing loses the value.
+        let text = with_second_value("")
+            + "\n[[values]]\nid = \"third\"\nname = \"Third\"\n\
+             breaks = \"A third entry with nothing to insert, so that two of them are missing it.\"\n\
+             expect = \"Reported as a missing field, once for each.\"\nsince = \"1.0\"\n";
+        let reported = codes(&text);
+        assert!(reported.contains(&"E003"), "{reported:?}");
+        assert!(!reported.contains(&"E016"), "{reported:?}");
+    }
+
+    #[test]
+    fn two_deliberately_empty_values_are_a_duplicate() {
+        // The other side of the same line. An empty value is a real test case -
+        // the boundary between "field empty" and "field filled" is one of the
+        // most often confused things in validation, and the format says so - and
+        // two of them are as redundant as any other pair.
+        let text = with_second_value("value = \"\"\n")
+            .replace("value = \"Kowalski\\u0020\"\n", "value = \"\"\n");
+        assert!(
+            codes(&text).contains(&"E016"),
+            "{:?}",
+            check(&text, PACK_ID)
+        );
     }
 
     #[test]

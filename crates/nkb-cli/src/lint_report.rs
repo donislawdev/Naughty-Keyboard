@@ -302,6 +302,9 @@ pub fn sentence(problem: &LintProblem) -> String {
         RuleCode::TranslationCarriesValue => format!(
             "the translation of `{owner}` carries `{subject}`, which decides what gets inserted into somebody else's application. A translation may change prose and nothing else - that is a safety property of the format, not a matter of tidiness."
         ),
+        RuleCode::DuplicateValueBody => format!(
+            "value `{owner}` is written exactly like `{subject}` earlier in this pack, so pressing the shortcut twice inserts the same thing twice. Usually an escape was lost: check that this value still says what its description claims."
+        ),
         RuleCode::TranslatesUnknownPack if is_pack_id(subject) => format!(
             "this file translates `{subject}`, and there is no `{subject}.toml` beside it. A translation follows its pack and cannot be read on its own."
         ),
@@ -506,7 +509,7 @@ mod tests {
             .about("unicode-text"),
         );
         let text = summary(&report).join("\n");
-        assert!(text.contains("Checked 32 of 42 rules"), "{text}");
+        assert!(text.contains("Checked 33 of 43 rules"), "{text}");
         assert!(
             text.contains("1 more rule could not be checked for this file"),
             "{text}"

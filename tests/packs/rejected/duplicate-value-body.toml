@@ -1,0 +1,63 @@
+# expect: E016
+#
+# Dwie wartosci, ktore wstawiaja to samo. Tester wciska skrot dwa razy
+# i dostaje dwa razy to samo, a paleta pokazuje dwie pozycje.
+#
+# 🔴 Znalezione przez wypadek, nie przez przeglad. Przy pisaniu pierwszej realnej
+# paczki wartosc crlf-in-value stracila jeden escape i stala sie bajtowo
+# identyczna z sasiadka - walidator powiedzial zero bledow i zero ostrzezen,
+# a paczka deklarujaca dwanascie wartosci niosla jedenascie. E011 pilnuje
+# identyfikatorow, nie tresci.
+#
+# Druga para nizej jest wazniejsza od pierwszej: te dwie wartosci sa zapisane
+# ROZNIE i znacza to samo. Regula porownuje wartosc PO SPARSOWANIU, bo o dublu
+# rozstrzyga to, co trafi do cudzego pola, a nie to, jak zostalo zapisane.
+#
+# Czego ta regula NIE lapie i nie udaje, ze lapie: literalu "aaa" obok generatora
+# "a" razy trzy. Te dwie daja ten sam tekst, a porownanie ich wymagaloby ZBUDOWANIA
+# wartosci - czego architektura zabrania, bo generator opisuje milion znakow
+# w jednym wierszu.
+
+format = 1
+
+[pack]
+id          = "duplicate-value-body"
+name        = "Duplicate value body"
+description = "Two values that insert the same thing, written two different ways."
+version     = "1.0"
+updated     = 2026-09-07
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+
+[[values]]
+id     = "comma-first"
+name   = "Comma inside a value"
+value  = "Kowalski, Jan"
+breaks = "A comma inside a value splits one column into two unless every export step quotes it."
+expect = "Quoted on export, so the file parses back into the same number of columns."
+since  = "1.0"
+
+[[values]]
+id     = "comma-again"
+name   = "The same comma, a second time"
+value  = "Kowalski, Jan"
+breaks = "Written exactly like the value above it, so one of the two inserts nothing new."
+expect = "Refused, because a pack that lists it twice tests one thing and claims two."
+since  = "1.0"
+
+[[values]]
+id     = "newline-long-escape"
+name   = "Newline written with four digits"
+value  = "Jan\u000AKowalski"
+breaks = "A single-line field that accepts a line break breaks CSV export and every list view below it."
+expect = "Rejected, or stored with the break preserved and escaped on export."
+since  = "1.0"
+
+[[values]]
+id     = "newline-short-escape"
+name   = "The same newline, written shorter"
+value  = "Jan\nKowalski"
+breaks = "Spelled differently from the value above and identical after parsing, which is the case the rule exists for."
+expect = "Refused, because what reaches the field is what decides, not how it was typed."
+since  = "1.0"
