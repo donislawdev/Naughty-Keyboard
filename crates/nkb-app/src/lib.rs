@@ -10,7 +10,12 @@
 #![forbid(unsafe_code)]
 
 pub mod lint_pack;
+pub mod new_pack;
 pub mod ports;
 
 pub use lint_pack::{LintOutcome, lint_pack};
-pub use ports::{PackFormat, PackSource, SourceError, TranslationCheck, TranslationTarget};
+pub use new_pack::{NewPackOutcome, new_pack};
+pub use ports::{
+    Clock, Date, PackFormat, PackSink, PackSource, SinkError, SourceError, TranslationCheck,
+    TranslationTarget,
+};

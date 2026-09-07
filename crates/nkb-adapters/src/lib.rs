@@ -7,7 +7,8 @@
 #![forbid(unsafe_code)]
 
 pub mod fs;
+pub mod skeleton;
 pub mod toml_pack;
 
-pub use fs::DirectoryPackSource;
+pub use fs::{DirectoryPackSink, DirectoryPackSource, SystemClock};
 pub use toml_pack::TomlPackFormat;

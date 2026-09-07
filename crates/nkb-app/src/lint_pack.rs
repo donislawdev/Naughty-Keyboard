@@ -258,6 +258,10 @@ mod tests {
         fn check_translation(&self, _text: &str, _translated: &str) -> TranslationCheck {
             self.comparison.clone()
         }
+
+        fn skeleton(&self, _id: &str, _today: crate::ports::Date) -> String {
+            unreachable!("linting never asks for a skeleton")
+        }
     }
 
     fn nothing() -> Says {
@@ -526,6 +530,9 @@ mod tests {
             }
             fn check_translation(&self, _text: &str, _translated: &str) -> TranslationCheck {
                 panic!("a chain must be refused before anything is compared")
+            }
+            fn skeleton(&self, _id: &str, _today: crate::ports::Date) -> String {
+                unreachable!("linting never asks for a skeleton")
             }
         }
 

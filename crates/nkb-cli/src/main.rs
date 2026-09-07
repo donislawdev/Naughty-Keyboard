@@ -16,8 +16,8 @@ mod lint_json;
 mod lint_report;
 
 use exit::ExitCode;
-use nkb_adapters::{DirectoryPackSource, TomlPackFormat};
-use nkb_app::{LintOutcome, lint_pack};
+use nkb_adapters::{DirectoryPackSink, DirectoryPackSource, SystemClock, TomlPackFormat};
+use nkb_app::{LintOutcome, NewPackOutcome, lint_pack, new_pack};
 use std::io::Write;
 use std::path::Path;
 
@@ -49,6 +49,7 @@ fn run(args: &[String]) -> ExitCode {
             ExitCode::Ok
         }
         "lint" => lint(&args[1..]),
+        "new-pack" => new_pack_command(&args[1..]),
         unknown => {
             let mut err = std::io::stderr();
             let _ = writeln!(err, "nkb: unknown command '{unknown}'");
@@ -174,6 +175,85 @@ fn lint(args: &[String]) -> ExitCode {
     }
 }
 
+/// `nkb new-pack <name>` - write the skeleton for a new pack.
+///
+/// # Why it takes a name and not a path
+///
+/// The contributor path in the published guide runs `nkb new-pack locale-cz` and
+/// then `nkb lint locale-cz.toml`, in the folder they are standing in. A path
+/// would let the first command write somewhere the second one does not look, and
+/// buy nothing: a pack file has to sit beside the pack it may translate anyway.
+fn new_pack_command(args: &[String]) -> ExitCode {
+    let mut name: Option<&str> = None;
+
+    for arg in args {
+        match arg.as_str() {
+            "-h" | "--help" => {
+                print_new_pack_help();
+                return ExitCode::Ok;
+            }
+            other if other.starts_with('-') => {
+                let mut err = std::io::stderr();
+                let _ = writeln!(err, "nkb new-pack: unknown option '{other}'");
+                let _ = writeln!(err, "Run 'nkb new-pack --help' to see what is available.");
+                return ExitCode::Usage;
+            }
+            other => name = Some(other),
+        }
+    }
+
+    let Some(name) = name else {
+        let mut err = std::io::stderr();
+        let _ = writeln!(err, "nkb new-pack: name the pack you want to start.");
+        let _ = writeln!(err, "Usage: nkb new-pack <name>");
+        return ExitCode::Usage;
+    };
+
+    let sink = DirectoryPackSink::new(".");
+    match new_pack(&sink, &TomlPackFormat, &SystemClock, name) {
+        NewPackOutcome::Created { file } => {
+            // The command's answer, on standard output the way the linter's
+            // verdict is. Nothing else is written there, so nothing is polluted.
+            println!("Wrote {file}.");
+            println!("Edit it, then run `nkb lint {file}` - it reports everything in one pass.");
+            println!(
+                "The pack format is not frozen yet: it freezes with the first public release that ships packs."
+            );
+            ExitCode::Ok
+        }
+        NewPackOutcome::NameNotAnIdentifier => {
+            let mut err = std::io::stderr();
+            let _ = writeln!(
+                err,
+                "nkb new-pack: '{name}' is not the shape a pack name has: lower case letters, digits and hyphens, starting with a letter, two to forty characters."
+            );
+            let _ = writeln!(err, "Nothing was written.");
+            ExitCode::Usage
+        }
+        NewPackOutcome::AlreadyExists { file } => {
+            // 🔴 Never an overwrite, and the message says the file is untouched
+            // rather than leaving the reader to wonder.
+            let mut err = std::io::stderr();
+            let _ = writeln!(
+                err,
+                "nkb new-pack: {file} is already here and has not been touched. Pick another name, or move that file first."
+            );
+            ExitCode::Usage
+        }
+        NewPackOutcome::Unwritable { file } => {
+            // The published set of exit codes has no code for a write failure, so
+            // the wording carries what the number cannot - the same compromise
+            // `nkb lint` makes for an unreadable file, and recorded the same way.
+            let mut err = std::io::stderr();
+            let _ = writeln!(
+                err,
+                "nkb new-pack: {file} could not be written here. Check that this folder exists and that you can write to it."
+            );
+            ExitCode::Usage
+        }
+    }
+}
+
 /// Help is written to standard output and never requires loading the catalogue.
 /// Someone reaching for `--help` may well be doing it because the catalogue is
 /// what is broken.
@@ -184,13 +264,28 @@ fn print_help() {
     println!("  nkb <command> [options]");
     println!();
     println!("Commands:");
-    println!("  lint <file>    Check a pack file against the format rules");
+    println!("  lint <file>       Check a pack file against the format rules");
+    println!("  new-pack <name>   Write the skeleton for a new pack");
+    println!();
+    println!("Options:");
+    println!("  -h, --help        Show this help and exit with 0");
+    println!("      --version     Print the version and exit with 0");
+    println!();
+    println!("The graphical interface is a separate executable: nkb-gui");
+}
+
+fn print_new_pack_help() {
+    println!("nkb new-pack - write the skeleton for a new pack");
+    println!();
+    println!("Usage:");
+    println!("  nkb new-pack <name>");
+    println!();
+    println!("The name becomes both the file name and the pack identifier, so it has");
+    println!("to be lower case letters, digits and hyphens, starting with a letter.");
+    println!("The file is written in the current folder and never over an existing one.");
     println!();
     println!("Options:");
     println!("  -h, --help     Show this help and exit with 0");
-    println!("      --version  Print the version and exit with 0");
-    println!();
-    println!("The graphical interface is a separate executable: nkb-gui");
 }
 
 fn print_lint_help() {

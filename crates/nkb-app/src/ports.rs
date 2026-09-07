@@ -100,6 +100,74 @@ pub trait PackFormat {
     /// below holds no file system: one of them has to carry the bytes across, and
     /// text is what the source port already deals in.
     fn check_translation(&self, text: &str, translated: &str) -> TranslationCheck;
+
+    /// The file a brand new pack starts from.
+    ///
+    /// # Why a template belongs behind the port that reads files
+    ///
+    /// The trait began as "questions only a parsed file can answer", and this is
+    /// not a question. It is here anyway because it is the same knowledge from
+    /// the other side: what a pack file looks like. Splitting it into a port of
+    /// its own would put one method behind a second name for the same boundary,
+    /// and the register of ports is a thing sessions read rather than a place to
+    /// file every method separately.
+    ///
+    /// 🔴 What comes back has to pass [`PackFormat::check`]. There is no written
+    /// specification of the format - a contributor meets it through this file and
+    /// through the linter's verdict - so the two disagreeing is the two halves of
+    /// the published contract disagreeing in front of a stranger.
+    fn skeleton(&self, id: &str, today: Date) -> String;
+}
+
+/// A calendar date as year, month and day.
+///
+/// A tuple rather than a type of its own, because nothing in this program does
+/// arithmetic on a date - it writes one into a file and reads one back. A type
+/// with no behaviour is a name for a tuple, and the register of ports is long
+/// enough already.
+pub type Date = (i32, u32, u32);
+
+/// Today's date, from wherever the running program gets it.
+///
+/// A port rather than a call to the system clock, so that a use case producing
+/// dated output can be exercised against a fixed one. The core never asks for
+/// the time at all: it receives the answer.
+pub trait Clock {
+    fn today(&self) -> Date;
+}
+
+/// Why a new pack file could not be written.
+///
+/// 🔴 `AlreadyExists` is the reason this port exists as its own thing rather
+/// than a call to write a file. Nothing in this tool overwrites what it did not
+/// create: a contributor with an hour of work in `locale-cz.toml` and a
+/// half-remembered command has to get a refusal, not a fresh skeleton.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SinkError {
+    /// Something is already at that name. Never overwritten, never appended to.
+    AlreadyExists,
+    /// The place cannot be written to: permissions, a missing folder, a device.
+    Unwritable,
+}
+
+/// Writes a new pack file.
+///
+/// Separate from [`PackSource`] because the two carry opposite risks: reading a
+/// pack that is not there costs a message, and writing over one that is costs
+/// somebody's work.
+pub trait PackSink {
+    /// Creates a pack file under this identifier, and refuses if one is there.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SinkError::AlreadyExists`] when the name is taken and
+    /// [`SinkError::Unwritable`] when the write itself fails.
+    ///
+    /// 🔴 The check and the write are one operation for the implementation to
+    /// make indivisible. Asking whether a file exists and then writing it is two
+    /// operations with a gap in between, and something can arrive in that gap -
+    /// the shape of race the architecture notes call TOCTOU.
+    fn create(&self, id: &str, text: &str) -> Result<(), SinkError>;
 }
 
 /// What a file's `translates` field points at.

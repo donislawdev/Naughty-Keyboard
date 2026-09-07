@@ -20,7 +20,7 @@
 //! rules about how a value is *written*. Those rules therefore read the raw slice
 //! of the file that a span points at - which was measured to be faithful.
 
-use nkb_app::{PackFormat, TranslationCheck, TranslationTarget};
+use nkb_app::{Date, PackFormat, TranslationCheck, TranslationTarget};
 use nkb_core::description::{self, BreaksFault};
 use nkb_core::identity::{is_pack_id, is_value_id};
 use nkb_core::lint::{LintProblem, RuleCode};
@@ -1162,6 +1162,10 @@ impl PackFormat for TomlPackFormat {
             Some(named) if is_pack_id(named) => TranslationTarget::Pack(named.to_owned()),
             _ => TranslationTarget::Unusable,
         }
+    }
+
+    fn skeleton(&self, id: &str, today: Date) -> String {
+        crate::skeleton::for_pack(id, today)
     }
 
     fn check_translation(&self, text: &str, translated: &str) -> TranslationCheck {
