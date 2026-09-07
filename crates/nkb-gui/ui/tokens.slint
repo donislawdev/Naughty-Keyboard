@@ -47,6 +47,11 @@
 // own with raised contrast. Open too: the actual alpha of the resting
 // background. ux-spec.md 2 says "translucent" and gives no number.
 
+// The typeface travels WITH the product. Measured, not assumed - see the
+// `font-mono` entry at the bottom of this file for the numbers and for the
+// sharp edge that comes with this import.
+import "fonts/DejaVuSansMono.ttf";
+
 export global Tokens {
     // ---- surfaces ----------------------------------------------------------
     out property <color> surface: #14161A;
@@ -110,11 +115,60 @@ export global Tokens {
     out property <length> radius-window: 10px;
     out property <length> hairline: 1px;
 
-    // ---- the preview typeface ----------------------------------------------
-    // ⚠️ Naming a family here is a stopgap and OBS-66 says why: the system
-    // fallback is a lottery. Measured 2026-09-07 on one machine, one string:
-    // Slint rendered two of four Chinese glyphs where iced rendered four. The
-    // product has to SHIP a typeface; until that decision is made, this name is
-    // a request, not a guarantee.
-    out property <string> font-mono: "Consolas";
+    // ---- the monospaced typeface -------------------------------------------
+    //
+    // DejaVu Sans Mono 2.37, shipped in ui/fonts/ and imported at the top of
+    // this file. The name below must match the family the FILE declares, to the
+    // character; `typeface.rs` reads the font's own name table and fails if the
+    // two ever drift apart.
+    //
+    // # Why the product carries a font at all
+    //
+    // This used to say "Consolas", a family that exists only on Windows.
+    // OBS-72 measured the consequence: on macOS and Linux the monospaced roles
+    // silently became proportional, and monospace was picked for a reason - a
+    // changing counter must not shift the characters around it.
+    //
+    // The obvious repair does not work, and that is measured too. Slint 1.17.1
+    // does not resolve the generic CSS names: rendering the letter A produced
+    // 448 inked pixels for the default face, 383 for "Consolas", 266 for
+    // "Courier New" - and 448 for BOTH "monospace" and a deliberately invented
+    // family name. A generic name behaves exactly like a name that does not
+    // exist. `font_family` takes one family, and there is no fallback list to
+    // write, so the only way to be sure of a face is to bring it.
+    //
+    // # Which one, and why this one
+    //
+    // Coverage was measured against what the catalogue's value column actually
+    // demands - 180 code points needing a glyph, plus 12 the interface needs -
+    // by reading each candidate's character map:
+    //
+    //     DejaVu Sans Mono 2.37     0.32 MB   151/180   12/12
+    //     JetBrains Mono 2.304      0.26 MB   137/180   11/12
+    //
+    // JetBrains Mono is the smaller file and loses Arabic entirely, so it costs
+    // 14 of the catalogue's code points to save 60 KB. Licence sieve, both
+    // questions: (a) Bitstream Vera Fonts Copyright plus Arev - permissive and
+    // GPL-3.0 compatible, and the rename clause is not engaged because the file
+    // ships unmodified; (b) not applicable, a typeface is not a reference
+    // dataset. The full text sits beside the font in ui/fonts/.
+    //
+    // 🔴 # What this import does NOT do
+    //
+    // It does not give the product a fallback chain. Measured with a positive
+    // control, same binary, same container: with this kind of import in place
+    // and no family named, 15 of the probe's code points had no glyph; naming
+    // the embedded family brought that to 8. Slint registers an imported font
+    // as a NAMED FAMILY and never adds it to the fallback chain - unlike the
+    // `SLINT_FONT_PATH` route, which does, and which takes a loose file beside
+    // the binary rather than bytes inside it.
+    //
+    // So: for anything this face covers, the result is now the same on all
+    // three systems. For anything it does not - the catalogue's Han, kana,
+    // fullwidth forms, emoji and mathematical alphanumerics - the lottery is
+    // exactly as it was, and measurably brutal: on Windows 4 of the probe's
+    // code points had no glyph, in a container carrying only DejaVu it was 12,
+    // and the two sets share ONE member. That gap belongs to the preview, it is
+    // a decision rather than a defect, and it is open. OBS-66.
+    out property <string> font-mono: "DejaVu Sans Mono";
 }

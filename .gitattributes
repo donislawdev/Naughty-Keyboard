@@ -26,6 +26,18 @@
 # normalised alongside it.
 /tests/packs/rejected/crlf-line-endings.toml -text
 
+# THE SHIPPED TYPEFACE - the upstream bytes, unaltered.
+#
+# `text=auto` above would almost certainly leave a .ttf alone, because Git
+# detects binary content by looking for NUL bytes. Almost certainly is not the
+# standard this file already holds itself to: the exception below it exists
+# because a guard that is green and blind is the failure this product hunts
+# elsewhere. A font mangled by line-ending conversion does not fail loudly, it
+# fails as a face that will not load, on someone else's machine.
+#
+# `binary` is `-text -diff`: no conversion, and no attempt to diff it either.
+/crates/nkb-gui/ui/fonts/** binary
+
 # PROJECT MEMORY - no conversion at all.
 #
 # These documents contain escaped invisible characters and examples where every
