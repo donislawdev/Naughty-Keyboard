@@ -19,18 +19,33 @@
 // pair that carries meaning is `text-muted` on `surface` at 5.00, against a 4.5
 // bar. The measurement is recorded in ADR-4.
 //
-// ⚠️ Those ratios hold for the OPAQUE window state. The resting state is
-// translucent by ux-spec.md 2, so its effective contrast depends on whatever
-// window sits behind the palette - which we neither control nor know. That is
-// OBS-68 and it is unresolved; nothing here may be read as covering it.
+// Those ratios were computed against an OPAQUE background, and D49 is what
+// keeps them true: in the resting state the alpha goes on the WINDOW'S
+// BACKGROUND ONLY, never on the text. Letters therefore always sit at full
+// opacity and their contrast stops depending on whichever window happens to be
+// behind the palette - something we neither control nor know. Put alpha on a
+// text colour here and the whole table above becomes a claim about nothing.
 //
-// # The third source that is not here yet
+// # One theme, and a second set of values that is not a theme
 //
-// ADR-4 measured that no graphical toolkit consults the system's high-contrast
-// setting - not Slint, not the alternatives, and winit reads it only to pick a
-// title-bar theme. So high contrast is ours to handle, and this dictionary will
-// need a third set of values beside the ordinary one. Document 13 section 7
-// listed that as a possibility; the measurement turned it into a certainty.
+// D48: the product is DARK ONLY. No light theme, no switch, no following the
+// system. That is a preference, and it is settled.
+//
+// High contrast is NOT a preference - it is an accessibility setting, switched
+// on out of need. ADR-4 measured that no graphical toolkit consults it: not
+// Slint, not the alternatives, and winit reads it solely to pick a title-bar
+// theme. So it is ours to handle, and this dictionary will need a SECOND set of
+// values beside the ordinary one. Second, not third: with one theme there is
+// only one ordinary set to sit beside.
+//
+// Document 13 section 7 requires that second set to be a NEW FILE rather than a
+// rewrite of the views, which is why nothing below is ever named by a screen -
+// a screen picks a name, never a value.
+//
+// ⚠️ Still open, and not to be inferred from anything here: WHERE those values
+// come from - read from the system's own high-contrast colours, or a set of our
+// own with raised contrast. Open too: the actual alpha of the resting
+// background. ux-spec.md 2 says "translucent" and gives no number.
 
 export global Tokens {
     // ---- surfaces ----------------------------------------------------------
