@@ -11,6 +11,7 @@
 //! capability undeclared means it cannot be reached for by accident.
 
 use nkb_core::lint::LintProblem;
+use nkb_core::pack::Pack;
 use std::fmt;
 
 /// Why a pack could not be provided. Carries no path and no free text, because
@@ -54,6 +55,103 @@ pub trait PackSource {
     fn read(&self, id: &str) -> Result<String, SourceError>;
 }
 
+/// A place that knows WHICH packs exist, not merely how to read one.
+///
+/// # Why this is a second trait rather than a method on [`PackSource`]
+///
+/// The two are different needs and only one of them is universal. `nkb lint` and
+/// `nkb fmt` are handed a path and read exactly one file: they never ask what
+/// else is around, and a source that could only be used by something able to
+/// enumerate would be the wrong shape for them. `nkb packs` is the opposite: it
+/// has no path at all and the enumeration IS the answer.
+///
+/// The supertrait says the part that is genuinely true - anything able to list
+/// packs can also read one - without forcing the reverse.
+pub trait PackCatalogue: PackSource {
+    /// Every pack identifier this catalogue holds, in a stable order.
+    ///
+    /// Stable rather than sorted-here, so that a source with a meaningful order
+    /// of its own may keep it. What must not happen is the order changing
+    /// between two runs over unchanged data: `nkb packs` output goes into other
+    /// people's scripts, and a listing that shuffles turns a diff into noise.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SourceError`] when the catalogue itself cannot be examined.
+    /// A catalogue that is present and holds nothing returns an empty list,
+    /// which is a different answer and is never folded into the error.
+    fn list(&self) -> Result<Vec<String>, SourceError>;
+
+    /// Which of the sources described by `pack-format.md` 12 this stands for,
+    /// and which ones were not consulted at all.
+    ///
+    /// 🔴 Here because untouchable rule 1 forbids the silence, not because a
+    /// caller asked. The format defines THREE sources - built in, team, and the
+    /// user's own - loaded in that order, with a later one overriding an earlier
+    /// one by `pack.id`. A build that consults one of the three and prints a
+    /// list looking exactly like a complete one is a run that did less than it
+    /// appeared to, which is the one thing a run may never do.
+    fn coverage(&self) -> CatalogueCoverage;
+}
+
+/// The three places packs come from, and whether this run looked at them.
+///
+/// A pack the tool did not see is indistinguishable, in a listing, from a pack
+/// that does not exist. This type is what lets the difference be printed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogueCoverage {
+    /// Sources that were read, named by the format's own words.
+    pub consulted: Vec<CatalogueSource>,
+    /// Sources that were not, each with the reason - which is never "no reason".
+    pub skipped: Vec<(CatalogueSource, SourceSkipped)>,
+}
+
+/// One of the three sources `pack-format.md` 12 defines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CatalogueSource {
+    /// Delivered with the tool.
+    BuiltIn,
+    /// A folder named in settings, shared by a team.
+    Team,
+    /// The user's own folder.
+    Own,
+}
+
+impl CatalogueSource {
+    /// The stable word for machine readable output.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::BuiltIn => "built-in",
+            Self::Team => "team",
+            Self::Own => "own",
+        }
+    }
+}
+
+/// Why a source was not read. Never a bare "no".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SourceSkipped {
+    /// This build has no settings file yet, so the folder cannot be named.
+    NotImplementedYet,
+    /// Configured, but nothing is at that location.
+    NotConfigured,
+    /// Configured and present, and the read failed.
+    Unreadable,
+}
+
+impl SourceSkipped {
+    /// The stable marker for machine readable output.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NotImplementedYet => "not-implemented-yet",
+            Self::NotConfigured => "not-configured",
+            Self::Unreadable => "unreadable",
+        }
+    }
+}
+
 /// Answers the questions that only a parsed pack file can answer.
 ///
 /// # Why this is a port and not a function call
@@ -64,9 +162,19 @@ pub trait PackSource {
 /// use case be exercised with no parser at all, and what keeps the dependency
 /// arrow pointing one way rather than resting on somebody remembering it.
 ///
-/// Note what this port does **not** do: it does not return a pack. A validator
-/// has to see a file as it actually is, including the parts a lenient reader
-/// would forgive, so it asks for problems rather than for a tidy model.
+/// # Two directions, and they are not the same reading
+///
+/// Most of what follows exists to find fault: it reads a file AS WRITTEN,
+/// including the parts a lenient reader would forgive, and returns problems
+/// rather than a tidy model. [`PackFormat::parse`] is the other direction - it
+/// reads a file AS MEANT and returns the pack.
+///
+/// ⚠️ Until 2026-09-08 this paragraph said the port does not return a pack, and
+/// that was true of every method there was. Keeping the two directions in one
+/// trait is deliberate: they are the same knowledge about the same file format,
+/// and splitting them would mean two names for one boundary. What must not blur
+/// is the order of use - a caller runs `check` first and refuses the pack on any
+/// error, because `pack-format.md` 11 loads all of a pack or none of it.
 pub trait PackFormat {
     /// Returns every problem the parsed file reveals.
     ///
@@ -100,6 +208,22 @@ pub trait PackFormat {
     /// below holds no file system: one of them has to carry the bytes across, and
     /// text is what the source port already deals in.
     fn check_translation(&self, text: &str, translated: &str) -> TranslationCheck;
+
+    /// The pack this file describes, or nothing when it describes none.
+    ///
+    /// # The other direction of the same format
+    ///
+    /// Every other method here exists to find fault. This one exists to obey,
+    /// and the two must not be confused: `check` is deliberately suspicious and
+    /// reads the file as written, while this reads the file as meant. Nothing
+    /// here reports a problem and nothing here forgives one - a caller runs
+    /// `check` first and refuses on any error, because `pack-format.md` 11 says
+    /// a pack with one bad value out of thirty-four loads NOTHING.
+    ///
+    /// `None` means the text is not a pack file at all, which `E004` has already
+    /// said. It is not the answer for a pack that is merely wrong somewhere:
+    /// deciding that is the caller's job and it needs the codes, not a shrug.
+    fn parse(&self, text: &str) -> Option<Pack>;
 
     /// The file a brand new pack starts from.
     ///

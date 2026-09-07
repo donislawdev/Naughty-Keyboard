@@ -20,6 +20,7 @@ pub mod description;
 pub mod identity;
 pub mod lint;
 pub mod metrics;
+pub mod pack;
 pub mod schema;
 pub mod source_text;
 pub mod text;
@@ -33,6 +34,7 @@ pub use lint::{
     RuleStatus, Severity, SkipReason, SkippedRule, rule_for,
 };
 pub use metrics::TextMetrics;
+pub use pack::{Pack, PackPair, PackValue, Risk};
 pub use schema::{FieldKind, kind_of};
 pub use source_text::line_of;
 pub use text::{EscapedText, LiteralText};

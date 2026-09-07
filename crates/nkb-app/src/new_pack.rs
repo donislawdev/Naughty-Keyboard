@@ -87,6 +87,13 @@ mod tests {
     /// exercised with no parser and no template.
     struct Templating;
     impl PackFormat for Templating {
+        // Loud rather than `None`. This double exists for a use case that never
+        // parses, so a silent empty answer would let a future caller reach a
+        // stub and believe it read a pack.
+        fn parse(&self, _text: &str) -> Option<nkb_core::pack::Pack> {
+            unimplemented!("Templating is a double for a use case that does not parse packs")
+        }
+
         fn check(&self, _text: &str, _expected_id: &str) -> Vec<LintProblem> {
             Vec::new()
         }

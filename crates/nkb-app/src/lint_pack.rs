@@ -240,6 +240,13 @@ mod tests {
     }
 
     impl PackFormat for Says {
+        // Loud rather than `None`. This double exists for a use case that never
+        // parses, so a silent empty answer would let a future caller reach a
+        // stub and believe it read a pack.
+        fn parse(&self, _text: &str) -> Option<nkb_core::pack::Pack> {
+            unimplemented!("Says is a double for a use case that does not parse packs")
+        }
+
         fn check(&self, _text: &str, _expected_id: &str) -> Vec<LintProblem> {
             self.codes
                 .iter()
@@ -530,6 +537,15 @@ mod tests {
         // chain: each file names something that is itself a translation.
         struct EverythingTranslates;
         impl PackFormat for EverythingTranslates {
+            // Loud rather than `None`. This double exists for a use case that never
+            // parses, so a silent empty answer would let a future caller reach a
+            // stub and believe it read a pack.
+            fn parse(&self, _text: &str) -> Option<nkb_core::pack::Pack> {
+                unimplemented!(
+                    "EverythingTranslates is a double for a use case that does not parse packs"
+                )
+            }
+
             fn check(&self, _text: &str, _expected_id: &str) -> Vec<LintProblem> {
                 Vec::new()
             }

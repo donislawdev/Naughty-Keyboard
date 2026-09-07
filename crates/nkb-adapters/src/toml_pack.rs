@@ -1260,6 +1260,13 @@ fn raw_slice<'a>(text: &'a str, item: &Item) -> &'a str {
 pub struct TomlPackFormat;
 
 impl PackFormat for TomlPackFormat {
+    /// The pack this file describes. Lives in `read_pack.rs`, because reading a
+    /// file to obey it and reading a file to fault it are two different habits
+    /// and mixing them in one module makes both harder to trust.
+    fn parse(&self, text: &str) -> Option<nkb_core::pack::Pack> {
+        crate::read_pack::parse(text)
+    }
+
     fn check(&self, text: &str, expected_id: &str) -> Vec<LintProblem> {
         check(text, expected_id)
     }

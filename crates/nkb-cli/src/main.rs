@@ -10,14 +10,20 @@
 
 #![forbid(unsafe_code)]
 
+mod browse_report;
 mod exit;
 mod json;
 mod lint_json;
 mod lint_report;
 
 use exit::ExitCode;
-use nkb_adapters::{DirectoryPackSink, DirectoryPackSource, SystemClock, TomlPackFormat};
-use nkb_app::{FormatOutcome, LintOutcome, NewPackOutcome, format_pack, lint_pack, new_pack};
+use nkb_adapters::{
+    BuiltInCatalogue, DirectoryPackSink, DirectoryPackSource, SystemClock, TomlPackFormat,
+};
+use nkb_app::{
+    FormatOutcome, LintOutcome, NewPackOutcome, ShowOutcome, format_pack, lint_pack, list_packs,
+    new_pack, show_pack,
+};
 use std::io::Write;
 use std::path::Path;
 
@@ -48,6 +54,8 @@ fn run(args: &[String]) -> ExitCode {
             println!("nkb {VERSION}");
             ExitCode::Ok
         }
+        "packs" => packs(&args[1..]),
+        "show" => show(&args[1..]),
         "lint" => lint(&args[1..]),
         "fmt" => fmt(&args[1..]),
         "new-pack" => new_pack_command(&args[1..]),
@@ -356,6 +364,144 @@ fn new_pack_command(args: &[String]) -> ExitCode {
 /// Help is written to standard output and never requires loading the catalogue.
 /// Someone reaching for `--help` may well be doing it because the catalogue is
 /// what is broken.
+/// `nkb packs` - what the tool can offer.
+///
+/// The listing is data and goes to standard output. The account of which
+/// sources were consulted goes there too rather than to standard error, and
+/// that is deliberate: it is part of the answer, not a diagnostic about it. A
+/// list of one source out of three read without that line is a false statement,
+/// and standard error is exactly where a pipeline drops things.
+fn packs(args: &[String]) -> ExitCode {
+    // `first` rather than a loop: every branch below returns, so a loop would be
+    // one that never loops, and the compiler is right to say so.
+    match args.first().map(String::as_str) {
+        None => {}
+        Some("-h" | "--help") => {
+            print_packs_help();
+            return ExitCode::Ok;
+        }
+        Some(other) => {
+            let mut err = std::io::stderr();
+            let _ = writeln!(err, "nkb packs: unexpected argument '{other}'");
+            let _ = writeln!(err, "Run 'nkb packs --help' to see what is available.");
+            return ExitCode::Usage;
+        }
+    }
+
+    let catalogue = BuiltInCatalogue::new();
+    let format = TomlPackFormat;
+
+    match list_packs(&catalogue, &format) {
+        Ok(found) => {
+            for line in browse_report::listing(&found) {
+                println!("{line}");
+            }
+            // A catalogue holding a pack nobody can load is not a failed run:
+            // the run succeeded and the answer includes the bad news. `nkb lint`
+            // is the command whose exit code is a verdict on a pack.
+            ExitCode::Ok
+        }
+        Err(reason) => {
+            let mut err = std::io::stderr();
+            let _ = writeln!(
+                err,
+                "nkb packs: the catalogue could not be examined ({reason})"
+            );
+            ExitCode::IoFailed
+        }
+    }
+}
+
+/// `nkb show <pack>` - one pack in full.
+fn show(args: &[String]) -> ExitCode {
+    let mut wanted: Option<&str> = None;
+
+    for arg in args {
+        match arg.as_str() {
+            "-h" | "--help" => {
+                print_show_help();
+                return ExitCode::Ok;
+            }
+            other if other.starts_with('-') => {
+                let mut err = std::io::stderr();
+                let _ = writeln!(err, "nkb show: unknown option '{other}'");
+                let _ = writeln!(err, "Run 'nkb show --help' to see what is available.");
+                return ExitCode::Usage;
+            }
+            other => wanted = Some(other),
+        }
+    }
+
+    let Some(wanted) = wanted else {
+        let mut err = std::io::stderr();
+        let _ = writeln!(err, "nkb show: name a pack.");
+        let _ = writeln!(err, "Run 'nkb packs' to see what there is.");
+        return ExitCode::Usage;
+    };
+
+    let catalogue = BuiltInCatalogue::new();
+    let format = TomlPackFormat;
+
+    match show_pack(&catalogue, &format, wanted) {
+        ShowOutcome::Shown { pack, warnings } => {
+            for line in browse_report::pack(&pack, warnings) {
+                println!("{line}");
+            }
+            ExitCode::Ok
+        }
+        ShowOutcome::Refused { errors } => {
+            let mut err = std::io::stderr();
+            let _ = writeln!(
+                err,
+                "nkb show: '{wanted}' has {errors} errors and is not loaded at all."
+            );
+            let _ = writeln!(
+                err,
+                "A pack is whole or absent - run `nkb lint` on it to see what is wrong."
+            );
+            ExitCode::ValidationFailed
+        }
+        ShowOutcome::NotFound => {
+            let mut err = std::io::stderr();
+            let _ = writeln!(err, "nkb show: no pack called '{wanted}'.");
+            let _ = writeln!(err, "Run 'nkb packs' to see what there is.");
+            ExitCode::NotFound
+        }
+        ShowOutcome::Unreadable => {
+            let mut err = std::io::stderr();
+            let _ = writeln!(err, "nkb show: '{wanted}' could not be read.");
+            ExitCode::IoFailed
+        }
+    }
+}
+
+fn print_packs_help() {
+    println!("nkb packs - list the packs this build can offer");
+    println!();
+    println!("Usage:");
+    println!("  nkb packs");
+    println!();
+    println!("Every run also states which pack sources were read and which were not,");
+    println!("because a list drawn from one source looks exactly like a complete one.");
+    println!();
+    println!("Options:");
+    println!("  -h, --help     Show this help and exit with 0");
+}
+
+fn print_show_help() {
+    println!("nkb show - print one pack in full");
+    println!();
+    println!("Usage:");
+    println!("  nkb show <pack>");
+    println!();
+    println!("Values are printed ESCAPED, which is the only readable form for a value");
+    println!("made of characters nobody can see. A generated value is printed as its");
+    println!("recipe and is never expanded here.");
+    println!();
+    println!("Options:");
+    println!("  -h, --help     Show this help and exit with 0");
+}
+
 fn print_help() {
     println!("nkb {VERSION} - malicious test data, one shortcut away");
     println!();
@@ -363,6 +509,8 @@ fn print_help() {
     println!("  nkb <command> [options]");
     println!();
     println!("Commands:");
+    println!("  packs             List the packs this build can offer");
+    println!("  show <pack>       Print one pack in full");
     println!("  lint <file>       Check a pack file against the format rules");
     println!("  fmt <file>        Rewrite a pack file in canonical shape");
     println!("  new-pack <name>   Write the skeleton for a new pack");
@@ -472,6 +620,41 @@ mod tests {
     #[test]
     fn an_unknown_command_is_a_usage_error_not_a_silent_success() {
         assert_eq!(run(&args(&["frobnicate"])), ExitCode::Usage);
+    }
+
+    #[test]
+    fn listing_the_packs_succeeds_and_does_not_need_a_file() {
+        assert_eq!(run(&args(&["packs"])), ExitCode::Ok);
+    }
+
+    #[test]
+    fn packs_takes_no_argument_and_says_so_rather_than_ignoring_one() {
+        // Ignoring it would let `nkb packs whitespace` print the whole catalogue
+        // and look like it had answered the question that was asked.
+        assert_eq!(run(&args(&["packs", "whitespace"])), ExitCode::Usage);
+    }
+
+    #[test]
+    fn showing_a_carried_pack_succeeds() {
+        assert_eq!(run(&args(&["show", "whitespace"])), ExitCode::Ok);
+    }
+
+    #[test]
+    fn showing_a_pack_that_does_not_exist_is_three_and_not_one() {
+        // The same distinction lint makes: "no such pack" is not "this pack is
+        // wrong", and a script branching on the code has to be able to tell.
+        assert_eq!(run(&args(&["show", "no-such-pack"])), ExitCode::NotFound);
+    }
+
+    #[test]
+    fn show_without_a_name_is_a_usage_error_rather_than_a_quiet_success() {
+        assert_eq!(run(&args(&["show"])), ExitCode::Usage);
+    }
+
+    #[test]
+    fn both_new_commands_answer_help_without_touching_the_catalogue() {
+        assert_eq!(run(&args(&["packs", "--help"])), ExitCode::Ok);
+        assert_eq!(run(&args(&["show", "--help"])), ExitCode::Ok);
     }
 
     #[test]
