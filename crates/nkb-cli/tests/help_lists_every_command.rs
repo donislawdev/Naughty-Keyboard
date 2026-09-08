@@ -27,8 +27,11 @@
 
 use std::path::Path;
 
-#[test]
-fn the_general_help_names_every_command_the_dispatcher_accepts() {
+/// The commands the dispatcher accepts, read out of its own source.
+///
+/// One list for both tests below. Two lists would mean a new command could
+/// satisfy one of them and fall through the gap between them.
+fn commands_in_the_dispatcher() -> Vec<String> {
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs");
     let body = std::fs::read_to_string(&source)
         .unwrap_or_else(|e| panic!("{} must be readable: {e}", source.display()));
@@ -52,6 +55,23 @@ fn the_general_help_names_every_command_the_dispatcher_accepts() {
         }
         commands.push(name.to_owned());
     }
+    commands
+}
+
+/// The help body, as `print_help` writes it.
+fn general_help() -> String {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs");
+    let body = std::fs::read_to_string(&source)
+        .unwrap_or_else(|e| panic!("{} must be readable: {e}", source.display()));
+    let start = body.find("fn print_help()").expect("print_help must exist");
+    let rest = &body[start..];
+    let end = rest.find("\n}").unwrap_or(rest.len());
+    rest[..end].to_owned()
+}
+
+#[test]
+fn the_general_help_names_every_command_the_dispatcher_accepts() {
+    let commands = commands_in_the_dispatcher();
 
     // Without this, a clean result is also what a wrong parse produces.
     assert!(
@@ -62,10 +82,7 @@ fn the_general_help_names_every_command_the_dispatcher_accepts() {
     );
 
     // The help body: `    println!("  packs             List the packs ...");`
-    let help_start = body.find("fn print_help()").expect("print_help must exist");
-    let help_body = &body[help_start..];
-    let help_end = help_body.find("\n}").unwrap_or(help_body.len());
-    let help_body = &help_body[..help_end];
+    let help_body = general_help();
 
     let missing: Vec<&String> = commands
         .iter()
@@ -78,5 +95,76 @@ fn the_general_help_names_every_command_the_dispatcher_accepts() {
          A command nobody can discover is a command that does not exist for most people. \
          Add a line to print_help - and if it is deliberately hidden, this test is the place \
          to say so.\n"
+    );
+}
+
+/// Every command answers `--help` the same way, and this one RUNS them.
+///
+/// # Why a second test, and why it starts the program
+///
+/// The test above reads source. It can see that a command is mentioned in the
+/// general help and nothing about what happens when somebody asks that command
+/// for help. Measured 2026-09-08: all seven answered, and `nkb send` answered in
+/// a different shape - no first line naming the command, no `Usage:`, no
+/// `Options:` entry for `--help` itself. Nothing was broken; the surface was
+/// simply not uniform, which is the kind of drift that arrives one command at a
+/// time and is never worth fixing on its own day.
+///
+/// `ux-spec.md` 10 requires `nkb <command> --help` to work always. `09-CLI-I-CI.md`
+/// section 8 settles that asking for help is a success rather than a usage
+/// error, so the exit code is 0 and the text goes to standard output.
+///
+/// # What it cannot see
+///
+/// Whether the words are right. It checks the frame - the name, the sections, a
+/// non-empty body - because a frame is what drifts silently, while wrong wording
+/// is caught by anybody who reads it once.
+#[test]
+fn every_command_answers_its_own_help_in_the_same_shape() {
+    let commands = commands_in_the_dispatcher();
+
+    for name in &commands {
+        let run = std::process::Command::new(env!("CARGO_BIN_EXE_nkb"))
+            .args([name.as_str(), "--help"])
+            .output()
+            .unwrap_or_else(|e| panic!("`nkb {name} --help` must be runnable: {e}"));
+
+        assert!(
+            run.status.success(),
+            "`nkb {name} --help` exited with {:?}. Asking for help is a success, not a usage \
+             error - 09-CLI-I-CI.md section 8.",
+            run.status.code()
+        );
+
+        let text = String::from_utf8_lossy(&run.stdout);
+        assert!(
+            !text.trim().is_empty(),
+            "`nkb {name} --help` printed nothing on standard output. A command whose help is \
+             empty, or goes to the error stream, is a command nobody can learn from a pipe."
+        );
+
+        let first = text.lines().next().unwrap_or("");
+        let expected = format!("nkb {name} - ");
+        assert!(
+            first.starts_with(&expected),
+            "`nkb {name} --help` opens with {first:?}, and every other command opens with \
+             \"{expected}...\". One surface in a different shape is what a person notices \
+             before they notice anything else."
+        );
+
+        for section in ["Usage:", "-h, --help"] {
+            assert!(
+                text.contains(section),
+                "`nkb {name} --help` has no {section:?}. The sections are the same everywhere \
+                 so that reading one help teaches the reader how to read the rest."
+            );
+        }
+    }
+
+    // Without this, a dispatcher that parsed as empty would satisfy the loop.
+    assert!(
+        commands.len() >= 7,
+        "only {} commands were examined: {commands:?}",
+        commands.len()
     );
 }

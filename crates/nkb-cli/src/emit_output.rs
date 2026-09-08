@@ -31,6 +31,19 @@
 use crate::json::Json;
 use nkb_app::emit_values::{Emission, EmittedValue};
 
+/// Version of the JSON THIS command prints.
+///
+/// 🔴 A different axis from the linter's schema, which happens to be on the
+/// same number today. The two describe different documents, are consumed by
+/// different scripts and move independently: one going to 2 says nothing about
+/// the other. Until 2026-09-08 this was a bare literal here, which is the one
+/// spelling nobody finds while searching for the constant - OBS-99.
+///
+/// Raised only by a breaking change: a member removed, or one whose meaning
+/// changed. Adding a member does not raise it, because a consumer that ignores
+/// what it does not recognise is unaffected.
+const SCHEMA: i64 = 1;
+
 /// Which shape the values come out in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EmitFormat {
@@ -175,9 +188,7 @@ fn as_json(emission: &Emission, base64: bool) -> String {
         .collect();
 
     Json::Object(vec![
-        // Its own version, like the linter's output has. A consumer must ignore
-        // fields it does not know, so adding one does not move this number.
-        ("schema".to_owned(), Json::Number(1)),
+        ("schema".to_owned(), Json::Number(SCHEMA)),
         ("values".to_owned(), Json::Array(values)),
     ])
     .render()

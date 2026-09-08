@@ -764,14 +764,19 @@ fn count_down(seconds: u64) {
 }
 
 fn print_send_help() {
-    println!("nkb send <pack> [--index N] [--delay S]");
+    println!("nkb send - type one value into the focused field");
+    println!();
+    println!("Usage:");
+    println!("  nkb send <pack> [--index N] [--delay S]");
     println!();
     println!("Put one value of a pack into whatever field has the keyboard focus.");
     println!();
-    println!("  --index N   which value, counting from 1 in the pack's own order");
-    println!("              (default: 1). The order of values is the order of testing.");
-    println!("  --delay S   seconds to wait first, so you can focus the target");
-    println!("              (default: 3). Use 0 when something else focuses it.");
+    println!("Options:");
+    println!("  --index N      which value, counting from 1 in the pack's own order");
+    println!("                 (default: 1). The order of values is the order of testing.");
+    println!("  --delay S      seconds to wait first, so you can focus the target");
+    println!("                 (default: 3). Use 0 when something else focuses it.");
+    println!("  -h, --help     Show this help and exit with 0");
     println!();
     println!("The value goes to the focused window, not to standard output.");
     println!("Everything you read here is on standard error.");
