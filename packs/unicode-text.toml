@@ -1,0 +1,109 @@
+format = 1
+
+[pack]
+id          = "unicode-text"
+name        = "Unicode and text"
+description = "Characters that look innocent and break counting, comparison and display."
+version     = "1.0"
+updated     = 2026-09-08
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["unicode", "rendering", "comparison"]
+fields      = ["text", "name", "multiline"]
+risk        = "normal"
+[[values]]
+id     = "rtl-override"
+name   = "Right-to-left override"
+value  = "raport\u202Etxt.exe"
+breaks = "A direction-override character makes the text render reversed: the value shown to the user is not the value stored."
+expect = "Stripped, escaped, or displayed with the override neutralised - never rendered as-is."
+since  = "1.0"
+
+[[values]]
+id     = "soft-hyphen"
+name   = "Soft hyphen"
+value  = "Kowal\u00ADski"
+breaks = "An invisible hyphen inside a word defeats exact search and makes two identical-looking names different records."
+expect = "Stored unchanged and found by a search for Kowalski, or normalised away on save."
+since  = "1.0"
+
+[[values]]
+id     = "combining-acute"
+name   = "Combining acute accent"
+value  = "e\u0301"
+breaks = "The same letter written as a base plus a combining mark compares as different from the single-character form."
+expect = "Normalised on save, or compared in a normalisation-aware way."
+since  = "1.0"
+
+[[values]]
+id     = "zalgo"
+name   = "Stacked combining marks"
+value  = "e\u0300\u0301\u0302\u0303\u0304\u0305\u0306\u0307\u0308\u0309"
+breaks = "Stacked combining marks overflow the line vertically and cover the interface around the field."
+expect = "Accepted and clipped to the box of the field, or rejected with a limit on combining marks."
+since  = "1.0"
+
+[[values]]
+id     = "bom-inside"
+name   = "Byte-order mark inside a value"
+value  = "Jan\uFEFFKowalski"
+breaks = "A byte-order mark in the middle of a value survives every copy and silently breaks exact comparison."
+expect = "Stripped on save, or preserved and made visible in the interface."
+since  = "1.0"
+
+[[values]]
+id     = "bell-control"
+name   = "Bell control character"
+value  = "Jan\u0007Kowalski"
+breaks = "A control character passed to a terminal or a log makes the output do something instead of saying something."
+expect = "Rejected or escaped before it reaches any log, terminal or report."
+since  = "1.0"
+
+[[values]]
+id     = "fullwidth-latin"
+name   = "Full-width Latin letters"
+value  = "\uFF46\uFF55\uFF4C\uFF4C\uFF57\uFF49\uFF44\uFF54\uFF48"
+breaks = "Full-width letters read as Latin to a human and as different characters to search, filters and uniqueness checks."
+expect = "Normalised for comparison, or accepted and consistently treated as distinct."
+since  = "1.0"
+
+[[values]]
+id     = "math-bold"
+name   = "Mathematical bold letters"
+value  = "\U0001D407\U0001D41E\U0001D425\U0001D425\U0001D428"
+breaks = "Mathematical letter variants defeat profanity filters and search while looking like ordinary words."
+expect = "Normalised for comparison and filtering, or rejected in fields where plain text is expected."
+since  = "1.0"
+
+[[values]]
+id     = "upside-down"
+name   = "Upside-down letters"
+value  = "\u0287x\u01DD\u0287"
+breaks = "Ordinary letters from another block, used to bypass filters and to break line rendering in lists."
+expect = "Accepted as plain text without breaking the layout, and covered by the same filters as normal text."
+since  = "1.0"
+
+[[values]]
+id     = "cjk-mixed"
+name   = "Mixed CJK characters"
+value  = "\u540D\u524D\u30C6\u30B9\u30C8"
+breaks = "Double-width characters break column alignment and confuse character counters that assume one character is one cell."
+expect = "Rendered and counted correctly, with column widths adapting instead of overflowing."
+since  = "1.0"
+
+[[values]]
+id     = "arabic-in-latin"
+name   = "Arabic inside a Latin sentence"
+value  = "Jan \u0645\u0631\u062D\u0628\u0627 Kowalski"
+breaks = "Right-to-left text inside a left-to-right sentence reorders on screen, so the visual order is not the stored order."
+expect = "Stored in logical order and rendered with correct isolation, so copying returns what was typed."
+since  = "1.0"
+
+[[values]]
+id     = "emoji-in-name"
+name   = "Emoji in a name field"
+value  = "Jan\U0001F600Kowalski"
+breaks = "A character outside the basic plane in a name field breaks byte-length limits and databases configured for narrow encodings."
+expect = "Stored intact or rejected with a message - never truncated mid-character."
+since  = "1.0"

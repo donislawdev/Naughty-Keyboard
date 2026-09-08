@@ -36,8 +36,17 @@
 /// catalogue a deliberate release order - whitespace first, because it hits the
 /// most common and cheapest-to-fix class of bug - and alphabetical sorting would
 /// silently discard that. Add a pack where it belongs, not at the end.
-pub const BUILT_IN_PACKS: &[(&str, &str)] =
-    &[("whitespace", include_str!("../../../packs/whitespace.toml"))];
+pub const BUILT_IN_PACKS: &[(&str, &str)] = &[
+    ("whitespace", include_str!("../../../packs/whitespace.toml")),
+    (
+        "unicode-text",
+        include_str!("../../../packs/unicode-text.toml"),
+    ),
+    (
+        "length-bombs",
+        include_str!("../../../packs/length-bombs.toml"),
+    ),
+];
 
 #[cfg(test)]
 #[allow(

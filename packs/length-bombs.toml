@@ -1,0 +1,129 @@
+format = 1
+
+[pack]
+id          = "length-bombs"
+name        = "Length bombs"
+description = "Values sized against common limits and against the gap between a character and a byte."
+version     = "1.0"
+updated     = 2026-09-08
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["limits", "truncation", "encoding"]
+fields      = ["any"]
+risk        = "normal"
+[[values]]
+id     = "len-0"
+name   = "Empty value"
+value  = ""
+breaks = "An empty value tests the boundary between not filled in and filled in with nothing."
+expect = "Required fields reject it with a clear message, optional fields store it as empty."
+since  = "1.0"
+
+[[values]]
+id     = "len-255"
+name   = "255 characters"
+type   = "repeat"
+unit   = "a"
+count  = 255
+breaks = "The classic column width: one character short of the limit, exactly at it, and one over it are three different code paths."
+expect = "Accepted at the limit and rejected above it, with the limit stated in the message."
+since  = "1.0"
+
+[[values]]
+id     = "len-256"
+name   = "256 characters"
+type   = "repeat"
+unit   = "a"
+count  = 256
+breaks = "One character over the classic limit, which is where silent truncation usually happens."
+expect = "Rejected with a message, never silently cut down to 255."
+since  = "1.0"
+
+[[values]]
+id     = "len-254"
+name   = "254 characters"
+type   = "repeat"
+unit   = "a"
+count  = 254
+breaks = "The value just under the limit, used to prove the limit is off by one in either direction."
+expect = "Accepted without complaint."
+since  = "1.0"
+
+[[values]]
+id     = "len-1000"
+name   = "1000 characters"
+type   = "repeat"
+unit   = "a"
+count  = 1000
+breaks = "Comment and description fields sized for a sentence and used for an essay."
+expect = "Accepted, or rejected with the limit stated - not accepted and truncated."
+since  = "1.0"
+
+[[values]]
+id     = "len-4000"
+name   = "4000 characters"
+type   = "repeat"
+unit   = "a"
+count  = 4000
+breaks = "A limit common in older database columns, and the first size at which text fields start failing quietly."
+expect = "The same rule as above, applied consistently between the interface and storage."
+since  = "1.0"
+
+[[values]]
+id     = "len-65535"
+name   = "65535 characters"
+type   = "repeat"
+unit   = "a"
+count  = 65535
+breaks = "The limit of the most common text column type, where crossing it usually produces a raw database error."
+expect = "A readable message instead of a database error page."
+since  = "1.0"
+
+[[values]]
+id     = "len-100000"
+name   = "100000 characters"
+type   = "repeat"
+unit   = "a"
+count  = 100000
+breaks = "Character counters, layout, logs and every downstream export, all at once."
+expect = "Rejected early, before the value travels through the whole system."
+since  = "1.0"
+
+[[values]]
+id     = "bytes-vs-chars"
+name   = "128 characters, 256 bytes"
+type   = "repeat"
+unit   = "\u0105"
+count  = 128
+breaks = "128 characters but 256 bytes: a field limited in bytes rejects a value the interface said was fine."
+expect = "The same unit used for the limit on both sides, and stated in the message."
+since  = "1.0"
+
+[[values]]
+id     = "emoji-truncation"
+name   = "64 emoji"
+type   = "repeat"
+unit   = "\U0001F600"
+count  = 64
+breaks = "Truncation by bytes cuts the last character in half and produces a value that is no longer valid text."
+expect = "Truncation, if it happens at all, happens on character boundaries - never mid-character."
+since  = "1.0"
+
+[[values]]
+id     = "one-word-200"
+name   = "200 characters without a space"
+type   = "repeat"
+unit   = "a"
+count  = 200
+breaks = "200 characters without a space: layouts that wrap on spaces push the value outside its container."
+expect = "Wrapped or clipped inside the container, never overflowing the surrounding interface."
+since  = "1.0"
+
+[[values]]
+id     = "len-1"
+name   = "One character"
+value  = "a"
+breaks = "The shortest non-empty value, used against minimum-length rules that are rarely tested."
+expect = "Accepted or rejected according to a stated minimum, not silently accepted where a minimum exists."
+since  = "1.0"
