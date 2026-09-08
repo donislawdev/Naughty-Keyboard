@@ -72,6 +72,52 @@ impl ValueBody {
         }
     }
 
+    /// Builds the text this recipe describes.
+    ///
+    /// # The separate, explicit operation
+    ///
+    /// `architektura.md` 6.1 requires the size of a value to be known BEFORE the
+    /// text exists, and everything else in this module obeys that by refusing to
+    /// build anything. This is the one place allowed to build, and it is a
+    /// method of its own precisely so that reaching it is a decision rather than
+    /// a side effect of asking a question.
+    ///
+    /// Nothing calls this to measure. [`ValueBody::metrics`] answers that from
+    /// the recipe, and code that materialises in order to count would set the
+    /// length bomb off inside the tool - before the warning it was supposed to
+    /// produce.
+    ///
+    /// # The ceiling is checked FIRST, and that ordering is the safety property
+    ///
+    /// A recipe describing two billion characters is refused here without a
+    /// single byte being allocated. Were the check to come afterwards, the
+    /// refusal would arrive from a process that had already tried to hold two
+    /// gigabytes, which is not a refusal at all.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same [`ValueProblem`] the validator reports, so a caller
+    /// never has to guess a rule code back from a message.
+    pub fn materialise(&self) -> Result<String, ValueProblem> {
+        self.check_size()?;
+
+        match self {
+            Self::Literal(text) => Ok(text.as_str().to_owned()),
+            Self::Repeat { unit, count } => {
+                // The size is already known and already bounded, so the buffer
+                // is asked for once at the right size instead of growing.
+                let metrics = self
+                    .metrics()
+                    .ok_or(ValueProblem::RepeatProductUnmeasurable)?;
+                let mut out = String::with_capacity(metrics.bytes);
+                for _ in 0..*count {
+                    out.push_str(unit.as_str());
+                }
+                Ok(out)
+            }
+        }
+    }
+
     /// Checks the size rules that apply before anything is built.
     ///
     /// `E024` and `E026` are deliberately separate: the first bounds the count,
@@ -171,5 +217,71 @@ mod tests {
     fn a_zero_count_is_rejected() {
         let problem = repeat("a", 0).check_size().expect_err("must reject");
         assert_eq!(problem.code(), "E024");
+    }
+
+    #[test]
+    fn a_literal_materialises_to_itself() {
+        let body = ValueBody::Literal(LiteralText::new("Jan\u{200B}Kowalski"));
+        assert_eq!(body.materialise().as_deref(), Ok("Jan\u{200B}Kowalski"));
+    }
+
+    #[test]
+    fn a_recipe_materialises_to_the_text_it_describes() {
+        let built = repeat("ab", 3)
+            .materialise()
+            .expect("well within the ceiling");
+        assert_eq!(built, "ababab");
+    }
+
+    #[test]
+    fn a_multi_byte_unit_repeats_whole_characters_not_bytes() {
+        // The mistake a byte-oriented buffer invites: half an emoji is not a
+        // character, and this catalogue is made of exactly such edges.
+        let built = repeat("\u{1F468}", 3).materialise().expect("fits");
+        assert_eq!(built.chars().count(), 3);
+        assert_eq!(built.len(), 12);
+    }
+
+    #[test]
+    fn what_comes_out_is_exactly_as_long_as_the_recipe_promised() {
+        // The property emit rests on: the size warning printed BEFORE building
+        // has to describe the thing that gets built, or it is not a warning.
+        let body = repeat("\u{0105}b", 1000);
+        let promised = body.metrics().expect("measurable");
+        let built = body.materialise().expect("fits");
+        assert_eq!(built.chars().count(), promised.code_points);
+        assert_eq!(built.len(), promised.bytes);
+    }
+
+    #[test]
+    fn the_two_billion_character_bomb_is_refused_without_being_built() {
+        // 🔴 The ordering this method exists to guarantee. A unit of 2000
+        // characters repeated a million times is refused by the ceiling BEFORE
+        // any allocation, so this test returns in microseconds. If the check
+        // ever moves after the building, this test does not merely fail - it
+        // tries to hold two gigabytes first, and the run time IS the assertion.
+        let unit = "a".repeat(2000);
+        let problem = repeat(&unit, 1_000_000)
+            .materialise()
+            .expect_err("the ceiling must refuse this");
+        assert_eq!(problem.code(), "E026");
+    }
+
+    #[test]
+    fn a_count_outside_the_range_is_refused_by_materialising_too() {
+        // materialise() must not be a way around check_size(). Anything the
+        // validator refuses, this refuses, with the same code.
+        let problem = repeat("a", 0)
+            .materialise()
+            .expect_err("zero is not a count");
+        assert_eq!(problem.code(), "E024");
+    }
+
+    #[test]
+    fn the_largest_value_in_the_shipped_catalogue_really_can_be_built() {
+        // The positive control for the test above: a ceiling that refused
+        // everything would pass every refusal test here and be useless.
+        let built = repeat("a", 100_000).materialise().expect("must build");
+        assert_eq!(built.len(), 100_000);
     }
 }

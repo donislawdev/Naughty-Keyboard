@@ -264,6 +264,7 @@ mod tests {
             risk: Risk::Normal,
             tags: Vec::new(),
             fields: vec!["any".to_owned()],
+            source: None,
             values: vec![nkb_core::pack::PackValue {
                 id: "one".to_owned(),
                 name: "One".to_owned(),
@@ -273,6 +274,9 @@ mod tests {
                 risk: None,
                 fields: Vec::new(),
                 tags: Vec::new(),
+                source: None,
+                since: Some("1.0".to_owned()),
+                shape: None,
                 deprecated: false,
                 replaced_by: None,
             }],

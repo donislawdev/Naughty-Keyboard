@@ -25,9 +25,23 @@
 //!
 //! # What this CANNOT see, and it is not a small hole
 //!
-//! 🔴 The software renderer and the hardware renderer disagree about missing
-//! glyphs: the hardware one draws a replacement box, the software one draws
-//! nothing at all. Measured 2026-09-07 on the hint bar, recorded as OBS-67.
+//! 🔴 The software renderer and the hardware renderer disagree, and OBS-67 used
+//! to record ONE of the ways. A capability sheet of 27 effects, rendered both
+//! ways on 2026-09-08, measured five - OBS-83:
+//!
+//! | | software, ie this picture | hardware, ie the product |
+//! |---|---|---|
+//! | `drop-shadow-blur` / `-spread` | draws NOTHING AT ALL | a visible glow |
+//! | `stroke` on text | barely there | a clear outline |
+//! | emoji | monochrome | in colour |
+//! | a ZWJ sequence | falls apart into pieces | joined into one glyph |
+//! | a glyph the face lacks | nothing | a replacement box |
+//!
+//! 🔴 The first row is the dangerous one, because it points the wrong way. A
+//! screen designed with a shadow looks FLAT here, so a session either deletes a
+//! shadow that works or piles on more of one it cannot see. Both mistakes are
+//! invisible to anyone reading this picture alone. Before trusting it about a
+//! shadow, a glow or an emoji: open a real window.
 //!
 //! So this picture is not what the user sees. It catches a broken layout, a
 //! wrong colour, a clipped label and a drifted spacing - which is what it was

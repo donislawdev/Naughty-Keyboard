@@ -100,6 +100,21 @@ pub struct PackValue {
     /// Field kinds this value suits, when it narrows the pack's own list.
     pub fields: Vec<String>,
     pub tags: Vec<String>,
+    /// Where this particular value came from, when it differs from the pack's
+    /// own attribution. Inherited like `risk` and `fields`, and kept as an
+    /// `Option` for the same reason: `W033` asks whether the value said
+    /// anything, and a parse that flattened this could not answer.
+    pub source: Option<String>,
+    /// The pack version this value first appeared in.
+    ///
+    /// Required by the format and optional here, exactly as `breaks` is: a type
+    /// that cannot represent absence forces whoever builds one to invent a
+    /// version number, and an invented one is worse than a visible gap.
+    pub since: Option<String>,
+    /// An author's override for the computed description of invisible
+    /// characters. `None` is the ordinary case - the description is computed -
+    /// and that is a different fact from an empty override.
+    pub shape: Option<String>,
     /// Retired values stay in the file so their identifiers are never reused.
     pub deprecated: bool,
     /// The value that replaces a retired one, named within this same pack.
@@ -122,6 +137,9 @@ pub struct PackPair {
     pub b: String,
     pub breaks: Option<String>,
     pub expect: Option<String>,
+    /// The pack version this pair first appeared in. `D33` put pairs under the
+    /// same sentence rule as values, and the format gives them `since` too.
+    pub since: Option<String>,
 }
 
 /// A whole pack file, loaded.
@@ -143,6 +161,10 @@ pub struct Pack {
     pub tags: Vec<String>,
     /// Field kinds this pack suits, and the default for every value in it.
     pub fields: Vec<String>,
+    /// Where these values came from, and the default for every value in the
+    /// pack. Optional in the format: honesty about somebody else's work is
+    /// owed when there is somebody to name, and not otherwise.
+    pub source: Option<String>,
     pub values: Vec<PackValue>,
     pub pairs: Vec<PackPair>,
 }
@@ -171,6 +193,19 @@ impl Pack {
         } else {
             &value.fields
         }
+    }
+
+    /// The attribution that actually applies to a value: its own when it
+    /// declares one, otherwise the pack's.
+    ///
+    /// The third inherited field, beside risk and fields, and it inherits the
+    /// same way - `pack-format.md` 5. A method rather than a value flattened at
+    /// parse time, so that "declared nothing" stays visible: `W033` is about a
+    /// pack that attributes some values individually and leaves others silent,
+    /// and it cannot ask that once the two are merged.
+    #[must_use]
+    pub fn source_of<'a>(&'a self, value: &'a PackValue) -> Option<&'a str> {
+        value.source.as_deref().or(self.source.as_deref())
     }
 
     /// Whether anything in this pack is offensive, however it was declared.
@@ -212,6 +247,9 @@ mod tests {
             risk,
             fields: Vec::new(),
             tags: Vec::new(),
+            source: None,
+            since: Some("1.0".to_owned()),
+            shape: None,
             deprecated: false,
             replaced_by: None,
         }
@@ -230,6 +268,7 @@ mod tests {
             risk,
             tags: Vec::new(),
             fields: vec!["any".to_owned()],
+            source: None,
             values,
             pairs: Vec::new(),
         }
@@ -273,6 +312,42 @@ mod tests {
     fn a_pack_of_ordinary_values_carries_nothing_offensive() {
         let subject = pack(Risk::Normal, vec![value("a", None), value("b", None)]);
         assert!(!subject.carries_offensive());
+    }
+
+    #[test]
+    fn a_value_without_its_own_source_takes_the_packs_attribution() {
+        let mut subject = pack(Risk::Normal, vec![value("a", None)]);
+        subject.source = Some("https://example.invalid/whole-pack".to_owned());
+        let first = subject.values.first().expect("one value");
+        assert_eq!(
+            subject.source_of(first),
+            Some("https://example.invalid/whole-pack")
+        );
+    }
+
+    #[test]
+    fn a_value_with_its_own_source_keeps_it() {
+        let mut narrowing = value("a", None);
+        narrowing.source = Some("https://example.invalid/this-value".to_owned());
+        let mut subject = pack(Risk::Normal, vec![narrowing]);
+        subject.source = Some("https://example.invalid/whole-pack".to_owned());
+        let first = subject.values.first().expect("one value");
+        assert_eq!(
+            subject.source_of(first),
+            Some("https://example.invalid/this-value")
+        );
+    }
+
+    #[test]
+    fn attributing_nothing_anywhere_stays_distinguishable_from_attributing_nothing_here() {
+        // The distinction W033 is built on: a value that declares no source in a
+        // pack that declares none either is not the same case as a silent value
+        // sitting beside attributed ones. Flattening at parse time would lose it.
+        let subject = pack(Risk::Normal, vec![value("a", None)]);
+        let first = subject.values.first().expect("one value");
+        assert_eq!(subject.source_of(first), None);
+        assert!(first.source.is_none());
+        assert!(subject.source.is_none());
     }
 
     #[test]

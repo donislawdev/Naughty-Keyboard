@@ -119,6 +119,12 @@ fn value_of(table: &Table) -> Option<PackValue> {
         risk: text(table, "risk").as_deref().and_then(Risk::parse),
         fields: words(table, "fields"),
         tags: words(table, "tags"),
+        // Absent stays absent for all three. `source` inherits from the pack and
+        // `Pack::source_of` is what performs that; flattening it here would
+        // leave W033 unable to ask who declared what.
+        source: text(table, "source"),
+        since: text(table, "since"),
+        shape: text(table, "shape"),
         deprecated: table
             .get("deprecated")
             .and_then(Item::as_bool)
@@ -136,6 +142,7 @@ fn pair_of(table: &Table) -> Option<PackPair> {
         b: text(table, "b")?,
         breaks: text(table, "breaks"),
         expect: text(table, "expect"),
+        since: text(table, "since"),
     })
 }
 
@@ -175,6 +182,7 @@ pub(crate) fn parse(text_of_file: &str) -> Option<Pack> {
             .unwrap_or_default(),
         tags: words(header, "tags"),
         fields: words(header, "fields"),
+        source: text(header, "source"),
         values,
         pairs,
     })
