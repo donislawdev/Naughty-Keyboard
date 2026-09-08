@@ -11,18 +11,20 @@
 #![forbid(unsafe_code)]
 
 mod browse_report;
+mod emit_output;
 mod exit;
 mod json;
 mod lint_json;
 mod lint_report;
 
+use emit_output::{EmitFormat, Form};
 use exit::ExitCode;
 use nkb_adapters::{
     BuiltInCatalogue, DirectoryPackSink, DirectoryPackSource, SystemClock, TomlPackFormat,
 };
 use nkb_app::{
-    FormatOutcome, LintOutcome, NewPackOutcome, ShowOutcome, format_pack, lint_pack, list_packs,
-    new_pack, show_pack,
+    EmitOutcome, FormatOutcome, LintOutcome, NewPackOutcome, ShowOutcome, emit_values, format_pack,
+    lint_pack, list_packs, new_pack, show_pack,
 };
 use std::io::Write;
 use std::path::Path;
@@ -56,6 +58,7 @@ fn run(args: &[String]) -> ExitCode {
         }
         "packs" => packs(&args[1..]),
         "show" => show(&args[1..]),
+        "emit" => emit(&args[1..]),
         "lint" => lint(&args[1..]),
         "fmt" => fmt(&args[1..]),
         "new-pack" => new_pack_command(&args[1..]),
@@ -488,6 +491,162 @@ fn print_packs_help() {
     println!("  -h, --help     Show this help and exit with 0");
 }
 
+/// `nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]`
+///
+/// The command that takes the catalogue out of the tool. Everything it prints on
+/// standard output is values; the account of what came out, and every note about
+/// what a format could not carry, goes to the error stream - `ux-spec.md` 10.
+fn emit(args: &[String]) -> ExitCode {
+    let mut wanted: Option<&str> = None;
+    let mut format = EmitFormat::Json;
+    let mut form: Option<Form> = None;
+    let mut base64 = false;
+    let mut expecting_format = false;
+
+    for arg in args {
+        if expecting_format {
+            let Some(chosen) = EmitFormat::parse(arg) else {
+                let mut err = std::io::stderr();
+                let _ = writeln!(err, "nkb emit: unknown format '{arg}'");
+                let _ = writeln!(err, "Available: json, csv, lines.");
+                return ExitCode::Usage;
+            };
+            format = chosen;
+            expecting_format = false;
+            continue;
+        }
+        match arg.as_str() {
+            "-h" | "--help" => {
+                print_emit_help();
+                return ExitCode::Ok;
+            }
+            "--format" => expecting_format = true,
+            "--escaped" | "--raw" => {
+                // The two point in opposite directions on one axis, so asking
+                // for both is a contradiction rather than a preference to
+                // resolve quietly.
+                let asked = if arg == "--escaped" {
+                    Form::Escaped
+                } else {
+                    Form::Literal
+                };
+                if form.is_some_and(|already| already != asked) {
+                    let mut err = std::io::stderr();
+                    let _ = writeln!(
+                        err,
+                        "nkb emit: --escaped and --raw ask for opposite things."
+                    );
+                    let _ = writeln!(err, "Pick one, or neither to take the format's default.");
+                    return ExitCode::Usage;
+                }
+                form = Some(asked);
+            }
+            "--base64" => base64 = true,
+            other if other.starts_with('-') => {
+                let mut err = std::io::stderr();
+                let _ = writeln!(err, "nkb emit: unknown option '{other}'");
+                let _ = writeln!(err, "Run 'nkb emit --help' to see what is available.");
+                return ExitCode::Usage;
+            }
+            other => wanted = Some(other),
+        }
+    }
+
+    if expecting_format {
+        let mut err = std::io::stderr();
+        let _ = writeln!(err, "nkb emit: --format needs a name.");
+        let _ = writeln!(err, "Available: json, csv, lines.");
+        return ExitCode::Usage;
+    }
+
+    let Some(wanted) = wanted else {
+        let mut err = std::io::stderr();
+        let _ = writeln!(err, "nkb emit: name a pack.");
+        let _ = writeln!(err, "Run 'nkb packs' to see what there is.");
+        return ExitCode::Usage;
+    };
+
+    let catalogue = BuiltInCatalogue::new();
+
+    match emit_values(&catalogue, &TomlPackFormat, wanted) {
+        EmitOutcome::Emitted(emission) => {
+            let rendered = emit_output::render(&emission, format, form, base64);
+            let mut err = std::io::stderr();
+            for note in &rendered.notes {
+                let _ = writeln!(err, "nkb emit: {note}");
+            }
+            // Written through `write!` rather than `print!` so that a closed
+            // pipe - `nkb emit pack | head -1` - ends the run quietly instead of
+            // panicking in the middle of somebody's shell.
+            let mut out = std::io::stdout();
+            match out.write_all(rendered.data.as_bytes()) {
+                Ok(()) => ExitCode::Ok,
+                Err(_) => ExitCode::Ok,
+            }
+        }
+        EmitOutcome::Refused { errors } => {
+            let mut err = std::io::stderr();
+            let _ = writeln!(
+                err,
+                "nkb emit: '{wanted}' has {errors} errors and is not loaded at all."
+            );
+            let _ = writeln!(
+                err,
+                "Nothing was printed - a pack is whole or absent. Run `nkb lint` on it."
+            );
+            ExitCode::ValidationFailed
+        }
+        EmitOutcome::NotFound => {
+            let mut err = std::io::stderr();
+            let _ = writeln!(err, "nkb emit: no pack called '{wanted}'.");
+            let _ = writeln!(err, "Run 'nkb packs' to see what there is.");
+            ExitCode::NotFound
+        }
+        EmitOutcome::Unreadable => {
+            let mut err = std::io::stderr();
+            let _ = writeln!(err, "nkb emit: '{wanted}' could not be read.");
+            ExitCode::IoFailed
+        }
+        EmitOutcome::ValueTooLarge { id, code } => {
+            let mut err = std::io::stderr();
+            let _ = writeln!(
+                err,
+                "nkb emit: value '{id}' passed validation and could not be built ({code})."
+            );
+            let _ = writeln!(
+                err,
+                "This is a fault in the tool, not in the pack. Nothing was printed."
+            );
+            ExitCode::ValidationFailed
+        }
+    }
+}
+
+fn print_emit_help() {
+    println!("nkb emit - print a pack's values for a script or a file");
+    println!();
+    println!("Usage:");
+    println!("  nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]");
+    println!();
+    println!("Values go to standard output. The account of what came out, and any");
+    println!("note about what a format could not carry, go to standard error - so a");
+    println!("redirected file holds values and nothing else.");
+    println!();
+    println!("Formats:");
+    println!("  json     Both forms of every value, and every field. The default,");
+    println!("           because it is the only one that carries the whole catalogue");
+    println!("  csv      One row per value. Escaped by default, because this");
+    println!("           catalogue contains values that destroy CSV files");
+    println!("  lines    One value per line. Refuses a value containing a line");
+    println!("           break by name, rather than splitting it silently");
+    println!();
+    println!("Options:");
+    println!("      --escaped  Print values as a pack file stores them");
+    println!("      --raw      Print values literally");
+    println!("      --base64   Encode values, for channels that damage text");
+    println!("  -h, --help     Show this help and exit with 0");
+}
+
 fn print_show_help() {
     println!("nkb show - print one pack in full");
     println!();
@@ -511,6 +670,7 @@ fn print_help() {
     println!("Commands:");
     println!("  packs             List the packs this build can offer");
     println!("  show <pack>       Print one pack in full");
+    println!("  emit <pack>       Print a pack's values for a script or a file");
     println!("  lint <file>       Check a pack file against the format rules");
     println!("  fmt <file>        Rewrite a pack file in canonical shape");
     println!("  new-pack <name>   Write the skeleton for a new pack");
@@ -610,6 +770,73 @@ mod tests {
     fn asking_for_help_is_a_success() {
         assert_eq!(run(&args(&["--help"])), ExitCode::Ok);
         assert_eq!(run(&args(&["-h"])), ExitCode::Ok);
+    }
+
+    #[test]
+    fn emitting_a_shipped_pack_succeeds_in_every_format() {
+        for format in ["json", "csv", "lines"] {
+            assert_eq!(
+                run(&args(&["emit", "whitespace", "--format", format])),
+                ExitCode::Ok,
+                "--format {format}"
+            );
+        }
+        // No format named at all takes the default, which is json.
+        assert_eq!(run(&args(&["emit", "whitespace"])), ExitCode::Ok);
+    }
+
+    #[test]
+    fn emitting_an_unknown_pack_is_told_apart_from_a_bad_invocation() {
+        // The distinction a pipeline branches on: 3 means the name is wrong,
+        // 2 means the command is.
+        assert_eq!(run(&args(&["emit", "no-such-pack"])), ExitCode::NotFound);
+        assert_eq!(run(&args(&["emit"])), ExitCode::Usage);
+    }
+
+    #[test]
+    fn an_unknown_format_is_refused_rather_than_guessed_at() {
+        assert_eq!(
+            run(&args(&["emit", "whitespace", "--format", "yaml"])),
+            ExitCode::Usage
+        );
+        // --format with nothing after it is the same mistake seen earlier.
+        assert_eq!(
+            run(&args(&["emit", "whitespace", "--format"])),
+            ExitCode::Usage
+        );
+    }
+
+    #[test]
+    fn asking_for_both_forms_at_once_is_a_contradiction_not_a_preference() {
+        assert_eq!(
+            run(&args(&["emit", "whitespace", "--escaped", "--raw"])),
+            ExitCode::Usage
+        );
+        // Repeating the same one is not a contradiction and stays allowed.
+        assert_eq!(
+            run(&args(&["emit", "whitespace", "--escaped", "--escaped"])),
+            ExitCode::Ok
+        );
+    }
+
+    #[test]
+    fn emit_takes_the_switches_the_format_document_defines() {
+        for switch in ["--escaped", "--raw", "--base64"] {
+            assert_eq!(
+                run(&args(&["emit", "whitespace", switch])),
+                ExitCode::Ok,
+                "{switch}"
+            );
+        }
+        assert_eq!(
+            run(&args(&["emit", "whitespace", "--frobnicate"])),
+            ExitCode::Usage
+        );
+    }
+
+    #[test]
+    fn emit_help_is_a_success_and_needs_no_pack() {
+        assert_eq!(run(&args(&["emit", "--help"])), ExitCode::Ok);
     }
 
     #[test]
