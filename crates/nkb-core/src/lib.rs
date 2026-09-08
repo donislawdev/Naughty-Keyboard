@@ -22,6 +22,7 @@ pub mod lint;
 pub mod metrics;
 pub mod pack;
 pub mod schema;
+pub mod sequence;
 pub mod source_text;
 pub mod text;
 pub mod value;
@@ -36,6 +37,7 @@ pub use lint::{
 pub use metrics::TextMetrics;
 pub use pack::{Pack, PackPair, PackValue, Risk};
 pub use schema::{FieldKind, kind_of};
+pub use sequence::{Delivery, Effect, Event, Position, Sequence, Step};
 pub use source_text::line_of;
 pub use text::{EscapedText, LiteralText};
 pub use value::{MAX_REPEAT_COUNT, MAX_VALUE_CODE_POINTS, ValueBody, ValueProblem};
