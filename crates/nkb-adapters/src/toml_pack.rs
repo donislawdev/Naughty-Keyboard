@@ -26,7 +26,7 @@ use nkb_core::description::{self, BreaksFault};
 use nkb_core::identity::{is_pack_id, is_value_id};
 use nkb_core::lint::{LintProblem, MAX_VALUES_PER_PACK, RuleCode};
 use nkb_core::schema::{FieldKind, kind_of};
-use nkb_core::source_text::line_of;
+use nkb_core::source_text::SourceText;
 use nkb_core::text::LiteralText;
 use nkb_core::value::ValueBody;
 use nkb_core::written_form;
@@ -227,11 +227,15 @@ const FIELD_VOCABULARY: [&str; 22] = [
 /// it. The single exception is a file that does not parse: there is nothing to
 /// look inside, so that one problem is returned alone.
 #[must_use]
-pub fn check(text: &str, expected_id: &str) -> Vec<LintProblem> {
-    let document: Document<String> = match text.parse() {
+pub fn check(file: &str, expected_id: &str) -> Vec<LintProblem> {
+    // The index is built once, here, and everything below is handed it. Counting
+    // newlines per question made the validator quadratic - OBS-98.
+    let text = &SourceText::new(file);
+
+    let document: Document<String> = match file.parse() {
         Ok(document) => document,
         Err(error) => {
-            let line = error.span().map_or(1, |span| line_of(text, span.start));
+            let line = error.span().map_or(1, |span| text.line(span.start));
             return vec![
                 LintProblem::new(RuleCode::NotValidToml)
                     .at(line)
@@ -284,7 +288,7 @@ pub fn check(text: &str, expected_id: &str) -> Vec<LintProblem> {
 }
 
 /// E001: the file format version, missing or newer than this build.
-fn check_format(text: &str, root: &Table) -> Vec<LintProblem> {
+fn check_format(text: &SourceText<'_>, root: &Table) -> Vec<LintProblem> {
     let Some(item) = root.get("format") else {
         // No position to point at - the key is missing from the whole file - so
         // this problem names the file rather than a line inside it.
@@ -310,7 +314,7 @@ fn check_format(text: &str, root: &Table) -> Vec<LintProblem> {
 /// Almost always a typo in a key that is part of it, which is why silence here is
 /// worse than noise: the field the author meant to set was never set, and the
 /// pack ships with a default nobody chose.
-fn check_top_level_keys(text: &str, root: &Table) -> Vec<LintProblem> {
+fn check_top_level_keys(text: &SourceText<'_>, root: &Table) -> Vec<LintProblem> {
     root.iter()
         .filter(|(key, _)| !TOP_LEVEL_KEYS.contains(key))
         .map(|(key, item)| {
@@ -322,7 +326,7 @@ fn check_top_level_keys(text: &str, root: &Table) -> Vec<LintProblem> {
 }
 
 /// E003, pack half: the table itself, and the fields it must carry.
-fn check_pack_table(text: &str, root: &Table) -> Vec<LintProblem> {
+fn check_pack_table(text: &SourceText<'_>, root: &Table) -> Vec<LintProblem> {
     let Some(pack) = root.get("pack").and_then(Item::as_table_like) else {
         return vec![LintProblem::new(RuleCode::MissingRequiredField).about("pack")];
     };
@@ -350,14 +354,14 @@ fn check_pack_table(text: &str, root: &Table) -> Vec<LintProblem> {
 /// Reported against the first line that differs rather than against the file, so
 /// a build log stays jumpable - and because "somewhere in this file" is the kind
 /// of message people learn to skip.
-fn check_canonical(text: &str) -> Vec<LintProblem> {
-    let Some(canonical) = canonical::render(text) else {
+fn check_canonical(text: &SourceText<'_>) -> Vec<LintProblem> {
+    let Some(canonical) = canonical::render(text.as_str()) else {
         // Not TOML at all. E004 has already said so, and calling a file nobody
         // could read badly formatted would invent a second finding out of the
         // first one.
         return Vec::new();
     };
-    if canonical == text {
+    if canonical == text.as_str() {
         return Vec::new();
     }
 
@@ -365,10 +369,11 @@ fn check_canonical(text: &str) -> Vec<LintProblem> {
     // that only differs past its last common line points at that line: the
     // difference is there, in what does or does not follow it.
     let line = text
+        .as_str()
         .lines()
         .zip(canonical.lines())
         .position(|(had, wanted)| had != wanted)
-        .unwrap_or_else(|| text.lines().count().saturating_sub(1));
+        .unwrap_or_else(|| text.as_str().lines().count().saturating_sub(1));
 
     vec![LintProblem::new(RuleCode::FileNotCanonical).at(u32::try_from(line + 1).unwrap_or(1))]
 }
@@ -392,7 +397,7 @@ fn check_canonical(text: &str) -> Vec<LintProblem> {
 /// the palette with no explanation anywhere near it. Same shape as W033, which
 /// warns about attribution that has become inconsistent rather than about
 /// inheritance - `decision-log.md` D27.
-fn check_style(text: &str, root: &Table) -> Vec<LintProblem> {
+fn check_style(text: &SourceText<'_>, root: &Table) -> Vec<LintProblem> {
     let Some(pack) = root.get("pack").and_then(Item::as_table_like) else {
         // No pack table at all is E003's finding. Style questions about a table
         // that is not there would be noise on top of it.
@@ -441,7 +446,7 @@ fn check_style(text: &str, root: &Table) -> Vec<LintProblem> {
             .map_or_else(|| format!("values[{index}]"), ToOwned::to_owned);
         problems.push(
             LintProblem::new(RuleCode::OffensiveValueInOrdinaryPack)
-                .at(table.span().map_or(1, |span| line_of(text, span.start)))
+                .at(table.span().map_or(1, |span| text.line(span.start)))
                 .owned_by(identity),
         );
     }
@@ -477,7 +482,7 @@ fn pack_context(root: &Table) -> PackContext<'_> {
 /// down to the keys that belong there. A stray top level key is E002's finding,
 /// and judging its kind as well would put two codes on one typo.
 fn check_field_kinds<'a>(
-    text: &str,
+    text: &SourceText<'_>,
     fields: impl Iterator<Item = (&'a str, &'a Item)>,
 ) -> Vec<LintProblem> {
     fields
@@ -506,7 +511,7 @@ fn check_field_kinds<'a>(
 /// and `mail` must not all become field kinds, and a rule that does not look
 /// where the vocabulary is used does not close it. Found by writing the first
 /// real pack - `D41`.
-fn check_pack_kinds(text: &str, root: &Table) -> Vec<LintProblem> {
+fn check_pack_kinds(text: &SourceText<'_>, root: &Table) -> Vec<LintProblem> {
     let Some(pack) = root.get("pack").and_then(Item::as_table_like) else {
         return Vec::new();
     };
@@ -543,7 +548,7 @@ fn holds(item: &Item, kind: FieldKind) -> bool {
 /// Silent when there is no `[pack]` table and when it declares no `id`. Both are
 /// already E003's finding, and one mistake wearing two codes sends a contributor
 /// hunting for a second problem that is not there.
-fn check_pack_id(text: &str, root: &Table, expected_id: &str) -> Vec<LintProblem> {
+fn check_pack_id(text: &SourceText<'_>, root: &Table, expected_id: &str) -> Vec<LintProblem> {
     let Some(item) = root
         .get("pack")
         .and_then(Item::as_table_like)
@@ -634,7 +639,7 @@ fn check_description(
 /// rule that already means "a required field is missing", which is recorded as an
 /// observation rather than decided here.
 fn check_values<'a>(
-    text: &str,
+    text: &SourceText<'_>,
     root: &'a Table,
     pack: &PackContext,
     seen: &mut HashSet<&'a str>,
@@ -666,7 +671,7 @@ fn check_values<'a>(
 
     let mut problems = Vec::new();
     for (index, table) in values.iter().enumerate() {
-        let line = table.span().map_or(1, |span| line_of(text, span.start));
+        let line = table.span().map_or(1, |span| text.line(span.start));
         let declared_id = table.get("id").and_then(Item::as_str);
         // A value with no identifier is named by its place in the file. Counting
         // problems here instead of values, as this once did, produces a number
@@ -749,7 +754,7 @@ fn check_values<'a>(
 /// E023 comes first and stops the rest: for a kind this build does not know,
 /// there is no telling which fields belong to it, so every further rule would be
 /// guessing about a shape nobody has defined.
-fn check_body(text: &str, table: &Table) -> Vec<LintProblem> {
+fn check_body(text: &SourceText<'_>, table: &Table) -> Vec<LintProblem> {
     let declared = table.get("type").and_then(Item::as_str);
 
     if let Some(kind) = declared
@@ -809,7 +814,7 @@ fn body_key(table: &Table) -> Option<BodyKey> {
 }
 
 /// A value written out in the file: how it is spelled, and how long it is.
-fn check_literal(text: &str, table: &Table) -> Vec<LintProblem> {
+fn check_literal(text: &SourceText<'_>, table: &Table) -> Vec<LintProblem> {
     let Some(item) = table.get("value") else {
         // Its absence is already reported as a missing required field. Saying so
         // twice would give one mistake two codes.
@@ -826,7 +831,7 @@ fn check_literal(text: &str, table: &Table) -> Vec<LintProblem> {
 
 /// A value described by a recipe: the recipe's parts, its size, and the spelling
 /// of the unit it repeats.
-fn check_repeat(text: &str, table: &Table) -> Vec<LintProblem> {
+fn check_repeat(text: &SourceText<'_>, table: &Table) -> Vec<LintProblem> {
     let mut problems = Vec::new();
 
     if table.contains_key("value") {
@@ -882,7 +887,7 @@ fn check_repeat(text: &str, table: &Table) -> Vec<LintProblem> {
 /// cited on its own - which is why the endpoints are checked against the values
 /// this file declares rather than taken on trust.
 fn check_pairs<'a>(
-    text: &str,
+    text: &SourceText<'_>,
     root: &'a Table,
     pack: &PackContext,
     seen: &mut HashSet<&'a str>,
@@ -904,7 +909,7 @@ fn check_pairs<'a>(
 
     let mut problems = Vec::new();
     for (index, table) in pairs.iter().enumerate() {
-        let line = table.span().map_or(1, |span| line_of(text, span.start));
+        let line = table.span().map_or(1, |span| text.line(span.start));
         let declared_id = table.get("id").and_then(Item::as_str);
         let identity = declared_id.map_or_else(|| format!("pairs[{index}]"), ToOwned::to_owned);
 
@@ -977,7 +982,7 @@ fn check_pairs<'a>(
 /// without a condition, the reviewer's guarantee is that only prose can change,
 /// and a format that is not frozen may yet give a pair something to carry.
 /// Closing a door while it is still inert is the cheap moment - `D40`.
-fn check_translation_file(text: &str, root: &Table) -> Vec<LintProblem> {
+fn check_translation_file(text: &SourceText<'_>, root: &Table) -> Vec<LintProblem> {
     // The root of a translation is the one table nothing walked, so `language`
     // and `translates` were never judged for their kind. E009 has to arrive
     // before the rule that reads a field, or that rule reads a field the format
@@ -1063,7 +1068,7 @@ fn entries_of<'a>(
 /// value like `../../secrets` would read outside the folder the pack lives in.
 /// The pack identifier alphabet has no dot and no separator in it, which is what
 /// makes the check a refusal rather than a sanitisation.
-fn check_translates_names_a_pack(text: &str, root: &Table) -> Vec<LintProblem> {
+fn check_translates_names_a_pack(text: &SourceText<'_>, root: &Table) -> Vec<LintProblem> {
     let Some(item) = root.get("translates") else {
         return Vec::new();
     };
@@ -1115,7 +1120,11 @@ fn translatable_ids(root: &Table) -> HashSet<String> {
 /// A warning rather than an error, and deliberately so: a translation follows the
 /// pack without a version of its own, so a stale entry is stale prose, not a
 /// broken pack. It is reported and passed through.
-fn check_translated_ids(text: &str, root: &Table, known: &HashSet<String>) -> Vec<LintProblem> {
+fn check_translated_ids(
+    text: &SourceText<'_>,
+    root: &Table,
+    known: &HashSet<String>,
+) -> Vec<LintProblem> {
     let mut problems = Vec::new();
     for table_name in ["values", "pairs"] {
         // The keyed shape only. This is an identity question rather than a safety
@@ -1140,7 +1149,7 @@ fn check_translated_ids(text: &str, root: &Table, known: &HashSet<String>) -> Ve
 /// E050: a field that decides what gets inserted, in a file that may only carry
 /// prose.
 fn check_insertion_fields<'a>(
-    text: &str,
+    text: &SourceText<'_>,
     fields: impl Iterator<Item = (&'a str, &'a Item)>,
 ) -> Vec<LintProblem> {
     fields
@@ -1159,7 +1168,7 @@ fn check_insertion_fields<'a>(
 /// the machine readable output says where - the same shape E003 uses for its two
 /// levels, and the reason neither of them needed a second code (`D30`).
 fn check_keys(
-    text: &str,
+    text: &SourceText<'_>,
     table: &dyn TableLike,
     allowed: &[&str],
     owner: &str,
@@ -1183,7 +1192,11 @@ fn check_keys(
 /// repair: delete the field. Reporting both would hand a contributor two codes
 /// and one thing to do, which is the objection that kept E003 from splitting in
 /// two (`D30`). E050 keeps it, because it is the one that says why it matters.
-fn check_translation_keys(text: &str, table: &dyn TableLike, allowed: &[&str]) -> Vec<LintProblem> {
+fn check_translation_keys(
+    text: &SourceText<'_>,
+    table: &dyn TableLike,
+    allowed: &[&str],
+) -> Vec<LintProblem> {
     check_keys(text, table, allowed, "")
         .into_iter()
         .filter(|problem| {
@@ -1200,7 +1213,7 @@ fn check_translation_keys(text: &str, table: &dyn TableLike, allowed: &[&str]) -
 /// Anything unrecognised is read as `normal`, which is the quiet answer: a pack
 /// that meant to warn about its values ships them unmarked, and nothing on screen
 /// says so.
-fn check_risk(text: &str, table: &dyn TableLike) -> Vec<LintProblem> {
+fn check_risk(text: &SourceText<'_>, table: &dyn TableLike) -> Vec<LintProblem> {
     let Some(item) = table.get("risk") else {
         return Vec::new();
     };
@@ -1246,8 +1259,8 @@ fn check_fields_of(table: &dyn TableLike) -> Vec<LintProblem> {
 ///
 /// Empty when the parser kept no span, which loses the spelling rules for that
 /// one value rather than reporting a fault that is not there.
-fn raw_slice<'a>(text: &'a str, item: &Item) -> &'a str {
-    item.span().and_then(|span| text.get(span)).unwrap_or("")
+fn raw_slice<'a>(text: &SourceText<'a>, item: &Item) -> &'a str {
+    item.span().map_or("", |span| text.slice(span))
 }
 
 /// The pack format as this build reads it, satisfying the port the layer above
@@ -1318,13 +1331,17 @@ impl PackFormat for TomlPackFormat {
         };
 
         let known = translatable_ids(translated_document.as_table());
-        TranslationCheck::Compared(check_translated_ids(text, document.as_table(), &known))
+        TranslationCheck::Compared(check_translated_ids(
+            &SourceText::new(text),
+            document.as_table(),
+            &known,
+        ))
     }
 }
 
 /// The line an item starts on, or the first line when the parser kept no span.
-fn span_line(text: &str, item: &Item) -> u32 {
-    item.span().map_or(1, |span| line_of(text, span.start))
+fn span_line(text: &SourceText<'_>, item: &Item) -> u32 {
+    item.span().map_or(1, |span| text.line(span.start))
 }
 
 #[cfg(test)]

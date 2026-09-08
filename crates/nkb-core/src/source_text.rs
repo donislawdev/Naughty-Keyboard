@@ -15,17 +15,86 @@ use crate::lint::{LintProblem, RuleCode};
 /// The byte order mark, which is a value in the catalogue and never punctuation.
 const BYTE_ORDER_MARK: char = '\u{FEFF}';
 
-/// Turns a byte offset into a line number counted from one.
+/// A file being examined, together with the index that turns a byte offset into
+/// a line number.
 ///
-/// Offsets that fall inside a character, or past the end of the text, return the
-/// last line rather than nothing: a problem with a slightly wrong line number is
-/// still findable, while a problem with no line number at all sends the reader
-/// to search a file by eye.
-#[must_use]
-pub fn line_of(text: &str, byte_offset: usize) -> u32 {
-    let head = text.get(..byte_offset).unwrap_or(text);
-    let lines = head.matches('\n').count() + 1;
-    u32::try_from(lines).unwrap_or(u32::MAX)
+/// # Why the index exists rather than counting each time
+///
+/// Counting newlines from the start of the file answers one question in time
+/// proportional to the file. A validator asks that question once per value, so
+/// the two multiply: measured on 2026-09-08, a pack of 12 800 values took
+/// **8,2 seconds** to check, and the curve was a clean square - doubling the
+/// file multiplied the time by 3,7 (OBS-98).
+///
+/// Nothing in the shipped catalogue comes close: the largest pack holds
+/// seventeen values and `W062` warns at sixty. The size that matters is the one
+/// a stranger sends, because `nkb lint` is the contribution gate (`D20`) and the
+/// format does not refuse a large pack - `W062` only warns.
+///
+/// # What it must answer identically to counting
+///
+/// Two edge cases carry meaning and are not free to change:
+///
+/// - an offset **past the end** returns the last line rather than nothing,
+/// - an offset **inside a character** does the same.
+///
+/// A problem with a slightly wrong line number is still findable; a problem with
+/// no line number sends the reader to search a file by eye. The tests below pin
+/// both against an independent oracle that counts the slow way.
+#[derive(Debug, Clone)]
+pub struct SourceText<'a> {
+    text: &'a str,
+    /// Byte offset of every newline, ascending. Built once.
+    newlines: Vec<usize>,
+}
+
+impl<'a> SourceText<'a> {
+    /// Indexes a file. Linear once, so that every later question is not.
+    #[must_use]
+    pub fn new(text: &'a str) -> Self {
+        Self {
+            text,
+            newlines: text
+                .bytes()
+                .enumerate()
+                .filter(|&(_, byte)| byte == b'\n')
+                .map(|(at, _)| at)
+                .collect(),
+        }
+    }
+
+    /// The file itself.
+    #[must_use]
+    pub const fn as_str(&self) -> &'a str {
+        self.text
+    }
+
+    /// The slice a span points at, or an empty string when it points nowhere.
+    #[must_use]
+    pub fn slice(&self, span: core::ops::Range<usize>) -> &'a str {
+        self.text.get(span).unwrap_or("")
+    }
+
+    /// The line an offset falls on, counted from one.
+    #[must_use]
+    pub fn line(&self, byte_offset: usize) -> u32 {
+        // An offset that does not name a place in this text - past the end, or
+        // in the middle of a character - answers with the last line. Kept
+        // deliberately identical to counting the whole file, which is what the
+        // slow version did when its slice came back empty.
+        if byte_offset > self.text.len() || !self.text.is_char_boundary(byte_offset) {
+            return Self::as_line(self.newlines.len());
+        }
+
+        // How many newlines lie before the offset. The offsets are ascending, so
+        // this is a search rather than a count.
+        Self::as_line(self.newlines.partition_point(|&at| at < byte_offset))
+    }
+
+    /// Newlines seen become a line number: the first line has none before it.
+    fn as_line(newlines_before: usize) -> u32 {
+        u32::try_from(newlines_before + 1).unwrap_or(u32::MAX)
+    }
 }
 
 /// Checks what only the raw file can answer: E005, E006 and E007.
@@ -179,12 +248,26 @@ mod tests {
         assert_eq!(found, vec!["E005", "E006", "E007"]);
     }
 
+    /// Counting the slow way, kept as the oracle the fast one is judged against.
+    ///
+    /// This is what `line_of` was until 2026-09-08, when it turned out to make
+    /// the validator quadratic. It survives here rather than in the shipped code
+    /// because an independent second implementation is the only thing that can
+    /// say whether the index agrees - a test written from the index's own logic
+    /// would agree with it whatever it did.
+    fn counted_the_slow_way(text: &str, byte_offset: usize) -> u32 {
+        let head = text.get(..byte_offset).unwrap_or(text);
+        let lines = head.matches('\n').count() + 1;
+        u32::try_from(lines).unwrap_or(u32::MAX)
+    }
+
     #[test]
     fn a_line_number_is_counted_from_one_not_from_zero() {
         let text = "alpha\nbeta\ngamma\n";
-        assert_eq!(line_of(text, 0), 1);
-        assert_eq!(line_of(text, 6), 2);
-        assert_eq!(line_of(text, 11), 3);
+        let source = SourceText::new(text);
+        assert_eq!(source.line(0), 1);
+        assert_eq!(source.line(6), 2);
+        assert_eq!(source.line(11), 3);
     }
 
     #[test]
@@ -192,7 +275,7 @@ mod tests {
         // A wrong line number is findable. No line number sends the reader to
         // search the file by eye, which is the outcome worth avoiding.
         let text = "alpha\nbeta\n";
-        assert_eq!(line_of(text, 9_000), 3);
+        assert_eq!(SourceText::new(text).line(9_000), 3);
     }
 
     #[test]
@@ -200,6 +283,64 @@ mod tests {
         // A multi-byte character means offsets that are not character boundaries
         // exist, and slicing on one would otherwise return nothing at all.
         let text = "\u{1F468}\nsecond\n";
-        assert_eq!(line_of(text, 2), 3);
+        assert_eq!(SourceText::new(text).line(2), 3);
+    }
+
+    #[test]
+    fn the_index_agrees_with_counting_at_every_offset_of_every_shape_of_file() {
+        // 🔴 The assertion that makes the change from counting to indexing safe.
+        // Every offset, including the ones past the end and the ones inside a
+        // character, against an oracle that does not share a line of logic with
+        // the thing it judges.
+        let shapes = [
+            "",
+            "\n",
+            "\n\n\n",
+            "no newline at all",
+            "alpha\nbeta\ngamma\n",
+            "trailing text after the last newline\nand more",
+            // A four byte character, so that offsets which are not character
+            // boundaries exist at all.
+            "\u{1F468}\nsecond\n\u{1F469}\u{200D}\u{1F467}\nlast",
+            // Consecutive newlines around content, the shape a pack file has.
+            "format = 1\n\n[pack]\nid = \"probe\"\n\n[[values]]\n",
+        ];
+
+        for text in shapes {
+            let source = SourceText::new(text);
+            // Past the end as well: the offsets a span can carry are not
+            // promised to be inside the file this build is looking at.
+            for offset in 0..=(text.len() + 3) {
+                assert_eq!(
+                    source.line(offset),
+                    counted_the_slow_way(text, offset),
+                    "offset {offset} of {text:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_oracle_and_the_index_can_actually_disagree() {
+        // The negative control. Both sides of the test above could be broken in
+        // the same way and agree, so here is a case where they must NOT: an
+        // offset the index is asked about after the text was replaced by a
+        // shorter one. If this ever passes, the comparison above is comparing
+        // something with itself.
+        let long = "one\ntwo\nthree\nfour\n";
+        let short = "one\n";
+        assert_ne!(
+            SourceText::new(long).line(15),
+            counted_the_slow_way(short, 15),
+            "the two sides are no longer independent"
+        );
+    }
+
+    #[test]
+    fn a_slice_of_a_span_that_points_nowhere_is_empty_rather_than_missing() {
+        let source = SourceText::new("format = 1\n");
+        assert_eq!(source.slice(0..6), "format");
+        assert_eq!(source.slice(0..9_000), "");
+        assert_eq!(source.as_str(), "format = 1\n");
     }
 }

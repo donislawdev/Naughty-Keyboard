@@ -38,7 +38,7 @@ pub use metrics::TextMetrics;
 pub use pack::{Pack, PackPair, PackValue, Risk};
 pub use schema::{FieldKind, kind_of};
 pub use sequence::{Delivery, Effect, Event, Position, Sequence, Step};
-pub use source_text::line_of;
+pub use source_text::SourceText;
 pub use text::{EscapedText, LiteralText};
 pub use value::{MAX_REPEAT_COUNT, MAX_VALUE_CODE_POINTS, ValueBody, ValueProblem};
 pub use written_form::{LITERAL_LENGTH_HINT, Quoting};
