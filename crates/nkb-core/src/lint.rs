@@ -314,12 +314,21 @@ pub const RULES: [LintRule; 45] = [
 /// Looks a rule up by its code.
 #[must_use]
 pub fn rule_for(code: RuleCode) -> LintRule {
-    // Every code has an entry - the test below proves it - so the fallback is
-    // unreachable in practice. It is written as a value rather than a panic
-    // because a crash inside a validator is a crash inside somebody else's CI.
+    // Every code has an entry, and
+    // `the_register_holds_an_entry_for_every_code_the_enum_can_spell` is
+    // what proves it - until 2026-09-08 this sentence promised a proof that
+    // did not exist, and a rule with no entry passed every check there was
+    // (OBS-95). So the fallback is unreachable in a build whose tests ran. It
+    // is written as a value rather than a panic because a crash inside a
+    // validator is a crash inside somebody else's CI.
     let mut index = 0;
     while index < RULES.len() {
-        if RULES[index].code as u8 == code as u8 {
+        // Compared directly rather than through a cast to a byte. The cast
+        // was safe at forty five variants and would have stayed safe for a
+        // long time, but it is a silent truncation in the one place where
+        // two rules becoming indistinguishable is exactly what the test
+        // about unique codes exists to prevent. OBS-99.
+        if RULES[index].code == code {
             return RULES[index];
         }
         index += 1;
@@ -599,6 +608,85 @@ mod tests {
         // The specification says forty five. If this number has to change, the
         // specification changed too, and that is a decision rather than a tidy up.
         assert_eq!(RULES.len(), 45);
+    }
+
+    /// Every code the enum can spell has an entry in the register.
+    ///
+    /// # Why this reads its own source instead of asking the type
+    ///
+    /// Rust has no reflection over an enum, so there is no way to ask `RuleCode`
+    /// for its variants. The compiler does force `as_str` to cover all of them,
+    /// because that match is exhaustive - but it cannot force a line in `RULES`,
+    /// because a table of data is not a match. That gap is the whole reason this
+    /// test exists.
+    ///
+    /// # What it was measured to catch
+    ///
+    /// A forty sixth variant was added on 2026-09-08 with a public code and no
+    /// entry here, and then written into `pack-format.md` 11 as well - the
+    /// natural order of work, document before code. Every check passed:
+    /// `cargo test` was green, `sprawdz-spojnosc.py` said everything agreed, and
+    /// `nkb lint` reported "Checked 39 of 45 rules" while the format had 46. The
+    /// rule appeared nowhere: not among the checked, not among the skipped, not
+    /// in the total.
+    ///
+    /// 🔴 The cause was not the fallback in `rule_for`. It was `RuleCoverage`
+    /// counting `RULES.len()`, so a rule outside the table does not exist in the
+    /// account before anybody asks about its status. OBS-95.
+    #[test]
+    fn the_register_holds_an_entry_for_every_code_the_enum_can_spell() {
+        // The arrow as written in `as_str`. Built as a constant so that this
+        // line does not itself look like one of the arms it is looking for.
+        const ARROW: &str = " => \"";
+
+        let source = include_str!("lint.rs");
+        let spelled: HashSet<&str> = source
+            .lines()
+            .filter(|line| line.contains("Self::") && line.contains(ARROW))
+            .filter_map(|line| {
+                let after = line.split_once(ARROW)?.1;
+                let code = after.split_once('"')?.0;
+                let mut characters = code.chars();
+                // A published code is a letter and three digits. Anything else
+                // on such a line belongs to some other match and is not ours.
+                match characters.next() {
+                    Some('E' | 'W') => {}
+                    _ => return None,
+                }
+                let digits: String = characters.collect();
+                (digits.len() == 3 && digits.chars().all(|c| c.is_ascii_digit())).then_some(code)
+            })
+            .collect();
+
+        // The negative control. Were the pattern above to stop matching - a
+        // reformatted `as_str`, a different arrow - both sets could end up empty
+        // and this test would pass by comparing nothing with nothing.
+        assert!(
+            spelled.len() > 40,
+            "the scan found {} codes in this file's own source, which means it is no longer \
+             reading `as_str` and proves nothing",
+            spelled.len()
+        );
+
+        let registered: HashSet<&str> = RULES.iter().map(|r| r.code.as_str()).collect();
+
+        let mut unregistered: Vec<&&str> = spelled.difference(&registered).collect();
+        unregistered.sort_unstable();
+        assert!(
+            unregistered.is_empty(),
+            "these codes exist and have no entry in RULES: {unregistered:?}. A rule outside the \
+             table is counted by nothing: `nkb lint` would report a total that leaves it out, and \
+             it would appear neither among the checked rules nor among the skipped ones."
+        );
+
+        let mut unspelled: Vec<&&str> = registered.difference(&spelled).collect();
+        unspelled.sort_unstable();
+        assert!(
+            unspelled.is_empty(),
+            "these codes are registered and the scan did not find them in `as_str`: {unspelled:?}. \
+             Either a code lost its spelling, or this test stopped reading the source correctly - \
+             and the second would make the check above worthless."
+        );
     }
 
     #[test]
