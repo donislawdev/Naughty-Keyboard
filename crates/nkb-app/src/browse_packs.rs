@@ -19,7 +19,6 @@
 //! problems and nothing else - the problems themselves belong to `nkb lint`,
 //! which is the command whose job that is.
 
-use nkb_core::lint::Severity;
 use nkb_core::pack::Pack;
 
 use crate::ports::{CatalogueCoverage, PackCatalogue, PackFormat, PackSource, SourceError};
@@ -87,33 +86,18 @@ impl Listing {
 /// checking afterwards would work exactly as well until the day a file parsed
 /// into something plausible and wrong.
 fn load(format: &dyn PackFormat, id: &str, text: &str) -> PackEntry {
-    let problems = format.check(text, id);
-    let errors = problems
-        .iter()
-        .filter(|problem| problem.severity() == Severity::Error)
-        .count();
-
-    if errors > 0 {
-        return PackEntry::Refused {
-            id: id.to_owned(),
-            errors,
-        };
-    }
-
-    let warnings = problems.len() - errors;
-
-    match format.parse(text) {
-        Some(pack) => PackEntry::Loaded {
-            pack: Box::new(pack),
-            warnings,
+    match crate::load_pack::load(format, id, text) {
+        Ok(loaded) => PackEntry::Loaded {
+            pack: Box::new(loaded.pack),
+            warnings: loaded.warnings,
         },
-        // Nothing found a fault and nothing could be built. That combination
-        // means the two halves of the format disagree with each other, which is
-        // this tool's own defect - reported as one problem rather than as a
-        // pack that silently vanished from the listing.
-        None => PackEntry::Refused {
+        // A refused pack still appears in the listing, named. The reasons it
+        // can be refused - errors in the file, or the two halves of the format
+        // disagreeing - are told apart in `load_pack`, and neither is allowed
+        // to make a pack silently vanish from here.
+        Err(refused) => PackEntry::Refused {
             id: id.to_owned(),
-            errors: 1,
+            errors: refused.errors,
         },
     }
 }

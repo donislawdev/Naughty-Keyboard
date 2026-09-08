@@ -28,7 +28,6 @@
 //! layer out, beside every other such decision. This hands over the values and
 //! the facts about them.
 
-use nkb_core::lint::Severity;
 use nkb_core::pack::{Pack, Risk};
 use nkb_core::value::{ValueBody, ValueProblem};
 
@@ -131,24 +130,16 @@ pub fn emit_values(source: &dyn PackSource, format: &dyn PackFormat, id: &str) -
     };
 
     // check first, refuse on any error, parse after - pack-format.md 11.
-    let problems = format.check(&text, id);
-    let errors = problems
-        .iter()
-        .filter(|problem| problem.severity() == Severity::Error)
-        .count();
-    if errors > 0 {
-        return EmitOutcome::Refused { errors };
+    // The order lives in `load_pack` rather than here, so that it is one rule
+    // rather than one rule per use case.
+    match crate::load_pack::load(format, id, &text) {
+        Ok(loaded) => build(&loaded.pack, loaded.warnings),
+        // Reported as a refusal rather than as an empty catalogue, for the same
+        // reason the listing does it: a pack must never vanish quietly.
+        Err(refused) => EmitOutcome::Refused {
+            errors: refused.errors,
+        },
     }
-    let warnings = problems.len() - errors;
-
-    let Some(pack) = format.parse(&text) else {
-        // Nothing found a fault and nothing could be built. Reported as a
-        // refusal rather than as an empty catalogue, for the same reason the
-        // listing does it: a pack must never vanish quietly.
-        return EmitOutcome::Refused { errors: 1 };
-    };
-
-    build(&pack, warnings)
 }
 
 /// Counts everything from the recipes, then builds. Never the other way round.

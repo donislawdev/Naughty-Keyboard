@@ -22,7 +22,6 @@
 use crate::ports::{
     Availability, DeliveryError, PackFormat, PackSource, SourceError, ValueDelivery,
 };
-use nkb_core::lint::Severity;
 use nkb_core::pack::{Pack, PackValue};
 use nkb_core::value::ValueProblem;
 
@@ -97,22 +96,13 @@ pub fn send_value(
     };
 
     // check first, refuse on any error, parse after - pack-format.md 11 and the
-    // binding order in architektura.md 3.
-    let problems = format.check(&text, pack_id);
-    let errors = problems
-        .iter()
-        .filter(|problem| problem.severity() == Severity::Error)
-        .count();
-    if errors > 0 {
-        return SendOutcome::Refused { errors };
+    // binding order in architektura.md 3, both of which live in `load_pack`.
+    match crate::load_pack::load(format, pack_id, &text) {
+        Ok(loaded) => deliver_one(&loaded.pack, delivery, position, loaded.warnings),
+        Err(refused) => SendOutcome::Refused {
+            errors: refused.errors,
+        },
     }
-    let warnings = problems.len() - errors;
-
-    let Some(pack) = format.parse(&text) else {
-        return SendOutcome::Refused { errors: 1 };
-    };
-
-    deliver_one(&pack, delivery, position, warnings)
 }
 
 fn deliver_one(
