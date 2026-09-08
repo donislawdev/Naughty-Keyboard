@@ -10,6 +10,7 @@ rust-version.workspace = true
 [dependencies]
 nkb-core.workspace = true
 nkb-app.workspace = true
+nkb-sys.workspace = true
 toml_edit.workspace = true
 
 [lints]

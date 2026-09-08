@@ -1,0 +1,60 @@
+# The only package in this workspace where `unsafe` is allowed to exist.
+#
+# # Why a package rather than an exception
+#
+# The workspace forbids `unsafe` outright, and `forbid` is not `deny`: measured
+# on 2026-09-08, `#![allow(unsafe_code)]` under it fails to compile with
+# `error[E0453]: allow(unsafe_code) incompatible with previous forbid`. So the
+# first real system call needed a decision, and three were weighed:
+#
+#   - loosen the workspace to `deny` and allow per site: weakens the rule for
+#     nkb-core too, which today has the strongest guarantee of the four;
+#   - give nkb-adapters its own lints, the way nkb-gui already does: cheaper,
+#     but `unsafe` then becomes legal in the TOML and filesystem code as well,
+#     where it has no business being;
+#   - THIS: one small package that does nothing but talk to the operating
+#     system. Everything else keeps `forbid`, untouched.
+#
+# The third makes "unsafe lives in one named place" a property of the structure
+# rather than of anyone's memory - architektura.md section 5. `unsafe_lives_here_only.rs`
+# is what keeps it true.
+#
+# D25 is not touched: that decision froze the number of EXECUTABLES, and this is
+# a library crate.
+
+[package]
+name = "nkb-sys"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+# Deliberately NOT `[lints] workspace = true`. Inheriting is all-or-nothing in
+# Cargo, so the clippy rules are repeated below rather than lost - the same
+# shape nkb-gui uses.
+[lints.rust]
+unsafe_code = "allow"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+# Only where this API exists. On the other two systems the package still
+# compiles and says plainly that it cannot deliver - untouchable rule 1.
+#
+# Licence sieve, both questions, checked against the registry on 2026-09-08:
+#   (a) MIT OR Apache-2.0. Both are GPL-3.0 compatible, and Apache-2.0 is
+#       compatible with GPL-3.0 specifically (not with GPL-2.0), which is the
+#       licence this workspace uses.
+#   (b) not applicable - FFI bindings, not a reference dataset.
+#
+# `default = []` upstream, so nothing arrives that is not named here. These
+# three features pull exactly one further crate, `windows-link`.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
+] }

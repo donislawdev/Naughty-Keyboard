@@ -20,11 +20,13 @@ mod lint_report;
 use emit_output::{EmitFormat, Form};
 use exit::ExitCode;
 use nkb_adapters::{
-    BuiltInCatalogue, DirectoryPackSink, DirectoryPackSource, SystemClock, TomlPackFormat,
+    BuiltInCatalogue, DirectInjection, DirectoryPackSink, DirectoryPackSource, SystemClock,
+    TomlPackFormat,
 };
 use nkb_app::{
-    EmitOutcome, FormatOutcome, LintOutcome, NewPackOutcome, ShowOutcome, emit_values, format_pack,
-    lint_pack, list_packs, new_pack, show_pack,
+    Availability, DeliveryError, EmitOutcome, FormatOutcome, LintOutcome, NewPackOutcome,
+    SendOutcome, ShowOutcome, ValueDelivery, emit_values, format_pack, lint_pack, list_packs,
+    new_pack, send_value, show_pack,
 };
 use std::io::Write;
 use std::path::Path;
@@ -59,6 +61,7 @@ fn run(args: &[String]) -> ExitCode {
         "packs" => packs(&args[1..]),
         "show" => show(&args[1..]),
         "emit" => emit(&args[1..]),
+        "send" => send(&args[1..]),
         "lint" => lint(&args[1..]),
         "fmt" => fmt(&args[1..]),
         "new-pack" => new_pack_command(&args[1..]),
@@ -491,6 +494,289 @@ fn print_packs_help() {
     println!("  -h, --help     Show this help and exit with 0");
 }
 
+/// Which switch is still waiting for its number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SendSwitch {
+    Index,
+    Delay,
+}
+
+/// `nkb send <pack> [--index N] [--delay S]` - put one value into the focused field.
+///
+/// # Why there is a delay at all, and why it defaults to more than zero
+///
+/// The command is run from a terminal, so at the moment it starts, the terminal
+/// is the focused window - and the focused window is exactly where this writes.
+/// Without a pause, the only thing `nkb send` could ever demonstrate is typing
+/// into the shell that launched it.
+///
+/// So the pause is not a convenience, it is what makes the command mean what its
+/// name says. `--delay 0` is kept for a target that is already focused by
+/// something else, which is how the automated check drives it.
+///
+/// Standard output stays EMPTY here, deliberately. `09-CLI-I-CI.md` gives stdout
+/// to data, and this command's data does not come back to the caller - it goes
+/// into somebody else's window. Everything a person reads is on standard error.
+fn send(args: &[String]) -> ExitCode {
+    let mut wanted: Option<&str> = None;
+    let mut position: u64 = 1;
+    let mut delay_seconds: u64 = 3;
+    let mut expecting: Option<SendSwitch> = None;
+
+    for arg in args {
+        if let Some(which) = expecting {
+            let name = match which {
+                SendSwitch::Index => "--index",
+                SendSwitch::Delay => "--delay",
+            };
+            let Ok(number) = arg.parse::<u64>() else {
+                let mut err = std::io::stderr();
+                let _ = writeln!(err, "nkb send: {name} needs a whole number, got '{arg}'.");
+                return ExitCode::Usage;
+            };
+            match which {
+                SendSwitch::Index => position = number,
+                SendSwitch::Delay => delay_seconds = number,
+            }
+            expecting = None;
+            continue;
+        }
+        match arg.as_str() {
+            "-h" | "--help" => {
+                print_send_help();
+                return ExitCode::Ok;
+            }
+            "--index" => expecting = Some(SendSwitch::Index),
+            "--delay" => expecting = Some(SendSwitch::Delay),
+            other if other.starts_with('-') => {
+                let mut err = std::io::stderr();
+                let _ = writeln!(err, "nkb send: unknown switch '{other}'");
+                let _ = writeln!(err, "Run 'nkb send --help' to see what is available.");
+                return ExitCode::Usage;
+            }
+            name => {
+                if wanted.is_some() {
+                    let mut err = std::io::stderr();
+                    let _ = writeln!(err, "nkb send: name one pack, not two.");
+                    return ExitCode::Usage;
+                }
+                wanted = Some(name);
+            }
+        }
+    }
+
+    if let Some(which) = expecting {
+        let name = match which {
+            SendSwitch::Index => "--index",
+            SendSwitch::Delay => "--delay",
+        };
+        let mut err = std::io::stderr();
+        let _ = writeln!(err, "nkb send: {name} needs a number.");
+        return ExitCode::Usage;
+    }
+
+    let Some(wanted) = wanted else {
+        let mut err = std::io::stderr();
+        let _ = writeln!(err, "nkb send: name a pack.");
+        let _ = writeln!(err, "Run 'nkb packs' to see what there is.");
+        return ExitCode::Usage;
+    };
+
+    // Asked before the countdown, so a machine with no route does not make
+    // somebody watch three seconds tick away for nothing.
+    let delivery = DirectInjection;
+    if let Availability::Unavailable { reason } = delivery.availability() {
+        let mut err = std::io::stderr();
+        let _ = writeln!(
+            err,
+            "nkb send: no way to deliver keystrokes on {reason} yet."
+        );
+        let _ = writeln!(
+            err,
+            "Nothing was sent. `nkb emit {wanted}` writes the values instead."
+        );
+        return ExitCode::InsertFailed;
+    }
+
+    // Measured 2026-09-08: run from a terminal with nothing else focused, this
+    // command reported `sent` while the value went into the terminal. The system
+    // had accepted the events, so the report was not false - it was just read as
+    // something stronger than it said. Comparing the target across the wait is
+    // the cheapest thing that turns that into a sentence somebody can act on.
+    let before = delivery.target();
+    count_down(delay_seconds);
+    let after = delivery.target();
+
+    // Reported BEFORE sending, and never as a refusal.
+    //
+    // ⚠️ A blocking version of this shipped for about ten minutes and was wrong:
+    // it refused whenever the target had not changed during the countdown, which
+    // is also what a correctly focused target looks like when nobody touches it.
+    // Measured the same day, `GetConsoleWindow` was tried as a sharper test and
+    // returns 0 for a process launched without a console of its own - so there is
+    // no cheap way here to tell "the terminal I came from" from "the field you
+    // meant". Telling the truth about that is `TargetInspector`, and it is a
+    // separate piece of work.
+    {
+        let mut err = std::io::stderr();
+        match after {
+            Some(target) => {
+                let _ = writeln!(err, "nkb send: target is window {:#x}", target.0);
+                if delay_seconds > 0 && before == after {
+                    let _ = writeln!(
+                        err,
+                        "  the focus did not change during the countdown - if that is the terminal, stop now"
+                    );
+                }
+            }
+            None => {
+                let _ = writeln!(err, "nkb send: nothing holds the keyboard focus.");
+                let _ = writeln!(err, "Click into a field, then run this again.");
+                return ExitCode::InsertFailed;
+            }
+        }
+    }
+
+    let catalogue = BuiltInCatalogue::new();
+    let position = usize::try_from(position).unwrap_or(usize::MAX);
+
+    let mut err = std::io::stderr();
+    match send_value(&catalogue, &TomlPackFormat, &delivery, wanted, position) {
+        SendOutcome::Sent {
+            reference,
+            name,
+            code_points,
+            bytes,
+            utf16_units,
+            warnings,
+        } => {
+            let _ = writeln!(err, "nkb send: sent {reference} - {name}");
+            // Three counts, because they differ and the difference is the point:
+            // characters above the basic plane cross as two units each.
+            let _ = writeln!(
+                err,
+                "  {code_points} code points, {bytes} bytes, {utf16_units} UTF-16 units"
+            );
+            // Said plainly, because the shorter sentence reads as a stronger
+            // claim than the tool can make: `SendInput` reports that the system
+            // ACCEPTED the events, not that they landed where you wanted.
+            let _ = writeln!(
+                err,
+                "  the system accepted the keystrokes - check the field to see them"
+            );
+            if warnings > 0 {
+                let _ = writeln!(
+                    err,
+                    "  the pack carries {warnings} warnings - run `nkb lint`"
+                );
+            }
+            ExitCode::Ok
+        }
+        SendOutcome::NotFound => {
+            let _ = writeln!(err, "nkb send: no pack called '{wanted}'.");
+            let _ = writeln!(err, "Run 'nkb packs' to see what there is.");
+            ExitCode::NotFound
+        }
+        SendOutcome::Unreadable => {
+            let _ = writeln!(err, "nkb send: '{wanted}' could not be read.");
+            ExitCode::IoFailed
+        }
+        SendOutcome::Refused { errors } => {
+            let _ = writeln!(
+                err,
+                "nkb send: '{wanted}' has {errors} errors and is not loaded at all."
+            );
+            let _ = writeln!(err, "Nothing was sent. Run `nkb lint` on it.");
+            ExitCode::ValidationFailed
+        }
+        SendOutcome::NoSuchIndex { asked, available } => {
+            let _ = writeln!(
+                err,
+                "nkb send: '{wanted}' has {available} values, so there is no number {asked}."
+            );
+            let _ = writeln!(
+                err,
+                "Positions start at 1, like the counter in the palette."
+            );
+            ExitCode::NotFound
+        }
+        SendOutcome::ValueTooLarge { id, code } => {
+            let _ = writeln!(
+                err,
+                "nkb send: value '{id}' describes more text than the format allows ({code})."
+            );
+            ExitCode::ValidationFailed
+        }
+        SendOutcome::RouteUnavailable { reason } => {
+            let _ = writeln!(
+                err,
+                "nkb send: no way to deliver keystrokes on {reason} yet."
+            );
+            ExitCode::InsertFailed
+        }
+        SendOutcome::NotDelivered { error } => {
+            match &error {
+                DeliveryError::NoTarget => {
+                    let _ = writeln!(err, "nkb send: nothing holds the keyboard focus.");
+                    let _ = writeln!(err, "Click into a field, then run this again.");
+                }
+                DeliveryError::Unsupported { system } => {
+                    let _ = writeln!(err, "nkb send: not supported on {system} yet.");
+                }
+                DeliveryError::Partial {
+                    units_sent,
+                    units_expected,
+                } => {
+                    // The loudest message in this command on purpose: the field
+                    // now holds a fragment, and a person who does not know that
+                    // will report the fragment as the application's doing.
+                    let _ = writeln!(
+                        err,
+                        "nkb send: only {units_sent} of {units_expected} UTF-16 units arrived."
+                    );
+                    let _ = writeln!(
+                        err,
+                        "The field holds a PARTIAL value. Clear it before testing."
+                    );
+                }
+            }
+            ExitCode::InsertFailed
+        }
+    }
+}
+
+/// Counts down on standard error so the person can put the focus where they mean.
+fn count_down(seconds: u64) {
+    if seconds == 0 {
+        return;
+    }
+    let mut err = std::io::stderr();
+    let _ = writeln!(
+        err,
+        "nkb send: click into the target field - sending in {seconds}s"
+    );
+    for left in (1..=seconds).rev() {
+        let _ = write!(err, "  {left}... ");
+        let _ = err.flush();
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+    let _ = writeln!(err);
+}
+
+fn print_send_help() {
+    println!("nkb send <pack> [--index N] [--delay S]");
+    println!();
+    println!("Put one value of a pack into whatever field has the keyboard focus.");
+    println!();
+    println!("  --index N   which value, counting from 1 in the pack's own order");
+    println!("              (default: 1). The order of values is the order of testing.");
+    println!("  --delay S   seconds to wait first, so you can focus the target");
+    println!("              (default: 3). Use 0 when something else focuses it.");
+    println!();
+    println!("The value goes to the focused window, not to standard output.");
+    println!("Everything you read here is on standard error.");
+}
+
 /// `nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]`
 ///
 /// The command that takes the catalogue out of the tool. Everything it prints on
@@ -671,6 +957,7 @@ fn print_help() {
     println!("  packs             List the packs this build can offer");
     println!("  show <pack>       Print one pack in full");
     println!("  emit <pack>       Print a pack's values for a script or a file");
+    println!("  send <pack>       Type one value into the focused field");
     println!("  lint <file>       Check a pack file against the format rules");
     println!("  fmt <file>        Rewrite a pack file in canonical shape");
     println!("  new-pack <name>   Write the skeleton for a new pack");
@@ -757,6 +1044,84 @@ mod tests {
             "{}/../../tests/packs/{kind}/{name}.toml",
             env!("CARGO_MANIFEST_DIR")
         )
+    }
+
+    // ---- nkb send ---------------------------------------------------------
+    //
+    // ⚠️ These stop at argument parsing on purpose. Everything past that point
+    // depends on the machine: on macOS and Linux there is no delivery route at
+    // all, and on a build server there may be no focused window - so a test that
+    // reached the send would be green here and red on two of the three systems
+    // this project is checked on. What a real send does is measured by running
+    // it, and that measurement is written down rather than automated, because
+    // automating it means typing into whatever window the build agent has.
+
+    #[test]
+    fn send_without_a_pack_name_is_a_usage_error() {
+        assert_eq!(run(&args(&["send"])), ExitCode::Usage);
+    }
+
+    #[test]
+    fn send_rejects_an_unknown_switch_rather_than_ignoring_it() {
+        assert_eq!(
+            run(&args(&["send", "whitespace", "--frobnicate"])),
+            ExitCode::Usage
+        );
+    }
+
+    #[test]
+    fn send_refuses_two_pack_names() {
+        assert_eq!(
+            run(&args(&["send", "whitespace", "unicode-text"])),
+            ExitCode::Usage
+        );
+    }
+
+    #[test]
+    fn send_needs_a_number_after_index_and_delay() {
+        // Missing entirely.
+        assert_eq!(
+            run(&args(&["send", "whitespace", "--index"])),
+            ExitCode::Usage
+        );
+        assert_eq!(
+            run(&args(&["send", "whitespace", "--delay"])),
+            ExitCode::Usage
+        );
+        // Present but not a number - told apart from missing, and both refused.
+        assert_eq!(
+            run(&args(&["send", "whitespace", "--index", "first"])),
+            ExitCode::Usage
+        );
+        assert_eq!(
+            run(&args(&["send", "whitespace", "--delay", "soon"])),
+            ExitCode::Usage
+        );
+    }
+
+    #[test]
+    fn asking_send_for_help_is_a_success_and_needs_no_machine() {
+        // Untouchable rule: --help works everywhere, including where the command
+        // itself could never run.
+        assert_eq!(run(&args(&["send", "--help"])), ExitCode::Ok);
+        assert_eq!(run(&args(&["send", "-h"])), ExitCode::Ok);
+    }
+
+    #[test]
+    fn send_never_reports_success_when_it_could_not_deliver() {
+        // Whatever this machine is, one thing must hold: `send` either delivers
+        // or reports a failure. A zero exit code with nothing sent is the shape
+        // of bug this whole command is most likely to grow, so it is asserted
+        // directly rather than left to a reading of the code.
+        //
+        // The pack name does not exist, so even on a machine that CAN deliver,
+        // nothing is typed anywhere by this test.
+        let code = run(&args(&["send", "no-such-pack-at-all", "--delay", "0"]));
+        assert_ne!(
+            code,
+            ExitCode::Ok,
+            "a send that delivered nothing must not exit successfully"
+        );
     }
 
     #[test]

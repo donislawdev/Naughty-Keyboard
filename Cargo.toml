@@ -8,9 +8,17 @@
 #
 #   nkb-cli ---.
 #              +--> nkb-adapters --> nkb-app --> nkb-core
-#   nkb-gui ---'                          (later)
+#   nkb-gui ---'         |
+#                        '--> nkb-sys        (the operating system)
 #
 # nkb-core depends on nothing. That is the whole rule in one line.
+#
+# nkb-sys is the sidecar added on 2026-09-08 for the first real system call.
+# It sits BESIDE core rather than above it: it depends on nothing of ours, and
+# nothing of ours depends on it except the adapter layer, which is the only
+# layer allowed to know what a system is. It is also the only package where
+# `unsafe` compiles - see its own manifest for why that is a package and not
+# an exception.
 
 [workspace]
 resolver = "3"
@@ -18,6 +26,7 @@ members = [
     "crates/nkb-core",
     "crates/nkb-app",
     "crates/nkb-adapters",
+    "crates/nkb-sys",
     "crates/nkb-cli",
     "crates/nkb-gui",
 ]
@@ -33,10 +42,20 @@ rust-version = "1.98"
 nkb-core = { path = "crates/nkb-core" }
 nkb-app = { path = "crates/nkb-app" }
 nkb-adapters = { path = "crates/nkb-adapters" }
+nkb-sys = { path = "crates/nkb-sys" }
 
 # Pinned deliberately. Versions were checked against the registry on 2026-09-06,
 # not recalled from memory - see the untouchable rule about dependency versions.
 toml_edit = "0.25.13"
+
+# The operating system, on Windows. Version checked against the registry on
+# 2026-09-08 - not recalled. Used by nkb-sys alone, and only under
+# `cfg(windows)`; the features are named there rather than here so that the
+# package asking for them is the package that documents why.
+#
+# Licence sieve is in nkb-sys/Cargo.toml beside the dependency itself, because
+# that is where someone reading the FFI will look for it.
+windows-sys = "0.61.2"
 
 # The graphical toolkit. Chosen in ADR-4 on 2026-09-07 after probes, not after
 # reading. Version checked against the registry on the same day.

@@ -2885,6 +2885,7 @@ version = "0.1.0"
 dependencies = [
  "nkb-app",
  "nkb-core",
+ "nkb-sys",
  "toml_edit",
 ]
 
@@ -2918,6 +2919,13 @@ dependencies = [
  "nkb-core",
  "slint",
  "slint-build",
+]
+
+[[package]]
+name = "nkb-sys"
+version = "0.1.0"
+dependencies = [
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

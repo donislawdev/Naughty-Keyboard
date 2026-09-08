@@ -40,6 +40,119 @@ impl fmt::Display for SourceError {
     }
 }
 
+/// How much of a value actually reached the field.
+///
+/// Counted in UTF-16 code units rather than characters, and that is not an
+/// implementation detail leaking upwards - it is the only count that cannot
+/// lie. A character above the basic plane crosses as a surrogate PAIR, so a
+/// delivery cut short can end between the halves; reporting "seven characters
+/// arrived" would then be a guess about something that is not a character.
+/// The layer that talks to a person converts, and says so.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Delivered {
+    pub utf16_units: usize,
+}
+
+/// Why a value did not reach the field, or did not reach all of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeliveryError {
+    /// This route does not exist on this system. Named, never a shrug -
+    /// untouchable rule 1.
+    Unsupported { system: String },
+    /// Nothing holds the keyboard focus, so there is nowhere to deliver to.
+    NoTarget,
+    /// Part of the value arrived. The field now holds a fragment, and saying so
+    /// is the entire reason this variant is separate from the others: a tool
+    /// that reported plain failure here would leave a half-written value in
+    /// somebody else's form looking like that application's own doing.
+    Partial {
+        units_sent: usize,
+        units_expected: usize,
+    },
+}
+
+impl fmt::Display for DeliveryError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unsupported { system } => write!(f, "unsupported-on-{system}"),
+            Self::NoTarget => f.write_str("no-target"),
+            Self::Partial {
+                units_sent,
+                units_expected,
+            } => {
+                write!(f, "partial-{units_sent}-of-{units_expected}")
+            }
+        }
+    }
+}
+
+/// An opaque handle to whatever will receive the value.
+///
+/// A number, never a name. `TargetInspector` and the `WindowTitle` type are what
+/// will one day carry an application name and a window title, precisely because
+/// those need a type that hides them by default - architektura.md section 5.
+/// This carries neither: two of these can be compared, and nothing else.
+///
+/// # Why the port needs it at all
+///
+/// Measured 2026-09-08, and it is the reason this method exists: `nkb send` run
+/// from a terminal reported `sent` while the characters went into the terminal
+/// itself. The system had accepted the events, so nothing was false - and the
+/// message was still read as "the value is in the field you meant". Untouchable
+/// rule 1 says a run that did less than it promised must say so, and without a
+/// handle to compare there is nothing to say it with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TargetRef(pub u64);
+
+/// Whether a delivery route can be used here at all.
+///
+/// Asked BEFORE the work of building a value, so that a system without a route
+/// says so instead of failing after the fact. This is also what step 5 of the
+/// plan turns into the `degraded` state and the clipboard fallback - but it
+/// earns its place today, because macOS and Linux have no route yet and the
+/// tool has to be able to say which.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Availability {
+    Ready,
+    Unavailable { reason: String },
+}
+
+/// Puts a value into whatever field currently has the keyboard focus.
+///
+/// # Why one port with two implementations rather than two paths
+///
+/// architektura.md section 3 is explicit: `DirectInjection` and
+/// `ClipboardDelivery` are two implementations of THIS trait, not two branches
+/// in a caller. The moment a caller writes `if clipboard_mode { ... } else`,
+/// every later feature has to be written twice and the second copy drifts.
+///
+/// # What this port deliberately cannot do
+///
+/// It cannot read. There is no method here that returns what a field contains,
+/// or what window is in front, or what any of it is called - architektura.md
+/// section 5 makes "does not read the contents of windows" hold because the
+/// capability is *undeclared*, and this trait is one of the places where that
+/// could quietly stop being true.
+pub trait ValueDelivery {
+    /// Whether this route works on this machine, asked before any work.
+    fn availability(&self) -> Availability;
+
+    /// What would receive a value right now, if anything would.
+    ///
+    /// Asked twice around a wait, so a caller can notice that nothing moved -
+    /// which usually means the value is about to go back into the window it was
+    /// launched from.
+    fn target(&self) -> Option<TargetRef>;
+
+    /// Sends `text` to the focused field.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DeliveryError`] when there is no route, no target, or when only
+    /// part of the value arrived.
+    fn deliver(&self, text: &str) -> Result<Delivered, DeliveryError>;
+}
+
 /// Supplies the raw text of a pack file.
 ///
 /// Returns text rather than a parsed pack on purpose: parsing belongs to the
