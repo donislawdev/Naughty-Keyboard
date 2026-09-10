@@ -28,6 +28,14 @@ CHANGELOG-DEV.md
 # Editor and formatter leftovers.
 **/*.rs.bk
 
+# Python bytecode caches. The internal tools in tools/ are Python, and importing
+# one from another - which they do, so that "what counts as invisible" has a
+# single source - makes CPython write these next to the source. They are build
+# output in the same sense as /target/: regenerated, never edited, and noise in
+# any listing that compares the working tree against what is tracked.
+__pycache__/
+*.pyc
+
 # Debug symbols produced by the MSVC toolchain on Windows.
 *.pdb
 
