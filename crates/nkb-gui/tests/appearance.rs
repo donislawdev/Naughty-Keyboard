@@ -18,7 +18,7 @@
 //!
 //! A session writing an interface has no eyes. It picks a spacing, a colour and
 //! a size, and it never finds out whether the result looks like anything. This
-//! test writes `target/appearance/gallery.png`, which the session can then
+//! test writes `target/tmp/appearance/gallery.png`, which the session can then
 //! actually look at - the loop being render, look, fix. Document 13 section 4
 //! marked repeatable off-screen rendering as NOT MEASURED for any toolkit; ADR-4
 //! measured it, and this is where the measurement lives from now on.
