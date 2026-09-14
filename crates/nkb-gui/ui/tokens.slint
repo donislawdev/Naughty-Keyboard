@@ -15,16 +15,29 @@
 // # Where the numbers came from
 //
 // The colours are not taste. Every foreground-background pair a screen may use
-// was measured against WCAG contrast before this file existed; the tightest
-// pair that carries meaning is `text-muted` on `surface` at 5.00, against a 4.5
-// bar. The measurement is recorded in ADR-4.
+// is measured against WCAG contrast: seven foreground roles on three surfaces,
+// 21 pairs, all above the 4.5 bar, the tightest being `text-muted` on
+// `surface-raised` at 4.55. The table is not copied anywhere - it is produced
+// by an internal script from THIS file, so a changed colour is re-measured
+// rather than re-remembered. (Until 2026-09-14 this comment quoted "ten pairs,
+// tightest 5.00" and pointed at ADR-4 for the table; no such table was ever
+// written down, and 5.00 was the tightest pair on `surface` alone.)
 //
-// Those ratios were computed against an OPAQUE background, and D49 is what
-// keeps them true: in the resting state the alpha goes on the WINDOW'S
-// BACKGROUND ONLY, never on the text. Letters therefore always sit at full
-// opacity and their contrast stops depending on whichever window happens to be
-// behind the palette - something we neither control nor know. Put alpha on a
-// text colour here and the whole table above becomes a claim about nothing.
+// Those ratios hold against an OPAQUE background. D49 puts the resting-state
+// alpha on the WINDOW'S BACKGROUND ONLY, never on the text, so letters always
+// sit at full opacity. That is necessary but NOT sufficient: contrast is a
+// ratio of two luminances, and a translucent background BLENDS with whatever
+// window lies beneath the palette - most often a white form in a browser. The
+// alpha below is therefore a measured floor, not a taste: at 0.90 every role
+// the resting state shows (text-primary, text-secondary, accent, risk, ok)
+// keeps 4.5 over a pure white backdrop with margin, on both renderers.
+// `text-muted` does not - it would need 0.96 - so it MUST NOT appear in the
+// resting state, and the same script checks the whole rule. D53.
+//
+// The alpha is honoured only when the system allows translucency at all: with
+// transparency effects switched off (Windows), "reduce transparency" (macOS)
+// or high contrast on (anywhere), the resting state is opaque. That rule lives
+// in the application layer; this file only names the value.
 //
 // # One theme, and a second set of values that is not a theme
 //
@@ -42,10 +55,12 @@
 // rewrite of the views, which is why nothing below is ever named by a screen -
 // a screen picks a name, never a value.
 //
-// ⚠️ Still open, and not to be inferred from anything here: WHERE those values
-// come from - read from the system's own high-contrast colours, or a set of our
-// own with raised contrast. Open too: the actual alpha of the resting
-// background. ux-spec.md 2 says "translucent" and gives no number.
+// WHERE those values come from was measured on 2026-09-14 and settled in D53:
+// Windows is the only system that offers COLOURS (eight system colours, every
+// pair above 5.3:1 in all four shipped schemes), so there the second set is
+// read from the system; macOS and Linux offer only a yes/no signal, so there
+// the second set is our own, kept in that second file. Neither set is in this
+// file yet - it arrives with the first screen.
 
 // The typeface travels WITH the product. Measured, not assumed - see the
 // `font-mono` entry at the bottom of this file for the numbers and for the
@@ -108,6 +123,13 @@ export global Tokens {
     // on someone else's machine, never on the author's.
     out property <length> palette-width: 420px;
     out property <length> sample-height: 40px;
+
+    // ---- opacity -----------------------------------------------------------
+    // Background alpha of the palette in its resting state (ux-spec.md 2,
+    // D49, D53). A measured floor, see the header: below 0.90 the roles shown
+    // at rest lose 4.5:1 over a white window beneath. Applied to the surface
+    // only, never to text, and only when the system permits translucency.
+    out property <float> alpha-resting: 0.90;
 
     // ---- shape -------------------------------------------------------------
     out property <length> radius-small: 4px;
