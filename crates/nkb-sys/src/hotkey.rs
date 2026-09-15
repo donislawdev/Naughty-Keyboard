@@ -322,9 +322,9 @@ mod platform {
 
         // Blocks only until the thread has registered, which is immediate. If
         // the thread vanished before reporting, there is nothing to listen to.
-        let (thread_id, outcomes) = ready_rx
-            .recv()
-            .map_err(|_| HotkeyUnsupported { system: "this system" })?;
+        let (thread_id, outcomes) = ready_rx.recv().map_err(|_| HotkeyUnsupported {
+            system: "this system",
+        })?;
 
         Ok((
             outcomes,
@@ -478,7 +478,10 @@ mod tests {
         }
         // The first listener holds the combination for the length of this test.
         let holder = listen(&[obscure(0xB030, 0x76)]).expect("route exists");
-        assert_eq!(holder.outcomes.as_slice(), &[HotkeyRegistration::Registered]);
+        assert_eq!(
+            holder.outcomes.as_slice(),
+            &[HotkeyRegistration::Registered]
+        );
 
         // A second listener asking for the same combination must be told it is
         // taken, distinctly from any other failure.
