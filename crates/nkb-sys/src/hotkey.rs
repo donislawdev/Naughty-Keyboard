@@ -64,6 +64,17 @@ pub struct HotkeyId(pub u32);
 /// 3 requires that holding "next value" not insert a dozen values, and the
 /// suppression belongs to the registration rather than to a caller who might
 /// forget it.
+///
+/// Two things this thin layer does NOT police, because the policy lives one
+/// layer out with the catalogue of shortcuts:
+///
+/// - ids within one [`listen`] call must be distinct. Two hotkeys sharing an id
+///   would be indistinguishable when they fire, and the OS refuses the second
+///   registration of a duplicate id on one thread anyway;
+/// - a hotkey with no modifier (`ctrl`/`alt`/`shift`/`win` all false) registers
+///   a BARE key globally - it would take that key from every application. The
+///   `ux-spec.md` 3 defaults always carry a modifier, and the app layer enforces
+///   that; this layer registers exactly what it is handed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Hotkey {
     pub id: HotkeyId,
@@ -97,20 +108,27 @@ pub enum HotkeyRegistration {
     Failed { code: u32 },
 }
 
-/// This build has no way to register a global shortcut. Named, never a shrug -
-/// untouchable rule 1.
+/// Why no listener was started. Named, never a shrug - untouchable rule 1.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HotkeyUnsupported {
-    pub system: &'static str,
+pub enum HotkeyUnavailable {
+    /// This build has no route to a global shortcut, naming the system.
+    Unsupported { system: &'static str },
+    /// A route exists, but the listener thread could not be started - the OS
+    /// refused a new thread. Separate from `Unsupported` because it is not about
+    /// the platform and can pass on a retry; and here at all because
+    /// `std::thread::spawn` would otherwise panic, which product code may not do.
+    CouldNotStart,
 }
 
-impl core::fmt::Display for HotkeyUnsupported {
+impl core::fmt::Display for HotkeyUnavailable {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(
-            f,
-            "listening for a global shortcut is not implemented on {} yet",
-            self.system
-        )
+        match self {
+            Self::Unsupported { system } => write!(
+                f,
+                "listening for a global shortcut is not implemented on {system} yet"
+            ),
+            Self::CouldNotStart => f.write_str("the shortcut listener thread could not be started"),
+        }
     }
 }
 
@@ -169,10 +187,11 @@ pub const fn can_register() -> bool {
 ///
 /// # Errors
 ///
-/// Returns [`HotkeyUnsupported`] on a system with no route, naming it. An empty
-/// slice is not an error: it registers nothing and yields a listener that never
-/// fires, which is a legitimate thing to ask for.
-pub fn listen(hotkeys: &[Hotkey]) -> Result<Listening, HotkeyUnsupported> {
+/// Returns [`HotkeyUnavailable::Unsupported`] on a system with no route, naming
+/// it, or [`HotkeyUnavailable::CouldNotStart`] when the listener thread cannot
+/// be spawned. An empty slice is not an error: it registers nothing and yields a
+/// listener that never fires, which is a legitimate thing to ask for.
+pub fn listen(hotkeys: &[Hotkey]) -> Result<Listening, HotkeyUnavailable> {
     let (outcomes, fired, inner) = platform::listen(hotkeys)?;
     Ok(Listening {
         outcomes,
@@ -183,7 +202,7 @@ pub fn listen(hotkeys: &[Hotkey]) -> Result<Listening, HotkeyUnsupported> {
 
 #[cfg(windows)]
 mod platform {
-    use super::{Hotkey, HotkeyId, HotkeyRegistration, HotkeyUnsupported};
+    use super::{Hotkey, HotkeyId, HotkeyRegistration, HotkeyUnavailable};
     use std::sync::mpsc::{Receiver, Sender};
     use std::thread::JoinHandle;
     use windows_sys::Win32::Foundation::{ERROR_HOTKEY_ALREADY_REGISTERED, GetLastError};
@@ -248,11 +267,13 @@ mod platform {
             }
             if message.message == WM_HOTKEY {
                 // wParam is the id we registered with. A send that fails means
-                // the receiver was dropped: nobody is listening, so stop and let
-                // teardown release the shortcuts.
-                if fired.send(HotkeyId(message.wParam as u32)).is_err() {
-                    break;
-                }
+                // the receiver was dropped - but the Listener that owns the
+                // registration may still be alive, so the shortcuts stay held
+                // and the press is simply discarded. Only WM_QUIT, posted when
+                // the Listener drops, ends this loop. Ending it here would
+                // release the shortcuts out from under a live Listener AND leave
+                // this thread's id free to be reused before teardown posts to it.
+                let _ = fired.send(HotkeyId(message.wParam as u32));
             }
         }
     }
@@ -271,11 +292,16 @@ mod platform {
             let Some(handle) = self.handle.take() else {
                 return;
             };
-            // Posting WM_QUIT makes the pump's GetMessageW return 0. Measured
-            // 2026-09-15: the thread then unregisters on its own thread and
-            // joins. If it has already exited, the post is a harmless no-op and
-            // the join returns at once.
-            unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, 0, 0) };
+            // Post WM_QUIT ONLY while the thread is still running. A thread that
+            // already exited (it registered nothing, so it never entered the
+            // pump) has released its id, and the OS may have handed that id to an
+            // unrelated thread - posting WM_QUIT to it could quit someone else's
+            // message loop, the main thread's included. While the thread is
+            // pumping, its id is its own, and WM_QUIT makes GetMessageW return 0
+            // so it unregisters on its own thread and exits. Measured 2026-09-15.
+            if !handle.is_finished() {
+                unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, 0, 0) };
+            }
             let _ = handle.join();
         }
     }
@@ -289,42 +315,50 @@ mod platform {
     #[allow(clippy::type_complexity)]
     pub fn listen(
         hotkeys: &[Hotkey],
-    ) -> Result<(Vec<HotkeyRegistration>, Receiver<HotkeyId>, Listener), HotkeyUnsupported> {
+    ) -> Result<(Vec<HotkeyRegistration>, Receiver<HotkeyId>, Listener), HotkeyUnavailable> {
         let owned: Vec<Hotkey> = hotkeys.to_vec();
         let (ready_tx, ready_rx) = std::sync::mpsc::channel::<(u32, Vec<HotkeyRegistration>)>();
         let (fired_tx, fired_rx) = std::sync::mpsc::channel::<HotkeyId>();
 
-        let handle = std::thread::spawn(move || {
-            // Registering here, on the pumping thread, is the whole point: it is
-            // what keeps the WM_HOTKEY in a queue this thread drains, and it
-            // creates that queue so the WM_QUIT gate below is safe.
-            let thread_id = unsafe { GetCurrentThreadId() };
-            let outcomes: Vec<HotkeyRegistration> = owned.iter().map(register_one).collect();
-            let any_registered = outcomes
-                .iter()
-                .any(|outcome| matches!(outcome, HotkeyRegistration::Registered));
+        // Builder rather than `thread::spawn`: the latter panics if the OS
+        // refuses a thread, and product code may not panic. A refusal here is
+        // reported, not crashed on. The name shows up in a debugger and a crash
+        // dump years from now, which is the whole reason to spend a Builder on it.
+        let handle = std::thread::Builder::new()
+            .name("nkb-hotkey".to_owned())
+            .spawn(move || {
+                // Registering here, on the pumping thread, is the whole point: it
+                // is what keeps the WM_HOTKEY in a queue this thread drains, and
+                // it creates that queue so the WM_QUIT gate below is safe.
+                let thread_id = unsafe { GetCurrentThreadId() };
+                let outcomes: Vec<HotkeyRegistration> = owned.iter().map(register_one).collect();
+                let any_registered = outcomes
+                    .iter()
+                    .any(|outcome| matches!(outcome, HotkeyRegistration::Registered));
 
-            // Report the id and outcomes BEFORE pumping. Only now, with the
-            // queue created by RegisterHotKey, may the parent post WM_QUIT.
-            if ready_tx.send((thread_id, outcomes)).is_err() {
-                // The parent went away between spawn and here; release and go.
+                // Report the id and outcomes BEFORE pumping. Only now, with the
+                // queue created by RegisterHotKey, may the parent post WM_QUIT.
+                if ready_tx.send((thread_id, outcomes)).is_err() {
+                    // The parent went away between spawn and here; release and go.
+                    release(&owned);
+                    return;
+                }
+
+                if any_registered {
+                    pump(&fired_tx);
+                }
+                // Whether we pumped or not, every shortcut is released on this
+                // thread - UnregisterHotKey undoes only what this thread registered.
                 release(&owned);
-                return;
-            }
+            })
+            .map_err(|_| HotkeyUnavailable::CouldNotStart)?;
 
-            if any_registered {
-                pump(&fired_tx);
-            }
-            // Whether we pumped or not, every shortcut is released on this
-            // thread - UnregisterHotKey undoes only what this thread registered.
-            release(&owned);
-        });
-
-        // Blocks only until the thread has registered, which is immediate. If
-        // the thread vanished before reporting, there is nothing to listen to.
-        let (thread_id, outcomes) = ready_rx.recv().map_err(|_| HotkeyUnsupported {
-            system: "this system",
-        })?;
+        // The thread reports before it pumps, so this blocks only until
+        // registration, which is immediate. A recv error means the thread
+        // vanished before registering - reported, not dressed as a system name.
+        let (thread_id, outcomes) = ready_rx
+            .recv()
+            .map_err(|_| HotkeyUnavailable::CouldNotStart)?;
 
         Ok((
             outcomes,
@@ -345,7 +379,7 @@ mod platform {
 
 #[cfg(not(windows))]
 mod platform {
-    use super::{Hotkey, HotkeyId, HotkeyRegistration, HotkeyUnsupported};
+    use super::{Hotkey, HotkeyId, HotkeyRegistration, HotkeyUnavailable};
     use std::sync::mpsc::Receiver;
 
     /// Named rather than "this platform", so the message says something the
@@ -368,13 +402,13 @@ mod platform {
     #[allow(clippy::type_complexity)]
     pub fn listen(
         _hotkeys: &[Hotkey],
-    ) -> Result<(Vec<HotkeyRegistration>, Receiver<HotkeyId>, Listener), HotkeyUnsupported> {
+    ) -> Result<(Vec<HotkeyRegistration>, Receiver<HotkeyId>, Listener), HotkeyUnavailable> {
         // macOS registers a hotkey without a permission, but delivering a value
         // is blocked without accessibility (OBS-70), so a listener with no way
         // to act on what it hears would be a promise the tool cannot keep. Linux
         // depends on the session protocol. Both say so by name rather than
         // returning a listener that never fires.
-        Err(HotkeyUnsupported { system: SYSTEM })
+        Err(HotkeyUnavailable::Unsupported { system: SYSTEM })
     }
 }
 

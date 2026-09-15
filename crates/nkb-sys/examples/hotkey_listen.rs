@@ -63,8 +63,8 @@ fn main() {
     let wanted = [ctrl_alt(NEXT_VALUE, VK_N), ctrl_alt(SHOW_HIDE, VK_H)];
     let listening = match hotkey::listen(&wanted) {
         Ok(listening) => listening,
-        Err(unsupported) => {
-            println!("{unsupported}");
+        Err(unavailable) => {
+            println!("{unavailable}");
             return;
         }
     };
