@@ -51,10 +51,15 @@ panic = "deny"
 #   (b) not applicable - FFI bindings, not a reference dataset.
 #
 # `default = []` upstream, so nothing arrives that is not named here. These
-# three features pull exactly one further crate, `windows-link`.
+# features pull exactly one further crate, `windows-link`. `Win32_System_Threading`
+# was added 2026-09-15 for `GetCurrentThreadId`, needed so the hotkey thread can
+# be told to stop by `PostThreadMessageW` - see `hotkey.rs`. It is part of the
+# same crate and pulls no new dependency; the layer guard confirms the tree is
+# unchanged.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
+    "Win32_System_Threading",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
 ] }

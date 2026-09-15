@@ -29,6 +29,8 @@
 //! `char`: the API takes one `u16` per event, so anything above the basic plane
 //! is two events and there is no way to make it one.
 
+pub mod hotkey;
+
 /// What a successful send actually did.
 ///
 /// Both numbers are reported because they differ, and the difference is the
