@@ -26,7 +26,7 @@ pub use load_pack::{LoadedPack, Refused, load};
 pub use new_pack::{NewPackOutcome, new_pack};
 pub use ports::{
     Availability, CatalogueCoverage, CatalogueSource, Clock, Date, Delivered, DeliveryError,
-    PackCatalogue, PackFormat, PackSink, PackSource, SinkError, SourceError, SourceSkipped,
-    TargetRef, TranslationCheck, TranslationTarget, ValueDelivery,
+    KeystrokeError, KeystrokeSender, PackCatalogue, PackFormat, PackSink, PackSource, SinkError,
+    SourceError, SourceSkipped, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery,
 };
-pub use send_value::{SendOutcome, send_value};
+pub use send_value::{Clearing, SendOutcome, SendRequest, send_value};

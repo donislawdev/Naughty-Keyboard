@@ -18,6 +18,7 @@
 
 pub mod description;
 pub mod identity;
+pub mod keys;
 pub mod lint;
 pub mod metrics;
 pub mod pack;

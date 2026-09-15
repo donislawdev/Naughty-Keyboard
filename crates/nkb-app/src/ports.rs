@@ -10,6 +10,7 @@
 //! blind until the version that introduces the input oracle, and leaving the
 //! capability undeclared means it cannot be reached for by accident.
 
+use nkb_core::keys::KeyChord;
 use nkb_core::lint::LintProblem;
 use nkb_core::pack::Pack;
 use std::fmt;
@@ -61,6 +62,10 @@ pub enum DeliveryError {
     Unsupported { system: String },
     /// Nothing holds the keyboard focus, so there is nowhere to deliver to.
     NoTarget,
+    /// A modifier is physically held and did not come up in time, so nothing
+    /// was sent: under a held modifier the value's characters mean something
+    /// else to many applications. The ordinary case right after a hotkey.
+    ModifierHeld { which: String },
     /// Part of the value arrived. The field now holds a fragment, and saying so
     /// is the entire reason this variant is separate from the others: a tool
     /// that reported plain failure here would leave a half-written value in
@@ -76,6 +81,7 @@ impl fmt::Display for DeliveryError {
         match self {
             Self::Unsupported { system } => write!(f, "unsupported-on-{system}"),
             Self::NoTarget => f.write_str("no-target"),
+            Self::ModifierHeld { which } => write!(f, "modifier-held-{which}"),
             Self::Partial {
                 units_sent,
                 units_expected,
@@ -151,6 +157,76 @@ pub trait ValueDelivery {
     /// Returns [`DeliveryError`] when there is no route, no target, or when only
     /// part of the value arrived.
     fn deliver(&self, text: &str) -> Result<Delivered, DeliveryError>;
+}
+
+/// Why a keystroke sequence was not sent, or not all of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KeystrokeError {
+    /// This route does not exist on this system. Named, never a shrug.
+    Unsupported { system: String },
+    /// Nothing holds the keyboard focus, so there is nowhere to press keys.
+    NoTarget,
+    /// A modifier is physically held on the keyboard and did not come up in
+    /// time. The chords were NOT sent: `Home` under a held `Ctrl` is the start
+    /// of the document, and `Shift+End` under it is the end of the document,
+    /// so the sequence would have selected and deleted far beyond the field.
+    /// This is the one race the recipe itself cannot see, and refusing is the
+    /// only answer that keeps untouchable rule 17.
+    ModifierHeld { which: String },
+    /// The system accepted fewer presses than it was handed. The field is in
+    /// an unknown state between "untouched" and "cleared", and saying so is
+    /// what lets the caller refuse to send a value on top of it.
+    Partial {
+        chords_sent: usize,
+        chords_expected: usize,
+    },
+}
+
+impl fmt::Display for KeystrokeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unsupported { system } => write!(f, "unsupported-on-{system}"),
+            Self::NoTarget => f.write_str("no-target"),
+            Self::ModifierHeld { which } => write!(f, "modifier-held-{which}"),
+            Self::Partial {
+                chords_sent,
+                chords_expected,
+            } => write!(f, "partial-{chords_sent}-of-{chords_expected}"),
+        }
+    }
+}
+
+/// Presses keys that are NOT content.
+///
+/// # Exactly two doors, and today one
+///
+/// `ux-spec.md` 4: clearing the field is the only place where the tool sends
+/// keystrokes other than the value, and architektura.md 5 turns that into a
+/// count - this trait is to be called from exactly two places, clearing and
+/// the paste of the clipboard route, and from nowhere else. The paste does not
+/// exist yet, so today the count is ONE, and
+/// `crates/nkb-app/tests/keystrokes_have_named_doors.rs` is the guard that
+/// names the places and goes red when a third appears.
+///
+/// # What the vocabulary cannot say
+///
+/// The argument is a slice of [`KeyChord`], whose only keys are `Home`, `End`
+/// and `Delete` and whose only modifier is `Shift`. "Select all" is not a
+/// thing this port can be asked for - see `nkb_core::keys`.
+///
+/// # Errors
+///
+/// A physically held modifier is a refusal, not a wait forever: the
+/// implementation gives it a bounded moment to come up and then returns
+/// [`KeystrokeError::ModifierHeld`] without pressing anything.
+pub trait KeystrokeSender {
+    /// Presses `chords` in order, each as a full press-and-release.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`KeystrokeError`] when there is no route, no target, a held
+    /// modifier, or when only part of the sequence was accepted.
+    fn send_keystrokes(&self, chords: &[KeyChord]) -> Result<(), KeystrokeError>;
 }
 
 /// Supplies the raw text of a pack file.

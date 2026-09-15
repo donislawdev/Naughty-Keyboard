@@ -55,6 +55,20 @@ pub enum SendError {
         units_sent: usize,
         units_expected: usize,
     },
+    /// A modifier key is physically held and did not come up within the wait.
+    /// Nothing was sent. Under a held `Ctrl`, `Home` is the start of the
+    /// DOCUMENT and `Shift+End` selects to its end, so the clearing recipe
+    /// would delete far beyond the field - and a held modifier changes what
+    /// the value's own characters mean to many applications too. The moment a
+    /// global hotkey fires is exactly the moment its modifiers are still down,
+    /// so this is the ordinary case, not a corner.
+    ModifierHeld { key: &'static str },
+    /// The system accepted fewer chords than it was handed. The field is in an
+    /// unknown state between untouched and cleared.
+    ChordsTruncated {
+        chords_sent: usize,
+        chords_expected: usize,
+    },
 }
 
 impl core::fmt::Display for SendError {
@@ -71,9 +85,45 @@ impl core::fmt::Display for SendError {
                 "the system accepted {units_sent} of {units_expected} UTF-16 units, \
                  so the field holds a partial value"
             ),
+            Self::ModifierHeld { key } => write!(
+                f,
+                "{key} is still held on the keyboard, so nothing was sent - release it first"
+            ),
+            Self::ChordsTruncated {
+                chords_sent,
+                chords_expected,
+            } => write!(
+                f,
+                "the system accepted {chords_sent} of {chords_expected} key presses"
+            ),
         }
     }
 }
+
+/// A key the tool presses on its own account. Mirrors `nkb_core::keys::Key`
+/// without depending on it - this crate depends on nothing of ours, and the
+/// adapter that knows both does the one-line mapping.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavKey {
+    Home,
+    End,
+    Delete,
+}
+
+/// One press, optionally with `Shift` held for its duration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Chord {
+    pub key: NavKey,
+    pub shift: bool,
+}
+
+/// How long a held modifier is given to come up before the send is refused.
+///
+/// Two seconds is longer than any key repeat and shorter than a person's
+/// patience: a hotkey's modifiers come up within a few hundred milliseconds
+/// of the press, and a modifier still down after two seconds is being held
+/// on purpose - for something that is not us.
+pub const MODIFIER_RELEASE_WAIT: core::time::Duration = core::time::Duration::from_secs(2);
 
 /// An opaque handle to whatever window is in front.
 ///
@@ -99,10 +149,110 @@ const CHUNK_UNITS: usize = 512;
 mod windows_impl {
     use super::{CHUNK_UNITS, SendError, SendOutcome, WindowRef};
 
+    use super::{Chord, MODIFIER_RELEASE_WAIT, NavKey};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-        INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, SendInput,
+        GetAsyncKeyState, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY,
+        KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, SendInput, VIRTUAL_KEY, VK_CONTROL, VK_DELETE, VK_END,
+        VK_HOME, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+
+    /// The modifiers whose being held changes what every other key means.
+    const MODIFIERS: [(VIRTUAL_KEY, &str); 5] = [
+        (VK_CONTROL, "Ctrl"),
+        (VK_MENU, "Alt"),
+        (VK_SHIFT, "Shift"),
+        (VK_LWIN, "Win"),
+        (VK_RWIN, "Win"),
+    ];
+
+    fn held_modifier() -> Option<&'static str> {
+        MODIFIERS.iter().find_map(|(key, name)| {
+            // The high bit says "down right now"; the low bit is history and
+            // is deliberately ignored.
+            let state = unsafe { GetAsyncKeyState(i32::from(*key)) };
+            ((state as u16) & 0x8000 != 0).then_some(*name)
+        })
+    }
+
+    /// Waits for every modifier to come up, for at most `MODIFIER_RELEASE_WAIT`.
+    fn wait_for_modifiers_released() -> Result<(), SendError> {
+        let deadline = std::time::Instant::now() + MODIFIER_RELEASE_WAIT;
+        loop {
+            let Some(key) = held_modifier() else {
+                return Ok(());
+            };
+            if std::time::Instant::now() >= deadline {
+                return Err(SendError::ModifierHeld { key });
+            }
+            std::thread::sleep(core::time::Duration::from_millis(10));
+        }
+    }
+
+    fn virtual_key(key: NavKey) -> VIRTUAL_KEY {
+        match key {
+            NavKey::Home => VK_HOME,
+            NavKey::End => VK_END,
+            NavKey::Delete => VK_DELETE,
+        }
+    }
+
+    /// One virtual-key event. `KEYEVENTF_EXTENDEDKEY` marks the navigation
+    /// cluster, so an application that tells `Home` from the numeric keypad's
+    /// `7` sees the former.
+    fn key_event(key: VIRTUAL_KEY, flags: u32) -> INPUT {
+        INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: key,
+                    wScan: 0,
+                    dwFlags: flags,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        }
+    }
+
+    /// The events of one chord: `Shift` down if asked, the key down and up
+    /// (extended), `Shift` up if it went down.
+    fn events_for_chord(chord: Chord) -> Vec<INPUT> {
+        let key = virtual_key(chord.key);
+        let mut events = Vec::with_capacity(4);
+        if chord.shift {
+            events.push(key_event(VK_SHIFT, 0));
+        }
+        events.push(key_event(key, KEYEVENTF_EXTENDEDKEY));
+        events.push(key_event(key, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP));
+        if chord.shift {
+            events.push(key_event(VK_SHIFT, KEYEVENTF_KEYUP));
+        }
+        events
+    }
+
+    pub fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
+        if chords.is_empty() {
+            return Ok(0);
+        }
+        wait_for_modifiers_released()?;
+        let size = core::mem::size_of::<INPUT>() as i32;
+        // One call per chord, so a short write is reported in chords - the unit
+        // the caller reasons in - and so `Shift` never stays down across a
+        // refused chord.
+        for (index, chord) in chords.iter().enumerate() {
+            let batch = events_for_chord(*chord);
+            let count = u32::try_from(batch.len()).unwrap_or(u32::MAX);
+            let accepted = unsafe { SendInput(count, batch.as_ptr(), size) } as usize;
+            if accepted != batch.len() {
+                return Err(SendError::ChordsTruncated {
+                    chords_sent: index,
+                    chords_expected: chords.len(),
+                });
+            }
+        }
+        Ok(chords.len())
+    }
 
     /// One UTF-16 unit as the pair of events the system expects.
     fn events_for(unit: u16) -> [INPUT; 2] {
@@ -139,6 +289,15 @@ mod windows_impl {
     pub fn send_text(text: &str) -> Result<SendOutcome, SendError> {
         let units: Vec<u16> = text.encode_utf16().collect();
         let expected = units.len();
+        if expected == 0 {
+            // Nothing to send, so nothing to wait for: an empty value is a real
+            // catalogue entry (`len-0`) and must not fail on a held key.
+            return Ok(SendOutcome {
+                units: 0,
+                events: 0,
+            });
+        }
+        wait_for_modifiers_released()?;
         let size = core::mem::size_of::<INPUT>() as i32;
 
         let mut sent_units = 0usize;
@@ -199,6 +358,10 @@ mod other_impl {
         // measured route, Wayland has a named candidate and no measurement.
         Err(SendError::Unsupported { system: SYSTEM })
     }
+
+    pub fn send_chords(_chords: &[super::Chord]) -> Result<usize, SendError> {
+        Err(SendError::Unsupported { system: SYSTEM })
+    }
 }
 
 #[cfg(windows)]
@@ -215,9 +378,28 @@ pub fn foreground_window() -> Option<WindowRef> {
 /// Send `text` to whatever holds the keyboard focus.
 ///
 /// The caller decides WHAT to send and WHERE the focus should be by then; this
-/// function only puts the characters on the wire.
+/// function only puts the characters on the wire. It waits up to
+/// [`MODIFIER_RELEASE_WAIT`] for a physically held modifier to come up and
+/// refuses with [`SendError::ModifierHeld`] if it does not.
 pub fn send_text(text: &str) -> Result<SendOutcome, SendError> {
     platform::send_text(text)
+}
+
+/// Press `chords` in order, each as a complete press-and-release, on whatever
+/// holds the keyboard focus. Returns how many chords were pressed.
+///
+/// These are the keys that are NOT content. The caller (one place in the
+/// whole program, guarded there) decides the recipe; this function waits for
+/// held modifiers exactly as [`send_text`] does and puts the presses on the
+/// wire one chord at a time.
+///
+/// # Errors
+///
+/// [`SendError::ModifierHeld`] when a modifier stays down past the wait,
+/// [`SendError::ChordsTruncated`] when the system accepted fewer presses than
+/// it was handed, [`SendError::Unsupported`] where there is no route.
+pub fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
+    platform::send_chords(chords)
 }
 
 /// Whether this build can deliver keystrokes at all.
@@ -271,6 +453,26 @@ mod tests {
         assert!(
             text.contains("macOS") || text.contains("Linux") || text.contains("this system"),
             "the message must name the system, got: {text}"
+        );
+    }
+
+    #[test]
+    fn no_chords_press_nothing_and_say_so() {
+        match send_chords(&[]) {
+            Ok(pressed) => assert_eq!(pressed, 0),
+            Err(SendError::Unsupported { .. }) => {}
+            Err(other) => panic!("no chords must not fail this way: {other}"),
+        }
+    }
+
+    #[test]
+    fn a_held_modifier_is_named_in_the_refusal() {
+        // The message is what a person acts on: "release it" needs a name.
+        let error = SendError::ModifierHeld { key: "Ctrl" };
+        let text = error.to_string();
+        assert!(
+            text.contains("Ctrl") && text.contains("release"),
+            "got: {text}"
         );
     }
 

@@ -24,9 +24,9 @@ use nkb_adapters::{
     TomlPackFormat,
 };
 use nkb_app::{
-    Availability, DeliveryError, EmitOutcome, FormatOutcome, LintOutcome, NewPackOutcome,
-    SendOutcome, ShowOutcome, ValueDelivery, emit_values, format_pack, lint_pack, list_packs,
-    new_pack, send_value, show_pack,
+    Availability, Clearing, DeliveryError, EmitOutcome, FormatOutcome, KeystrokeError, LintOutcome,
+    NewPackOutcome, SendOutcome, SendRequest, ShowOutcome, ValueDelivery, emit_values, format_pack,
+    lint_pack, list_packs, new_pack, send_value, show_pack,
 };
 use std::io::Write;
 use std::path::Path;
@@ -501,7 +501,16 @@ enum SendSwitch {
     Delay,
 }
 
-/// `nkb send <pack> [--index N] [--delay S]` - put one value into the focused field.
+/// `nkb send <pack> [--index N] [--delay S] [--clear]` - put one value into the
+/// focused field.
+///
+/// # `--clear` is opt-in, and that is the whole point of the switch
+///
+/// Without it, the only keys this command ever presses are the value's own
+/// characters. With it, `Home`, `Shift+End`, `Delete` go out first - the
+/// within-the-line recipe of `ux-spec.md` 4, which never selects beyond the
+/// field. A command run from scripts should not press navigation keys in
+/// somebody's window unless the script said so.
 ///
 /// # Why there is a delay at all, and why it defaults to more than zero
 ///
@@ -521,6 +530,7 @@ fn send(args: &[String]) -> ExitCode {
     let mut wanted: Option<&str> = None;
     let mut position: u64 = 1;
     let mut delay_seconds: u64 = 3;
+    let mut clearing = Clearing::Keep;
     let mut expecting: Option<SendSwitch> = None;
 
     for arg in args {
@@ -548,6 +558,7 @@ fn send(args: &[String]) -> ExitCode {
             }
             "--index" => expecting = Some(SendSwitch::Index),
             "--delay" => expecting = Some(SendSwitch::Delay),
+            "--clear" => clearing = Clearing::Line,
             other if other.starts_with('-') => {
                 let mut err = std::io::stderr();
                 let _ = writeln!(err, "nkb send: unknown switch '{other}'");
@@ -639,9 +650,16 @@ fn send(args: &[String]) -> ExitCode {
 
     let catalogue = BuiltInCatalogue::new();
     let position = usize::try_from(position).unwrap_or(usize::MAX);
+    let request = SendRequest {
+        pack_id: wanted,
+        position,
+        clearing,
+    };
 
     let mut err = std::io::stderr();
-    match send_value(&catalogue, &TomlPackFormat, &delivery, wanted, position) {
+    // `DirectInjection` is both the delivery and the keystroke route: one
+    // adapter, two ports, so the two cannot disagree about the target.
+    match send_value(&catalogue, &TomlPackFormat, &delivery, &delivery, &request) {
         SendOutcome::Sent {
             reference,
             name,
@@ -649,7 +667,11 @@ fn send(args: &[String]) -> ExitCode {
             bytes,
             utf16_units,
             warnings,
+            cleared,
         } => {
+            if cleared {
+                let _ = writeln!(err, "nkb send: cleared the line (Home, Shift+End, Delete)");
+            }
             let _ = writeln!(err, "nkb send: sent {reference} - {name}");
             // Three counts, because they differ and the difference is the point:
             // characters above the basic plane cross as two units each.
@@ -714,7 +736,35 @@ fn send(args: &[String]) -> ExitCode {
             );
             ExitCode::InsertFailed
         }
-        SendOutcome::NotDelivered { error } => {
+        SendOutcome::NotCleared { error } => {
+            let _ = match &error {
+                KeystrokeError::ModifierHeld { which } => writeln!(
+                    err,
+                    "nkb send: {which} is still held on the keyboard, so nothing was sent - release it and run again."
+                ),
+                KeystrokeError::NoTarget => {
+                    writeln!(
+                        err,
+                        "nkb send: nothing holds the keyboard focus, so there is nothing to clear."
+                    )
+                }
+                KeystrokeError::Unsupported { system } => {
+                    writeln!(err, "nkb send: clearing is not supported on {system} yet.")
+                }
+                KeystrokeError::Partial {
+                    chords_sent,
+                    chords_expected,
+                } => writeln!(
+                    err,
+                    "nkb send: the system accepted {chords_sent} of {chords_expected} clearing key presses - the field may be half-cleared. Nothing else was sent."
+                ),
+            };
+            ExitCode::InsertFailed
+        }
+        SendOutcome::NotDelivered { error, cleared } => {
+            if cleared {
+                let _ = writeln!(err, "nkb send: the line was cleared before this happened.");
+            }
             match &error {
                 DeliveryError::NoTarget => {
                     let _ = writeln!(err, "nkb send: nothing holds the keyboard focus.");
@@ -722,6 +772,12 @@ fn send(args: &[String]) -> ExitCode {
                 }
                 DeliveryError::Unsupported { system } => {
                     let _ = writeln!(err, "nkb send: not supported on {system} yet.");
+                }
+                DeliveryError::ModifierHeld { which } => {
+                    let _ = writeln!(
+                        err,
+                        "nkb send: {which} is still held on the keyboard, so the value was not sent - release it and run again."
+                    );
                 }
                 DeliveryError::Partial {
                     units_sent,
@@ -767,7 +823,7 @@ fn print_send_help() {
     println!("nkb send - type one value into the focused field");
     println!();
     println!("Usage:");
-    println!("  nkb send <pack> [--index N] [--delay S]");
+    println!("  nkb send <pack> [--index N] [--delay S] [--clear]");
     println!();
     println!("Put one value of a pack into whatever field has the keyboard focus.");
     println!();
@@ -776,10 +832,16 @@ fn print_send_help() {
     println!("                 (default: 1). The order of values is the order of testing.");
     println!("  --delay S      seconds to wait first, so you can focus the target");
     println!("                 (default: 3). Use 0 when something else focuses it.");
+    println!("  --clear        press Home, Shift+End, Delete first, clearing the current");
+    println!("                 line of the field. Never selects beyond the line, so a");
+    println!("                 multi-line field keeps its other lines. Without this switch");
+    println!("                 the only keys sent are the value's own characters.");
     println!("  -h, --help     Show this help and exit with 0");
     println!();
     println!("The value goes to the focused window, not to standard output.");
     println!("Everything you read here is on standard error.");
+    println!("Nothing is sent while Ctrl, Alt, Shift or Win is held on the keyboard:");
+    println!("the command waits up to two seconds for them to come up, then refuses.");
 }
 
 /// `nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]`

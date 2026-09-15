@@ -5,7 +5,11 @@
 //! result. Everything that requires `unsafe` lives in `nkb-sys`, behind a safe
 //! function, so nothing in this package needs it.
 
-use nkb_app::ports::{Availability, Delivered, DeliveryError, TargetRef, ValueDelivery};
+use nkb_app::ports::{
+    Availability, Delivered, DeliveryError, KeystrokeError, KeystrokeSender, TargetRef,
+    ValueDelivery,
+};
+use nkb_core::keys::{Key, KeyChord};
 
 /// Sends the value as synthetic keystrokes, straight to the focused field.
 ///
@@ -60,6 +64,60 @@ impl ValueDelivery for DirectInjection {
                 units_sent,
                 units_expected,
             }),
+            Err(nkb_sys::SendError::ModifierHeld { key }) => Err(DeliveryError::ModifierHeld {
+                which: key.to_owned(),
+            }),
+            // `send_text` never reports in chords; if it ever did, the honest
+            // translation is "nothing is known to have arrived".
+            Err(nkb_sys::SendError::ChordsTruncated { .. }) => Err(DeliveryError::Partial {
+                units_sent: 0,
+                units_expected: text.encode_utf16().count(),
+            }),
+        }
+    }
+}
+
+/// The one-line mapping between the vocabulary `app` speaks and the one
+/// `nkb-sys` speaks. Two enums rather than one shared type, because `nkb-sys`
+/// depends on nothing of ours and `nkb-core` knows nothing about systems.
+fn chord_for(chord: &KeyChord) -> nkb_sys::Chord {
+    nkb_sys::Chord {
+        key: match chord.key {
+            Key::Home => nkb_sys::NavKey::Home,
+            Key::End => nkb_sys::NavKey::End,
+            Key::Delete => nkb_sys::NavKey::Delete,
+        },
+        shift: chord.shift,
+    }
+}
+
+impl KeystrokeSender for DirectInjection {
+    fn send_keystrokes(&self, chords: &[KeyChord]) -> Result<(), KeystrokeError> {
+        if nkb_sys::foreground_window().is_none() {
+            return Err(KeystrokeError::NoTarget);
+        }
+        let mapped: Vec<nkb_sys::Chord> = chords.iter().map(chord_for).collect();
+        match nkb_sys::send_chords(&mapped) {
+            Ok(_) => Ok(()),
+            Err(nkb_sys::SendError::Unsupported { system }) => Err(KeystrokeError::Unsupported {
+                system: system.to_owned(),
+            }),
+            Err(nkb_sys::SendError::ModifierHeld { key }) => Err(KeystrokeError::ModifierHeld {
+                which: key.to_owned(),
+            }),
+            Err(nkb_sys::SendError::ChordsTruncated {
+                chords_sent,
+                chords_expected,
+            }) => Err(KeystrokeError::Partial {
+                chords_sent,
+                chords_expected,
+            }),
+            // `send_chords` never reports in UTF-16 units; if it ever did, the
+            // honest translation is "some of it went out", not success.
+            Err(nkb_sys::SendError::Truncated { .. }) => Err(KeystrokeError::Partial {
+                chords_sent: 0,
+                chords_expected: chords.len(),
+            }),
         }
     }
 }
@@ -72,6 +130,44 @@ impl ValueDelivery for DirectInjection {
 )]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_key_of_the_vocabulary_maps_to_a_navigation_key_and_shift_survives() {
+        // The mapping is the only place the two vocabularies meet; a key that
+        // fell through to a wrong neighbour would clear the wrong thing.
+        assert_eq!(
+            chord_for(&KeyChord::plain(Key::Home)),
+            nkb_sys::Chord {
+                key: nkb_sys::NavKey::Home,
+                shift: false
+            }
+        );
+        assert_eq!(
+            chord_for(&KeyChord::shifted(Key::End)),
+            nkb_sys::Chord {
+                key: nkb_sys::NavKey::End,
+                shift: true
+            }
+        );
+        assert_eq!(
+            chord_for(&KeyChord::plain(Key::Delete)),
+            nkb_sys::Chord {
+                key: nkb_sys::NavKey::Delete,
+                shift: false
+            }
+        );
+    }
+
+    #[test]
+    fn no_keystrokes_press_nothing_where_a_route_exists() {
+        if !nkb_sys::can_send() {
+            return;
+        }
+        match DirectInjection.send_keystrokes(&[]) {
+            Ok(()) | Err(KeystrokeError::NoTarget) => {}
+            Err(other) => panic!("an empty sequence must not fail this way: {other}"),
+        }
+    }
 
     #[test]
     fn availability_agrees_with_what_nkb_sys_says_about_this_build() {
