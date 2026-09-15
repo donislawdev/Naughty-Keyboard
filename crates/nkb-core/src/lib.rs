@@ -17,6 +17,7 @@
 #![forbid(unsafe_code)]
 
 pub mod description;
+pub mod hotkeys;
 pub mod identity;
 pub mod keys;
 pub mod lint;
@@ -30,6 +31,7 @@ pub mod value;
 pub mod written_form;
 
 pub use description::{BreaksFault, MIN_BREAKS_CODE_POINTS, check_breaks, looks_english};
+pub use hotkeys::{DEFAULT_BINDINGS, HotkeyAction, HotkeyChord, HotkeyKey, default_chord};
 pub use identity::{is_pack_id, is_value_id};
 pub use lint::{
     LintProblem, LintReport, LintRule, MAX_VALUES_PER_PACK, RULES, RuleCode, RuleCoverage,
