@@ -9,6 +9,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod advance_sequence;
 pub mod browse_packs;
 pub mod emit_values;
 pub mod format_pack;
@@ -18,6 +19,7 @@ pub mod new_pack;
 pub mod ports;
 pub mod send_value;
 
+pub use advance_sequence::{AdvanceSequence, ChooseError, Message, Outcome, Sent};
 pub use browse_packs::{Listing, PackEntry, ShowOutcome, list_packs, show_pack};
 pub use emit_values::{Emission, EmitOutcome, EmittedValue, emit_values};
 pub use format_pack::{FormatOutcome, format_pack};
@@ -29,4 +31,4 @@ pub use ports::{
     KeystrokeError, KeystrokeSender, PackCatalogue, PackFormat, PackSink, PackSource, SinkError,
     SourceError, SourceSkipped, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery,
 };
-pub use send_value::{Clearing, SendOutcome, SendRequest, send_value};
+pub use send_value::{Clearing, SendOutcome, SendRequest, deliver_value, send_value};

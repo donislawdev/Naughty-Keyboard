@@ -176,10 +176,26 @@ fn deliver_one(
         };
     };
 
-    send_that_value(pack, value, delivery, keys, request.clearing, warnings)
+    deliver_value(pack, value, delivery, keys, request.clearing, warnings)
 }
 
-fn send_that_value(
+/// Delivers one value that is ALREADY in memory, and reports what happened.
+///
+/// # Why this is public and separate from [`send_value`]
+///
+/// [`send_value`] reads the pack from a source every time it runs, which is
+/// right for `nkb send`, a one-shot command. The palette's core loop is the
+/// opposite: it loads a pack once and sends many values from it, because `W5`
+/// (architektura.md 6a) requires the value shown to the tester to be the very
+/// value that was sent - a re-read between the two could differ if the file
+/// changed underneath. So `AdvanceSequence` holds the pack and calls THIS, which
+/// takes the value it already has rather than an index to look up.
+///
+/// The clearing keys go out before the value; if clearing does not go through,
+/// the value is not sent, and the outcome says which half happened. The returned
+/// [`SendOutcome`] carries both the delivery result and the numbers the palette
+/// shows, so one call answers both questions.
+pub fn deliver_value(
     pack: &Pack,
     value: &PackValue,
     delivery: &dyn ValueDelivery,

@@ -113,9 +113,21 @@ pub enum Event {
     Restart,
     /// A value finished arriving in the field.
     InsertionFinished,
-    /// A value did not arrive, or only partly did.
+    /// Direct delivery is not working at all, so the value did not arrive and
+    /// the clipboard is the way forward now. This is the persistent inability
+    /// (`product-spec.md` 9.3), NOT a passing hiccup.
     InsertionFailed,
-    /// `Escape` during an insertion.
+    /// The send never started, and the field was left untouched: nothing holds
+    /// the focus, or a modifier is physically held. Distinct from
+    /// [`Event::InsertionFailed`] because the answer is "try again", not "switch
+    /// to the clipboard for good", and distinct from [`Event::Cancelled`]
+    /// because there is no fragment in the field to report. The sequence returns
+    /// to exactly where it stood before the `Next`, and the message that says
+    /// WHY is the caller's, because the reason is a fact about delivery rather
+    /// than about the sequence.
+    InsertionRefused,
+    /// `Escape` during an insertion, or a partial send: either way a fragment
+    /// was left in the field.
     Cancelled,
     /// The focused window or field changed.
     TargetChanged,
@@ -239,10 +251,10 @@ impl Sequence {
             Event::TargetChanged => self.target_changed(),
             Event::TargetLost => self.nothing_but(Effect::AnnounceNoTarget),
             Event::InsertionFailed => self.degrade(),
-            // Nothing is in flight, so neither of these describes anything.
+            // Nothing is in flight, so none of these describes anything.
             // `W3`: `Escape` belongs to `inserting` and is not captured outside
             // it, so arriving here at all means somebody wired it globally.
-            Event::InsertionFinished | Event::Cancelled => self.nothing(),
+            Event::InsertionFinished | Event::InsertionRefused | Event::Cancelled => self.nothing(),
         }
     }
 
@@ -276,6 +288,26 @@ impl Sequence {
                     delivery: Delivery::Degraded,
                 },
                 effects: vec![Effect::AnnounceDegraded],
+            },
+            // The send never started: no target, or a held modifier. Nothing
+            // reached the field and nothing is degraded - the sequence returns
+            // to exactly where it stood before this `Next`. From the first send
+            // that is `Ready`; from any later one it is `Running` on the value
+            // already done. No effect: the caller says WHY, because the reason
+            // is a fact about delivery, not about the sequence.
+            Event::InsertionRefused => Step {
+                sequence: Self {
+                    position: if sending <= 1 {
+                        Position::Ready { total }
+                    } else {
+                        Position::Running {
+                            done: sending - 1,
+                            total,
+                        }
+                    },
+                    ..self
+                },
+                effects: Vec::new(),
             },
             // Escape, or the target moving out from under a running insertion
             // (`W2`). Both leave a FRAGMENT in the field, and both say so.
@@ -699,6 +731,93 @@ mod tests {
         let step = sequence.apply(Event::TargetChanged);
         assert_eq!(step.effects, vec![Effect::AnnounceInterrupted { index: 1 }]);
         assert!(!step.sequence.is_inserting());
+    }
+
+    #[test]
+    fn a_refused_send_from_the_first_value_returns_to_ready_and_does_not_degrade() {
+        // No target or a held modifier on the very first Next: nothing reached
+        // the field, nothing is degraded, and the sequence is exactly back at
+        // Ready. Crucially NOT Degraded - a passing hiccup must not switch the
+        // tool to clipboard mode for good.
+        let sequence = run(
+            Sequence::new(),
+            &[Event::PackChosen { total: 5 }, Event::Next],
+        )
+        .sequence;
+        assert!(sequence.is_inserting());
+
+        let step = sequence.apply(Event::InsertionRefused);
+        assert_eq!(
+            step.sequence.position,
+            Position::Ready { total: 5 },
+            "a refused first send goes back to Ready, not on to Running"
+        );
+        assert_eq!(
+            step.sequence.delivery,
+            Delivery::Direct,
+            "a refusal is not a degradation"
+        );
+        assert!(
+            step.effects.is_empty(),
+            "the caller supplies the reason, not the machine"
+        );
+        assert_eq!(step.sequence.counter(), Some((0, 5)));
+    }
+
+    #[test]
+    fn a_refused_send_from_a_later_value_returns_to_running_without_advancing() {
+        let before = run(
+            Sequence::new(),
+            &[
+                Event::PackChosen { total: 5 },
+                Event::Next,
+                Event::InsertionFinished,
+                Event::Next,
+                Event::InsertionFinished,
+                Event::Next,
+            ],
+        )
+        .sequence;
+        assert_eq!(
+            before.position,
+            Position::Inserting {
+                sending: 3,
+                total: 5
+            }
+        );
+
+        let step = before.apply(Event::InsertionRefused);
+        assert_eq!(
+            step.sequence.position,
+            Position::Running { done: 2, total: 5 },
+            "value three never started, so the counter stays at two done"
+        );
+        assert_eq!(step.sequence.delivery, Delivery::Direct);
+        assert!(step.effects.is_empty());
+    }
+
+    #[test]
+    fn a_refused_send_is_told_apart_from_a_failed_one() {
+        // The whole reason the event exists: Failed degrades, Refused does not.
+        let inserting = run(
+            Sequence::new(),
+            &[Event::PackChosen { total: 3 }, Event::Next],
+        )
+        .sequence;
+
+        let refused = inserting.apply(Event::InsertionRefused).sequence;
+        let failed = inserting.apply(Event::InsertionFailed).sequence;
+        assert_eq!(refused.delivery, Delivery::Direct);
+        assert_eq!(failed.delivery, Delivery::Degraded);
+    }
+
+    #[test]
+    fn insertion_refused_outside_an_insertion_does_nothing() {
+        // Nothing is in flight, so there is nothing to refuse.
+        let ready = run(Sequence::new(), &[Event::PackChosen { total: 3 }]).sequence;
+        let step = ready.apply(Event::InsertionRefused);
+        assert_eq!(step.sequence, ready);
+        assert!(step.effects.is_empty());
     }
 
     #[test]
