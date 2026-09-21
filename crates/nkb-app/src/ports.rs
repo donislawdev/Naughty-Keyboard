@@ -10,10 +10,12 @@
 //! blind until the version that introduces the input oracle, and leaving the
 //! capability undeclared means it cannot be reached for by accident.
 
+use nkb_core::hotkeys::{HotkeyAction, HotkeyChord};
 use nkb_core::keys::KeyChord;
 use nkb_core::lint::LintProblem;
 use nkb_core::pack::Pack;
 use std::fmt;
+use std::time::Duration;
 
 /// Why a pack could not be provided. Carries no path and no free text, because
 /// the layer that reports this decides how much to reveal to a person.
@@ -555,6 +557,117 @@ pub enum TranslationCheck {
     /// apart. The problem is reported against **that** file when somebody lints
     /// it, not against this one.
     TranslatedPackDidNotParse,
+}
+
+/// What became of registering one global shortcut. Three answers, not two -
+/// `ux-spec.md` 3 and `D55`.
+///
+/// The third way a registration can go wrong - accepted by the system, but the
+/// event never arrives because something higher intercepts it - is NOT here,
+/// because no register call can know it. It is discovered live, by the
+/// shortcut-test field, and a value that claimed to know it would be a guess
+/// dressed as a fact.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShortcutRegistration {
+    /// The system accepted it. Whether a press actually arrives is the separate
+    /// question above.
+    Registered,
+    /// The combination is already held - by this tool or by another
+    /// application. The one failure that means "pick a different shortcut".
+    Taken,
+    /// Refused for some other reason, carrying the raw system code. Not every
+    /// code can be enumerated, so the truthful thing is the number.
+    Failed { code: u32 },
+}
+
+/// Why no shortcut could be registered at all - named, never a shrug.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ShortcutsUnavailable {
+    /// This build has no route to a global shortcut on the named system.
+    Unsupported { system: String },
+    /// A route exists, but the thread that would hold the shortcuts could not
+    /// be started. Separate from `Unsupported` because it is not about the
+    /// platform and can pass on a retry.
+    CouldNotStart,
+}
+
+impl fmt::Display for ShortcutsUnavailable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unsupported { system } => {
+                write!(f, "global shortcuts are not implemented on {system} yet")
+            }
+            Self::CouldNotStart => f.write_str("the shortcut listener could not be started"),
+        }
+    }
+}
+
+/// What waiting for a press produced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wait {
+    /// A shortcut was pressed, and this is the action bound to it.
+    Pressed(HotkeyAction),
+    /// The wait ran out with nothing pressed. Not an error: the caller asked to
+    /// be woken so it could check whether it should still be running.
+    Nothing,
+    /// The shortcuts are no longer held - the thread behind them has gone. No
+    /// press will ever arrive again, so a caller must not wait for one.
+    Gone,
+}
+
+/// A set of registered shortcuts, alive for as long as this handle is.
+///
+/// Dropping the handle releases every shortcut it holds. That is the whole of
+/// the release mechanism, on purpose: a tool that pretends to be a keyboard must
+/// never leave `Ctrl+Alt+N` taken after it has gone, and a release that had to
+/// be remembered would be forgotten on the one exit path nobody tested.
+///
+/// # Why presses are pulled, not pushed
+///
+/// The handle yields presses on request rather than calling back. A callback
+/// would run on the thread that owns the shortcuts - the one that
+/// `architektura.md` 6.5 says must do nothing but hand the event on - and it
+/// would leave the app with no say over what happens to a press that arrives
+/// while the previous one is still being delivered (`W1`). Pulling puts both
+/// decisions where the state is: in `app`.
+pub trait LiveShortcuts {
+    /// How each requested binding fared, in the order the bindings were given.
+    fn outcomes(&self) -> &[(HotkeyAction, ShortcutRegistration)];
+
+    /// Waits up to `wait` for the next press.
+    ///
+    /// A zero wait asks only for what is already queued, which is how a caller
+    /// drains presses that arrived while it was busy. A caller that wants to
+    /// stop on its own terms waits in short slices and checks between them;
+    /// nothing here blocks for longer than it was asked to.
+    fn next(&self, wait: Duration) -> Wait;
+}
+
+/// Registers the tool's global shortcuts with the system.
+///
+/// All bindings go in at once and come back with one outcome each, so a
+/// shortcut that is taken is reported beside the ones that are not, rather than
+/// aborting the set. What to do about a taken shortcut is the caller's to
+/// decide - the palette says so and keeps running; this port only answers
+/// truthfully.
+///
+/// The bindings are `HotkeyAction` with `HotkeyChord`, the core's vocabulary;
+/// the mapping to a platform key code belongs to the implementation, exactly as
+/// the clearing keys are mapped by the keyboard adapter. The handle is `Send`
+/// because the presses are consumed on a worker thread, never on the thread
+/// that draws (`architektura.md` 6.5).
+pub trait HotkeyRegistrar {
+    /// Registers every binding and hands back the live set.
+    ///
+    /// # Errors
+    ///
+    /// [`ShortcutsUnavailable`] when nothing could be registered at all - a
+    /// system with no route, or a listener that could not start. A binding that
+    /// is merely taken is not an error here: it is an outcome on the handle.
+    fn register(
+        &self,
+        bindings: &[(HotkeyAction, HotkeyChord)],
+    ) -> Result<Box<dyn LiveShortcuts + Send>, ShortcutsUnavailable>;
 }
 
 #[cfg(test)]

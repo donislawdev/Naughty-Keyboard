@@ -12,6 +12,7 @@ pub mod catalogue;
 pub mod fs;
 pub mod keyboard;
 pub(crate) mod read_pack;
+pub mod shortcuts;
 pub mod skeleton;
 pub mod toml_pack;
 
@@ -19,4 +20,5 @@ pub use built_in::BUILT_IN_PACKS;
 pub use catalogue::BuiltInCatalogue;
 pub use fs::{DirectoryPackSink, DirectoryPackSource, SystemClock};
 pub use keyboard::DirectInjection;
+pub use shortcuts::GlobalShortcuts;
 pub use toml_pack::TomlPackFormat;

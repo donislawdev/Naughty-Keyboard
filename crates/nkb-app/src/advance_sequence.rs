@@ -94,6 +94,12 @@ pub struct Outcome {
     pub sent: Option<Sent>,
     /// What the palette must say, in order. Keys and numbers, never words.
     pub messages: Vec<Message>,
+    /// Whether this action went as far as the field - the machine asked for a
+    /// send and the send was attempted, landed or not. A caller draining
+    /// presses that queued in the meantime keys on this: presses queued behind
+    /// an attempt were pressed while the tool was busy (`W1`); presses queued
+    /// behind an instant answer, such as an end-of-pack warning, were not.
+    pub attempted_send: bool,
 }
 
 /// What the palette shows about the value that just went out.
@@ -150,6 +156,11 @@ pub enum Message {
     ValueTooLarge { id: String },
     /// The shortcut is not wired in this build. Said, never ignored.
     Unhandled { action: HotkeyAction },
+    /// The shortcut arrived while the previous one was still being handled -
+    /// a send in flight, or the wait for a held modifier - and was dropped, not
+    /// queued. `W1`: replaying it afterwards would be exactly the queueing that
+    /// `ux-spec.md` 3 rejects, and dropping it in silence would break rule 1.
+    PressedWhileBusy { action: HotkeyAction },
 }
 
 impl AdvanceSequence {
@@ -233,6 +244,7 @@ impl AdvanceSequence {
                     sequence: self.sequence,
                     sent: None,
                     messages: vec![Message::Unhandled { action: other }],
+                    attempted_send: false,
                 };
             }
         };
@@ -246,6 +258,7 @@ impl AdvanceSequence {
                 sequence: self.sequence,
                 sent: None,
                 messages: step.effects.iter().filter_map(announce).collect(),
+                attempted_send: false,
             };
         };
 
@@ -265,7 +278,7 @@ impl AdvanceSequence {
         // If it somehow is not, say so rather than reach into a `None`.
         let Some(loaded) = self.loaded.as_ref() else {
             self.sequence = self.sequence.apply(Event::InsertionRefused).sequence;
-            return self.settled(None, vec![Message::NoPack]);
+            return self.settled(None, vec![Message::NoPack], false);
         };
 
         // Refuse before touching the field if nothing is focused: the value
@@ -273,14 +286,14 @@ impl AdvanceSequence {
         // step-2 probe, not hypothetical.
         if delivery.target().is_none() {
             self.sequence = self.sequence.apply(Event::InsertionRefused).sequence;
-            return self.settled(None, vec![Message::NoTarget]);
+            return self.settled(None, vec![Message::NoTarget], false);
         }
 
         let Some(value) = loaded.pack.values.get(index - 1) else {
             // The machine asked for an index the pack does not hold, which would
             // be a machine/pack disagreement rather than a delivery problem.
             self.sequence = self.sequence.apply(Event::InsertionRefused).sequence;
-            return self.settled(None, Vec::new());
+            return self.settled(None, Vec::new(), false);
         };
         let offensive = value.risk.unwrap_or(loaded.pack.risk) == Risk::Offensive;
         let outcome = deliver_value(
@@ -294,15 +307,21 @@ impl AdvanceSequence {
 
         let (event, sent, messages) = classify(outcome, offensive);
         self.sequence = self.sequence.apply(event).sequence;
-        self.settled(sent, messages)
+        self.settled(sent, messages, true)
     }
 
     /// Wraps the current state with what the send produced.
-    fn settled(&self, sent: Option<Sent>, messages: Vec<Message>) -> Outcome {
+    ///
+    /// `attempted` is true only when [`deliver_value`] actually ran. The
+    /// refusals before it (no pack, no target, an index the pack does not hold)
+    /// answer instantly, so a press queued behind them was not pressed while
+    /// the tool was busy and must not be reported as if it were.
+    fn settled(&self, sent: Option<Sent>, messages: Vec<Message>, attempted: bool) -> Outcome {
         Outcome {
             sequence: self.sequence,
             sent,
             messages,
+            attempted_send: attempted,
         }
     }
 }
@@ -444,197 +463,8 @@ fn clearing_message(error: KeystrokeError) -> Message {
 )]
 mod tests {
     use super::*;
-    use crate::ports::{
-        Availability, Date, Delivered, TargetRef, TranslationCheck, TranslationTarget,
-    };
-    use nkb_core::keys::KeyChord;
-    use nkb_core::lint::{LintProblem, RuleCode};
-    use nkb_core::pack::PackValue;
+    use crate::test_support::*;
     use nkb_core::sequence::{Delivery, Position};
-    use nkb_core::text::LiteralText;
-    use nkb_core::value::ValueBody;
-
-    /// A delivery whose target presence and outcome a test dictates.
-    struct FakeDelivery {
-        target: Option<TargetRef>,
-        fail: Option<DeliveryError>,
-    }
-
-    impl FakeDelivery {
-        fn ready() -> Self {
-            Self {
-                target: Some(TargetRef(1)),
-                fail: None,
-            }
-        }
-        fn without_target() -> Self {
-            Self {
-                target: None,
-                fail: None,
-            }
-        }
-        fn failing(error: DeliveryError) -> Self {
-            Self {
-                target: Some(TargetRef(1)),
-                fail: Some(error),
-            }
-        }
-    }
-
-    impl ValueDelivery for FakeDelivery {
-        fn availability(&self) -> Availability {
-            Availability::Ready
-        }
-        fn target(&self) -> Option<TargetRef> {
-            self.target
-        }
-        fn deliver(&self, text: &str) -> Result<Delivered, DeliveryError> {
-            match &self.fail {
-                None => Ok(Delivered {
-                    utf16_units: text.encode_utf16().count(),
-                }),
-                Some(error) => Err(error.clone()),
-            }
-        }
-    }
-
-    struct FakeKeys {
-        fail: Option<KeystrokeError>,
-    }
-
-    impl FakeKeys {
-        fn working() -> Self {
-            Self { fail: None }
-        }
-        fn failing(error: KeystrokeError) -> Self {
-            Self { fail: Some(error) }
-        }
-    }
-
-    impl KeystrokeSender for FakeKeys {
-        fn send_keystrokes(&self, _chords: &[KeyChord]) -> Result<(), KeystrokeError> {
-            match &self.fail {
-                None => Ok(()),
-                Some(error) => Err(error.clone()),
-            }
-        }
-    }
-
-    struct FakeSource;
-
-    impl PackSource for FakeSource {
-        fn read(&self, _id: &str) -> Result<String, SourceError> {
-            Ok("the format is scripted, this text is ignored".to_owned())
-        }
-    }
-
-    struct MissingSource;
-
-    impl PackSource for MissingSource {
-        fn read(&self, _id: &str) -> Result<String, SourceError> {
-            Err(SourceError::NotFound)
-        }
-    }
-
-    fn a_value(id: &str, text: &str, risk: Option<Risk>) -> PackValue {
-        PackValue {
-            id: id.to_owned(),
-            name: format!("Value {id}"),
-            body: ValueBody::Literal(LiteralText::new(text.to_owned())),
-            breaks: Some("It breaks something worth a whole sentence about it.".to_owned()),
-            expect: None,
-            risk,
-            fields: Vec::new(),
-            tags: Vec::new(),
-            source: None,
-            since: Some("1.0".to_owned()),
-            shape: None,
-            deprecated: false,
-            replaced_by: None,
-        }
-    }
-
-    fn a_pack(values: Vec<PackValue>, risk: Risk) -> Pack {
-        Pack {
-            id: "sample".to_owned(),
-            name: "Sample pack".to_owned(),
-            description: "A pack for the tests in this module.".to_owned(),
-            version: "1.0".to_owned(),
-            updated: "2026-09-15".to_owned(),
-            license: "CC-BY-4.0".to_owned(),
-            authors: vec!["Naughty Keyboard".to_owned()],
-            language: "en".to_owned(),
-            risk,
-            tags: Vec::new(),
-            fields: vec!["any".to_owned()],
-            source: None,
-            values,
-            pairs: Vec::new(),
-        }
-    }
-
-    struct FakeFormat {
-        errors: usize,
-        pack: Option<Pack>,
-    }
-
-    impl FakeFormat {
-        fn of(pack: Pack) -> Self {
-            Self {
-                errors: 0,
-                pack: Some(pack),
-            }
-        }
-        fn with_errors(n: usize) -> Self {
-            Self {
-                errors: n,
-                pack: None,
-            }
-        }
-    }
-
-    impl PackFormat for FakeFormat {
-        fn check(&self, _text: &str, _expected_id: &str) -> Vec<LintProblem> {
-            (0..self.errors)
-                .map(|_| LintProblem::new(RuleCode::PackWithoutValues))
-                .collect()
-        }
-        fn parse(&self, _text: &str) -> Option<Pack> {
-            self.pack.clone()
-        }
-        fn skeleton(&self, _id: &str, _today: Date) -> String {
-            String::new()
-        }
-        fn canonical(&self, _text: &str) -> Option<String> {
-            None
-        }
-        fn translated_pack(&self, _text: &str) -> TranslationTarget {
-            TranslationTarget::NotATranslation
-        }
-        fn check_translation(&self, _t: &str, _o: &str) -> TranslationCheck {
-            TranslationCheck::Compared(Vec::new())
-        }
-        fn same_insertions(&self, _before: &str, _after: &str) -> bool {
-            true
-        }
-    }
-
-    /// Chooses a three-value pack and hands back the ready sequence machine.
-    fn chosen(risk: Risk) -> AdvanceSequence {
-        let mut advance = AdvanceSequence::new();
-        let pack = a_pack(
-            vec![
-                a_value("one", "alpha", None),
-                a_value("two", "beta", None),
-                a_value("three", "gamma", None),
-            ],
-            risk,
-        );
-        advance
-            .choose_pack(&FakeSource, &FakeFormat::of(pack), "sample")
-            .expect("a scripted pack with no errors loads");
-        advance
-    }
 
     #[test]
     fn choosing_a_pack_moves_to_ready_with_the_right_total() {
