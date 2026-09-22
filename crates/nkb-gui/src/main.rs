@@ -6,11 +6,16 @@
 //!
 //! # What it does today, and what it does not
 //!
-//! It opens the palette on a pack and shows where the sequence stands. What it
-//! does NOT do yet is listen: the global shortcuts, the worker thread and
-//! `drive_sequence` are piece C5, and the pattern for that is already written
-//! and measured in `crates/nkb-adapters/examples/drive_loop.rs`. So the window
-//! is real and the data in it is real, and nothing yet moves it.
+//! It opens the palette on a pack, registers the ten global shortcuts and runs
+//! the sequence from them: press `Ctrl+Alt+N` in any field and the next value of
+//! the pack lands there while the palette says what went out. Two threads, and
+//! `live` holds the reason they are two.
+//!
+//! ⚠️ What it does NOT do yet: refuse the keyboard focus. Until
+//! `WS_EX_NOACTIVATE` goes on the window the palette is the foreground window
+//! immediately after it opens, so the first shortcut would deliver into our own
+//! window. Click into a field first - which a tester does anyway - and it
+//! behaves from then on. `OBS-119`.
 //!
 //! The catalogue of components stays reachable behind an argument, which is what
 //! document 13 section 4 asks for - it is a view for whoever is BUILDING the
@@ -45,13 +50,14 @@
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 use std::process::ExitCode;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use nkb_adapters::i18n::PaletteLabel;
-use nkb_adapters::{BuiltInCatalogue, TomlPackFormat, i18n, report_window_failure};
-use nkb_app::AdvanceSequence;
+use nkb_adapters::{i18n, report_window_failure};
 use nkb_core::hotkeys::{DEFAULT_BINDINGS, HotkeyAction};
-use nkb_gui::{Gallery, HintRow, Palette};
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use nkb_gui::{Gallery, HintRow, Palette, live};
+use slint::{ComponentHandle, ModelRc, VecModel};
 
 /// The pack the palette opens on when the command line names none.
 ///
@@ -121,44 +127,54 @@ fn request() -> Request {
 fn start(request: &Request) -> Result<(), slint::PlatformError> {
     match request {
         Request::Gallery => Gallery::new()?.run(),
-        Request::Palette(pack) => palette(pack)?.run(),
+        Request::Palette(pack) => run_palette(pack),
     }
 }
 
-/// The palette, filled from a real pack.
+/// The palette, with the shortcuts driving it.
 ///
-/// 🔴 Every string handed to the window comes from `nkb_adapters::i18n`. Writing
-/// one here would move the sentence out of the dictionary into the wiring, which
-/// is the same violation as writing it into the `.slint` file and is caught by
-/// the same guard - untouchable rule 9, D58.
-fn palette(pack: &str) -> Result<Palette, slint::PlatformError> {
-    let mut sequence = AdvanceSequence::new();
-    let mut messages: Vec<SharedString> = Vec::new();
-
-    if let Err(error) = sequence.choose_pack(&BuiltInCatalogue::new(), &TomlPackFormat, pack) {
-        messages.push(i18n::choose_error(&error, pack).into());
-    }
-
+/// # The shape of the two threads, and why the join is not optional
+///
+/// The main thread builds the window and then belongs to Slint. The worker
+/// registers the shortcuts, runs the sequence and hands finished views back
+/// (`live`). `run()` returns when the window closes; the flag then stops the
+/// worker within one tick.
+///
+/// 🔴 The worker is JOINED, never detached. It owns the registered shortcuts and
+/// releases them when its handle drops - a detached thread would leave
+/// `Ctrl+Alt+N` and nine others taken from whoever wants them next, for as long
+/// as the process lingers. Joining also means a send in flight finishes writing
+/// rather than being cut in half inside somebody's field.
+fn run_palette(pack: &str) -> Result<(), slint::PlatformError> {
     let palette = Palette::new()?;
     palette.set_window_title(i18n::label(PaletteLabel::Title).into());
     palette.set_degraded_label(i18n::label(PaletteLabel::DirectInputRefused).into());
-
-    if let Some(name) = sequence.pack_name() {
-        palette.set_pack(name.into());
-    }
-    if let Some((done, total)) = sequence.counter() {
-        palette.set_counter(i18n::counter(done, total).into());
-    }
-
-    palette.set_messages(ModelRc::new(VecModel::from(messages)));
     palette.set_hints(ModelRc::new(VecModel::from(hints())));
-
     // Awake at first run, with the hints up and nothing sent yet - `ux-spec.md`
-    // 5.1. The resting state arrives with the loop that can leave it again.
+    // 5.1. The worker fills the pack and the counter, because the sequence that
+    // knows them lives over there.
     palette.set_showing(true);
     palette.set_has_value(false);
 
-    Ok(palette)
+    let stop = Arc::new(AtomicBool::new(false));
+    let worker = std::thread::spawn({
+        let palette = palette.as_weak();
+        let stop = Arc::clone(&stop);
+        let pack = pack.to_owned();
+        // Measured: work handed to the event loop before `run()` is delivered
+        // once it starts (`slint.md` 1.9), so this thread may say something
+        // before the window is running and nothing is lost.
+        move || live::drive(&palette, &stop, &pack)
+    });
+
+    let ran = palette.run();
+    stop.store(true, Ordering::Relaxed);
+    // A worker that panicked has already lost its shortcuts to its own unwind,
+    // and the window is closing either way. Nothing is swallowed that anyone
+    // could act on: the workspace denies `unwrap`, `expect` and `panic` in
+    // product code, so a panic here is a bug rather than a path.
+    drop(worker.join());
+    ran
 }
 
 /// The hint bar's rows, built from the bindings rather than written out.

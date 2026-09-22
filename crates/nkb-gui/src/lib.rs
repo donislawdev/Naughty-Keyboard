@@ -28,3 +28,10 @@ mod generated {
 }
 
 pub use generated::*;
+
+// The bridge between the shortcut thread and the window. It lives in the LIBRARY
+// rather than beside `main.rs` for one reason: in the binary it would be
+// unreachable from a test, and `apply` maps six fields onto six properties -
+// a pair swapped there shows up as two labels trading places, which nothing else
+// in this crate would notice.
+pub mod live;
