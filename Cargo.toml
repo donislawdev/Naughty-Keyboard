@@ -69,8 +69,8 @@ windows-sys = "0.61.2"
 #
 # Only nkb-gui depends on this. `nkb` links no graphical toolkit at all, and that
 # is a property of the artefact rather than of anyone's discipline - D25.
-slint = "1.17.1"
-slint-build = "1.17.1"
+slint = "1.18.1"
+slint-build = "1.18.1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
