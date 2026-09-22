@@ -1,4 +1,5 @@
-//! The guard that makes screens reuse the vocabulary instead of inventing it.
+//! The guard that makes views reuse the vocabulary instead of inventing it,
+//! and say nothing of their own.
 //!
 //! # Why this exists before the first screen
 //!
@@ -22,9 +23,38 @@
 //!   ui/tokens.slint      the dictionary. The only file allowed literal values.
 //!   ui/components/*      the vocabulary. May use raw primitives - that is its job.
 //!   ui/components.slint  THE DOOR. Re-exports the tokens and every component.
-//!   ui/screens/*         composition only. Imports through the door, nothing else.
-//!   ui/all.slint         the build entry point, re-exports screens to Rust.
+//!   ui/screens/*         product screens. Composition only, and NO SENTENCES.
+//!   ui/gallery/*         the catalogue. Composition only, specimen text allowed.
+//!   ui/all.slint         the build entry point, re-exports views to Rust.
 //! ```
+//!
+//! # Why the catalogue has a directory of its own
+//!
+//! Untouchable rule 9 says a sentence shown to a person is a key, never a
+//! literal at the place it is shown. The catalogue is the one view that must
+//! break that, and not for convenience:
+//!
+//! - its labels NAME COMPONENTS, in the language the code is written in
+//!   (untouchable rule 6). Translated, they stop naming them;
+//! - fed from Rust, it would render in `appearance.rs` as a screen of empty
+//!   labels - and that off-screen render is the only mechanism this project has
+//!   for looking at its own interface;
+//! - document 13 section 3 asks the catalogue to carry a very long label and an
+//!   empty one BY NAME. Those are the catalogue's data, not the product's
+//!   sentences.
+//!
+//! The exemption is therefore a DIRECTORY rather than a name in a list here. A
+//! list of exempt files is a door that opens outward - the second catalogue gets
+//! added to it, because that is what the list is for. A directory cannot be
+//! widened without physically moving a file out of `ui/screens/`, which is
+//! visible in any diff and impossible to do by accident. D58.
+//!
+//! ⚠️ `ui/screens/` may be EMPTY and the run still means something: every rule
+//! below either scans the union of the two view directories, or scans the whole
+//! of `ui/` minus the catalogue - which holds the dictionary, the door and the
+//! components from day one. The sentence rules additionally carry their own
+//! positive and negative control, so "nothing to scan" can never be mistaken for
+//! "nothing to report".
 //!
 //! # What this guard does NOT catch, written down on purpose
 //!
@@ -34,15 +64,27 @@
 //! - a named value multiplied by a number: `Tokens.space-2 * 3` passes, and it
 //!   is a hole in the closed scale of section 2.3;
 //! - a value computed in Rust and pushed in through a property - the literal is
-//!   then in a `.rs` file, which this guard does not read;
+//!   then in a `.rs` file, and only SENTENCES are followed there, not lengths;
 //! - the right component used in the wrong place. This checks vocabulary, not
 //!   meaning, and no guard of this shape ever could;
-//! - literals inside `ui/components/*.slint`. Deliberate: components are where
-//!   primitives are allowed to live. The line is drawn at the screen boundary;
+//! - appearance literals inside `ui/components/*.slint`. Deliberate: components
+//!   are where primitives are allowed to live. Sentences are NOT - see below;
 //! - block comments spanning several lines. Line comments are stripped, `/* */`
-//!   is not, so a colour inside one would be reported;
+//!   is not, so a colour or a sentence inside one would be reported. That is the
+//!   loud direction, not the silent one;
 //! - a built-in colour name such as `Colors.red`, which is a literal in spirit
-//!   but not in syntax.
+//!   but not in syntax;
+//! - on the Rust side: a sentence assembled into a variable and then pushed, a
+//!   raw string (`r"..."`), and a char literal holding a quote (`'"'`). All three
+//!   are absent from this crate today and all three would walk past.
+//!
+//! # The two sentence rules, and why there are two
+//!
+//! A guard that closes one of two doors is worse than one that closes neither,
+//! because it looks like a complete answer. Refusing a literal in `.slint` moves
+//! the sentence to `palette.set_title("...")` in Rust, which is the same
+//! violation one file away. So both are checked, and `nkb-adapters::i18n` is the
+//! only place a sentence is allowed to be written down.
 
 // A failed expectation in a test is a failed test. The workspace denies both in
 // product code, where a panic lands in someone else's CI.
@@ -94,6 +136,15 @@ const ABSOLUTE_UNITS: &[&str] = &["px", "pt", "phx", "in", "mm", "cm"];
 
 fn ui_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("ui")
+}
+
+fn src_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
+}
+
+/// The catalogue, the one view allowed to write its own labels.
+fn catalogue_dir() -> PathBuf {
+    ui_dir().join("gallery")
 }
 
 /// Everything before a `//` that is not inside a string literal.
@@ -219,7 +270,177 @@ fn instantiated_elements(line: &str) -> Vec<&str> {
     found
 }
 
-fn slint_files_in(dir: &Path) -> Vec<PathBuf> {
+// ---------------------------------------------------------------------------
+// Sentences
+// ---------------------------------------------------------------------------
+
+/// The contents of every quoted string on the line.
+///
+/// Escapes are honoured, so `"say \"no\""` is ONE literal rather than two plus a
+/// stray. An unterminated quote is left to the Slint compiler, which names the
+/// file and the line far better than this could.
+fn string_literals(line: &str) -> Vec<&str> {
+    let bytes = line.as_bytes();
+    let mut found = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'"' {
+            i += 1;
+            continue;
+        }
+        let start = i + 1;
+        let mut end = start;
+        while end < bytes.len() && bytes[end] != b'"' {
+            end += if bytes[end] == b'\\' { 2 } else { 1 };
+        }
+        if end >= bytes.len() {
+            break;
+        }
+        found.push(&line[start..end]);
+        i = end + 1;
+    }
+    found
+}
+
+/// The name a line binds a value to, whether it declares a property or assigns
+/// one: `out property <string> font-mono: "x"` binds `font-mono`, `text: "x"`
+/// binds `text`.
+fn bound_name(line: &str) -> Option<&str> {
+    let colon = line.find(':')?;
+    // `:=` declares an element, it does not bind a value to a name.
+    if line.as_bytes().get(colon + 1) == Some(&b'=') {
+        return None;
+    }
+    line[..colon]
+        .rsplit(|c: char| c.is_whitespace() || c == '<' || c == '>')
+        .find(|piece| !piece.is_empty())
+}
+
+/// True for a line that imports, which is the one place a `.slint` file names a
+/// path rather than a sentence.
+///
+/// ⚠️ The trailing check is not decoration: `important: "x"` starts with the
+/// word `import`, and a prefix test alone would wave it through.
+fn is_import(line: &str) -> bool {
+    line.trim_start()
+        .strip_prefix("import")
+        .is_some_and(|rest| {
+            !rest.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        })
+}
+
+/// Sentences written into a `.slint` file, as (line number, text).
+///
+/// A pure function over the file's text, and that is deliberate: it can be shown
+/// failing without a screen to fail on, which is what keeps the rule honest
+/// while `ui/screens/` is still empty.
+///
+/// `allow_font_names` is true only for the dictionary. A typeface family IS a
+/// design value and the dictionary is where design values live - but the
+/// allowance is bound to the NAME, so `label-next: "Next"` in `tokens.slint` is
+/// still a sentence hidden in the one file nobody re-reads.
+fn sentences_written_into(body: &str, allow_font_names: bool) -> Vec<(usize, String)> {
+    let mut found = Vec::new();
+    // ⚠️ An import is a STATEMENT, not a line, and the first version of this
+    // rule forgot it. `ui/components.slint` lists nine names one per line and
+    // closes with `} from "components/typography.slint";` - so the path sat on a
+    // line that does not begin with `import`, and the guard reported the door
+    // itself. Measured the moment the rule first ran, which is the argument for
+    // running a new guard against the tree before believing an estimate of its
+    // false alarms.
+    let mut inside_import = false;
+    for (n, raw) in body.lines().enumerate() {
+        let line = strip_line_comment(raw);
+        if !inside_import && is_import(line) {
+            inside_import = true;
+        }
+        if inside_import {
+            inside_import = !line.contains(';');
+            continue;
+        }
+        if allow_font_names && bound_name(line).is_some_and(|name| name.starts_with("font-")) {
+            continue;
+        }
+        for literal in string_literals(line) {
+            found.push((n + 1, literal.to_owned()));
+        }
+    }
+    found
+}
+
+/// Sentences handed to the interface from Rust, as (line number, text).
+///
+/// Narrow by construction: only a string literal INSIDE a `set_*(...)` call
+/// counts, because that is the one way a word reaches a Slint property. An
+/// ordinary literal - a path, a panic message, a test fixture - is none of this
+/// rule's business.
+///
+/// The scan crosses newlines on purpose. `rustfmt` breaks a long call over
+/// several lines, and a rule that only ever looked at one line would go quiet on
+/// exactly the long sentences it most needs to see.
+fn sentences_pushed_from(body: &str) -> Vec<(usize, String)> {
+    let stripped: String = body
+        .lines()
+        .map(strip_line_comment)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let mut found = Vec::new();
+
+    for (at, _) in stripped.match_indices("set_") {
+        // `reset_foo(` is not a setter.
+        if at > 0
+            && stripped[..at]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_')
+        {
+            continue;
+        }
+        let after = &stripped[at + "set_".len()..];
+        let name_len = after
+            .bytes()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == b'_')
+            .count();
+        let tail = &after[name_len..];
+        if !tail.starts_with('(') {
+            continue;
+        }
+
+        let mut depth = 0_usize;
+        let mut walk = tail.char_indices();
+        while let Some((offset, c)) = walk.next() {
+            match c {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                '"' => {
+                    let opened = at + "set_".len() + name_len + offset;
+                    let literal = string_literals(&stripped[opened..])
+                        .first()
+                        .map_or_else(String::new, |s| (*s).to_owned());
+                    let line = stripped[..opened].matches('\n').count() + 1;
+                    found.push((line, literal));
+                    break;
+                }
+                '\\' => {
+                    walk.next();
+                }
+                _ => {}
+            }
+        }
+    }
+    found
+}
+
+// ---------------------------------------------------------------------------
+// Walking the tree
+// ---------------------------------------------------------------------------
+
+fn files_in(dir: &Path, extension: &str) -> Vec<PathBuf> {
     if !dir.is_dir() {
         return Vec::new();
     }
@@ -227,10 +448,44 @@ fn slint_files_in(dir: &Path) -> Vec<PathBuf> {
         .unwrap_or_else(|e| panic!("{} must be readable: {e}", dir.display()))
         .filter_map(Result::ok)
         .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|x| x == "slint"))
+        .filter(|p| p.extension().is_some_and(|x| x == extension))
         .collect();
     out.sort();
     out
+}
+
+fn files_under(dir: &Path, extension: &str) -> Vec<PathBuf> {
+    if !dir.is_dir() {
+        return Vec::new();
+    }
+    let mut out = files_in(dir, extension);
+    let mut sub: Vec<PathBuf> = std::fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("{} must be readable: {e}", dir.display()))
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
+    sub.sort();
+    for child in sub {
+        out.extend(files_under(&child, extension));
+    }
+    out
+}
+
+/// Both view directories. The rules about appearance apply to the catalogue
+/// exactly as they do to a product screen - only its LABELS are its own.
+fn composed_views() -> Vec<PathBuf> {
+    let mut out = files_in(&ui_dir().join("screens"), "slint");
+    out.extend(files_in(&catalogue_dir(), "slint"));
+    out
+}
+
+/// Every `.slint` file the product ships except the catalogue's.
+fn files_that_may_not_speak() -> Vec<PathBuf> {
+    files_under(&ui_dir(), "slint")
+        .into_iter()
+        .filter(|p| !p.starts_with(catalogue_dir()))
+        .collect()
 }
 
 fn read(path: &Path) -> String {
@@ -238,41 +493,50 @@ fn read(path: &Path) -> String {
         .unwrap_or_else(|e| panic!("{} must be readable: {e}", path.display()))
 }
 
+fn shown(path: &Path) -> String {
+    path.file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned()
+}
+
 /// Reports every complaint at once. One failure per run teaches nothing about
 /// the size of the problem.
-fn report(problems: Vec<String>) {
+fn report(problems: Vec<String>, closing: &str) {
     if problems.is_empty() {
         return;
     }
-    let mut message = format!("\n{} screen problem(s):\n\n", problems.len());
+    let mut message = format!("\n{} problem(s):\n\n", problems.len());
     for p in &problems {
         message.push_str("  ");
         message.push_str(p);
         message.push('\n');
     }
-    message.push_str(
-        "\nScreens compose from the vocabulary behind ui/components.slint.\n\
-         Appearance lives in ui/tokens.slint and nowhere else - document 13, section 2.1.\n",
-    );
+    message.push('\n');
+    message.push_str(closing);
     panic!("{message}");
 }
 
+const APPEARANCE_RULE: &str = "Views compose from the vocabulary behind ui/components.slint.\n\
+     Appearance lives in ui/tokens.slint and nowhere else - document 13, section 2.1.\n";
+
+const SENTENCE_RULE: &str = "A sentence shown to a person is a KEY, never a literal where it is shown -\n\
+     untouchable rule 9. The sentences live in nkb-adapters::i18n, keyed by the\n\
+     app type that carries them, and reach the view through a property.\n\
+     Specimen labels belong in ui/gallery/, which is exempt by directory - D58.\n";
+
 #[test]
-fn screens_hold_no_appearance_of_their_own() {
-    let screens = slint_files_in(&ui_dir().join("screens"));
+fn views_hold_no_appearance_of_their_own() {
+    let views = composed_views();
     assert!(
-        !screens.is_empty(),
-        "ui/screens holds no .slint file - a guard with nothing to guard passes for the \
-         wrong reason, which is indistinguishable from a broken guard"
+        !views.is_empty(),
+        "neither ui/screens nor ui/gallery holds a .slint file - a guard with nothing to \
+         guard passes for the wrong reason, which is indistinguishable from a broken guard"
     );
 
     let mut problems = Vec::new();
-    for path in &screens {
-        let name = path
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .into_owned();
+    for path in &views {
+        let name = shown(path);
         for (n, raw) in read(path).lines().enumerate() {
             let line = strip_line_comment(raw);
             let at = format!("{name}:{}", n + 1);
@@ -296,20 +560,15 @@ fn screens_hold_no_appearance_of_their_own() {
             }
         }
     }
-    report(problems);
+    report(problems, APPEARANCE_RULE);
 }
 
 #[test]
-fn screens_reach_the_vocabulary_only_through_the_door() {
-    let screens = slint_files_in(&ui_dir().join("screens"));
+fn views_reach_the_vocabulary_only_through_the_door() {
     let mut problems = Vec::new();
 
-    for path in &screens {
-        let name = path
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .into_owned();
+    for path in &composed_views() {
+        let name = shown(path);
         for (n, raw) in read(path).lines().enumerate() {
             let line = strip_line_comment(raw);
             if !line.trim_start().starts_with("import ") {
@@ -321,14 +580,14 @@ fn screens_reach_the_vocabulary_only_through_the_door() {
             let target = from.trim().trim_end_matches(';').trim_matches('"');
             if !target.ends_with("components.slint") {
                 problems.push(format!(
-                    "{name}:{}  imports \"{target}\" - screens see the vocabulary only \
+                    "{name}:{}  imports \"{target}\" - views see the vocabulary only \
                      through ui/components.slint",
                     n + 1
                 ));
             }
         }
     }
-    report(problems);
+    report(problems, APPEARANCE_RULE);
 }
 
 /// The door has to list everything, or the next session cannot find it by
@@ -339,7 +598,7 @@ fn the_door_re_exports_every_component() {
     let door = read(&door_path);
     let mut problems = Vec::new();
 
-    let components = slint_files_in(&ui_dir().join("components"));
+    let components = files_in(&ui_dir().join("components"), "slint");
     assert!(
         !components.is_empty(),
         "ui/components holds no .slint file, so this test would pass by having nothing to check"
@@ -379,7 +638,7 @@ fn the_door_re_exports_every_component() {
             ));
         }
     }
-    report(problems);
+    report(problems, APPEARANCE_RULE);
 }
 
 /// Only the dictionary is allowed to hold a value out of thin air.
@@ -395,5 +654,133 @@ fn the_dictionary_is_the_only_file_that_may_hold_raw_values() {
         holds_colour_literal(&body),
         "ui/tokens.slint holds no colour literal at all, which means the dictionary is empty \
          and every other check in this file passes for the wrong reason"
+    );
+}
+
+/// Untouchable rule 9, on the interface side of the seam.
+#[test]
+fn views_hold_no_sentence_of_their_own() {
+    let files = files_that_may_not_speak();
+    assert!(
+        !files.is_empty(),
+        "no .slint file outside ui/gallery - this rule would then pass by having nothing to read"
+    );
+
+    let dictionary = ui_dir().join("tokens.slint");
+    let mut problems = Vec::new();
+    for path in &files {
+        let name = shown(path);
+        for (line, text) in sentences_written_into(&read(path), *path == dictionary) {
+            problems.push(format!("{name}:{line}  text written out: \"{text}\""));
+        }
+    }
+    report(problems, SENTENCE_RULE);
+}
+
+/// Untouchable rule 9, on the Rust side of the same seam.
+///
+/// Without this, refusing a literal in `.slint` would simply move it to
+/// `window.set_title("...")` - the same violation, one file away, and the guard
+/// would look complete while the rule had a hole the width of a crate.
+#[test]
+fn no_sentence_reaches_the_interface_as_a_rust_literal() {
+    let files = files_under(&src_dir(), "rs");
+    assert!(
+        !files.is_empty(),
+        "crates/nkb-gui/src holds no .rs file, so this rule would have nothing to read"
+    );
+
+    let mut problems = Vec::new();
+    for path in &files {
+        let name = shown(path);
+        for (line, text) in sentences_pushed_from(&read(path)) {
+            problems.push(format!(
+                "{name}:{line}  sentence handed to a property as a literal: \"{text}\""
+            ));
+        }
+    }
+    report(problems, SENTENCE_RULE);
+}
+
+/// The control that makes the two rules above mean something.
+///
+/// 🔴 `ui/screens/` is legitimately empty until the palette lands, so those
+/// rules would then be reading only files that never held a sentence. A rule
+/// that has never been seen firing is indistinguishable from a broken one -
+/// document 05 section 2 - and this project has twice measured a guard that was
+/// green for the wrong reason. So both directions are checked here directly,
+/// against text rather than against the tree.
+#[test]
+fn the_sentence_rules_can_actually_fail() {
+    // --- positive: it fires ------------------------------------------------
+    let screen = "import { TextBody } from \"../components.slint\";\n\
+                  export component Palette inherits Window {\n\
+                  \x20   TextBody { text: \"End of pack\"; }\n\
+                  }\n";
+    let caught = sentences_written_into(screen, false);
+    assert_eq!(
+        caught.len(),
+        1,
+        "the .slint rule must report exactly the sentence and not the import path: {caught:?}"
+    );
+    assert_eq!(caught[0], (3, "End of pack".to_owned()));
+
+    let rust = "fn wire(p: &Palette) {\n    p.set_message(\n        \"End of pack\",\n    );\n}\n";
+    let pushed = sentences_pushed_from(rust);
+    assert_eq!(
+        pushed.len(),
+        1,
+        "the Rust rule must follow a setter across the line break rustfmt puts in: {pushed:?}"
+    );
+    assert_eq!(pushed[0], (3, "End of pack".to_owned()));
+
+    // --- negative: it stays quiet where it must ----------------------------
+    // A guard that fires on everything is a guard switched off within a week -
+    // document 13 section 2.2.
+    let quiet = "import { TextBody } from \"../components.slint\";\n\
+                 import \"fonts/DejaVuSansMono.ttf\";\n\
+                 export component Palette inherits Window {\n\
+                 \x20   TextBody { text: root.message; }\n\
+                 }\n";
+    assert!(
+        sentences_written_into(quiet, false).is_empty(),
+        "an import path and a bound property are not sentences"
+    );
+    assert!(
+        sentences_written_into(
+            "    out property <string> font-mono: \"DejaVu Sans Mono\";",
+            true
+        )
+        .is_empty(),
+        "the dictionary may name a typeface"
+    );
+    assert!(
+        !sentences_written_into("    out property <string> label-next: \"Next\";", true).is_empty(),
+        "the dictionary allowance is bound to the NAME, or it is a hiding place"
+    );
+    assert!(
+        sentences_written_into("    important: \"x\";", false).len() == 1,
+        "a property whose name begins with the word `import` is not an import line"
+    );
+    // The door's own shape, and the false alarm this rule was born with.
+    let door = "import {\n    TextName,\n    TextBody,\n} from \"components/typography.slint\";\n\
+                export component Palette inherits Window {\n\
+                \x20   TextBody { text: root.message; }\n\
+                }\n";
+    assert!(
+        sentences_written_into(door, false).is_empty(),
+        "an import is a statement, not a line - the path may sit under the names it brings in"
+    );
+    assert!(
+        sentences_pushed_from("fn wire(p: &Palette) { p.set_message(sentence); }").is_empty(),
+        "a value handed over as a variable came from the dictionary of sentences"
+    );
+    assert!(
+        sentences_pushed_from("fn reset(p: &Palette) { p.reset_message(\"x\"); }").is_empty(),
+        "`reset_` is not a setter"
+    );
+    assert!(
+        sentences_pushed_from("let path = \"ui/all.slint\";").is_empty(),
+        "an ordinary literal is none of this rule's business"
     );
 }

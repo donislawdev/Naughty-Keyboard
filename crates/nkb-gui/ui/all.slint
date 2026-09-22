@@ -9,10 +9,16 @@
 // SCREEN sees; this one is the door RUST sees, and they point in opposite
 // directions:
 //
-//     tokens  ->  components/*  ->  components.slint  ->  screens/*  ->  all
+//     tokens  ->  components/*  ->  components.slint  ->  screens|gallery  ->  all
 //
 // Keeping them apart is what stops the import cycle a single door would create.
+//
+// There are two view directories, not one, and the difference is a rule rather
+// than a habit: `screens/` holds the product, whose every sentence is a key
+// (untouchable rule 9), and `gallery/` holds the catalogue, whose labels name
+// components and must therefore be written out. `ui_guard.rs` draws that line at
+// the directory boundary - D58.
 
-import { Gallery } from "screens/gallery.slint";
+import { Gallery } from "gallery/gallery.slint";
 
 export { Gallery }
