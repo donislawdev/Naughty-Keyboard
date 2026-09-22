@@ -31,12 +31,11 @@
 //!
 //! # What this module deliberately does not do
 //!
-//! It does not stop the palette from taking the keyboard focus. Until
-//! `WS_EX_NOACTIVATE` goes on the window, the palette is the foreground window
-//! right after it opens, so the first shortcut would deliver into our own window
-//! rather than into the field under test. The tester clicks into a field first -
-//! which they must do anyway - and from then on it behaves. Named here rather
-//! than left to be discovered: `OBS-119`.
+//! It does not make the palette refuse the keyboard focus. That runs on the main
+//! thread, because only the main thread may touch the window, and it lives in
+//! `focus`. What crosses between them is [`crate::focus::Standing`]: a sentence
+//! saying the promise could not be kept, which this module reads again on every
+//! view because it rebuilds the message band from scratch each time.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -50,6 +49,7 @@ use nkb_core::hotkeys::DEFAULT_BINDINGS;
 use nkb_core::sequence::Delivery;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
+use crate::focus::{Standing, standing_line};
 use crate::{Marker, Palette};
 
 /// How long one wait for a press lasts before the stop flag is read again.
@@ -105,7 +105,7 @@ struct ValueView {
 /// Takes the pack by name rather than a loaded sequence, because the sequence
 /// must live on this thread: it is the one gate over the sequence state
 /// (`architektura.md` 6a) and it never crosses back.
-pub fn drive(palette: &Weak<Palette>, stop: &Arc<AtomicBool>, pack: &str) {
+pub fn drive(palette: &Weak<Palette>, stop: &Arc<AtomicBool>, pack: &str, standing: &Standing) {
     let mut sequence = AdvanceSequence::new();
     let mut opening: Vec<String> = Vec::new();
 
@@ -123,7 +123,10 @@ pub fn drive(palette: &Weak<Palette>, stop: &Arc<AtomicBool>, pack: &str) {
             // up. Untouchable rule 1: a run that did less than it promised says
             // so, rather than looking alive.
             opening.push(i18n::shortcuts_unavailable(&error));
-            show(palette, opening_view(&pack_shown, &sequence, opening));
+            show(
+                palette,
+                opening_view(&pack_shown, &sequence, opening, standing),
+            );
             return;
         }
     };
@@ -135,10 +138,14 @@ pub fn drive(palette: &Weak<Palette>, stop: &Arc<AtomicBool>, pack: &str) {
             opening.push(line);
         }
     }
-    show(palette, opening_view(&pack_shown, &sequence, opening));
+    show(
+        palette,
+        opening_view(&pack_shown, &sequence, opening, standing),
+    );
 
     let mut keep_going = || !stop.load(Ordering::Relaxed);
-    let mut present = |outcome: Outcome| show(palette, view_of(&outcome, &pack_shown, pack));
+    let mut present =
+        |outcome: Outcome| show(palette, view_of(&outcome, &pack_shown, pack, standing));
     let ended = drive_sequence(
         live.as_ref(),
         &mut sequence,
@@ -158,7 +165,10 @@ pub fn drive(palette: &Weak<Palette>, stop: &Arc<AtomicBool>, pack: &str) {
         // sentence, and the stop flag is set by the window closing. If it is
         // ever reached after the loop has quit, the measurement above says this
         // vanishes silently, and there is nobody left to tell.
-        show(palette, opening_view(&pack_shown, &sequence, vec![line]));
+        show(
+            palette,
+            opening_view(&pack_shown, &sequence, vec![line], standing),
+        );
     }
 }
 
@@ -168,18 +178,36 @@ fn counter_of(sequence: &AdvanceSequence) -> String {
         .map_or_else(String::new, |(done, total)| i18n::counter(done, total))
 }
 
-fn opening_view(pack_shown: &str, sequence: &AdvanceSequence, messages: Vec<String>) -> View {
+/// Puts the standing sentence, if there is one, in front of this view's own.
+///
+/// 🔴 In FRONT rather than behind: what it says is that the tool could not keep
+/// a promise, which outranks anything about the value that just went out. The
+/// worker rebuilds this band from scratch on every view, so a sentence produced
+/// on the main thread has to be re-read here or it lasts exactly one view.
+fn with_standing(mut messages: Vec<String>, standing: &Standing) -> Vec<String> {
+    if let Some(line) = standing_line(standing) {
+        messages.insert(0, line);
+    }
+    messages
+}
+
+fn opening_view(
+    pack_shown: &str,
+    sequence: &AdvanceSequence,
+    messages: Vec<String>,
+    standing: &Standing,
+) -> View {
     View {
         pack: pack_shown.to_owned(),
         counter: counter_of(sequence),
         value: None,
-        messages,
+        messages: with_standing(messages, standing),
         degraded: sequence.sequence().delivery == Delivery::Degraded,
         transient: false,
     }
 }
 
-fn view_of(outcome: &Outcome, pack_shown: &str, pack: &str) -> View {
+fn view_of(outcome: &Outcome, pack_shown: &str, pack: &str, standing: &Standing) -> View {
     View {
         pack: pack_shown.to_owned(),
         counter: outcome
@@ -192,11 +220,14 @@ fn view_of(outcome: &Outcome, pack_shown: &str, pack: &str) -> View {
             counts: i18n::counts(sent.code_points, sent.bytes, sent.utf16_units),
             markers: markers_of(sent),
         }),
-        messages: outcome
-            .messages
-            .iter()
-            .map(|message| i18n::message(message, pack))
-            .collect(),
+        messages: with_standing(
+            outcome
+                .messages
+                .iter()
+                .map(|message| i18n::message(message, pack))
+                .collect(),
+            standing,
+        ),
         degraded: outcome.sequence.delivery == Delivery::Degraded,
         // Every outcome is something that just happened, so every outcome gets
         // looked at and then gets out of the way.
@@ -310,7 +341,13 @@ mod tests {
     use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
     use slint::platform::{Platform, PlatformError, WindowAdapter};
 
-    use super::{Delivery, Outcome, Palette, apply, markers_of, view_of};
+    use super::{Delivery, Outcome, Palette, Standing, apply, markers_of, view_of, with_standing};
+
+    /// No standing sentence: the ordinary case, and the one the field-by-field
+    /// test is about.
+    fn quiet() -> Standing {
+        crate::focus::standing()
+    }
 
     struct Headless {
         window: Rc<MinimalSoftwareWindow>,
@@ -383,6 +420,7 @@ mod tests {
                 &an_outcome(Some(a_sent()), Vec::new()),
                 "Unicode & text",
                 "u",
+                &quiet(),
             ),
         );
         assert_eq!(palette.get_pack(), "Unicode & text");
@@ -415,6 +453,7 @@ mod tests {
                 &an_outcome(None, vec![Message::EndOfPack { total: 34 }]),
                 "p",
                 "p",
+                &quiet(),
             ),
         );
         assert!(palette.get_has_value(), "the previous value was blanked");
@@ -428,7 +467,7 @@ mod tests {
         // ---- the second axis reaches the standing bar ---------------------
         let mut degraded = an_outcome(Some(a_sent()), Vec::new());
         degraded.sequence.delivery = Delivery::Degraded;
-        apply(&palette, view_of(&degraded, "p", "p"));
+        apply(&palette, view_of(&degraded, "p", "p", &quiet()));
         assert!(palette.get_degraded());
     }
 
@@ -443,6 +482,32 @@ mod tests {
         );
         assert!(markers[0].1, "the risk comes first - product-spec.md 10.2");
         assert!(!markers[2].1, "clearing the field is not a risk");
+    }
+
+    /// The standing sentence goes in FRONT of this view's own, and survives a
+    /// view that has messages of its own.
+    ///
+    /// 🔴 The order is the point. What the standing sentence says is that the
+    /// tool could not keep a promise - the palette taking the focus, say - and a
+    /// tester reading top to bottom has to meet that before "end of pack".
+    #[test]
+    fn a_standing_sentence_leads_every_message_band() {
+        let standing = quiet();
+        assert_eq!(
+            with_standing(vec![String::from("own")], &standing),
+            vec![String::from("own")],
+            "nothing standing means nothing added"
+        );
+        *standing.lock().expect("a fresh lock is not poisoned") = Some(String::from("kept"));
+        assert_eq!(
+            with_standing(vec![String::from("own")], &standing),
+            vec![String::from("kept"), String::from("own")]
+        );
+        assert_eq!(
+            with_standing(Vec::new(), &standing),
+            vec![String::from("kept")],
+            "a view with nothing to say still carries it"
+        );
     }
 
     /// A value with nothing worth saying about it says nothing.

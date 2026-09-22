@@ -35,3 +35,9 @@ pub use generated::*;
 // a pair swapped there shows up as two labels trading places, which nothing else
 // in this crate would notice.
 pub mod live;
+
+// Making the window refuse the keyboard focus. Beside `live` rather than inside
+// it for one reason: this runs on the MAIN thread and `live` is the worker, and
+// mixing the two in one file is how a session ends up calling a Slint method
+// from the wrong side.
+pub mod focus;

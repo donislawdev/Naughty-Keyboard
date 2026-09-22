@@ -11,11 +11,11 @@
 //! the pack lands there while the palette says what went out. Two threads, and
 //! `live` holds the reason they are two.
 //!
-//! ⚠️ What it does NOT do yet: refuse the keyboard focus. Until
-//! `WS_EX_NOACTIVATE` goes on the window the palette is the foreground window
-//! immediately after it opens, so the first shortcut would deliver into our own
-//! window. Click into a field first - which a tester does anyway - and it
-//! behaves from then on. `OBS-119`.
+//! It also refuses the keyboard focus, which `ux-spec.md` 2 calls the sharpest
+//! technical requirement in the product: the window will not activate when
+//! clicked, and it hands the foreground back to whoever held it. Measured rather
+//! than assumed, and the measurement corrected the plan - `focus` carries the
+//! table. Where it cannot be done the palette says so instead of pretending.
 //!
 //! The catalogue of components stays reachable behind an argument, which is what
 //! document 13 section 4 asks for - it is a view for whoever is BUILDING the
@@ -54,9 +54,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use nkb_adapters::i18n::PaletteLabel;
-use nkb_adapters::{i18n, report_window_failure};
+use nkb_adapters::{KeptFocus, i18n, report_window_failure};
 use nkb_core::hotkeys::{DEFAULT_BINDINGS, HotkeyAction};
-use nkb_gui::{Gallery, HintRow, Palette, live};
+use nkb_gui::{Gallery, HintRow, Palette, focus, live};
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 /// The pack the palette opens on when the command line names none.
@@ -146,6 +146,10 @@ fn start(request: &Request) -> Result<(), slint::PlatformError> {
 /// as the process lingers. Joining also means a send in flight finishes writing
 /// rather than being cut in half inside somebody's field.
 fn run_palette(pack: &str) -> Result<(), slint::PlatformError> {
+    // 🔴 BEFORE the window exists. Afterwards the answer is the palette itself,
+    // and handing the focus back to ourselves is a no-op that reports success -
+    // the failure shape this project keeps meeting (`slint.md` 2.17).
+    let kept = KeptFocus::remember();
     let palette = Palette::new()?;
     palette.set_window_title(i18n::label(PaletteLabel::Title).into());
     palette.set_degraded_label(i18n::label(PaletteLabel::DirectInputRefused).into());
@@ -156,15 +160,22 @@ fn run_palette(pack: &str) -> Result<(), slint::PlatformError> {
     palette.set_showing(true);
     palette.set_has_value(false);
 
+    // The two threads meet here. `focus` runs on this one and may produce a
+    // sentence saying the palette could not refuse the focus; the worker rebuilds
+    // the message band on every view and has to find that sentence again.
+    let standing = focus::standing();
+    focus::refuse_focus(&palette, kept, &standing);
+
     let stop = Arc::new(AtomicBool::new(false));
     let worker = std::thread::spawn({
         let palette = palette.as_weak();
         let stop = Arc::clone(&stop);
         let pack = pack.to_owned();
+        let standing = std::sync::Arc::clone(&standing);
         // Measured: work handed to the event loop before `run()` is delivered
         // once it starts (`slint.md` 1.9), so this thread may say something
         // before the window is running and nothing is lost.
-        move || live::drive(&palette, &stop, &pack)
+        move || live::drive(&palette, &stop, &pack, &standing)
     });
 
     let ran = palette.run();

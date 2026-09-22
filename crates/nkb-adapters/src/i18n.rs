@@ -461,6 +461,49 @@ pub fn startup_failure(failure: Startup, reason: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// What the environment would not let the tool do
+// ---------------------------------------------------------------------------
+
+/// Something about the machine or the session that stops the tool doing its job.
+///
+/// `ux-spec.md` 6 section B announces four of these. One stands today, and the
+/// other three keep their announcement mark there rather than being invented
+/// here: a key with a sentence nobody can reach is a promise, and the bridge in
+/// `tools/sprawdz-kontrakt.py` would not tell the difference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Environment {
+    /// The palette could not be made to refuse the keyboard focus.
+    FocusNotRefused,
+}
+
+/// The pattern for an environment limit. `ux-spec.md` 6, section B.
+///
+/// The sentence has two halves and both are load-bearing. The first says what
+/// the tool could not do, because untouchable rule 1 forbids a run that did less
+/// than it promised from looking whole. The second says what the tester can do
+/// INSTEAD, and it is a real remedy rather than a consolation: clicking into the
+/// field under test moves the focus there, and measured 2026-09-22 the palette
+/// does not take it back on its own.
+fn pattern_environment(limit: Environment) -> &'static str {
+    match limit {
+        Environment::FocusNotRefused => {
+            "The palette could not refuse the keyboard focus: {reason}. Click into the field you are testing before pressing a shortcut."
+        }
+    }
+}
+
+/// What the tool says when the environment limited it.
+///
+/// `reason` is the system layer's own wording, for the same reason
+/// `startup_failure` passes the graphics library's through: it is the one
+/// specific thing in the sentence, and shortening it here would leave a tester
+/// with nothing to put in a bug report.
+#[must_use]
+pub fn environment(limit: Environment, reason: &str) -> String {
+    fill(pattern_environment(limit), &[("reason", reason)])
+}
+
+// ---------------------------------------------------------------------------
 // The palette's own labels
 // ---------------------------------------------------------------------------
 

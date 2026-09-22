@@ -2997,6 +2997,7 @@ dependencies = [
  "nkb-adapters",
  "nkb-app",
  "nkb-core",
+ "raw-window-handle",
  "slint",
  "slint-build",
 ]
@@ -4490,6 +4491,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "pin-weak",
+ "raw-window-handle",
  "slint-macros",
  "unicode-segmentation",
  "vtable",

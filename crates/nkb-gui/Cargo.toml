@@ -28,7 +28,15 @@ nkb-adapters.workspace = true
 # rather than worked around: a QA tool gets run over remote desktops and inside
 # virtual machines, where a software fallback is the difference between a window
 # and no window.
-slint = { workspace = true, features = ["renderer-software"] }
+# `raw-window-handle-06` is what makes `Window::window_handle()` exist at all.
+# Without it the palette cannot name its own window to the system, and C5b - the
+# window refusing the keyboard focus - has nothing to put the style on.
+slint = { workspace = true, features = ["renderer-software", "raw-window-handle-06"] }
+
+# The traits that make the handle above readable. Licence sieve is in the
+# workspace manifest beside the version, where a reader of the dependency will
+# look for it.
+raw-window-handle.workspace = true
 
 [build-dependencies]
 slint-build.workspace = true

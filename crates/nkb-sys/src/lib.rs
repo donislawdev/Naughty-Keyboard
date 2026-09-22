@@ -31,6 +31,7 @@
 
 pub mod hotkey;
 pub mod startup;
+pub mod window;
 
 /// What a successful send actually did.
 ///

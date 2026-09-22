@@ -72,6 +72,24 @@ windows-sys = "0.61.2"
 slint = "1.18.1"
 slint-build = "1.18.1"
 
+# The window-handle vocabulary. Not a second toolkit: it is the set of types
+# through which every Rust windowing library reports "here is the native window",
+# and Slint hands its handle out through it behind the `raw-window-handle-06`
+# feature. Added 2026-09-22 for C5b, where the palette has to put
+# `WS_EX_NOACTIVATE` on its own window; version checked against the registry the
+# same day.
+#
+# Licence sieve, both questions:
+#   (a) MIT OR Apache-2.0 OR Zlib. All three are compatible with GPL-3.0 and the
+#       choice is ours, so nothing here narrows the workspace licence;
+#   (b) not applicable - a set of types, not a reference dataset.
+#
+# 🔴 Only nkb-gui depends on this, and the reason is the layer rather than the
+# size: the package that OWNS a window is the only one entitled to ask what its
+# handle is. The call that uses the handle lives in nkb-sys, reached through
+# nkb-adapters, so `nkb` gains nothing from this line - D25 again.
+raw-window-handle = "0.6.2"
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
