@@ -30,6 +30,7 @@
 //! is two events and there is no way to make it one.
 
 pub mod hotkey;
+pub mod startup;
 
 /// What a successful send actually did.
 ///

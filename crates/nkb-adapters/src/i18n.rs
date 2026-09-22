@@ -414,6 +414,52 @@ pub fn ended(ended: Ended) -> Option<String> {
     pattern_ended(ended).map(ToOwned::to_owned)
 }
 
+// ---------------------------------------------------------------------------
+// Startup - the one thing said before any screen exists
+// ---------------------------------------------------------------------------
+
+/// A failure that happens before the palette exists.
+///
+/// The only key in this module declared HERE rather than matched from `app` or
+/// `core`, and the reason is narrow: there is no type to match on. The failure
+/// comes out of the graphics library as its own error, and the KINDS of startup
+/// failure are not something this product models - it models packs, values and
+/// sequences. A key still has to be a variant rather than a bare function, so
+/// that `ux-spec.md` 6 and `tools/sprawdz-kontrakt.py` see it the same shape as
+/// every other sentence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Startup {
+    /// The window could not be created at all.
+    WindowFailed,
+}
+
+/// The pattern for a startup failure. `ux-spec.md` 6, section B.
+///
+/// ⚠️ The sentence names an environment variable, which document `08` section 3
+/// would normally call an implementation detail. It stays because the same
+/// document's section 4 is stronger here: an option that will do nothing in
+/// somebody's setup MUST say so, and this is the only thing a tester can
+/// actually do today. Slint has no runtime fallback from its hardware renderer
+/// to the software one (`OBS-103`), so without the variable the answer would be
+/// "it does not work", full stop.
+fn pattern_startup(failure: Startup) -> &'static str {
+    match failure {
+        Startup::WindowFailed => {
+            "Naughty Keyboard could not open its window: {reason}. If this machine has no graphics acceleration, set SLINT_BACKEND=winit-software and start it again."
+        }
+    }
+}
+
+/// What the tool says when it could not start.
+///
+/// `reason` is the graphics library's own error text: English, untranslatable,
+/// and in the sentence because without it a tester has nothing to put in a bug
+/// report.
+#[must_use]
+pub fn startup_failure(failure: Startup, reason: &str) -> String {
+    fill(pattern_startup(failure), &[("reason", reason)])
+}
+
 #[cfg(test)]
 #[allow(
     clippy::expect_used,
@@ -487,6 +533,10 @@ mod tests {
         }));
         out.push(shortcuts_unavailable(&ShortcutsUnavailable::CouldNotStart));
         out.push(ended(Ended::ShortcutsGone).expect("the listener going away is said"));
+        // A reason without a full stop of its own: the sentence-count rule below
+        // is about OUR sentence, and a library error text carrying three full
+        // stops would fail it for something we did not write.
+        out.push(startup_failure(Startup::WindowFailed, "no OpenGL context"));
         out
     }
 
