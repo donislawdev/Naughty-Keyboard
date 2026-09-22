@@ -45,6 +45,8 @@ import {
     TextName,
     TextBody,
     TextMono,
+    TextPreview,
+    TextSmallMuted,
     TextCounter,
     Spacer,
     Pill,
@@ -71,6 +73,22 @@ export component Palette inherits Window {
     in property <string> value-name;
     in property <string> value-reference;
     in property <string> value-counts;
+    // The value as a person can see it: invisible characters stand in as
+    // `nkb_core::preview::MARKER`. `ux-spec.md` 2 calls this the line without
+    // which the whole unicode category is unreportable.
+    in property <string> value-preview;
+    // Said only when the preview is a fragment. Never implied: a fragment
+    // presented as the whole is the silence rule 1 forbids.
+    in property <string> value-elided;
+    // What the value is made of, already joined into one line by `i18n`.
+    in property <string> value-shape;
+    // 🔴 Two switches rather than comparing the strings to "" in the view, and
+    // that is not a detour: `ui_guard.rs` refuses a quoted string in a view
+    // (untouchable rule 9, D58) and it caught exactly this - the empty literal
+    // is not a sentence, but an exception carved into a guard is a door, so the
+    // view gets a boolean instead. The same shape as `has-value` above.
+    in property <bool> has-elided;
+    in property <bool> has-shape;
     in property <[Marker]> markers;
 
     // ---- what the tool has to say ------------------------------------------
@@ -140,6 +158,27 @@ export component Palette inherits Window {
             if root.showing && root.has-value: Zone {
                 TextName {
                     text: root.value-name;
+                    wrap: word-wrap;
+                }
+                // The preview, in the order the sketch draws: name, preview,
+                // shape, counters.
+                //
+                // ⚠️ ONE text element rather than coloured segments, and the
+                // reason is the layout engine: colouring the markers apart from
+                // the value would mean one element per segment, and a horizontal
+                // layout in Slint does not wrap - a hundred-code-point value at
+                // preview size would run off the window. `TextPreviewInvisible`
+                // therefore stays unused for now; the marker is told apart by its
+                // SHAPE, which is a visible box, rather than by colour.
+                TextPreview {
+                    text: root.value-preview;
+                    wrap: char-wrap;
+                }
+                if root.has-elided: TextSmallMuted {
+                    text: root.value-elided;
+                }
+                if root.has-shape: TextBody {
+                    text: root.value-shape;
                     wrap: word-wrap;
                 }
                 TextMono {

@@ -41,6 +41,7 @@ use crate::ports::{
 };
 use nkb_core::keys::line_clearing_recipe;
 use nkb_core::pack::{Pack, PackValue};
+use nkb_core::preview::{Preview, ShapeFact, preview, shape};
 use nkb_core::value::ValueProblem;
 
 /// Whether the field is cleared before the value goes in.
@@ -81,6 +82,11 @@ pub enum SendOutcome {
         warnings: usize,
         /// Whether the clearing keys went out before the value.
         cleared: bool,
+        /// The value as a person can see it, invisible characters substituted.
+        /// `ux-spec.md` 2 requires this line and `nkb_core::preview` builds it.
+        preview: Preview,
+        /// What the value is made of, as facts rather than as a sentence.
+        shape: Vec<ShapeFact>,
     },
     /// No pack of that name.
     NotFound,
@@ -245,6 +251,11 @@ pub fn deliver_value(
             utf16_units: delivered.utf16_units,
             warnings,
             cleared,
+            // Built from the LITERAL, which is what actually went out - not from
+            // the written form, which is escaped. Showing the escaped form would
+            // answer a different question, and `nkb emit` already answers it.
+            preview: preview(&literal),
+            shape: shape(&literal),
         },
         Err(DeliveryError::Partial { units_sent, .. }) => SendOutcome::NotDelivered {
             // Rebuilt with the count this layer knows, so the two halves of the

@@ -23,6 +23,7 @@ pub mod keys;
 pub mod lint;
 pub mod metrics;
 pub mod pack;
+pub mod preview;
 pub mod schema;
 pub mod sequence;
 pub mod source_text;

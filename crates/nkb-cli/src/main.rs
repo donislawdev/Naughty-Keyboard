@@ -668,6 +668,12 @@ fn send(args: &[String]) -> ExitCode {
             utf16_units,
             warnings,
             cleared,
+            // The preview and the shape are for the PALETTE. The CLI prints the
+            // escaped form through `nkb emit`, which answers the same question
+            // without inventing a second format for it - and a marker glyph in a
+            // pipeline would be worse than the escape it replaced.
+            preview: _,
+            shape: _,
         } => {
             if cleared {
                 let _ = writeln!(err, "nkb send: cleared the line (Home, Shift+End, Delete)");

@@ -36,6 +36,13 @@ const HEIGHT: u32 = 460;
 /// never fail. `typeface.rs` uses the same reasoning for the font family.
 const TEXT_MUTED: (u8, u8, u8) = (0x7E, 0x87, 0x97);
 
+/// `text-primary` from the dictionary, for the same reason as the role above.
+const TEXT_PRIMARY: (u8, u8, u8) = (0xE6, 0xE9, 0xEF);
+
+/// Nothing but the substitution marker, so its own ink can be measured apart
+/// from the rest of the value.
+const MARKER_ONLY: &str = "\u{2423}\u{2423}\u{2423}\u{2423}";
+
 /// Specimen data. The literals are the test's own - the test is not the product,
 /// and what it feeds in is a sample to look at, the same job the gallery's
 /// labels do. The product fills these from `nkb-adapters::i18n`.
@@ -46,6 +53,16 @@ fn fill(palette: &Palette) {
     palette.set_value_name("Three zero-width spaces".into());
     palette.set_value_reference("unicode-text/zero-width-spaces".into());
     palette.set_value_counts("7 code points, 13 bytes, 7 UTF-16 units".into());
+    // The preview and the shape, exactly as the sketch in `ux-spec.md` 2 draws
+    // them. The marker is U+2423, whose glyph is IN the shipped typeface -
+    // measured from the file's `cmap`, so the marker cannot itself render as the
+    // empty rectangle it exists to prevent.
+    palette.set_value_preview("ab\u{2423}\u{2423}\u{2423}cd".into());
+    palette.set_value_shape("zero-width \u{D7} 3".into());
+    palette.set_has_shape(true);
+    // No elision for a seven-code-point value, and the render proves the band
+    // does not draw an empty line for it.
+    palette.set_has_elided(false);
     palette.set_degraded_label("direct input refused".into());
     // There IS a value, so the value band is gated by `showing` alone - which is
     // what the resting rule below is about, and what mutation M51 flips.
@@ -119,6 +136,35 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     palette.set_degraded(false);
     let showing = render(&window);
     let showing_path = offscreen::save_cropped(&showing, WIDTH, HEIGHT, "palette-showing.png");
+
+    // ---- the preview really draws, measured rather than assumed ------------
+    // 🔴 Zasada GUI 10: a property written into a view can be silently ignored by
+    // the toolkit and looks identical to a working one. So the check is a
+    // DIFFERENCE between two renders: blanking the preview and the shape must
+    // take ink away. Measuring the presence of `text-primary` alone would not
+    // work - the value's name is that colour too, so the count would stay
+    // non-zero with the preview gone.
+    let with_preview = offscreen::count_exactly(&showing, TEXT_PRIMARY);
+    palette.set_value_preview("".into());
+    palette.set_value_shape("".into());
+    palette.set_has_shape(false);
+    let without_preview = offscreen::count_exactly(&render(&window), TEXT_PRIMARY);
+    assert!(
+        with_preview > without_preview,
+        "blanking the preview and the shape changed nothing on screen ({with_preview} vs          {without_preview} pixels of text-primary), so the value band is not drawing them"
+    );
+    // The marker is the point: U+2423 must leave ink of its own, or the preview
+    // shows a value with a hole where the invisible character was.
+    palette.set_value_preview(MARKER_ONLY.into());
+    let marker_only = offscreen::count_exactly(&render(&window), TEXT_PRIMARY);
+    assert!(
+        marker_only > without_preview,
+        "the substitution marker left no ink, so it has no glyph in the shipped          typeface and the preview would show nothing where an invisible character sits"
+    );
+    // Put the specimen back, so the renders saved below are the ones the gallery
+    // and the calibration tool compare against.
+    fill(&palette);
+    palette.set_showing(true);
 
     palette.set_degraded(true);
     let degraded = render(&window);

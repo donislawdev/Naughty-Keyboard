@@ -66,6 +66,7 @@ use nkb_app::advance_sequence::{ChooseError, Message};
 use nkb_app::drive_sequence::Ended;
 use nkb_app::ports::{ShortcutRegistration, ShortcutsUnavailable};
 use nkb_core::hotkeys::{HotkeyAction, HotkeyChord, HotkeyKey, default_chord};
+use nkb_core::preview::ShapeFact;
 
 /// Substitutes `{name}` placeholders in one pass over the pattern.
 ///
@@ -461,6 +462,86 @@ pub fn startup_failure(failure: Startup, reason: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// The value's shape, and the preview around it
+// ---------------------------------------------------------------------------
+
+/// The pattern for one shape fact. `ux-spec.md` 6, section G.
+///
+/// # Why the counted facts read `name × N` rather than `N names`
+///
+/// 🔴 Because there is no plural mechanism here, and two patterns would not be
+/// enough to build one. The sketch in `ux-spec.md` 2 draws `3 zero-width spaces`,
+/// which needs English plural agreement; Polish needs THREE forms for the same
+/// sentence, and the next language may need more. A form that carries the number
+/// beside an uninflected name is the only one that survives translation without
+/// a mechanism we do not have. The sketch says of itself that it is "content, not
+/// appearance", so this is a rendering of it rather than a departure from it.
+///
+/// `×` is `U+00D7`, already in the document's own sketch (`100 000 × "a"`), and
+/// present in the shipped typeface.
+fn pattern_shape(fact: ShapeFact) -> &'static str {
+    match fact {
+        // Reordering first in the list the core builds, and named plainly here:
+        // a tester who misses this reads the field backwards rather than seeing
+        // a defect.
+        ShapeFact::BidiControl(_) => "reordering control × {count}",
+        ShapeFact::ZeroWidth(_) => "zero-width × {count}",
+        ShapeFact::UnusualSpace(_) => "unusual space × {count}",
+        ShapeFact::SoftHyphen(_) => "soft hyphen × {count}",
+        ShapeFact::LineBreak(_) => "line break × {count}",
+        ShapeFact::Tab(_) => "tab × {count}",
+        ShapeFact::OtherControl(_) => "control character × {count}",
+        // No count: these are about WHERE, and there is only one of each end.
+        ShapeFact::LeadingSpace => "leading space",
+        ShapeFact::TrailingSpace => "trailing space",
+    }
+}
+
+/// One shape fact as a person reads it.
+#[must_use]
+pub fn shape_fact(fact: ShapeFact) -> String {
+    let count = match fact {
+        ShapeFact::BidiControl(n)
+        | ShapeFact::ZeroWidth(n)
+        | ShapeFact::UnusualSpace(n)
+        | ShapeFact::SoftHyphen(n)
+        | ShapeFact::LineBreak(n)
+        | ShapeFact::Tab(n)
+        | ShapeFact::OtherControl(n) => n,
+        ShapeFact::LeadingSpace | ShapeFact::TrailingSpace => 0,
+    };
+    fill(pattern_shape(fact), &[("count", &count.to_string())])
+}
+
+/// Every fact about the value, on one line, in the order the core put them.
+///
+/// The separator is `·` (`U+00B7`), from the sketch in `ux-spec.md` 2. Joining
+/// happens here rather than in the core because a separator is text, and
+/// untouchable rule 9 keeps text out of the layer below.
+#[must_use]
+pub fn shape_line(facts: &[ShapeFact]) -> String {
+    facts
+        .iter()
+        .map(|fact| shape_fact(*fact))
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+/// What the palette says when the preview is only part of the value.
+///
+/// 🔴 Said out loud, never implied. A preview showing a hundred characters of a
+/// million without a word would be the tool answering "what did I send" with a
+/// fragment presented as the whole - which is the silence untouchable rule 1
+/// forbids.
+#[must_use]
+pub fn preview_elided(shown: usize, total: usize) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::PreviewElided),
+        &[("shown", &shown.to_string()), ("total", &total.to_string())],
+    )
+}
+
+// ---------------------------------------------------------------------------
 // What the environment would not let the tool do
 // ---------------------------------------------------------------------------
 
@@ -553,6 +634,8 @@ pub enum PaletteLabel {
     /// in the clipboard before. Same rule as the two message rows carrying two
     /// contents in `ux-spec.md` 6.
     DirectInputRefused,
+    /// The preview shows only part of the value, so the palette says how much.
+    PreviewElided,
 }
 
 fn pattern_palette_label(label: PaletteLabel) -> &'static str {
@@ -564,6 +647,7 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::Cleared => "cleared first",
         PaletteLabel::Warnings => "pack warnings: {count}",
         PaletteLabel::DirectInputRefused => "direct input refused",
+        PaletteLabel::PreviewElided => "showing {shown} of {total} code points",
     }
 }
 
@@ -890,7 +974,10 @@ mod tests {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
             let takes_numbers = match label {
-                PaletteLabel::Counter | PaletteLabel::Counts | PaletteLabel::Warnings => true,
+                PaletteLabel::Counter
+                | PaletteLabel::Counts
+                | PaletteLabel::Warnings
+                | PaletteLabel::PreviewElided => true,
                 PaletteLabel::Title
                 | PaletteLabel::Offensive
                 | PaletteLabel::Cleared

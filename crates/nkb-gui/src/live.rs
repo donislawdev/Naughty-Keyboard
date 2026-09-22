@@ -95,6 +95,12 @@ struct ValueView {
     name: String,
     reference: String,
     counts: String,
+    /// The value with invisible characters substituted, ready to draw.
+    preview: String,
+    /// Empty unless the preview is a fragment, in which case it says how much.
+    elided: String,
+    /// Every fact about the value on one line, already joined by `i18n`.
+    shape: String,
     /// Text and whether it is a risk. The COLOUR is the palette's business -
     /// document 13 section 2.1 - so it is not decided here.
     markers: Vec<(String, bool)>,
@@ -218,6 +224,14 @@ fn view_of(outcome: &Outcome, pack_shown: &str, pack: &str, standing: &Standing)
             name: sent.name.clone(),
             reference: sent.reference.clone(),
             counts: i18n::counts(sent.code_points, sent.bytes, sent.utf16_units),
+            preview: sent.preview.shown.clone(),
+            // An empty string rather than an Option, because the view's condition
+            // is `!= ""` and a second representation of "nothing" would be one
+            // more thing that can disagree with the first.
+            elided: sent.preview.elided_total.map_or_else(String::new, |total| {
+                i18n::preview_elided(sent.preview.shown.chars().count(), total)
+            }),
+            shape: i18n::shape_line(&sent.shape),
             markers: markers_of(sent),
         }),
         messages: with_standing(
@@ -281,6 +295,12 @@ fn apply(palette: &Palette, view: View) {
         palette.set_value_name(value.name.into());
         palette.set_value_reference(value.reference.into());
         palette.set_value_counts(value.counts.into());
+        palette.set_value_preview(value.preview.into());
+        // The switches are read BEFORE the strings move into the properties.
+        palette.set_has_elided(!value.elided.is_empty());
+        palette.set_has_shape(!value.shape.is_empty());
+        palette.set_value_elided(value.elided.into());
+        palette.set_value_shape(value.shape.into());
         palette.set_markers(ModelRc::new(VecModel::from(
             value
                 .markers
@@ -381,6 +401,10 @@ mod tests {
             offensive: true,
             warnings: 2,
             cleared: true,
+            // The example from `ux-spec.md` 2, so the field-by-field test below
+            // checks the same value the document draws.
+            preview: nkb_core::preview::preview("ab\u{200B}\u{200B}\u{200B}cd"),
+            shape: nkb_core::preview::shape("ab\u{200B}\u{200B}\u{200B}cd"),
         }
     }
 
@@ -430,6 +454,15 @@ mod tests {
         assert_eq!(
             palette.get_value_counts(),
             "7 code points, 13 bytes, 7 UTF-16 units"
+        );
+        // The preview and the shape, checked against the sketch in `ux-spec.md` 2
+        // rather than against whatever the code happens to produce.
+        assert_eq!(palette.get_value_preview(), "ab\u{2423}\u{2423}\u{2423}cd");
+        assert_eq!(palette.get_value_shape(), "zero-width \u{D7} 3");
+        assert_eq!(
+            palette.get_value_elided(),
+            "",
+            "a short value is shown whole, so nothing is said about eliding"
         );
         assert_eq!(
             slint::Model::row_count(&palette.get_markers()),

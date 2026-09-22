@@ -49,6 +49,7 @@
 
 use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::pack::{Pack, Risk};
+use nkb_core::preview::{Preview, ShapeFact};
 use nkb_core::sequence::{Effect, Event, Sequence};
 
 use crate::load_pack;
@@ -124,6 +125,16 @@ pub struct Sent {
     pub warnings: usize,
     /// Whether the field was cleared before the value went in.
     pub cleared: bool,
+    /// The value as a person can see it: invisible characters substituted by
+    /// `nkb_core::preview::MARKER`, long values elided at both ends.
+    ///
+    /// 🔴 The palette must say the total when `elided_total` is `Some`. A preview
+    /// that silently showed a fragment would be the tool claiming to answer
+    /// "what did I send" while hiding most of it.
+    pub preview: Preview,
+    /// What the value is made of. Facts, in a fixed order that puts what changes
+    /// how the field READS above what changes where the text sits.
+    pub shape: Vec<ShapeFact>,
 }
 
 /// A thing the palette must say. A key with its numbers - untouchable rule 9
@@ -370,6 +381,8 @@ fn classify(outcome: SendOutcome, offensive: bool) -> (Event, Option<Sent>, Vec<
             utf16_units,
             warnings,
             cleared,
+            preview,
+            shape,
         } => (
             Event::InsertionFinished,
             Some(Sent {
@@ -381,6 +394,8 @@ fn classify(outcome: SendOutcome, offensive: bool) -> (Event, Option<Sent>, Vec<
                 offensive,
                 warnings,
                 cleared,
+                preview,
+                shape,
             }),
             Vec::new(),
         ),
