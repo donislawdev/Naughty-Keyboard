@@ -10,6 +10,7 @@ pub mod built_in;
 pub mod canonical;
 pub mod catalogue;
 pub mod fs;
+pub mod i18n;
 pub mod keyboard;
 pub(crate) mod read_pack;
 pub mod shortcuts;

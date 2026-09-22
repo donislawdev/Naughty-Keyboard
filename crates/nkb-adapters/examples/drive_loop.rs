@@ -28,9 +28,9 @@
 
 use std::time::{Duration, Instant};
 
-use nkb_adapters::{BuiltInCatalogue, DirectInjection, GlobalShortcuts, TomlPackFormat};
-use nkb_app::ports::{HotkeyRegistrar, ShortcutRegistration};
-use nkb_app::{AdvanceSequence, Message, Outcome, drive_sequence};
+use nkb_adapters::{BuiltInCatalogue, DirectInjection, GlobalShortcuts, TomlPackFormat, i18n};
+use nkb_app::ports::HotkeyRegistrar;
+use nkb_app::{AdvanceSequence, Outcome, drive_sequence};
 use nkb_core::hotkeys::DEFAULT_BINDINGS;
 
 const PACK: &str = "whitespace";
@@ -42,7 +42,7 @@ fn main() {
     let catalogue = BuiltInCatalogue::new();
     let mut sequence = AdvanceSequence::new();
     if let Err(error) = sequence.choose_pack(&catalogue, &format, PACK) {
-        eprintln!("could not choose the built-in pack {PACK}: {error:?}");
+        eprintln!("{}", i18n::choose_error(&error, PACK));
         std::process::exit(1);
     }
     let Some((_, total)) = sequence.counter() else {
@@ -53,17 +53,16 @@ fn main() {
     let live = match GlobalShortcuts.register(&DEFAULT_BINDINGS) {
         Ok(live) => live,
         Err(error) => {
-            eprintln!("{error}");
+            eprintln!("{}", i18n::shortcuts_unavailable(&error));
             std::process::exit(4);
         }
     };
+    // A registration that worked says nothing - `i18n::registration` returns
+    // `None` for it, so the silence is the dictionary's decision rather than
+    // this harness's.
     for (action, outcome) in live.outcomes() {
-        match outcome {
-            ShortcutRegistration::Registered => {}
-            ShortcutRegistration::Taken => println!("{action:?}: TAKEN by another application"),
-            ShortcutRegistration::Failed { code } => {
-                println!("{action:?}: FAILED with code {code}")
-            }
+        if let Some(line) = i18n::registration(outcome, *action) {
+            println!("{line}");
         }
     }
     println!(
@@ -85,10 +84,18 @@ fn main() {
         &mut present,
     );
     drop(live);
-    println!("ended: {ended:?} - every shortcut released");
+    if let Some(line) = i18n::ended(ended) {
+        println!("{line}");
+    }
+    println!("every shortcut released");
 }
 
-/// One line per outcome. Words live here, in the harness, not in `app`.
+/// One line per outcome.
+///
+/// The counter and the delivery facts are formatted here, because they are
+/// diagnostics for whoever runs this harness. The SENTENCES are not: they come
+/// from `i18n`, so this example and the palette cannot end up saying two
+/// different things about the same event.
 fn describe(outcome: &Outcome) -> String {
     let counter = outcome.sequence.counter().map_or_else(
         || "-/-".to_owned(),
@@ -103,26 +110,7 @@ fn describe(outcome: &Outcome) -> String {
     }
     for message in &outcome.messages {
         line.push(' ');
-        line.push_str(&match message {
-            Message::EndOfPack { total } => {
-                format!("end of pack ({total}); press again to start over")
-            }
-            Message::CounterKept { done, total } => format!("counter kept at {done}/{total}"),
-            Message::NoPack => "no pack chosen".to_owned(),
-            Message::NoTarget => "nothing has the focus, nothing sent".to_owned(),
-            Message::ModifierHeld { key } => format!("release {key} and try again"),
-            Message::ClearingFailed => "the field could not be cleared".to_owned(),
-            Message::Interrupted {
-                units_sent,
-                units_expected,
-            } => format!("interrupted after {units_sent} of {units_expected} units"),
-            Message::Degraded => "direct delivery failed; clipboard mode".to_owned(),
-            Message::ValueTooLarge { id } => format!("value {id} is too large"),
-            Message::Unhandled { action } => format!("{action:?} is not wired yet"),
-            Message::PressedWhileBusy { action } => {
-                format!("{action:?} pressed while the previous send was running - ignored")
-            }
-        });
+        line.push_str(&i18n::message(message, PACK));
     }
     line
 }
