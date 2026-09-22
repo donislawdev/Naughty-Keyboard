@@ -86,17 +86,100 @@ export component SampleSurface inherits Rectangle {
     border-radius: Tokens.radius;
 }
 
-// One row of the hint bar: the key, then what it does.
-export component Hint inherits HorizontalLayout {
-    in property <string> key;
-    in property <string> action;
+// What one hint says. A struct rather than two parallel lists, so a key and its
+// action cannot drift apart by one index.
+export struct HintRow {
+    key: string,
+    action: string,
+}
+
+// The hint bar: one hint per line, keys in their own column.
+//
+// 🔴 It is a GRID and it runs DOWNWARDS, and both were measured rather than
+// preferred. Written as a row of hints side by side - which is how the sketch in
+// `ux-spec.md` 2 draws it - three hints in the author's own language already ran
+// off the right edge of a 420 px palette, and the fourth word of a German or
+// Polish translation would not have fitted either. GUI rule 14: a layout is
+// computed, never fitted to what the author happened to measure on their own
+// machine.
+//
+// The grid also buys the alignment GUI rule 13 asks for: every key starts at the
+// same x, so the eye reads a column instead of hunting.
+export component HintBar inherits GridLayout {
+    in property <[HintRow]> rows;
     spacing: Tokens.space-1;
 
-    TextSmallMuted {
-        text: root.key;
-        font-family: Tokens.font-mono;
+    for hint in root.rows: Row {
+        TextSmallMuted {
+            text: hint.key;
+            font-family: Tokens.font-mono;
+            horizontal-stretch: 0;
+        }
+        TextHint {
+            text: hint.action;
+            horizontal-stretch: 1;
+        }
     }
-    TextHint {
-        text: root.action;
+}
+
+// The ground the whole palette stands on.
+//
+// # Why the window itself is transparent and this carries the colour
+//
+// D53 puts the resting alpha on the BACKGROUND and never on the text, and that
+// rules out `opacity`, which in Slint fades an element together with everything
+// inside it. So the alpha rides on the colour. `slint.md` 2.12 measured both
+// routes on Windows and both hold (`Window.background` directly: 6 of 6 runs,
+// this one: 4 of 4) - this one is chosen because a window background cannot be
+// rounded and a rectangle can.
+//
+// ⚠️ The alpha is honoured only where the system allows translucency at all.
+// With transparency effects off (Windows), "reduce transparency" (macOS) or high
+// contrast anywhere, the palette must be solid - which is why `dimmed` is an
+// input rather than something computed from the state here.
+export component WindowSurface inherits Rectangle {
+    in property <bool> dimmed;
+    background: root.dimmed ? Tokens.surface.with-alpha(Tokens.alpha-resting) : Tokens.surface;
+    border-radius: Tokens.radius-window;
+}
+
+// One band of the palette, with the rule above it.
+//
+// Document 13 sections 18 and 19 ask that a section be a component with its own
+// spacing rather than whatever container happened to be there, and there is a
+// second reason here: a band that hides must take its own divider with it.
+// Written as a bare `Hairline` between bands, hiding a band leaves a rule
+// floating over nothing, and the two would have to be gated in step forever.
+export component Zone inherits VerticalLayout {
+    in property <bool> divided: true;
+
+    if root.divided: Hairline { }
+
+    VerticalLayout {
+        padding: Tokens.space-3;
+        spacing: Tokens.space-2;
+        @children
+    }
+}
+
+// One thing worth knowing about the value that just went out.
+//
+// 🔴 `risky` is a fact, not a colour. The layer that fills this model must not
+// be able to pick the tint, or appearance would start living in Rust - document
+// 13 section 2.1. What is risky and what is merely worth saying is a question
+// about the value; which colour that becomes is a question about the palette.
+export struct Marker {
+    text: string,
+    risky: bool,
+}
+
+export component MarkerRow inherits HorizontalLayout {
+    in property <[Marker]> markers;
+    spacing: Tokens.space-2;
+    alignment: start;
+
+    for marker in root.markers: Pill {
+        text: marker.text;
+        tint: marker.risky ? Tokens.risk : Tokens.text-muted;
     }
 }

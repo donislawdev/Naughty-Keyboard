@@ -460,6 +460,120 @@ pub fn startup_failure(failure: Startup, reason: &str) -> String {
     fill(pattern_startup(failure), &[("reason", reason)])
 }
 
+// ---------------------------------------------------------------------------
+// The palette's own labels
+// ---------------------------------------------------------------------------
+
+/// A word the palette writes BESIDE its data, as opposed to a sentence it says.
+///
+/// # Why these are keys at all
+///
+/// Untouchable rule 9 does not distinguish a sentence from a word: both are text
+/// a person reads. `7 / 34` looks like pure data until one notices that the
+/// slash, the spaces and the order are a decision - and that the view is exactly
+/// where such a decision must not live, because `ui_guard.rs` refuses a quoted
+/// string there. So the palette receives finished strings, and this is where
+/// they are finished.
+///
+/// # Why the enum lives here and not in `app`
+///
+/// The other key sets match on types the application layer already owns, which
+/// makes the compiler the completeness guard. These have no such producer: they
+/// are presentation, and `app` neither knows nor should know that a counter is
+/// drawn. `Startup` above is the same shape for the same reason - a key has to
+/// be a variant rather than a bare function, so that `ux-spec.md` 6 and
+/// `tools/sprawdz-kontrakt.py` see it like every other sentence.
+///
+/// ⚠️ The completeness that IS guarded here is the other direction: a variant
+/// without a pattern does not compile, and a pattern whose placeholders do not
+/// match its accessor is caught by the test at the bottom of this file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaletteLabel {
+    /// The window's own title, which the system shows in the task switcher.
+    Title,
+    /// Where the sequence stands inside the pack.
+    Counter,
+    /// How much text the value that just went out actually was.
+    Counts,
+    /// The value is offensive - marked before a tester can wonder,
+    /// `product-spec.md` 10.2.
+    Offensive,
+    /// The field was emptied before the value went in.
+    Cleared,
+    /// The pack loaded, and it loaded with warnings.
+    Warnings,
+    /// The standing bar of the degraded state.
+    ///
+    /// 🔴 It says what is true TODAY. `ux-spec.md` 2 writes this bar as
+    /// `clipboard mode`, and that sentence would be worse than silence while no
+    /// clipboard port exists: the tester presses paste and pastes whatever was
+    /// in the clipboard before. Same rule as the two message rows carrying two
+    /// contents in `ux-spec.md` 6.
+    DirectInputRefused,
+}
+
+fn pattern_palette_label(label: PaletteLabel) -> &'static str {
+    match label {
+        PaletteLabel::Title => "Naughty Keyboard",
+        PaletteLabel::Counter => "{done} / {total}",
+        PaletteLabel::Counts => "{codepoints} code points, {bytes} bytes, {utf16} UTF-16 units",
+        PaletteLabel::Offensive => "offensive",
+        PaletteLabel::Cleared => "cleared first",
+        PaletteLabel::Warnings => "pack warnings: {count}",
+        PaletteLabel::DirectInputRefused => "direct input refused",
+    }
+}
+
+/// A label that carries no number, ready to show.
+///
+/// ⚠️ Takes the enum rather than being seven functions, and the price is that a
+/// caller can ask for a label that HAS placeholders. The test at the bottom of
+/// this file refuses exactly that: a pattern with a brace must have a typed
+/// accessor below, and one without must not.
+#[must_use]
+pub fn label(label: PaletteLabel) -> &'static str {
+    pattern_palette_label(label)
+}
+
+/// Where the sequence stands: `7 / 34`.
+#[must_use]
+pub fn counter(done: usize, total: usize) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::Counter),
+        &[("done", &done.to_string()), ("total", &total.to_string())],
+    )
+}
+
+/// How much text went out, in the three units that differ from each other.
+///
+/// The three are not decoration. A tester reporting a bug needs the count the
+/// receiving system will argue about, and which one that is depends on the
+/// system - so the palette shows all three rather than picking for them.
+#[must_use]
+pub fn counts(code_points: usize, bytes: usize, utf16_units: usize) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::Counts),
+        &[
+            ("codepoints", &code_points.to_string()),
+            ("bytes", &bytes.to_string()),
+            ("utf16", &utf16_units.to_string()),
+        ],
+    )
+}
+
+/// How many warnings the pack carried when it loaded.
+///
+/// Written as `pack warnings: 1` rather than `1 pack warnings` on purpose: the
+/// second needs a plural rule, and a plural rule is a mechanism this module does
+/// not have and does not need for one label.
+#[must_use]
+pub fn warnings(count: usize) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::Warnings),
+        &[("count", &count.to_string())],
+    )
+}
+
 #[cfg(test)]
 #[allow(
     clippy::expect_used,
@@ -710,5 +824,67 @@ mod tests {
             assert!(!out.is_empty(), "{message:?} produced nothing");
             assert!(!out.contains('{'), "{message:?} left a placeholder: {out}");
         }
+    }
+
+    /// The palette's labels divide in two, and the division has to hold.
+    ///
+    /// ⚠️ The array below is the one thing here that can drift from the enum: a
+    /// new variant left out of it is simply not visited. That is tolerable
+    /// because it is not the only net - `tools/sprawdz-kontrakt.py` reads every
+    /// `pattern_*` function and goes red for a key with no row in `ux-spec.md` 6,
+    /// so a variant added in silence fails a gate either way.
+    #[test]
+    fn a_label_carrying_a_number_has_a_typed_accessor_and_one_without_does_not() {
+        for label in [
+            PaletteLabel::Title,
+            PaletteLabel::Counter,
+            PaletteLabel::Counts,
+            PaletteLabel::Offensive,
+            PaletteLabel::Cleared,
+            PaletteLabel::Warnings,
+            PaletteLabel::DirectInputRefused,
+        ] {
+            // Exhaustive, so a new variant must be put on one side or the other
+            // before this file compiles.
+            let takes_numbers = match label {
+                PaletteLabel::Counter | PaletteLabel::Counts | PaletteLabel::Warnings => true,
+                PaletteLabel::Title
+                | PaletteLabel::Offensive
+                | PaletteLabel::Cleared
+                | PaletteLabel::DirectInputRefused => false,
+            };
+            let pattern = pattern_palette_label(label);
+            assert_eq!(
+                pattern.contains('{'),
+                takes_numbers,
+                "{label:?}: a pattern with a placeholder needs a typed accessor, and one \
+                 without must be reachable through `label()` - pattern was {pattern:?}"
+            );
+            if !takes_numbers {
+                assert!(
+                    !super::label(label).is_empty(),
+                    "{label:?} produced nothing"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_numbered_labels_leave_no_placeholder_standing() {
+        // Zero, one and a value big enough to differ in all three units: every
+        // one of these is reachable from a real pack.
+        for text in [
+            counter(0, 0),
+            counter(7, 34),
+            counts(0, 0, 0),
+            counts(2, 8, 4),
+            warnings(0),
+            warnings(1),
+        ] {
+            assert!(!text.is_empty(), "a label produced nothing");
+            assert!(!text.contains('{'), "a label left a placeholder: {text}");
+        }
+        assert_eq!(counter(7, 34), "7 / 34");
+        assert_eq!(counts(2, 8, 4), "2 code points, 8 bytes, 4 UTF-16 units");
     }
 }

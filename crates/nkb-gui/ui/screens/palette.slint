@@ -1,0 +1,187 @@
+// The palette: a DISPLAY driven by global shortcuts, not a form.
+//
+// `ux-spec.md` 2 fixes the shape, and the one requirement that decides the rest
+// is that this window NEVER TAKES KEYBOARD FOCUS: if it did, the cursor would
+// leave the field under test at every insertion, which is the product. So there
+// is no control here to click, no button and no text field. Everything arrives
+// as a property and everything leaves as a shortcut.
+//
+// # Two axes and a bar, not five states
+//
+// `OBS-94` settled this for the core and it holds for the window: `degraded` is
+// a SECOND AXIS, not another state. So:
+//
+//     showing      false = resting, true = a value just went out
+//     degraded     a standing condition, visible in both
+//     hints        the first twenty uses, and on demand afterwards
+//
+// 🔴 Nothing here ever hides the WINDOW. `OBS-80` measured that `hide()` and
+// `show()` destroy the window on Windows and lose `WS_EX_NOACTIVATE` with it, so
+// the three states of `ux-spec.md` 2 are transparency and which bands are
+// visible - never the window itself.
+//
+// # What the resting state may show, and why it is so short
+//
+// D53: at the resting alpha, `text-muted` no longer holds 4.5:1 over a white
+// window lying under the palette - it would need 0.96 - so it MUST NOT appear
+// while the palette is dimmed. Every muted role therefore lives inside a band
+// gated on `showing`, and `appearance.rs` measures the rendered pixels rather
+// than trusting this sentence.
+//
+// # Two zones from the sketch in `ux-spec.md` 2 are absent, on purpose
+//
+// - the TARGET band (application, window title, field kind). `nkb-sys` knows one
+//   thing about the target today, its window handle, and nothing that could be
+//   written next to a person. A band with no source would be a promise, so it
+//   waits for `TargetInspector` - `OBS-91`;
+// - the value PREVIEW and its shape line. `Sent` deliberately carries neither:
+//   that is piece C4b.
+//
+// Both absences are named here rather than left as a gap the next session
+// rediscovers.
+
+import {
+    Tokens,
+    TextName,
+    TextBody,
+    TextMono,
+    TextCounter,
+    Spacer,
+    Pill,
+    Zone,
+    HintRow,
+    HintBar,
+    Marker,
+    MarkerRow,
+    WindowSurface,
+} from "../components.slint";
+
+export component Palette inherits Window {
+    // ---- what the window is ------------------------------------------------
+    // Every string below is finished text from `nkb-adapters::i18n`. Assembling
+    // one here would mean a quoted string in a view, which `ui_guard.rs`
+    // refuses - untouchable rule 9, D58.
+    in property <string> window-title;
+
+    // ---- the pack band, the only one the resting state shows ----------------
+    in property <string> pack;
+    in property <string> counter;
+
+    // ---- the value band ----------------------------------------------------
+    in property <string> value-name;
+    in property <string> value-reference;
+    in property <string> value-counts;
+    in property <[Marker]> markers;
+
+    // ---- what the tool has to say ------------------------------------------
+    in property <[string]> messages;
+
+    // ---- the standing bar --------------------------------------------------
+    in property <string> degraded-label;
+
+    // ---- the hint bar ------------------------------------------------------
+    in property <[HintRow]> hints;
+
+    // ---- state -------------------------------------------------------------
+    in property <bool> showing;
+    // Whether there is a value to show at all. Separate from `showing` because
+    // the palette is awake and opaque at first run, with the hints up and
+    // nothing sent yet - `ux-spec.md` 5.1. Without this the value band would
+    // then draw three empty lines and a row of no markers.
+    in property <bool> has-value;
+    in property <bool> degraded;
+    in property <bool> hints-visible: true;
+    // Whether the system permits translucency at all (D53). Separate from
+    // `showing` because it is the system's answer, not the palette's state.
+    in property <bool> translucency-allowed: true;
+
+    title: root.window-title;
+    // The colour lives on the surface below, so that the palette can have
+    // rounded corners - a window background cannot.
+    background: transparent;
+    always-on-top: true;
+    width: Tokens.palette-width;
+    // The palette follows its own content. Measured 2026-09-22: Slint does NOT
+    // resize a window when what is inside it changes, so without this binding
+    // the resting state would be one line of text at the top of a panel the size
+    // of the shown state - the opposite of what `ux-spec.md` 2 asks of it.
+    height: surface.preferred-height;
+
+    surface := WindowSurface {
+        dimmed: !root.showing && root.translucency-allowed;
+
+        VerticalLayout {
+            // Packed to the top: the window sizes to its content, and where the
+            // system gives it more room the bands must not stretch to fill it.
+            alignment: start;
+
+            // The pack and the counter. No rule above it: it is the first band,
+            // and at rest it is the only one.
+            Zone {
+                divided: false;
+                HorizontalLayout {
+                    spacing: Tokens.space-2;
+                    TextBody {
+                        // A pack name is somebody else's string and can be any
+                        // length. Elided rather than wrapped: the counter beside
+                        // it must keep its place, and a band that grows a line
+                        // because of a long name moves everything below it.
+                        text: root.pack;
+                        overflow: elide;
+                    }
+                    Spacer { }
+                    TextCounter {
+                        text: root.counter;
+                    }
+                }
+            }
+
+            // The value that just went out.
+            if root.showing && root.has-value: Zone {
+                TextName {
+                    text: root.value-name;
+                    wrap: word-wrap;
+                }
+                TextMono {
+                    text: root.value-reference;
+                }
+                TextMono {
+                    text: root.value-counts;
+                }
+                MarkerRow {
+                    markers: root.markers;
+                }
+            }
+
+            // What the tool has to say about it. Rule 1 of this project: a run
+            // that did less than it promised says so, and this band is where
+            // the palette says it.
+            if root.showing && root.messages.length > 0: Zone {
+                for message in root.messages: TextBody {
+                    text: message;
+                    wrap: word-wrap;
+                }
+            }
+
+            // The standing bar. Permanent by design: a message that disappears
+            // stops existing while the limitation stays - `ux-spec.md` 2.
+            if root.degraded: Zone {
+                HorizontalLayout {
+                    alignment: start;
+                    Pill {
+                        text: root.degraded-label;
+                        tint: Tokens.risk;
+                    }
+                }
+            }
+
+            // The hints. Hidden at rest, because the resting state is meant to
+            // take little room and take no attention.
+            if root.hints-visible && root.showing: Zone {
+                HintBar {
+                    rows: root.hints;
+                }
+            }
+        }
+    }
+}

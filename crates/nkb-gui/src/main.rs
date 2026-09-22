@@ -4,9 +4,17 @@
 //! on - D25. It shares `core` and `app` with `nkb` and shares the same catalogue
 //! on disk, and neither executable can start the other.
 //!
-//! Today it opens the gallery: every component in every state, which is what
-//! document 13 section 3 asks for and what a session reads to find out what the
-//! vocabulary already contains. The palette itself comes next.
+//! # What it does today, and what it does not
+//!
+//! It opens the palette on a pack and shows where the sequence stands. What it
+//! does NOT do yet is listen: the global shortcuts, the worker thread and
+//! `drive_sequence` are piece C5, and the pattern for that is already written
+//! and measured in `crates/nkb-adapters/examples/drive_loop.rs`. So the window
+//! is real and the data in it is real, and nothing yet moves it.
+//!
+//! The catalogue of components stays reachable behind an argument, which is what
+//! document 13 section 4 asks for - it is a view for whoever is BUILDING the
+//! interface, not for a tester.
 //!
 //! # No console window, and what had to exist first
 //!
@@ -38,12 +46,39 @@
 
 use std::process::ExitCode;
 
-use nkb_adapters::report_window_failure;
-use nkb_gui::Gallery;
-use slint::ComponentHandle;
+use nkb_adapters::i18n::PaletteLabel;
+use nkb_adapters::{BuiltInCatalogue, TomlPackFormat, i18n, report_window_failure};
+use nkb_app::AdvanceSequence;
+use nkb_core::hotkeys::{DEFAULT_BINDINGS, HotkeyAction};
+use nkb_gui::{Gallery, HintRow, Palette};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+
+/// The pack the palette opens on when the command line names none.
+///
+/// One of the three that ship inside the binary (D51), so the palette has
+/// something real to show on a machine with no catalogue on disk at all.
+const DEFAULT_PACK: &str = "whitespace";
+
+/// Which shortcuts the hint bar names, and in this order.
+///
+/// Four of the ten, because `ux-spec.md` 2 gives the hint bar four and because a
+/// list of ten stops being a hint. These four are the ones the first five
+/// minutes need: move through the pack, and get the report out.
+///
+/// ⚠️ `OpenPacks` is here although the pack search is step 7 and does not exist.
+/// It stays because the shortcut IS registered - `nkb_core::hotkeys` reserves
+/// all ten so another application cannot take them - and an unwired one answers
+/// with `Message::Unhandled` rather than with silence. A tester who presses it
+/// learns something true either way.
+const HINTED: [HotkeyAction; 4] = [
+    HotkeyAction::NextValue,
+    HotkeyAction::PreviousValue,
+    HotkeyAction::CopyReport,
+    HotkeyAction::OpenPacks,
+];
 
 fn main() -> ExitCode {
-    match start() {
+    match start(&request()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             // The channel is reported rather than ignored, but there is nothing
@@ -60,7 +95,80 @@ fn main() -> ExitCode {
     }
 }
 
+/// What the command line asked for.
+///
+/// Deliberately tiny: two shapes, no flags to combine, no parser. `nkb` is the
+/// executable with a command surface and `ux-spec.md` 10 is its contract; this
+/// one is a window, and a window that grows an option grammar has started to
+/// become the other binary.
+enum Request {
+    /// The palette, on this pack.
+    Palette(String),
+    /// The component catalogue - document 13 section 3.
+    Gallery,
+}
+
+fn request() -> Request {
+    let mut arguments = std::env::args().skip(1);
+    match arguments.next() {
+        Some(first) if first == "--gallery" => Request::Gallery,
+        Some(pack) => Request::Palette(pack),
+        None => Request::Palette(DEFAULT_PACK.to_owned()),
+    }
+}
+
 /// Everything that can fail before there is a window to fail in.
-fn start() -> Result<(), slint::PlatformError> {
-    Gallery::new()?.run()
+fn start(request: &Request) -> Result<(), slint::PlatformError> {
+    match request {
+        Request::Gallery => Gallery::new()?.run(),
+        Request::Palette(pack) => palette(pack)?.run(),
+    }
+}
+
+/// The palette, filled from a real pack.
+///
+/// 🔴 Every string handed to the window comes from `nkb_adapters::i18n`. Writing
+/// one here would move the sentence out of the dictionary into the wiring, which
+/// is the same violation as writing it into the `.slint` file and is caught by
+/// the same guard - untouchable rule 9, D58.
+fn palette(pack: &str) -> Result<Palette, slint::PlatformError> {
+    let mut sequence = AdvanceSequence::new();
+    let mut messages: Vec<SharedString> = Vec::new();
+
+    if let Err(error) = sequence.choose_pack(&BuiltInCatalogue::new(), &TomlPackFormat, pack) {
+        messages.push(i18n::choose_error(&error, pack).into());
+    }
+
+    let palette = Palette::new()?;
+    palette.set_window_title(i18n::label(PaletteLabel::Title).into());
+    palette.set_degraded_label(i18n::label(PaletteLabel::DirectInputRefused).into());
+
+    if let Some(name) = sequence.pack_name() {
+        palette.set_pack(name.into());
+    }
+    if let Some((done, total)) = sequence.counter() {
+        palette.set_counter(i18n::counter(done, total).into());
+    }
+
+    palette.set_messages(ModelRc::new(VecModel::from(messages)));
+    palette.set_hints(ModelRc::new(VecModel::from(hints())));
+
+    // Awake at first run, with the hints up and nothing sent yet - `ux-spec.md`
+    // 5.1. The resting state arrives with the loop that can leave it again.
+    palette.set_showing(true);
+    palette.set_has_value(false);
+
+    Ok(palette)
+}
+
+/// The hint bar's rows, built from the bindings rather than written out.
+fn hints() -> Vec<HintRow> {
+    DEFAULT_BINDINGS
+        .iter()
+        .filter(|(action, _)| HINTED.contains(action))
+        .map(|(action, chord)| HintRow {
+            key: i18n::chord(*chord).into(),
+            action: i18n::action_name(*action).into(),
+        })
+        .collect()
 }

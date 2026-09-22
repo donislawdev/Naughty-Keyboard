@@ -27,7 +27,12 @@ import {
     Pill,
     StatusDot,
     SampleSurface,
-    Hint,
+    HintRow,
+    HintBar,
+    Marker,
+    MarkerRow,
+    Zone,
+    WindowSurface,
 } from "../components.slint";
 
 export component Gallery inherits Window {
@@ -91,14 +96,46 @@ export component Gallery inherits Window {
 
         Hairline {}
 
-        // The hint bar, with the spacer doing the job a bare Rectangle would
-        // otherwise be asked to do.
+        // The markers of the value band, both tints. The tint never carries the
+        // meaning by itself - the word inside each one says the same thing.
+        MarkerRow {
+            markers: [
+                { text: "offensive", risky: true },
+                { text: "cleared first", risky: false },
+            ];
+        }
+
+        // The hint bar. It runs DOWNWARDS and aligns its keys in a column, and
+        // the longest action below is why: side by side, three hints already ran
+        // off a 420 px palette in the author's own language.
+        HintBar {
+            rows: [
+                { key: "Ctrl+Alt+N", action: "Next value" },
+                { key: "Ctrl+Alt+P", action: "Previous value" },
+                { key: "Ctrl+Alt+B", action: "An action name long enough to be a translation" },
+            ];
+        }
+
+        Hairline {}
+
+        // A band of the palette, with its own rule and padding, and the same
+        // band with the rule suppressed - which is how the first band is drawn.
+        Zone {
+            TextSmallMuted { text: "Zone - a band with its rule above it"; }
+        }
+        Zone {
+            divided: false;
+            TextSmallMuted { text: "Zone { divided: false } - the first band"; }
+        }
+
+        // The palette's own ground, at both opacities. Over the gallery's
+        // background the dimmed one barely differs, and that is honest: the
+        // difference only appears over somebody else's window.
         HorizontalLayout {
-            spacing: Tokens.space-3;
-            Hint { key: "Ctrl+Alt+N"; action: "next"; }
-            Hint { key: "Ctrl+Alt+P"; action: "prev"; }
-            Spacer {}
-            Hint { key: "?"; action: "help"; }
+            spacing: Tokens.space-2;
+            height: Tokens.sample-height;
+            WindowSurface { }
+            WindowSurface { dimmed: true; }
         }
 
         Hairline {}
