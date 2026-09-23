@@ -14,6 +14,7 @@ use nkb_core::hotkeys::{HotkeyAction, HotkeyChord};
 use nkb_core::keys::KeyChord;
 use nkb_core::lint::LintProblem;
 use nkb_core::pack::Pack;
+use nkb_core::report::ReportBlock;
 use std::fmt;
 use std::time::Duration;
 
@@ -229,6 +230,71 @@ pub trait KeystrokeSender {
     /// Returns [`KeystrokeError`] when there is no route, no target, a held
     /// modifier, or when only part of the sequence was accepted.
     fn send_keystrokes(&self, chords: &[KeyChord]) -> Result<(), KeystrokeError>;
+}
+
+/// Why the clipboard did not take the text.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClipboardError {
+    /// Another application held the clipboard for longer than the adapter
+    /// waits. Passing, so the tester is told to press again - not that the
+    /// tool cannot do it.
+    Busy,
+    /// The clipboard refused, and the words are the library's: this is the one
+    /// specific thing a tester can put in a ticket about the tool itself.
+    Failed { detail: String },
+}
+
+impl fmt::Display for ClipboardError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Busy => f.write_str("busy"),
+            Self::Failed { detail } => write!(f, "failed: {detail}"),
+        }
+    }
+}
+
+/// Puts text on the system clipboard, replacing what was there.
+///
+/// # Exactly two doors, and today one
+///
+/// Untouchable rule 17: the tool uses the clipboard in TWO places - copying the
+/// report block, and clipboard mode delivering a value - and nowhere else. That
+/// is a promise nobody can see in use, so `architektura.md` 5 turns it into a
+/// count, and `crates/nkb-app/tests/clipboard_has_named_doors.rs` names the
+/// places and goes red when a third appears. Clipboard mode does not exist yet,
+/// so today there is ONE.
+///
+/// # What this port deliberately cannot do
+///
+/// It cannot READ. Clipboard mode will not need to either - `ux-spec.md` 12
+/// item 2 recommends against restoring the tester's previous clipboard, because
+/// a restore writes into shared state at a moment the tool does not know - and a
+/// read that nothing calls is a capability waiting for a reason. It arrives with
+/// the first use that needs it, and the promise's count moves with it.
+pub trait Clipboard {
+    /// Replaces the clipboard's text with `text`.
+    ///
+    /// # Errors
+    ///
+    /// [`ClipboardError`] when the clipboard is held by somebody else or
+    /// refuses outright. Nothing is ever reported as copied that was not.
+    fn put_text(&self, text: &str) -> Result<(), ClipboardError>;
+}
+
+/// Turns the facts of a report block into the text a tester pastes.
+///
+/// # Why text is a port here and nowhere else in `app`
+///
+/// Everywhere else `app` returns keys and facts, and the surface that shows them
+/// turns them into words (untouchable rule 9). The report block is the one case
+/// where the WORDS are the payload of an effect `app` performs: they go into the
+/// clipboard, not onto a screen, and the use case must know whether that worked.
+/// So the words come in through a port, and the adapter behind it holds them -
+/// the same shape `nkb session export` will need for its Markdown, which is the
+/// second case `architektura.md` 8 asks for before a seam is cut.
+pub trait ReportText {
+    /// The block, ready to paste.
+    fn report_text(&self, block: &ReportBlock) -> String;
 }
 
 /// Supplies the raw text of a pack file.

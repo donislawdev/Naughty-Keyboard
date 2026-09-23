@@ -130,6 +130,20 @@ pub fn is_format_character(character: char) -> bool {
     )
 }
 
+/// One character in the escaped notation of `pack-format.md` 2 - `\u200B`, or
+/// `\U0001F600` outside the basic plane - whether or not the format's own rule
+/// would escape it.
+///
+/// For a caller with a stricter rule of its own: the report block escapes its
+/// prose more widely than a pack file is escaped (`D68`, `OBS-125`), and it must
+/// still write the one notation a reader knows, not a second one.
+#[must_use]
+pub fn escaped_char(character: char) -> String {
+    let mut out = String::new();
+    write_escape(&mut out, character);
+    out
+}
+
 fn write_escape(out: &mut String, character: char) {
     let code = character as u32;
     if code <= 0xFFFF {

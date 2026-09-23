@@ -38,6 +38,10 @@ slint = { workspace = true, features = ["renderer-software", "raw-window-handle-
 # look for it.
 raw-window-handle.workspace = true
 
+# The clipboard, for `Ctrl+Alt+B`. Why here and nowhere else, and why it adds
+# no crate to the product: the workspace manifest, beside the version.
+arboard.workspace = true
+
 [build-dependencies]
 slint-build.workspace = true
 

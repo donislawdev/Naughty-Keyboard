@@ -28,8 +28,11 @@
 
 use std::time::{Duration, Instant};
 
-use nkb_adapters::{BuiltInCatalogue, DirectInjection, GlobalShortcuts, TomlPackFormat, i18n};
-use nkb_app::ports::HotkeyRegistrar;
+use nkb_adapters::{
+    BuiltInCatalogue, DirectInjection, EnglishReport, GlobalShortcuts, TomlPackFormat, i18n,
+};
+use nkb_app::advance_sequence::Ports;
+use nkb_app::ports::{Clipboard, ClipboardError, HotkeyRegistrar};
 use nkb_app::{AdvanceSequence, Outcome, drive_sequence};
 use nkb_core::hotkeys::DEFAULT_BINDINGS;
 
@@ -74,11 +77,16 @@ fn main() {
     let started = Instant::now();
     let mut keep_going = || started.elapsed() < RUN_FOR;
     let mut present = |outcome: Outcome| println!("{}", describe(&outcome));
+    let ports = Ports {
+        delivery: &DirectInjection,
+        keys: &DirectInjection,
+        clipboard: &NoClipboard,
+        report_text: &EnglishReport,
+    };
     let ended = drive_sequence(
         live.as_ref(),
         &mut sequence,
-        &DirectInjection,
-        &DirectInjection,
+        &ports,
         TICK,
         &mut keep_going,
         &mut present,
@@ -113,4 +121,19 @@ fn describe(outcome: &Outcome) -> String {
         line.push_str(&i18n::message(message, PACK));
     }
     line
+}
+
+/// This example has no clipboard, and says so when `Ctrl+Alt+B` asks for one.
+///
+/// The real one lives in `nkb-gui`, and it cannot live here: its library would
+/// reach `nkb` through this package (D25). A clipboard that refused in silence
+/// - or pretended to copy - would make this example lie about the palette.
+struct NoClipboard;
+
+impl Clipboard for NoClipboard {
+    fn put_text(&self, _text: &str) -> Result<(), ClipboardError> {
+        Err(ClipboardError::Failed {
+            detail: "this example has no clipboard - the palette has".to_owned(),
+        })
+    }
 }

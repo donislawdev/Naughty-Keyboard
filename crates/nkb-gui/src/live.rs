@@ -42,8 +42,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use nkb_adapters::i18n::PaletteLabel;
-use nkb_adapters::{BuiltInCatalogue, DirectInjection, GlobalShortcuts, TomlPackFormat, i18n};
-use nkb_app::advance_sequence::Sent;
+use nkb_adapters::{
+    BuiltInCatalogue, DirectInjection, EnglishReport, GlobalShortcuts, TomlPackFormat, i18n,
+};
+use nkb_app::advance_sequence::{Ports, Sent};
 use nkb_app::ports::HotkeyRegistrar;
 use nkb_app::{AdvanceSequence, Outcome, drive_sequence};
 use nkb_core::hotkeys::DEFAULT_BINDINGS;
@@ -52,6 +54,7 @@ use nkb_core::sequence::Delivery;
 use nkb_core::typeface::outside_guarantee;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
+use crate::clipboard::SystemClipboard;
 use crate::focus::{Standing, standing_line};
 use crate::typeface::SHIPPED;
 use crate::{Marker, Palette};
@@ -160,11 +163,19 @@ pub fn drive(palette: &Weak<Palette>, stop: &Arc<AtomicBool>, pack: &str, standi
     let mut keep_going = || !stop.load(Ordering::Relaxed);
     let mut present =
         |outcome: Outcome| show(palette, view_of(&outcome, &pack_shown, pack, standing));
+    // Created here, on the thread that uses it, and dropped with it - which is
+    // when a Linux clipboard stops serving what it holds (`clipboard` says why).
+    let clipboard = SystemClipboard::new();
+    let ports = Ports {
+        delivery: &DirectInjection,
+        keys: &DirectInjection,
+        clipboard: &clipboard,
+        report_text: &EnglishReport,
+    };
     let ended = drive_sequence(
         live.as_ref(),
         &mut sequence,
-        &DirectInjection,
-        &DirectInjection,
+        &ports,
         TICK,
         &mut keep_going,
         &mut present,

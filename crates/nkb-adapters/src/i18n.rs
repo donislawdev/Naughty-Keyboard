@@ -80,7 +80,7 @@ use nkb_core::preview::ShapeFact;
 /// silently emptied sentence reads as finished. The test below refuses any
 /// pattern that still holds a brace after its own arguments are applied, so the
 /// ugly version never reaches a tester.
-fn fill(pattern: &str, values: &[(&str, &str)]) -> String {
+pub(crate) fn fill(pattern: &str, values: &[(&str, &str)]) -> String {
     let mut out = String::with_capacity(pattern.len());
     let mut rest = pattern;
 
@@ -239,6 +239,18 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::PressedWhileBusy { .. } => {
             "\"{action}\" arrived while the previous value was still going out, so it was dropped rather than queued. Press it again."
         }
+        Message::ReportCopied { .. } => {
+            "Report block for {reference} copied. Paste it into the ticket."
+        }
+        Message::NothingToReport => {
+            "Nothing has been sent yet, so there is no report block to copy. Send a value first."
+        }
+        Message::ReportBusy => {
+            "Another application is holding the clipboard, so the report block was not copied. Press {shortcut} again in a moment."
+        }
+        Message::ReportFailed { .. } => {
+            "The report block was not copied: {detail}. The same facts are printed by: nkb show {pack}"
+        }
     }
 }
 
@@ -251,9 +263,11 @@ fn pattern_message(message: &Message) -> &'static str {
 pub fn message(message: &Message, pack: &str) -> String {
     let pattern = pattern_message(message);
     match message {
-        Message::Degraded | Message::NoTarget | Message::NoPack | Message::ClearingFailed => {
-            pattern.to_owned()
-        }
+        Message::Degraded
+        | Message::NoTarget
+        | Message::NoPack
+        | Message::ClearingFailed
+        | Message::NothingToReport => pattern.to_owned(),
         Message::Interrupted {
             units_sent,
             units_expected,
@@ -278,6 +292,12 @@ pub fn message(message: &Message, pack: &str) -> String {
         Message::Unhandled { action } | Message::PressedWhileBusy { action } => {
             fill(pattern, &[("action", action_name(*action))])
         }
+        Message::ReportCopied { reference } => fill(pattern, &[("reference", reference)]),
+        Message::ReportBusy => fill(
+            pattern,
+            &[("shortcut", &chord_text(HotkeyAction::CopyReport))],
+        ),
+        Message::ReportFailed { detail } => fill(pattern, &[("detail", detail), ("pack", pack)]),
     }
 }
 
@@ -832,6 +852,14 @@ mod tests {
             Message::PressedWhileBusy {
                 action: HotkeyAction::NextValue,
             },
+            Message::ReportCopied {
+                reference: "whitespace/nbsp".to_owned(),
+            },
+            Message::NothingToReport,
+            Message::ReportBusy,
+            Message::ReportFailed {
+                detail: "the clipboard is not available".to_owned(),
+            },
         ]
     }
 
@@ -916,18 +944,51 @@ mod tests {
         }
     }
 
+    /// Each variant's slot in [`every_message`].
+    ///
+    /// 🔴 Exhaustive on purpose - no `_` arm - and that is the whole guard. Until
+    /// 2026-09-23 the test below compared the list's length with a number
+    /// written beside it, and four new variants went in with both unchanged and
+    /// the test green: it counted its own list, never the variants. Now a new
+    /// variant stops this file compiling until it has a slot, and the test then
+    /// demands the list fill that slot.
+    fn slot(message: &Message) -> usize {
+        match message {
+            Message::Degraded => 0,
+            Message::NoTarget => 1,
+            Message::Interrupted { .. } => 2,
+            Message::EndOfPack { .. } => 3,
+            Message::CounterKept { .. } => 4,
+            Message::NoPack => 5,
+            Message::ModifierHeld { .. } => 6,
+            Message::ClearingFailed => 7,
+            Message::ValueTooLarge { .. } => 8,
+            Message::Unhandled { .. } => 9,
+            Message::PressedWhileBusy { .. } => 10,
+            Message::ReportCopied { .. } => 11,
+            Message::NothingToReport => 12,
+            Message::ReportBusy => 13,
+            Message::ReportFailed { .. } => 14,
+        }
+    }
+
+    const SLOTS: usize = 15;
+
     #[test]
     fn every_message_variant_is_listed_here() {
         // The compiler guarantees `pattern_message` covers every variant. What
         // it cannot guarantee is that the LIST above grew with it, and a content
-        // check over a stale list passes for the wrong reason. Counting is the
-        // cheapest honest link: the number below changes in the same commit as
-        // the variant.
-        assert_eq!(
-            every_message().len(),
-            11,
-            "a Message variant was added or removed - add it to every_message() too"
-        );
+        // check over a stale list passes for the wrong reason.
+        let mut listed = [false; SLOTS];
+        for message in every_message() {
+            listed[slot(&message)] = true;
+        }
+        for (slot, present) in listed.iter().enumerate() {
+            assert!(
+                present,
+                "the Message variant in slot {slot} is missing from every_message()"
+            );
+        }
     }
 
     #[test]

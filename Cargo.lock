@@ -2993,6 +2993,7 @@ version = "0.1.0"
 name = "nkb-gui"
 version = "0.1.0"
 dependencies = [
+ "arboard",
  "image",
  "nkb-adapters",
  "nkb-app",

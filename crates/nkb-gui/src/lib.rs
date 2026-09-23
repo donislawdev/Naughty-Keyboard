@@ -46,3 +46,6 @@ pub mod focus;
 // the core because it is a fact about a file this crate carries, and the core
 // must not learn where its tables come from.
 pub mod typeface;
+// The system clipboard, for the report block. Here rather than in nkb-adapters
+// because the library behind it must never reach `nkb` - the module says why.
+pub mod clipboard;

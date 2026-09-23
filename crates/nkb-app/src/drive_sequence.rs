@@ -43,8 +43,8 @@
 
 use std::time::Duration;
 
-use crate::advance_sequence::{AdvanceSequence, Message, Outcome};
-use crate::ports::{KeystrokeSender, LiveShortcuts, ValueDelivery, Wait};
+use crate::advance_sequence::{AdvanceSequence, Message, Outcome, Ports};
+use crate::ports::{LiveShortcuts, Wait};
 
 /// Why the loop returned. It runs until told to stop or until it cannot go on,
 /// and the two are told apart because the second is worth a message.
@@ -71,8 +71,7 @@ pub enum Ended {
 pub fn drive_sequence(
     shortcuts: &dyn LiveShortcuts,
     sequence: &mut AdvanceSequence,
-    delivery: &dyn ValueDelivery,
-    keys: &dyn KeystrokeSender,
+    ports: &Ports<'_>,
     tick: Duration,
     keep_going: &mut dyn FnMut() -> bool,
     present: &mut dyn FnMut(Outcome),
@@ -87,7 +86,7 @@ pub fn drive_sequence(
             Wait::Pressed(action) => action,
         };
 
-        let outcome = sequence.on_action(action, delivery, keys);
+        let outcome = sequence.on_action(action, ports);
         let reached_the_field = outcome.attempted_send;
         present(outcome);
 
@@ -192,8 +191,7 @@ mod tests {
         let ended = drive_sequence(
             shortcuts,
             sequence,
-            &FakeDelivery::ready(),
-            &FakeKeys::working(),
+            &Kit::ready().ports(),
             TICK,
             &mut going,
             &mut |outcome| presented.push(outcome),

@@ -12,14 +12,18 @@
     reason = "a failed expectation in a test is a failed test"
 )]
 
-use crate::advance_sequence::AdvanceSequence;
+use std::cell::RefCell;
+
+use crate::advance_sequence::{AdvanceSequence, Ports};
 use crate::ports::{
-    Availability, Date, Delivered, DeliveryError, KeystrokeError, KeystrokeSender, PackFormat,
-    PackSource, SourceError, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery,
+    Availability, Clipboard, ClipboardError, Date, Delivered, DeliveryError, KeystrokeError,
+    KeystrokeSender, PackFormat, PackSource, ReportText, SourceError, TargetRef, TranslationCheck,
+    TranslationTarget, ValueDelivery,
 };
 use nkb_core::keys::KeyChord;
 use nkb_core::lint::{LintProblem, RuleCode};
 use nkb_core::pack::{Pack, PackValue, Risk};
+use nkb_core::report::ReportBlock;
 use nkb_core::text::LiteralText;
 use nkb_core::value::ValueBody;
 
@@ -85,6 +89,99 @@ impl KeystrokeSender for FakeKeys {
         match &self.fail {
             None => Ok(()),
             Some(error) => Err(error.clone()),
+        }
+    }
+}
+
+/// A clipboard that records what it was handed, or refuses as a test says.
+pub(crate) struct FakeClipboard {
+    fail: Option<ClipboardError>,
+    pub(crate) puts: RefCell<Vec<String>>,
+}
+
+impl FakeClipboard {
+    pub(crate) fn working() -> Self {
+        Self {
+            fail: None,
+            puts: RefCell::new(Vec::new()),
+        }
+    }
+    pub(crate) fn failing(error: ClipboardError) -> Self {
+        Self {
+            fail: Some(error),
+            puts: RefCell::new(Vec::new()),
+        }
+    }
+}
+
+impl Clipboard for FakeClipboard {
+    fn put_text(&self, text: &str) -> Result<(), ClipboardError> {
+        match &self.fail {
+            None => {
+                self.puts.borrow_mut().push(text.to_owned());
+                Ok(())
+            }
+            Some(error) => Err(error.clone()),
+        }
+    }
+}
+
+/// A report text that keeps every block it was asked to write, so a test can
+/// look at the FACTS rather than parse a sentence back out of the text.
+pub(crate) struct FakeReportText {
+    pub(crate) blocks: RefCell<Vec<ReportBlock>>,
+}
+
+impl ReportText for FakeReportText {
+    fn report_text(&self, block: &ReportBlock) -> String {
+        self.blocks.borrow_mut().push(block.clone());
+        format!("report of {}", block.reference)
+    }
+}
+
+/// One of every fake port, owned together so a test can lend them all at once.
+pub(crate) struct Kit {
+    pub(crate) delivery: FakeDelivery,
+    pub(crate) keys: FakeKeys,
+    pub(crate) clipboard: FakeClipboard,
+    pub(crate) text: FakeReportText,
+}
+
+impl Kit {
+    pub(crate) fn ready() -> Self {
+        Self {
+            delivery: FakeDelivery::ready(),
+            keys: FakeKeys::working(),
+            clipboard: FakeClipboard::working(),
+            text: FakeReportText {
+                blocks: RefCell::new(Vec::new()),
+            },
+        }
+    }
+    pub(crate) fn with_delivery(delivery: FakeDelivery) -> Self {
+        Self {
+            delivery,
+            ..Self::ready()
+        }
+    }
+    pub(crate) fn with_keys(keys: FakeKeys) -> Self {
+        Self {
+            keys,
+            ..Self::ready()
+        }
+    }
+    pub(crate) fn with_clipboard(clipboard: FakeClipboard) -> Self {
+        Self {
+            clipboard,
+            ..Self::ready()
+        }
+    }
+    pub(crate) fn ports(&self) -> Ports<'_> {
+        Ports {
+            delivery: &self.delivery,
+            keys: &self.keys,
+            clipboard: &self.clipboard,
+            report_text: &self.text,
         }
     }
 }

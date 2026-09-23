@@ -36,8 +36,8 @@
 //!
 //! # What this deliberately does not do yet
 //!
-//! - only `Next`, `Previous` and `Restart` are wired. Repeat, the result marks,
-//!   the report copy, the pack search and show/hide belong to later steps; an
+//! - only `Next`, `Previous`, `Restart` and the report copy are wired. Repeat,
+//!   the result marks, the pack search and show/hide belong to later steps; an
 //!   action that is not wired says so rather than doing nothing in silence;
 //! - the send is atomic - one blocking [`deliver_value`] - so `Inserting` is
 //!   passed straight through. The progress bar, `Escape` mid-send and the
@@ -50,20 +50,52 @@
 use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::pack::{Pack, Risk};
 use nkb_core::preview::{ShapeFact, ValuePreview};
+use nkb_core::report::{Arrival, ReportBlock};
 use nkb_core::sequence::{Effect, Event, Sequence};
 
 use crate::load_pack;
 use crate::ports::{
-    DeliveryError, KeystrokeError, KeystrokeSender, PackFormat, PackSource, SourceError,
-    ValueDelivery,
+    Clipboard, ClipboardError, DeliveryError, KeystrokeError, KeystrokeSender, PackFormat,
+    PackSource, ReportText, SourceError, ValueDelivery,
 };
 use crate::send_value::{Clearing, SendOutcome, deliver_value};
+
+/// Everything an action may reach outside the sequence, one port each.
+///
+/// A struct rather than four parameters, because the list grows with the plan:
+/// the report copy brought the clipboard and its text, and clipboard mode will
+/// reuse both. Four loose references would also let two call sites pass them in
+/// a different order and still compile, since two of them are the same adapter.
+#[derive(Clone, Copy)]
+pub struct Ports<'a> {
+    pub delivery: &'a dyn ValueDelivery,
+    pub keys: &'a dyn KeystrokeSender,
+    pub clipboard: &'a dyn Clipboard,
+    pub report_text: &'a dyn ReportText,
+}
 
 /// The core loop and its one piece of state.
 #[derive(Debug, Default)]
 pub struct AdvanceSequence {
     sequence: Sequence,
     loaded: Option<Loaded>,
+    /// The last value that went out, whole or in part - what a report block
+    /// describes. A refusal leaves it alone, because nothing new reached the
+    /// field, and the palette keeps showing the same value for the same reason.
+    last: Option<LastSent>,
+}
+
+/// Which value a report block would describe, and how much of it arrived.
+///
+/// An index into the held pack rather than a copy of the block: the pack is
+/// loaded once and never re-read under the sequence (`W5`), so the block built
+/// from it on `Ctrl+Alt+B` is the value that went out - and the send itself pays
+/// nothing for a report that is usually never asked for.
+#[derive(Debug, Clone, Copy)]
+struct LastSent {
+    /// One-based, like the machine's positions.
+    index: usize,
+    arrival: Arrival,
 }
 
 /// A pack held in memory for the length of the sequence.
@@ -171,6 +203,17 @@ pub enum Message {
     /// queued. `W1`: replaying it afterwards would be exactly the queueing that
     /// `ux-spec.md` 3 rejects, and dropping it in silence would break rule 1.
     PressedWhileBusy { action: HotkeyAction },
+    /// The report block of the last value is on the clipboard.
+    ReportCopied { reference: String },
+    /// Nothing has gone out yet, so there is no value to describe.
+    NothingToReport,
+    /// Another application held the clipboard, and nothing was copied. Passing,
+    /// so the tester is told to press again.
+    ReportBusy,
+    /// The clipboard refused outright, and nothing was copied. The library's
+    /// own words travel with it, because they are what a ticket about the tool
+    /// needs.
+    ReportFailed { detail: String },
 }
 
 impl AdvanceSequence {
@@ -225,6 +268,8 @@ impl AdvanceSequence {
                 errors: refused.errors,
             })?;
         let total = loaded.pack.values.len();
+        // A new pack makes the old index point at somebody else's value.
+        self.last = None;
         self.loaded = Some(Loaded {
             pack: loaded.pack,
             warnings: loaded.warnings,
@@ -239,16 +284,12 @@ impl AdvanceSequence {
     /// would go into the window the palette was launched from, so the send is
     /// refused before a single key leaves.
     #[must_use]
-    pub fn on_action(
-        &mut self,
-        action: HotkeyAction,
-        delivery: &dyn ValueDelivery,
-        keys: &dyn KeystrokeSender,
-    ) -> Outcome {
+    pub fn on_action(&mut self, action: HotkeyAction, ports: &Ports<'_>) -> Outcome {
         let event = match action {
             HotkeyAction::NextValue => Event::Next,
             HotkeyAction::PreviousValue => Event::Previous,
             HotkeyAction::RestartPack => Event::Restart,
+            HotkeyAction::CopyReport => return self.copy_report(ports),
             other => {
                 return Outcome {
                     sequence: self.sequence,
@@ -274,7 +315,46 @@ impl AdvanceSequence {
 
         // The machine has put us in `Inserting` and asked for value `index`.
         self.sequence = step.sequence;
-        self.send(index, delivery, keys)
+        self.send(index, ports.delivery, ports.keys)
+    }
+
+    /// Copies the report block of the last value that went out.
+    ///
+    /// Answers at once and moves nothing: the sequence has no event for a
+    /// report, and a press queued behind this one was not pressed while busy.
+    ///
+    /// 🔴 One of the TWO doors to the clipboard - untouchable rule 17 and
+    /// `tests/clipboard_has_named_doors.rs`. Nothing is written unless the
+    /// tester asked, and nothing is reported as copied that the clipboard did
+    /// not take.
+    fn copy_report(&self, ports: &Ports<'_>) -> Outcome {
+        let message = match self.last_block() {
+            None => Message::NothingToReport,
+            Some(Err(id)) => Message::ValueTooLarge { id },
+            Some(Ok(block)) => {
+                let text = ports.report_text.report_text(&block);
+                match ports.clipboard.put_text(&text) {
+                    Ok(()) => Message::ReportCopied {
+                        reference: block.reference,
+                    },
+                    Err(ClipboardError::Busy) => Message::ReportBusy,
+                    Err(ClipboardError::Failed { detail }) => Message::ReportFailed { detail },
+                }
+            }
+        };
+        self.settled(None, vec![message], false)
+    }
+
+    /// The block for the last value that went out, if one did.
+    ///
+    /// `Err` carries the value's identifier when the recipe cannot be built -
+    /// unreachable for a value that was just sent, and said rather than
+    /// swallowed if it ever is.
+    fn last_block(&self) -> Option<Result<ReportBlock, String>> {
+        let last = self.last?;
+        let loaded = self.loaded.as_ref()?;
+        let value = loaded.pack.values.get(last.index.checked_sub(1)?)?;
+        Some(ReportBlock::describe(&loaded.pack, value, last.arrival).map_err(|_| value.id.clone()))
     }
 
     /// Delivers value `index` from the held pack and settles the sequence.
@@ -315,6 +395,9 @@ impl AdvanceSequence {
             loaded.warnings,
         );
 
+        if let Some(arrival) = arrival_of(&outcome) {
+            self.last = Some(LastSent { index, arrival });
+        }
         let (event, sent, messages) = classify(outcome, offensive);
         self.sequence = self.sequence.apply(event).sequence;
         self.settled(sent, messages, true)
@@ -333,6 +416,28 @@ impl AdvanceSequence {
             messages,
             attempted_send: attempted,
         }
+    }
+}
+
+/// How much of the value reached the field, when any of it did.
+///
+/// `None` for every refusal: nothing new is in the field, so the report block
+/// keeps describing the value before.
+fn arrival_of(outcome: &SendOutcome) -> Option<Arrival> {
+    match outcome {
+        SendOutcome::Sent { .. } => Some(Arrival::Whole),
+        SendOutcome::NotDelivered {
+            error:
+                DeliveryError::Partial {
+                    units_sent,
+                    units_expected,
+                },
+            ..
+        } => Some(Arrival::Interrupted {
+            units_sent: *units_sent,
+            units_expected: *units_expected,
+        }),
+        _ => None,
     }
 }
 
@@ -492,11 +597,7 @@ mod tests {
     #[test]
     fn the_first_next_sends_value_one_and_advances_the_counter() {
         let mut advance = chosen(Risk::Normal);
-        let outcome = advance.on_action(
-            HotkeyAction::NextValue,
-            &FakeDelivery::ready(),
-            &FakeKeys::working(),
-        );
+        let outcome = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
         let sent = outcome.sent.expect("value one must have been sent");
         assert_eq!(sent.reference, "sample/one");
         assert_eq!(sent.name, "Value one");
@@ -509,18 +610,10 @@ mod tests {
     fn walking_the_whole_pack_ends_exhausted() {
         let mut advance = chosen(Risk::Normal);
         for _ in 0..3 {
-            let _ = advance.on_action(
-                HotkeyAction::NextValue,
-                &FakeDelivery::ready(),
-                &FakeKeys::working(),
-            );
+            let _ = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
         }
         assert_eq!(advance.counter(), Some((3, 3)));
-        let outcome = advance.on_action(
-            HotkeyAction::NextValue,
-            &FakeDelivery::ready(),
-            &FakeKeys::working(),
-        );
+        let outcome = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
         assert_eq!(outcome.messages, vec![Message::EndOfPack { total: 3 }]);
         assert!(outcome.sent.is_none());
     }
@@ -530,8 +623,7 @@ mod tests {
         let mut advance = chosen(Risk::Normal);
         let outcome = advance.on_action(
             HotkeyAction::NextValue,
-            &FakeDelivery::without_target(),
-            &FakeKeys::working(),
+            &Kit::with_delivery(FakeDelivery::without_target()).ports(),
         );
         assert_eq!(outcome.messages, vec![Message::NoTarget]);
         assert!(outcome.sent.is_none());
@@ -544,10 +636,10 @@ mod tests {
         let mut advance = chosen(Risk::Normal);
         let outcome = advance.on_action(
             HotkeyAction::NextValue,
-            &FakeDelivery::failing(DeliveryError::Unsupported {
+            &Kit::with_delivery(FakeDelivery::failing(DeliveryError::Unsupported {
                 system: "macOS".to_owned(),
-            }),
-            &FakeKeys::working(),
+            }))
+            .ports(),
         );
         assert_eq!(outcome.messages, vec![Message::Degraded]);
         assert_eq!(advance.sequence().delivery, Delivery::Degraded);
@@ -559,11 +651,11 @@ mod tests {
         let mut advance = chosen(Risk::Normal);
         let outcome = advance.on_action(
             HotkeyAction::NextValue,
-            &FakeDelivery::failing(DeliveryError::Partial {
+            &Kit::with_delivery(FakeDelivery::failing(DeliveryError::Partial {
                 units_sent: 3,
                 units_expected: 5,
-            }),
-            &FakeKeys::working(),
+            }))
+            .ports(),
         );
         assert_eq!(
             outcome.messages,
@@ -580,10 +672,10 @@ mod tests {
         let mut advance = chosen(Risk::Normal);
         let outcome = advance.on_action(
             HotkeyAction::NextValue,
-            &FakeDelivery::failing(DeliveryError::ModifierHeld {
+            &Kit::with_delivery(FakeDelivery::failing(DeliveryError::ModifierHeld {
                 which: "Ctrl".to_owned(),
-            }),
-            &FakeKeys::working(),
+            }))
+            .ports(),
         );
         assert_eq!(
             outcome.messages,
@@ -600,10 +692,10 @@ mod tests {
         let mut advance = chosen(Risk::Normal);
         let outcome = advance.on_action(
             HotkeyAction::NextValue,
-            &FakeDelivery::ready(),
-            &FakeKeys::failing(KeystrokeError::ModifierHeld {
+            &Kit::with_keys(FakeKeys::failing(KeystrokeError::ModifierHeld {
                 which: "Alt".to_owned(),
-            }),
+            }))
+            .ports(),
         );
         assert_eq!(
             outcome.messages,
@@ -618,15 +710,11 @@ mod tests {
     #[test]
     fn an_unwired_action_says_so_rather_than_doing_nothing() {
         let mut advance = chosen(Risk::Normal);
-        let outcome = advance.on_action(
-            HotkeyAction::CopyReport,
-            &FakeDelivery::ready(),
-            &FakeKeys::working(),
-        );
+        let outcome = advance.on_action(HotkeyAction::MarkProblem, &Kit::ready().ports());
         assert_eq!(
             outcome.messages,
             vec![Message::Unhandled {
-                action: HotkeyAction::CopyReport
+                action: HotkeyAction::MarkProblem
             }]
         );
         assert_eq!(advance.counter(), Some((0, 3)));
@@ -635,11 +723,7 @@ mod tests {
     #[test]
     fn next_with_no_pack_chosen_says_no_pack() {
         let mut advance = AdvanceSequence::new();
-        let outcome = advance.on_action(
-            HotkeyAction::NextValue,
-            &FakeDelivery::ready(),
-            &FakeKeys::working(),
-        );
+        let outcome = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
         assert_eq!(outcome.messages, vec![Message::NoPack]);
         assert!(outcome.sent.is_none());
     }
@@ -661,11 +745,7 @@ mod tests {
     #[test]
     fn an_offensive_value_is_marked_from_the_pack_default() {
         let mut advance = chosen(Risk::Offensive);
-        let outcome = advance.on_action(
-            HotkeyAction::NextValue,
-            &FakeDelivery::ready(),
-            &FakeKeys::working(),
-        );
+        let outcome = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
         let sent = outcome.sent.expect("sent");
         assert!(sent.offensive, "an offensive pack marks its values");
     }
@@ -673,15 +753,156 @@ mod tests {
     #[test]
     fn previous_at_the_start_keeps_the_counter_and_says_so() {
         let mut advance = chosen(Risk::Normal);
-        let outcome = advance.on_action(
-            HotkeyAction::PreviousValue,
-            &FakeDelivery::ready(),
-            &FakeKeys::working(),
-        );
+        let outcome = advance.on_action(HotkeyAction::PreviousValue, &Kit::ready().ports());
         assert_eq!(
             outcome.messages,
             vec![Message::CounterKept { done: 0, total: 3 }]
         );
         assert!(outcome.sent.is_none());
+    }
+
+    // ---- the report block: one of the two doors to the clipboard -----------
+
+    #[test]
+    fn a_report_before_anything_went_out_writes_nothing_and_says_so() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+
+        let outcome = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+
+        assert_eq!(outcome.messages, vec![Message::NothingToReport]);
+        assert!(
+            kit.clipboard.puts.borrow().is_empty(),
+            "nothing was asked for, so nothing touches the clipboard"
+        );
+        assert!(!outcome.attempted_send, "a report answers at once");
+    }
+
+    #[test]
+    fn a_report_after_a_send_copies_the_block_of_that_value_once() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+
+        let outcome = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+
+        assert_eq!(
+            outcome.messages,
+            vec![Message::ReportCopied {
+                reference: "sample/two".to_owned()
+            }]
+        );
+        assert_eq!(*kit.clipboard.puts.borrow(), vec!["report of sample/two"]);
+        let blocks = kit.text.blocks.borrow();
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].pack_version, "1.0");
+        assert_eq!(blocks[0].arrival, Arrival::Whole);
+        assert!(
+            outcome.sent.is_none(),
+            "the palette keeps the value it shows"
+        );
+        assert_eq!(advance.counter(), Some((2, 3)), "a report moves nothing");
+    }
+
+    #[test]
+    fn a_refused_send_leaves_the_report_on_the_value_before_it() {
+        // Nothing new reached the field, so the block describes what is there -
+        // the same value the palette keeps on screen after a refusal.
+        let mut advance = chosen(Risk::Normal);
+        let _ = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
+        let _ = advance.on_action(
+            HotkeyAction::NextValue,
+            &Kit::with_delivery(FakeDelivery::without_target()).ports(),
+        );
+        let kit = Kit::ready();
+
+        let outcome = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+
+        assert_eq!(
+            outcome.messages,
+            vec![Message::ReportCopied {
+                reference: "sample/one".to_owned()
+            }]
+        );
+    }
+
+    #[test]
+    fn an_interrupted_send_is_reported_as_interrupted_not_skipped() {
+        // Part of the value is in the field. A block that described the value
+        // before would be about something the application no longer holds.
+        let mut advance = chosen(Risk::Normal);
+        let _ = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
+        let _ = advance.on_action(
+            HotkeyAction::NextValue,
+            &Kit::with_delivery(FakeDelivery::failing(DeliveryError::Partial {
+                units_sent: 2,
+                units_expected: 4,
+            }))
+            .ports(),
+        );
+        let kit = Kit::ready();
+
+        let _ = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+
+        let blocks = kit.text.blocks.borrow();
+        assert_eq!(blocks[0].reference, "sample/two");
+        assert_eq!(
+            blocks[0].arrival,
+            Arrival::Interrupted {
+                units_sent: 2,
+                units_expected: 4
+            }
+        );
+    }
+
+    #[test]
+    fn a_busy_clipboard_is_named_and_nothing_is_claimed_copied() {
+        let mut advance = chosen(Risk::Normal);
+        let _ = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
+
+        let outcome = advance.on_action(
+            HotkeyAction::CopyReport,
+            &Kit::with_clipboard(FakeClipboard::failing(ClipboardError::Busy)).ports(),
+        );
+
+        assert_eq!(outcome.messages, vec![Message::ReportBusy]);
+    }
+
+    #[test]
+    fn a_refusing_clipboard_passes_its_own_words_on() {
+        let mut advance = chosen(Risk::Normal);
+        let _ = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
+
+        let outcome = advance.on_action(
+            HotkeyAction::CopyReport,
+            &Kit::with_clipboard(FakeClipboard::failing(ClipboardError::Failed {
+                detail: "no display".to_owned(),
+            }))
+            .ports(),
+        );
+
+        assert_eq!(
+            outcome.messages,
+            vec![Message::ReportFailed {
+                detail: "no display".to_owned()
+            }]
+        );
+    }
+
+    #[test]
+    fn sending_never_touches_the_clipboard() {
+        // The other half of the promise: a whole walk through the pack, with
+        // every refusal in between, writes nothing until the tester asks.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        for _ in 0..5 {
+            let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        }
+        let _ = advance.on_action(HotkeyAction::PreviousValue, &kit.ports());
+        let _ = advance.on_action(HotkeyAction::RestartPack, &kit.ports());
+
+        assert!(kit.clipboard.puts.borrow().is_empty());
+        assert!(kit.text.blocks.borrow().is_empty());
     }
 }
