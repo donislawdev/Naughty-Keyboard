@@ -43,9 +43,10 @@ use std::time::Duration;
 
 use nkb_adapters::i18n::PaletteLabel;
 use nkb_adapters::{
-    BuiltInCatalogue, DirectInjection, EnglishReport, GlobalShortcuts, TomlPackFormat, i18n,
+    BuiltInCatalogue, ClipboardDelivery, DirectInjection, EnglishReport, GlobalShortcuts,
+    TomlPackFormat, i18n,
 };
-use nkb_app::advance_sequence::{Ports, Sent};
+use nkb_app::advance_sequence::{Ports, RouteRequest, Sent};
 use nkb_app::ports::HotkeyRegistrar;
 use nkb_app::{AdvanceSequence, Outcome, drive_sequence};
 use nkb_core::hotkeys::DEFAULT_BINDINGS;
@@ -121,10 +122,30 @@ struct ValueView {
 ///
 /// Takes the pack by name rather than a loaded sequence, because the sequence
 /// must live on this thread: it is the one gate over the sequence state
-/// (`architektura.md` 6a) and it never crosses back.
-pub fn drive(palette: &Weak<Palette>, stop: &Arc<AtomicBool>, pack: &str, standing: &Standing) {
+/// (`architektura.md` 6a) and it never crosses back. `route` is how the palette
+/// was started - `nkb-gui --clipboard` asks for clipboard mode (`D71`).
+pub fn drive(
+    palette: &Weak<Palette>,
+    stop: &Arc<AtomicBool>,
+    pack: &str,
+    route: RouteRequest,
+    standing: &Standing,
+) {
     let mut sequence = AdvanceSequence::new();
     let mut opening: Vec<String> = Vec::new();
+    // Created here, on the thread that uses it, and dropped with it - which is
+    // when a Linux clipboard stops serving what it holds (`clipboard` says why).
+    // Nothing connects until the first write, so a palette that never copies
+    // never touches the clipboard at all.
+    let clipboard = SystemClipboard::new();
+    let by_clipboard = ClipboardDelivery::new(&clipboard);
+    let ports = Ports {
+        direct: &DirectInjection,
+        by_clipboard: &by_clipboard,
+        keys: &DirectInjection,
+        clipboard: &clipboard,
+        report_text: &EnglishReport,
+    };
 
     if let Err(error) = sequence.choose_pack(&BuiltInCatalogue::new(), &TomlPackFormat, pack) {
         opening.push(i18n::choose_error(&error, pack));
@@ -155,6 +176,16 @@ pub fn drive(palette: &Weak<Palette>, stop: &Arc<AtomicBool>, pack: &str, standi
             opening.push(line);
         }
     }
+    // Only now, with shortcuts that can drive the palette: a sentence telling
+    // the tester to paste each value would promise a flow that a palette with
+    // no shortcuts does not have (`D71`). A system with no direct route starts
+    // in clipboard mode here, rather than failing the first press.
+    opening.extend(
+        sequence
+            .choose_route(route, &ports)
+            .iter()
+            .map(|message| i18n::message(message, pack)),
+    );
     show(
         palette,
         opening_view(&pack_shown, &sequence, opening, standing),
@@ -163,15 +194,6 @@ pub fn drive(palette: &Weak<Palette>, stop: &Arc<AtomicBool>, pack: &str, standi
     let mut keep_going = || !stop.load(Ordering::Relaxed);
     let mut present =
         |outcome: Outcome| show(palette, view_of(&outcome, &pack_shown, pack, standing));
-    // Created here, on the thread that uses it, and dropped with it - which is
-    // when a Linux clipboard stops serving what it holds (`clipboard` says why).
-    let clipboard = SystemClipboard::new();
-    let ports = Ports {
-        delivery: &DirectInjection,
-        keys: &DirectInjection,
-        clipboard: &clipboard,
-        report_text: &EnglishReport,
-    };
     let ended = drive_sequence(
         live.as_ref(),
         &mut sequence,
@@ -227,7 +249,7 @@ fn opening_view(
         counter: counter_of(sequence),
         value: None,
         messages: with_standing(messages, standing),
-        clipboard_mode: sequence.sequence().delivery == Delivery::Degraded,
+        clipboard_mode: sequence.sequence().delivery == Delivery::ClipboardMode,
         transient: false,
     }
 }
@@ -248,7 +270,7 @@ fn view_of(outcome: &Outcome, pack_shown: &str, pack: &str, standing: &Standing)
                 .collect(),
             standing,
         ),
-        clipboard_mode: outcome.sequence.delivery == Delivery::Degraded,
+        clipboard_mode: outcome.sequence.delivery == Delivery::ClipboardMode,
         // Every outcome is something that just happened, so every outcome gets
         // looked at and then gets out of the way.
         transient: true,
@@ -307,6 +329,12 @@ fn markers_of(sent: &Sent) -> Vec<(String, bool)> {
     }
     if sent.cleared {
         markers.push((i18n::label(PaletteLabel::Cleared).to_owned(), false));
+    }
+    // Never beside `cleared first`: the clipboard route presses nothing, so it
+    // clears nothing. It answers the same question from the other side - what
+    // is in the field is what the tester pasted.
+    if sent.on_clipboard {
+        markers.push((i18n::label(PaletteLabel::OnClipboard).to_owned(), false));
     }
     markers
 }
@@ -453,6 +481,7 @@ mod tests {
             offensive: true,
             warnings: 2,
             cleared: true,
+            on_clipboard: false,
             // The example from `ux-spec.md` 2, so the field-by-field test below
             // checks the same value the document draws.
             preview: ValuePreview::Text(nkb_core::preview::preview("ab\u{200B}\u{200B}\u{200B}cd")),
@@ -615,7 +644,7 @@ mod tests {
 
         // ---- the second axis reaches the standing bar ---------------------
         let mut by_clipboard = an_outcome(Some(a_sent()), Vec::new());
-        by_clipboard.sequence.delivery = Delivery::Degraded;
+        by_clipboard.sequence.delivery = Delivery::ClipboardMode;
         apply(&palette, view_of(&by_clipboard, "p", "p", &quiet()));
         assert!(palette.get_clipboard_mode());
     }
@@ -678,5 +707,22 @@ mod tests {
             ..a_sent()
         };
         assert!(markers_of(&plain).is_empty());
+    }
+
+    /// A value that went to the clipboard says so, where `cleared first` would
+    /// stand - never both, because the clipboard route presses nothing.
+    #[test]
+    fn a_value_on_the_clipboard_is_marked_so_in_place_of_cleared() {
+        let pasted = Sent {
+            offensive: false,
+            warnings: 0,
+            cleared: false,
+            on_clipboard: true,
+            ..a_sent()
+        };
+        assert_eq!(
+            markers_of(&pasted),
+            vec![(String::from("on the clipboard"), false)]
+        );
     }
 }

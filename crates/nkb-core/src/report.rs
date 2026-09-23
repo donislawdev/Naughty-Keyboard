@@ -89,9 +89,10 @@ pub enum SpelledOut {
     },
 }
 
-/// Whether the whole value reached the field.
+/// How the value reached the field, and whether all of it did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Arrival {
+    /// Typed into the field whole.
     Whole,
     /// Delivery stopped part-way. The field holds a fragment, and a ticket that
     /// did not say so would describe a value the application never received.
@@ -99,6 +100,13 @@ pub enum Arrival {
         units_sent: usize,
         units_expected: usize,
     },
+    /// Put on the clipboard whole, for the tester to paste (`D71`).
+    ///
+    /// Told apart from [`Arrival::Whole`] because an application that checks
+    /// its input on every keystroke meets a paste as ONE event, and behaves
+    /// differently - a ticket that did not say how the value got in would send
+    /// the developer after a defect that typing never shows.
+    OnClipboard,
 }
 
 impl ReportBlock {

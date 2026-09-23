@@ -200,18 +200,28 @@ fn chord_text(action: HotkeyAction) -> String {
 
 /// The pattern for one message key. `ux-spec.md` 6, section A, byte for byte.
 ///
-/// 🔴 `Message::Degraded` is the one sentence here that is DELIBERATELY not the
-/// document's target text. The target says "switching to clipboard mode. Press
-/// your paste shortcut" - and clipboard mode does not exist: measured on the
-/// whole tree, the word appears in comments and in the `degraded` state of the
-/// machine, with no port, no adapter and nothing writing to a clipboard. A
-/// tester following that sentence would press paste and paste whatever was in
-/// the clipboard before. The target text goes in WITH the port, and the document
-/// carries both texts so the swap is not a rediscovery.
+/// 🔴 The two sentences that enter clipboard mode say the tester's clipboard is
+/// replaced, and they are the only place that says it: `ux-spec.md` 12 item 2
+/// warns once and never restores. They arrived with the clipboard route itself
+/// (`D71`) and not a day before - a sentence telling a tester to press paste,
+/// written while nothing put a value on the clipboard, would have pasted
+/// whatever was there before.
 fn pattern_message(message: &Message) -> &'static str {
     match message {
-        Message::Degraded => {
-            "Nothing reached the field. This app does not accept simulated input, so values cannot be sent here - try another field or application."
+        Message::NoDirectRoute { .. } => {
+            "This build cannot type into other applications on {system}, so values now go to your clipboard, replacing what you had copied. Press your paste shortcut to insert each one."
+        }
+        Message::ClipboardMode => {
+            "Clipboard mode: each value goes to your clipboard, replacing what you had copied. Press your paste shortcut to insert each one."
+        }
+        Message::ClipboardBusy => {
+            "Another application is holding the clipboard, so the value was not placed on it. Press the shortcut again in a moment."
+        }
+        Message::ClipboardFailed { .. } => {
+            "The value was not placed on the clipboard: {detail}. The counter did not move, so the same shortcut tries this value again."
+        }
+        Message::NotForClipboard { .. } => {
+            "Value \"{id}\" contains {character}, where clipboard text would be cut short, so it was not placed on the clipboard. Only direct input can deliver it whole."
         }
         Message::NoTarget => "The target window is gone. Click into a field and try again.",
         Message::Interrupted { .. } => {
@@ -263,11 +273,24 @@ fn pattern_message(message: &Message) -> &'static str {
 pub fn message(message: &Message, pack: &str) -> String {
     let pattern = pattern_message(message);
     match message {
-        Message::Degraded
+        Message::ClipboardMode
+        | Message::ClipboardBusy
         | Message::NoTarget
         | Message::NoPack
         | Message::ClearingFailed
         | Message::NothingToReport => pattern.to_owned(),
+        Message::NoDirectRoute { system } => fill(pattern, &[("system", system)]),
+        Message::ClipboardFailed { detail } => fill(pattern, &[("detail", detail)]),
+        Message::NotForClipboard { id, character } => fill(
+            pattern,
+            &[
+                ("id", id),
+                // As a code point, never the character itself: the one this
+                // names today is U+0000, and a NUL in the palette's own
+                // sentence would cut the sentence short the same way.
+                ("character", &format!("U+{:04X}", u32::from(*character))),
+            ],
+        ),
         Message::Interrupted {
             units_sent,
             units_expected,
@@ -707,16 +730,16 @@ pub enum PaletteLabel {
     Offensive,
     /// The field was emptied before the value went in.
     Cleared,
+    /// The value went to the clipboard for the tester to paste. Takes the place
+    /// of `Cleared`, never stands beside it: on the clipboard route nothing
+    /// presses a key, so nothing clears the field (`D71`).
+    OnClipboard,
     /// The pack loaded, and it loaded with warnings.
     Warnings,
-    /// The standing bar of the degraded state.
-    ///
-    /// 🔴 It says what is true TODAY. `ux-spec.md` 2 writes this bar as
-    /// `clipboard mode`, and that sentence would be worse than silence while no
-    /// clipboard port exists: the tester presses paste and pastes whatever was
-    /// in the clipboard before. Same rule as the two message rows carrying two
-    /// contents in `ux-spec.md` 6.
-    DirectInputRefused,
+    /// The standing bar of clipboard mode, `ux-spec.md` 2. Until `D71` it read
+    /// `direct input refused`, because a bar saying `clipboard mode` while
+    /// nothing put a value on the clipboard would have been worse than silence.
+    ClipboardMode,
     /// The preview shows only part of the value, so the palette says how much.
     PreviewElided,
     /// Characters on screen that the shipped typeface does not draw by itself,
@@ -745,8 +768,9 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         }
         PaletteLabel::Offensive => "offensive",
         PaletteLabel::Cleared => "cleared first",
+        PaletteLabel::OnClipboard => "on the clipboard",
         PaletteLabel::Warnings => "pack warnings: {count}",
-        PaletteLabel::DirectInputRefused => "direct input refused",
+        PaletteLabel::ClipboardMode => "clipboard mode",
         PaletteLabel::PreviewElided => "showing {shown} of {total} code points",
         PaletteLabel::NotGuaranteed => "not guaranteed by the bundled font: {list}",
         PaletteLabel::NotGuaranteedMore => {
@@ -830,7 +854,18 @@ mod tests {
     /// it is kept honest by `every_message_variant_is_listed_here` below.
     fn every_message() -> Vec<Message> {
         vec![
-            Message::Degraded,
+            Message::NoDirectRoute {
+                system: "macOS".to_owned(),
+            },
+            Message::ClipboardMode,
+            Message::ClipboardBusy,
+            Message::ClipboardFailed {
+                detail: "the display went away".to_owned(),
+            },
+            Message::NotForClipboard {
+                id: "nul-in-text".to_owned(),
+                character: '\0',
+            },
             Message::NoTarget,
             Message::Interrupted {
                 units_sent: 12480,
@@ -954,7 +989,11 @@ mod tests {
     /// demands the list fill that slot.
     fn slot(message: &Message) -> usize {
         match message {
-            Message::Degraded => 0,
+            Message::NoDirectRoute { .. } => 0,
+            Message::ClipboardMode => 15,
+            Message::ClipboardBusy => 16,
+            Message::ClipboardFailed { .. } => 17,
+            Message::NotForClipboard { .. } => 18,
             Message::NoTarget => 1,
             Message::Interrupted { .. } => 2,
             Message::EndOfPack { .. } => 3,
@@ -972,7 +1011,7 @@ mod tests {
         }
     }
 
-    const SLOTS: usize = 15;
+    const SLOTS: usize = 19;
 
     #[test]
     fn every_message_variant_is_listed_here() {
@@ -1086,6 +1125,24 @@ mod tests {
     }
 
     #[test]
+    fn the_character_the_clipboard_refuses_is_named_as_a_code_point() {
+        // The character itself would do in the palette what it does in the
+        // clipboard: a NUL cuts the sentence short.
+        let out = message(
+            &Message::NotForClipboard {
+                id: "nul-in-text".to_owned(),
+                character: '\0',
+            },
+            "p",
+        );
+        assert_eq!(
+            out,
+            "Value \"nul-in-text\" contains U+0000, where clipboard text would be cut short, so it was not placed on the clipboard. Only direct input can deliver it whole."
+        );
+        assert!(!out.contains('\0'));
+    }
+
+    #[test]
     fn a_degenerate_but_legal_argument_still_reads_as_a_sentence() {
         // Zero of zero, an empty modifier name, an empty identifier: none of
         // these should occur, and all of them are reachable by a caller. The
@@ -1120,8 +1177,9 @@ mod tests {
             PaletteLabel::Counts,
             PaletteLabel::Offensive,
             PaletteLabel::Cleared,
+            PaletteLabel::OnClipboard,
             PaletteLabel::Warnings,
-            PaletteLabel::DirectInputRefused,
+            PaletteLabel::ClipboardMode,
             PaletteLabel::PreviewElided,
             PaletteLabel::NotGuaranteed,
             PaletteLabel::NotGuaranteedMore,
@@ -1140,7 +1198,8 @@ mod tests {
                 PaletteLabel::Title
                 | PaletteLabel::Offensive
                 | PaletteLabel::Cleared
-                | PaletteLabel::DirectInputRefused => false,
+                | PaletteLabel::OnClipboard
+                | PaletteLabel::ClipboardMode => false,
             };
             let pattern = pattern_palette_label(label);
             assert_eq!(

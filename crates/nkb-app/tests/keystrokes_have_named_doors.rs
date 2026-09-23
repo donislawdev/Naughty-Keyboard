@@ -4,20 +4,23 @@
 //!
 //! Untouchable rule 17, fourth promise: the tool does not send keys other than
 //! the value's own characters. `ux-spec.md` 4 narrows that to ONE exception,
-//! clearing the field, and architektura.md 5 turns the exception into a count:
-//! the port that presses keys is to be called from exactly two places - the
-//! clearing and, when the clipboard route exists, its paste - and the guard
-//! "counts the call sites". Until today that row read "nothing" in the column
-//! of what goes red, because the port did not exist. This file is the guard
-//! the row promised, written together with the port, as the row said it would
-//! be.
+//! clearing the field, and architektura.md 5 turns the exception into a list
+//! of call sites with ONE entry. Until the port existed that row read
+//! "nothing" in the column of what goes red; this file is the guard the row
+//! promised, written together with the port.
+//!
+//! ⚠️ Until 2026-09-23 this header said there would be TWO doors, the second
+//! being the paste of the clipboard route. `D71` corrected it: clipboard mode
+//! presses nothing - the tester pastes - because every reason that leads there
+//! also blocks the channel a synthetic paste would take. The clipboard route
+//! is a door of `clipboard_has_named_doors.rs`, not of this list.
 //!
 //! # Why a list of doors rather than a number
 //!
-//! A bare "at most two" would let a third call site in as soon as one of the
-//! two intended ones had not been written yet - which is the situation today.
-//! Naming the doors makes the second one a deliberate edit to THIS list, with
-//! the commit message that goes with it, rather than a free slot.
+//! A bare "at most two" would have let a second call site in for free - and
+//! the second door it was holding a slot for turned out never to be one
+//! (`D71`). Naming the doors makes any new one a deliberate edit to THIS list,
+//! with the commit message that goes with it, rather than a free slot.
 //!
 //! # What this checks, and what it cannot
 //!
@@ -42,8 +45,9 @@
 use std::path::{Path, PathBuf};
 
 /// The doors, as `crates/<package>/src/<file>` with the number of calls each
-/// may hold. The clipboard paste is not here yet: when it arrives it is a
-/// second entry, and a session adding it edits this list on purpose.
+/// may hold. One: clearing the field. A second comes only with an automatic
+/// paste as a separate route the tester chooses (step 7), and a session adding
+/// it edits this list on purpose.
 const DOORS: &[(&str, usize)] = &[("nkb-app/src/send_value.rs", 1)];
 
 const THE_CALL: &str = ".send_keystrokes(";

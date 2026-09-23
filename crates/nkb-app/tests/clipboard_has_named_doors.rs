@@ -7,8 +7,9 @@
 //! architektura.md 5 turns that into a count, and until the report block arrived
 //! the row read "nothing" in the column of what goes red, because there was no
 //! port. This file is the guard that row promised, written together with the
-//! port, as the row said it would be. Clipboard mode does not exist yet, so the
-//! list below has ONE door.
+//! port, as the row said it would be. Since `D71` the list has both doors: the
+//! report block in `app`, and the clipboard route in `nkb-adapters` - which
+//! presses no key, so it is a door of this list and of no other.
 //!
 //! # Three ways round a port, and one check for each
 //!
@@ -36,8 +37,11 @@
 use std::path::{Path, PathBuf};
 
 /// The doors, as `crates/<package>/src/<file>` with the number of calls each
-/// may hold. Clipboard mode is the second entry, added on purpose when it lands.
-const DOORS: &[(&str, usize)] = &[("nkb-app/src/advance_sequence.rs", 1)];
+/// may hold: the report block, and the clipboard route of clipboard mode.
+const DOORS: &[(&str, usize)] = &[
+    ("nkb-app/src/advance_sequence.rs", 1),
+    ("nkb-adapters/src/clipboard_delivery.rs", 1),
+];
 
 const THE_CALL: &str = ".put_text(";
 

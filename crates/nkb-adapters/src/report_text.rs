@@ -113,6 +113,11 @@ pub enum ReportPhrase {
     SessionNotRecorded,
     /// The value arrived in part.
     Interrupted,
+    /// The value went to the clipboard and the tester pasted it (`D71`).
+    /// Chosen by the owner on 2026-09-23: an application that checks every
+    /// keystroke meets a paste as one event, so the reader has to know it was
+    /// not typed.
+    Clipboard,
     /// This program and its version.
     Tool,
 }
@@ -133,6 +138,7 @@ fn pattern_report_phrase(phrase: ReportPhrase) -> &'static str {
         ReportPhrase::Interrupted => {
             "interrupted after {sent} of {expected} UTF-16 units - the field holds a fragment"
         }
+        ReportPhrase::Clipboard => "placed on the clipboard - pasted by the tester, not typed",
         ReportPhrase::Tool => "Naughty Keyboard {version}",
     }
 }
@@ -202,12 +208,15 @@ pub fn report_text(block: &ReportBlock) -> String {
             .join(" · "),
         ),
     ]);
-    if let Arrival::Interrupted {
-        units_sent,
-        units_expected,
-    } = block.arrival
-    {
-        lines.push((
+    // The conditional line: only when the value did NOT go into the field by
+    // being typed whole - `D68` keeps it a warning rather than a field of
+    // every value, and `D71` gives it its second reason.
+    match block.arrival {
+        Arrival::Whole => {}
+        Arrival::Interrupted {
+            units_sent,
+            units_expected,
+        } => lines.push((
             ReportLabel::Delivery,
             fill(
                 pattern_report_phrase(ReportPhrase::Interrupted),
@@ -216,7 +225,11 @@ pub fn report_text(block: &ReportBlock) -> String {
                     ("expected", &units_expected.to_string()),
                 ],
             ),
-        ));
+        )),
+        Arrival::OnClipboard => lines.push((
+            ReportLabel::Delivery,
+            pattern_report_phrase(ReportPhrase::Clipboard).to_owned(),
+        )),
     }
     lines.extend([
         (ReportLabel::Breaks, given(block.breaks.as_deref())),
@@ -489,6 +502,26 @@ mod tests {
             "Delivery: interrupted after 3 of 7 UTF-16 units - the field holds a fragment"
         );
         assert!(got[6].starts_with("Breaks:   "));
+    }
+
+    #[test]
+    fn a_pasted_value_gets_a_delivery_line_in_the_same_place() {
+        // D71: same label, same place, one more reason. The rest of the block
+        // keeps its shape - D68.
+        let mut pasted = block();
+        pasted.arrival = Arrival::OnClipboard;
+        let text = report_text(&pasted);
+        let got = lines(&text);
+        assert_eq!(
+            got[5],
+            "Delivery: placed on the clipboard - pasted by the tester, not typed"
+        );
+        assert!(got[6].starts_with("Breaks:   "));
+        assert_eq!(
+            got.len(),
+            lines(&report_text(&block())).len() + 1,
+            "exactly one line more than a typed value"
+        );
     }
 
     #[test]

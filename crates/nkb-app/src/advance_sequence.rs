@@ -24,15 +24,24 @@
 //!
 //! | delivery outcome | event | why |
 //! |---|---|---|
-//! | the value landed | `InsertionFinished` | it is done |
-//! | no route on this system | `InsertionFailed` | direct delivery cannot work; clipboard now |
+//! | the value landed, or was put on the clipboard | `InsertionFinished` | it is done |
+//! | no route on this system, from the send OR from the clearing before it | `InsertionFailed` | direct delivery cannot work; the same value goes to the clipboard now |
 //! | part of it landed | `Cancelled` | a fragment was left in the field |
-//! | nothing was sent (no target, held modifier, clear failed) | `InsertionRefused` | try again, and do NOT switch to the clipboard for a passing hiccup |
+//! | nothing was sent (no target, held modifier, clear failed, clipboard busy or refusing, a character the clipboard cannot carry) | `InsertionRefused` | try again, and do NOT switch routes for a passing hiccup |
 //!
 //! The last row is why `InsertionRefused` exists: folding it into
 //! `InsertionFailed` would turn a held Ctrl+Alt into a permanent clipboard mode.
 //! The machine returns the STATE for each; the MESSAGE that says which and with
 //! what numbers is built here, because the numbers are facts about delivery.
+//!
+//! # Two routes, one choice (`D71`)
+//!
+//! Values reach the field straight, or through the clipboard for the tester to
+//! paste. Both are implementations of `ValueDelivery`, and [`AdvanceSequence`]
+//! picks one by the sequence's delivery axis in exactly one place; everything
+//! after that choice - building the value, counting it, reporting it - is the
+//! same code. On the clipboard route nothing clears the field and NOTHING is
+//! pressed: the tester selects and pastes.
 //!
 //! # What this deliberately does not do yet
 //!
@@ -51,27 +60,42 @@ use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::pack::{Pack, Risk};
 use nkb_core::preview::{ShapeFact, ValuePreview};
 use nkb_core::report::{Arrival, ReportBlock};
-use nkb_core::sequence::{Effect, Event, Sequence};
+use nkb_core::sequence::{Delivery, Effect, Event, Sequence};
 
 use crate::load_pack;
 use crate::ports::{
-    Clipboard, ClipboardError, DeliveryError, KeystrokeError, KeystrokeSender, PackFormat,
-    PackSource, ReportText, SourceError, ValueDelivery,
+    Availability, Clipboard, ClipboardError, DeliveryError, History, KeystrokeError,
+    KeystrokeSender, PackFormat, PackSource, ReportText, SourceError, ValueDelivery,
 };
 use crate::send_value::{Clearing, SendOutcome, deliver_value};
 
 /// Everything an action may reach outside the sequence, one port each.
 ///
-/// A struct rather than four parameters, because the list grows with the plan:
-/// the report copy brought the clipboard and its text, and clipboard mode will
-/// reuse both. Four loose references would also let two call sites pass them in
-/// a different order and still compile, since two of them are the same adapter.
+/// A struct rather than loose parameters, because the list grows with the plan:
+/// the report copy brought the clipboard and its text, and clipboard mode
+/// brought the second route. Loose references would also let two call sites
+/// pass them in a different order and still compile, since several of them are
+/// the same adapter.
 #[derive(Clone, Copy)]
 pub struct Ports<'a> {
-    pub delivery: &'a dyn ValueDelivery,
+    /// Straight into the focused field - `DirectInjection`.
+    pub direct: &'a dyn ValueDelivery,
+    /// Onto the clipboard, for the tester to paste - `ClipboardDelivery`. The
+    /// second implementation of the same port, chosen in [`AdvanceSequence`]
+    /// by the delivery axis and nowhere else (`D71`).
+    pub by_clipboard: &'a dyn ValueDelivery,
     pub keys: &'a dyn KeystrokeSender,
     pub clipboard: &'a dyn Clipboard,
     pub report_text: &'a dyn ReportText,
+}
+
+/// How the palette was asked to deliver values, before the first press.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RouteRequest {
+    /// Straight into the field, where this system has a way to.
+    Direct,
+    /// Through the clipboard - `nkb-gui --clipboard`.
+    Clipboard,
 }
 
 /// The core loop and its one piece of state.
@@ -155,6 +179,10 @@ pub struct Sent {
     pub warnings: usize,
     /// Whether the field was cleared before the value went in.
     pub cleared: bool,
+    /// Whether the value went to the clipboard for the tester to paste, rather
+    /// than into the field. Never together with `cleared`: on the clipboard
+    /// route nothing presses a key, so nothing clears the field.
+    pub on_clipboard: bool,
     /// The value as a person can see it: invisible characters substituted by
     /// `nkb_core::preview::MARKER`, long values elided at both ends, generated
     /// values shown as their recipe.
@@ -191,8 +219,25 @@ pub enum Message {
         units_sent: usize,
         units_expected: usize,
     },
-    /// Direct delivery does not work here; the clipboard is the way now.
-    Degraded,
+    /// This build has no direct route on `system`, so values go to the
+    /// clipboard from now on, replacing what the tester had copied. Said when
+    /// the palette starts on such a system, or when a send finds out.
+    ///
+    /// 🔴 Names the cause the tool KNOWS. Until `D71` this was `Degraded`,
+    /// whose sentence blamed the application for ignoring simulated input - a
+    /// cause the tool cannot detect before the input oracle (`OBS-42`).
+    NoDirectRoute { system: String },
+    /// Clipboard mode is on because the tester asked for it: values go to the
+    /// clipboard, replacing what was there. Once, at the start.
+    ClipboardMode,
+    /// Another application held the clipboard, and the value was not placed
+    /// on it. Passing, so the tester is told to press again.
+    ClipboardBusy,
+    /// The clipboard refused the value, in the library's own words.
+    ClipboardFailed { detail: String },
+    /// The value holds a character the clipboard does not carry whole, so it
+    /// was refused by name rather than pasted cut short. `U+0000` today.
+    NotForClipboard { id: String, character: char },
     /// The recipe describes more text than the format allows. Should not reach
     /// here for a validated pack, and said plainly rather than swallowed.
     ValueTooLarge { id: String },
@@ -278,6 +323,35 @@ impl AdvanceSequence {
         Ok(())
     }
 
+    /// Settles how values will travel, before the first press, and says what
+    /// the tester has to know about it.
+    ///
+    /// Called once at start, after the shortcuts are known to work - a palette
+    /// that nothing can drive must not tell the tester to paste each value.
+    ///
+    /// Direct delivery with no route on this system starts in clipboard mode AT
+    /// ONCE: failing the first press to discover what `availability` already
+    /// knew would be the pretending `ux-spec.md` 8 forbids.
+    #[must_use]
+    pub fn choose_route(&mut self, request: RouteRequest, ports: &Ports<'_>) -> Vec<Message> {
+        let announcement = match request {
+            RouteRequest::Clipboard => Message::ClipboardMode,
+            RouteRequest::Direct => match ports.direct.availability() {
+                Availability::Ready => return Vec::new(),
+                Availability::Unavailable { reason } => Message::NoDirectRoute { system: reason },
+            },
+        };
+        let step = self.sequence.apply(Event::UseClipboard);
+        self.sequence = step.sequence;
+        // Said only when the machine actually entered the mode: a second
+        // request finds it on already, and the warning is owed once.
+        if step.effects.contains(&Effect::AnnounceClipboardMode) {
+            vec![announcement]
+        } else {
+            step.effects.iter().filter_map(announce).collect()
+        }
+    }
+
     /// Applies one shortcut and, if it means sending, does the send.
     ///
     /// The target is checked ONCE before a send: nothing focused means the value
@@ -315,7 +389,7 @@ impl AdvanceSequence {
 
         // The machine has put us in `Inserting` and asked for value `index`.
         self.sequence = step.sequence;
-        self.send(index, ports.delivery, ports.keys)
+        self.send(index, ports)
     }
 
     /// Copies the report block of the last value that went out.
@@ -326,14 +400,15 @@ impl AdvanceSequence {
     /// 🔴 One of the TWO doors to the clipboard - untouchable rule 17 and
     /// `tests/clipboard_has_named_doors.rs`. Nothing is written unless the
     /// tester asked, and nothing is reported as copied that the clipboard did
-    /// not take.
+    /// not take. The block stays in the system's clipboard history on purpose
+    /// (`D68`); the values of clipboard mode do not (`D71`).
     fn copy_report(&self, ports: &Ports<'_>) -> Outcome {
         let message = match self.last_block() {
             None => Message::NothingToReport,
             Some(Err(id)) => Message::ValueTooLarge { id },
             Some(Ok(block)) => {
                 let text = ports.report_text.report_text(&block);
-                match ports.clipboard.put_text(&text) {
+                match ports.clipboard.put_text(&text, History::Keep) {
                     Ok(()) => Message::ReportCopied {
                         reference: block.reference,
                     },
@@ -358,49 +433,84 @@ impl AdvanceSequence {
     }
 
     /// Delivers value `index` from the held pack and settles the sequence.
-    fn send(
-        &mut self,
-        index: usize,
-        delivery: &dyn ValueDelivery,
-        keys: &dyn KeystrokeSender,
-    ) -> Outcome {
+    ///
+    /// # At most two attempts, and why there is a second
+    ///
+    /// A direct send that finds no route switches the sequence to clipboard
+    /// mode, and the machine asks for the SAME value again in the same press -
+    /// "switching to clipboard mode, press paste now" (`product-spec.md` 9.3,
+    /// `D71`). The machine asks that once by construction. Were it ever to ask
+    /// a second time, the flight is ended here instead of repeated: a value must
+    /// never be left in flight, and a route must never be asked forever.
+    fn send(&mut self, index: usize, ports: &Ports<'_>) -> Outcome {
+        let first = self.attempt(index, ports);
+        let Some(again) = first.again else {
+            return self.settled(first.sent, first.messages, first.attempted);
+        };
+        let second = self.attempt(again, ports);
+        if second.again.is_some() {
+            self.sequence = self.sequence.apply(Event::InsertionRefused).sequence;
+        }
+        let mut messages = first.messages;
+        messages.extend(second.messages);
+        // The first attempt reached the route, so a press queued behind this
+        // one was pressed while the tool was busy - whatever the second did.
+        self.settled(second.sent, messages, true)
+    }
+
+    /// One try at value `index`, by the route the delivery axis names.
+    fn attempt(&mut self, index: usize, ports: &Ports<'_>) -> Attempt {
+        // 🔴 THE choice between the two implementations, and the only one
+        // (`D71`, `ports.rs` on `ValueDelivery`). The clipboard route clears
+        // nothing, because it presses nothing: the tester selects and pastes.
+        let (route, clearing) = match self.sequence.delivery {
+            Delivery::Direct => (ports.direct, Clearing::Line),
+            Delivery::ClipboardMode => (ports.by_clipboard, Clearing::Keep),
+        };
+        let on_clipboard = self.sequence.delivery == Delivery::ClipboardMode;
+
         // A SendValue effect only comes from a chosen pack, so this is present.
         // If it somehow is not, say so rather than reach into a `None`.
         let Some(loaded) = self.loaded.as_ref() else {
-            self.sequence = self.sequence.apply(Event::InsertionRefused).sequence;
-            return self.settled(None, vec![Message::NoPack], false);
+            return refuse(&mut self.sequence, vec![Message::NoPack]);
         };
 
         // Refuse before touching the field if nothing is focused: the value
         // would otherwise land in the launching window. Measured as real in the
-        // step-2 probe, not hypothetical.
-        if delivery.target().is_none() {
-            self.sequence = self.sequence.apply(Event::InsertionRefused).sequence;
-            return self.settled(None, vec![Message::NoTarget], false);
+        // step-2 probe, not hypothetical. The clipboard route always has a
+        // target, because its value does not go to the focused window at all.
+        if route.target().is_none() {
+            return refuse(&mut self.sequence, vec![Message::NoTarget]);
         }
 
         let Some(value) = loaded.pack.values.get(index - 1) else {
             // The machine asked for an index the pack does not hold, which would
             // be a machine/pack disagreement rather than a delivery problem.
-            self.sequence = self.sequence.apply(Event::InsertionRefused).sequence;
-            return self.settled(None, Vec::new(), false);
+            return refuse(&mut self.sequence, Vec::new());
         };
         let offensive = value.risk.unwrap_or(loaded.pack.risk) == Risk::Offensive;
+        let id = value.id.clone();
         let outcome = deliver_value(
             &loaded.pack,
             value,
-            delivery,
-            keys,
-            Clearing::Line,
+            route,
+            ports.keys,
+            clearing,
             loaded.warnings,
         );
 
-        if let Some(arrival) = arrival_of(&outcome) {
+        if let Some(arrival) = arrival_of(&outcome, on_clipboard) {
             self.last = Some(LastSent { index, arrival });
         }
-        let (event, sent, messages) = classify(outcome, offensive);
-        self.sequence = self.sequence.apply(event).sequence;
-        self.settled(sent, messages, true)
+        let (event, sent, messages) = classify(outcome, offensive, on_clipboard, &id);
+        let step = self.sequence.apply(event);
+        self.sequence = step.sequence;
+        Attempt {
+            sent,
+            messages,
+            attempted: true,
+            again: send_index(&step),
+        }
     }
 
     /// Wraps the current state with what the send produced.
@@ -419,12 +529,39 @@ impl AdvanceSequence {
     }
 }
 
-/// How much of the value reached the field, when any of it did.
+/// What one attempt at a value produced, before the sequence is settled.
+struct Attempt {
+    sent: Option<Sent>,
+    messages: Vec<Message>,
+    /// Whether the route was reached at all - see [`Outcome::attempted_send`].
+    attempted: bool,
+    /// The value the machine asks for once more, by index - only after a
+    /// direct send found no route and the sequence moved to the clipboard.
+    again: Option<usize>,
+}
+
+/// Refuses before the route was reached: the sequence goes back to where it
+/// stood, and nothing new is in the field.
+///
+/// Takes the sequence rather than `self`, because the caller still holds the
+/// pack borrowed and the two fields are separate.
+fn refuse(sequence: &mut Sequence, messages: Vec<Message>) -> Attempt {
+    *sequence = sequence.apply(Event::InsertionRefused).sequence;
+    Attempt {
+        sent: None,
+        messages,
+        attempted: false,
+        again: None,
+    }
+}
+
+/// How the value reached the field, when any of it did.
 ///
 /// `None` for every refusal: nothing new is in the field, so the report block
 /// keeps describing the value before.
-fn arrival_of(outcome: &SendOutcome) -> Option<Arrival> {
+fn arrival_of(outcome: &SendOutcome, on_clipboard: bool) -> Option<Arrival> {
     match outcome {
+        SendOutcome::Sent { .. } if on_clipboard => Some(Arrival::OnClipboard),
         SendOutcome::Sent { .. } => Some(Arrival::Whole),
         SendOutcome::NotDelivered {
             error:
@@ -465,17 +602,25 @@ fn announce(effect: &Effect) -> Option<Message> {
         // These arise only while sending, and the send path builds a richer
         // message from the delivery outcome. Seeing one here would mean a send
         // effect leaked onto the no-send path, so it is dropped rather than
-        // shown half-formed.
+        // shown half-formed. Entering clipboard mode is said by the caller that
+        // knows WHY it was entered - the tester's request or a missing route -
+        // because the two sentences differ and the machine knows neither.
         Effect::SendValue { .. }
         | Effect::AnnounceStillInserting
         | Effect::AnnounceInterrupted { .. }
-        | Effect::AnnounceDegraded => None,
+        | Effect::AnnounceClipboardMode => None,
     }
 }
 
 /// Sorts a delivery outcome onto a sequence event and the message that goes with
-/// it. `offensive` rides along so a landed value can be marked.
-fn classify(outcome: SendOutcome, offensive: bool) -> (Event, Option<Sent>, Vec<Message>) {
+/// it. `offensive` rides along so a landed value can be marked, `on_clipboard`
+/// so it can say which route it took, and `id` so a refusal can name it.
+fn classify(
+    outcome: SendOutcome,
+    offensive: bool,
+    on_clipboard: bool,
+    id: &str,
+) -> (Event, Option<Sent>, Vec<Message>) {
     match outcome {
         SendOutcome::Sent {
             reference,
@@ -500,16 +645,22 @@ fn classify(outcome: SendOutcome, offensive: bool) -> (Event, Option<Sent>, Vec<
                 offensive,
                 warnings,
                 cleared,
+                on_clipboard,
                 preview,
                 shape,
             }),
             Vec::new(),
         ),
-        // No route at all: the one outcome that degrades to the clipboard.
+        // No route at all: the one outcome that moves to the clipboard, and the
+        // machine asks for the same value there in the same press.
         SendOutcome::NotDelivered {
-            error: DeliveryError::Unsupported { .. },
+            error: DeliveryError::Unsupported { system },
             ..
-        } => (Event::InsertionFailed, None, vec![Message::Degraded]),
+        } => (
+            Event::InsertionFailed,
+            None,
+            vec![Message::NoDirectRoute { system }],
+        ),
         // A fragment was left: interrupted, with how far it got.
         SendOutcome::NotDelivered {
             error:
@@ -539,9 +690,39 @@ fn classify(outcome: SendOutcome, offensive: bool) -> (Event, Option<Sent>, Vec<
             None,
             vec![Message::ModifierHeld { key: which }],
         ),
-        // Clearing failed, so the value never went. The reason names the message.
+        // The three below are reported by the clipboard route alone - the
+        // direct one presses keys and has no clipboard to be busy or to refuse.
+        // A direct route that began to report them would need sentences of its
+        // own; the words here name the clipboard, because only it gets here.
+        // Nothing reached the clipboard in any of them, so the counter stays.
+        SendOutcome::NotDelivered {
+            error: DeliveryError::Busy,
+            ..
+        } => (Event::InsertionRefused, None, vec![Message::ClipboardBusy]),
+        SendOutcome::NotDelivered {
+            error: DeliveryError::Refused { detail },
+            ..
+        } => (
+            Event::InsertionRefused,
+            None,
+            vec![Message::ClipboardFailed { detail }],
+        ),
+        SendOutcome::NotDelivered {
+            error: DeliveryError::CannotCarry { character },
+            ..
+        } => (
+            Event::InsertionRefused,
+            None,
+            vec![Message::NotForClipboard {
+                id: id.to_owned(),
+                character,
+            }],
+        ),
+        // Clearing failed, so the value never went. The reason names both the
+        // event and the message.
         SendOutcome::NotCleared { error } => {
-            (Event::InsertionRefused, None, vec![clearing_message(error)])
+            let (event, message) = after_clearing(error);
+            (event, None, vec![message])
         }
         // A validated pack cannot describe a value this large, but if one did,
         // nothing was sent and it is said plainly.
@@ -562,17 +743,27 @@ fn classify(outcome: SendOutcome, offensive: bool) -> (Event, Option<Sent>, Vec<
     }
 }
 
-/// The message for a clearing that did not go through. Nothing was sent either
-/// way; the reason tells the tester what to do.
-fn clearing_message(error: KeystrokeError) -> Message {
+/// What a clearing that did not go through means. Nothing was sent either way;
+/// the reason tells the machine where to go and the tester what to do.
+fn after_clearing(error: KeystrokeError) -> (Event, Message) {
     match error {
-        KeystrokeError::NoTarget => Message::NoTarget,
-        KeystrokeError::ModifierHeld { which } => Message::ModifierHeld { key: which },
-        // No route to press keys, or a partial clear leaving the field in an
-        // unknown state: both mean the field cannot be trusted to be clear.
-        KeystrokeError::Unsupported { .. } | KeystrokeError::Partial { .. } => {
-            Message::ClearingFailed
+        // 🔴 No route to press keys is no route at all - the SAME fact a send
+        // would have reported one step later, and the same answer: clipboard
+        // mode, with the value going there now. Until `D71` it was sorted as a
+        // failed clear, "the field may hold part of its old content", about a
+        // field nothing had touched - and it never reached clipboard mode,
+        // because the clear goes first (`OBS-129`).
+        KeystrokeError::Unsupported { system } => {
+            (Event::InsertionFailed, Message::NoDirectRoute { system })
         }
+        KeystrokeError::NoTarget => (Event::InsertionRefused, Message::NoTarget),
+        KeystrokeError::ModifierHeld { which } => (
+            Event::InsertionRefused,
+            Message::ModifierHeld { key: which },
+        ),
+        // A partial clear leaves the field in an unknown state: it cannot be
+        // trusted to be clear, and nothing goes on top of it.
+        KeystrokeError::Partial { .. } => (Event::InsertionRefused, Message::ClearingFailed),
     }
 }
 
@@ -632,18 +823,213 @@ mod tests {
     }
 
     #[test]
-    fn no_route_degrades_to_the_clipboard() {
+    fn no_route_switches_to_the_clipboard_and_puts_that_same_value_there() {
+        // D71, product-spec.md 9.3: "switching to clipboard mode, press paste
+        // now" - in the same press, with the value that did not arrive.
         let mut advance = chosen(Risk::Normal);
-        let outcome = advance.on_action(
-            HotkeyAction::NextValue,
-            &Kit::with_delivery(FakeDelivery::failing(DeliveryError::Unsupported {
-                system: "macOS".to_owned(),
-            }))
-            .ports(),
+        let kit = Kit::with_delivery(FakeDelivery::failing(DeliveryError::Unsupported {
+            system: "macOS".to_owned(),
+        }));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(
+            outcome.messages,
+            vec![Message::NoDirectRoute {
+                system: "macOS".to_owned()
+            }]
         );
-        assert_eq!(outcome.messages, vec![Message::Degraded]);
-        assert_eq!(advance.sequence().delivery, Delivery::Degraded);
+        assert_eq!(advance.sequence().delivery, Delivery::ClipboardMode);
+        assert_eq!(*kit.by_clipboard.handed.borrow(), vec!["alpha"]);
+        let sent = outcome.sent.expect("value one went to the clipboard");
+        assert_eq!(sent.reference, "sample/one");
+        assert!(sent.on_clipboard);
+        assert!(!sent.cleared, "the clipboard route clears nothing");
+        assert_eq!(
+            advance.counter(),
+            Some((1, 3)),
+            "placed on the clipboard counts as sent - ux-spec.md 8"
+        );
+        assert!(outcome.attempted_send);
+    }
+
+    #[test]
+    fn no_route_found_by_the_clearing_is_no_route_not_a_failed_clear() {
+        // OBS-129: the clearing goes first, so on a system with no route the
+        // keys answer before the value can. It used to say the field "may hold
+        // part of its old content" about a field nothing had touched.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_keys(FakeKeys::failing(KeystrokeError::Unsupported {
+            system: "Linux".to_owned(),
+        }));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(
+            outcome.messages,
+            vec![Message::NoDirectRoute {
+                system: "Linux".to_owned()
+            }]
+        );
+        assert!(!outcome.messages.contains(&Message::ClearingFailed));
+        assert_eq!(advance.sequence().delivery, Delivery::ClipboardMode);
+        assert!(
+            kit.direct.handed.borrow().is_empty(),
+            "the value never went direct"
+        );
+        assert_eq!(*kit.by_clipboard.handed.borrow(), vec!["alpha"]);
+    }
+
+    #[test]
+    fn in_clipboard_mode_nothing_is_pressed_and_every_value_goes_to_the_clipboard() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        assert_eq!(
+            advance.choose_route(RouteRequest::Clipboard, &kit.ports()),
+            vec![Message::ClipboardMode]
+        );
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        let outcome = advance.on_action(HotkeyAction::PreviousValue, &kit.ports());
+
+        assert_eq!(
+            *kit.keys.requests.borrow(),
+            0,
+            "clipboard mode presses NOTHING - the tester pastes (D71)"
+        );
+        assert!(kit.direct.handed.borrow().is_empty());
+        assert_eq!(
+            *kit.by_clipboard.handed.borrow(),
+            vec!["alpha", "beta", "alpha"]
+        );
+        let sent = outcome.sent.expect("value one went to the clipboard again");
+        assert!(sent.on_clipboard && !sent.cleared);
+        assert!(
+            outcome.messages.is_empty(),
+            "the bar says it, not every press"
+        );
+    }
+
+    #[test]
+    fn a_system_without_a_route_starts_in_clipboard_mode_and_says_why() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_delivery(FakeDelivery::unavailable("macOS"));
+        assert_eq!(
+            advance.choose_route(RouteRequest::Direct, &kit.ports()),
+            vec![Message::NoDirectRoute {
+                system: "macOS".to_owned()
+            }]
+        );
+        assert_eq!(advance.sequence().delivery, Delivery::ClipboardMode);
+        assert_eq!(
+            advance.counter(),
+            Some((0, 3)),
+            "choosing a route sends nothing"
+        );
+        assert!(kit.by_clipboard.handed.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_system_with_a_route_stays_direct_and_says_nothing() {
+        let mut advance = chosen(Risk::Normal);
+        assert!(
+            advance
+                .choose_route(RouteRequest::Direct, &Kit::ready().ports())
+                .is_empty()
+        );
+        assert_eq!(advance.sequence().delivery, Delivery::Direct);
+    }
+
+    #[test]
+    fn asking_for_clipboard_mode_twice_warns_once() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        let _ = advance.choose_route(RouteRequest::Clipboard, &kit.ports());
+        assert!(
+            advance
+                .choose_route(RouteRequest::Clipboard, &kit.ports())
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_busy_clipboard_refuses_the_value_and_keeps_the_counter() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_by_clipboard(FakeDelivery::failing(DeliveryError::Busy));
+        let _ = advance.choose_route(RouteRequest::Clipboard, &kit.ports());
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(outcome.messages, vec![Message::ClipboardBusy]);
+        assert!(outcome.sent.is_none());
+        assert_eq!(advance.sequence().position, Position::Ready { total: 3 });
+        assert_eq!(advance.sequence().delivery, Delivery::ClipboardMode);
+    }
+
+    #[test]
+    fn a_refusing_clipboard_passes_its_words_on_for_a_value_too() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_by_clipboard(FakeDelivery::failing(DeliveryError::Refused {
+            detail: "no display".to_owned(),
+        }));
+        let _ = advance.choose_route(RouteRequest::Clipboard, &kit.ports());
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(
+            outcome.messages,
+            vec![Message::ClipboardFailed {
+                detail: "no display".to_owned()
+            }]
+        );
         assert_eq!(advance.counter(), Some((0, 3)));
+    }
+
+    #[test]
+    fn a_value_the_clipboard_cannot_carry_is_refused_by_name() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_by_clipboard(FakeDelivery::failing(DeliveryError::CannotCarry {
+            character: '\0',
+        }));
+        let _ = advance.choose_route(RouteRequest::Clipboard, &kit.ports());
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(
+            outcome.messages,
+            vec![Message::NotForClipboard {
+                id: "one".to_owned(),
+                character: '\0'
+            }]
+        );
+        assert_eq!(advance.counter(), Some((0, 3)), "OBS-130: it stays put");
+    }
+
+    #[test]
+    fn a_failing_clipboard_after_the_switch_is_said_after_the_switch() {
+        // Both halves reach the tester, in order: why the mode changed, then
+        // why this value is not on the clipboard either.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit {
+            direct: FakeDelivery::failing(DeliveryError::Unsupported {
+                system: "macOS".to_owned(),
+            }),
+            by_clipboard: FakeDelivery::failing(DeliveryError::Busy),
+            ..Kit::ready()
+        };
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(
+            outcome.messages,
+            vec![
+                Message::NoDirectRoute {
+                    system: "macOS".to_owned()
+                },
+                Message::ClipboardBusy
+            ]
+        );
+        assert!(!advance.sequence().is_inserting(), "nothing left in flight");
+        assert_eq!(advance.sequence().delivery, Delivery::ClipboardMode);
+        assert_eq!(advance.counter(), Some((0, 3)));
+    }
+
+    #[test]
+    fn the_report_of_a_pasted_value_says_it_went_by_the_clipboard() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        let _ = advance.choose_route(RouteRequest::Clipboard, &kit.ports());
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        let _ = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+        assert_eq!(kit.text.blocks.borrow()[0].arrival, Arrival::OnClipboard);
     }
 
     #[test]
@@ -794,6 +1180,11 @@ mod tests {
             }]
         );
         assert_eq!(*kit.clipboard.puts.borrow(), vec!["report of sample/two"]);
+        assert_eq!(
+            *kit.clipboard.histories.borrow(),
+            vec![History::Keep],
+            "the block stays in the clipboard history on purpose (D68)"
+        );
         let blocks = kit.text.blocks.borrow();
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].pack_version, "1.0");
@@ -904,5 +1295,9 @@ mod tests {
 
         assert!(kit.clipboard.puts.borrow().is_empty());
         assert!(kit.text.blocks.borrow().is_empty());
+        assert!(
+            kit.by_clipboard.handed.borrow().is_empty(),
+            "in direct mode the clipboard route is never taken (D71)"
+        );
     }
 }

@@ -22,7 +22,7 @@ pub mod send_value;
 #[cfg(test)]
 pub(crate) mod test_support;
 
-pub use advance_sequence::{AdvanceSequence, ChooseError, Message, Outcome, Sent};
+pub use advance_sequence::{AdvanceSequence, ChooseError, Message, Outcome, RouteRequest, Sent};
 pub use browse_packs::{Listing, PackEntry, ShowOutcome, list_packs, show_pack};
 pub use drive_sequence::{Ended, drive_sequence};
 pub use emit_values::{Emission, EmitOutcome, EmittedValue, emit_values};

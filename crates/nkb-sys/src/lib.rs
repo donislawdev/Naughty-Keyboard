@@ -147,6 +147,11 @@ pub struct WindowRef(pub u64);
 /// one unit per call either, which would multiply the syscall count by the
 /// length of the value. This is also the seam where step 3 will check that the
 /// target has not changed mid-insert - architektura.md 6a, race `W2`.
+///
+/// Windows only, like the one route that reads it: elsewhere it was dead code,
+/// and `clippy -D warnings` refused the workspace on macOS and Linux - unseen
+/// until 2026-09-23, when clippy first ran there.
+#[cfg(windows)]
 const CHUNK_UNITS: usize = 512;
 
 #[cfg(windows)]

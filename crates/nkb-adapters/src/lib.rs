@@ -9,6 +9,7 @@
 pub mod built_in;
 pub mod canonical;
 pub mod catalogue;
+pub mod clipboard_delivery;
 pub mod focus;
 pub mod fs;
 pub mod i18n;
@@ -22,6 +23,7 @@ pub mod toml_pack;
 
 pub use built_in::BUILT_IN_PACKS;
 pub use catalogue::BuiltInCatalogue;
+pub use clipboard_delivery::ClipboardDelivery;
 pub use focus::KeptFocus;
 pub use fs::{DirectoryPackSink, DirectoryPackSource, SystemClock};
 pub use keyboard::DirectInjection;

@@ -16,9 +16,9 @@ use std::cell::RefCell;
 
 use crate::advance_sequence::{AdvanceSequence, Ports};
 use crate::ports::{
-    Availability, Clipboard, ClipboardError, Date, Delivered, DeliveryError, KeystrokeError,
-    KeystrokeSender, PackFormat, PackSource, ReportText, SourceError, TargetRef, TranslationCheck,
-    TranslationTarget, ValueDelivery,
+    Availability, Clipboard, ClipboardError, Date, Delivered, DeliveryError, History,
+    KeystrokeError, KeystrokeSender, PackFormat, PackSource, ReportText, SourceError, TargetRef,
+    TranslationCheck, TranslationTarget, ValueDelivery,
 };
 use nkb_core::keys::KeyChord;
 use nkb_core::lint::{LintProblem, RuleCode};
@@ -27,41 +27,61 @@ use nkb_core::report::ReportBlock;
 use nkb_core::text::LiteralText;
 use nkb_core::value::ValueBody;
 
-/// A delivery whose target presence and outcome a test dictates.
+/// A delivery whose availability, target and outcome a test dictates, and
+/// which keeps every text it was handed - so a test can say which ROUTE a value
+/// went by, which is the whole question once there are two.
 pub(crate) struct FakeDelivery {
+    availability: Availability,
     target: Option<TargetRef>,
     fail: Option<DeliveryError>,
+    pub(crate) handed: RefCell<Vec<String>>,
 }
 
 impl FakeDelivery {
     pub(crate) fn ready() -> Self {
         Self {
+            availability: Availability::Ready,
             target: Some(TargetRef(1)),
             fail: None,
+            handed: RefCell::new(Vec::new()),
         }
     }
     pub(crate) fn without_target() -> Self {
         Self {
             target: None,
-            fail: None,
+            ..Self::ready()
         }
     }
     pub(crate) fn failing(error: DeliveryError) -> Self {
         Self {
-            target: Some(TargetRef(1)),
             fail: Some(error),
+            ..Self::ready()
+        }
+    }
+    /// No route on this system, known before any send - what `DirectInjection`
+    /// answers on macOS and Linux today.
+    pub(crate) fn unavailable(system: &str) -> Self {
+        Self {
+            availability: Availability::Unavailable {
+                reason: system.to_owned(),
+            },
+            fail: Some(DeliveryError::Unsupported {
+                system: system.to_owned(),
+            }),
+            ..Self::ready()
         }
     }
 }
 
 impl ValueDelivery for FakeDelivery {
     fn availability(&self) -> Availability {
-        Availability::Ready
+        self.availability.clone()
     }
     fn target(&self) -> Option<TargetRef> {
         self.target
     }
     fn deliver(&self, text: &str) -> Result<Delivered, DeliveryError> {
+        self.handed.borrow_mut().push(text.to_owned());
         match &self.fail {
             None => Ok(Delivered {
                 utf16_units: text.encode_utf16().count(),
@@ -71,21 +91,31 @@ impl ValueDelivery for FakeDelivery {
     }
 }
 
+/// Keys that go through or refuse as a test says, and count the requests - so
+/// a test can prove that a route pressed NOTHING.
 pub(crate) struct FakeKeys {
     fail: Option<KeystrokeError>,
+    pub(crate) requests: RefCell<usize>,
 }
 
 impl FakeKeys {
     pub(crate) fn working() -> Self {
-        Self { fail: None }
+        Self {
+            fail: None,
+            requests: RefCell::new(0),
+        }
     }
     pub(crate) fn failing(error: KeystrokeError) -> Self {
-        Self { fail: Some(error) }
+        Self {
+            fail: Some(error),
+            requests: RefCell::new(0),
+        }
     }
 }
 
 impl KeystrokeSender for FakeKeys {
     fn send_keystrokes(&self, _chords: &[KeyChord]) -> Result<(), KeystrokeError> {
+        *self.requests.borrow_mut() += 1;
         match &self.fail {
             None => Ok(()),
             Some(error) => Err(error.clone()),
@@ -93,10 +123,12 @@ impl KeystrokeSender for FakeKeys {
     }
 }
 
-/// A clipboard that records what it was handed, or refuses as a test says.
+/// A clipboard that records what it was handed and under which history rule,
+/// or refuses as a test says.
 pub(crate) struct FakeClipboard {
     fail: Option<ClipboardError>,
     pub(crate) puts: RefCell<Vec<String>>,
+    pub(crate) histories: RefCell<Vec<History>>,
 }
 
 impl FakeClipboard {
@@ -104,21 +136,23 @@ impl FakeClipboard {
         Self {
             fail: None,
             puts: RefCell::new(Vec::new()),
+            histories: RefCell::new(Vec::new()),
         }
     }
     pub(crate) fn failing(error: ClipboardError) -> Self {
         Self {
             fail: Some(error),
-            puts: RefCell::new(Vec::new()),
+            ..Self::working()
         }
     }
 }
 
 impl Clipboard for FakeClipboard {
-    fn put_text(&self, text: &str) -> Result<(), ClipboardError> {
+    fn put_text(&self, text: &str, history: History) -> Result<(), ClipboardError> {
         match &self.fail {
             None => {
                 self.puts.borrow_mut().push(text.to_owned());
+                self.histories.borrow_mut().push(history);
                 Ok(())
             }
             Some(error) => Err(error.clone()),
@@ -140,8 +174,14 @@ impl ReportText for FakeReportText {
 }
 
 /// One of every fake port, owned together so a test can lend them all at once.
+///
+/// Two deliveries, as the product has: `direct` stands for `DirectInjection`
+/// and `by_clipboard` for `ClipboardDelivery`. The fake clipboard is the one
+/// the report block writes to, and `by_clipboard` keeps its own record of the
+/// values - so a test can tell the two doors apart.
 pub(crate) struct Kit {
-    pub(crate) delivery: FakeDelivery,
+    pub(crate) direct: FakeDelivery,
+    pub(crate) by_clipboard: FakeDelivery,
     pub(crate) keys: FakeKeys,
     pub(crate) clipboard: FakeClipboard,
     pub(crate) text: FakeReportText,
@@ -150,7 +190,8 @@ pub(crate) struct Kit {
 impl Kit {
     pub(crate) fn ready() -> Self {
         Self {
-            delivery: FakeDelivery::ready(),
+            direct: FakeDelivery::ready(),
+            by_clipboard: FakeDelivery::ready(),
             keys: FakeKeys::working(),
             clipboard: FakeClipboard::working(),
             text: FakeReportText {
@@ -158,9 +199,15 @@ impl Kit {
             },
         }
     }
-    pub(crate) fn with_delivery(delivery: FakeDelivery) -> Self {
+    pub(crate) fn with_delivery(direct: FakeDelivery) -> Self {
         Self {
-            delivery,
+            direct,
+            ..Self::ready()
+        }
+    }
+    pub(crate) fn with_by_clipboard(by_clipboard: FakeDelivery) -> Self {
+        Self {
+            by_clipboard,
             ..Self::ready()
         }
     }
@@ -178,7 +225,8 @@ impl Kit {
     }
     pub(crate) fn ports(&self) -> Ports<'_> {
         Ports {
-            delivery: &self.delivery,
+            direct: &self.direct,
+            by_clipboard: &self.by_clipboard,
             keys: &self.keys,
             clipboard: &self.clipboard,
             report_text: &self.text,

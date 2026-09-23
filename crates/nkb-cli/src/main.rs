@@ -804,6 +804,27 @@ fn send(args: &[String]) -> ExitCode {
                         "The field holds a PARTIAL value. Clear it before testing."
                     );
                 }
+                // The three below belong to the clipboard route of the palette,
+                // which this command does not have and will not have (D71,
+                // OBS-131). Typing reports none of them; they are answered in
+                // plain words rather than folded into a guess, should a route
+                // ever start to.
+                DeliveryError::Busy => {
+                    let _ = writeln!(
+                        err,
+                        "nkb send: the route was held by another application, so nothing was sent - run again in a moment."
+                    );
+                }
+                DeliveryError::Refused { detail } => {
+                    let _ = writeln!(err, "nkb send: the route refused the value: {detail}.");
+                }
+                DeliveryError::CannotCarry { character } => {
+                    let _ = writeln!(
+                        err,
+                        "nkb send: this route cannot carry U+{:04X}, so nothing was sent.",
+                        u32::from(*character)
+                    );
+                }
             }
             ExitCode::InsertFailed
         }

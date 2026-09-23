@@ -55,6 +55,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use nkb_adapters::i18n::PaletteLabel;
 use nkb_adapters::{KeptFocus, i18n, report_window_failure};
+use nkb_app::RouteRequest;
 use nkb_core::hotkeys::{DEFAULT_BINDINGS, HotkeyAction};
 use nkb_gui::{Gallery, HintRow, Palette, focus, live};
 use slint::{ComponentHandle, ModelRc, VecModel};
@@ -103,23 +104,34 @@ fn main() -> ExitCode {
 
 /// What the command line asked for.
 ///
-/// Deliberately tiny: two shapes, no flags to combine, no parser. `nkb` is the
-/// executable with a command surface and `ux-spec.md` 10 is its contract; this
-/// one is a window, and a window that grows an option grammar has started to
-/// become the other binary.
+/// Deliberately tiny: three shapes, no flags to combine, no parser. `nkb` is
+/// the executable with a command surface and `ux-spec.md` 10 is its contract;
+/// this one is a window, and a window that grows an option grammar has started
+/// to become the other binary.
+///
+/// ⚠️ The third shape, `--clipboard`, went in on purpose (`D71`) and it is
+/// still not a grammar: one word, in the first place only, before the optional
+/// pack - `nkb-gui --clipboard whitespace`. Switching the mode while the
+/// palette runs belongs to the settings (step 7), never to another global
+/// shortcut: each one is a new collision in somebody's application.
 enum Request {
-    /// The palette, on this pack.
-    Palette(String),
+    /// The palette, on this pack, delivering values this way.
+    Palette { pack: String, route: RouteRequest },
     /// The component catalogue - document 13 section 3.
     Gallery,
 }
 
 fn request() -> Request {
     let mut arguments = std::env::args().skip(1);
-    match arguments.next() {
-        Some(first) if first == "--gallery" => Request::Gallery,
-        Some(pack) => Request::Palette(pack),
-        None => Request::Palette(DEFAULT_PACK.to_owned()),
+    let first = arguments.next();
+    let (route, pack) = match first.as_deref() {
+        Some("--gallery") => return Request::Gallery,
+        Some("--clipboard") => (RouteRequest::Clipboard, arguments.next()),
+        _ => (RouteRequest::Direct, first),
+    };
+    Request::Palette {
+        pack: pack.unwrap_or_else(|| DEFAULT_PACK.to_owned()),
+        route,
     }
 }
 
@@ -127,7 +139,7 @@ fn request() -> Request {
 fn start(request: &Request) -> Result<(), slint::PlatformError> {
     match request {
         Request::Gallery => Gallery::new()?.run(),
-        Request::Palette(pack) => run_palette(pack),
+        Request::Palette { pack, route } => run_palette(pack, *route),
     }
 }
 
@@ -145,14 +157,14 @@ fn start(request: &Request) -> Result<(), slint::PlatformError> {
 /// `Ctrl+Alt+N` and nine others taken from whoever wants them next, for as long
 /// as the process lingers. Joining also means a send in flight finishes writing
 /// rather than being cut in half inside somebody's field.
-fn run_palette(pack: &str) -> Result<(), slint::PlatformError> {
+fn run_palette(pack: &str, route: RouteRequest) -> Result<(), slint::PlatformError> {
     // 🔴 BEFORE the window exists. Afterwards the answer is the palette itself,
     // and handing the focus back to ourselves is a no-op that reports success -
     // the failure shape this project keeps meeting (`slint.md` 2.17).
     let kept = KeptFocus::remember();
     let palette = Palette::new()?;
     palette.set_window_title(i18n::label(PaletteLabel::Title).into());
-    palette.set_clipboard_mode_label(i18n::label(PaletteLabel::DirectInputRefused).into());
+    palette.set_clipboard_mode_label(i18n::label(PaletteLabel::ClipboardMode).into());
     palette.set_hints(ModelRc::new(VecModel::from(hints())));
     // Awake at first run, with the hints up and nothing sent yet - `ux-spec.md`
     // 5.1. The worker fills the pack and the counter, because the sequence that
@@ -175,7 +187,7 @@ fn run_palette(pack: &str) -> Result<(), slint::PlatformError> {
         // Measured: work handed to the event loop before `run()` is delivered
         // once it starts (`slint.md` 1.9), so this thread may say something
         // before the window is running and nothing is lost.
-        move || live::drive(&palette, &stop, &pack, &standing)
+        move || live::drive(&palette, &stop, &pack, route, &standing)
     });
 
     let ran = palette.run();

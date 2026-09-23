@@ -29,10 +29,11 @@
 use std::time::{Duration, Instant};
 
 use nkb_adapters::{
-    BuiltInCatalogue, DirectInjection, EnglishReport, GlobalShortcuts, TomlPackFormat, i18n,
+    BuiltInCatalogue, ClipboardDelivery, DirectInjection, EnglishReport, GlobalShortcuts,
+    TomlPackFormat, i18n,
 };
 use nkb_app::advance_sequence::Ports;
-use nkb_app::ports::{Clipboard, ClipboardError, HotkeyRegistrar};
+use nkb_app::ports::{Clipboard, ClipboardError, History, HotkeyRegistrar};
 use nkb_app::{AdvanceSequence, Outcome, drive_sequence};
 use nkb_core::hotkeys::DEFAULT_BINDINGS;
 
@@ -77,8 +78,12 @@ fn main() {
     let started = Instant::now();
     let mut keep_going = || started.elapsed() < RUN_FOR;
     let mut present = |outcome: Outcome| println!("{}", describe(&outcome));
+    // The clipboard route sits over the same refusing clipboard, so clipboard
+    // mode here says plainly that it cannot work rather than pretending to.
+    let by_clipboard = ClipboardDelivery::new(&NoClipboard);
     let ports = Ports {
-        delivery: &DirectInjection,
+        direct: &DirectInjection,
+        by_clipboard: &by_clipboard,
         keys: &DirectInjection,
         clipboard: &NoClipboard,
         report_text: &EnglishReport,
@@ -131,7 +136,7 @@ fn describe(outcome: &Outcome) -> String {
 struct NoClipboard;
 
 impl Clipboard for NoClipboard {
-    fn put_text(&self, _text: &str) -> Result<(), ClipboardError> {
+    fn put_text(&self, _text: &str, _history: History) -> Result<(), ClipboardError> {
         Err(ClipboardError::Failed {
             detail: "this example has no clipboard - the palette has".to_owned(),
         })

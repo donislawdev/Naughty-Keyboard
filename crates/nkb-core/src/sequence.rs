@@ -76,12 +76,16 @@ pub enum Delivery {
     /// Straight into the field. The normal case.
     #[default]
     Direct,
-    /// Direct delivery failed, so values go via the clipboard.
+    /// Values go to the clipboard and the tester pastes them.
+    ///
+    /// Named after the glossary, never "degraded" or "fallback": `ux-spec.md` 8
+    /// calls this a full route rather than a failure, and a name saying
+    /// otherwise would say it in every place the mode is mentioned.
     ///
     /// `ux-spec.md` 2: the bar saying so is PERMANENT. Nothing in this module
-    /// leaves this mode on its own - the tester asks for it, or a diagnosis
-    /// does, and both are events.
-    Degraded,
+    /// leaves this mode on its own, and entering it is always an event - the
+    /// tester asking for it, or the tool finding no direct route (`D71`).
+    ClipboardMode,
 }
 
 /// Where the sequence stands: both axes, together.
@@ -111,11 +115,23 @@ pub enum Event {
     Previous,
     /// The "start this pack from the beginning" shortcut.
     Restart,
+    /// Values are to go through the clipboard from now on: the tester asked
+    /// for it, or the tool learned before any send that this system has no
+    /// direct route. Refused while a value is in flight, like a change of pack:
+    /// the route must not change under a value that is still going out.
+    UseClipboard,
     /// A value finished arriving in the field.
     InsertionFinished,
-    /// Direct delivery is not working at all, so the value did not arrive and
-    /// the clipboard is the way forward now. This is the persistent inability
-    /// (`product-spec.md` 9.3), NOT a passing hiccup.
+    /// Direct delivery has no route at all, so the value did not arrive. This
+    /// is the persistent inability (`product-spec.md` 9.3), NOT a passing
+    /// hiccup.
+    ///
+    /// 🔴 In direct mode it switches to the clipboard and asks for the SAME
+    /// value again, in the same press - "switching to clipboard mode, press
+    /// paste now". The same value, by its index, and not "the next one": after
+    /// `Previous` the next one is a different value. Once, by construction: in
+    /// clipboard mode this event only returns to where the sequence stood
+    /// (`D71`).
     InsertionFailed,
     /// The send never started, and the field was left untouched: nothing holds
     /// the focus, or a modifier is physically held. Distinct from
@@ -163,8 +179,10 @@ pub enum Effect {
     AnnounceNoPack,
     /// Say the insertion stopped part-way, and how far it got.
     AnnounceInterrupted { index: usize },
-    /// Say direct delivery stopped working and the clipboard is being used.
-    AnnounceDegraded,
+    /// Say values now go to the clipboard, replacing what the tester had
+    /// copied. Once, on entering the mode - `ux-spec.md` 12 item 2 warns once
+    /// and never restores.
+    AnnounceClipboardMode,
 }
 
 impl fmt::Display for Effect {
@@ -179,7 +197,7 @@ impl fmt::Display for Effect {
             Self::AnnounceNoTarget => f.write_str("no-target"),
             Self::AnnounceNoPack => f.write_str("no-pack"),
             Self::AnnounceInterrupted { .. } => f.write_str("interrupted"),
-            Self::AnnounceDegraded => f.write_str("degraded"),
+            Self::AnnounceClipboardMode => f.write_str("clipboard-mode"),
         }
     }
 }
@@ -250,11 +268,16 @@ impl Sequence {
             Event::Restart => self.restart(),
             Event::TargetChanged => self.target_changed(),
             Event::TargetLost => self.nothing_but(Effect::AnnounceNoTarget),
-            Event::InsertionFailed => self.degrade(),
+            Event::UseClipboard => self.use_clipboard(),
             // Nothing is in flight, so none of these describes anything.
             // `W3`: `Escape` belongs to `inserting` and is not captured outside
-            // it, so arriving here at all means somebody wired it globally.
-            Event::InsertionFinished | Event::InsertionRefused | Event::Cancelled => self.nothing(),
+            // it, so arriving here at all means somebody wired it globally. A
+            // failure outside a send switched the route until `D71`; entering the
+            // mode outside a send is `UseClipboard` now, with its own name.
+            Event::InsertionFinished
+            | Event::InsertionFailed
+            | Event::InsertionRefused
+            | Event::Cancelled => self.nothing(),
         }
     }
 
@@ -277,38 +300,31 @@ impl Sequence {
                 },
                 effects: Vec::new(),
             },
-            // The value did not land, so the counter must not move: `done` stays
-            // at what it was before this attempt.
-            Event::InsertionFailed => Step {
-                sequence: Self {
-                    position: Position::Running {
-                        done: sending.saturating_sub(1),
-                        total,
+            // No direct route. The value did not land, so the counter does not
+            // move - and the SAME value goes out again through the clipboard in
+            // this very press (`D71`). The position stays `Inserting`, because
+            // that value is still the one in flight.
+            Event::InsertionFailed => match self.delivery {
+                Delivery::Direct => Step {
+                    sequence: Self {
+                        delivery: Delivery::ClipboardMode,
+                        ..self
                     },
-                    delivery: Delivery::Degraded,
+                    effects: vec![
+                        Effect::AnnounceClipboardMode,
+                        Effect::SendValue { index: sending },
+                    ],
                 },
-                effects: vec![Effect::AnnounceDegraded],
+                // The clipboard route reports its own trouble as a refusal, so
+                // this should not arrive here. If it does, asking again would be
+                // the loop the rule above exists to rule out: go back instead.
+                Delivery::ClipboardMode => self.back_before(sending, total),
             },
-            // The send never started: no target, or a held modifier. Nothing
-            // reached the field and nothing is degraded - the sequence returns
-            // to exactly where it stood before this `Next`. From the first send
-            // that is `Ready`; from any later one it is `Running` on the value
-            // already done. No effect: the caller says WHY, because the reason
-            // is a fact about delivery, not about the sequence.
-            Event::InsertionRefused => Step {
-                sequence: Self {
-                    position: if sending <= 1 {
-                        Position::Ready { total }
-                    } else {
-                        Position::Running {
-                            done: sending - 1,
-                            total,
-                        }
-                    },
-                    ..self
-                },
-                effects: Vec::new(),
-            },
+            // The send never started: no target, a held modifier, a clipboard
+            // held by somebody else. Nothing reached the field and the route
+            // stays as it was. No effect: the caller says WHY, because the
+            // reason is a fact about delivery, not about the sequence.
+            Event::InsertionRefused => self.back_before(sending, total),
             // Escape, or the target moving out from under a running insertion
             // (`W2`). Both leave a FRAGMENT in the field, and both say so.
             Event::Cancelled | Event::TargetChanged | Event::TargetLost => Step {
@@ -326,11 +342,32 @@ impl Sequence {
                 sequence: self,
                 effects: vec![Effect::AnnounceStillInserting],
             },
-            // A pack cannot be swapped under a value that is still arriving.
-            Event::PackChosen { .. } => Step {
+            // Neither the pack nor the route can be swapped under a value that
+            // is still arriving.
+            Event::PackChosen { .. } | Event::UseClipboard => Step {
                 sequence: self,
                 effects: vec![Effect::AnnounceStillInserting],
             },
+        }
+    }
+
+    /// Back to exactly where the sequence stood before the press that started
+    /// value `sending`: `Ready` when it was the first, `Running` on the value
+    /// already done when it was a later one.
+    fn back_before(self, sending: usize, total: usize) -> Step {
+        Step {
+            sequence: Self {
+                position: if sending <= 1 {
+                    Position::Ready { total }
+                } else {
+                    Position::Running {
+                        done: sending - 1,
+                        total,
+                    }
+                },
+                ..self
+            },
+            effects: Vec::new(),
         }
     }
 
@@ -440,13 +477,18 @@ impl Sequence {
         }
     }
 
-    fn degrade(self) -> Step {
-        Step {
-            sequence: Self {
-                delivery: Delivery::Degraded,
-                ..self
+    /// Enters clipboard mode, and says so exactly once: a second request finds
+    /// the mode already on and has nothing to announce.
+    fn use_clipboard(self) -> Step {
+        match self.delivery {
+            Delivery::ClipboardMode => self.nothing(),
+            Delivery::Direct => Step {
+                sequence: Self {
+                    delivery: Delivery::ClipboardMode,
+                    ..self
+                },
+                effects: vec![Effect::AnnounceClipboardMode],
             },
-            effects: vec![Effect::AnnounceDegraded],
         }
     }
 
@@ -631,7 +673,7 @@ mod tests {
     // ---- (A) failure ------------------------------------------------------
 
     #[test]
-    fn a_failed_insertion_leaves_the_counter_where_it_was_and_degrades_delivery() {
+    fn a_failed_direct_insertion_switches_to_the_clipboard_and_resends_that_value() {
         let before = run(
             Sequence::new(),
             &[
@@ -652,13 +694,75 @@ mod tests {
             Some((1, 4)),
             "value two never arrived, so it must not be counted as sent"
         );
-        assert_eq!(step.sequence.delivery, Delivery::Degraded);
-        assert_eq!(step.effects, vec![Effect::AnnounceDegraded]);
+        assert_eq!(step.sequence.delivery, Delivery::ClipboardMode);
+        assert_eq!(
+            step.effects,
+            vec![
+                Effect::AnnounceClipboardMode,
+                Effect::SendValue { index: 2 }
+            ],
+            "D71: the same value goes out again through the clipboard, in this press"
+        );
+        assert!(
+            step.sequence.is_inserting(),
+            "value two is still the one in flight"
+        );
+
+        let landed = step.sequence.apply(Event::InsertionFinished).sequence;
+        assert_eq!(
+            landed.counter(),
+            Some((2, 4)),
+            "placed on the clipboard counts as sent - ux-spec.md 8"
+        );
     }
 
     #[test]
-    fn delivery_is_a_second_axis_and_degrading_does_not_disturb_the_counter() {
-        // The whole reason `degraded` is not a sixth position: a tester in
+    fn the_value_resent_after_previous_is_the_one_previous_asked_for() {
+        // Resending by "next" would send value four here - a different value
+        // from the one that never arrived.
+        let running = run(
+            Sequence::new(),
+            &[
+                Event::PackChosen { total: 5 },
+                Event::Next,
+                Event::InsertionFinished,
+                Event::Next,
+                Event::InsertionFinished,
+                Event::Next,
+                Event::InsertionFinished,
+            ],
+        )
+        .sequence;
+        let step = running
+            .apply(Event::Previous)
+            .sequence
+            .apply(Event::InsertionFailed);
+        assert_eq!(sent_values(&step), [2]);
+    }
+
+    #[test]
+    fn a_failure_on_the_clipboard_route_goes_back_and_never_asks_again() {
+        // The retry is once by construction: a second failure must end the
+        // flight, or a route that keeps failing would be asked forever.
+        let inserting = run(
+            Sequence::new(),
+            &[
+                Event::PackChosen { total: 3 },
+                Event::UseClipboard,
+                Event::Next,
+            ],
+        )
+        .sequence;
+        let step = inserting.apply(Event::InsertionFailed);
+        assert!(sent_values(&step).is_empty(), "no second retry");
+        assert!(step.effects.is_empty());
+        assert_eq!(step.sequence.position, Position::Ready { total: 3 });
+        assert_eq!(step.sequence.delivery, Delivery::ClipboardMode);
+    }
+
+    #[test]
+    fn delivery_is_a_second_axis_and_the_clipboard_does_not_disturb_the_counter() {
+        // The whole reason clipboard mode is not a sixth position: a tester in
         // clipboard mode is still somewhere in the pack, and ux-spec.md 2 calls
         // the bar saying so PERMANENT.
         let sequence = run(
@@ -672,22 +776,59 @@ mod tests {
             ],
         )
         .sequence;
-        let degraded = sequence.apply(Event::InsertionFailed).sequence;
+        let step = sequence.apply(Event::UseClipboard);
+        assert_eq!(step.effects, vec![Effect::AnnounceClipboardMode]);
+        let by_clipboard = step.sequence;
 
         assert_eq!(
-            degraded.counter(),
+            by_clipboard.counter(),
             Some((2, 9)),
-            "the counter survives degradation"
+            "the counter survives the change of route"
         );
-        assert_eq!(degraded.delivery, Delivery::Degraded);
+        assert_eq!(by_clipboard.delivery, Delivery::ClipboardMode);
 
-        let after = run(degraded, &[Event::Next, Event::InsertionFinished]).sequence;
+        let after = run(by_clipboard, &[Event::Next, Event::InsertionFinished]).sequence;
         assert_eq!(
             after.delivery,
-            Delivery::Degraded,
+            Delivery::ClipboardMode,
             "nothing here leaves clipboard mode on its own"
         );
         assert_eq!(after.counter(), Some((3, 9)));
+    }
+
+    #[test]
+    fn entering_clipboard_mode_twice_announces_it_once() {
+        // The announcement warns that the tester's clipboard is replaced, and
+        // `ux-spec.md` 12 item 2 says to warn ONCE.
+        let once = run(
+            Sequence::new(),
+            &[Event::PackChosen { total: 3 }, Event::UseClipboard],
+        )
+        .sequence;
+        let twice = once.apply(Event::UseClipboard);
+        assert!(twice.effects.is_empty());
+        assert_eq!(twice.sequence, once);
+    }
+
+    #[test]
+    fn the_route_cannot_change_under_a_value_in_flight() {
+        let inserting = run(
+            Sequence::new(),
+            &[Event::PackChosen { total: 3 }, Event::Next],
+        )
+        .sequence;
+        let step = inserting.apply(Event::UseClipboard);
+        assert_eq!(step.effects, vec![Effect::AnnounceStillInserting]);
+        assert_eq!(step.sequence, inserting);
+    }
+
+    #[test]
+    fn a_failure_outside_an_insertion_does_nothing() {
+        // Entering the mode outside a send is `UseClipboard`, with its own name.
+        let ready = run(Sequence::new(), &[Event::PackChosen { total: 3 }]).sequence;
+        let step = ready.apply(Event::InsertionFailed);
+        assert_eq!(step.sequence, ready);
+        assert!(step.effects.is_empty());
     }
 
     // ---- (T) teardown -----------------------------------------------------
@@ -808,7 +949,7 @@ mod tests {
         let refused = inserting.apply(Event::InsertionRefused).sequence;
         let failed = inserting.apply(Event::InsertionFailed).sequence;
         assert_eq!(refused.delivery, Delivery::Direct);
-        assert_eq!(failed.delivery, Delivery::Degraded);
+        assert_eq!(failed.delivery, Delivery::ClipboardMode);
     }
 
     #[test]
@@ -1036,7 +1177,7 @@ mod tests {
             Effect::AnnounceNoTarget,
             Effect::AnnounceNoPack,
             Effect::AnnounceInterrupted { index: 1 },
-            Effect::AnnounceDegraded,
+            Effect::AnnounceClipboardMode,
         ];
         let mut markers: Vec<String> = all.iter().map(ToString::to_string).collect();
         let before = markers.len();

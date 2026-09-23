@@ -77,6 +77,17 @@ pub enum DeliveryError {
         units_sent: usize,
         units_expected: usize,
     },
+    /// The route is held by somebody else for longer than the implementation
+    /// waits, and nothing went out. Passing - the same request may work in a
+    /// moment. Today only the clipboard route reports it.
+    Busy,
+    /// The route refused, and nothing went out. The words are the route's own:
+    /// they are the one specific thing a ticket about the tool can quote.
+    Refused { detail: String },
+    /// The route cannot carry this character whole, so nothing went out.
+    /// Refused by name rather than delivered cut short - the clipboard ends its
+    /// text at `U+0000`, and a paste would stop there without a sign (`D71`).
+    CannotCarry { character: char },
 }
 
 impl fmt::Display for DeliveryError {
@@ -90,6 +101,11 @@ impl fmt::Display for DeliveryError {
                 units_expected,
             } => {
                 write!(f, "partial-{units_sent}-of-{units_expected}")
+            }
+            Self::Busy => f.write_str("busy"),
+            Self::Refused { detail } => write!(f, "refused: {detail}"),
+            Self::CannotCarry { character } => {
+                write!(f, "cannot-carry-U+{:04X}", u32::from(*character))
             }
         }
     }
@@ -116,10 +132,9 @@ pub struct TargetRef(pub u64);
 /// Whether a delivery route can be used here at all.
 ///
 /// Asked BEFORE the work of building a value, so that a system without a route
-/// says so instead of failing after the fact. This is also what step 5 of the
-/// plan turns into the `degraded` state and the clipboard fallback - but it
-/// earns its place today, because macOS and Linux have no route yet and the
-/// tool has to be able to say which.
+/// says so instead of failing after the fact. The palette asks it before the
+/// first press and, when direct input has no route, starts in clipboard mode
+/// rather than pretending (`ux-spec.md` 8, `D71`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Availability {
     Ready,
@@ -133,7 +148,9 @@ pub enum Availability {
 /// architektura.md section 3 is explicit: `DirectInjection` and
 /// `ClipboardDelivery` are two implementations of THIS trait, not two branches
 /// in a caller. The moment a caller writes `if clipboard_mode { ... } else`,
-/// every later feature has to be written twice and the second copy drifts.
+/// every later feature has to be written twice and the second copy drifts. The
+/// one place that chooses between them is `AdvanceSequence::send`, by the
+/// sequence's delivery axis, and everything past that choice is shared.
 ///
 /// # What this port deliberately cannot do
 ///
@@ -201,15 +218,19 @@ impl fmt::Display for KeystrokeError {
 
 /// Presses keys that are NOT content.
 ///
-/// # Exactly two doors, and today one
+/// # One door: clearing the field
 ///
 /// `ux-spec.md` 4: clearing the field is the only place where the tool sends
 /// keystrokes other than the value, and architektura.md 5 turns that into a
-/// count - this trait is to be called from exactly two places, clearing and
-/// the paste of the clipboard route, and from nowhere else. The paste does not
-/// exist yet, so today the count is ONE, and
-/// `crates/nkb-app/tests/keystrokes_have_named_doors.rs` is the guard that
-/// names the places and goes red when a third appears.
+/// list of call sites with ONE entry.
+/// `crates/nkb-app/tests/keystrokes_have_named_doors.rs` names it and goes red
+/// when a second appears.
+///
+/// 🔴 Until 2026-09-23 this said "exactly two, and the second is the paste of
+/// the clipboard route". That was wrong (`D71`): clipboard mode presses
+/// NOTHING, the tester pastes, because every reason that leads to clipboard
+/// mode also blocks the channel a synthetic paste would travel. A second door
+/// arrives only with an automatic paste as a separate route the tester chooses.
 ///
 /// # What the vocabulary cannot say
 ///
@@ -253,32 +274,45 @@ impl fmt::Display for ClipboardError {
     }
 }
 
+/// Whether what goes on the clipboard may stay in the system's clipboard
+/// history - `Win+V` on Windows, and the history managers of the other two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum History {
+    /// Stays in the history. The report block does, on purpose: a tester who
+    /// copied three blocks and pastes them into three tickets reaches for
+    /// exactly that list (`D68`).
+    Keep,
+    /// Kept out of it. Values do (`D71`): walking a pack in clipboard mode
+    /// would otherwise push the tester's own items out of a history that holds
+    /// twenty-five, one value at a time.
+    Skip,
+}
+
 /// Puts text on the system clipboard, replacing what was there.
 ///
-/// # Exactly two doors, and today one
+/// # Exactly two doors
 ///
 /// Untouchable rule 17: the tool uses the clipboard in TWO places - copying the
 /// report block, and clipboard mode delivering a value - and nowhere else. That
 /// is a promise nobody can see in use, so `architektura.md` 5 turns it into a
 /// count, and `crates/nkb-app/tests/clipboard_has_named_doors.rs` names the
-/// places and goes red when a third appears. Clipboard mode does not exist yet,
-/// so today there is ONE.
+/// places and goes red when a third appears.
 ///
 /// # What this port deliberately cannot do
 ///
-/// It cannot READ. Clipboard mode will not need to either - `ux-spec.md` 12
+/// It cannot READ. Clipboard mode does not need to either - `ux-spec.md` 12
 /// item 2 recommends against restoring the tester's previous clipboard, because
 /// a restore writes into shared state at a moment the tool does not know - and a
 /// read that nothing calls is a capability waiting for a reason. It arrives with
 /// the first use that needs it, and the promise's count moves with it.
 pub trait Clipboard {
-    /// Replaces the clipboard's text with `text`.
+    /// Replaces the clipboard's text with `text`, in or out of the history.
     ///
     /// # Errors
     ///
     /// [`ClipboardError`] when the clipboard is held by somebody else or
     /// refuses outright. Nothing is ever reported as copied that was not.
-    fn put_text(&self, text: &str) -> Result<(), ClipboardError>;
+    fn put_text(&self, text: &str, history: History) -> Result<(), ClipboardError>;
 }
 
 /// Turns the facts of a report block into the text a tester pastes.

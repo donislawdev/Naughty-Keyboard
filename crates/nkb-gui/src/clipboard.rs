@@ -20,20 +20,28 @@
 //! closes. `arboard` offers the content to a clipboard manager on that drop; with
 //! none running, the block leaves with the palette. Named in `ux-spec.md` 7.
 //!
-//! # 🔴 Kept off the cloud, left in the history
+//! # 🔴 Kept off the cloud; in the history or out of it, as asked
 //!
 //! Windows can upload the clipboard to the owner's account and sync it to their
 //! other devices. The tool promises to send nothing over the network, and a copy
-//! it triggers must not become an upload it caused - so on Windows the block
-//! carries the documented `CanUploadToCloudClipboard = 0`. The LOCAL history is
-//! left alone on purpose: a tester who copied three blocks and pastes them into
-//! three tickets reaches for exactly that history. macOS has no such switch in
-//! this library - Universal Clipboard may carry the block to a nearby Apple
-//! device, and that is recorded in `D68` rather than hidden.
+//! it triggers must not become an upload it caused - so on Windows EVERYTHING
+//! this adapter writes carries the documented `CanUploadToCloudClipboard = 0`.
+//! macOS has no such switch in this library - Universal Clipboard may carry the
+//! text to a nearby Apple device, and that is recorded in `D68` rather than
+//! hidden.
+//!
+//! The LOCAL history is the caller's choice ([`History`]). The report block
+//! stays in it on purpose: a tester who copied three blocks and pastes them
+//! into three tickets reaches for exactly that history (`D68`). The values of
+//! clipboard mode stay out of it (`D71`), through the one switch the library
+//! has on each system: `CanIncludeInClipboardHistory = 0` on Windows, the
+//! `org.nspasteboard.ConcealedType` convention on macOS, and KDE's password
+//! manager hint on Linux - read from the library's source, 3.6.1. What the
+//! managers of other desktops do with it is theirs.
 
 use std::cell::RefCell;
 
-use nkb_app::ports::{Clipboard, ClipboardError};
+use nkb_app::ports::{Clipboard, ClipboardError, History};
 
 /// The clipboard of the session the palette runs in.
 #[derive(Default)]
@@ -49,7 +57,7 @@ impl SystemClipboard {
 }
 
 impl Clipboard for SystemClipboard {
-    fn put_text(&self, text: &str) -> Result<(), ClipboardError> {
+    fn put_text(&self, text: &str, history: History) -> Result<(), ClipboardError> {
         let mut slot = self.handle.borrow_mut();
         if slot.is_none() {
             *slot = Some(arboard::Clipboard::new().map_err(error)?);
@@ -64,7 +72,27 @@ impl Clipboard for SystemClipboard {
         #[cfg(windows)]
         let set = {
             use arboard::SetExtWindows;
-            set.exclude_from_cloud()
+            let set = set.exclude_from_cloud();
+            match history {
+                History::Keep => set,
+                History::Skip => set.exclude_from_history(),
+            }
+        };
+        #[cfg(target_os = "macos")]
+        let set = {
+            use arboard::SetExtApple;
+            match history {
+                History::Keep => set,
+                History::Skip => set.exclude_from_history(),
+            }
+        };
+        #[cfg(all(unix, not(target_os = "macos")))]
+        let set = {
+            use arboard::SetExtLinux;
+            match history {
+                History::Keep => set,
+                History::Skip => set.exclude_from_history(),
+            }
         };
         set.text(text).map_err(error)
     }
