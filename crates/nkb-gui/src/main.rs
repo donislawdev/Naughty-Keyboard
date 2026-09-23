@@ -164,7 +164,8 @@ fn run_palette(pack: &str, route: RouteRequest) -> Result<(), slint::PlatformErr
     let kept = KeptFocus::remember();
     let palette = Palette::new()?;
     palette.set_window_title(i18n::label(PaletteLabel::Title).into());
-    palette.set_clipboard_mode_label(i18n::label(PaletteLabel::ClipboardMode).into());
+    // The clipboard bar's words come with each view, because two conditions
+    // share the bar and say different things (`D72`) - see `live::View`.
     palette.set_hints(ModelRc::new(VecModel::from(hints())));
     // Awake at first run, with the hints up and nothing sent yet - `ux-spec.md`
     // 5.1. The worker fills the pack and the counter, because the sequence that

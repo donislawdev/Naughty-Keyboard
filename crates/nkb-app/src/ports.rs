@@ -88,6 +88,11 @@ pub enum DeliveryError {
     /// Refused by name rather than delivered cut short - the clipboard ends its
     /// text at `U+0000`, and a paste would stop there without a sign (`D71`).
     CannotCarry { character: char },
+    /// The window in front runs with higher privileges than the tool, so the
+    /// system would drop every keystroke while reporting success (`OBS-128`).
+    /// Nothing went out: the route asks BEFORE sending, because after the fact
+    /// a blocked send cannot be told from a delivered one (`D72`).
+    HigherPrivileges,
 }
 
 impl fmt::Display for DeliveryError {
@@ -107,6 +112,7 @@ impl fmt::Display for DeliveryError {
             Self::CannotCarry { character } => {
                 write!(f, "cannot-carry-U+{:04X}", u32::from(*character))
             }
+            Self::HigherPrivileges => f.write_str("higher-privileges"),
         }
     }
 }
@@ -200,6 +206,10 @@ pub enum KeystrokeError {
         chords_sent: usize,
         chords_expected: usize,
     },
+    /// The window in front runs with higher privileges than the tool, so no
+    /// key was pressed: the system would have dropped them all and reported
+    /// success (`OBS-128`, `D72`). The field is untouched.
+    HigherPrivileges,
 }
 
 impl fmt::Display for KeystrokeError {
@@ -212,6 +222,7 @@ impl fmt::Display for KeystrokeError {
                 chords_sent,
                 chords_expected,
             } => write!(f, "partial-{chords_sent}-of-{chords_expected}"),
+            Self::HigherPrivileges => f.write_str("higher-privileges"),
         }
     }
 }

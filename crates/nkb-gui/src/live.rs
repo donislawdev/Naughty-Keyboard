@@ -87,7 +87,11 @@ pub struct View {
     /// screen: blanking it would take away the thing the message is about.
     value: Option<ValueView>,
     messages: Vec<String>,
-    clipboard_mode: bool,
+    /// The standing clipboard bar and its words, or `None` when values are
+    /// typed. Two conditions share the one bar: the mode the sequence is in,
+    /// and the window in front taking no typing (`D72`). The words differ, so
+    /// the view carries them rather than a flag.
+    clipboard_bar: Option<&'static str>,
     /// Whether this view starts the countdown back to the resting state.
     ///
     /// 🔴 False for the OPENING view, and that is a correction rather than a
@@ -249,8 +253,25 @@ fn opening_view(
         counter: counter_of(sequence),
         value: None,
         messages: with_standing(messages, standing),
-        clipboard_mode: sequence.sequence().delivery == Delivery::ClipboardMode,
+        clipboard_bar: clipboard_bar(
+            sequence.sequence().delivery,
+            sequence.clipboard_for_window(),
+        ),
         transient: false,
+    }
+}
+
+/// The words of the standing clipboard bar, if it stands.
+///
+/// The mode wins over the window: in clipboard mode every value goes there
+/// anyway, and "for this window" would suggest the others are typed.
+fn clipboard_bar(delivery: Delivery, for_window: bool) -> Option<&'static str> {
+    if delivery == Delivery::ClipboardMode {
+        Some(i18n::label(PaletteLabel::ClipboardMode))
+    } else if for_window {
+        Some(i18n::label(PaletteLabel::ClipboardForWindow))
+    } else {
+        None
     }
 }
 
@@ -270,7 +291,7 @@ fn view_of(outcome: &Outcome, pack_shown: &str, pack: &str, standing: &Standing)
                 .collect(),
             standing,
         ),
-        clipboard_mode: outcome.sequence.delivery == Delivery::ClipboardMode,
+        clipboard_bar: clipboard_bar(outcome.sequence.delivery, outcome.clipboard_for_window),
         // Every outcome is something that just happened, so every outcome gets
         // looked at and then gets out of the way.
         transient: true,
@@ -355,7 +376,10 @@ fn apply(palette: &Palette, view: View) {
     let transient = view.transient;
     palette.set_pack(view.pack.into());
     palette.set_counter(view.counter.into());
-    palette.set_clipboard_mode(view.clipboard_mode);
+    palette.set_clipboard_mode(view.clipboard_bar.is_some());
+    if let Some(words) = view.clipboard_bar {
+        palette.set_clipboard_mode_label(words.into());
+    }
     palette.set_messages(ModelRc::new(VecModel::from(
         view.messages
             .into_iter()
@@ -436,8 +460,8 @@ mod tests {
     use slint::platform::{Platform, PlatformError, WindowAdapter};
 
     use super::{
-        Delivery, Outcome, Palette, Standing, ValuePreview, apply, markers_of, view_of,
-        with_standing,
+        Delivery, Outcome, Palette, Standing, ValuePreview, apply, clipboard_bar, markers_of,
+        view_of, with_standing,
     };
 
     /// No standing sentence: the ordinary case, and the one the field-by-field
@@ -498,6 +522,7 @@ mod tests {
             sent,
             messages,
             attempted_send: true,
+            clipboard_for_window: false,
         }
     }
 
@@ -647,6 +672,46 @@ mod tests {
         by_clipboard.sequence.delivery = Delivery::ClipboardMode;
         apply(&palette, view_of(&by_clipboard, "p", "p", &quiet()));
         assert!(palette.get_clipboard_mode());
+        assert_eq!(palette.get_clipboard_mode_label(), "clipboard mode");
+
+        // ---- and so does the window in front (`D72`), in its own words ---
+        let for_window = Outcome {
+            clipboard_for_window: true,
+            ..an_outcome(Some(a_sent()), Vec::new())
+        };
+        apply(&palette, view_of(&for_window, "p", "p", &quiet()));
+        assert!(palette.get_clipboard_mode());
+        assert_eq!(
+            palette.get_clipboard_mode_label(),
+            "clipboard mode for this window"
+        );
+        apply(
+            &palette,
+            view_of(&an_outcome(None, Vec::new()), "p", "p", &quiet()),
+        );
+        assert!(
+            !palette.get_clipboard_mode(),
+            "the window left the front, so the bar goes"
+        );
+    }
+
+    /// Two conditions share one bar; the mode wins, because in clipboard mode
+    /// every value goes there and "for this window" would suggest otherwise.
+    #[test]
+    fn the_clipboard_bar_names_the_mode_before_the_window() {
+        assert_eq!(clipboard_bar(Delivery::Direct, false), None);
+        assert_eq!(
+            clipboard_bar(Delivery::Direct, true),
+            Some("clipboard mode for this window")
+        );
+        assert_eq!(
+            clipboard_bar(Delivery::ClipboardMode, false),
+            Some("clipboard mode")
+        );
+        assert_eq!(
+            clipboard_bar(Delivery::ClipboardMode, true),
+            Some("clipboard mode")
+        );
     }
 
     /// A value carrying `text`, with the preview and shape the product builds.

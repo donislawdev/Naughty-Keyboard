@@ -50,6 +50,9 @@ impl ValueDelivery for DirectInjection {
         if nkb_sys::foreground_window().is_none() {
             return Err(DeliveryError::NoTarget);
         }
+        if !text.is_empty() && blocked_by_privileges() {
+            return Err(DeliveryError::HigherPrivileges);
+        }
         match nkb_sys::send_text(text) {
             Ok(outcome) => Ok(Delivered {
                 utf16_units: outcome.units,
@@ -77,6 +80,24 @@ impl ValueDelivery for DirectInjection {
     }
 }
 
+/// Whether the window in front runs with higher privileges than this process.
+///
+/// Asked right before anything is pressed, by both doors of this adapter - the
+/// value and the clearing - because the system drops such input while reporting
+/// success, so after the fact a blocked send cannot be told from a delivered one
+/// (`OBS-128`, `D72`). Asked HERE rather than by the caller, so no caller can
+/// forget it and the answer is as fresh as the send (`W2`). A level that could
+/// not be read (`InputReach::Unknown`) presses as before - never a guess.
+///
+/// Nothing is pressed when there is nothing to press, so an empty value or an
+/// empty recipe is not refused: refusing would report a blocked send that was
+/// never going to happen.
+fn blocked_by_privileges() -> bool {
+    nkb_sys::foreground_window().is_some_and(|window| {
+        nkb_sys::privilege::input_reach(window) == nkb_sys::privilege::InputReach::HigherPrivileges
+    })
+}
+
 /// The one-line mapping between the vocabulary `app` speaks and the one
 /// `nkb-sys` speaks. Two enums rather than one shared type, because `nkb-sys`
 /// depends on nothing of ours and `nkb-core` knows nothing about systems.
@@ -95,6 +116,9 @@ impl KeystrokeSender for DirectInjection {
     fn send_keystrokes(&self, chords: &[KeyChord]) -> Result<(), KeystrokeError> {
         if nkb_sys::foreground_window().is_none() {
             return Err(KeystrokeError::NoTarget);
+        }
+        if !chords.is_empty() && blocked_by_privileges() {
+            return Err(KeystrokeError::HigherPrivileges);
         }
         let mapped: Vec<nkb_sys::Chord> = chords.iter().map(chord_for).collect();
         match nkb_sys::send_chords(&mapped) {

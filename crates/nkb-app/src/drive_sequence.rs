@@ -81,7 +81,15 @@ pub fn drive_sequence(
             return Ended::Stopped;
         }
         let action = match shortcuts.next(tick) {
-            Wait::Nothing => continue,
+            Wait::Nothing => {
+                // A quiet tick is where a window leaving the front is noticed,
+                // so the clipboard bar for it goes (`D72`). It asks nothing
+                // unless that bar is up.
+                if let Some(outcome) = sequence.on_idle(ports) {
+                    present(outcome);
+                }
+                continue;
+            }
             Wait::Gone => return Ended::ShortcutsGone,
             Wait::Pressed(action) => action,
         };
@@ -99,6 +107,7 @@ pub fn drive_sequence(
                     sent: None,
                     messages: vec![Message::PressedWhileBusy { action: late }],
                     attempted_send: false,
+                    clipboard_for_window: sequence.clipboard_for_window(),
                 });
             }
         }
@@ -113,7 +122,7 @@ pub fn drive_sequence(
 )]
 mod tests {
     use super::*;
-    use crate::ports::ShortcutRegistration;
+    use crate::ports::{KeystrokeError, ShortcutRegistration, TargetRef};
     use crate::test_support::*;
     use nkb_core::hotkeys::HotkeyAction;
     use nkb_core::pack::Risk;
@@ -197,6 +206,41 @@ mod tests {
             &mut |outcome| presented.push(outcome),
         );
         (ended, presented)
+    }
+
+    #[test]
+    fn a_quiet_tick_lets_the_clipboard_bar_go_when_another_window_comes_forward() {
+        // `D72`: the window in front took no typing, its value went to the
+        // clipboard and the bar went up. The tester switches windows, and the
+        // next quiet tick takes the bar down - no press needed.
+        let shortcuts = Scripted::of(&[(Arrives::Later, NEXT)]);
+        let mut sequence = chosen(Risk::Normal);
+        let kit = Kit::with_keys(FakeKeys::failing(KeystrokeError::HigherPrivileges));
+        kit.direct.set_target(Some(TargetRef(7)));
+        let mut presented: Vec<Outcome> = Vec::new();
+        let mut going = turns(3);
+        let _ = drive_sequence(
+            &shortcuts,
+            &mut sequence,
+            &kit.ports(),
+            TICK,
+            &mut going,
+            &mut |outcome| {
+                if outcome.clipboard_for_window {
+                    kit.direct.set_target(Some(TargetRef(8)));
+                }
+                presented.push(outcome);
+            },
+        );
+
+        assert_eq!(
+            presented.len(),
+            2,
+            "the press, then the tick that saw the window go"
+        );
+        assert!(presented[0].clipboard_for_window);
+        assert!(!presented[1].clipboard_for_window);
+        assert!(presented[1].sent.is_none(), "a tick sends nothing");
     }
 
     #[test]

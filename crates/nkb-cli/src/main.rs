@@ -767,6 +767,7 @@ fn send(args: &[String]) -> ExitCode {
                     err,
                     "nkb send: the system accepted {chords_sent} of {chords_expected} clearing key presses - the field may be half-cleared. Nothing else was sent."
                 ),
+                KeystrokeError::HigherPrivileges => writeln!(err, "{HIGHER_PRIVILEGES}"),
             };
             ExitCode::InsertFailed
         }
@@ -825,11 +826,23 @@ fn send(args: &[String]) -> ExitCode {
                         u32::from(*character)
                     );
                 }
+                DeliveryError::HigherPrivileges => {
+                    let _ = writeln!(err, "{HIGHER_PRIVILEGES}");
+                }
             }
             ExitCode::InsertFailed
         }
     }
 }
+
+/// What `nkb send` says when the window in front runs with higher privileges.
+///
+/// One sentence for both places it can come from - the clearing, which goes
+/// first, and the send without `--clear` - because the fact is the same and no
+/// key was pressed in either. Until `D72` this case printed "sent" and exited
+/// with 0 while nothing reached the field (`OBS-128`); code 4 is the existing
+/// "the value could not be inserted", not a new code (`D46`).
+const HIGHER_PRIVILEGES: &str = "nkb send: the window in front runs with higher privileges than nkb, so the system would drop the keystrokes without a word. Nothing was sent - run nkb with the same privileges to type into it.";
 
 /// Counts down on standard error so the person can put the focus where they mean.
 fn count_down(seconds: u64) {
@@ -872,6 +885,9 @@ fn print_send_help() {
     println!("Everything you read here is on standard error.");
     println!("Nothing is sent while Ctrl, Alt, Shift or Win is held on the keyboard:");
     println!("the command waits up to two seconds for them to come up, then refuses.");
+    println!("Nothing is sent to a window running with higher privileges than nkb,");
+    println!("such as an application started as administrator: the system would drop");
+    println!("the keystrokes without a word, so the command refuses and exits with 4.");
 }
 
 /// `nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]`

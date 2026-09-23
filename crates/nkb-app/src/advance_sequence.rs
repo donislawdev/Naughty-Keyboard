@@ -43,6 +43,20 @@
 //! same code. On the clipboard route nothing clears the field and NOTHING is
 //! pressed: the tester selects and pastes.
 //!
+//! # The clipboard for one window (`D72`, step 5b)
+//!
+//! A window running with higher privileges than the tool takes no typing: the
+//! system drops every keystroke and reports success (`OBS-128`). The direct
+//! route asks before pressing anything and refuses with `HigherPrivileges`. That
+//! refusal is not "try again" and not "clipboard for good": `ux-spec.md` 8 asks
+//! for clipboard mode FOR THAT WINDOW. So the same value goes to the clipboard in
+//! the same press, the tester is told once per window, and the view shows the
+//! bar until another window comes to the front - [`AdvanceSequence::on_idle`]
+//! notices that. The machine's delivery axis does not move: this is not a mode
+//! the sequence is in, it is a fact about the window in front, and the direct
+//! route is asked again at every press, so a closed window whose handle comes
+//! back on another process cannot keep a value away from a field that takes it.
+//!
 //! # What this deliberately does not do yet
 //!
 //! - only `Next`, `Previous`, `Restart` and the report copy are wired. Repeat,
@@ -65,7 +79,7 @@ use nkb_core::sequence::{Delivery, Effect, Event, Sequence};
 use crate::load_pack;
 use crate::ports::{
     Availability, Clipboard, ClipboardError, DeliveryError, History, KeystrokeError,
-    KeystrokeSender, PackFormat, PackSource, ReportText, SourceError, ValueDelivery,
+    KeystrokeSender, PackFormat, PackSource, ReportText, SourceError, TargetRef, ValueDelivery,
 };
 use crate::send_value::{Clearing, SendOutcome, deliver_value};
 
@@ -107,6 +121,11 @@ pub struct AdvanceSequence {
     /// describes. A refusal leaves it alone, because nothing new reached the
     /// field, and the palette keeps showing the same value for the same reason.
     last: Option<LastSent>,
+    /// The window whose values go to the clipboard because it runs with higher
+    /// privileges (`D72`). Set when the direct route refuses it, cleared by the
+    /// next press that the direct route takes and by [`Self::on_idle`] when
+    /// another window comes to the front. A number, never a name.
+    window_on_clipboard: Option<TargetRef>,
 }
 
 /// Which value a report block would describe, and how much of it arrived.
@@ -157,6 +176,11 @@ pub struct Outcome {
     /// an attempt were pressed while the tool was busy (`W1`); presses queued
     /// behind an instant answer, such as an end-of-pack warning, were not.
     pub attempted_send: bool,
+    /// Whether values for the window in front go to the clipboard because it
+    /// runs with higher privileges (`D72`). Beside `sequence.delivery`, not in
+    /// it: the bar says so for as long as that window stays in front, and the
+    /// sequence is not in clipboard mode (`ux-spec.md` 8).
+    pub clipboard_for_window: bool,
 }
 
 /// What the palette shows about the value that just went out.
@@ -227,6 +251,12 @@ pub enum Message {
     /// whose sentence blamed the application for ignoring simulated input - a
     /// cause the tool cannot detect before the input oracle (`OBS-42`).
     NoDirectRoute { system: String },
+    /// The window in front runs with higher privileges than the tool, so its
+    /// values go to the clipboard, replacing what the tester had copied. Said
+    /// once per window, when its first value goes there (`D72`). A cause the
+    /// tool READ - the integrity level of the window's process - never a guess:
+    /// a level it could not read sends as before and says nothing.
+    HigherPrivileges,
     /// Clipboard mode is on because the tester asked for it: values go to the
     /// clipboard, replacing what was there. Once, at the start.
     ClipboardMode,
@@ -283,6 +313,28 @@ impl AdvanceSequence {
     #[must_use]
     pub fn sequence(&self) -> Sequence {
         self.sequence
+    }
+
+    /// Whether values for the window in front go to the clipboard because it
+    /// runs with higher privileges - see [`Outcome::clipboard_for_window`].
+    #[must_use]
+    pub fn clipboard_for_window(&self) -> bool {
+        self.window_on_clipboard.is_some()
+    }
+
+    /// Between presses: notices that the window whose values went to the
+    /// clipboard is no longer in front, so the bar can go (`ux-spec.md` 8).
+    ///
+    /// Asks for the window in front only while that state holds, and asks for
+    /// nothing else - the tool does not watch which windows the tester visits.
+    /// `None` when nothing changed, so the caller draws nothing.
+    pub fn on_idle(&mut self, ports: &Ports<'_>) -> Option<Outcome> {
+        let window = self.window_on_clipboard?;
+        if ports.direct.target() == Some(window) {
+            return None;
+        }
+        self.window_on_clipboard = None;
+        Some(self.settled(None, Vec::new(), false))
     }
 
     /// Reads, validates and chooses a pack, moving the sequence to `ready`.
@@ -365,12 +417,7 @@ impl AdvanceSequence {
             HotkeyAction::RestartPack => Event::Restart,
             HotkeyAction::CopyReport => return self.copy_report(ports),
             other => {
-                return Outcome {
-                    sequence: self.sequence,
-                    sent: None,
-                    messages: vec![Message::Unhandled { action: other }],
-                    attempted_send: false,
-                };
+                return self.settled(None, vec![Message::Unhandled { action: other }], false);
             }
         };
 
@@ -379,12 +426,11 @@ impl AdvanceSequence {
             // Nothing to send - a warning, an end-of-pack, a no-op. The state
             // moves and the machine's own effects become the messages.
             self.sequence = step.sequence;
-            return Outcome {
-                sequence: self.sequence,
-                sent: None,
-                messages: step.effects.iter().filter_map(announce).collect(),
-                attempted_send: false,
-            };
+            return self.settled(
+                None,
+                step.effects.iter().filter_map(announce).collect(),
+                false,
+            );
         };
 
         // The machine has put us in `Inserting` and asked for value `index`.
@@ -490,7 +536,9 @@ impl AdvanceSequence {
         };
         let offensive = value.risk.unwrap_or(loaded.pack.risk) == Risk::Offensive;
         let id = value.id.clone();
-        let outcome = deliver_value(
+        let window = route.target();
+        let mut on_clipboard = on_clipboard;
+        let mut outcome = deliver_value(
             &loaded.pack,
             value,
             route,
@@ -499,10 +547,36 @@ impl AdvanceSequence {
             loaded.warnings,
         );
 
+        // `D72`: the direct route refused a window with higher privileges before
+        // pressing a single key. Not a hiccup to retry and not a system without
+        // a route: THIS window takes no typing, so the same value goes to the
+        // clipboard now, and the tester hears why once per window.
+        let mut messages = Vec::new();
+        if !on_clipboard && refused_for_privileges(&outcome) {
+            if self.window_on_clipboard != window {
+                messages.push(Message::HigherPrivileges);
+            }
+            self.window_on_clipboard = window;
+            on_clipboard = true;
+            outcome = deliver_value(
+                &loaded.pack,
+                value,
+                ports.by_clipboard,
+                ports.keys,
+                Clearing::Keep,
+                loaded.warnings,
+            );
+        } else {
+            // The direct route took this window, or the sequence is in clipboard
+            // mode anyway: no window of ours is waiting on the clipboard.
+            self.window_on_clipboard = None;
+        }
+
         if let Some(arrival) = arrival_of(&outcome, on_clipboard) {
             self.last = Some(LastSent { index, arrival });
         }
-        let (event, sent, messages) = classify(outcome, offensive, on_clipboard, &id);
+        let (event, sent, classified) = classify(outcome, offensive, on_clipboard, &id);
+        messages.extend(classified);
         let step = self.sequence.apply(event);
         self.sequence = step.sequence;
         Attempt {
@@ -525,6 +599,7 @@ impl AdvanceSequence {
             sent,
             messages,
             attempted_send: attempted,
+            clipboard_for_window: self.clipboard_for_window(),
         }
     }
 }
@@ -576,6 +651,21 @@ fn arrival_of(outcome: &SendOutcome, on_clipboard: bool) -> Option<Arrival> {
         }),
         _ => None,
     }
+}
+
+/// Whether the direct route refused because the window in front runs with
+/// higher privileges - from the clearing, which goes first, or from the send.
+/// Either way no key was pressed (`D72`).
+fn refused_for_privileges(outcome: &SendOutcome) -> bool {
+    matches!(
+        outcome,
+        SendOutcome::NotCleared {
+            error: KeystrokeError::HigherPrivileges
+        } | SendOutcome::NotDelivered {
+            error: DeliveryError::HigherPrivileges,
+            ..
+        }
+    )
 }
 
 /// The `index` a step asks to send, if it asks at all.
@@ -690,6 +780,17 @@ fn classify(
             None,
             vec![Message::ModifierHeld { key: which }],
         ),
+        // `attempt` sends this value to the clipboard before classifying, so
+        // this arm is reached only if a route other than the direct one ever
+        // reported it. Nothing was pressed: refuse, and say why.
+        SendOutcome::NotDelivered {
+            error: DeliveryError::HigherPrivileges,
+            ..
+        } => (
+            Event::InsertionRefused,
+            None,
+            vec![Message::HigherPrivileges],
+        ),
         // The three below are reported by the clipboard route alone - the
         // direct one presses keys and has no clipboard to be busy or to refuse.
         // A direct route that began to report them would need sentences of its
@@ -764,6 +865,9 @@ fn after_clearing(error: KeystrokeError) -> (Event, Message) {
         // A partial clear leaves the field in an unknown state: it cannot be
         // trusted to be clear, and nothing goes on top of it.
         KeystrokeError::Partial { .. } => (Event::InsertionRefused, Message::ClearingFailed),
+        // Rerouted to the clipboard in `attempt` before it gets here; reached
+        // only if that ever stops. No key was pressed and the field is intact.
+        KeystrokeError::HigherPrivileges => (Event::InsertionRefused, Message::HigherPrivileges),
     }
 }
 
@@ -1297,7 +1401,166 @@ mod tests {
         assert!(kit.text.blocks.borrow().is_empty());
         assert!(
             kit.by_clipboard.handed.borrow().is_empty(),
-            "in direct mode the clipboard route is never taken (D71)"
+            "in direct mode the clipboard route is never taken for a window that takes typing (D71, D72)"
         );
+    }
+
+    // ---- `D72`: a window running with higher privileges ------------------------
+
+    /// The direct route as it answers for a window with higher privileges: the
+    /// clearing goes first, and it refuses before pressing anything.
+    fn a_higher_window() -> Kit {
+        let kit = Kit::with_keys(FakeKeys::failing(KeystrokeError::HigherPrivileges));
+        kit.direct.set_target(Some(TargetRef(7)));
+        kit
+    }
+
+    #[test]
+    fn a_window_with_higher_privileges_gets_the_same_value_on_the_clipboard_in_the_same_press() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = a_higher_window();
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+
+        assert!(
+            kit.direct.handed.borrow().is_empty(),
+            "nothing may be typed at a window that drops typing"
+        );
+        assert_eq!(*kit.by_clipboard.handed.borrow(), vec!["alpha"]);
+        assert_eq!(outcome.messages, vec![Message::HigherPrivileges]);
+        let sent = outcome.sent.expect("value one went to the clipboard");
+        assert!(sent.on_clipboard && !sent.cleared);
+        assert_eq!(
+            advance.counter(),
+            Some((1, 3)),
+            "the value went out, so the counter moves"
+        );
+        assert!(
+            outcome.clipboard_for_window,
+            "the bar says so for this window"
+        );
+        assert_eq!(
+            outcome.sequence.delivery,
+            Delivery::Direct,
+            "a window is not a mode: the sequence stays on direct delivery (ux-spec.md 8)"
+        );
+    }
+
+    #[test]
+    fn the_window_is_named_once_and_its_next_values_go_the_same_way() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = a_higher_window();
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        let second = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+
+        assert!(
+            second.messages.is_empty(),
+            "the bar says it, not every press"
+        );
+        assert!(second.sent.expect("value two went out").on_clipboard);
+        assert!(second.clipboard_for_window);
+        assert_eq!(*kit.by_clipboard.handed.borrow(), vec!["alpha", "beta"]);
+    }
+
+    #[test]
+    fn another_window_in_front_takes_typing_again_and_the_bar_goes() {
+        let mut advance = chosen(Risk::Normal);
+        let higher = a_higher_window();
+        let _ = advance.on_action(HotkeyAction::NextValue, &higher.ports());
+
+        let ordinary = Kit::ready();
+        ordinary.direct.set_target(Some(TargetRef(8)));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &ordinary.ports());
+
+        assert_eq!(*ordinary.direct.handed.borrow(), vec!["beta"]);
+        assert!(ordinary.by_clipboard.handed.borrow().is_empty());
+        assert!(!outcome.sent.expect("typed").on_clipboard);
+        assert!(!outcome.clipboard_for_window);
+        assert!(outcome.messages.is_empty());
+    }
+
+    #[test]
+    fn coming_back_to_the_higher_window_names_it_again() {
+        // "Once per window" is once per VISIT: the tester left and came back, and
+        // the reason the value is on the clipboard is news again.
+        let mut advance = chosen(Risk::Normal);
+        let higher = a_higher_window();
+        let _ = advance.on_action(HotkeyAction::NextValue, &higher.ports());
+        let ordinary = Kit::ready();
+        ordinary.direct.set_target(Some(TargetRef(8)));
+        let _ = advance.on_action(HotkeyAction::NextValue, &ordinary.ports());
+        let back = advance.on_action(HotkeyAction::NextValue, &higher.ports());
+        assert_eq!(back.messages, vec![Message::HigherPrivileges]);
+    }
+
+    #[test]
+    fn a_refusal_from_the_send_itself_takes_the_same_way() {
+        // The clearing went through and the window changed before the value:
+        // the send refuses on its own, and the value still reaches the clipboard
+        // rather than nowhere.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_delivery(FakeDelivery::failing(DeliveryError::HigherPrivileges));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+
+        assert_eq!(*kit.by_clipboard.handed.borrow(), vec!["alpha"]);
+        assert_eq!(outcome.messages, vec![Message::HigherPrivileges]);
+        assert!(outcome.sent.expect("on the clipboard").on_clipboard);
+    }
+
+    #[test]
+    fn the_report_block_says_the_tester_pasted_it() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = a_higher_window();
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        let _ = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+        let blocks = kit.text.blocks.borrow();
+        let block = blocks.first().expect("a block was written");
+        assert_eq!(block.arrival, Arrival::OnClipboard);
+    }
+
+    #[test]
+    fn clipboard_mode_never_asks_about_the_window() {
+        // In clipboard mode nothing is typed, so there is nothing a window could
+        // refuse - and no second bar beside the first.
+        let mut advance = chosen(Risk::Normal);
+        let kit = a_higher_window();
+        let _ = advance.choose_route(RouteRequest::Clipboard, &kit.ports());
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert!(outcome.messages.is_empty());
+        assert!(!outcome.clipboard_for_window);
+        assert_eq!(*kit.keys.requests.borrow(), 0);
+    }
+
+    #[test]
+    fn idling_lets_the_bar_go_only_when_another_window_comes_forward() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = a_higher_window();
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+
+        assert_eq!(
+            advance.on_idle(&kit.ports()),
+            None,
+            "the same window is still in front"
+        );
+        kit.direct.set_target(Some(TargetRef(8)));
+        let outcome = advance
+            .on_idle(&kit.ports())
+            .expect("the window left, so the bar goes");
+        assert!(!outcome.clipboard_for_window);
+        assert!(outcome.sent.is_none() && outcome.messages.is_empty());
+        assert!(!outcome.attempted_send);
+        assert_eq!(
+            advance.on_idle(&kit.ports()),
+            None,
+            "said once, not every tick"
+        );
+    }
+
+    #[test]
+    fn idling_without_the_bar_changes_nothing() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        kit.direct.set_target(Some(TargetRef(9)));
+        assert_eq!(advance.on_idle(&kit.ports()), None);
     }
 }

@@ -214,6 +214,9 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::ClipboardMode => {
             "Clipboard mode: each value goes to your clipboard, replacing what you had copied. Press your paste shortcut to insert each one."
         }
+        Message::HigherPrivileges => {
+            "This window runs with higher privileges than Naughty Keyboard, so the system blocks typing into it - values for it now go to your clipboard, replacing what you had copied. Press your paste shortcut to insert each one, or start the tool with the same privileges."
+        }
         Message::ClipboardBusy => {
             "Another application is holding the clipboard, so the value was not placed on it. Press the shortcut again in a moment."
         }
@@ -274,6 +277,7 @@ pub fn message(message: &Message, pack: &str) -> String {
     let pattern = pattern_message(message);
     match message {
         Message::ClipboardMode
+        | Message::HigherPrivileges
         | Message::ClipboardBusy
         | Message::NoTarget
         | Message::NoPack
@@ -740,6 +744,11 @@ pub enum PaletteLabel {
     /// `direct input refused`, because a bar saying `clipboard mode` while
     /// nothing put a value on the clipboard would have been worse than silence.
     ClipboardMode,
+    /// The same bar, for one window: the one in front runs with higher
+    /// privileges, and the bar goes when another window comes forward
+    /// (`ux-spec.md` 8, `D72`). Its own words, so the tester can tell a mode
+    /// they are in from a window they are looking at.
+    ClipboardForWindow,
     /// The preview shows only part of the value, so the palette says how much.
     PreviewElided,
     /// Characters on screen that the shipped typeface does not draw by itself,
@@ -771,6 +780,7 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::OnClipboard => "on the clipboard",
         PaletteLabel::Warnings => "pack warnings: {count}",
         PaletteLabel::ClipboardMode => "clipboard mode",
+        PaletteLabel::ClipboardForWindow => "clipboard mode for this window",
         PaletteLabel::PreviewElided => "showing {shown} of {total} code points",
         PaletteLabel::NotGuaranteed => "not guaranteed by the bundled font: {list}",
         PaletteLabel::NotGuaranteedMore => {
@@ -858,6 +868,7 @@ mod tests {
                 system: "macOS".to_owned(),
             },
             Message::ClipboardMode,
+            Message::HigherPrivileges,
             Message::ClipboardBusy,
             Message::ClipboardFailed {
                 detail: "the display went away".to_owned(),
@@ -994,6 +1005,7 @@ mod tests {
             Message::ClipboardBusy => 16,
             Message::ClipboardFailed { .. } => 17,
             Message::NotForClipboard { .. } => 18,
+            Message::HigherPrivileges => 19,
             Message::NoTarget => 1,
             Message::Interrupted { .. } => 2,
             Message::EndOfPack { .. } => 3,
@@ -1011,7 +1023,7 @@ mod tests {
         }
     }
 
-    const SLOTS: usize = 19;
+    const SLOTS: usize = 20;
 
     #[test]
     fn every_message_variant_is_listed_here() {
@@ -1180,6 +1192,7 @@ mod tests {
             PaletteLabel::OnClipboard,
             PaletteLabel::Warnings,
             PaletteLabel::ClipboardMode,
+            PaletteLabel::ClipboardForWindow,
             PaletteLabel::PreviewElided,
             PaletteLabel::NotGuaranteed,
             PaletteLabel::NotGuaranteedMore,
@@ -1199,7 +1212,8 @@ mod tests {
                 | PaletteLabel::Offensive
                 | PaletteLabel::Cleared
                 | PaletteLabel::OnClipboard
-                | PaletteLabel::ClipboardMode => false,
+                | PaletteLabel::ClipboardMode
+                | PaletteLabel::ClipboardForWindow => false,
             };
             let pattern = pattern_palette_label(label);
             assert_eq!(

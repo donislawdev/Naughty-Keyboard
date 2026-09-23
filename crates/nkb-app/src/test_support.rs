@@ -12,7 +12,7 @@
     reason = "a failed expectation in a test is a failed test"
 )]
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use crate::advance_sequence::{AdvanceSequence, Ports};
 use crate::ports::{
@@ -32,7 +32,9 @@ use nkb_core::value::ValueBody;
 /// went by, which is the whole question once there are two.
 pub(crate) struct FakeDelivery {
     availability: Availability,
-    target: Option<TargetRef>,
+    /// A `Cell`, so a test can bring another window to the front between two
+    /// presses - or between two idle ticks - without rebuilding the ports.
+    target: Cell<Option<TargetRef>>,
     fail: Option<DeliveryError>,
     pub(crate) handed: RefCell<Vec<String>>,
 }
@@ -41,16 +43,20 @@ impl FakeDelivery {
     pub(crate) fn ready() -> Self {
         Self {
             availability: Availability::Ready,
-            target: Some(TargetRef(1)),
+            target: Cell::new(Some(TargetRef(1))),
             fail: None,
             handed: RefCell::new(Vec::new()),
         }
     }
     pub(crate) fn without_target() -> Self {
         Self {
-            target: None,
+            target: Cell::new(None),
             ..Self::ready()
         }
+    }
+    /// Another window comes to the front.
+    pub(crate) fn set_target(&self, target: Option<TargetRef>) {
+        self.target.set(target);
     }
     pub(crate) fn failing(error: DeliveryError) -> Self {
         Self {
@@ -78,7 +84,7 @@ impl ValueDelivery for FakeDelivery {
         self.availability.clone()
     }
     fn target(&self) -> Option<TargetRef> {
-        self.target
+        self.target.get()
     }
     fn deliver(&self, text: &str) -> Result<Delivered, DeliveryError> {
         self.handed.borrow_mut().push(text.to_owned());
