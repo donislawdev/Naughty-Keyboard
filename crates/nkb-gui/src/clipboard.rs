@@ -124,8 +124,9 @@ mod tests {
     // 🔴 No test here writes to the real clipboard, and that is a rule, not an
     // omission: `cargo test` runs while the owner works on this machine, and a
     // test that replaced their clipboard would destroy whatever they had copied.
-    // What the real clipboard does is measured by `tools/schowek.ps1`, run by
-    // hand. What CAN be checked without touching it is the sorting below.
+    // What the real clipboard does is measured by `tools/petla-palety.ps1`, run
+    // by hand with a warning first: the text, the history and cloud flags, and
+    // the block. What CAN be checked without touching it is the sorting below.
 
     #[test]
     fn only_a_held_clipboard_is_passing() {
