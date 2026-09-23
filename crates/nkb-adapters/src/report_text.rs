@@ -297,13 +297,13 @@ fn prose(text: &str) -> String {
 /// Whether a character of pack prose is written escaped in the block.
 ///
 /// 🔴 The UNION of the core's two rules, minus the ordinary space - and the
-/// union is not decoration. `needs_escaping` is the pack format's rule, and it
-/// does not know the bidi isolates `U+2066`-`U+2069`; `is_invisible` - the
-/// preview's rule - does. So a name holding `U+2067` passed the format's rule
-/// and would have reordered a developer's ticket, which is half of what
-/// "Trojan Source" is made of. Prose in a ticket is not a pack file, so escaping
-/// more here changes no format. Aligning the format's own rule is a format
-/// change, and it waits for the owner in `OBS-125`.
+/// union is not decoration. `needs_escaping` is the pack format's rule and
+/// `is_invisible` the preview's, and the two drifted apart once: the format's
+/// did not know the bidi isolates `U+2066`-`U+2069`, so a name holding `U+2067`
+/// would have reordered a developer's ticket - half of what "Trojan Source" is
+/// made of. `D69` aligned them and a core test now walks every code point, but
+/// the union stays: it costs nothing, and a ticket is where a future drift
+/// would do its damage before anyone read the test.
 fn escapes_in_prose(character: char) -> bool {
     character != ' ' && (needs_escaping(character, false) || is_invisible(character))
 }

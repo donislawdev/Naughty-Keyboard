@@ -1,0 +1,30 @@
+# expect: E020
+#
+# The value below holds a right-to-left isolate and its pop, written out instead
+# of escaped. A reviewer reading this file sees `file.txt` and cannot tell that
+# the text in between is laid out right to left. `pack-format.md` 2 names every
+# character that changes the direction of text; until 2026-09-23 the validator
+# knew the overrides and not the isolates, and this file passed.
+#
+# The correct spelling of the same value is "file\u2067txt.exe\u2069".
+
+format = 1
+
+[pack]
+id          = "unescaped-bidi-isolate"
+name        = "Unescaped bidirectional isolate"
+description = "Writes a direction isolate out rather than escaping it."
+version     = "1.0"
+updated     = 2026-09-23
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["format-suite"]
+
+[[values]]
+id     = "rli-in-file-name"
+name   = "Right-to-left isolate in a file name"
+value  = "file⁧txt.exe⁩"
+breaks = "The name is displayed with its extension reversed, so a file that looks harmless is an executable."
+expect = "Stored and shown with the isolate visible or rejected with a message that names the character."
+since  = "1.0"

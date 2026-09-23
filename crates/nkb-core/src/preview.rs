@@ -139,7 +139,7 @@ pub fn is_invisible(c: char) -> bool {
         | ' ' | '\u{A0}' | '\u{1680}' | '\u{2000}'..='\u{200A}'
         | '\u{202F}' | '\u{205F}' | '\u{3000}'
         // Format characters: zero-width, joiners, bidi, the soft hyphen, the BOM.
-        | '\u{AD}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}'
+        | '\u{AD}' | '\u{061C}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}'
         | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{206F}' | '\u{FEFF}'
         // Line and paragraph separators.
         | '\u{2028}' | '\u{2029}'
@@ -277,9 +277,13 @@ pub fn shape(text: &str) -> Vec<ShapeFact> {
     for c in text.chars() {
         match c {
             '\u{200B}' | '\u{200C}' | '\u{200D}' | '\u{2060}' | '\u{FEFF}' => zero_width += 1,
-            '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' => {
-                bidi += 1
-            }
+            // `U+061C` since 2026-09-23 (`OBS-121`, `OBS-125`): a direction
+            // mark like `U+200E`, and until then shown as nothing and no fact.
+            '\u{061C}'
+            | '\u{200E}'
+            | '\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2066}'..='\u{2069}' => bidi += 1,
             '\u{AD}' => soft_hyphen += 1,
             '\t' => tab += 1,
             '\n' | '\r' | '\u{2028}' | '\u{2029}' => line_break += 1,
@@ -450,6 +454,26 @@ mod tests {
     /// A category silently missing here would show as a value whose shape line is
     /// empty although something invisible is inside it - the exact failure this
     /// module exists to prevent.
+    /// Every character that changes the direction of text is ONE fact, the one
+    /// the core puts first. Not measured in the shipped packs - none of them
+    /// carries an isolate or `U+061C` - which is exactly why it is written out:
+    /// the first Arabic pack must not be the test.
+    #[test]
+    fn every_direction_character_is_a_reordering_fact_and_is_marked() {
+        for c in [
+            '\u{061C}', '\u{200E}', '\u{200F}', '\u{202A}', '\u{202E}', '\u{2066}', '\u{2067}',
+            '\u{2068}', '\u{2069}',
+        ] {
+            assert_eq!(
+                shape(&format!("x{c}y")),
+                vec![ShapeFact::BidiControl(1)],
+                "U+{:04X} is not counted as reordering",
+                c as u32
+            );
+            assert!(is_invisible(c), "U+{:04X} is drawn as itself", c as u32);
+        }
+    }
+
     #[test]
     fn every_invisible_character_measured_in_the_shipped_packs_has_a_fact() {
         for (c, expected) in [

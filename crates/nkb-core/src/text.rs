@@ -109,7 +109,15 @@ pub fn needs_escaping(character: char, at_edge: bool) -> bool {
 }
 
 /// Characters that carry meaning without carrying a shape: zero width, joiners,
-/// direction marks, the byte order mark, and the tag block.
+/// direction marks and isolates, the byte order mark, and the tag block.
+///
+/// 🔴 The isolates `U+2066`-`U+2069`, the deprecated format characters up to
+/// `U+206F` and the Arabic letter mark `U+061C` arrived on 2026-09-23 (`OBS-125`,
+/// `D69`). `pack-format.md` 2 had always named "characters that change the
+/// direction of text"; the list here did not, so a value holding an isolate
+/// passed `E020` and was shown by `nkb show` as nothing - half of what "Trojan
+/// Source" is made of. A test below walks every code point and fails if the
+/// preview ever hides a character this list lets through.
 ///
 /// Note what is **not** here: emoji. They have a visible shape and pretend to be
 /// nothing, so they are written literally. A family emoji is a mixture of both
@@ -120,9 +128,12 @@ pub fn needs_escaping(character: char, at_edge: bool) -> bool {
 pub fn is_format_character(character: char) -> bool {
     matches!(character as u32,
         0x00AD                    // soft hyphen
+        | 0x061C                  // Arabic letter mark - a direction mark
         | 0x200B..=0x200F         // zero width space, joiners, direction marks
         | 0x202A..=0x202E         // bidirectional overrides
         | 0x2060..=0x2064         // word joiner and invisible operators
+        | 0x2066..=0x2069         // bidirectional isolates
+        | 0x206A..=0x206F         // deprecated format characters
         | 0xFEFF                  // byte order mark
         | 0x1D173..=0x1D17A       // musical formatting, outside the basic plane
         | 0xE0001                 // language tag
@@ -216,5 +227,41 @@ mod tests {
     fn non_breaking_space_is_escaped_even_in_the_middle() {
         let literal = LiteralText::new("Jan\u{00A0}Kowalski");
         assert_eq!(literal.escape().as_str(), "Jan\\u00A0Kowalski");
+    }
+
+    /// 🔴 Two hand-written lists answer "can a person see this character", and
+    /// they drifted apart once: the preview knew the bidi isolates U+2066-U+2069
+    /// and the format's escaping did not, so a value holding one passed `E020`
+    /// and was printed by `nkb show` as nothing (`OBS-125`). The lists answer
+    /// different questions and may differ in ONE direction - the format also
+    /// escapes tags the preview draws as themselves (`OBS-121`) - but never in
+    /// this one: whatever the preview has to stand in for, the format must
+    /// escape. Every code point, because a sample would miss the next gap.
+    #[test]
+    fn everything_the_preview_marks_the_format_escapes() {
+        let missed: Vec<String> = (0..=0x10FFFF_u32)
+            .filter_map(char::from_u32)
+            .filter(|&c| c != ' ' && crate::preview::is_invisible(c) && !needs_escaping(c, false))
+            .map(|c| format!("U+{:04X}", u32::from(c)))
+            .collect();
+        assert!(
+            missed.is_empty(),
+            "the preview marks these as invisible and the format writes them bare: {missed:?}"
+        );
+    }
+
+    #[test]
+    fn direction_characters_the_specification_names_are_escaped() {
+        // `pack-format.md` 2: "znaki zmiany kierunku tekstu" - every one of
+        // them, the isolates and the Arabic letter mark included.
+        for (text, escaped) in [
+            ("a\u{2067}b\u{2069}", "a\\u2067b\\u2069"),
+            ("a\u{2066}b", "a\\u2066b"),
+            ("a\u{2068}b", "a\\u2068b"),
+            ("a\u{061C}b", "a\\u061Cb"),
+            ("a\u{206A}b", "a\\u206Ab"),
+        ] {
+            assert_eq!(LiteralText::new(text).escape().as_str(), escaped);
+        }
     }
 }
