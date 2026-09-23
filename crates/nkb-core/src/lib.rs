@@ -23,6 +23,7 @@ pub mod identity;
 pub mod keys;
 pub mod lint;
 pub mod metrics;
+pub mod normalization;
 pub mod pack;
 pub mod preview;
 pub mod report;
@@ -44,7 +45,7 @@ pub use lint::{
 };
 pub use metrics::TextMetrics;
 pub use pack::{Pack, PackPair, PackValue, Risk};
-pub use report::{Arrival, ReportBlock, Typed};
+pub use report::{Arrival, ReportBlock, SpelledOut, Typed};
 pub use schema::{FieldKind, kind_of};
 pub use sequence::{Delivery, Effect, Event, Position, Sequence, Step};
 pub use source_text::SourceText;

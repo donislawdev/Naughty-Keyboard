@@ -1,8 +1,9 @@
 # Unicode Character Database files, vendored
 
 These are upstream files from the Unicode Character Database, unmodified. They are
-the source the grapheme cluster table in `src/graphemes/table.rs` is derived from,
-and the conformance suite that proves the derivation is right.
+the source the two generated tables are derived from - the grapheme cluster table in
+`src/graphemes/table.rs` and the normalization check in `src/normalization/table.rs` -
+and the conformance suite that proves the grapheme derivation is right.
 
 ## Why they are here rather than fetched
 
@@ -12,8 +13,9 @@ large table, and the table has to come from somewhere. Downloading it at build t
 would make an offline build impossible and a reproducible build a matter of trust in
 a web server, so the bytes live here instead.
 
-Nothing in this directory is compiled into the product. `table.rs` is, and a test
-re-derives it from these files for every one of the 1 114 112 code points.
+Nothing in this directory is compiled into the product. The two `table.rs` files
+are, and a test re-derives each of them from these files for every one of the
+1 114 112 code points.
 
 ## What each file answers
 
@@ -23,17 +25,28 @@ re-derives it from these files for every one of the 1 114 112 code points.
 | `emoji-data.txt` | `Extended_Pictographic`, which rule GB11 is stated in | 451 |
 | `DerivedCoreProperties.txt` | `Indic_Conjunct_Break`, which rule GB9c is stated in | 506 |
 | `GraphemeBreakTest.txt` | the official conformance suite: 766 cases | all |
+| `DerivedNormalizationProps.txt` | `NFKC_Quick_Check`, the table behind the report block's `Unicode:` line, and `NFC_Quick_Check`, read only to prove the first one covers both forms | 445 and 124 |
+| `DerivedCombiningClass.txt` | `Canonical_Combining_Class`, which the same check needs to see combining marks out of canonical order | all |
 
-`DerivedCoreProperties.txt` is large and only 506 of its lines are read. It is kept
-whole anyway: a trimmed copy is a file this project made up, whose checksum matches
-nothing upstream and whose provenance is somebody's word.
+`DerivedCoreProperties.txt` and `DerivedNormalizationProps.txt` are large and only a
+few hundred of their lines are read. They are kept whole anyway: a trimmed copy is a
+file this project made up, whose checksum matches nothing upstream and whose
+provenance is somebody's word.
+
+The normalization table has no script behind it that could get lost:
+`tests/unicode_data.rs` writes the source the files imply to
+`target/tmp/unicode/normalization_table.rs` on every run.
 
 ## Provenance
 
 Every file was taken from `https://www.unicode.org/Public/17.0.0/ucd/` on 2026-09-23,
-except `LICENSE-UNICODE.txt`, which is `https://www.unicode.org/license.txt`.
+except `DerivedCombiningClass.txt`, which lives one level down in that directory,
+under `extracted/`, and `LICENSE-UNICODE.txt`, which is
+`https://www.unicode.org/license.txt`.
 
+    191463abfbd202703c6fd6776a92a23ac44ec65e0476a7f95aa91ca492cef29b  DerivedCombiningClass.txt
     24c7fed1195c482faaefd5c1e7eb821c5ee1fb6de07ecdbaa64b56a99da22c08  DerivedCoreProperties.txt
+    71fd6a206a2c0cdd41feb6b7f656aa31091db45e9cedc926985d718397f9e488  DerivedNormalizationProps.txt
     d6b51d1d2ae5c33b451b7ed994b48f1f4dc62b2272a5831e7fd418514a6bae89  GraphemeBreakProperty.txt
     e2d134d2c52919bace503ebb6a551c1855fe1a1faec18478c78fff254a1793ec  GraphemeBreakTest.txt
     2cb2bb9455cda83e8481541ecf5b6dfda66a3bb89efa3fa7c5297eccf607b72b  emoji-data.txt
@@ -52,9 +65,10 @@ the comparison. That implementation is `unicode-segmentation` 1.13.3, and it sta
 Unicode 17.0.0. Two implementations of different versions of the standard would
 disagree on real text and the disagreement would look like a bug in one of them.
 
-Upgrading means: replace these four files, run `cargo test -p nkb-core`, expect the
-table test to name every code point that moved, regenerate, and move the victim's
-dependency in the same commit.
+Upgrading means: replace these six files, run `cargo test -p nkb-core`, expect the
+table tests to name every code point that moved, regenerate - the normalization
+table by copying the file the test wrote - and move the victim's dependency in the
+same commit.
 
 ## Licence
 

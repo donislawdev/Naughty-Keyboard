@@ -21,9 +21,10 @@
 //!
 //! Every line is always present - `Target:` and `Session:` included, today with
 //! "not recorded" - so a block from this version and one from the version that
-//! records a target have the same labels in the same order. The one exception is
-//! `Delivery:`, present only when the value arrived in part, because that is an
-//! abnormal event a reader must not be able to miss, not a field of every value.
+//! records a target have the same labels in the same order. Two exceptions, each
+//! a warning rather than a field of every value: `Delivery:`, present only when
+//! the value arrived in part, and `Unicode:`, present only when `Typed:` holds a
+//! character a tracker that normalizes text could rewrite (`D70`).
 //!
 //! # Somebody else's prose is escaped before it goes out
 //!
@@ -37,7 +38,7 @@
 
 use nkb_app::ports::ReportText;
 use nkb_core::preview::{ShapeFact, is_invisible};
-use nkb_core::report::{Arrival, ReportBlock, Typed};
+use nkb_core::report::{Arrival, ReportBlock, SpelledOut, Typed};
 use nkb_core::text::{escaped_char, needs_escaping};
 
 use crate::i18n::{fill, shape_line};
@@ -58,6 +59,8 @@ pub enum ReportLabel {
     Value,
     Name,
     Typed,
+    /// Only when normalization could rewrite what `Typed` says.
+    Unicode,
     Shape,
     Size,
     /// Only when the value arrived in part.
@@ -74,6 +77,7 @@ fn pattern_report_label(label: ReportLabel) -> &'static str {
         ReportLabel::Value => "Value:",
         ReportLabel::Name => "Name:",
         ReportLabel::Typed => "Typed:",
+        ReportLabel::Unicode => "Unicode:",
         ReportLabel::Shape => "Shape:",
         ReportLabel::Size => "Size:",
         ReportLabel::Delivery => "Delivery:",
@@ -92,6 +96,10 @@ pub enum ReportPhrase {
     Reference,
     /// A generated value, exact at every length.
     Recipe,
+    /// A generated value as code points: the unit's, and how many in a row.
+    RecipeCodePoints,
+    /// A list of code points cut at [`CODE_POINTS_LISTED`].
+    CodePointsMore,
     /// `value = ""` is a legal test value, and a label followed by nothing
     /// reads as a line that lost its content.
     EmptyValue,
@@ -113,6 +121,8 @@ fn pattern_report_phrase(phrase: ReportPhrase) -> &'static str {
     match phrase {
         ReportPhrase::Reference => "{reference} @ pack {version}",
         ReportPhrase::Recipe => "{count} × \"{unit}\"",
+        ReportPhrase::RecipeCodePoints => "{count} × {list}",
+        ReportPhrase::CodePointsMore => "{list} and {rest} more",
         ReportPhrase::EmptyValue => "empty - the value has no characters",
         ReportPhrase::NoShape => "no invisible characters, no controls, no edge spaces",
         ReportPhrase::NotGiven => "not given in the pack",
@@ -176,6 +186,11 @@ pub fn report_text(block: &ReportBlock) -> String {
         ),
         (ReportLabel::Name, prose(&block.name)),
         (ReportLabel::Typed, typed(&block.typed)),
+    ];
+    if let Some(spelled) = &block.spelled_out {
+        lines.push((ReportLabel::Unicode, spelled_out(spelled)));
+    }
+    lines.extend([
         (ReportLabel::Shape, shape(&block.shape)),
         (
             ReportLabel::Size,
@@ -186,7 +201,7 @@ pub fn report_text(block: &ReportBlock) -> String {
             ]
             .join(" · "),
         ),
-    ];
+    ]);
     if let Arrival::Interrupted {
         units_sent,
         units_expected,
@@ -253,6 +268,46 @@ fn typed(typed: &Typed) -> String {
             pattern_report_phrase(ReportPhrase::Recipe),
             &[("count", &count.to_string()), ("unit", unit.as_str())],
         ),
+    }
+}
+
+/// How many code points the `Unicode:` line lists before it says how many more.
+///
+/// The number the palette's preview starts eliding at (`D64`), so the two
+/// surfaces agree on what "long" means. The longest value that earns the line in
+/// the shipped packs has eleven, so every one of them is listed whole.
+const CODE_POINTS_LISTED: usize = 100;
+
+/// The `Unicode:` line: the value as code points.
+///
+/// Written `U+0065`, the standard's own notation and the one the palette's note
+/// under the preview uses (`i18n::not_guaranteed`). It is ASCII, and ASCII is
+/// what no normalization rewrites - which is the whole reason the line exists.
+fn spelled_out(spelled: &SpelledOut) -> String {
+    match spelled {
+        SpelledOut::Written(characters) => code_points(characters),
+        SpelledOut::Recipe { unit, count } => fill(
+            pattern_report_phrase(ReportPhrase::RecipeCodePoints),
+            &[("count", &count.to_string()), ("list", &code_points(unit))],
+        ),
+    }
+}
+
+fn code_points(characters: &[char]) -> String {
+    let list = characters
+        .iter()
+        .take(CODE_POINTS_LISTED)
+        .map(|c| format!("U+{:04X}", u32::from(*c)))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let rest = characters.len().saturating_sub(CODE_POINTS_LISTED);
+    if rest == 0 {
+        list
+    } else {
+        fill(
+            pattern_report_phrase(ReportPhrase::CodePointsMore),
+            &[("list", &list), ("rest", &rest.to_string())],
+        )
     }
 }
 
@@ -324,6 +379,7 @@ mod tests {
             pack_version: "1.0".to_owned(),
             name: "Three zero-width spaces".to_owned(),
             typed: Typed::Written(LiteralText::new("ab\u{200B}\u{200B}\u{200B}cd").escape()),
+            spelled_out: None,
             shape: vec![ShapeFact::ZeroWidth(3)],
             graphemes: 7,
             code_points: 7,
@@ -433,6 +489,65 @@ mod tests {
             "Delivery: interrupted after 3 of 7 UTF-16 units - the field holds a fragment"
         );
         assert!(got[6].starts_with("Breaks:   "));
+    }
+
+    #[test]
+    fn a_value_normalization_could_rewrite_is_spelled_out_right_after_typed() {
+        let mut accented = block();
+        accented.typed = Typed::Written(LiteralText::new("e\u{0301}").escape());
+        accented.spelled_out = Some(SpelledOut::Written(vec!['e', '\u{0301}']));
+        let text = report_text(&accented);
+        let got = lines(&text);
+        assert_eq!(got[2], "Typed:    e\u{0301}");
+        assert_eq!(got[3], "Unicode:  U+0065 U+0301");
+        assert!(
+            got[4].starts_with("Shape:    "),
+            "the value column does not move: {text}"
+        );
+        assert_eq!(got.len(), 11, "one line more than a value without it");
+    }
+
+    #[test]
+    fn a_generated_value_is_spelled_out_as_its_recipe() {
+        let mut generated = block();
+        generated.typed = Typed::Recipe {
+            unit: LiteralText::new("e\u{0301}").escape(),
+            count: 100_000,
+        };
+        generated.spelled_out = Some(SpelledOut::Recipe {
+            unit: vec!['e', '\u{0301}'],
+            count: 100_000,
+        });
+        let text = report_text(&generated);
+        assert!(text.contains("Unicode:  100000 × U+0065 U+0301"), "{text}");
+    }
+
+    #[test]
+    fn a_long_list_says_how_many_it_left_out_and_lists_every_one_up_to_the_limit() {
+        let mut long = block();
+        long.spelled_out = Some(SpelledOut::Written(vec!['\u{FF41}'; CODE_POINTS_LISTED]));
+        let whole = report_text(&long);
+        assert_eq!(
+            lines(&whole)[3].matches("U+FF41").count(),
+            CODE_POINTS_LISTED
+        );
+        assert!(!whole.contains("more"), "at the limit nothing is left out");
+
+        long.spelled_out = Some(SpelledOut::Written(vec![
+            '\u{FF41}';
+            CODE_POINTS_LISTED + 7
+        ]));
+        let cut = report_text(&long);
+        let line = lines(&cut)[3];
+        assert_eq!(line.matches("U+FF41").count(), CODE_POINTS_LISTED);
+        assert!(line.ends_with("U+FF41 and 7 more"), "{line}");
+    }
+
+    #[test]
+    fn a_code_point_beyond_the_basic_plane_is_written_with_every_digit() {
+        let mut bold = block();
+        bold.spelled_out = Some(SpelledOut::Written(vec!['\u{1D407}', 'a']));
+        assert!(report_text(&bold).contains("Unicode:  U+1D407 U+0061"));
     }
 
     #[test]

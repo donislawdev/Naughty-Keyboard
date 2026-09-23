@@ -15,6 +15,15 @@
 //! form `pack-format.md` 2 defines - the one `nkb show` prints - and a generated
 //! value as its recipe, which is exact at every length.
 //!
+//! # Spelled out when a tracker could rewrite what `Typed` says
+//!
+//! The escaped form keeps visible characters as themselves - `e` followed by a
+//! combining acute, fullwidth and mathematical letters. A tracker that
+//! normalizes what it stores to NFC or NFKC rewrites exactly those, silently,
+//! which is the very class of defect this tool finds in other people's software
+//! (`OBS-123`). For such a value the block also carries [`SpelledOut`]: the same
+//! value as code points, which no normalization touches (`D70`).
+//!
 //! # Measured with the same functions as the palette
 //!
 //! The counts come from [`ValueBody::metrics`], [`crate::graphemes::count`] and
@@ -23,6 +32,7 @@
 //! later disagree, and a ticket quoting a size the palette never showed is a
 //! ticket nobody trusts.
 
+use crate::normalization;
 use crate::pack::{Pack, PackValue};
 use crate::preview::{ShapeFact, shape};
 use crate::text::EscapedText;
@@ -38,6 +48,9 @@ pub struct ReportBlock {
     pub pack_version: String,
     pub name: String,
     pub typed: Typed,
+    /// The value as code points - present only when [`Typed`] holds a
+    /// character that normalization could rewrite on the way to a ticket.
+    pub spelled_out: Option<SpelledOut>,
     /// What the value is made of, in the core's fixed order.
     pub shape: Vec<ShapeFact>,
     pub graphemes: usize,
@@ -60,6 +73,20 @@ pub enum Typed {
     Written(EscapedText),
     /// A generated value: `unit` repeated `count` times, the unit escaped.
     Recipe { unit: EscapedText, count: u32 },
+}
+
+/// A value written as code points, in the same two shapes as [`Typed`].
+///
+/// Every character, never a cut: whether a long list is shortened is the text
+/// layer's choice, the way the palette's note under the preview is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SpelledOut {
+    Written(Vec<char>),
+    /// The unit's code points; the value is `count` of them in a row.
+    Recipe {
+        unit: Vec<char>,
+        count: u32,
+    },
 }
 
 /// Whether the whole value reached the field.
@@ -98,11 +125,13 @@ impl ReportBlock {
             .metrics()
             .ok_or(ValueProblem::RepeatProductUnmeasurable)?;
         let literal = value.body.materialise()?;
+        let typed = typed_of(&value.body);
         Ok(Self {
             reference: format!("{}/{}", pack.id, value.id),
             pack_version: pack.version.clone(),
             name: value.name.clone(),
-            typed: typed_of(&value.body),
+            spelled_out: spelled_out(&value.body, &typed),
+            typed,
             shape: shape(&literal),
             graphemes: crate::graphemes::count(&literal),
             code_points: metrics.code_points,
@@ -124,6 +153,31 @@ pub fn typed_of(body: &ValueBody) -> Typed {
             count: *count,
         },
     }
+}
+
+/// The value as code points, when its typed form could be rewritten on the way.
+///
+/// 🔴 Asked of the TYPED form, never of the value. `Typed` already escapes what
+/// a person cannot see, and an escape is ASCII no normalization touches - asked
+/// of the value, a no-break space would earn a line for a character the block
+/// already wrote as an escape. Measured on `whitespace/nbsp-between-words`,
+/// `D70`. A recipe's typed form shows its unit once, between plain quotes, so
+/// the unit is what is asked.
+fn spelled_out(body: &ValueBody, typed: &Typed) -> Option<SpelledOut> {
+    let at_risk = match typed {
+        Typed::Written(escaped) => normalization::may_change(escaped.as_str()),
+        Typed::Recipe { unit, .. } => normalization::may_change(unit.as_str()),
+    };
+    if !at_risk {
+        return None;
+    }
+    Some(match body {
+        ValueBody::Literal(text) => SpelledOut::Written(text.as_str().chars().collect()),
+        ValueBody::Repeat { unit, count } => SpelledOut::Recipe {
+            unit: unit.as_str().chars().collect(),
+            count: *count,
+        },
+    })
 }
 
 #[cfg(test)]
@@ -208,6 +262,56 @@ mod tests {
         );
         assert_eq!(block.breaks.as_deref(), Some("Counters disagree."));
         assert_eq!(block.expected, None, "absent in the pack, absent here");
+        assert_eq!(block.spelled_out, None, "every character is escaped");
+    }
+
+    #[test]
+    fn a_value_normalization_could_rewrite_is_spelled_out_in_code_points() {
+        let block = ReportBlock::describe(
+            &pack(),
+            &value("combining-acute", literal("e\u{0301}")),
+            Arrival::Whole,
+        )
+        .expect("a small literal describes");
+
+        assert_eq!(
+            block.spelled_out,
+            Some(SpelledOut::Written(vec!['e', '\u{0301}']))
+        );
+    }
+
+    #[test]
+    fn a_character_the_typed_form_already_escapes_earns_no_spelling() {
+        // The correction `D70` made to the first design: asked of the VALUE, a
+        // no-break space answers No for NFKC and would earn the line. Asked of
+        // the typed form, it is an escape - ASCII, which nothing rewrites.
+        let text = "Jan\u{00A0}Kowalski";
+        assert!(
+            crate::normalization::may_change(text),
+            "the value itself is one NFKC changes"
+        );
+        let block = ReportBlock::describe(&pack(), &value("nbsp", literal(text)), Arrival::Whole)
+            .expect("a small literal describes");
+
+        assert_eq!(block.spelled_out, None);
+    }
+
+    #[test]
+    fn a_generated_value_is_spelled_out_as_its_recipe() {
+        let body = ValueBody::Repeat {
+            unit: LiteralText::new("e\u{0301}"),
+            count: 3,
+        };
+        let block = ReportBlock::describe(&pack(), &value("accents", body), Arrival::Whole)
+            .expect("three units describe");
+
+        assert_eq!(
+            block.spelled_out,
+            Some(SpelledOut::Recipe {
+                unit: vec!['e', '\u{0301}'],
+                count: 3
+            })
+        );
     }
 
     #[test]

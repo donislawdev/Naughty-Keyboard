@@ -1,4 +1,4 @@
-//! The generated table, judged against the files it was generated from.
+//! The generated tables, judged against the files they were generated from.
 //!
 //! # The question this closes
 //!
@@ -10,6 +10,11 @@
 //! So this file rebuilds the whole thing from the vendored Unicode files and
 //! compares every code point in the standard - all 1 114 112 of them, not a
 //! sample. If the two ever disagree, the failure names the code point.
+//!
+//! `src/normalization/table.rs` is judged the same way, further down, and goes
+//! one step further: its generator IS the test. Every run writes the table the
+//! file implies to `target/tmp/unicode/`, so an upgrade of the standard does not
+//! depend on a script somebody kept.
 //!
 //! # Why it reads the table as TEXT rather than calling into the crate
 //!
@@ -277,6 +282,8 @@ fn the_vendored_files_are_the_version_the_code_claims() {
         ("GraphemeBreakProperty.txt", stamp.as_str()),
         ("DerivedCoreProperties.txt", stamp.as_str()),
         ("GraphemeBreakTest.txt", stamp.as_str()),
+        ("DerivedNormalizationProps.txt", stamp.as_str()),
+        ("DerivedCombiningClass.txt", stamp.as_str()),
     ] {
         let text = read(file);
         let first = text.lines().next().unwrap_or_default();
@@ -296,5 +303,318 @@ fn the_vendored_files_are_the_version_the_code_claims() {
     assert!(
         version_line.contains(&short),
         "emoji-data.txt announces {version_line:?}, which is not Unicode {short}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Normalization - `src/normalization/table.rs`
+// ---------------------------------------------------------------------------
+
+/// A quick check answer, as `DerivedNormalizationProps.txt` spells it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Quick {
+    Yes,
+    No,
+    Maybe,
+}
+
+fn every_code_point<T: Clone>(value: T) -> Vec<T> {
+    let size = usize::try_from(MAX_CODE_POINT).unwrap_or_else(|e| panic!("{e}")) + 1;
+    vec![value; size]
+}
+
+fn set_range<T: Copy>(slots: &mut [T], low: u32, high: u32, value: T) {
+    for code in low..=high.min(MAX_CODE_POINT) {
+        let index = usize::try_from(code).unwrap_or_else(|e| panic!("{e}"));
+        if let Some(slot) = slots.get_mut(index) {
+            *slot = value;
+        }
+    }
+}
+
+/// The answer of one quick check property for every code point.
+///
+/// The file lists only `No` and `Maybe`; a code point it does not name is `Yes`
+/// by the file's own convention.
+fn quick_check(property: &str) -> Vec<Quick> {
+    let mut answers = every_code_point(Quick::Yes);
+    let text = read("DerivedNormalizationProps.txt");
+    let mut lines = 0usize;
+    for (low, high, fields) in data_lines(&text) {
+        if fields.first() != Some(&property) {
+            continue;
+        }
+        let answer = match fields.get(1) {
+            Some(&"N") => Quick::No,
+            Some(&"M") => Quick::Maybe,
+            other => panic!("{property} gives an answer this test does not know: {other:?}"),
+        };
+        lines += 1;
+        set_range(&mut answers, low, high, answer);
+    }
+    assert!(
+        lines > 100,
+        "only {lines} lines of {property} were read - the parser stopped matching \
+         the file, which would make every comparison below pass for the wrong reason"
+    );
+    answers
+}
+
+/// `Canonical_Combining_Class` for every code point.
+///
+/// The file's own `@missing` line makes an unlisted code point class 0.
+fn combining_classes() -> Vec<u8> {
+    let mut classes = every_code_point(0u8);
+    let text = read("DerivedCombiningClass.txt");
+    let mut lines = 0usize;
+    for (low, high, fields) in data_lines(&text) {
+        let class = fields
+            .first()
+            .and_then(|field| field.parse::<u8>().ok())
+            .unwrap_or_else(|| panic!("a class that is not a number 0-255: {fields:?}"));
+        lines += 1;
+        set_range(&mut classes, low, high, class);
+    }
+    assert!(
+        lines > 1000,
+        "only {lines} lines of DerivedCombiningClass.txt were read - the parser \
+         stopped matching the file"
+    );
+    classes
+}
+
+/// The table the files imply: every code point's `NFKC_QC` answer as "not
+/// Yes", and its combining class.
+struct Normalization {
+    not_quick_yes: Vec<bool>,
+    combining_class: Vec<u8>,
+}
+
+fn expected_normalization() -> Normalization {
+    Normalization {
+        not_quick_yes: quick_check("NFKC_QC")
+            .iter()
+            .map(|answer| *answer != Quick::Yes)
+            .collect(),
+        combining_class: combining_classes(),
+    }
+}
+
+/// The inclusive ranges of equal, non-zero values, in code point order.
+fn ranges_of(values: &[u8]) -> Vec<(u32, u32, u8)> {
+    let mut ranges: Vec<(u32, u32, u8)> = Vec::new();
+    for (index, &value) in values.iter().enumerate() {
+        if value == 0 {
+            continue;
+        }
+        let code = u32::try_from(index).unwrap_or_else(|e| panic!("{e}"));
+        match ranges.last_mut() {
+            Some((_, high, same)) if *high + 1 == code && *same == value => *high = code,
+            _ => ranges.push((code, code, value)),
+        }
+    }
+    ranges
+}
+
+/// The source of `src/normalization/table.rs`, exactly as it should read.
+fn render_normalization_table(expected: &Normalization) -> String {
+    let (major, minor, patch) = nkb_core::UNICODE_VERSION;
+    let flagged: Vec<u8> = expected
+        .not_quick_yes
+        .iter()
+        .map(|&on| u8::from(on))
+        .collect();
+    let not_yes = ranges_of(&flagged);
+    let classes = ranges_of(&expected.combining_class);
+
+    let mut out = format!(
+        "//! Generated from the Unicode Character Database. Do not edit by hand.
+//!
+//! Source files, their exact bytes and the reason they are vendored:
+//! `crates/nkb-core/unicode/README.md`. Unicode {major}.{minor}.{patch}.
+//!
+//! Two tables of inclusive code point ranges. A code point in no range of the
+//! first answers `Yes` to `NFKC_Quick_Check`, and one in no range of the second
+//! has combining class 0 - which is the common case for both, and why it is
+//! left out.
+//!
+//! What keeps this honest is `tests/unicode_data.rs`, which rebuilds both
+//! tables from those files and compares all 1 114 112 code points. It also
+//! writes the source the files imply to
+//! `target/tmp/unicode/normalization_table.rs` on every run, which is how this
+//! file was made and how it is remade for the next version of the standard.
+
+/// `NFKC_Quick_Check` is `No` or `Maybe` - which [`super::may_change`] treats
+/// alike - from `DerivedNormalizationProps.txt`.
+pub(super) static NOT_QUICK_YES: [(u32, u32); {}] = [
+",
+        not_yes.len()
+    );
+    for (low, high, _) in &not_yes {
+        out.push_str(&format!("    (0x{low:04X}, 0x{high:04X}),\n"));
+    }
+    out.push_str(&format!(
+        "];
+
+/// `Canonical_Combining_Class` where it is not 0, from
+/// `extracted/DerivedCombiningClass.txt`. The class is written in decimal, as
+/// the standard writes it.
+pub(super) static COMBINING_CLASS: [(u32, u32, u8); {}] = [
+",
+        classes.len()
+    ));
+    for (low, high, class) in &classes {
+        out.push_str(&format!("    (0x{low:04X}, 0x{high:04X}, {class}),\n"));
+    }
+    out.push_str("];\n");
+    out
+}
+
+/// Reads both tables back out of the committed source.
+///
+/// An entry belongs to the table whose `static` line came last before it, and
+/// its number of fields must match that table - a two-field entry among the
+/// classes is a broken file, not a class of zero.
+fn committed_normalization() -> Normalization {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("normalization")
+        .join("table.rs");
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("the generated table must be readable at {path:?}: {e}"));
+
+    let mut committed = Normalization {
+        not_quick_yes: every_code_point(false),
+        combining_class: every_code_point(0u8),
+    };
+    let mut table = "";
+    let (mut not_yes_entries, mut class_entries) = (0usize, 0usize);
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with("pub(super) static NOT_QUICK_YES") {
+            table = "NOT_QUICK_YES";
+            continue;
+        }
+        if line.starts_with("pub(super) static COMBINING_CLASS") {
+            table = "COMBINING_CLASS";
+            continue;
+        }
+        let Some(inner) = line
+            .strip_prefix('(')
+            .and_then(|inner| inner.strip_suffix("),"))
+        else {
+            continue;
+        };
+        let parts: Vec<&str> = inner.split(',').map(str::trim).collect();
+        let hex = |field: &str| {
+            let digits = field.strip_prefix("0x").unwrap_or_else(|| {
+                panic!("a code point must be written in hexadecimal, found {field}")
+            });
+            u32::from_str_radix(digits, 16)
+                .unwrap_or_else(|e| panic!("the table has a bad number {field}: {e}"))
+        };
+        match (table, parts.as_slice()) {
+            ("NOT_QUICK_YES", [low, high]) => {
+                not_yes_entries += 1;
+                set_range(&mut committed.not_quick_yes, hex(low), hex(high), true);
+            }
+            ("COMBINING_CLASS", [low, high, class]) => {
+                class_entries += 1;
+                let class = class
+                    .parse::<u8>()
+                    .unwrap_or_else(|e| panic!("a class must be a decimal byte: {line}: {e}"));
+                set_range(&mut committed.combining_class, hex(low), hex(high), class);
+            }
+            _ => panic!("an entry that fits no table in {table:?}: {line}"),
+        }
+    }
+    assert!(
+        not_yes_entries > 100 && class_entries > 100,
+        "only {not_yes_entries} quick check and {class_entries} class ranges were read - \
+         the parser stopped matching what the generator writes"
+    );
+    committed
+}
+
+#[test]
+fn the_normalization_tables_say_exactly_what_the_vendored_files_say() {
+    let expected = expected_normalization();
+
+    // Written every time, before the comparison, so the generator's output is
+    // there to read even when the committed table is missing or unreadable.
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("target")
+        .join("tmp")
+        .join("unicode");
+    let path = dir.join("normalization_table.rs");
+    std::fs::create_dir_all(&dir)
+        .and_then(|()| std::fs::write(&path, render_normalization_table(&expected)))
+        .unwrap_or_else(|e| panic!("the implied table must be writable at {path:?}: {e}"));
+
+    let committed = committed_normalization();
+
+    let mut wrong: Vec<String> = Vec::new();
+    for (code, (want, got)) in expected
+        .not_quick_yes
+        .iter()
+        .zip(&committed.not_quick_yes)
+        .enumerate()
+    {
+        if want != got {
+            let says = if *want { "not Yes" } else { "Yes" };
+            wrong.push(format!(
+                "  U+{code:04X}: NFKC_QC in the file is {says}, the table the opposite"
+            ));
+        }
+    }
+    for (code, (want, got)) in expected
+        .combining_class
+        .iter()
+        .zip(&committed.combining_class)
+        .enumerate()
+    {
+        if want != got {
+            wrong.push(format!(
+                "  U+{code:04X}: combining class {want} in the file, {got} in the table"
+            ));
+        }
+    }
+
+    assert!(
+        wrong.is_empty(),
+        "{} disagreements between the vendored files and the generated table \
+         (first twenty shown):\n{}\nThe table the files imply is at {path:?}, ready \
+         to replace src/normalization/table.rs.",
+        wrong.len(),
+        wrong
+            .iter()
+            .take(20)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}
+
+#[test]
+fn one_table_serves_both_forms_because_nfc_is_never_less_sure_than_nfkc() {
+    // `normalization.rs` keeps ONE table, NFKC's, and answers for NFC with it.
+    // That is correct only while every code point NFC does not answer Yes for
+    // is also not Yes for NFKC - measured true on 17.0.0, and checked here for
+    // every code point so a new standard cannot quietly make it false.
+    let nfc = quick_check("NFC_QC");
+    let nfkc = quick_check("NFKC_QC");
+    let missed: Vec<String> = nfc
+        .iter()
+        .zip(&nfkc)
+        .enumerate()
+        .filter(|(_, (nfc, nfkc))| **nfc != Quick::Yes && **nfkc == Quick::Yes)
+        .map(|(code, _)| format!("U+{code:04X}"))
+        .collect();
+    assert!(
+        missed.is_empty(),
+        "NFC may change these and the NFKC table says Yes, so the one table would \
+         miss them: {missed:?}"
     );
 }

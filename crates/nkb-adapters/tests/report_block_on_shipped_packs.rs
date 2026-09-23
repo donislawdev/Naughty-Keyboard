@@ -59,6 +59,20 @@ impl KeystrokeSender for NoKeys {
     }
 }
 
+/// The shipped values whose `Typed:` line a normalizing tracker could rewrite.
+///
+/// 🔴 Pinned from outside this code. On 2026-09-23 Python's `unicodedata`
+/// (Unicode 16.0) normalized the `Typed:` text of every shipped value to NFC
+/// and to NFKC, and these four came back different - these four and no other.
+/// A different implementation, so a mistake in `nkb_core::normalization` cannot
+/// stand on both sides of the comparison (`D70`).
+const REWRITTEN_BY_NORMALIZATION: [&str; 4] = [
+    "unicode-text/combining-acute",
+    "unicode-text/zalgo",
+    "unicode-text/fullwidth-latin",
+    "unicode-text/math-bold",
+];
+
 fn shipped_packs() -> Vec<Pack> {
     let catalogue = BuiltInCatalogue::new();
     let ids = catalogue.list().expect("the built-in catalogue lists");
@@ -84,6 +98,7 @@ fn every_shipped_value_has_a_block_that_agrees_with_the_palette() {
     std::fs::create_dir_all(&out).expect("target/tmp/report can be created");
 
     let mut values = 0usize;
+    let mut spelled_out = 0usize;
     for pack in shipped_packs() {
         let mut rendered = Vec::new();
         for value in &pack.values {
@@ -114,7 +129,32 @@ fn every_shipped_value_has_a_block_that_agrees_with_the_palette() {
 
             let text = report_text(&block);
             let lines: Vec<&str> = text.lines().collect();
-            assert_eq!(lines.len(), 10, "{reference}: a whole value has ten lines");
+            if REWRITTEN_BY_NORMALIZATION.contains(&reference.as_str()) {
+                spelled_out += 1;
+                assert_eq!(
+                    lines.len(),
+                    11,
+                    "{reference}: normalization rewrites its Typed: line, so it is \
+                     spelled out as well\n{text}"
+                );
+                assert!(
+                    lines[3].starts_with("Unicode:  U+"),
+                    "{reference}: {}",
+                    lines[3]
+                );
+                assert_eq!(
+                    lines[3].matches("U+").count(),
+                    code_points,
+                    "{reference}: the Unicode: line lists every code point Size: counts"
+                );
+            } else {
+                assert_eq!(
+                    lines.len(),
+                    10,
+                    "{reference}: nothing in its Typed: line is rewritten, so ten \
+                     lines\n{text}"
+                );
+            }
             assert!(
                 lines[0].starts_with(&format!("Value:    {reference} @ pack {}", pack.version)),
                 "{reference}: {}",
@@ -136,4 +176,9 @@ fn every_shipped_value_has_a_block_that_agrees_with_the_palette() {
         .expect("the rendered blocks are written");
     }
     assert!(values > 0, "no value was checked - the loop saw nothing");
+    assert_eq!(
+        spelled_out,
+        REWRITTEN_BY_NORMALIZATION.len(),
+        "a pinned reference no longer names a shipped value - the list went stale"
+    );
 }
