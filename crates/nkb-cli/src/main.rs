@@ -663,6 +663,7 @@ fn send(args: &[String]) -> ExitCode {
         SendOutcome::Sent {
             reference,
             name,
+            graphemes,
             code_points,
             bytes,
             utf16_units,
@@ -679,11 +680,13 @@ fn send(args: &[String]) -> ExitCode {
                 let _ = writeln!(err, "nkb send: cleared the line (Home, Shift+End, Delete)");
             }
             let _ = writeln!(err, "nkb send: sent {reference} - {name}");
-            // Three counts, because they differ and the difference is the point:
-            // characters above the basic plane cross as two units each.
+            // Four counts, because they differ and the difference is the point:
+            // a family emoji is one cluster, five code points and eighteen bytes,
+            // and characters above the basic plane cross as two units each.
             let _ = writeln!(
                 err,
-                "  {code_points} code points, {bytes} bytes, {utf16_units} UTF-16 units"
+                "  {graphemes} graphemes, {code_points} code points, \
+                 {bytes} bytes, {utf16_units} UTF-16 units"
             );
             // Said plainly, because the shorter sentence reads as a stronger
             // claim than the tool can make: `SendInput` reports that the system

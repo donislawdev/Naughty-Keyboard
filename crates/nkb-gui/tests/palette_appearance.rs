@@ -52,7 +52,7 @@ fn fill(palette: &Palette) {
     palette.set_counter("7 / 34".into());
     palette.set_value_name("Three zero-width spaces".into());
     palette.set_value_reference("unicode-text/zero-width-spaces".into());
-    palette.set_value_counts("7 code points, 13 bytes, 7 UTF-16 units".into());
+    palette.set_value_counts("7 graphemes, 7 code points, 13 bytes, 7 UTF-16 units".into());
     // The preview and the shape, exactly as the sketch in `ux-spec.md` 2 draws
     // them. The marker is U+2423, whose glyph is IN the shipped typeface -
     // measured from the file's `cmap`, so the marker cannot itself render as the

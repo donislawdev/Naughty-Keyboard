@@ -223,7 +223,12 @@ fn view_of(outcome: &Outcome, pack_shown: &str, pack: &str, standing: &Standing)
         value: outcome.sent.as_ref().map(|sent| ValueView {
             name: sent.name.clone(),
             reference: sent.reference.clone(),
-            counts: i18n::counts(sent.code_points, sent.bytes, sent.utf16_units),
+            counts: i18n::counts(
+                sent.graphemes,
+                sent.code_points,
+                sent.bytes,
+                sent.utf16_units,
+            ),
             preview: sent.preview.shown.clone(),
             // An empty string rather than an Option, because the view's condition
             // is `!= ""` and a second representation of "nothing" would be one
@@ -395,6 +400,9 @@ mod tests {
         Sent {
             reference: String::from("unicode-text/zero-width"),
             name: String::from("Three zero-width spaces"),
+            // Seven, not four. The zero width space is its own cluster, which is
+            // the correction `OBS-105` made to the specification itself.
+            graphemes: 7,
             code_points: 7,
             bytes: 13,
             utf16_units: 7,
@@ -453,7 +461,7 @@ mod tests {
         assert_eq!(palette.get_value_reference(), "unicode-text/zero-width");
         assert_eq!(
             palette.get_value_counts(),
-            "7 code points, 13 bytes, 7 UTF-16 units"
+            "7 graphemes, 7 code points, 13 bytes, 7 UTF-16 units"
         );
         // The preview and the shape, checked against the sketch in `ux-spec.md` 2
         // rather than against whatever the code happens to produce.

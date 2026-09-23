@@ -104,15 +104,13 @@ pub struct Outcome {
 }
 
 /// What the palette shows about the value that just went out.
-///
-/// The rich preview - invisible characters made visible, the computed shape
-/// line, the grapheme count - is deliberately absent: that is the value zone,
-/// piece C4b. This carries what the core loop can answer today.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sent {
     /// `pack-id/value-id`, the same shape `emit` prints.
     pub reference: String,
     pub name: String,
+    /// Clusters, as a person sees them - the counter `ux-spec.md` 2 puts first.
+    pub graphemes: usize,
     pub code_points: usize,
     pub bytes: usize,
     /// What actually crossed the wire. Differs from `code_points` exactly when
@@ -376,6 +374,7 @@ fn classify(outcome: SendOutcome, offensive: bool) -> (Event, Option<Sent>, Vec<
         SendOutcome::Sent {
             reference,
             name,
+            graphemes,
             code_points,
             bytes,
             utf16_units,
@@ -388,6 +387,7 @@ fn classify(outcome: SendOutcome, offensive: bool) -> (Event, Option<Sent>, Vec<
             Some(Sent {
                 reference,
                 name,
+                graphemes,
                 code_points,
                 bytes,
                 utf16_units,

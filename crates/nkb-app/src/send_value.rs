@@ -72,6 +72,9 @@ pub enum SendOutcome {
         /// `pack-id/value-id`, the same shape `emit` prints.
         reference: String,
         name: String,
+        /// Clusters, as a person sees them. `nkb_core::graphemes` counts these,
+        /// and it is the only one of the four a tester can check by looking.
+        graphemes: usize,
         code_points: usize,
         bytes: usize,
         /// What actually crossed the wire. Differs from `code_points` exactly
@@ -246,6 +249,10 @@ pub fn deliver_value(
         Ok(delivered) => SendOutcome::Sent {
             reference: format!("{}/{}", pack.id, value.id),
             name: value.name.clone(),
+            // Counted from the literal that went out, like the preview below and
+            // for the same reason: the written form is escaped, so counting it
+            // would answer a question nobody asked.
+            graphemes: nkb_core::graphemes::count(&literal),
             code_points: metrics.code_points,
             bytes: metrics.bytes,
             utf16_units: delivered.utf16_units,

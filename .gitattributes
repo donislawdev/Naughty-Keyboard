@@ -38,6 +38,16 @@
 # `binary` is `-text -diff`: no conversion, and no attempt to diff it either.
 /crates/nkb-gui/ui/fonts/** binary
 
+# THE VENDORED UNICODE DATA - the upstream bytes, unaltered.
+#
+# These files are already LF-only, so `text=auto eol=lf` above would convert
+# nothing. They are listed anyway, for the same reason the typeface above is:
+# what makes the bytes safe today is a property of the current content, not a
+# rule, and the next release of the Unicode Character Database is not under our
+# control. A checksum in that directory's README names the exact bytes taken
+# from unicode.org, and a conversion on checkout would quietly make it false.
+/crates/nkb-core/unicode/** -text
+
 # PROJECT MEMORY - no conversion at all.
 #
 # These documents contain escaped invisible characters and examples where every

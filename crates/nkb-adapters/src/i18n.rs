@@ -642,7 +642,9 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
     match label {
         PaletteLabel::Title => "Naughty Keyboard",
         PaletteLabel::Counter => "{done} / {total}",
-        PaletteLabel::Counts => "{codepoints} code points, {bytes} bytes, {utf16} UTF-16 units",
+        PaletteLabel::Counts => {
+            "{graphemes} graphemes, {codepoints} code points, {bytes} bytes, {utf16} UTF-16 units"
+        }
         PaletteLabel::Offensive => "offensive",
         PaletteLabel::Cleared => "cleared first",
         PaletteLabel::Warnings => "pack warnings: {count}",
@@ -671,16 +673,22 @@ pub fn counter(done: usize, total: usize) -> String {
     )
 }
 
-/// How much text went out, in the three units that differ from each other.
+/// How much text went out, in the four units that differ from each other.
 ///
-/// The three are not decoration. A tester reporting a bug needs the count the
+/// The four are not decoration. A tester reporting a bug needs the count the
 /// receiving system will argue about, and which one that is depends on the
-/// system - so the palette shows all three rather than picking for them.
+/// system - so the palette shows all of them rather than picking for them.
+///
+/// Graphemes come first because they are the only one a person can check by
+/// looking: a family emoji is one of them, five code points and eighteen bytes,
+/// and a field that accepted "one character" and stored five is the bug this
+/// tool exists to find. `ux-spec.md` 2 puts them first for the same reason.
 #[must_use]
-pub fn counts(code_points: usize, bytes: usize, utf16_units: usize) -> String {
+pub fn counts(graphemes: usize, code_points: usize, bytes: usize, utf16_units: usize) -> String {
     fill(
         pattern_palette_label(PaletteLabel::Counts),
         &[
+            ("graphemes", &graphemes.to_string()),
             ("codepoints", &code_points.to_string()),
             ("bytes", &bytes.to_string()),
             ("utf16", &utf16_units.to_string()),
@@ -1001,13 +1009,13 @@ mod tests {
 
     #[test]
     fn the_numbered_labels_leave_no_placeholder_standing() {
-        // Zero, one and a value big enough to differ in all three units: every
+        // Zero, one and a value big enough to differ in all four units: every
         // one of these is reachable from a real pack.
         for text in [
             counter(0, 0),
             counter(7, 34),
-            counts(0, 0, 0),
-            counts(2, 8, 4),
+            counts(0, 0, 0, 0),
+            counts(1, 2, 8, 4),
             warnings(0),
             warnings(1),
         ] {
@@ -1015,6 +1023,9 @@ mod tests {
             assert!(!text.contains('{'), "a label left a placeholder: {text}");
         }
         assert_eq!(counter(7, 34), "7 / 34");
-        assert_eq!(counts(2, 8, 4), "2 code points, 8 bytes, 4 UTF-16 units");
+        assert_eq!(
+            counts(1, 2, 8, 4),
+            "1 graphemes, 2 code points, 8 bytes, 4 UTF-16 units"
+        );
     }
 }

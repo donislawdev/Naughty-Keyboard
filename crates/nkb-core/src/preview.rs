@@ -30,10 +30,10 @@
 //!
 //! # What this module deliberately does not do
 //!
-//! - **it does not count graphemes.** `ux-spec.md` 2 shows three counters and the
-//!   core computes two; graphemes are UAX #29, over a thousand ranges and the
-//!   GB1-GB999 rules, and the core has zero dependencies. That is `OBS-106`,
-//!   still open, with two named routes and no decision;
+//! - **it does not count anything.** The counters under the preview come from
+//!   [`crate::metrics`] and [`crate::graphemes`], which are separate on purpose:
+//!   this module answers "what does this look like", those answer "how much of
+//!   it is there", and a value can need one without the other;
 //! - **it does not know which characters the shipped typeface covers.** The
 //!   guarantee table is `D52` point 1 and lives in `gui`, built from the file's
 //!   `cmap`. The rule that uses it is `D52` point 2 and belongs beside this
