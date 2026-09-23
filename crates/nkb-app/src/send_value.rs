@@ -41,7 +41,7 @@ use crate::ports::{
 };
 use nkb_core::keys::line_clearing_recipe;
 use nkb_core::pack::{Pack, PackValue};
-use nkb_core::preview::{Preview, ShapeFact, preview, shape};
+use nkb_core::preview::{ShapeFact, ValuePreview, preview_of, shape};
 use nkb_core::value::ValueProblem;
 
 /// Whether the field is cleared before the value goes in.
@@ -85,9 +85,10 @@ pub enum SendOutcome {
         warnings: usize,
         /// Whether the clearing keys went out before the value.
         cleared: bool,
-        /// The value as a person can see it, invisible characters substituted.
+        /// The value as a person can see it: its text with invisible characters
+        /// substituted, or - for a generated value - the recipe that makes it.
         /// `ux-spec.md` 2 requires this line and `nkb_core::preview` builds it.
-        preview: Preview,
+        preview: ValuePreview,
         /// What the value is made of, as facts rather than as a sentence.
         shape: Vec<ShapeFact>,
     },
@@ -258,10 +259,12 @@ pub fn deliver_value(
             utf16_units: delivered.utf16_units,
             warnings,
             cleared,
-            // Built from the LITERAL, which is what actually went out - not from
-            // the written form, which is escaped. Showing the escaped form would
-            // answer a different question, and `nkb emit` already answers it.
-            preview: preview(&literal),
+            // Built from the RECIPE, not from the literal: a generated value is
+            // shown as `255 × "a"`, and a written one as the text that went out
+            // (never the escaped form, which `nkb emit` already answers for).
+            // From the recipe also means a million-character value is not
+            // walked end to end to show a hundred characters of it.
+            preview: preview_of(&value.body),
             shape: shape(&literal),
         },
         Err(DeliveryError::Partial { units_sent, .. }) => SendOutcome::NotDelivered {
@@ -664,6 +667,50 @@ mod tests {
         };
         assert_eq!(code_points, 2, "'a' plus one emoji is two code points");
         assert_eq!(utf16_units, 3, "the emoji crosses as a surrogate pair");
+    }
+
+    #[test]
+    fn a_generated_value_goes_out_whole_and_previews_as_its_recipe() {
+        // The two halves of one send must not be confused: the FIELD gets all
+        // two hundred and fifty-five characters, the PALETTE gets the recipe.
+        let log = log();
+        let spy = Spy::ready(&log);
+        let keys = KeySpy::working(&log);
+        let generated = Scripted {
+            errors: 0,
+            pack: Some(a_pack(vec![PackValue {
+                body: ValueBody::Repeat {
+                    unit: LiteralText::new("a".to_owned()),
+                    count: 255,
+                },
+                ..value("len-255", "")
+            }])),
+        };
+        let outcome = send_value(&Shelf, &generated, &spy, &keys, &request(1, Clearing::Keep));
+        let SendOutcome::Sent {
+            preview,
+            code_points,
+            ..
+        } = outcome
+        else {
+            panic!("expected a send, got {outcome:?}");
+        };
+        assert_eq!(code_points, 255);
+        assert_eq!(
+            preview,
+            ValuePreview::Recipe(nkb_core::preview::Recipe {
+                unit: "a".to_owned(),
+                count: 255,
+            })
+        );
+        // Equality, not `contains`: two hundred and fifty-six characters
+        // contain two hundred and fifty-five, and the difference is the test.
+        let sent = format!("text:{}", "a".repeat(255));
+        assert_eq!(
+            log.borrow().as_slice(),
+            [sent].as_slice(),
+            "the field must receive the whole value and nothing else"
+        );
     }
 
     #[test]

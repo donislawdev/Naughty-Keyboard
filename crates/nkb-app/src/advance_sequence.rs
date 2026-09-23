@@ -49,7 +49,7 @@
 
 use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::pack::{Pack, Risk};
-use nkb_core::preview::{Preview, ShapeFact};
+use nkb_core::preview::{ShapeFact, ValuePreview};
 use nkb_core::sequence::{Effect, Event, Sequence};
 
 use crate::load_pack;
@@ -124,12 +124,13 @@ pub struct Sent {
     /// Whether the field was cleared before the value went in.
     pub cleared: bool,
     /// The value as a person can see it: invisible characters substituted by
-    /// `nkb_core::preview::MARKER`, long values elided at both ends.
+    /// `nkb_core::preview::MARKER`, long values elided at both ends, generated
+    /// values shown as their recipe.
     ///
-    /// 🔴 The palette must say the total when `elided_total` is `Some`. A preview
-    /// that silently showed a fragment would be the tool claiming to answer
-    /// "what did I send" while hiding most of it.
-    pub preview: Preview,
+    /// 🔴 The palette must say the total when a text preview's `elided_total`
+    /// is `Some`. A preview that silently showed a fragment would be the tool
+    /// claiming to answer "what did I send" while hiding most of it.
+    pub preview: ValuePreview,
     /// What the value is made of. Facts, in a fixed order that puts what changes
     /// how the field READS above what changes where the text sits.
     pub shape: Vec<ShapeFact>,

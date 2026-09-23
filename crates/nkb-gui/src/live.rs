@@ -43,9 +43,11 @@ use std::time::Duration;
 
 use nkb_adapters::i18n::PaletteLabel;
 use nkb_adapters::{BuiltInCatalogue, DirectInjection, GlobalShortcuts, TomlPackFormat, i18n};
+use nkb_app::advance_sequence::Sent;
 use nkb_app::ports::HotkeyRegistrar;
 use nkb_app::{AdvanceSequence, Outcome, drive_sequence};
 use nkb_core::hotkeys::DEFAULT_BINDINGS;
+use nkb_core::preview::ValuePreview;
 use nkb_core::sequence::Delivery;
 use nkb_core::typeface::outside_guarantee;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
@@ -97,7 +99,8 @@ struct ValueView {
     name: String,
     reference: String,
     counts: String,
-    /// The value with invisible characters substituted, ready to draw.
+    /// The value with invisible characters substituted, or the recipe of a
+    /// generated one - ready to draw either way.
     preview: String,
     /// Empty unless the preview is a fragment, in which case it says how much.
     elided: String,
@@ -225,30 +228,7 @@ fn view_of(outcome: &Outcome, pack_shown: &str, pack: &str, standing: &Standing)
             .sequence
             .counter()
             .map_or_else(String::new, |(done, total)| i18n::counter(done, total)),
-        value: outcome.sent.as_ref().map(|sent| ValueView {
-            name: sent.name.clone(),
-            reference: sent.reference.clone(),
-            counts: i18n::counts(
-                sent.graphemes,
-                sent.code_points,
-                sent.bytes,
-                sent.utf16_units,
-            ),
-            preview: sent.preview.shown.clone(),
-            // An empty string rather than an Option, because the view's condition
-            // is `!= ""` and a second representation of "nothing" would be one
-            // more thing that can disagree with the first.
-            elided: sent.preview.elided_total.map_or_else(String::new, |total| {
-                i18n::preview_elided(sent.preview.shown.chars().count(), total)
-            }),
-            // Measured on what the preview DRAWS, not on the whole value: a
-            // character in the elided middle never reaches the screen, so the
-            // typeface is never asked for it.
-            not_guaranteed: i18n::not_guaranteed(&outside_guarantee(&sent.preview.shown, &SHIPPED))
-                .unwrap_or_default(),
-            shape: i18n::shape_line(&sent.shape),
-            markers: markers_of(sent),
-        }),
+        value: outcome.sent.as_ref().map(value_view),
         messages: with_standing(
             outcome
                 .messages
@@ -264,11 +244,49 @@ fn view_of(outcome: &Outcome, pack_shown: &str, pack: &str, standing: &Standing)
     }
 }
 
+/// The value band, every line finished.
+fn value_view(sent: &Sent) -> ValueView {
+    let (preview, elided) = match &sent.preview {
+        ValuePreview::Text(text) => (
+            text.shown.clone(),
+            // An empty string rather than an Option, because the view's switch
+            // is set from `is_empty()` and a second representation of "nothing"
+            // would be one more thing that can disagree with the first.
+            text.elided_total.map_or_else(String::new, |total| {
+                i18n::preview_elided(text.shown.chars().count(), total)
+            }),
+        ),
+        // A recipe is the whole value, exactly, so nothing is elided and there
+        // is nothing to confess.
+        ValuePreview::Recipe(recipe) => (i18n::recipe(recipe.count, &recipe.unit), String::new()),
+    };
+    // Measured on the line the preview DRAWS, not on the whole value: a
+    // character in the elided middle never reaches the screen, and for a
+    // recipe the line is the unit plus digits and a sign the typeface carries.
+    let not_guaranteed =
+        i18n::not_guaranteed(&outside_guarantee(&preview, &SHIPPED)).unwrap_or_default();
+    ValueView {
+        name: sent.name.clone(),
+        reference: sent.reference.clone(),
+        counts: i18n::counts(
+            sent.graphemes,
+            sent.code_points,
+            sent.bytes,
+            sent.utf16_units,
+        ),
+        preview,
+        elided,
+        not_guaranteed,
+        shape: i18n::shape_line(&sent.shape),
+        markers: markers_of(sent),
+    }
+}
+
 /// What is worth knowing about the value beyond its name and its size.
 ///
 /// Order is fixed rather than sorted: the risk comes first because it is the one
 /// a tester must not miss, `product-spec.md` 10.2.
-fn markers_of(sent: &nkb_app::advance_sequence::Sent) -> Vec<(String, bool)> {
+fn markers_of(sent: &Sent) -> Vec<(String, bool)> {
     let mut markers = Vec::new();
     if sent.offensive {
         markers.push((i18n::label(PaletteLabel::Offensive).to_owned(), true));
@@ -378,7 +396,10 @@ mod tests {
     use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
     use slint::platform::{Platform, PlatformError, WindowAdapter};
 
-    use super::{Delivery, Outcome, Palette, Standing, apply, markers_of, view_of, with_standing};
+    use super::{
+        Delivery, Outcome, Palette, Standing, ValuePreview, apply, markers_of, view_of,
+        with_standing,
+    };
 
     /// No standing sentence: the ordinary case, and the one the field-by-field
     /// test is about.
@@ -423,7 +444,7 @@ mod tests {
             cleared: true,
             // The example from `ux-spec.md` 2, so the field-by-field test below
             // checks the same value the document draws.
-            preview: nkb_core::preview::preview("ab\u{200B}\u{200B}\u{200B}cd"),
+            preview: ValuePreview::Text(nkb_core::preview::preview("ab\u{200B}\u{200B}\u{200B}cd")),
             shape: nkb_core::preview::shape("ab\u{200B}\u{200B}\u{200B}cd"),
         }
     }
@@ -557,6 +578,27 @@ mod tests {
         assert_eq!(palette.get_value_not_guaranteed(), "");
         assert!(!palette.get_has_not_guaranteed());
 
+        // ---- a generated value shows its recipe ----------------------------
+        // `length-bombs/emoji-truncation`, as the core previews it. The recipe
+        // IS the preview, so nothing is elided - and the note is measured on
+        // the recipe line, whose unit the shipped typeface does not carry.
+        let mut generated = a_sent();
+        generated.preview = nkb_core::preview::preview_of(&nkb_core::ValueBody::Repeat {
+            unit: nkb_core::LiteralText::new("\u{1F600}"),
+            count: 64,
+        });
+        apply(
+            &palette,
+            view_of(&an_outcome(Some(generated), Vec::new()), "p", "p", &quiet()),
+        );
+        assert_eq!(palette.get_value_preview(), "64 \u{D7} \"\u{1F600}\"");
+        assert_eq!(palette.get_value_elided(), "");
+        assert!(!palette.get_has_elided());
+        assert_eq!(
+            palette.get_value_not_guaranteed(),
+            "not guaranteed by the bundled font: U+1F600"
+        );
+
         // ---- the second axis reaches the standing bar ---------------------
         let mut degraded = an_outcome(Some(a_sent()), Vec::new());
         degraded.sequence.delivery = Delivery::Degraded;
@@ -567,7 +609,7 @@ mod tests {
     /// A value carrying `text`, with the preview and shape the product builds.
     fn sent_of(text: &str) -> Sent {
         Sent {
-            preview: nkb_core::preview::preview(text),
+            preview: ValuePreview::Text(nkb_core::preview::preview(text)),
             shape: nkb_core::preview::shape(text),
             ..a_sent()
         }

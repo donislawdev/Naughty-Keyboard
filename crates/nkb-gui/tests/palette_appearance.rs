@@ -51,6 +51,17 @@ const NOT_GUARANTEED_PREVIEW: &str = "\u{540D}\u{524D} \u{30C6}\u{30B9}\u{30C8} 
 const NOT_GUARANTEED_NOTE: &str =
     "not guaranteed by the bundled font: U+540D U+524D U+30C6 U+30B9 U+30C8 U+1F600";
 
+/// The counters at the format's ceiling: a million code points, four bytes and
+/// two UTF-16 units each - the longest line `i18n::counts` can compose from a
+/// value the format accepts.
+const LONGEST_COUNTS: &str = "1000000 graphemes, 1000000 code points, 4000000 bytes, \
+                              2000000 UTF-16 units";
+
+/// A reference at the identifier limits of `pack-format.md` 7: forty characters
+/// of pack, forty-eight of value, and no space anywhere to break at.
+const LONGEST_REFERENCE: &str = "abcdefghijklmnopqrstuvwxyzabcdefghijklmn/\
+                                 abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuv";
+
 /// Specimen data. The literals are the test's own - the test is not the product,
 /// and what it feeds in is a sample to look at, the same job the gallery's
 /// labels do. The product fills these from `nkb-adapters::i18n`.
@@ -121,6 +132,55 @@ fn render(
     offscreen::draw(window, WIDTH, HEIGHT)
 }
 
+/// The last row the palette draws anything on. The buffer is taller than the
+/// palette and keeps its initial value below it, so this is where the window
+/// ends - `offscreen::save_cropped` finds the same edge for the picture.
+fn bottom_edge(buffer: &[offscreen::Pixel]) -> usize {
+    let empty = offscreen::Pixel::default();
+    buffer
+        .chunks(WIDTH as usize)
+        .rposition(|row| row.iter().any(|pixel| *pixel != empty))
+        .unwrap_or(0)
+}
+
+/// The last row the palette's SURFACE covers, read in the right margin, where
+/// no text ever stands.
+fn surface_edge(buffer: &[offscreen::Pixel]) -> usize {
+    let empty = offscreen::Pixel::default();
+    let column = (WIDTH - SURFACE_PROBE_INSET) as usize;
+    buffer
+        .chunks(WIDTH as usize)
+        .rposition(|row| row[column] != empty)
+        .unwrap_or(0)
+}
+
+/// How far in from the right edge the surface is read: inside the band padding,
+/// so no text reaches it, and far enough from the edge that the rounded corner
+/// takes only a row or two.
+const SURFACE_PROBE_INSET: u32 = 6;
+
+/// Rows the rounded corner may take off the surface at the probe column. The
+/// corner is `radius-window`; at six pixels in from the edge its curve rises by
+/// less than two rows, so three is a margin and not a hiding place.
+const CORNER_ROWS: usize = 3;
+
+/// Fails when anything is drawn below the palette's own surface.
+///
+/// 🔴 The failure this exists for, measured 2026-09-23 on Slint 1.18.1: a band
+/// behind an `if` whose text wrapped reported one line per wrapped text, the
+/// palette sized itself from that, and everything after the wrap was drawn
+/// below the surface - on a live window, cut off. `bottom_edge` alone cannot see
+/// it: spilled text still moves the bottom edge. The surface is what stops short.
+fn assert_nothing_escapes_the_surface(buffer: &[offscreen::Pixel], state: &str, picture: &str) {
+    let drawn = bottom_edge(buffer);
+    let surface = surface_edge(buffer);
+    assert!(
+        drawn <= surface + CORNER_ROWS,
+        "{state}: the palette draws down to row {drawn} but its surface ends at row \
+         {surface}, so the bottom of the palette spills out of it. Look at {picture}"
+    );
+}
+
 #[test]
 fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one() {
     let window = offscreen::start(WIDTH, HEIGHT);
@@ -189,11 +249,50 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     let muted_with_note = offscreen::count_exactly(&with_note, TEXT_MUTED);
     let note_path =
         offscreen::save_cropped(&with_note, WIDTH, HEIGHT, "palette-not-guaranteed.png");
+    // The note wraps onto a second line, which is exactly the case that used to
+    // push the hint bar out of the palette.
+    assert_nothing_escapes_the_surface(
+        &with_note,
+        "with the typeface note",
+        &note_path.display().to_string(),
+    );
     assert!(
         muted_with_note > muted_without_note,
         "switching the typeface note on added no muted ink ({muted_without_note} vs \
          {muted_with_note}), so the palette does not draw it. Look at {}",
         note_path.display()
+    );
+
+    // ---- long lines wrap rather than run off the window -------------------
+    // Measured 2026-09-23 on the shipped `len-100000`: the counters ran past the
+    // right edge and were cut mid-word. The specimen above uses small numbers and
+    // never tried. A line that wraps pushes the palette's bottom edge down, and a
+    // line that is cut leaves it where it was - so the edge is the measurement.
+    fill(&palette);
+    palette.set_showing(true);
+    let edge_short = bottom_edge(&render(&window));
+    palette.set_value_counts(LONGEST_COUNTS.into());
+    let edge_counts = bottom_edge(&render(&window));
+    palette.set_value_reference(LONGEST_REFERENCE.into());
+    let long_lines = render(&window);
+    let edge_reference = bottom_edge(&long_lines);
+    let long_path = offscreen::save_cropped(&long_lines, WIDTH, HEIGHT, "palette-long-lines.png");
+    assert_nothing_escapes_the_surface(
+        &long_lines,
+        "with the longest counters and reference",
+        &long_path.display().to_string(),
+    );
+    assert!(
+        edge_counts > edge_short,
+        "the longest counters did not move the palette's bottom edge ({edge_short} -> \
+         {edge_counts}), so they are cut off rather than wrapped. Look at {}",
+        long_path.display()
+    );
+    assert!(
+        edge_reference > edge_counts,
+        "the longest reference did not move the palette's bottom edge ({edge_counts} -> \
+         {edge_reference}), so it is cut off rather than wrapped. Look at {}",
+        long_path.display()
     );
 
     // Put the specimen back, so the renders saved below are the ones the gallery

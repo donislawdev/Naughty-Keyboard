@@ -40,12 +40,14 @@
 //!   `cmap`. The rule that uses it is `D52` point 2 and sits beside this module,
 //!   in [`crate::typeface`] - separate because a preview is needed by every
 //!   surface and a typeface only by the one that draws;
-//! - **it does not show the RECIPE of a generated value.** `ux-spec.md` 2 asks
-//!   for `100 000 × "a"` rather than a million markers. That needs the value's
-//!   generator, not its text, so it belongs where `Value` is read. Named here so
-//!   the gap is not mistaken for an oversight: a generated value reaching this
-//!   function is elided like any other long text, which is correct but not the
-//!   whole promise.
+//! - **it does not decide how many digits a number gets.** [`preview_of`] shows
+//!   a generated value as its recipe, `ux-spec.md` 2's `100 000 × "a"`, and
+//!   carries the count as a number. Grouping its digits is a locale's business
+//!   and the palette has no locale mechanism (`OBS-120` is the same gap), so the
+//!   sketch's space is not reproduced anywhere - the counters print plain digits
+//!   too, and the two lines must read alike.
+
+use crate::value::ValueBody;
 
 /// What stands in for a character with no visible glyph.
 ///
@@ -174,6 +176,86 @@ pub fn preview(text: &str) -> Preview {
 
 fn substitute(c: char) -> char {
     if is_invisible(c) { MARKER } else { c }
+}
+
+/// A value as the palette shows it: its text, or the recipe that makes it.
+///
+/// An enum rather than a flag on [`Preview`], so that a consumer which forgets
+/// the recipe does not compile - a flag would let it print a bare unit, `a`,
+/// for a value of a hundred thousand characters.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ValuePreview {
+    /// The value itself, markers substituted and long text elided at both ends.
+    Text(Preview),
+    /// A generated value, shown as what generates it (`ux-spec.md` 2).
+    Recipe(Recipe),
+}
+
+/// A generated value as a person reads it: `255 × "a"`.
+///
+/// The words around the two fields are the palette's business, not the core's
+/// (untouchable rule 9), so this carries data only.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Recipe {
+    /// The repeated unit, invisible characters substituted by [`MARKER`] - a
+    /// unit of three zero-width spaces must not preview as `1000 × ""`.
+    pub unit: String,
+    /// How many times the unit repeats.
+    pub count: u32,
+}
+
+/// What the palette shows for a value, worked out from the recipe.
+///
+/// 🔴 A generated value is shown as its RECIPE whenever the unit fits in a
+/// preview, at every length. Measured on the shipped packs: `len-254`,
+/// `len-255` and `len-256` all previewed as the same wall of `a`, and the one
+/// thing those three values exist to tell apart sat in a footnote. `64 × "😀"`
+/// answers "what did I send" exactly; sixty-four emoji have to be counted.
+///
+/// A unit longer than a preview (the format allows it, no catalogue value has
+/// one) falls back to the text, elided at both ends like any long value - and
+/// built WITHOUT building the value, which may be a million characters.
+#[must_use]
+pub fn preview_of(body: &ValueBody) -> ValuePreview {
+    match body {
+        ValueBody::Literal(text) => ValuePreview::Text(preview(text.as_str())),
+        ValueBody::Repeat { unit, count } => {
+            let unit = unit.as_str();
+            if unit.chars().count() <= PREVIEW_LIMIT {
+                ValuePreview::Recipe(Recipe {
+                    unit: unit.chars().map(substitute).collect(),
+                    count: *count,
+                })
+            } else {
+                ValuePreview::Text(preview_repeated(unit, *count))
+            }
+        }
+    }
+}
+
+/// The preview of `unit` repeated `count` times, without the repetition.
+///
+/// Exactly what [`preview`] would return for the built text - the test below
+/// holds it to that - at the cost of the preview rather than of the value.
+fn preview_repeated(unit: &str, count: u32) -> Preview {
+    let unit_length = unit.chars().count();
+    let total = unit_length.saturating_mul(usize::try_from(count).unwrap_or(usize::MAX));
+    if total <= PREVIEW_LIMIT {
+        return Preview {
+            shown: unit.chars().cycle().take(total).map(substitute).collect(),
+            elided_total: None,
+        };
+    }
+    // Character `i` of the built text is character `i % unit_length` of the
+    // unit, so the tail starts that far into a unit. `unit_length` is not zero
+    // here: an empty unit makes `total` zero, which returned above.
+    let tail_start = (total - KEPT_PER_END) % unit_length;
+    let head = unit.chars().cycle().take(KEPT_PER_END);
+    let tail = unit.chars().cycle().skip(tail_start).take(KEPT_PER_END);
+    Preview {
+        shown: head.chain(tail).map(substitute).collect(),
+        elided_total: Some(total),
+    }
 }
 
 /// Everything worth saying about what the value is made of.
@@ -412,5 +494,96 @@ mod tests {
     fn the_marker_is_not_itself_something_the_preview_would_replace() {
         assert!(!is_invisible(MARKER));
         assert_eq!(MARKER.to_string().chars().count(), 1);
+    }
+
+    fn repeat(unit: &str, count: u32) -> ValueBody {
+        ValueBody::Repeat {
+            unit: crate::text::LiteralText::new(unit),
+            count,
+        }
+    }
+
+    fn recipe(unit: &str, count: u32) -> ValuePreview {
+        ValuePreview::Recipe(Recipe {
+            unit: unit.to_owned(),
+            count,
+        })
+    }
+
+    #[test]
+    fn a_written_value_previews_as_its_text() {
+        let body = ValueBody::Literal(crate::text::LiteralText::new("ab\u{200B}cd"));
+        assert_eq!(
+            preview_of(&body),
+            ValuePreview::Text(preview("ab\u{200B}cd"))
+        );
+    }
+
+    #[test]
+    fn the_three_lengths_around_the_classic_limit_are_told_apart() {
+        // The reason this exists. As text, all three previewed as a hundred `a`
+        // and differed only in the elision note.
+        assert_eq!(preview_of(&repeat("a", 254)), recipe("a", 254));
+        assert_eq!(preview_of(&repeat("a", 255)), recipe("a", 255));
+        assert_eq!(preview_of(&repeat("a", 256)), recipe("a", 256));
+    }
+
+    #[test]
+    fn a_short_generated_value_is_a_recipe_too() {
+        // Sixty-four emoji fit in a preview and would still have to be counted.
+        assert_eq!(
+            preview_of(&repeat("\u{1F600}", 64)),
+            recipe("\u{1F600}", 64)
+        );
+    }
+
+    #[test]
+    fn an_invisible_unit_is_shown_by_its_marker() {
+        assert_eq!(
+            preview_of(&repeat("\u{200B}\u{200B}", 1000)),
+            recipe("\u{2423}\u{2423}", 1000)
+        );
+        assert_eq!(preview_of(&repeat(" ", 3)), recipe("\u{2423}", 3));
+    }
+
+    #[test]
+    fn an_empty_unit_says_so_rather_than_disappearing() {
+        assert_eq!(preview_of(&repeat("", 5)), recipe("", 5));
+    }
+
+    #[test]
+    fn a_unit_at_the_limit_is_a_recipe_and_one_past_it_is_text() {
+        let at_limit = "b".repeat(PREVIEW_LIMIT);
+        assert_eq!(preview_of(&repeat(&at_limit, 3)), recipe(&at_limit, 3));
+        let past_limit = "b".repeat(PREVIEW_LIMIT + 1);
+        assert!(matches!(
+            preview_of(&repeat(&past_limit, 3)),
+            ValuePreview::Text(_)
+        ));
+    }
+
+    #[test]
+    fn a_long_unit_previews_exactly_as_its_built_text_would() {
+        // The oracle is the function every written value already goes through,
+        // fed the text built the slow way. Units of awkward lengths, with an
+        // invisible character in them so the substitution is checked too, and
+        // counts that put the tail at every offset into a unit.
+        for unit_length in [101, 150, 257] {
+            let unit: String = (0..unit_length)
+                .map(|i| match i % 7 {
+                    0 => '\u{200B}',
+                    1 => ' ',
+                    other => char::from(b'a' + u8::try_from(other).expect("small")),
+                })
+                .collect();
+            for count in [1, 2, 3, 7] {
+                let built = unit.repeat(usize::try_from(count).expect("small"));
+                assert_eq!(
+                    preview_of(&repeat(&unit, count)),
+                    ValuePreview::Text(preview(&built)),
+                    "unit of {unit_length} code points, repeated {count} times"
+                );
+            }
+        }
     }
 }

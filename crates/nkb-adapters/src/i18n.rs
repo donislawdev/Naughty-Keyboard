@@ -541,6 +541,24 @@ pub fn preview_elided(shown: usize, total: usize) -> String {
     )
 }
 
+/// A generated value as the preview shows it: `255 × "a"`.
+///
+/// The count is written in plain digits. `ux-spec.md` 2 sketches `100 000`,
+/// and grouping digits is a locale's decision this module has no mechanism
+/// for, the same gap as the plural in `OBS-120`. Plain digits also match the
+/// counters on the line below, which print them that way too.
+///
+/// `unit` arrives with its invisible characters already replaced by the marker.
+/// A unit holding a quotation mark reads as `3 × """`: ambiguous to the eye and
+/// still true, and no catalogue value has one.
+#[must_use]
+pub fn recipe(count: u32, unit: &str) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::Recipe),
+        &[("count", &count.to_string()), ("unit", unit)],
+    )
+}
+
 /// How many characters the typeface note names before it counts the rest.
 ///
 /// Eight, because the longest list any shipped value produces is eight - the
@@ -690,6 +708,12 @@ pub enum PaletteLabel {
     NotGuaranteed,
     /// The same, when there are more of them than the note lists.
     NotGuaranteedMore,
+    /// A generated value, written as what generates it: `255 × "a"`.
+    ///
+    /// It takes the preview's place rather than sitting beside it, because it is
+    /// the preview - exact at every length, where a hundred characters of `a`
+    /// would say nothing about whether there were 254 or 256 of them.
+    Recipe,
 }
 
 fn pattern_palette_label(label: PaletteLabel) -> &'static str {
@@ -708,6 +732,7 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::NotGuaranteedMore => {
             "not guaranteed by the bundled font: {list} and {rest} more"
         }
+        PaletteLabel::Recipe => "{count} × \"{unit}\"",
     }
 }
 
@@ -1039,6 +1064,7 @@ mod tests {
             PaletteLabel::PreviewElided,
             PaletteLabel::NotGuaranteed,
             PaletteLabel::NotGuaranteedMore,
+            PaletteLabel::Recipe,
         ] {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
@@ -1048,7 +1074,8 @@ mod tests {
                 | PaletteLabel::Warnings
                 | PaletteLabel::PreviewElided
                 | PaletteLabel::NotGuaranteed
-                | PaletteLabel::NotGuaranteedMore => true,
+                | PaletteLabel::NotGuaranteedMore
+                | PaletteLabel::Recipe => true,
                 PaletteLabel::Title
                 | PaletteLabel::Offensive
                 | PaletteLabel::Cleared
@@ -1082,6 +1109,8 @@ mod tests {
             warnings(0),
             warnings(1),
             preview_elided(100, 100_000),
+            recipe(1, "a"),
+            recipe(100_000, "\u{2423}"),
         ] {
             assert!(!text.is_empty(), "a label produced nothing");
             assert!(!text.contains('{'), "a label left a placeholder: {text}");
@@ -1091,6 +1120,14 @@ mod tests {
             counts(1, 2, 8, 4),
             "1 graphemes, 2 code points, 8 bytes, 4 UTF-16 units"
         );
+    }
+
+    #[test]
+    fn a_recipe_reads_the_way_the_sketch_draws_it() {
+        // The sketch in `ux-spec.md` 2, less the digit grouping - see `recipe`.
+        assert_eq!(recipe(100_000, "a"), "100000 \u{D7} \"a\"");
+        // A unit holding braces is copied, never substituted a second time.
+        assert_eq!(recipe(2, "{count}"), "2 \u{D7} \"{count}\"");
     }
 
     #[test]

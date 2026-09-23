@@ -150,15 +150,33 @@ export component WindowSurface inherits Rectangle {
 // second reason here: a band that hides must take its own divider with it.
 // Written as a bare `Hairline` between bands, hiding a band leaves a rule
 // floating over nothing, and the two would have to be gated in step forever.
-export component Zone inherits VerticalLayout {
+//
+// # Why the height is stated here rather than left to the layout
+//
+// Measured 2026-09-23, Slint 1.18.1 (`slint.md` 2.23): a band that was itself a
+// `VerticalLayout`, placed behind an `if`, reported the height of ONE line for
+// every text of its own that wrapped. It laid its children out correctly - the
+// line after a wrapped text sat where it should - but the palette sizes itself
+// from that report, stopped short, and the rest spilled below its surface. On
+// the live window, whose height is that report, it would simply be cut off.
+//
+// Stating the height inside the component, from the band's own layout, is what
+// holds: measured with the band behind the same `if`, and with long counters,
+// the longest reference and the two-line typeface note. `palette_appearance.rs`
+// fails when anything is drawn below the palette's surface.
+export component Zone inherits Rectangle {
     in property <bool> divided: true;
 
-    if root.divided: Hairline { }
+    height: band.preferred-height;
 
-    VerticalLayout {
-        padding: Tokens.space-3;
-        spacing: Tokens.space-2;
-        @children
+    band := VerticalLayout {
+        if root.divided: Hairline { }
+
+        VerticalLayout {
+            padding: Tokens.space-3;
+            spacing: Tokens.space-2;
+            @children
+        }
     }
 }
 
