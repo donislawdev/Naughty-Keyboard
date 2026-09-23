@@ -152,7 +152,7 @@ fn run_palette(pack: &str) -> Result<(), slint::PlatformError> {
     let kept = KeptFocus::remember();
     let palette = Palette::new()?;
     palette.set_window_title(i18n::label(PaletteLabel::Title).into());
-    palette.set_degraded_label(i18n::label(PaletteLabel::DirectInputRefused).into());
+    palette.set_clipboard_mode_label(i18n::label(PaletteLabel::DirectInputRefused).into());
     palette.set_hints(ModelRc::new(VecModel::from(hints())));
     // Awake at first run, with the hints up and nothing sent yet - `ux-spec.md`
     // 5.1. The worker fills the pack and the counter, because the sequence that

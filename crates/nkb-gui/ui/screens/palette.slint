@@ -8,12 +8,12 @@
 //
 // # Two axes and a bar, not five states
 //
-// `OBS-94` settled this for the core and it holds for the window: `degraded` is
-// a SECOND AXIS, not another state. So:
+// `OBS-94` settled this for the core and it holds for the window: clipboard mode
+// is a SECOND AXIS, not another state. So:
 //
-//     showing      false = resting, true = a value just went out
-//     degraded     a standing condition, visible in both
-//     hints        the first twenty uses, and on demand afterwards
+//     showing          false = resting, true = a value just went out
+//     clipboard-mode   a standing condition, visible in both
+//     hints            the first twenty uses, and on demand afterwards
 //
 // 🔴 Nothing here ever hides the WINDOW. `OBS-80` measured that `hide()` and
 // `show()` destroy the window on Windows and lose `WS_EX_NOACTIVATE` with it, so
@@ -100,7 +100,7 @@ export component Palette inherits Window {
     in property <[string]> messages;
 
     // ---- the standing bar --------------------------------------------------
-    in property <string> degraded-label;
+    in property <string> clipboard-mode-label;
 
     // ---- the hint bar ------------------------------------------------------
     in property <[HintRow]> hints;
@@ -112,7 +112,10 @@ export component Palette inherits Window {
     // nothing sent yet - `ux-spec.md` 5.1. Without this the value band would
     // then draw three empty lines and a row of no markers.
     in property <bool> has-value;
-    in property <bool> degraded;
+    // Values go through the clipboard and the tester pastes them. Named after
+    // the glossary (`ClipboardMode`), never "degraded": `ux-spec.md` 8 forbids
+    // presenting this mode as a failure, in words or otherwise.
+    in property <bool> clipboard-mode;
     in property <bool> hints-visible: true;
     // Whether the system permits translucency at all (D53). Separate from
     // `showing` because it is the system's answer, not the palette's state.
@@ -155,6 +158,30 @@ export component Palette inherits Window {
                     Spacer { }
                     TextCounter {
                         text: root.counter;
+                    }
+                }
+            }
+
+            // The standing bar. Permanent by design: a message that disappears
+            // stops existing while the limitation stays - `ux-spec.md` 2.
+            //
+            // Right under the pack band, and that is a correction from the
+            // first render (D71): placed after the messages it stood under the
+            // counter at rest and some two hundred pixels lower once a value
+            // went out - a standing condition that JUMPS between the two states
+            // of the window, which GUI rule 3 forbids. Here it holds one place.
+            //
+            // The ACCENT tint, not the risk one, and that is the point of the
+            // colour here (D71). Risk is what `offensive` wears, and clipboard
+            // mode is a full route rather than a failure - `ux-spec.md` 8 says so
+            // in words, and a bar in the risk colour would say the opposite
+            // without any. The gallery drew this pill in accent from the start.
+            if root.clipboard-mode: Zone {
+                HorizontalLayout {
+                    alignment: start;
+                    Pill {
+                        text: root.clipboard-mode-label;
+                        tint: Tokens.accent;
                     }
                 }
             }
@@ -219,18 +246,6 @@ export component Palette inherits Window {
                 for message in root.messages: TextBody {
                     text: message;
                     wrap: word-wrap;
-                }
-            }
-
-            // The standing bar. Permanent by design: a message that disappears
-            // stops existing while the limitation stays - `ux-spec.md` 2.
-            if root.degraded: Zone {
-                HorizontalLayout {
-                    alignment: start;
-                    Pill {
-                        text: root.degraded-label;
-                        tint: Tokens.risk;
-                    }
                 }
             }
 

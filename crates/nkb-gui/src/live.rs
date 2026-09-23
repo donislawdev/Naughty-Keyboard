@@ -86,7 +86,7 @@ pub struct View {
     /// screen: blanking it would take away the thing the message is about.
     value: Option<ValueView>,
     messages: Vec<String>,
-    degraded: bool,
+    clipboard_mode: bool,
     /// Whether this view starts the countdown back to the resting state.
     ///
     /// 🔴 False for the OPENING view, and that is a correction rather than a
@@ -227,7 +227,7 @@ fn opening_view(
         counter: counter_of(sequence),
         value: None,
         messages: with_standing(messages, standing),
-        degraded: sequence.sequence().delivery == Delivery::Degraded,
+        clipboard_mode: sequence.sequence().delivery == Delivery::Degraded,
         transient: false,
     }
 }
@@ -248,7 +248,7 @@ fn view_of(outcome: &Outcome, pack_shown: &str, pack: &str, standing: &Standing)
                 .collect(),
             standing,
         ),
-        degraded: outcome.sequence.delivery == Delivery::Degraded,
+        clipboard_mode: outcome.sequence.delivery == Delivery::Degraded,
         // Every outcome is something that just happened, so every outcome gets
         // looked at and then gets out of the way.
         transient: true,
@@ -327,7 +327,7 @@ fn apply(palette: &Palette, view: View) {
     let transient = view.transient;
     palette.set_pack(view.pack.into());
     palette.set_counter(view.counter.into());
-    palette.set_degraded(view.degraded);
+    palette.set_clipboard_mode(view.clipboard_mode);
     palette.set_messages(ModelRc::new(VecModel::from(
         view.messages
             .into_iter()
@@ -530,7 +530,10 @@ mod tests {
             "a value went out, so the band shows"
         );
         assert!(palette.get_showing(), "an outcome wakes the palette");
-        assert!(!palette.get_degraded(), "direct delivery is not degraded");
+        assert!(
+            !palette.get_clipboard_mode(),
+            "direct delivery is not clipboard mode"
+        );
 
         // ---- a turn that produced no value --------------------------------
         // The previous value STAYS. Blanking it would take away the value the
@@ -611,10 +614,10 @@ mod tests {
         );
 
         // ---- the second axis reaches the standing bar ---------------------
-        let mut degraded = an_outcome(Some(a_sent()), Vec::new());
-        degraded.sequence.delivery = Delivery::Degraded;
-        apply(&palette, view_of(&degraded, "p", "p", &quiet()));
-        assert!(palette.get_degraded());
+        let mut by_clipboard = an_outcome(Some(a_sent()), Vec::new());
+        by_clipboard.sequence.delivery = Delivery::Degraded;
+        apply(&palette, view_of(&by_clipboard, "p", "p", &quiet()));
+        assert!(palette.get_clipboard_mode());
     }
 
     /// A value carrying `text`, with the preview and shape the product builds.

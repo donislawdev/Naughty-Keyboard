@@ -39,6 +39,11 @@ const TEXT_MUTED: (u8, u8, u8) = (0x7E, 0x87, 0x97);
 /// `text-primary` from the dictionary, for the same reason as the role above.
 const TEXT_PRIMARY: (u8, u8, u8) = (0xE6, 0xE9, 0xEF);
 
+/// `accent` and `risk` from the dictionary, copied for the same reason: the
+/// clipboard-mode bar must wear the first and never the second (D71).
+const ACCENT: (u8, u8, u8) = (0x7A, 0xA2, 0xF7);
+const RISK: (u8, u8, u8) = (0xE0, 0xAF, 0x68);
+
 /// Nothing but the substitution marker, so its own ink can be measured apart
 /// from the rest of the value.
 const MARKER_ONLY: &str = "\u{2423}\u{2423}\u{2423}\u{2423}";
@@ -86,7 +91,7 @@ fn fill(palette: &Palette) {
     // the specimen of the sketch has no note - the note is measured on its own
     // below, with a value that earns one.
     palette.set_has_not_guaranteed(false);
-    palette.set_degraded_label("direct input refused".into());
+    palette.set_clipboard_mode_label("clipboard mode".into());
     // There IS a value, so the value band is gated by `showing` alone - which is
     // what the resting rule below is about, and what mutation M51 flips.
     palette.set_has_value(true);
@@ -189,11 +194,11 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     palette.show().expect("the palette must show");
 
     // ---- resting: the state the rule is about ------------------------------
-    // Degraded as well, because that is the WORST resting case: the standing bar
-    // is the only extra thing the dimmed palette ever shows, so if any role in
-    // it were muted this is where it would appear.
+    // In clipboard mode as well, because that is the WORST resting case: the
+    // standing bar is the only extra thing the dimmed palette ever shows, so if
+    // any role in it were muted this is where it would appear.
     palette.set_showing(false);
-    palette.set_degraded(true);
+    palette.set_clipboard_mode(true);
     let resting = render(&window);
     let resting_again = render(&window);
     assert!(
@@ -205,7 +210,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
 
     // ---- showing: the positive control, and the rest of the window ---------
     palette.set_showing(true);
-    palette.set_degraded(false);
+    palette.set_clipboard_mode(false);
     let showing = render(&window);
     let showing_path = offscreen::save_cropped(&showing, WIDTH, HEIGHT, "palette-showing.png");
 
@@ -300,9 +305,49 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     fill(&palette);
     palette.set_showing(true);
 
-    palette.set_degraded(true);
-    let degraded = render(&window);
-    let degraded_path = offscreen::save_cropped(&degraded, WIDTH, HEIGHT, "palette-degraded.png");
+    // ---- clipboard mode: the standing bar wears the accent, never risk -----
+    // D71. Measured as a DIFFERENCE of two renders, like the preview above:
+    // switching the mode on must ADD accent ink and must add NO risk ink. A bar
+    // in the risk colour - the colour `offensive` wears - would tell the tester
+    // without a word that the mode is a failure, which `ux-spec.md` 8 forbids.
+    // In this mode the field is not cleared, so the value carries the marker
+    // that it went to the clipboard instead of `cleared first`.
+    palette.set_markers(ModelRc::new(VecModel::from(vec![
+        Marker {
+            text: "offensive".into(),
+            risky: true,
+        },
+        Marker {
+            text: "on the clipboard".into(),
+            risky: false,
+        },
+    ])));
+    let direct = render(&window);
+    palette.set_clipboard_mode(true);
+    let clipboard = render(&window);
+    let clipboard_path =
+        offscreen::save_cropped(&clipboard, WIDTH, HEIGHT, "palette-clipboard-mode.png");
+    assert_nothing_escapes_the_surface(
+        &clipboard,
+        "in clipboard mode",
+        &clipboard_path.display().to_string(),
+    );
+    let accent_gained = offscreen::count_exactly(&clipboard, ACCENT)
+        .saturating_sub(offscreen::count_exactly(&direct, ACCENT));
+    assert!(
+        accent_gained > 0,
+        "switching clipboard mode on added no accent ink, so the standing bar is not drawn \
+         in the accent. Look at {}",
+        clipboard_path.display()
+    );
+    assert_eq!(
+        offscreen::count_exactly(&clipboard, RISK),
+        offscreen::count_exactly(&direct, RISK),
+        "switching clipboard mode on changed the amount of risk ink, so the standing bar \
+         wears the colour of `offensive` - `ux-spec.md` 8 says the mode is not a failure. \
+         Look at {}",
+        clipboard_path.display()
+    );
 
     // ---- anti-vacuity ------------------------------------------------------
     // An empty buffer compares equal to itself and holds no muted pixel either,
@@ -345,14 +390,14 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
         "resting and showing rendered identically, so `showing` gates nothing"
     );
     assert!(
-        showing != degraded,
-        "the standing bar changed no pixel, so `degraded` gates nothing"
+        direct != clipboard,
+        "the standing bar changed no pixel, so `clipboard-mode` gates nothing"
     );
 
     println!(
         "palette rendered to {}, {}, {}",
         resting_path.display(),
         showing_path.display(),
-        degraded_path.display()
+        clipboard_path.display()
     );
 }
