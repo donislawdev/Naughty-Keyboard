@@ -43,6 +43,14 @@ const TEXT_PRIMARY: (u8, u8, u8) = (0xE6, 0xE9, 0xEF);
 /// from the rest of the value.
 const MARKER_ONLY: &str = "\u{2423}\u{2423}\u{2423}\u{2423}";
 
+/// A value from the shipped `cjk-mixed` and `emoji-in-name`, which the shipped
+/// typeface does not carry - and the note the product writes for it, as
+/// `i18n::not_guaranteed` composes it. The test's own copy, for the reason the
+/// colours above are copies.
+const NOT_GUARANTEED_PREVIEW: &str = "\u{540D}\u{524D} \u{30C6}\u{30B9}\u{30C8} \u{1F600}";
+const NOT_GUARANTEED_NOTE: &str =
+    "not guaranteed by the bundled font: U+540D U+524D U+30C6 U+30B9 U+30C8 U+1F600";
+
 /// Specimen data. The literals are the test's own - the test is not the product,
 /// and what it feeds in is a sample to look at, the same job the gallery's
 /// labels do. The product fills these from `nkb-adapters::i18n`.
@@ -63,6 +71,10 @@ fn fill(palette: &Palette) {
     // No elision for a seven-code-point value, and the render proves the band
     // does not draw an empty line for it.
     palette.set_has_elided(false);
+    // Latin letters and the marker are all inside the typeface guarantee, so
+    // the specimen of the sketch has no note - the note is measured on its own
+    // below, with a value that earns one.
+    palette.set_has_not_guaranteed(false);
     palette.set_degraded_label("direct input refused".into());
     // There IS a value, so the value band is gated by `showing` alone - which is
     // what the resting rule below is about, and what mutation M51 flips.
@@ -151,7 +163,8 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     let without_preview = offscreen::count_exactly(&render(&window), TEXT_PRIMARY);
     assert!(
         with_preview > without_preview,
-        "blanking the preview and the shape changed nothing on screen ({with_preview} vs          {without_preview} pixels of text-primary), so the value band is not drawing them"
+        "blanking the preview and the shape changed nothing on screen ({with_preview} vs \
+         {without_preview} pixels of text-primary), so the value band is not drawing them"
     );
     // The marker is the point: U+2423 must leave ink of its own, or the preview
     // shows a value with a hole where the invisible character was.
@@ -159,8 +172,30 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     let marker_only = offscreen::count_exactly(&render(&window), TEXT_PRIMARY);
     assert!(
         marker_only > without_preview,
-        "the substitution marker left no ink, so it has no glyph in the shipped          typeface and the preview would show nothing where an invisible character sits"
+        "the substitution marker left no ink, so it has no glyph in the shipped \
+         typeface and the preview would show nothing where an invisible character sits"
     );
+    // ---- the typeface note draws, measured rather than assumed ------------
+    // `D66`: a value with characters the shipped typeface does not carry gets a
+    // note under the preview. It is a muted line, so switching it on must ADD
+    // muted ink - the same difference-of-two-renders shape as above, because a
+    // line that the view silently drops looks exactly like a line never asked for.
+    palette.set_value_preview(NOT_GUARANTEED_PREVIEW.into());
+    palette.set_value_not_guaranteed(NOT_GUARANTEED_NOTE.into());
+    palette.set_has_not_guaranteed(false);
+    let muted_without_note = offscreen::count_exactly(&render(&window), TEXT_MUTED);
+    palette.set_has_not_guaranteed(true);
+    let with_note = render(&window);
+    let muted_with_note = offscreen::count_exactly(&with_note, TEXT_MUTED);
+    let note_path =
+        offscreen::save_cropped(&with_note, WIDTH, HEIGHT, "palette-not-guaranteed.png");
+    assert!(
+        muted_with_note > muted_without_note,
+        "switching the typeface note on added no muted ink ({muted_without_note} vs \
+         {muted_with_note}), so the palette does not draw it. Look at {}",
+        note_path.display()
+    );
+
     // Put the specimen back, so the renders saved below are the ones the gallery
     // and the calibration tool compare against.
     fill(&palette);

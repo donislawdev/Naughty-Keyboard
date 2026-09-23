@@ -41,3 +41,8 @@ pub mod live;
 // mixing the two in one file is how a session ends up calling a Slint method
 // from the wrong side.
 pub mod focus;
+
+// What the shipped typeface draws by itself (`D52`, `D66`). Here rather than in
+// the core because it is a fact about a file this crate carries, and the core
+// must not learn where its tables come from.
+pub mod typeface;

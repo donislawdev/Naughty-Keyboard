@@ -28,17 +28,16 @@
 // gated on `showing`, and `appearance.rs` measures the rendered pixels rather
 // than trusting this sentence.
 //
-// # Two zones from the sketch in `ux-spec.md` 2 are absent, on purpose
+// # One zone from the sketch in `ux-spec.md` 2 is absent, on purpose
 //
-// - the TARGET band (application, window title, field kind). `nkb-sys` knows one
-//   thing about the target today, its window handle, and nothing that could be
-//   written next to a person. A band with no source would be a promise, so it
-//   waits for `TargetInspector` - `OBS-91`;
-// - the value PREVIEW and its shape line. `Sent` deliberately carries neither:
-//   that is piece C4b.
+// The TARGET band (application, window title, field kind). `nkb-sys` knows one
+// thing about the target today, its window handle, and nothing that could be
+// written next to a person. A band with no source would be a promise, so it
+// waits for `TargetInspector` - `OBS-91`. Named here rather than left as a gap
+// the next session rediscovers.
 //
-// Both absences are named here rather than left as a gap the next session
-// rediscovers.
+// Until 2026-09-23 this said the preview and its shape line were absent too.
+// They arrived with C4b-1 (`D64`) and the sentence stayed behind for a day.
 
 import {
     Tokens,
@@ -80,6 +79,11 @@ export component Palette inherits Window {
     // Said only when the preview is a fragment. Never implied: a fragment
     // presented as the whole is the silence rule 1 forbids.
     in property <string> value-elided;
+    // Said only when the preview draws a character the shipped typeface does
+    // not guarantee (`D52`, `D66`). What the tester sees of that character
+    // depends on the machine, and the tool cannot tell what the machine drew -
+    // so it says where its own promise ends.
+    in property <string> value-not-guaranteed;
     // What the value is made of, already joined into one line by `i18n`.
     in property <string> value-shape;
     // 🔴 Two switches rather than comparing the strings to "" in the view, and
@@ -88,6 +92,7 @@ export component Palette inherits Window {
     // is not a sentence, but an exception carved into a guard is a door, so the
     // view gets a boolean instead. The same shape as `has-value` above.
     in property <bool> has-elided;
+    in property <bool> has-not-guaranteed;
     in property <bool> has-shape;
     in property <[Marker]> markers;
 
@@ -176,6 +181,14 @@ export component Palette inherits Window {
                 }
                 if root.has-elided: TextSmallMuted {
                     text: root.value-elided;
+                }
+                // Under the preview because it qualifies the preview, and in
+                // the muted role because it is a note about the tool's display
+                // rather than a fact about the value. Wrapped: a list of code
+                // points is somebody else's data and has no fixed length.
+                if root.has-not-guaranteed: TextSmallMuted {
+                    text: root.value-not-guaranteed;
+                    wrap: word-wrap;
                 }
                 if root.has-shape: TextBody {
                     text: root.value-shape;

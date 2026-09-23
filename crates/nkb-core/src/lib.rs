@@ -29,6 +29,7 @@ pub mod schema;
 pub mod sequence;
 pub mod source_text;
 pub mod text;
+pub mod typeface;
 pub mod value;
 pub mod written_form;
 
@@ -46,5 +47,6 @@ pub use schema::{FieldKind, kind_of};
 pub use sequence::{Delivery, Effect, Event, Position, Sequence, Step};
 pub use source_text::SourceText;
 pub use text::{EscapedText, LiteralText};
+pub use typeface::{TypefaceGuarantee, outside_guarantee};
 pub use value::{MAX_REPEAT_COUNT, MAX_VALUE_CODE_POINTS, ValueBody, ValueProblem};
 pub use written_form::{LITERAL_LENGTH_HINT, Quoting};

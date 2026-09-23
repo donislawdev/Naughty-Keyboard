@@ -47,9 +47,11 @@ use nkb_app::ports::HotkeyRegistrar;
 use nkb_app::{AdvanceSequence, Outcome, drive_sequence};
 use nkb_core::hotkeys::DEFAULT_BINDINGS;
 use nkb_core::sequence::Delivery;
+use nkb_core::typeface::outside_guarantee;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 
 use crate::focus::{Standing, standing_line};
+use crate::typeface::SHIPPED;
 use crate::{Marker, Palette};
 
 /// How long one wait for a press lasts before the stop flag is read again.
@@ -99,6 +101,9 @@ struct ValueView {
     preview: String,
     /// Empty unless the preview is a fragment, in which case it says how much.
     elided: String,
+    /// Empty unless the preview draws something the shipped typeface does not
+    /// guarantee, in which case it names those characters (`D52`, `D66`).
+    not_guaranteed: String,
     /// Every fact about the value on one line, already joined by `i18n`.
     shape: String,
     /// Text and whether it is a risk. The COLOUR is the palette's business -
@@ -236,6 +241,11 @@ fn view_of(outcome: &Outcome, pack_shown: &str, pack: &str, standing: &Standing)
             elided: sent.preview.elided_total.map_or_else(String::new, |total| {
                 i18n::preview_elided(sent.preview.shown.chars().count(), total)
             }),
+            // Measured on what the preview DRAWS, not on the whole value: a
+            // character in the elided middle never reaches the screen, so the
+            // typeface is never asked for it.
+            not_guaranteed: i18n::not_guaranteed(&outside_guarantee(&sent.preview.shown, &SHIPPED))
+                .unwrap_or_default(),
             shape: i18n::shape_line(&sent.shape),
             markers: markers_of(sent),
         }),
@@ -303,8 +313,10 @@ fn apply(palette: &Palette, view: View) {
         palette.set_value_preview(value.preview.into());
         // The switches are read BEFORE the strings move into the properties.
         palette.set_has_elided(!value.elided.is_empty());
+        palette.set_has_not_guaranteed(!value.not_guaranteed.is_empty());
         palette.set_has_shape(!value.shape.is_empty());
         palette.set_value_elided(value.elided.into());
+        palette.set_value_not_guaranteed(value.not_guaranteed.into());
         palette.set_value_shape(value.shape.into());
         palette.set_markers(ModelRc::new(VecModel::from(
             value
@@ -472,6 +484,10 @@ mod tests {
             "",
             "a short value is shown whole, so nothing is said about eliding"
         );
+        // The marker is inside the guarantee, so a value made of Latin letters
+        // and invisible characters has nothing to confess.
+        assert_eq!(palette.get_value_not_guaranteed(), "");
+        assert!(!palette.get_has_not_guaranteed());
         assert_eq!(
             slint::Model::row_count(&palette.get_markers()),
             3,
@@ -505,11 +521,56 @@ mod tests {
             "the message is shown"
         );
 
+        // ---- the preview draws what the shipped typeface does not ----------
+        // Two ideographs and an emoji from the shipped packs, none of which
+        // DejaVu Sans Mono carries. Named as code points, in reading order.
+        apply(
+            &palette,
+            view_of(
+                &an_outcome(Some(sent_of("\u{540D}\u{524D} \u{1F600}")), Vec::new()),
+                "p",
+                "p",
+                &quiet(),
+            ),
+        );
+        assert_eq!(
+            palette.get_value_not_guaranteed(),
+            "not guaranteed by the bundled font: U+540D U+524D U+1F600"
+        );
+        assert!(palette.get_has_not_guaranteed());
+
+        // ---- ... but only what the preview actually DRAWS ------------------
+        // The emoji sits in the middle of a value long enough to be elided, so
+        // it never reaches the screen and the typeface is never asked for it.
+        // A note about it would describe a character nobody can see.
+        let mut long = "a".repeat(120);
+        long.insert(60, '\u{1F600}');
+        apply(
+            &palette,
+            view_of(
+                &an_outcome(Some(sent_of(&long)), Vec::new()),
+                "p",
+                "p",
+                &quiet(),
+            ),
+        );
+        assert_eq!(palette.get_value_not_guaranteed(), "");
+        assert!(!palette.get_has_not_guaranteed());
+
         // ---- the second axis reaches the standing bar ---------------------
         let mut degraded = an_outcome(Some(a_sent()), Vec::new());
         degraded.sequence.delivery = Delivery::Degraded;
         apply(&palette, view_of(&degraded, "p", "p", &quiet()));
         assert!(palette.get_degraded());
+    }
+
+    /// A value carrying `text`, with the preview and shape the product builds.
+    fn sent_of(text: &str) -> Sent {
+        Sent {
+            preview: nkb_core::preview::preview(text),
+            shape: nkb_core::preview::shape(text),
+            ..a_sent()
+        }
     }
 
     /// The markers are facts about the value, and every one of them shows.

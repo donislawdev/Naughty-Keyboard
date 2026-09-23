@@ -26,7 +26,8 @@
 //! (DejaVu Sans Mono 2.37, `D50`): the glyph IS there, so the marker cannot
 //! itself become the empty rectangle this module exists to prevent. That is not
 //! a detail - a marker outside the guarantee (`D52`) would fail exactly on the
-//! machines the guarantee was written for.
+//! machines the guarantee was written for. Since `D66` that reading is a test
+//! rather than a note: `nkb-gui`'s guarantee table must cover the marker.
 //!
 //! # What this module deliberately does not do
 //!
@@ -35,9 +36,10 @@
 //!   this module answers "what does this look like", those answer "how much of
 //!   it is there", and a value can need one without the other;
 //! - **it does not know which characters the shipped typeface covers.** The
-//!   guarantee table is `D52` point 1 and lives in `gui`, built from the file's
-//!   `cmap`. The rule that uses it is `D52` point 2 and belongs beside this
-//!   module - when it exists;
+//!   guarantee table is `D52` point 1 and lives in `gui`, read from the file's
+//!   `cmap`. The rule that uses it is `D52` point 2 and sits beside this module,
+//!   in [`crate::typeface`] - separate because a preview is needed by every
+//!   surface and a typeface only by the one that draws;
 //! - **it does not show the RECIPE of a generated value.** `ux-spec.md` 2 asks
 //!   for `100 000 × "a"` rather than a million markers. That needs the value's
 //!   generator, not its text, so it belongs where `Value` is read. Named here so

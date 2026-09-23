@@ -541,6 +541,51 @@ pub fn preview_elided(shown: usize, total: usize) -> String {
     )
 }
 
+/// How many characters the typeface note names before it counts the rest.
+///
+/// Eight, because the longest list any shipped value produces is eight - the
+/// full-width Latin one - so every shipped value is named whole. Past that the
+/// note grows by a line for roughly every eight more and pushes the counters,
+/// which a tester came to read, down the palette. Measured 2026-09-23 in the
+/// palette render: six code points take two lines, the first holding five
+/// after the words.
+const NOT_GUARANTEED_LISTED: usize = 8;
+
+/// The note under the preview naming what the shipped typeface does not draw.
+///
+/// `None` for an empty list, so "nothing to say" has one representation and a
+/// caller cannot show a note that ends in a colon.
+///
+/// The characters are written as `U+30B9`, never as themselves, and that is the
+/// whole point of the note: a character outside the guarantee may draw as the
+/// empty rectangle the note exists to explain. The notation is the Unicode
+/// standard's own and reads the same in every language, which is why it is
+/// written here rather than behind a key of its own.
+#[must_use]
+pub fn not_guaranteed(outside: &[char]) -> Option<String> {
+    if outside.is_empty() {
+        return None;
+    }
+    let list = outside
+        .iter()
+        .take(NOT_GUARANTEED_LISTED)
+        .map(|c| format!("U+{:04X}", u32::from(*c)))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let rest = outside.len().saturating_sub(NOT_GUARANTEED_LISTED);
+    Some(if rest == 0 {
+        fill(
+            pattern_palette_label(PaletteLabel::NotGuaranteed),
+            &[("list", &list)],
+        )
+    } else {
+        fill(
+            pattern_palette_label(PaletteLabel::NotGuaranteedMore),
+            &[("list", &list), ("rest", &rest.to_string())],
+        )
+    })
+}
+
 // ---------------------------------------------------------------------------
 // What the environment would not let the tool do
 // ---------------------------------------------------------------------------
@@ -636,6 +681,15 @@ pub enum PaletteLabel {
     DirectInputRefused,
     /// The preview shows only part of the value, so the palette says how much.
     PreviewElided,
+    /// Characters on screen that the shipped typeface does not draw by itself,
+    /// so what a tester sees of them depends on the machine (`D52`).
+    ///
+    /// 🔴 "Not guaranteed", never "cannot be shown". The tool cannot find out
+    /// what the machine's own fonts drew, and the note says the one thing it
+    /// knows for certain: where its promise ends.
+    NotGuaranteed,
+    /// The same, when there are more of them than the note lists.
+    NotGuaranteedMore,
 }
 
 fn pattern_palette_label(label: PaletteLabel) -> &'static str {
@@ -650,6 +704,10 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::Warnings => "pack warnings: {count}",
         PaletteLabel::DirectInputRefused => "direct input refused",
         PaletteLabel::PreviewElided => "showing {shown} of {total} code points",
+        PaletteLabel::NotGuaranteed => "not guaranteed by the bundled font: {list}",
+        PaletteLabel::NotGuaranteedMore => {
+            "not guaranteed by the bundled font: {list} and {rest} more"
+        }
     }
 }
 
@@ -978,6 +1036,9 @@ mod tests {
             PaletteLabel::Cleared,
             PaletteLabel::Warnings,
             PaletteLabel::DirectInputRefused,
+            PaletteLabel::PreviewElided,
+            PaletteLabel::NotGuaranteed,
+            PaletteLabel::NotGuaranteedMore,
         ] {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
@@ -985,7 +1046,9 @@ mod tests {
                 PaletteLabel::Counter
                 | PaletteLabel::Counts
                 | PaletteLabel::Warnings
-                | PaletteLabel::PreviewElided => true,
+                | PaletteLabel::PreviewElided
+                | PaletteLabel::NotGuaranteed
+                | PaletteLabel::NotGuaranteedMore => true,
                 PaletteLabel::Title
                 | PaletteLabel::Offensive
                 | PaletteLabel::Cleared
@@ -1018,6 +1081,7 @@ mod tests {
             counts(1, 2, 8, 4),
             warnings(0),
             warnings(1),
+            preview_elided(100, 100_000),
         ] {
             assert!(!text.is_empty(), "a label produced nothing");
             assert!(!text.contains('{'), "a label left a placeholder: {text}");
@@ -1026,6 +1090,39 @@ mod tests {
         assert_eq!(
             counts(1, 2, 8, 4),
             "1 graphemes, 2 code points, 8 bytes, 4 UTF-16 units"
+        );
+    }
+
+    #[test]
+    fn the_typeface_note_names_code_points_and_counts_what_it_does_not_name() {
+        // Nothing outside the guarantee: nothing to say, and no way to say it.
+        assert_eq!(not_guaranteed(&[]), None);
+
+        // Written as code points, padded to four digits in the basic plane and
+        // five above it - the form a tester can paste into a search.
+        assert_eq!(
+            not_guaranteed(&['\u{1F600}']).as_deref(),
+            Some("not guaranteed by the bundled font: U+1F600")
+        );
+        assert_eq!(
+            not_guaranteed(&['\u{E9}', '\u{1D407}']).as_deref(),
+            Some("not guaranteed by the bundled font: U+00E9 U+1D407")
+        );
+
+        // Exactly as many as the note lists: named whole, no tail.
+        let eight: Vec<char> = ('\u{FF41}'..='\u{FF48}').collect();
+        let whole = not_guaranteed(&eight).expect("eight characters are something to say");
+        assert!(whole.ends_with("U+FF48"), "{whole}");
+        assert!(!whole.contains("more"), "{whole}");
+
+        // One past it: the ninth is counted, not named.
+        let nine: Vec<char> = ('\u{FF41}'..='\u{FF49}').collect();
+        let counted = not_guaranteed(&nine).expect("nine characters are something to say");
+        assert!(counted.ends_with("U+FF48 and 1 more"), "{counted}");
+        assert!(!counted.contains("U+FF49"), "{counted}");
+        assert!(
+            !counted.contains('{'),
+            "a placeholder was left standing: {counted}"
         );
     }
 }

@@ -47,6 +47,16 @@ slint-build.workspace = true
 [dev-dependencies]
 image = "0.25.10"
 
+# The oracle for the typeface guarantee (D66): what the toolkit's own text layout
+# reads from the font's character map. Test-only, the same lighter tier as the
+# line above. Checked against the registry 2026-09-23: MIT OR Apache-2.0.
+#
+# 🔴 Deliberately NOT the newest release (0.47.0 that day). 0.44.0 is the version
+# Slint 1.18.1 locks, so the test asks exactly the reader the renderer asks - a
+# newer one would be a second opinion, not the renderer's. It moves together with
+# Slint, and tests/typeface_guarantee.rs fails when the lock file holds two.
+skrifa = "0.44.0"
+
 # This package does NOT inherit the workspace lints, and the reason is one
 # single word. The workspace sets `unsafe_code = "forbid"`, and `forbid` cannot
 # be lifted by anything downstream - not even by the code that Slint generates

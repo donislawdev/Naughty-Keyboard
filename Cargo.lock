@@ -2998,6 +2998,7 @@ dependencies = [
  "nkb-app",
  "nkb-core",
  "raw-window-handle",
+ "skrifa",
  "slint",
  "slint-build",
 ]
