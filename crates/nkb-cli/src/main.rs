@@ -25,7 +25,7 @@ use nkb_adapters::{
 };
 use nkb_app::{
     Availability, Clearing, ClearingOutcome, DeliveryError, EmitOutcome, FormatOutcome,
-    KeystrokeError, LintOutcome, NewPackOutcome, SendOutcome, SendRequest, ShowOutcome,
+    KeystrokeError, LintOutcome, NewPackOutcome, SendOutcome, SendRequest, ShowOutcome, SkipReason,
     ValueDelivery, emit_values, format_pack, lint_pack, list_packs, new_pack, send_value,
     show_pack,
 };
@@ -681,8 +681,11 @@ fn send(args: &[String]) -> ExitCode {
                 ClearingOutcome::Done => {
                     let _ = writeln!(err, "nkb send: cleared the line (Home, Shift+End, Delete)");
                 }
-                ClearingOutcome::Skipped => {
+                ClearingOutcome::Skipped(SkipReason::Unconfirmed) => {
                     let _ = writeln!(err, "{CLEARING_SKIPPED}");
+                }
+                ClearingOutcome::Skipped(SkipReason::Terminal) => {
+                    let _ = writeln!(err, "{CLEARING_SKIPPED_IN_TERMINAL}");
                 }
                 ClearingOutcome::NotAsked => {}
             }
@@ -783,6 +786,12 @@ fn send(args: &[String]) -> ExitCode {
                     err,
                     "nkb send: the focus could not be confirmed as a text field, so it was not cleared and nothing was sent."
                 ),
+                // The same skip for a terminal, and the same fallback if it ever
+                // arrives here: nothing pressed, nothing sent.
+                KeystrokeError::InTerminal => writeln!(
+                    err,
+                    "nkb send: the focus is a terminal, so it was not cleared and nothing was sent."
+                ),
             };
             ExitCode::InsertFailed
         }
@@ -791,8 +800,11 @@ fn send(args: &[String]) -> ExitCode {
                 ClearingOutcome::Done => {
                     let _ = writeln!(err, "nkb send: the line was cleared before this happened.");
                 }
-                ClearingOutcome::Skipped => {
+                ClearingOutcome::Skipped(SkipReason::Unconfirmed) => {
                     let _ = writeln!(err, "{CLEARING_SKIPPED}");
+                }
+                ClearingOutcome::Skipped(SkipReason::Terminal) => {
+                    let _ = writeln!(err, "{CLEARING_SKIPPED_IN_TERMINAL}");
                 }
                 ClearingOutcome::NotAsked => {}
             }
@@ -888,6 +900,15 @@ const NO_TEXT_FIELD: &str = "nkb send: the system reports the keyboard focus out
 /// they emptied a whole row. So the value went on top of whatever was there,
 /// and the command says that rather than let `--clear` read as done.
 const CLEARING_SKIPPED: &str = "nkb send: not cleared first - the system does not report this focus as a text field, and the clearing keys could reach beyond one. The value went in on top of what was there.";
+
+/// What `nkb send --clear` says when the focus is a terminal (`OBS-141`).
+///
+/// A terminal answers the same with a prompt and with a full-screen program
+/// running in it, and the clearing keys there go to that program - a file
+/// manager may select to the last file and delete. The system does report a
+/// text field here, so the sentence above would be false, and this one names
+/// the terminal instead.
+const CLEARING_SKIPPED_IN_TERMINAL: &str = "nkb send: not cleared first - this is a terminal, where the clearing keys go to the program running in it and could act beyond the line. The value went in on top of what was there.";
 
 /// Counts down on standard error so the person can put the focus where they mean.
 fn count_down(seconds: u64) {

@@ -223,6 +223,9 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::ClearingSkipped => {
             "Not cleared first: the system does not report this focus as a text field, and the clearing keys could reach beyond one. The value went in on top of what was there."
         }
+        Message::ClearingSkippedInTerminal => {
+            "Not cleared first: this is a terminal, where the clearing keys go to the program running in it and could act beyond the line. The value went in on top of what was there."
+        }
         Message::ClipboardBusy => {
             "Another application is holding the clipboard, so the value was not placed on it. Press the shortcut again in a moment."
         }
@@ -286,6 +289,7 @@ pub fn message(message: &Message, pack: &str) -> String {
         | Message::HigherPrivileges
         | Message::NoTextField
         | Message::ClearingSkipped
+        | Message::ClearingSkippedInTerminal
         | Message::ClipboardBusy
         | Message::NoTarget
         | Message::NoPack
@@ -879,6 +883,7 @@ mod tests {
             Message::HigherPrivileges,
             Message::NoTextField,
             Message::ClearingSkipped,
+            Message::ClearingSkippedInTerminal,
             Message::ClipboardBusy,
             Message::ClipboardFailed {
                 detail: "the display went away".to_owned(),
@@ -1018,6 +1023,7 @@ mod tests {
             Message::HigherPrivileges => 19,
             Message::NoTextField => 20,
             Message::ClearingSkipped => 21,
+            Message::ClearingSkippedInTerminal => 22,
             Message::NoTarget => 1,
             Message::Interrupted { .. } => 2,
             Message::EndOfPack { .. } => 3,
@@ -1035,7 +1041,7 @@ mod tests {
         }
     }
 
-    const SLOTS: usize = 22;
+    const SLOTS: usize = 23;
 
     #[test]
     fn every_message_variant_is_listed_here() {

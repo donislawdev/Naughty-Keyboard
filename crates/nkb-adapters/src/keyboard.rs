@@ -132,6 +132,9 @@ fn clearing_verdict(focus: nkb_sys::field::FocusedInput) -> Result<(), Keystroke
         nkb_sys::field::FocusedInput::TextField => Ok(()),
         nkb_sys::field::FocusedInput::NotTextField => Err(KeystrokeError::NoTextField),
         nkb_sys::field::FocusedInput::Unknown => Err(KeystrokeError::FieldUnconfirmed),
+        // `OBS-141`: a terminal is a field for the value, and never for the
+        // recipe - what the keys do there is the program's choice, not ours.
+        nkb_sys::field::FocusedInput::Terminal => Err(KeystrokeError::InTerminal),
     }
 }
 
@@ -234,6 +237,11 @@ mod tests {
         assert_eq!(
             clearing_verdict(FocusedInput::Unknown),
             Err(KeystrokeError::FieldUnconfirmed)
+        );
+        // `OBS-141`: the same reading with a prompt and with a file manager in it.
+        assert_eq!(
+            clearing_verdict(FocusedInput::Terminal),
+            Err(KeystrokeError::InTerminal)
         );
     }
 

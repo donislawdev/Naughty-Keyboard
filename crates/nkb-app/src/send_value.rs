@@ -68,10 +68,21 @@ pub enum ClearingOutcome {
     NotAsked,
     /// The clearing keys went out before the value.
     Done,
-    /// Clearing was asked for and left out, with no key pressed, because the
-    /// focus could not be confirmed as a text field (`D76`). The value went on
-    /// top of what the field held.
-    Skipped,
+    /// Clearing was asked for and left out, with no key pressed. The value went
+    /// on top of what the field held, and the reason says why.
+    Skipped(SkipReason),
+}
+
+/// Why clearing was left out. Two reasons, because the tester is told a
+/// different true sentence for each: one focus the system does not describe as
+/// a field, the other it does, and the tool still keeps the keys out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SkipReason {
+    /// The focus could not be confirmed as a text field (`D76`).
+    Unconfirmed,
+    /// The focus is a terminal, where the clearing keys go to the program
+    /// running in it (`OBS-141`).
+    Terminal,
 }
 
 /// What to send: which value of which pack, and whether to clear first.
@@ -124,8 +135,9 @@ pub enum SendOutcome {
     /// There is no delivery route on this system.
     RouteUnavailable { reason: String },
     /// Clearing was asked for and did not go through. The value was NOT sent.
-    /// Never [`KeystrokeError::FieldUnconfirmed`]: that one is a skip, and the
-    /// value goes on ([`ClearingOutcome::Skipped`]).
+    /// Never [`KeystrokeError::FieldUnconfirmed`] or
+    /// [`KeystrokeError::InTerminal`]: those are skips, and the value goes on
+    /// ([`ClearingOutcome::Skipped`]).
     NotCleared { error: KeystrokeError },
     /// There is a route, and the value did not arrive, or not all of it.
     NotDelivered {
@@ -265,7 +277,10 @@ pub fn deliver_value(
         Clearing::Keep => ClearingOutcome::NotAsked,
         Clearing::Line => match keys.send_keystrokes(&line_clearing_recipe()) {
             Ok(()) => ClearingOutcome::Done,
-            Err(KeystrokeError::FieldUnconfirmed) => ClearingOutcome::Skipped,
+            Err(KeystrokeError::FieldUnconfirmed) => {
+                ClearingOutcome::Skipped(SkipReason::Unconfirmed)
+            }
+            Err(KeystrokeError::InTerminal) => ClearingOutcome::Skipped(SkipReason::Terminal),
             Err(error) => return SendOutcome::NotCleared { error },
         },
     };
@@ -582,9 +597,38 @@ mod tests {
         let SendOutcome::Sent { clearing, .. } = outcome else {
             panic!("an unconfirmed field is a skip, not a refusal, got {outcome:?}");
         };
-        assert_eq!(clearing, ClearingOutcome::Skipped);
+        assert_eq!(clearing, ClearingOutcome::Skipped(SkipReason::Unconfirmed));
         // The spy logs the request it then refuses, so the recipe appears once,
         // and the value follows it - the door, not this layer, pressed nothing.
+        assert_eq!(
+            log.borrow().as_slice(),
+            ["keys:Home,Shift+End,Delete", "text:ab"]
+        );
+    }
+
+    #[test]
+    fn a_terminal_gets_the_value_uncleared_and_the_outcome_names_the_terminal() {
+        // `OBS-141`: the door pressed nothing, because what the clearing keys do
+        // in a terminal is the choice of the program running in it. The value
+        // goes, and the reason is the terminal, not an unconfirmed field - the
+        // tester is told a different sentence for each.
+        let log = log();
+        let spy = Spy::ready(&log);
+        let keys = KeySpy {
+            fail_with: Some(KeystrokeError::InTerminal),
+            log: Rc::clone(&log),
+        };
+        let outcome = send_value(
+            &Shelf,
+            &Scripted::two(),
+            &spy,
+            &keys,
+            &request(1, Clearing::Line),
+        );
+        let SendOutcome::Sent { clearing, .. } = outcome else {
+            panic!("a terminal is a skip, not a refusal, got {outcome:?}");
+        };
+        assert_eq!(clearing, ClearingOutcome::Skipped(SkipReason::Terminal));
         assert_eq!(
             log.borrow().as_slice(),
             ["keys:Home,Shift+End,Delete", "text:ab"]

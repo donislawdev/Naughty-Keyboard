@@ -13,12 +13,12 @@
 //! # What this checks, and what it cannot
 //!
 //! - every `const PROPERTY_...: i32 = N` in `crates/nkb-sys/src` - the ids the
-//!   COM call is handed - is exactly the six below, name and number,
+//!   COM call is handed - is exactly the seven below, name and number,
 //! - every `const SLOT_...: usize = N` - the COM methods called - is exactly the
 //!   five below. A pattern object (the way to a value or a text range) needs a
 //!   method that is not on the list,
 //! - no number between 30000 and 30199 - the property id range - appears in
-//!   code outside the test modules unless it is one of the six, so a raw id
+//!   code outside the test modules unless it is one of the seven, so a raw id
 //!   handed to the call is caught too,
 //! - it drops everything from the first `#[cfg(test)]` line of a file, where
 //!   the platform's own names are pinned, and strips `//` comments.
@@ -34,6 +34,12 @@ use std::path::Path;
 const PROPERTIES: &[(&str, u32)] = &[
     ("PROCESS_ID", 30002),
     ("CONTROL_TYPE", 30003),
+    // The class name, added 2026-09-24 (`OBS-141`), and the one entry that is a
+    // string: whoever wrote the control named it, the tester's typing never
+    // does. field.rs compares it with its list of terminal classes where it is
+    // read and keeps only the answer - a terminal takes the value, never the
+    // clearing recipe, and nothing else tells it from a text field.
+    ("CLASS_NAME", 30012),
     // Whether the element is a window of its own - compared with zero, for the
     // second look at a browser that is still building its tree (field.rs).
     ("NATIVE_WINDOW_HANDLE", 30020),
@@ -162,6 +168,7 @@ fn the_scanner_sees_what_it_is_meant_to_forbid() {
     // A guard nobody has seen fail is indistinguishable from a broken one.
     let clean = "    pub(super) const PROPERTY_PROCESS_ID: i32 = 30002;\n\
                  pub(super) const PROPERTY_CONTROL_TYPE: i32 = 30003;\n\
+                 pub(super) const PROPERTY_CLASS_NAME: i32 = 30012;\n\
                  pub(super) const PROPERTY_NATIVE_WINDOW_HANDLE: i32 = 30020;\n\
                  pub(super) const PROPERTY_IS_TEXT_PATTERN_AVAILABLE: i32 = 30040;\n\
                  pub(super) const PROPERTY_IS_VALUE_PATTERN_AVAILABLE: i32 = 30043;\n\

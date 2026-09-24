@@ -81,7 +81,7 @@ use crate::ports::{
     Availability, Clipboard, ClipboardError, DeliveryError, History, KeystrokeError,
     KeystrokeSender, PackFormat, PackSource, ReportText, SourceError, TargetRef, ValueDelivery,
 };
-use crate::send_value::{Clearing, ClearingOutcome, SendOutcome, deliver_value};
+use crate::send_value::{Clearing, ClearingOutcome, SendOutcome, SkipReason, deliver_value};
 
 /// Everything an action may reach outside the sequence, one port each.
 ///
@@ -267,6 +267,12 @@ pub enum Message {
     /// reach beyond it there (`D76`). Said on every such send: the value sits
     /// on top of whatever the field held, and the tester has to know that.
     ClearingSkipped,
+    /// The value went in, but the field was NOT cleared first, because the
+    /// focus is a terminal: the clearing keys would go to the program running
+    /// in it, which may act beyond the line (`OBS-141`). A separate sentence
+    /// from [`Message::ClearingSkipped`], because here the system DOES report a
+    /// field - saying it does not would be false.
+    ClearingSkippedInTerminal,
     /// Clipboard mode is on because the tester asked for it: values go to the
     /// clipboard, replacing what was there. Once, at the start.
     ClipboardMode,
@@ -749,11 +755,16 @@ fn classify(
                 preview,
                 shape,
             }),
-            // `D76`: the value landed, uncleared, and the tester is told why.
-            if clearing == ClearingOutcome::Skipped {
-                vec![Message::ClearingSkipped]
-            } else {
-                Vec::new()
+            // `D76`, `OBS-141`: the value landed, uncleared, and the tester is
+            // told why.
+            match clearing {
+                ClearingOutcome::Skipped(SkipReason::Unconfirmed) => {
+                    vec![Message::ClearingSkipped]
+                }
+                ClearingOutcome::Skipped(SkipReason::Terminal) => {
+                    vec![Message::ClearingSkippedInTerminal]
+                }
+                ClearingOutcome::Done | ClearingOutcome::NotAsked => Vec::new(),
             },
         ),
         // No route at all: the one outcome that moves to the clipboard, and the
@@ -896,7 +907,9 @@ fn after_clearing(error: KeystrokeError) -> (Event, Message) {
         // `deliver_value` treats this one as a skip and sends the value, so it
         // does not arrive here. If that ever stops, nothing was pressed and
         // nothing was sent - the careful sentence, which asks to check the field.
-        KeystrokeError::FieldUnconfirmed => (Event::InsertionRefused, Message::ClearingFailed),
+        KeystrokeError::FieldUnconfirmed | KeystrokeError::InTerminal => {
+            (Event::InsertionRefused, Message::ClearingFailed)
+        }
     }
 }
 
@@ -1641,6 +1654,26 @@ mod tests {
             !sent.cleared,
             "the marker must not say the field was cleared"
         );
+        assert_eq!(advance.counter(), Some((1, 3)));
+    }
+
+    // ---- `OBS-141`: a terminal ---------------------------------------------------
+
+    #[test]
+    fn a_terminal_gets_the_value_uncleared_the_counter_moves_and_the_terminal_is_named() {
+        // The door pressed nothing: in a terminal the clearing keys go to the
+        // program running in it. The value lands, and the sentence names the
+        // terminal - the unconfirmed-field one would say the system does not
+        // report a field, which here it does.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_keys(FakeKeys::failing(KeystrokeError::InTerminal));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+
+        assert_eq!(*kit.direct.handed.borrow(), vec!["alpha"]);
+        assert!(kit.by_clipboard.handed.borrow().is_empty());
+        assert_eq!(outcome.messages, vec![Message::ClearingSkippedInTerminal]);
+        let sent = outcome.sent.expect("the value went in");
+        assert!(!sent.cleared);
         assert_eq!(advance.counter(), Some((1, 3)));
     }
 

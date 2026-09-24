@@ -50,7 +50,23 @@
 //! `Pane` for their fields, so nobody else waits. That `Pane` stays `Unknown`
 //! for the same reason: a waking browser gives it for a text input too.
 //!
-//! # Three answers, and the third is never folded into the second
+//! # A terminal is a field whose keys belong to someone else
+//!
+//! Measured 2026-09-24 (`OBS-141`), nothing pressed: a terminal answers the
+//! same with a shell prompt waiting and with a full-screen program running in
+//! it - Windows Terminal `Text` with the Text pattern, the VS Code terminal
+//! (xterm.js) an `Edit` that takes typing. What `Home`, `Shift+End` and
+//! `Delete` do there is decided by the program inside, which UI Automation does
+//! not show: a prompt edits its line, a file manager may select to the last
+//! file and delete. So a terminal is its own answer, [`FocusedInput::Terminal`]:
+//! the value goes as before, the clearing recipe never. It is recognised by the
+//! class name of the focused element, from a closed list of classes measured
+//! as terminals ([`TERMINAL_CLASSES`]). The classic console gives its element
+//! no class name, and its element comes from another process than its window
+//! (`OBS-139`), so it stays `Unknown` - and its row, `Document` with the Text
+//! pattern alone, is `Unknown` too, never a field.
+//!
+//! # Four answers, and the unknown is never folded into another
 //!
 //! [`FocusedInput::NotTextField`] is claimed only for control types that take no
 //! text by definition, and it is the only answer that stops a send. Everything
@@ -62,11 +78,14 @@
 //!
 //! # What this reads, and what it does not
 //!
-//! Six properties of ONE element, the one holding the focus: its process, its
+//! Seven properties of ONE element, the one holding the focus: its process, its
 //! control type, whether it has the Value pattern and whether that is
-//! read-only, whether it has the Text pattern, and whether it is a window of
-//! its own (only compared with zero, for the second look above). Never its
-//! name, never its value, never its text, never any other element.
+//! read-only, whether it has the Text pattern, whether it is a window of its
+//! own (only compared with zero, for the second look above), and its class
+//! name - compared with [`TERMINAL_CLASSES`] where it is read and dropped
+//! there, so nothing past that comparison ever holds it. A class name is set
+//! by whoever wrote the control, not by what the tester typed. Never its name,
+//! never its value, never its text, never any other element.
 //! `tests/field_reads_only_kinds.rs` holds the list and goes red when a
 //! property is added to it - the promise "does not read the contents of
 //! windows" (untouchable rule 17) rests on it.
@@ -86,8 +105,12 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FocusedInput {
     /// A control that takes typed text: an edit box, an editable document, a
-    /// `contenteditable` region, a console.
+    /// `contenteditable` region.
     TextField,
+    /// A terminal: it takes typed text, but what its keys do belongs to the
+    /// program running in it, which UI Automation does not show. A value is
+    /// sent there, the clearing recipe never (`OBS-141`).
+    Terminal,
     /// A control that takes no text by definition - a button, a link, a list
     /// item, a page that is not editable. Keys sent there act on the control.
     NotTextField,
@@ -144,6 +167,35 @@ struct Facts {
     /// Whether the element is a native window of its own. Chromium's elements
     /// and Slint's are not, classic controls are.
     windowed: bool,
+    /// Whether the element's class name is one of [`TERMINAL_CLASSES`]. The
+    /// name itself is not kept.
+    terminal: bool,
+}
+
+/// Class names of the focused element that mean a terminal, each measured
+/// (`tools/sonda-czyszczenie/sonda-czyszczenie.ps1`, scenes `terminal` and
+/// `vscode`, 2026-09-24).
+///
+/// - `TermControl` - Windows Terminal, a `Text` element with the Text pattern,
+/// - `xterm-helper-textarea` - the hidden text area through which xterm.js
+///   takes typing: the VS Code terminal, and by the way xterm.js is built
+///   every terminal made with it (not measured beyond VS Code).
+///
+/// Compared whole and with case, so a class that merely contains one of these
+/// is not a terminal. A class missing here makes a terminal answer as it did
+/// before this list - the only cost of a gap is a recipe pressed where it
+/// should not be, which is why a new entry needs a measurement, not a guess.
+pub const TERMINAL_CLASSES: &[&str] = &["TermControl", "xterm-helper-textarea"];
+
+/// Whether a class name, as the UTF-16 units UI Automation hands over, is one
+/// of [`TERMINAL_CLASSES`]. Compared unit by unit, so the name is never turned
+/// into a string that could outlive the comparison. Called by the Windows
+/// reading only - elsewhere there is no focus to ask about - and by the tests.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn is_terminal_class(units: &[u16]) -> bool {
+    TERMINAL_CLASSES
+        .iter()
+        .any(|name| name.encode_utf16().eq(units.iter().copied()))
 }
 
 /// Whether an answer looks like a provider that has not built its tree yet:
@@ -197,6 +249,11 @@ mod control {
     pub const TREE: i32 = 50023;
     pub const TREE_ITEM: i32 = 50024;
     pub const GROUP: i32 = 50026;
+    // Named for the tests: Windows Terminal answers with it, and the rule
+    // decides a terminal by its class, never by this type - static text
+    // answers `Text` too.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub const TEXT: i32 = 50020;
     pub const THUMB: i32 = 50027;
     pub const DOCUMENT: i32 = 50030;
     pub const SPLIT_BUTTON: i32 = 50031;
@@ -253,16 +310,25 @@ const NOT_TEXT: &[i32] = &[
 
 /// The decision, apart from the reading, so it can be checked on every system.
 fn classify(facts: &Facts) -> FocusedInput {
+    // Before the type: the VS Code terminal is an `Edit`, and an `Edit` is a
+    // field everywhere else.
+    if facts.terminal {
+        return FocusedInput::Terminal;
+    }
     match facts.control_type {
         control::EDIT => FocusedInput::TextField,
-        // A rich edit box is a writable `Document`, a console one with the Text
-        // pattern and no Value pattern - both take typing. A web page that is
-        // not editable is a READ-ONLY `Document`, and there a letter can be a
-        // command of the application under test.
+        // A rich edit box is a writable `Document`. A web page that is not
+        // editable is a READ-ONLY `Document`, and there a letter can be a
+        // command of the application under test. A `Document` with the Text
+        // pattern and no Value pattern is how the classic console answers - and
+        // the console answers so under a full-screen program as well (`OBS-141`),
+        // so it is not claimed as a field. Its element comes from another
+        // process than its window, so today it never gets this far (`OBS-139`),
+        // and this arm keeps that from turning into clearing if it ever does.
         control::DOCUMENT => match (facts.value, facts.text) {
             (Some(true), _) => FocusedInput::NotTextField,
-            (Some(false), _) | (None, true) => FocusedInput::TextField,
-            (None, false) => FocusedInput::Unknown,
+            (Some(false), _) => FocusedInput::TextField,
+            (None, _) => FocusedInput::Unknown,
         },
         // `contenteditable` in Chromium. A group without text is a container
         // of something else, and the module does not know of what.
@@ -278,17 +344,17 @@ fn classify(facts: &Facts) -> FocusedInput {
 
 #[cfg(windows)]
 mod platform {
-    use super::{Facts, TIMEOUT_MS};
+    use super::{Facts, TIMEOUT_MS, is_terminal_class};
     use crate::WindowRef;
     use core::ffi::c_void;
     use core::ptr::{null, null_mut};
     use std::cell::RefCell;
-    use windows_sys::Win32::Foundation::{HWND, RPC_E_CHANGED_MODE};
+    use windows_sys::Win32::Foundation::{HWND, RPC_E_CHANGED_MODE, SysStringLen};
     use windows_sys::Win32::System::Com::{
         CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
         CoUninitialize,
     };
-    use windows_sys::Win32::System::Variant::{VARIANT, VT_BOOL, VT_I4, VariantClear};
+    use windows_sys::Win32::System::Variant::{VARIANT, VT_BOOL, VT_BSTR, VT_I4, VariantClear};
     use windows_sys::Win32::UI::Accessibility::CUIAutomation8;
     use windows_sys::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
     use windows_sys::core::{GUID, HRESULT};
@@ -296,10 +362,11 @@ mod platform {
     /// `IUIAutomation2`, which adds the two timeouts to `IUIAutomation`.
     const IID_IUIAUTOMATION2: GUID = GUID::from_u128(0x34723aff_0c9d_49d0_9896_7ab52df8cd8a);
 
-    // The six properties read, and the only ones - see the module text and
+    // The seven properties read, and the only ones - see the module text and
     // `tests/field_reads_only_kinds.rs`, which holds this list.
     pub(super) const PROPERTY_PROCESS_ID: i32 = 30002;
     pub(super) const PROPERTY_CONTROL_TYPE: i32 = 30003;
+    pub(super) const PROPERTY_CLASS_NAME: i32 = 30012;
     pub(super) const PROPERTY_NATIVE_WINDOW_HANDLE: i32 = 30020;
     pub(super) const PROPERTY_IS_TEXT_PATTERN_AVAILABLE: i32 = 30040;
     pub(super) const PROPERTY_IS_VALUE_PATTERN_AVAILABLE: i32 = 30043;
@@ -430,13 +497,39 @@ mod platform {
             let text = bool_property(&element, PROPERTY_IS_TEXT_PATTERN_AVAILABLE)?;
             // Compared with zero and dropped - the handle itself is not kept.
             let windowed = int_property(&element, PROPERTY_NATIVE_WINDOW_HANDLE)? != 0;
+            let terminal = class_is_terminal(&element);
             Some(Facts {
                 control_type,
                 value,
                 text,
                 windowed,
+                terminal,
             })
         }
+    }
+
+    /// Whether the element's class name is a terminal's. Read, compared and
+    /// released here - the name goes nowhere else. A class that cannot be read
+    /// is not a terminal: the element is then decided by its type, as it was
+    /// before classes were asked.
+    fn class_is_terminal(element: &Com) -> bool {
+        let Some(value) = property(element, PROPERTY_CLASS_NAME) else {
+            return false;
+        };
+        let inner = unsafe { &value.0.Anonymous.Anonymous };
+        if inner.vt != VT_BSTR {
+            return false;
+        }
+        let name = unsafe { inner.Anonymous.bstrVal };
+        if name.is_null() {
+            return false;
+        }
+        // The length the string says it has, not a search for a zero: a BSTR
+        // may carry one inside. The units live as long as `value`, which is
+        // cleared when this function returns.
+        let length = unsafe { SysStringLen(name) } as usize;
+        let units = unsafe { core::slice::from_raw_parts(name, length) };
+        is_terminal_class(units)
     }
 
     /// A `VARIANT` this module received, cleared on every path out - a
@@ -522,6 +615,7 @@ mod tests {
             value,
             text,
             windowed: false,
+            terminal: false,
         }
     }
 
@@ -532,6 +626,17 @@ mod tests {
         }
     }
 
+    fn of_a_terminal_class(facts: Facts) -> Facts {
+        Facts {
+            terminal: true,
+            ..facts
+        }
+    }
+
+    fn units(text: &str) -> Vec<u16> {
+        text.encode_utf16().collect()
+    }
+
     const RW: Option<bool> = Some(false);
     const RO: Option<bool> = Some(true);
 
@@ -540,7 +645,7 @@ mod tests {
     /// rule that turns any of these around is a change to what was MEASURED.
     #[test]
     fn every_measured_focus_is_answered_as_it_was() {
-        use FocusedInput::{NotTextField, TextField, Unknown};
+        use FocusedInput::{NotTextField, Terminal, TextField, Unknown};
         let rows: &[(&str, Facts, FocusedInput)] = &[
             // Classic Win32 controls, through WinForms.
             ("edit box", facts(control::EDIT, RW, true), TextField),
@@ -634,16 +739,78 @@ mod tests {
                 facts(control::DOCUMENT, RO, true),
                 NotTextField,
             ),
-            // The console, and a File Explorer list of files.
-            ("console", facts(control::DOCUMENT, None, true), TextField),
+            // The console, and a File Explorer list of files. The console row was
+            // `TextField` until 2026-09-24: the same reading comes with a
+            // full-screen program running in it (`OBS-141`).
+            ("console", facts(control::DOCUMENT, None, true), Unknown),
             (
                 "file explorer list",
                 facts(control::LIST_ITEM, RW, false),
                 NotTextField,
             ),
+            // `OBS-141`, 2026-09-24: terminals with a prompt and with `less`
+            // running in them - the same reading both times, so the same answer.
+            (
+                "windows terminal, prompt",
+                of_a_terminal_class(facts(control::TEXT, None, true)),
+                Terminal,
+            ),
+            (
+                "windows terminal, less",
+                of_a_terminal_class(facts(control::TEXT, None, true)),
+                Terminal,
+            ),
+            (
+                "vs code terminal, prompt",
+                of_a_terminal_class(facts(control::EDIT, RW, true)),
+                Terminal,
+            ),
+            (
+                "vs code terminal, less",
+                of_a_terminal_class(facts(control::EDIT, RW, true)),
+                Terminal,
+            ),
+            (
+                "console, less",
+                facts(control::DOCUMENT, None, true),
+                Unknown,
+            ),
         ];
         for (what, reading, expected) in rows {
             assert_eq!(classify(reading), *expected, "{what}: {reading:?}");
+        }
+    }
+
+    #[test]
+    fn a_terminal_class_is_matched_whole_and_with_case() {
+        for measured in TERMINAL_CLASSES {
+            assert!(is_terminal_class(&units(measured)), "{measured}");
+        }
+        for not_one in [
+            "",
+            "termcontrol",
+            "TermControl2",
+            "xterm-helper-textarea ",
+            "helper-textarea",
+            // The VS Code EDITOR, which is not a terminal - measured 2026-09-24,
+            // when the focus left the terminal for it during the probe.
+            "native-edit-context",
+            "Edit",
+        ] {
+            assert!(!is_terminal_class(&units(not_one)), "{not_one:?}");
+        }
+    }
+
+    #[test]
+    fn a_terminal_is_a_terminal_whatever_type_it_reports() {
+        // The xterm.js text area is an `Edit`, and an `Edit` is a field
+        // everywhere else: the class must be asked before the type.
+        for control_type in [control::EDIT, control::TEXT, control::DOCUMENT] {
+            assert_eq!(
+                classify(&of_a_terminal_class(facts(control_type, RW, true))),
+                FocusedInput::Terminal,
+                "control type {control_type}"
+            );
         }
     }
 
@@ -834,6 +1001,7 @@ mod tests {
             (control::TREE, uia::UIA_TreeControlTypeId),
             (control::TREE_ITEM, uia::UIA_TreeItemControlTypeId),
             (control::GROUP, uia::UIA_GroupControlTypeId),
+            (control::TEXT, uia::UIA_TextControlTypeId),
             (control::THUMB, uia::UIA_ThumbControlTypeId),
             (control::DOCUMENT, uia::UIA_DocumentControlTypeId),
             (control::SPLIT_BUTTON, uia::UIA_SplitButtonControlTypeId),
@@ -852,6 +1020,7 @@ mod tests {
                 platform::PROPERTY_CONTROL_TYPE,
                 uia::UIA_ControlTypePropertyId,
             ),
+            (platform::PROPERTY_CLASS_NAME, uia::UIA_ClassNamePropertyId),
             (
                 platform::PROPERTY_NATIVE_WINDOW_HANDLE,
                 uia::UIA_NativeWindowHandlePropertyId,
@@ -884,7 +1053,7 @@ mod tests {
     #[test]
     fn the_client_answers_where_the_route_exists() {
         // The whole COM path on this machine, against whatever is in front:
-        // any of the three answers is fine, a crash or a hang is not. Asked
+        // any of the four answers is fine, a crash or a hang is not. Asked
         // twice, so the kept client is exercised as well as the new one.
         if !crate::can_send() {
             return;

@@ -226,6 +226,13 @@ pub enum KeystrokeError {
     /// measured in a spreadsheet, the recipe emptied a whole row (`D76`). Not a
     /// refusal of the value - the caller sends it without clearing and says so.
     FieldUnconfirmed,
+    /// The focus is a terminal, so no key was pressed. A terminal answers the
+    /// same with a prompt and with a full-screen program running in it, and
+    /// what `Home`, `Shift+End`, `Delete` do there is that program's choice -
+    /// a file manager may select to the last file and delete (`OBS-141`). Not
+    /// a refusal of the value - the caller sends it without clearing and says
+    /// why.
+    InTerminal,
 }
 
 impl fmt::Display for KeystrokeError {
@@ -241,6 +248,7 @@ impl fmt::Display for KeystrokeError {
             Self::HigherPrivileges => f.write_str("higher-privileges"),
             Self::NoTextField => f.write_str("no-text-field"),
             Self::FieldUnconfirmed => f.write_str("field-unconfirmed"),
+            Self::InTerminal => f.write_str("in-terminal"),
         }
     }
 }
