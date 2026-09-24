@@ -137,6 +137,36 @@ pub fn render(
     Rendered { data, notes }
 }
 
+/// The characters a spreadsheet reads as the start of a formula when a cell
+/// begins with one of them.
+const FORMULA_STARTS: [char; 4] = ['=', '+', '-', '@'];
+
+/// The escaped form of a value, with a first character a spreadsheet would run
+/// as a formula written as an escape instead.
+///
+/// `OBS-142`, `D81`: until 2026-09-24 `=1+1`, `+48123456789`, `-1+1` and `@name`
+/// from `export-breakers` left this command as bare cells, and a spreadsheet
+/// opening the file computed them - the exact failure whose `expect` in that
+/// pack reads "escaped on export so the spreadsheet shows the text as entered".
+/// Nothing is lost: the escaped form is read back by the same rule as a pack
+/// file, so the escape of `=` decodes to `=`. Quoting the cell is not relied on:
+/// whether a spreadsheet looks for a formula before or after it removes the
+/// quotes was not measured, and an escape does not depend on the answer.
+///
+/// Only the escaped form. `--raw` is literal because somebody asked for it, and
+/// its note says what that costs. Base64 cannot start with any of these: `+`
+/// and `/` would need a first byte from 0xF8 up, which UTF-8 never has, `=`
+/// only pads the end, and `-` and `@` are not in the alphabet.
+fn not_a_formula(escaped: &str) -> String {
+    let mut rest = escaped.chars();
+    match rest.next() {
+        Some(first) if FORMULA_STARTS.contains(&first) => {
+            format!("{}u{:04X}{}", '\\', u32::from(first), rest.as_str())
+        }
+        _ => escaped.to_owned(),
+    }
+}
+
 /// The text of one value in the requested form.
 fn body_of(value: &EmittedValue, form: Form, base64: bool) -> String {
     let text = match form {
@@ -209,7 +239,8 @@ fn as_csv(emission: &Emission, form: Form, base64: bool, notes: &mut Vec<String>
         notes.push(
             "--raw prints values literally, so a value containing a comma, a quotation mark \
              or a line break is quoted rather than escaped - the file stays valid CSV and the \
-             cells hold characters no editor will show you"
+             cells hold characters no editor will show you. A spreadsheet opening it also runs \
+             every value that starts with =, +, - or @ as a formula"
                 .to_owned(),
         );
     }
@@ -217,12 +248,17 @@ fn as_csv(emission: &Emission, form: Form, base64: bool, notes: &mut Vec<String>
     let mut out = String::from(CSV_HEADER);
     out.push('\n');
     for value in &emission.values {
+        let body = body_of(value, form, base64);
         let row = [
             value.pack.clone(),
             value.reference.clone(),
             value.id.clone(),
             value.name.clone(),
-            body_of(value, form, base64),
+            if form == Form::Escaped && !base64 {
+                not_a_formula(&body)
+            } else {
+                body
+            },
             value.breaks.clone().unwrap_or_default(),
             value.expect.clone().unwrap_or_default(),
             value.fields.join(" "),
@@ -419,6 +455,61 @@ mod tests {
             rendered.data.contains("\"a,\"\"b\"\"\""),
             "a comma and a quotation mark must be quoted and doubled: {}",
             rendered.data
+        );
+    }
+
+    #[test]
+    fn csv_escapes_a_first_character_a_spreadsheet_would_run_as_a_formula() {
+        // `OBS-142`: the four from `export-breakers`, plus the neighbours that
+        // must stay as they are. Built with a char, never written as an escape
+        // in this source - an editor turns that sequence into the character.
+        let bs = '\\';
+        let rendered = render(
+            &emission(vec![
+                value("eq", "=1+1", "=1+1"),
+                value("plus", "+48123456789", "+48123456789"),
+                value("minus", "-1+1", "-1+1"),
+                value("at", "@name", "@name"),
+                value("inside", "a=b", "a=b"),
+                value("escaped", " x", &format!("{bs}u0020x")),
+            ]),
+            EmitFormat::Csv,
+            None,
+            false,
+        );
+        let cells: Vec<&str> = rendered
+            .data
+            .lines()
+            .skip(1)
+            .map(|row| row.split(',').nth(4).unwrap_or_default())
+            .collect();
+        assert_eq!(
+            cells,
+            vec![
+                format!("{bs}u003D1+1"),
+                format!("{bs}u002B48123456789"),
+                format!("{bs}u002D1+1"),
+                format!("{bs}u0040name"),
+                "a=b".to_owned(),
+                format!("{bs}u0020x"),
+            ],
+            "{}",
+            rendered.data
+        );
+
+        // Asked for literally, the value stays literal - and the note says what
+        // a spreadsheet will do with it.
+        let raw = render(
+            &emission(vec![value("eq", "=1+1", "=1+1")]),
+            EmitFormat::Csv,
+            Some(Form::Literal),
+            false,
+        );
+        assert!(raw.data.contains(",=1+1,"), "{}", raw.data);
+        assert!(
+            raw.notes.iter().any(|n| n.contains("as a formula")),
+            "{:?}",
+            raw.notes
         );
     }
 
