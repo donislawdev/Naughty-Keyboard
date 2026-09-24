@@ -1,0 +1,62 @@
+format = 1
+
+[pack]
+id          = "locale-pl"
+name        = "Polish locale"
+description = "Polish identifiers, formats and characters that global commercial products do not handle."
+version     = "1.0"
+updated     = 2026-09-25
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["locale", "checksum", "identifiers"]
+fields      = ["id-number", "name", "address", "postal-code"]
+risk        = "normal"
+
+[[values]]
+id     = "pesel-valid"
+name   = "PESEL with a valid checksum"
+value  = "99023012343"
+breaks = "A national identifier that passes the checksum but encodes an impossible birth date - accepted by length checks, rejected by real validation."
+expect = "Accepted or rejected according to which validation the field claims to do, consistently."
+since  = "1.0"
+
+[[values]]
+id     = "pesel-bad-checksum"
+name   = "PESEL with a wrong checksum"
+value  = "99023012344"
+breaks = "Differs from the valid one by a single digit; a field checking only the length cannot tell them apart."
+expect = "Rejected with a message that says the checksum failed, not that the length is wrong."
+since  = "1.0"
+
+[[values]]
+id     = "diacritics-full"
+name   = "Every Polish diacritic"
+value  = "\u0104\u0106\u0118\u0141\u0143\u00D3\u015A\u0179\u017B \u0105\u0107\u0119\u0142\u0144\u00F3\u015B\u017A\u017C"
+breaks = "Encoding narrower than the full character set replaces these with question marks, and the name is corrupted on save."
+expect = "Stored and returned unchanged in every layer, including exports and printouts."
+since  = "1.0"
+
+[[values]]
+id     = "surname-hyphenated"
+name   = "Double-barrelled surname"
+value  = "Kowalska-Nowak"
+breaks = "Double surnames break name splitting, sorting and the assumption that a surname is one word."
+expect = "Stored as one surname; sorting and search treat it as written."
+since  = "1.0"
+
+[[values]]
+id     = "postal-code"
+name   = "Polish postal code"
+value  = "00-950"
+breaks = "The national postal code format; a field expecting five digits without a separator rejects every real code."
+expect = "The expected format shown next to the field, and the separator handled either way."
+since  = "1.0"
+
+[[values]]
+id     = "street-with-slash"
+name   = "Street with a building and flat number"
+value  = "Marsza\u0142kowska 12/34"
+breaks = "House and flat numbers written with a slash; a field splitting on a slash produces two address lines from one."
+expect = "Stored as one line, and exported without splitting."
+since  = "1.0"

@@ -342,8 +342,9 @@ fn every_character_the_table_promises_leaves_ink() {
 /// the middle of a long value still has to be acknowledged here.
 ///
 /// ⚠️ Eighteen, not the twenty-nine `D52` gives. That number is the whole
-/// catalogue of `catalog-v0.1.md`. Eight of its twenty packs are shipped today,
-/// and the five added on 2026-09-24 reach outside the guarantee nowhere.
+/// catalogue of `catalog-v0.1.md`. Nine of its twenty packs are shipped today,
+/// and the six added on 2026-09-24 and 2026-09-25 reach outside the guarantee
+/// nowhere.
 const SHIPPED_OUTSIDE: [(char, &str); 18] = [
     ('\u{30B9}', "unicode-text/cjk-mixed"),
     ('\u{30C6}', "unicode-text/cjk-mixed"),

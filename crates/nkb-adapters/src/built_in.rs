@@ -62,8 +62,8 @@ pub const BUILT_IN_PACKS: &[(&str, &str)] = &[
         "export-breakers",
         include_str!("../../../packs/export-breakers.toml"),
     ),
-    // `locale-pl` and `injections` come here in the catalogue's order, when
-    // they ship.
+    ("locale-pl", include_str!("../../../packs/locale-pl.toml")),
+    // `injections` comes here in the catalogue's order, when it ships.
     (
         "filenames-paths",
         include_str!("../../../packs/filenames-paths.toml"),
