@@ -22,16 +22,33 @@
 //!   window and NO caret, in a text input and on a button alike - so the reading
 //!   the documents planned (`OBS-42`: attach to the thread, ask `GetFocus`)
 //!   cannot see the case testers meet most often,
-//! - UI Automation tells them apart everywhere except Slint: `Edit` for inputs
-//!   and text areas, `Group` with the Text pattern for `contenteditable`,
-//!   `Button`, `Hyperlink`, `ListItem` (File Explorer too), `ComboBox` for a
-//!   `select`, and a READ-ONLY `Document` for the page itself,
-//! - a Slint window reports its focus on winit's hidden event target: `Pane`,
-//!   while the focus sits in a `TextInput`. That is why `Pane` is `Unknown` and
-//!   must stay so - calling it "not a field" would refuse every Slint
-//!   application, our own test victim included.
+//! - UI Automation tells them apart: `Edit` for inputs and text areas, `Group`
+//!   with the Text pattern for `contenteditable`, `Button`, `Hyperlink`,
+//!   `ListItem` (File Explorer too), `ComboBox` for a `select`, and a READ-ONLY
+//!   `Document` for the page itself.
 //!
 //! The readings are the fixtures of the tests below, row for row.
+//!
+//! ⚠️ Corrected the same day: that probe also recorded Slint as `Pane` and this
+//! text built on it. It was the probe's own doing - `Process.MainWindowHandle`
+//! of a winit application is its hidden `Winit Thread Event Target`, the probe
+//! brought THAT window to the front and the keyboard focus went with it. With
+//! the real window in front, Slint answers `Edit` with both patterns from the
+//! first request (measured twice, `tools/sonda-pole/zimne.ps1`).
+//!
+//! # A provider that is still waking up
+//!
+//! Measured 2026-09-24, four times out of four: a Chromium window nobody has
+//! asked before answers the first requests with a placeholder - `Pane`, no
+//! pattern, no native window - for 180-220 ms while it builds its tree, and
+//! only then `Button` or `Edit`. Taken at its word, that `Pane` is `Unknown`
+//! and the first press in a fresh browser typed into a button
+//! (`tools/brak-pola.ps1`, three times out of three). So a `Pane` without a
+//! native window is asked again, every [`LOOK_STEP_MS`], for at most
+//! [`SECOND_LOOK_MS`], and the last answer is the one classified. Classic
+//! controls come with a window, and Slint and a warm browser never answer
+//! `Pane` for their fields, so nobody else waits. That `Pane` stays `Unknown`
+//! for the same reason: a waking browser gives it for a text input too.
 //!
 //! # Three answers, and the third is never folded into the second
 //!
@@ -45,12 +62,14 @@
 //!
 //! # What this reads, and what it does not
 //!
-//! Five properties of ONE element, the one holding the focus: its process, its
+//! Six properties of ONE element, the one holding the focus: its process, its
 //! control type, whether it has the Value pattern and whether that is
-//! read-only, and whether it has the Text pattern. Never its name, never its
-//! value, never its text, never any other element. `tests/field_reads_only_kinds.rs`
-//! holds the list and goes red when a property is added to it - the promise
-//! "does not read the contents of windows" (untouchable rule 17) rests on it.
+//! read-only, whether it has the Text pattern, and whether it is a window of
+//! its own (only compared with zero, for the second look above). Never its
+//! name, never its value, never its text, never any other element.
+//! `tests/field_reads_only_kinds.rs` holds the list and goes red when a
+//! property is added to it - the promise "does not read the contents of
+//! windows" (untouchable rule 17) rests on it.
 //!
 //! # Cost, and a hung application
 //!
@@ -61,6 +80,7 @@
 //! timeout is `Unknown`, never a frozen palette.
 
 use crate::WindowRef;
+use std::time::{Duration, Instant};
 
 /// What holds the keyboard focus in a window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -83,12 +103,34 @@ pub enum FocusedInput {
 /// press hang. Applies to making the connection and to each request separately.
 pub const TIMEOUT_MS: u32 = 500;
 
+/// How long a provider that may still be waking up is asked again.
+///
+/// ⚠️ Chosen from one measurement, not from a hung application: the waking
+/// browser answered within 220 ms on this machine, and this is a bit more than
+/// twice that. A heavier page or a slower machine may take longer, and then the
+/// answer is `Unknown` and the send goes ahead as it did before the second
+/// look existed.
+pub const SECOND_LOOK_MS: u64 = 500;
+
+/// The pause between two looks - the probe asked every 40 ms and saw the
+/// answer change between the third and the fourth request.
+pub const LOOK_STEP_MS: u64 = 40;
+
 /// What holds the keyboard focus in `window`, asked fresh.
 ///
 /// Returns [`FocusedInput::Unknown`] on systems without UI Automation.
 #[must_use]
 pub fn focused_input(window: WindowRef) -> FocusedInput {
-    platform::facts(window).map_or(FocusedInput::Unknown, |facts| classify(&facts))
+    let Some(first) = platform::facts(window) else {
+        return FocusedInput::Unknown;
+    };
+    let deadline = Instant::now() + Duration::from_millis(SECOND_LOOK_MS);
+    let again = || {
+        std::thread::sleep(Duration::from_millis(LOOK_STEP_MS));
+        platform::facts(window)
+    };
+    settle(first, again, || Instant::now() < deadline)
+        .map_or(FocusedInput::Unknown, |facts| classify(&facts))
 }
 
 /// What UI Automation said about the focused element - all of it.
@@ -99,6 +141,31 @@ struct Facts {
     value: Option<bool>,
     /// Whether the element has the Text pattern.
     text: bool,
+    /// Whether the element is a native window of its own. Chromium's elements
+    /// and Slint's are not, classic controls are.
+    windowed: bool,
+}
+
+/// Whether an answer looks like a provider that has not built its tree yet:
+/// a `Pane` that is not a window of its own. See the module text.
+fn worth_a_second_look(facts: &Facts) -> bool {
+    facts.control_type == control::PANE && !facts.windowed
+}
+
+/// The answer to classify: `first`, or - while it looks like a waking
+/// provider and `time_left` says so - whatever `again` reads next. A read that
+/// fails on the way is `None`, the same as a first read that fails: the focus
+/// may have left the window, and then nothing is known about it.
+fn settle(
+    first: Facts,
+    mut again: impl FnMut() -> Option<Facts>,
+    mut time_left: impl FnMut() -> bool,
+) -> Option<Facts> {
+    let mut facts = first;
+    while worth_a_second_look(&facts) && time_left() {
+        facts = again()?;
+    }
+    Some(facts)
 }
 
 /// UI Automation control type identifiers.
@@ -151,7 +218,7 @@ mod control {
 /// (letters are mnemonics), tabs, headers (space sorts), and controls that show
 /// rather than take (an image, a progress bar, a status bar, a tooltip).
 ///
-/// 🔴 Deliberately NOT here: `Pane` (Slint), `Custom`, `Window`, `Text`
+/// 🔴 Deliberately NOT here: `Pane` (a waking browser, text inputs too), `Custom`, `Window`, `Text`
 /// (terminals may report it), `Spinner` and `Calendar` (they take digits and
 /// dates), and the grid family - `DataGrid`, `DataItem`, `Table` - because a
 /// spreadsheet takes typing in its cells and none of it was measured.
@@ -229,10 +296,11 @@ mod platform {
     /// `IUIAutomation2`, which adds the two timeouts to `IUIAutomation`.
     const IID_IUIAUTOMATION2: GUID = GUID::from_u128(0x34723aff_0c9d_49d0_9896_7ab52df8cd8a);
 
-    // The five properties read, and the only ones - see the module text and
+    // The six properties read, and the only ones - see the module text and
     // `tests/field_reads_only_kinds.rs`, which holds this list.
     pub(super) const PROPERTY_PROCESS_ID: i32 = 30002;
     pub(super) const PROPERTY_CONTROL_TYPE: i32 = 30003;
+    pub(super) const PROPERTY_NATIVE_WINDOW_HANDLE: i32 = 30020;
     pub(super) const PROPERTY_IS_TEXT_PATTERN_AVAILABLE: i32 = 30040;
     pub(super) const PROPERTY_IS_VALUE_PATTERN_AVAILABLE: i32 = 30043;
     pub(super) const PROPERTY_VALUE_IS_READ_ONLY: i32 = 30046;
@@ -360,10 +428,13 @@ mod platform {
                 None
             };
             let text = bool_property(&element, PROPERTY_IS_TEXT_PATTERN_AVAILABLE)?;
+            // Compared with zero and dropped - the handle itself is not kept.
+            let windowed = int_property(&element, PROPERTY_NATIVE_WINDOW_HANDLE)? != 0;
             Some(Facts {
                 control_type,
                 value,
                 text,
+                windowed,
             })
         }
     }
@@ -450,6 +521,14 @@ mod tests {
             control_type,
             value,
             text,
+            windowed: false,
+        }
+    }
+
+    fn windowed(facts: Facts) -> Facts {
+        Facts {
+            windowed: true,
+            ..facts
         }
     }
 
@@ -501,7 +580,10 @@ mod tests {
                 facts(control::COMBO_BOX, RW, false),
                 NotTextField,
             ),
-            // Slint: the focus is in a TextInput, UIA sees winit's event target.
+            // Recorded as "Slint", but the probe had brought winit's hidden event
+            // target to the front, and the focus went there with it. Kept as a
+            // reading of a Pane - with the real window in front Slint answers
+            // Edit (module text).
             (
                 "slint text input",
                 facts(control::PANE, None, false),
@@ -609,8 +691,119 @@ mod tests {
         }
         assert!(
             !NOT_TEXT.contains(&control::PANE),
-            "Pane is how Slint reports a text input"
+            "Pane is how a waking browser reports a text input"
         );
+    }
+
+    /// `tools/sonda-pole/zimne.ps1`, 2026-09-24, every answer that differed:
+    /// a fresh Edge gave `Pane` without a window for its first requests, then
+    /// the real control. A change to the rule that makes any of these wait, or
+    /// stop waiting, is a change to what was MEASURED.
+    #[test]
+    fn only_a_pane_without_a_window_is_asked_again() {
+        let rows: &[(&str, Facts, bool)] = &[
+            (
+                "fresh Edge, any focus, first 180-220 ms",
+                facts(control::PANE, None, false),
+                true,
+            ),
+            (
+                "Edge a moment later, button",
+                facts(control::BUTTON, None, false),
+                false,
+            ),
+            (
+                "Edge a moment later, input",
+                facts(control::EDIT, RW, true),
+                false,
+            ),
+            (
+                "Slint, first request",
+                facts(control::EDIT, RW, true),
+                false,
+            ),
+            (
+                "WinForms button",
+                windowed(facts(control::BUTTON, None, false)),
+                false,
+            ),
+            (
+                "a native pane - a window of its own",
+                windowed(facts(control::PANE, None, false)),
+                false,
+            ),
+        ];
+        for (what, reading, expected) in rows {
+            assert_eq!(worth_a_second_look(reading), *expected, "{what}");
+        }
+    }
+
+    #[test]
+    fn a_waking_provider_is_classified_by_its_first_real_answer() {
+        // Pane, Pane, then the button - the order the probe saw. The answer
+        // is the button's, so the send is refused instead of typed into it.
+        let mut answers = vec![
+            facts(control::BUTTON, None, false),
+            facts(control::PANE, None, false),
+        ];
+        let mut asked = 0;
+        let settled = settle(
+            facts(control::PANE, None, false),
+            || {
+                asked += 1;
+                answers.pop()
+            },
+            || true,
+        )
+        .expect("every read succeeded");
+        assert_eq!(asked, 2);
+        assert_eq!(classify(&settled), FocusedInput::NotTextField);
+    }
+
+    #[test]
+    fn a_pane_that_stays_a_pane_is_unknown_when_the_time_is_up() {
+        let mut asked = 0;
+        let mut looks_left = 3;
+        let settled = settle(
+            facts(control::PANE, None, false),
+            || {
+                asked += 1;
+                Some(facts(control::PANE, None, false))
+            },
+            || {
+                looks_left -= 1;
+                looks_left >= 0
+            },
+        )
+        .expect("every read succeeded");
+        assert_eq!(asked, 3, "asked again exactly while time was left");
+        assert_eq!(classify(&settled), FocusedInput::Unknown);
+    }
+
+    #[test]
+    fn an_answer_that_needs_no_second_look_is_not_asked_again() {
+        let mut asked = 0;
+        let settled = settle(
+            facts(control::EDIT, RW, true),
+            || {
+                asked += 1;
+                None
+            },
+            || true,
+        );
+        assert_eq!(asked, 0);
+        assert_eq!(settled, Some(facts(control::EDIT, RW, true)));
+        // A window of its own is a native pane, not a waking provider.
+        let native = windowed(facts(control::PANE, None, false));
+        assert_eq!(settle(native, || None, || true), Some(native));
+    }
+
+    #[test]
+    fn a_read_that_fails_during_the_second_look_is_unknown() {
+        // The focus left the window while the browser was waking up: nothing
+        // is known about where it went, so nothing is claimed.
+        let settled = settle(facts(control::PANE, None, false), || None, || true);
+        assert_eq!(settled, None);
     }
 
     #[cfg(windows)]
@@ -658,6 +851,10 @@ mod tests {
             (
                 platform::PROPERTY_CONTROL_TYPE,
                 uia::UIA_ControlTypePropertyId,
+            ),
+            (
+                platform::PROPERTY_NATIVE_WINDOW_HANDLE,
+                uia::UIA_NativeWindowHandlePropertyId,
             ),
             (
                 platform::PROPERTY_IS_TEXT_PATTERN_AVAILABLE,
