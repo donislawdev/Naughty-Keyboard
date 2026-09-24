@@ -20,6 +20,7 @@
 //! and the simplest way to obey a rule about a condition is not to have the
 //! behaviour the condition applies to.
 
+use crate::english::plural;
 use nkb_app::{CatalogueSource, Listing, PackEntry, SourceError, SourceSkipped};
 use nkb_core::metrics::TextMetrics;
 use nkb_core::pack::{Pack, PackValue};
@@ -36,19 +37,6 @@ pub fn written_form(body: &ValueBody) -> String {
         ValueBody::Repeat { unit, count } => {
             format!("{} x {count}", unit.escape().as_str())
         }
-    }
-}
-
-/// A count with its noun, in the number the count actually is.
-///
-/// Document 08 asks for interface text a person would write. "1 code points" is
-/// not that, and it appears next to the shortest values in the catalogue, which
-/// are the ones this tool exists for.
-fn plural(count: usize, noun: &str) -> String {
-    if count == 1 {
-        format!("{count} {noun}")
-    } else {
-        format!("{count} {noun}s")
     }
 }
 
@@ -284,15 +272,6 @@ mod tests {
             "the recipe was expanded: {} characters came out",
             shown.len()
         );
-    }
-
-    #[test]
-    fn a_count_of_one_is_written_in_the_singular() {
-        // "1 code points" appears beside the shortest values in the catalogue,
-        // which are exactly the ones this tool exists for.
-        assert_eq!(plural(1, "code point"), "1 code point");
-        assert_eq!(plural(0, "byte"), "0 bytes");
-        assert_eq!(plural(2, "byte"), "2 bytes");
     }
 
     #[test]

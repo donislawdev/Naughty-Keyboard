@@ -12,6 +12,7 @@
 
 mod browse_report;
 mod emit_output;
+mod english;
 mod exit;
 mod json;
 mod lint_json;
@@ -694,13 +695,10 @@ fn send(args: &[String]) -> ExitCode {
                 ClearingOutcome::NotAsked => {}
             }
             let _ = writeln!(err, "nkb send: sent {reference} - {name}");
-            // Four counts, because they differ and the difference is the point:
-            // a family emoji is one cluster, five code points and eighteen bytes,
-            // and characters above the basic plane cross as two units each.
             let _ = writeln!(
                 err,
-                "  {graphemes} graphemes, {code_points} code points, \
-                 {bytes} bytes, {utf16_units} UTF-16 units"
+                "  {}",
+                sent_counts(graphemes, code_points, bytes, utf16_units)
             );
             // Said plainly, because the shorter sentence reads as a stronger
             // claim than the tool can make: `SendInput` reports that the system
@@ -948,6 +946,23 @@ const CLEARING_SKIPPED: &str = "nkb send: not cleared first - the system does no
 const CLEARING_SKIPPED_IN_TERMINAL: &str = "nkb send: not cleared first - this is a terminal, where the clearing keys go to the program running in it and could act beyond the line. The value went in on top of what was there.";
 
 /// Counts down on standard error so the person can put the focus where they mean.
+/// How much text `nkb send` sent, in the four units that differ.
+///
+/// Four, because the difference is the point: a family emoji is one cluster,
+/// five code points and eighteen bytes, and characters above the basic plane
+/// cross as two units each. In the singular where the count is one - "1
+/// graphemes" stood here until 2026-09-24, next to the shortest values in the
+/// catalogue (`OBS-120`).
+fn sent_counts(graphemes: usize, code_points: usize, bytes: usize, utf16_units: usize) -> String {
+    format!(
+        "{}, {}, {}, {}",
+        english::plural(graphemes, "grapheme"),
+        english::plural(code_points, "code point"),
+        english::plural(bytes, "byte"),
+        english::plural(utf16_units, "UTF-16 unit")
+    )
+}
+
 fn count_down(seconds: u64) {
     if seconds == 0 {
         return;
@@ -1263,6 +1278,20 @@ mod tests {
             "{}/../../tests/packs/{kind}/{name}.toml",
             env!("CARGO_MANIFEST_DIR")
         )
+    }
+
+    #[test]
+    fn what_send_sent_is_counted_in_the_number_each_count_is() {
+        // The shortest values in the catalogue are the ones this reads out
+        // most: `magic-values/dash-only` is one of everything.
+        assert_eq!(
+            sent_counts(1, 1, 1, 1),
+            "1 grapheme, 1 code point, 1 byte, 1 UTF-16 unit"
+        );
+        assert_eq!(
+            sent_counts(1, 5, 18, 8),
+            "1 grapheme, 5 code points, 18 bytes, 8 UTF-16 units"
+        );
     }
 
     // ---- nkb send ---------------------------------------------------------

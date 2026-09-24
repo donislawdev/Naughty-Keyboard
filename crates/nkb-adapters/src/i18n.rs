@@ -789,7 +789,7 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::Title => "Naughty Keyboard",
         PaletteLabel::Counter => "{done} / {total}",
         PaletteLabel::Counts => {
-            "{graphemes} graphemes, {codepoints} code points, {bytes} bytes, {utf16} UTF-16 units"
+            "graphemes: {graphemes}, code points: {codepoints}, bytes: {bytes}, UTF-16 units: {utf16}"
         }
         PaletteLabel::Offensive => "offensive",
         PaletteLabel::Cleared => "cleared first",
@@ -837,6 +837,12 @@ pub fn counter(done: usize, total: usize) -> String {
 /// looking: a family emoji is one of them, five code points and eighteen bytes,
 /// and a field that accepted "one character" and stored five is the bug this
 /// tool exists to find. `ux-spec.md` 2 puts them first for the same reason.
+///
+/// Every count stands AFTER its label, never before an inflected noun (`D80`).
+/// "1 graphemes" stood here until 2026-09-24, and the English rule would not
+/// have fixed it for long: this sentence is translated, and Polish has three
+/// plural forms. `warnings` and the shape line (`D64`) chose the same form for
+/// the same reason, so the palette needs no plural mechanism at all.
 #[must_use]
 pub fn counts(graphemes: usize, code_points: usize, bytes: usize, utf16_units: usize) -> String {
     fill(
@@ -1275,9 +1281,11 @@ mod tests {
             assert!(!text.contains('{'), "a label left a placeholder: {text}");
         }
         assert_eq!(counter(7, 34), "7 / 34");
+        // The count after the label, so one of anything reads right in every
+        // language without a plural rule (`D80`, `OBS-120`).
         assert_eq!(
             counts(1, 2, 8, 4),
-            "1 graphemes, 2 code points, 8 bytes, 4 UTF-16 units"
+            "graphemes: 1, code points: 2, bytes: 8, UTF-16 units: 4"
         );
     }
 

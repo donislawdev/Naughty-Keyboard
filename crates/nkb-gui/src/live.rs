@@ -572,7 +572,7 @@ mod tests {
         assert_eq!(palette.get_value_reference(), "unicode-text/zero-width");
         assert_eq!(
             palette.get_value_counts(),
-            "7 graphemes, 7 code points, 13 bytes, 7 UTF-16 units"
+            "graphemes: 7, code points: 7, bytes: 13, UTF-16 units: 7"
         );
         // The preview and the shape, checked against the sketch in `ux-spec.md` 2
         // rather than against whatever the code happens to produce.

@@ -59,8 +59,13 @@ const NOT_GUARANTEED_NOTE: &str =
 /// The counters at the format's ceiling: a million code points, four bytes and
 /// two UTF-16 units each - the longest line `i18n::counts` can compose from a
 /// value the format accepts.
-const LONGEST_COUNTS: &str = "1000000 graphemes, 1000000 code points, 4000000 bytes, \
-                              2000000 UTF-16 units";
+///
+/// Composed by the product rather than written out: until 2026-09-24 this was a
+/// literal, and the pattern changed under it (`D80`) - a copy of the text would
+/// have kept testing a line the palette no longer shows.
+fn longest_counts() -> String {
+    nkb_adapters::i18n::counts(1_000_000, 1_000_000, 4_000_000, 2_000_000)
+}
 
 /// A reference at the identifier limits of `pack-format.md` 7: forty characters
 /// of pack, forty-eight of value, and no space anywhere to break at.
@@ -76,7 +81,7 @@ fn fill(palette: &Palette) {
     palette.set_counter("7 / 34".into());
     palette.set_value_name("Three zero-width spaces".into());
     palette.set_value_reference("unicode-text/zero-width-spaces".into());
-    palette.set_value_counts("7 graphemes, 7 code points, 13 bytes, 7 UTF-16 units".into());
+    palette.set_value_counts("graphemes: 7, code points: 7, bytes: 13, UTF-16 units: 7".into());
     // The preview and the shape, exactly as the sketch in `ux-spec.md` 2 draws
     // them. The marker is U+2423, whose glyph is IN the shipped typeface -
     // measured from the file's `cmap`, so the marker cannot itself render as the
@@ -276,7 +281,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     fill(&palette);
     palette.set_showing(true);
     let edge_short = bottom_edge(&render(&window));
-    palette.set_value_counts(LONGEST_COUNTS.into());
+    palette.set_value_counts(longest_counts().into());
     let edge_counts = bottom_edge(&render(&window));
     palette.set_value_reference(LONGEST_REFERENCE.into());
     let long_lines = render(&window);

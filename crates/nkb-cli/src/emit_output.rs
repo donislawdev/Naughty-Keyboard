@@ -28,6 +28,7 @@
 //! returning one block of text - a note about lost information inside the data
 //! file would be the exact fault it warns about.
 
+use crate::english::plural;
 use crate::json::Json;
 use nkb_app::emit_values::{Emission, EmittedValue};
 
@@ -111,10 +112,10 @@ pub fn render(
     // The account comes first, because it is the thing a person reads before
     // deciding whether to let the rest arrive.
     notes.push(format!(
-        "{} values, {} code points, {} bytes",
-        emission.values.len(),
-        emission.code_points,
-        emission.bytes
+        "{}, {}, {}",
+        plural(emission.values.len(), "value"),
+        plural(emission.code_points, "code point"),
+        plural(emission.bytes, "byte")
     ));
     if emission.warnings > 0 {
         notes.push(format!(
@@ -363,9 +364,12 @@ mod tests {
             false,
         );
         assert_eq!(rendered.data, "x\n");
-        assert!(
-            rendered.notes.iter().any(|n| n.contains("1 values")),
-            "the account must be present: {:?}",
+        // In the singular: a pack of one value is allowed, and "1 values, 1 code
+        // points, 1 bytes" was what it printed until 2026-09-24 (`OBS-120`).
+        assert_eq!(
+            rendered.notes.first().map(String::as_str),
+            Some("1 value, 1 code point, 1 byte"),
+            "the account must come first and be in English: {:?}",
             rendered.notes
         );
     }
