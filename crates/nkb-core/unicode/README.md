@@ -1,8 +1,9 @@
 # Unicode Character Database files, vendored
 
 These are upstream files from the Unicode Character Database, unmodified. They are
-the source the two generated tables are derived from - the grapheme cluster table in
-`src/graphemes/table.rs` and the normalization check in `src/normalization/table.rs` -
+the source the three generated tables are derived from - the grapheme cluster table in
+`src/graphemes/table.rs`, the normalization check in `src/normalization/table.rs` and
+the characters a reader cannot see in `src/ignorable/table.rs` -
 and the conformance suite that proves the grapheme derivation is right.
 
 ## Why they are here rather than fetched
@@ -13,7 +14,7 @@ large table, and the table has to come from somewhere. Downloading it at build t
 would make an offline build impossible and a reproducible build a matter of trust in
 a web server, so the bytes live here instead.
 
-Nothing in this directory is compiled into the product. The two `table.rs` files
+Nothing in this directory is compiled into the product. The three `table.rs` files
 are, and a test re-derives each of them from these files for every one of the
 1 114 112 code points.
 
@@ -23,7 +24,7 @@ are, and a test re-derives each of them from these files for every one of the
 |---|---|---|
 | `GraphemeBreakProperty.txt` | `Grapheme_Cluster_Break` for every code point that is not `Other` | 1429 |
 | `emoji-data.txt` | `Extended_Pictographic`, which rule GB11 is stated in | 451 |
-| `DerivedCoreProperties.txt` | `Indic_Conjunct_Break`, which rule GB9c is stated in | 506 |
+| `DerivedCoreProperties.txt` | `Indic_Conjunct_Break`, which rule GB9c is stated in, and `Default_Ignorable_Code_Point`, which the pack format escapes and the preview marks (`D79`) | 506 and 27 |
 | `GraphemeBreakTest.txt` | the official conformance suite: 766 cases | all |
 | `DerivedNormalizationProps.txt` | `NFKC_Quick_Check`, the table behind the report block's `Unicode:` line, and `NFC_Quick_Check`, read only to prove the first one covers both forms | 445 and 124 |
 | `DerivedCombiningClass.txt` | `Canonical_Combining_Class`, which the same check needs to see combining marks out of canonical order | all |
@@ -33,9 +34,10 @@ few hundred of their lines are read. They are kept whole anyway: a trimmed copy 
 file this project made up, whose checksum matches nothing upstream and whose
 provenance is somebody's word.
 
-The normalization table has no script behind it that could get lost:
-`tests/unicode_data.rs` writes the source the files imply to
-`target/tmp/unicode/normalization_table.rs` on every run.
+The normalization and ignorable tables have no script behind them that could get
+lost: `tests/unicode_data.rs` writes the source the files imply to
+`target/tmp/unicode/normalization_table.rs` and `target/tmp/unicode/ignorable_table.rs`
+on every run.
 
 ## Provenance
 
@@ -67,7 +69,7 @@ disagree on real text and the disagreement would look like a bug in one of them.
 
 Upgrading means: replace these six files, run `cargo test -p nkb-core`, expect the
 table tests to name every code point that moved, regenerate - the normalization
-table by copying the file the test wrote - and move the victim's dependency in the
+and ignorable tables by copying the files the test wrote - and move the victim's dependency in the
 same commit.
 
 ## Licence

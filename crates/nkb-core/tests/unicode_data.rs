@@ -618,3 +618,136 @@ fn one_table_serves_both_forms_because_nfc_is_never_less_sure_than_nfkc() {
          miss them: {missed:?}"
     );
 }
+
+/// `Default_Ignorable_Code_Point` for every code point, from the vendored file.
+fn expected_ignorable() -> Vec<u8> {
+    let mut flags = every_code_point(0u8);
+    let text = read("DerivedCoreProperties.txt");
+    let mut lines = 0usize;
+    for (low, high, fields) in data_lines(&text) {
+        if fields.first() != Some(&"Default_Ignorable_Code_Point") {
+            continue;
+        }
+        lines += 1;
+        set_range(&mut flags, low, high, 1);
+    }
+    assert!(
+        lines > 10,
+        "only {lines} lines of Default_Ignorable_Code_Point were read - the parser \
+         stopped matching the file, which would make the comparison pass for the \
+         wrong reason"
+    );
+    flags
+}
+
+/// The source of `src/ignorable/table.rs`, exactly as it should read.
+fn render_ignorable_table(expected: &[u8]) -> String {
+    let (major, minor, patch) = nkb_core::UNICODE_VERSION;
+    let ranges = ranges_of(expected);
+    let mut out = format!(
+        "//! Generated from the Unicode Character Database. Do not edit by hand.
+//!
+//! Source file, its exact bytes and the reason it is vendored:
+//! `crates/nkb-core/unicode/README.md`. Unicode {major}.{minor}.{patch}.
+//!
+//! Every code point with `Default_Ignorable_Code_Point` in
+//! `DerivedCoreProperties.txt`, as inclusive ranges in code point order.
+//!
+//! What keeps this honest is `tests/unicode_data.rs`, which rebuilds the table
+//! from that file and compares all 1 114 112 code points. It also writes the
+//! source the file implies to `target/tmp/unicode/ignorable_table.rs` on every
+//! run, which is how this file was made and how it is remade for the next
+//! version of the standard.
+
+pub(super) static DEFAULT_IGNORABLE: [(u32, u32); {}] = [
+",
+        ranges.len()
+    );
+    for (low, high, _) in &ranges {
+        out.push_str(&format!("    (0x{low:04X}, 0x{high:04X}),\n"));
+    }
+    out.push_str("];\n");
+    out
+}
+
+/// Reads the table back out of the committed source.
+fn committed_ignorable() -> (Vec<u8>, usize) {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("ignorable")
+        .join("table.rs");
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("the generated table must be readable at {path:?}: {e}"));
+    let mut flags = every_code_point(0u8);
+    let mut entries = 0usize;
+    for line in text.lines() {
+        let Some(inner) = line
+            .trim()
+            .strip_prefix('(')
+            .and_then(|inner| inner.strip_suffix("),"))
+        else {
+            continue;
+        };
+        let parts: Vec<&str> = inner.split(',').map(str::trim).collect();
+        let [low, high] = parts.as_slice() else {
+            panic!("an entry of the ignorable table must be a pair: {line}");
+        };
+        let hex = |field: &str| {
+            let digits = field.strip_prefix("0x").unwrap_or_else(|| {
+                panic!("a code point must be written in hexadecimal, found {field}")
+            });
+            u32::from_str_radix(digits, 16)
+                .unwrap_or_else(|e| panic!("the table has a bad number {field}: {e}"))
+        };
+        entries += 1;
+        set_range(&mut flags, hex(low), hex(high), 1);
+    }
+    (flags, entries)
+}
+
+#[test]
+fn the_ignorable_table_says_exactly_what_the_vendored_file_says() {
+    let expected = expected_ignorable();
+
+    // Written every time, before the comparison, so the generator's output is
+    // there to read even when the committed table is missing or empty.
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..")
+        .join("target")
+        .join("tmp")
+        .join("unicode");
+    let path = dir.join("ignorable_table.rs");
+    std::fs::create_dir_all(&dir)
+        .and_then(|()| std::fs::write(&path, render_ignorable_table(&expected)))
+        .unwrap_or_else(|e| panic!("the implied table must be writable at {path:?}: {e}"));
+
+    let (committed, entries) = committed_ignorable();
+    let wrong: Vec<String> = expected
+        .iter()
+        .zip(&committed)
+        .enumerate()
+        .filter(|(_, (want, got))| want != got)
+        .map(|(code, (want, _))| {
+            let says = if *want == 1 {
+                "ignorable"
+            } else {
+                "not ignorable"
+            };
+            format!("  U+{code:04X}: {says} in the file, the table the opposite")
+        })
+        .collect();
+    assert!(
+        wrong.is_empty(),
+        "{} disagreements between DerivedCoreProperties.txt and the ignorable table \
+         of {entries} ranges (first twenty shown):\n{}\nThe table the file implies is \
+         at {path:?}, ready to replace src/ignorable/table.rs.",
+        wrong.len(),
+        wrong
+            .iter()
+            .take(20)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}

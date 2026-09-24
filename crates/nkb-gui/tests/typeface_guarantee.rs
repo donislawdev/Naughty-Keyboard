@@ -232,7 +232,12 @@ slint::slint! {
 /// Characters in the table whose glyph legitimately draws nothing ON ITS OWN.
 ///
 /// Measured 2026-09-23 by rendering all 3322 promised characters: 100 cells came
-/// out empty, and every one of them falls into one of three kinds.
+/// out empty, and every one of them falls into one of two kinds.
+///
+/// Three kinds until 2026-09-24. The third was U+FFF9 to U+FFFC, the
+/// interlinear annotation controls and the object replacement character, which
+/// the preview did not mark (`OBS-121`). Since `D79` it marks them, so the
+/// first kind covers them and a name in this list would only hide a new gap.
 fn draws_nothing_alone(c: char) -> bool {
     // Spaces and format characters. The preview never draws these - it draws
     // the marker in their place - so their blank glyphs are never seen.
@@ -243,10 +248,6 @@ fn draws_nothing_alone(c: char) -> bool {
         // Arabic and Lao ones do not. Joining is asked of the core's own
         // segmentation rather than listed here.
         || nkb_core::graphemes::count(&format!("o{c}")) == 1
-        // Interlinear annotation controls and the object replacement character.
-        // Format characters the preview's `is_invisible` does not list - a gap
-        // recorded in `OBS-121` - and the layout draws nothing for them.
-        || matches!(c, '\u{FFF9}'..='\u{FFFC}')
 }
 
 #[test]

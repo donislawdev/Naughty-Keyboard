@@ -98,7 +98,9 @@ pub struct Preview {
 /// says otherwise.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShapeFact {
-    /// Characters that occupy no width at all: `U+200B`, the joiners, the BOM.
+    /// Characters that occupy no width at all: `U+200B`, the joiners, the BOM,
+    /// and since `D79` every other format character - variation selectors,
+    /// the grapheme joiner, tags, invisible operators.
     ZeroWidth(usize),
     /// Characters that reorder what follows them. Their own class, because the
     /// damage they do is visual rather than textual, and a tester who does not
@@ -106,7 +108,9 @@ pub enum ShapeFact {
     BidiControl(usize),
     /// `U+00AD`, which is invisible until the text wraps and then is not.
     SoftHyphen(usize),
-    /// A space that is not `U+0020`: no-break, ogham, en, em, ideographic.
+    /// A space that is not `U+0020`: no-break, ogham, en, em, ideographic - and
+    /// the Hangul fillers U+3164 and U+FFA0, which are letters to the standard
+    /// and a blank cell on screen (`D79`).
     /// Indistinguishable from an ordinary space on screen and different to every
     /// trimmer, which is what makes it worth its own line.
     UnusualSpace(usize),
@@ -128,6 +132,11 @@ pub enum ShapeFact {
 ///
 /// Deliberately NOT "is it whitespace". `U+00A0` is whitespace and needs marking.
 /// `U+200B` is not whitespace by most definitions and needs marking more.
+///
+/// The format characters are the pack format's own rule, not a second list:
+/// whatever a reviewer of a pack file cannot see, a tester looking at the
+/// palette cannot see either. Two lists drifted apart twice (`OBS-125`,
+/// `OBS-121`), so since `D79` there is one.
 #[must_use]
 pub fn is_invisible(c: char) -> bool {
     matches!(
@@ -138,12 +147,9 @@ pub fn is_invisible(c: char) -> bool {
         // because a trailing space is invisible, so the preview shows it.
         | ' ' | '\u{A0}' | '\u{1680}' | '\u{2000}'..='\u{200A}'
         | '\u{202F}' | '\u{205F}' | '\u{3000}'
-        // Format characters: zero-width, joiners, bidi, the soft hyphen, the BOM.
-        | '\u{AD}' | '\u{061C}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}'
-        | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{206F}' | '\u{FEFF}'
         // Line and paragraph separators.
         | '\u{2028}' | '\u{2029}'
-    )
+    ) || crate::text::is_format_character(c)
 }
 
 /// Builds the preview: markers for the invisible, elision for the long.
@@ -292,10 +298,22 @@ pub fn shape(text: &str) -> Vec<ShapeFact> {
             | '\u{2000}'..='\u{200A}'
             | '\u{202F}'
             | '\u{205F}'
-            | '\u{3000}' => unusual_space += 1,
+            | '\u{3000}'
+            // The two Hangul fillers that stand alone take a blank cell of
+            // width, which is how they make a name look empty (`D79`). The two
+            // conjoining ones, U+115F and U+1160, sit inside a syllable and are
+            // zero-width there, so they fall to the arm below.
+            | '\u{3164}'
+            | '\u{FFA0}' => unusual_space += 1,
             // The ordinary space is not a fact on its own - it is only worth
             // saying when it sits at an end, which the two facts below cover.
             ' ' => {}
+            // Every other character of the format's rule: variation selectors,
+            // the grapheme joiner, tags, invisible operators, the annotation
+            // characters. None of them is a control, and all of them occupy no
+            // width of their own (`D79` - until then some were counted as
+            // controls and most as nothing).
+            other if crate::text::is_format_character(other) => zero_width += 1,
             other if is_invisible(other) => other_control += 1,
             _ => {}
         }
@@ -507,6 +525,75 @@ mod tests {
                 c as u32
             );
         }
+    }
+
+    /// The characters `OBS-121` found drawn as nothing, each marked and named.
+    ///
+    /// None of them is in a shipped pack - measured 2026-09-24 - which is why
+    /// they are written out: the first pack that carries one must not be the
+    /// test.
+    #[test]
+    fn every_character_obs_121_found_is_marked_and_named() {
+        for (c, expected) in [
+            ('\u{3164}', ShapeFact::UnusualSpace(1)),
+            ('\u{FFA0}', ShapeFact::UnusualSpace(1)),
+            ('\u{115F}', ShapeFact::ZeroWidth(1)),
+            ('\u{034F}', ShapeFact::ZeroWidth(1)),
+            ('\u{180E}', ShapeFact::ZeroWidth(1)),
+            ('\u{FE0F}', ShapeFact::ZeroWidth(1)),
+            ('\u{E0100}', ShapeFact::ZeroWidth(1)),
+            ('\u{E0041}', ShapeFact::ZeroWidth(1)),
+            ('\u{2062}', ShapeFact::ZeroWidth(1)),
+            ('\u{206A}', ShapeFact::ZeroWidth(1)),
+            ('\u{FFF9}', ShapeFact::ZeroWidth(1)),
+            ('\u{FFFC}', ShapeFact::ZeroWidth(1)),
+        ] {
+            let value = format!("x{c}y");
+            assert_eq!(
+                shape(&value),
+                vec![expected],
+                "U+{:04X} has the wrong fact",
+                u32::from(c)
+            );
+            assert_eq!(
+                preview(&value).shown,
+                format!("x{MARKER}y"),
+                "U+{:04X} is not substituted",
+                u32::from(c)
+            );
+        }
+    }
+
+    #[test]
+    fn a_variation_selector_after_an_emoji_is_marked_like_a_joiner() {
+        // The catalogue's `emoji-variation` value. The picture loses its emoji
+        // presentation in the preview, and that is the trade the preview already
+        // makes for the joiners of a family: it says WHERE the invisible
+        // character is, and the shape line says WHAT it is.
+        assert_eq!(
+            preview("\u{2764}\u{FE0F}").shown,
+            format!("\u{2764}{MARKER}")
+        );
+        assert_eq!(shape("\u{2764}\u{FE0F}"), vec![ShapeFact::ZeroWidth(1)]);
+    }
+
+    /// No character the preview replaces goes unnamed below it.
+    ///
+    /// A marker with no fact is the half of the design that says WHERE without
+    /// the half that says WHAT. Every code point, so a character added to the
+    /// format's rule tomorrow cannot land in the preview without a fact.
+    #[test]
+    fn every_character_the_preview_marks_has_a_fact() {
+        let silent: Vec<String> = (0..=0x10_FFFF_u32)
+            .filter_map(char::from_u32)
+            .filter(|&c| c != ' ' && is_invisible(c))
+            .filter(|&c| shape(&format!("x{c}y")).is_empty())
+            .map(|c| format!("U+{:04X}", u32::from(c)))
+            .collect();
+        assert!(
+            silent.is_empty(),
+            "marked in the preview and named by no fact: {silent:?}"
+        );
     }
 
     /// The marker itself must be a visible character.

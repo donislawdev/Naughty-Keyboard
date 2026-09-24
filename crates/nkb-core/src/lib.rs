@@ -20,6 +20,7 @@ pub mod description;
 pub mod graphemes;
 pub mod hotkeys;
 pub mod identity;
+pub mod ignorable;
 pub mod keys;
 pub mod lint;
 pub mod metrics;

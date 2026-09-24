@@ -36,6 +36,11 @@
 //!   selector when choosing a typeface, the shipped one does not map it, and so
 //!   `U+2764` followed by it is drawn by the machine's typeface although the
 //!   heart itself IS in ours. Reporting the selector is what tells the truth.
+//!   ⊕ Since `D79` (2026-09-24) the preview replaces the selector by its
+//!   marker, like every character a reviewer of a pack cannot see, so it no
+//!   longer reaches the layout and the heart stays in the guarantee. The
+//!   measurement above still stands and is WHY that matters - the rule below
+//!   exempts what the preview replaces, never what is merely ignorable.
 //! - **characters the preview replaces are skipped.** Every character
 //!   [`crate::preview::is_invisible`] names is drawn as the marker, never as
 //!   itself, so its own glyph is never asked for.
@@ -188,17 +193,25 @@ mod tests {
     }
 
     #[test]
-    fn the_variation_selector_is_reported_because_the_layout_counts_it() {
-        // The case the module header is about. The heart is covered, the
-        // selector is not - and measured, the selector is what sends the heart
-        // to the machine's typeface. Leaving it out would promise a glyph the
-        // product does not draw.
-        static WITH_HEART: [(u32, u32); 1] = [(0x2764, 0x2764)];
+    fn the_variation_selector_never_reaches_the_layout_since_d79() {
+        // The case the module header is about. Until `D79` the preview drew the
+        // selector as itself, the layout counted it, and it sent the heart to
+        // the machine's typeface - so it was reported. Since then the preview
+        // draws the MARKER in its place, and the marker is a cluster of its own,
+        // so the heart's cluster holds the heart alone and stays in the
+        // guarantee. Both halves are asked, not assumed.
+        static WITH_HEART: [(u32, u32); 2] = [(0x2423, 0x2423), (0x2764, 0x2764)];
         let guarantee = TypefaceGuarantee::new(&WITH_HEART).expect("well formed");
-        assert_eq!(
-            outside_guarantee("\u{2764}\u{FE0F}", &guarantee),
-            vec!['\u{FE0F}']
+        let drawn = crate::preview::preview("\u{2764}\u{FE0F}").shown;
+        assert!(
+            !drawn.contains('\u{FE0F}'),
+            "the selector reaches the layout: {drawn:?}"
         );
+        assert_eq!(crate::graphemes::count(&drawn), 2, "{drawn:?}");
+        assert!(outside_guarantee(&drawn, &guarantee).is_empty());
+        // The raw value too, for a caller that passes one: the selector is
+        // skipped because the preview replaces it, not because it is ignorable.
+        assert!(outside_guarantee("\u{2764}\u{FE0F}", &guarantee).is_empty());
     }
 
     #[test]

@@ -109,36 +109,36 @@ pub fn needs_escaping(character: char, at_edge: bool) -> bool {
 }
 
 /// Characters that carry meaning without carrying a shape: zero width, joiners,
-/// direction marks and isolates, the byte order mark, and the tag block.
+/// direction marks and isolates, variation selectors, fillers, the byte order
+/// mark, the tag block - every `Default_Ignorable_Code_Point` of the standard -
+/// and the four annotation and replacement characters the shipped typeface
+/// draws as nothing.
 ///
-/// 🔴 The isolates `U+2066`-`U+2069`, the deprecated format characters up to
-/// `U+206F` and the Arabic letter mark `U+061C` arrived on 2026-09-23 (`OBS-125`,
-/// `D69`). `pack-format.md` 2 had always named "characters that change the
-/// direction of text". The list here did not, so a value holding an isolate
-/// passed `E020` and was shown by `nkb show` as nothing - half of what "Trojan
-/// Source" is made of. A test below walks every code point and fails if the
-/// preview ever hides a character this list lets through.
+/// 🔴 A hand-written list until 2026-09-24, found shorter than the rule it
+/// serves twice. First the isolates and `U+061C` (`OBS-125`, `D69`), then 272
+/// ignorable characters that passed `E020` written literally, the Hangul
+/// filler U+3164 among them (`OBS-121`, `D79`). `pack-format.md` 2 escapes
+/// "every character a reviewer will not see", so the list is now the
+/// standard's property, read from the vendored file - see [`crate::ignorable`]
+/// for what the property leaves out and why. A test below walks every code
+/// point and fails if the preview ever hides a character this rule lets
+/// through.
 ///
 /// Note what is **not** here: emoji. They have a visible shape and pretend to be
 /// nothing, so they are written literally. A family emoji is a mixture of both
 /// rules - the pictures stay literal, the joiners between them are escaped -
 /// and that mixture is the whole point, because it is the invisible joiners
-/// that make one apparent character count as several.
+/// that make one apparent character count as several. A variation selector
+/// after an emoji is escaped for the same reason as a joiner: it decides how
+/// the picture is drawn, and a reviewer cannot see that it is there.
 #[must_use]
 pub fn is_format_character(character: char) -> bool {
-    matches!(character as u32,
-        0x00AD                    // soft hyphen
-        | 0x061C                  // Arabic letter mark - a direction mark
-        | 0x200B..=0x200F         // zero width space, joiners, direction marks
-        | 0x202A..=0x202E         // bidirectional overrides
-        | 0x2060..=0x2064         // word joiner and invisible operators
-        | 0x2066..=0x2069         // bidirectional isolates
-        | 0x206A..=0x206F         // deprecated format characters
-        | 0xFEFF                  // byte order mark
-        | 0x1D173..=0x1D17A       // musical formatting, outside the basic plane
-        | 0xE0001                 // language tag
-        | 0xE0020..=0xE007F       // tag characters - invisible, and a known trick
-    )
+    crate::ignorable::is_default_ignorable(character)
+        // Interlinear annotation anchor, separator and terminator, and the
+        // object replacement character. Not ignorable in the standard, which
+        // expects them drawn - but measured drawing nothing in the shipped
+        // typeface (`D66`), so a reviewer and a tester see nothing too.
+        || matches!(character, '\u{FFF9}'..='\u{FFFC}')
 }
 
 /// One character in the escaped notation of `pack-format.md` 2 - `\u200B`, or
@@ -229,14 +229,14 @@ mod tests {
         assert_eq!(literal.escape().as_str(), "Jan\\u00A0Kowalski");
     }
 
-    /// 🔴 Two hand-written lists answer "can a person see this character", and
-    /// they drifted apart once: the preview knew the bidi isolates U+2066-U+2069
-    /// and the format's escaping did not, so a value holding one passed `E020`
-    /// and was printed by `nkb show` as nothing (`OBS-125`). The lists answer
-    /// different questions and may differ in ONE direction - the format also
-    /// escapes tags the preview draws as themselves (`OBS-121`) - but never in
-    /// this one: whatever the preview has to stand in for, the format must
-    /// escape. Every code point, because a sample would miss the next gap.
+    /// 🔴 Two hand-written lists answered "can a person see this character", and
+    /// they drifted apart: the preview knew the bidi isolates U+2066-U+2069 and
+    /// the format's escaping did not, so a value holding one passed `E020` and
+    /// was printed by `nkb show` as nothing (`OBS-125`). Since `D79` the
+    /// preview's format characters ARE this rule, so the drift cannot recur
+    /// there - but the preview still names controls and spaces of its own, and
+    /// whatever it has to stand in for, the format must escape. Every code
+    /// point, because a sample would miss the next gap.
     #[test]
     fn everything_the_preview_marks_the_format_escapes() {
         let missed: Vec<String> = (0..=0x10FFFF_u32)
@@ -248,6 +248,31 @@ mod tests {
             missed.is_empty(),
             "the preview marks these as invisible and the format writes them bare: {missed:?}"
         );
+    }
+
+    #[test]
+    fn characters_a_reviewer_cannot_see_are_escaped_since_d79() {
+        // `pack-format.md` 2: "every character a reviewer will not see". The
+        // Hangul filler that makes a name look empty, a variation selector after
+        // an emoji - escaped like the joiner of a family, the picture stays - the
+        // grapheme joiner, and the object replacement character the shipped
+        // typeface draws as nothing.
+        for (text, escaped) in [
+            ("a\u{3164}b", "a\\u3164b"),
+            ("\u{2764}\u{FE0F}", "\u{2764}\\uFE0F"),
+            ("a\u{034F}b", "a\\u034Fb"),
+            ("a\u{FFFC}b", "a\\uFFFCb"),
+            ("a\u{E0100}b", "a\\U000E0100b"),
+        ] {
+            assert_eq!(LiteralText::new(text).escape().as_str(), escaped);
+        }
+    }
+
+    #[test]
+    fn a_drawn_format_character_stays_literal() {
+        // The Arabic number sign is a format character by category and is
+        // drawn - a rule built on the category would escape it for nothing.
+        assert_eq!(LiteralText::new("\u{0600}1").escape().as_str(), "\u{0600}1");
     }
 
     #[test]

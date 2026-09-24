@@ -1,0 +1,32 @@
+# expect: E020
+#
+# The value below is a single Hangul filler, U+3164, written out instead of
+# escaped. The standard lists it as Default_Ignorable_Code_Point and a screen
+# shows a blank, so a reviewer reading this file sees an empty string - and a
+# name made of it is a known way to register a user whose name looks empty.
+# `pack-format.md` 2 escapes every character a reviewer will not see. Until
+# 2026-09-24 the validator's list did not know this one, and this file passed
+# (OBS-121, D79).
+#
+# The correct spelling of the same value is "\u3164".
+
+format = 1
+
+[pack]
+id          = "unescaped-hangul-filler"
+name        = "Unescaped Hangul filler"
+description = "Writes a Hangul filler out rather than escaping it."
+version     = "1.0"
+updated     = 2026-09-24
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["format-suite"]
+
+[[values]]
+id     = "hangul-filler-name"
+name   = "Hangul filler as a whole name"
+value  = "ㅤ"
+breaks = "A required name field accepts it, and every list then shows a user with no name."
+expect = "Rejected as empty, or stored and shown with the filler visible."
+since  = "1.0"
