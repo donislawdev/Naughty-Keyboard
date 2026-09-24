@@ -51,8 +51,27 @@ pub enum Clearing {
     /// the value's own characters is pressed.
     Keep,
     /// `Home`, `Shift+End`, `Delete`, then the value. Clears the current line
-    /// of the field and never reaches beyond it.
+    /// of the field and never reaches beyond it - so it clears only a focus
+    /// confirmed as a text field, and sends the value uncleared elsewhere
+    /// ([`ClearingOutcome::Skipped`], `D76`).
     Line,
+}
+
+/// What became of the clearing that goes before a value.
+///
+/// Three states rather than a flag, because "not asked" and "asked and left
+/// out" are different news for a tester: the second one means the value went
+/// on top of whatever the field held although clearing was requested.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClearingOutcome {
+    /// Clearing was not asked for, or the route presses no keys.
+    NotAsked,
+    /// The clearing keys went out before the value.
+    Done,
+    /// Clearing was asked for and left out, with no key pressed, because the
+    /// focus could not be confirmed as a text field (`D76`). The value went on
+    /// top of what the field held.
+    Skipped,
 }
 
 /// What to send: which value of which pack, and whether to clear first.
@@ -83,8 +102,8 @@ pub enum SendOutcome {
         /// Warnings the pack carried. It was still sent - warnings never block,
         /// only errors do - but a silent send would hide them.
         warnings: usize,
-        /// Whether the clearing keys went out before the value.
-        cleared: bool,
+        /// What became of the clearing before the value.
+        clearing: ClearingOutcome,
         /// The value as a person can see it: its text with invisible characters
         /// substituted, or - for a generated value - the recipe that makes it.
         /// `ux-spec.md` 2 requires this line and `nkb_core::preview` builds it.
@@ -105,14 +124,16 @@ pub enum SendOutcome {
     /// There is no delivery route on this system.
     RouteUnavailable { reason: String },
     /// Clearing was asked for and did not go through. The value was NOT sent.
+    /// Never [`KeystrokeError::FieldUnconfirmed`]: that one is a skip, and the
+    /// value goes on ([`ClearingOutcome::Skipped`]).
     NotCleared { error: KeystrokeError },
     /// There is a route, and the value did not arrive, or not all of it.
     NotDelivered {
         error: DeliveryError,
-        /// Whether the field had already been cleared when this happened -
-        /// the tester needs to know the field is empty-plus-fragment, not
+        /// What became of the clearing when this happened - the tester needs
+        /// to know the field is empty-plus-fragment, not
         /// old-content-plus-fragment.
-        cleared: bool,
+        clearing: ClearingOutcome,
     },
 }
 
@@ -202,7 +223,9 @@ fn deliver_one(
 /// takes the value it already has rather than an index to look up.
 ///
 /// The clearing keys go out before the value. If clearing does not go through,
-/// the value is not sent, and the outcome says which half happened. The returned
+/// the value is not sent, and the outcome says which half happened. A focus
+/// that could not be confirmed as a text field is not cleared at all, and the
+/// value then goes uncleared ([`ClearingOutcome::Skipped`], `D76`). The returned
 /// [`SendOutcome`] carries both the delivery result and the numbers the palette
 /// shows, so one call answers both questions.
 pub fn deliver_value(
@@ -235,11 +258,14 @@ pub fn deliver_value(
     };
 
     // The one door. Clearing that does not go through stops everything: the
-    // value must not land on a field in an unknown state.
-    let cleared = match clearing {
-        Clearing::Keep => false,
+    // value must not land on a field in an unknown state. A focus the door
+    // could not confirm as a field is different - no key was pressed, the field
+    // is as it was, and the value goes on top of it, said as such (`D76`).
+    let clearing = match clearing {
+        Clearing::Keep => ClearingOutcome::NotAsked,
         Clearing::Line => match keys.send_keystrokes(&line_clearing_recipe()) {
-            Ok(()) => true,
+            Ok(()) => ClearingOutcome::Done,
+            Err(KeystrokeError::FieldUnconfirmed) => ClearingOutcome::Skipped,
             Err(error) => return SendOutcome::NotCleared { error },
         },
     };
@@ -258,7 +284,7 @@ pub fn deliver_value(
             bytes: metrics.bytes,
             utf16_units: delivered.utf16_units,
             warnings,
-            cleared,
+            clearing,
             // Built from the RECIPE, not from the literal: a generated value is
             // shown as `255 × "a"`, and a written one as the text that went out
             // (never the escaped form, which `nkb emit` already answers for).
@@ -274,9 +300,9 @@ pub fn deliver_value(
                 units_sent,
                 units_expected: expected_units,
             },
-            cleared,
+            clearing,
         },
-        Err(error) => SendOutcome::NotDelivered { error, cleared },
+        Err(error) => SendOutcome::NotDelivered { error, clearing },
     }
 }
 
@@ -501,10 +527,10 @@ mod tests {
             &keys,
             &request(1, Clearing::Keep),
         );
-        let SendOutcome::Sent { cleared, .. } = outcome else {
+        let SendOutcome::Sent { clearing, .. } = outcome else {
             panic!("expected a send, got {outcome:?}");
         };
-        assert!(!cleared);
+        assert_eq!(clearing, ClearingOutcome::NotAsked);
         assert!(
             log.borrow().iter().all(|entry| entry.starts_with("text:")),
             "no keys may be pressed when the field is kept, got {:?}",
@@ -524,11 +550,41 @@ mod tests {
             &keys,
             &request(1, Clearing::Line),
         );
-        let SendOutcome::Sent { cleared, .. } = outcome else {
+        let SendOutcome::Sent { clearing, .. } = outcome else {
             panic!("expected a send, got {outcome:?}");
         };
-        assert!(cleared);
+        assert_eq!(clearing, ClearingOutcome::Done);
         // Order is the property: keys first, exactly the recipe, then the text.
+        assert_eq!(
+            log.borrow().as_slice(),
+            ["keys:Home,Shift+End,Delete", "text:ab"]
+        );
+    }
+
+    #[test]
+    fn an_unconfirmed_field_gets_the_value_uncleared_and_the_outcome_says_so() {
+        // `D76`: the door pressed nothing, because the focus could not be
+        // confirmed as a text field. The field is as it was, so the value goes
+        // on top of it - unlike a clearing that went part of the way.
+        let log = log();
+        let spy = Spy::ready(&log);
+        let keys = KeySpy {
+            fail_with: Some(KeystrokeError::FieldUnconfirmed),
+            log: Rc::clone(&log),
+        };
+        let outcome = send_value(
+            &Shelf,
+            &Scripted::two(),
+            &spy,
+            &keys,
+            &request(1, Clearing::Line),
+        );
+        let SendOutcome::Sent { clearing, .. } = outcome else {
+            panic!("an unconfirmed field is a skip, not a refusal, got {outcome:?}");
+        };
+        assert_eq!(clearing, ClearingOutcome::Skipped);
+        // The spy logs the request it then refuses, so the recipe appears once,
+        // and the value follows it - the door, not this layer, pressed nothing.
         assert_eq!(
             log.borrow().as_slice(),
             ["keys:Home,Shift+End,Delete", "text:ab"]
@@ -784,7 +840,7 @@ mod tests {
             &keys,
             &request(2, Clearing::Line),
         );
-        let SendOutcome::NotDelivered { error, cleared } = outcome else {
+        let SendOutcome::NotDelivered { error, clearing } = outcome else {
             panic!("a partial delivery must not look like a send, got {outcome:?}");
         };
         assert_eq!(
@@ -794,8 +850,9 @@ mod tests {
                 units_expected: 3
             }
         );
-        assert!(
-            cleared,
+        assert_eq!(
+            clearing,
+            ClearingOutcome::Done,
             "the tester must learn the field is empty-plus-fragment, not old-plus-fragment"
         );
     }

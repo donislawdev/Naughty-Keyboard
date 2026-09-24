@@ -218,7 +218,10 @@ fn pattern_message(message: &Message) -> &'static str {
             "This window runs with higher privileges than Naughty Keyboard, so the system blocks typing into it - values for it now go to your clipboard, replacing what you had copied. Press your paste shortcut to insert each one, or start the tool with the same privileges."
         }
         Message::NoTextField => {
-            "The keyboard focus is not in a text field, so nothing was sent - keys there could press buttons or act on list items. Click into a field and press the shortcut again."
+            "The system reports the keyboard focus outside a text field, so nothing was sent - keys there could press buttons or act on list items. Click into the field and press the shortcut again."
+        }
+        Message::ClearingSkipped => {
+            "Not cleared first: the system does not report this focus as a text field, and the clearing keys could reach beyond one. The value went in on top of what was there."
         }
         Message::ClipboardBusy => {
             "Another application is holding the clipboard, so the value was not placed on it. Press the shortcut again in a moment."
@@ -282,6 +285,7 @@ pub fn message(message: &Message, pack: &str) -> String {
         Message::ClipboardMode
         | Message::HigherPrivileges
         | Message::NoTextField
+        | Message::ClearingSkipped
         | Message::ClipboardBusy
         | Message::NoTarget
         | Message::NoPack
@@ -874,6 +878,7 @@ mod tests {
             Message::ClipboardMode,
             Message::HigherPrivileges,
             Message::NoTextField,
+            Message::ClearingSkipped,
             Message::ClipboardBusy,
             Message::ClipboardFailed {
                 detail: "the display went away".to_owned(),
@@ -1012,6 +1017,7 @@ mod tests {
             Message::NotForClipboard { .. } => 18,
             Message::HigherPrivileges => 19,
             Message::NoTextField => 20,
+            Message::ClearingSkipped => 21,
             Message::NoTarget => 1,
             Message::Interrupted { .. } => 2,
             Message::EndOfPack { .. } => 3,
@@ -1029,7 +1035,7 @@ mod tests {
         }
     }
 
-    const SLOTS: usize = 21;
+    const SLOTS: usize = 22;
 
     #[test]
     fn every_message_variant_is_listed_here() {

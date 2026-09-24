@@ -107,14 +107,32 @@ fn blocked_by_privileges() -> bool {
 /// The clearing recipe keeps "never beyond the field" only inside a field: on a
 /// list of files `Home`, `Shift+End`, `Delete` select them all and delete them
 /// (`OBS-135`), and on a button a space from the value presses it. Asked by
-/// both doors, after the privilege check - a window that takes no typing at all
-/// is the stronger answer - and asked HERE for the same reasons as that one.
-/// `FocusedInput::Unknown` presses as before: only a type that takes no text by
-/// definition stops a send, never a guess.
+/// the value's door, after the privilege check - a window that takes no typing
+/// at all is the stronger answer - and asked HERE for the same reasons as that
+/// one. `FocusedInput::Unknown` sends the value as before: only a type that
+/// takes no text by definition stops a send, never a guess. The clearing door
+/// asks the stricter [`clearing_verdict`].
 fn focus_outside_a_text_field() -> bool {
     nkb_sys::foreground_window().is_some_and(|window| {
         nkb_sys::field::focused_input(window) == nkb_sys::field::FocusedInput::NotTextField
     })
+}
+
+/// Whether the clearing recipe may be pressed on this focus (`D76`).
+///
+/// Stricter than the value's door, and deliberately so. A value typed into a
+/// focus nobody recognised lands where the tester put it. The recipe does not:
+/// `Home`, `Shift+End`, `Delete` keep "never beyond the field" only inside a
+/// field, and an application that does not say what holds its focus may be a
+/// grid. Measured 2026-09-24 in LibreOffice Calc, which reports only its frame
+/// window: the recipe on cell A1 emptied all five cells of the row. So only a
+/// CONFIRMED text field is cleared, and the unknown is left as it is.
+fn clearing_verdict(focus: nkb_sys::field::FocusedInput) -> Result<(), KeystrokeError> {
+    match focus {
+        nkb_sys::field::FocusedInput::TextField => Ok(()),
+        nkb_sys::field::FocusedInput::NotTextField => Err(KeystrokeError::NoTextField),
+        nkb_sys::field::FocusedInput::Unknown => Err(KeystrokeError::FieldUnconfirmed),
+    }
 }
 
 /// The one-line mapping between the vocabulary `app` speaks and the one
@@ -133,14 +151,14 @@ fn chord_for(chord: &KeyChord) -> nkb_sys::Chord {
 
 impl KeystrokeSender for DirectInjection {
     fn send_keystrokes(&self, chords: &[KeyChord]) -> Result<(), KeystrokeError> {
-        if nkb_sys::foreground_window().is_none() {
+        let Some(window) = nkb_sys::foreground_window() else {
             return Err(KeystrokeError::NoTarget);
-        }
+        };
         if !chords.is_empty() && blocked_by_privileges() {
             return Err(KeystrokeError::HigherPrivileges);
         }
-        if !chords.is_empty() && focus_outside_a_text_field() {
-            return Err(KeystrokeError::NoTextField);
+        if !chords.is_empty() {
+            clearing_verdict(nkb_sys::field::focused_input(window))?;
         }
         let mapped: Vec<nkb_sys::Chord> = chords.iter().map(chord_for).collect();
         match nkb_sys::send_chords(&mapped) {
@@ -201,6 +219,21 @@ mod tests {
                 key: nkb_sys::NavKey::Delete,
                 shift: false
             }
+        );
+    }
+
+    #[test]
+    fn only_a_confirmed_text_field_is_cleared() {
+        use nkb_sys::field::FocusedInput;
+        assert_eq!(clearing_verdict(FocusedInput::TextField), Ok(()));
+        assert_eq!(
+            clearing_verdict(FocusedInput::NotTextField),
+            Err(KeystrokeError::NoTextField)
+        );
+        // `D76`: the answer a spreadsheet gives. Clearing there emptied a row.
+        assert_eq!(
+            clearing_verdict(FocusedInput::Unknown),
+            Err(KeystrokeError::FieldUnconfirmed)
         );
     }
 

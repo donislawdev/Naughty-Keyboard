@@ -24,9 +24,10 @@ use nkb_adapters::{
     TomlPackFormat,
 };
 use nkb_app::{
-    Availability, Clearing, DeliveryError, EmitOutcome, FormatOutcome, KeystrokeError, LintOutcome,
-    NewPackOutcome, SendOutcome, SendRequest, ShowOutcome, ValueDelivery, emit_values, format_pack,
-    lint_pack, list_packs, new_pack, send_value, show_pack,
+    Availability, Clearing, ClearingOutcome, DeliveryError, EmitOutcome, FormatOutcome,
+    KeystrokeError, LintOutcome, NewPackOutcome, SendOutcome, SendRequest, ShowOutcome,
+    ValueDelivery, emit_values, format_pack, lint_pack, list_packs, new_pack, send_value,
+    show_pack,
 };
 use std::io::Write;
 use std::path::Path;
@@ -668,7 +669,7 @@ fn send(args: &[String]) -> ExitCode {
             bytes,
             utf16_units,
             warnings,
-            cleared,
+            clearing,
             // The preview and the shape are for the PALETTE. The CLI prints the
             // escaped form through `nkb emit`, which answers the same question
             // without inventing a second format for it - and a marker glyph in a
@@ -676,8 +677,14 @@ fn send(args: &[String]) -> ExitCode {
             preview: _,
             shape: _,
         } => {
-            if cleared {
-                let _ = writeln!(err, "nkb send: cleared the line (Home, Shift+End, Delete)");
+            match clearing {
+                ClearingOutcome::Done => {
+                    let _ = writeln!(err, "nkb send: cleared the line (Home, Shift+End, Delete)");
+                }
+                ClearingOutcome::Skipped => {
+                    let _ = writeln!(err, "{CLEARING_SKIPPED}");
+                }
+                ClearingOutcome::NotAsked => {}
             }
             let _ = writeln!(err, "nkb send: sent {reference} - {name}");
             // Four counts, because they differ and the difference is the point:
@@ -769,12 +776,25 @@ fn send(args: &[String]) -> ExitCode {
                 ),
                 KeystrokeError::HigherPrivileges => writeln!(err, "{HIGHER_PRIVILEGES}"),
                 KeystrokeError::NoTextField => writeln!(err, "{NO_TEXT_FIELD}"),
+                // `send_value` treats this one as a skip and sends the value, so
+                // it does not arrive here. If that ever stops, nothing was
+                // pressed and nothing was sent, and that is what is said.
+                KeystrokeError::FieldUnconfirmed => writeln!(
+                    err,
+                    "nkb send: the focus could not be confirmed as a text field, so it was not cleared and nothing was sent."
+                ),
             };
             ExitCode::InsertFailed
         }
-        SendOutcome::NotDelivered { error, cleared } => {
-            if cleared {
-                let _ = writeln!(err, "nkb send: the line was cleared before this happened.");
+        SendOutcome::NotDelivered { error, clearing } => {
+            match clearing {
+                ClearingOutcome::Done => {
+                    let _ = writeln!(err, "nkb send: the line was cleared before this happened.");
+                }
+                ClearingOutcome::Skipped => {
+                    let _ = writeln!(err, "{CLEARING_SKIPPED}");
+                }
+                ClearingOutcome::NotAsked => {}
             }
             match &error {
                 DeliveryError::NoTarget => {
@@ -854,7 +874,20 @@ const HIGHER_PRIVILEGES: &str = "nkb send: the window in front runs with higher 
 /// when `--clear` is given, the send refuses otherwise, and no key was pressed
 /// in either (`D73`). The cause is one the command READ - the control type of
 /// the focused element - so it is named, and a focus it could not read sends.
-const NO_TEXT_FIELD: &str = "nkb send: the keyboard focus is not in a text field, so nothing was sent - keys there could press buttons or act on list items. Click into a field and run this again.";
+///
+/// "The system reports", because the command knows only what UI Automation
+/// answered: a Firefox window asked for the first time reports its page for a
+/// while, although the focus is in a field, until the focus moves (`OBS-140`).
+/// Clicking into the field again is what ends that, so it is what is asked for.
+const NO_TEXT_FIELD: &str = "nkb send: the system reports the keyboard focus outside a text field, so nothing was sent - keys there could press buttons or act on list items. Click into the field and run this again.";
+
+/// What `nkb send --clear` says when it sent the value without clearing.
+///
+/// The clearing keys go out only where the focus is confirmed as a text field
+/// (`D76`): measured in a spreadsheet, which does not say what holds its focus,
+/// they emptied a whole row. So the value went on top of whatever was there,
+/// and the command says that rather than let `--clear` read as done.
+const CLEARING_SKIPPED: &str = "nkb send: not cleared first - the system does not report this focus as a text field, and the clearing keys could reach beyond one. The value went in on top of what was there.";
 
 /// Counts down on standard error so the person can put the focus where they mean.
 fn count_down(seconds: u64) {

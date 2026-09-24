@@ -81,7 +81,7 @@ use crate::ports::{
     Availability, Clipboard, ClipboardError, DeliveryError, History, KeystrokeError,
     KeystrokeSender, PackFormat, PackSource, ReportText, SourceError, TargetRef, ValueDelivery,
 };
-use crate::send_value::{Clearing, SendOutcome, deliver_value};
+use crate::send_value::{Clearing, ClearingOutcome, SendOutcome, deliver_value};
 
 /// Everything an action may reach outside the sequence, one port each.
 ///
@@ -262,6 +262,11 @@ pub enum Message {
     /// type of the focused element - never a guess: a focus it could not read
     /// sends as before and says nothing.
     NoTextField,
+    /// The value went in, but the field was NOT cleared first, because the
+    /// focus could not be confirmed as a text field and the clearing keys could
+    /// reach beyond it there (`D76`). Said on every such send: the value sits
+    /// on top of whatever the field held, and the tester has to know that.
+    ClearingSkipped,
     /// Clipboard mode is on because the tester asked for it: values go to the
     /// clipboard, replacing what was there. Once, at the start.
     ClipboardMode,
@@ -725,7 +730,7 @@ fn classify(
             bytes,
             utf16_units,
             warnings,
-            cleared,
+            clearing,
             preview,
             shape,
         } => (
@@ -739,12 +744,17 @@ fn classify(
                 utf16_units,
                 offensive,
                 warnings,
-                cleared,
+                cleared: clearing == ClearingOutcome::Done,
                 on_clipboard,
                 preview,
                 shape,
             }),
-            Vec::new(),
+            // `D76`: the value landed, uncleared, and the tester is told why.
+            if clearing == ClearingOutcome::Skipped {
+                vec![Message::ClearingSkipped]
+            } else {
+                Vec::new()
+            },
         ),
         // No route at all: the one outcome that moves to the clipboard, and the
         // machine asks for the same value there in the same press.
@@ -883,6 +893,10 @@ fn after_clearing(error: KeystrokeError) -> (Event, Message) {
         // `D73`, `OBS-135`: the clearing goes first, so this is where a focus on
         // a list of files is caught - before `Home`, `Shift+End`, `Delete`.
         KeystrokeError::NoTextField => (Event::InsertionRefused, Message::NoTextField),
+        // `deliver_value` treats this one as a skip and sends the value, so it
+        // does not arrive here. If that ever stops, nothing was pressed and
+        // nothing was sent - the careful sentence, which asks to check the field.
+        KeystrokeError::FieldUnconfirmed => (Event::InsertionRefused, Message::ClearingFailed),
     }
 }
 
@@ -1605,6 +1619,29 @@ mod tests {
             "nothing went out, so the counter stays and the same value goes next"
         );
         assert!(!outcome.clipboard_for_window);
+    }
+
+    // ---- `D76`: a focus that could not be confirmed as a text field --------------
+
+    #[test]
+    fn an_unconfirmed_field_gets_the_value_uncleared_the_counter_moves_and_it_is_said() {
+        // The door pressed nothing: an application that does not say what holds
+        // its focus may be a grid, where the recipe emptied a whole row. The
+        // value is not refused - it lands where the tester put it, on top of
+        // what was there, and the palette says so.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_keys(FakeKeys::failing(KeystrokeError::FieldUnconfirmed));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+
+        assert_eq!(*kit.direct.handed.borrow(), vec!["alpha"]);
+        assert!(kit.by_clipboard.handed.borrow().is_empty());
+        assert_eq!(outcome.messages, vec![Message::ClearingSkipped]);
+        let sent = outcome.sent.expect("the value went in");
+        assert!(
+            !sent.cleared,
+            "the marker must not say the field was cleared"
+        );
+        assert_eq!(advance.counter(), Some((1, 3)));
     }
 
     #[test]

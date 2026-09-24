@@ -36,4 +36,6 @@ pub use ports::{
     PackSink, PackSource, ShortcutRegistration, ShortcutsUnavailable, SinkError, SourceError,
     SourceSkipped, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery, Wait,
 };
-pub use send_value::{Clearing, SendOutcome, SendRequest, deliver_value, send_value};
+pub use send_value::{
+    Clearing, ClearingOutcome, SendOutcome, SendRequest, deliver_value, send_value,
+};

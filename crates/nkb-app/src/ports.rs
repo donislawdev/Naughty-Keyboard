@@ -220,6 +220,12 @@ pub enum KeystrokeError {
     /// pressed: on a list of files `Home`, `Shift+End`, `Delete` select every
     /// file and delete them (`D73`, `OBS-135`). Nothing was touched.
     NoTextField,
+    /// The focus could not be confirmed as a text field, so no key was
+    /// pressed. The recipe keeps "never beyond the field" only inside a field,
+    /// and an application that does not say what holds its focus may be a grid:
+    /// measured in a spreadsheet, the recipe emptied a whole row (`D76`). Not a
+    /// refusal of the value - the caller sends it without clearing and says so.
+    FieldUnconfirmed,
 }
 
 impl fmt::Display for KeystrokeError {
@@ -234,6 +240,7 @@ impl fmt::Display for KeystrokeError {
             } => write!(f, "partial-{chords_sent}-of-{chords_expected}"),
             Self::HigherPrivileges => f.write_str("higher-privileges"),
             Self::NoTextField => f.write_str("no-text-field"),
+            Self::FieldUnconfirmed => f.write_str("field-unconfirmed"),
         }
     }
 }
