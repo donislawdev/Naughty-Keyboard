@@ -768,6 +768,7 @@ fn send(args: &[String]) -> ExitCode {
                     "nkb send: the system accepted {chords_sent} of {chords_expected} clearing key presses - the field may be half-cleared. Nothing else was sent."
                 ),
                 KeystrokeError::HigherPrivileges => writeln!(err, "{HIGHER_PRIVILEGES}"),
+                KeystrokeError::NoTextField => writeln!(err, "{NO_TEXT_FIELD}"),
             };
             ExitCode::InsertFailed
         }
@@ -829,6 +830,9 @@ fn send(args: &[String]) -> ExitCode {
                 DeliveryError::HigherPrivileges => {
                     let _ = writeln!(err, "{HIGHER_PRIVILEGES}");
                 }
+                DeliveryError::NoTextField => {
+                    let _ = writeln!(err, "{NO_TEXT_FIELD}");
+                }
             }
             ExitCode::InsertFailed
         }
@@ -843,6 +847,14 @@ fn send(args: &[String]) -> ExitCode {
 /// with 0 while nothing reached the field (`OBS-128`); code 4 is the existing
 /// "the value could not be inserted", not a new code (`D46`).
 const HIGHER_PRIVILEGES: &str = "nkb send: the window in front runs with higher privileges than nkb, so the system would drop the keystrokes without a word. Nothing was sent - run nkb with the same privileges to type into it.";
+
+/// What `nkb send` says when the keyboard focus is surely not in a text field.
+///
+/// One sentence for both doors, like the one above: the clearing refuses first
+/// when `--clear` is given, the send refuses otherwise, and no key was pressed
+/// in either (`D73`). The cause is one the command READ - the control type of
+/// the focused element - so it is named, and a focus it could not read sends.
+const NO_TEXT_FIELD: &str = "nkb send: the keyboard focus is not in a text field, so nothing was sent - keys there could press buttons or act on list items. Click into a field and run this again.";
 
 /// Counts down on standard error so the person can put the focus where they mean.
 fn count_down(seconds: u64) {
@@ -888,6 +900,9 @@ fn print_send_help() {
     println!("Nothing is sent to a window running with higher privileges than nkb,");
     println!("such as an application started as administrator: the system would drop");
     println!("the keystrokes without a word, so the command refuses and exits with 4.");
+    println!("Nothing is sent when the keyboard focus is on a button, a link, a list item");
+    println!("or a page that is not editable: keys there act on that control, so the");
+    println!("command refuses and exits with 4. Where it cannot tell, it sends.");
 }
 
 /// `nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]`

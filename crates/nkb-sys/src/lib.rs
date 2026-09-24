@@ -29,6 +29,7 @@
 //! `char`: the API takes one `u16` per event, so anything above the basic plane
 //! is two events and there is no way to make it one.
 
+pub mod field;
 pub mod hotkey;
 pub mod privilege;
 pub mod startup;

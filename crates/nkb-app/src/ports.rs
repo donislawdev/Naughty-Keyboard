@@ -93,6 +93,11 @@ pub enum DeliveryError {
     /// Nothing went out: the route asks BEFORE sending, because after the fact
     /// a blocked send cannot be told from a delivered one (`D72`).
     HigherPrivileges,
+    /// The keyboard focus is surely not in a text field - a button, a link, a
+    /// list item, a page that is not editable - so nothing went out: keys
+    /// there act on the control (`D73`, `OBS-135`). Only a type that takes no
+    /// text by definition answers this - a focus the route cannot read sends.
+    NoTextField,
 }
 
 impl fmt::Display for DeliveryError {
@@ -113,6 +118,7 @@ impl fmt::Display for DeliveryError {
                 write!(f, "cannot-carry-U+{:04X}", u32::from(*character))
             }
             Self::HigherPrivileges => f.write_str("higher-privileges"),
+            Self::NoTextField => f.write_str("no-text-field"),
         }
     }
 }
@@ -210,6 +216,10 @@ pub enum KeystrokeError {
     /// key was pressed: the system would have dropped them all and reported
     /// success (`OBS-128`, `D72`). The field is untouched.
     HigherPrivileges,
+    /// The keyboard focus is surely not in a text field, so no key was
+    /// pressed: on a list of files `Home`, `Shift+End`, `Delete` select every
+    /// file and delete them (`D73`, `OBS-135`). Nothing was touched.
+    NoTextField,
 }
 
 impl fmt::Display for KeystrokeError {
@@ -223,6 +233,7 @@ impl fmt::Display for KeystrokeError {
                 chords_expected,
             } => write!(f, "partial-{chords_sent}-of-{chords_expected}"),
             Self::HigherPrivileges => f.write_str("higher-privileges"),
+            Self::NoTextField => f.write_str("no-text-field"),
         }
     }
 }

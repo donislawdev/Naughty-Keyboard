@@ -217,6 +217,9 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::HigherPrivileges => {
             "This window runs with higher privileges than Naughty Keyboard, so the system blocks typing into it - values for it now go to your clipboard, replacing what you had copied. Press your paste shortcut to insert each one, or start the tool with the same privileges."
         }
+        Message::NoTextField => {
+            "The keyboard focus is not in a text field, so nothing was sent - keys there could press buttons or act on list items. Click into a field and press the shortcut again."
+        }
         Message::ClipboardBusy => {
             "Another application is holding the clipboard, so the value was not placed on it. Press the shortcut again in a moment."
         }
@@ -278,6 +281,7 @@ pub fn message(message: &Message, pack: &str) -> String {
     match message {
         Message::ClipboardMode
         | Message::HigherPrivileges
+        | Message::NoTextField
         | Message::ClipboardBusy
         | Message::NoTarget
         | Message::NoPack
@@ -869,6 +873,7 @@ mod tests {
             },
             Message::ClipboardMode,
             Message::HigherPrivileges,
+            Message::NoTextField,
             Message::ClipboardBusy,
             Message::ClipboardFailed {
                 detail: "the display went away".to_owned(),
@@ -1006,6 +1011,7 @@ mod tests {
             Message::ClipboardFailed { .. } => 17,
             Message::NotForClipboard { .. } => 18,
             Message::HigherPrivileges => 19,
+            Message::NoTextField => 20,
             Message::NoTarget => 1,
             Message::Interrupted { .. } => 2,
             Message::EndOfPack { .. } => 3,
@@ -1023,7 +1029,7 @@ mod tests {
         }
     }
 
-    const SLOTS: usize = 20;
+    const SLOTS: usize = 21;
 
     #[test]
     fn every_message_variant_is_listed_here() {

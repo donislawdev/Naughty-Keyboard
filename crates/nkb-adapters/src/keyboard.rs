@@ -53,6 +53,9 @@ impl ValueDelivery for DirectInjection {
         if !text.is_empty() && blocked_by_privileges() {
             return Err(DeliveryError::HigherPrivileges);
         }
+        if !text.is_empty() && focus_outside_a_text_field() {
+            return Err(DeliveryError::NoTextField);
+        }
         match nkb_sys::send_text(text) {
             Ok(outcome) => Ok(Delivered {
                 utf16_units: outcome.units,
@@ -98,6 +101,22 @@ fn blocked_by_privileges() -> bool {
     })
 }
 
+/// Whether the keyboard focus in the window in front is surely NOT a text field
+/// - a button, a link, a list item, a page that is not editable (`D73`).
+///
+/// The clearing recipe keeps "never beyond the field" only inside a field: on a
+/// list of files `Home`, `Shift+End`, `Delete` select them all and delete them
+/// (`OBS-135`), and on a button a space from the value presses it. Asked by
+/// both doors, after the privilege check - a window that takes no typing at all
+/// is the stronger answer - and asked HERE for the same reasons as that one.
+/// `FocusedInput::Unknown` presses as before: only a type that takes no text by
+/// definition stops a send, never a guess.
+fn focus_outside_a_text_field() -> bool {
+    nkb_sys::foreground_window().is_some_and(|window| {
+        nkb_sys::field::focused_input(window) == nkb_sys::field::FocusedInput::NotTextField
+    })
+}
+
 /// The one-line mapping between the vocabulary `app` speaks and the one
 /// `nkb-sys` speaks. Two enums rather than one shared type, because `nkb-sys`
 /// depends on nothing of ours and `nkb-core` knows nothing about systems.
@@ -119,6 +138,9 @@ impl KeystrokeSender for DirectInjection {
         }
         if !chords.is_empty() && blocked_by_privileges() {
             return Err(KeystrokeError::HigherPrivileges);
+        }
+        if !chords.is_empty() && focus_outside_a_text_field() {
+            return Err(KeystrokeError::NoTextField);
         }
         let mapped: Vec<nkb_sys::Chord> = chords.iter().map(chord_for).collect();
         match nkb_sys::send_chords(&mapped) {

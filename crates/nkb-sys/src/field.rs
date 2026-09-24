@@ -1,0 +1,700 @@
+//! What holds the keyboard focus in the window in front: a text field, surely
+//! not a text field, or something this module cannot tell.
+//!
+//! # Why the question is asked at all
+//!
+//! The palette clears before it types - `Home`, `Shift+End`, `Delete` (`D54`) -
+//! and that recipe keeps its promise "clearing never reaches beyond the field"
+//! only while the focus IS in a field. With the focus on a list of files the
+//! same three keys select from the first file to the last and delete them, on a
+//! button a space from the value presses it, and on a web page with single-key
+//! shortcuts every letter is a command (`OBS-135`). So the direct route asks
+//! before pressing anything, the same way it asks about privileges (`D72`).
+//!
+//! # The measurement this stands on
+//!
+//! Probed 2026-09-24 on Windows 11 against applications with a KNOWN focus -
+//! classic Win32 controls, Edge (Chromium), a Slint window, the console and a
+//! File Explorer list - 24 readings, every one with the probed window in front:
+//!
+//! - the Win32 answers (`GetGUIThreadInfo`: the focus window and the caret) tell
+//!   a field from a button only for classic controls. Chromium reports its one
+//!   window and NO caret, in a text input and on a button alike - so the reading
+//!   the documents planned (`OBS-42`: attach to the thread, ask `GetFocus`)
+//!   cannot see the case testers meet most often,
+//! - UI Automation tells them apart everywhere except Slint: `Edit` for inputs
+//!   and text areas, `Group` with the Text pattern for `contenteditable`,
+//!   `Button`, `Hyperlink`, `ListItem` (File Explorer too), `ComboBox` for a
+//!   `select`, and a READ-ONLY `Document` for the page itself,
+//! - a Slint window reports its focus on winit's hidden event target: `Pane`,
+//!   while the focus sits in a `TextInput`. That is why `Pane` is `Unknown` and
+//!   must stay so - calling it "not a field" would refuse every Slint
+//!   application, our own test victim included.
+//!
+//! The readings are the fixtures of the tests below, row for row.
+//!
+//! # Three answers, and the third is never folded into the second
+//!
+//! [`FocusedInput::NotTextField`] is claimed only for control types that take no
+//! text by definition, and it is the only answer that stops a send. Everything
+//! the module does not recognise, every read that fails or times out, and every
+//! element that belongs to another process than the window in front is
+//! [`FocusedInput::Unknown`] - and `Unknown` presses exactly as before this
+//! module existed. Guessing a cause the tool did not recognise is what
+//! `product-spec.md` 9.3 forbids.
+//!
+//! # What this reads, and what it does not
+//!
+//! Five properties of ONE element, the one holding the focus: its process, its
+//! control type, whether it has the Value pattern and whether that is
+//! read-only, and whether it has the Text pattern. Never its name, never its
+//! value, never its text, never any other element. `tests/field_reads_only_kinds.rs`
+//! holds the list and goes red when a property is added to it - the promise
+//! "does not read the contents of windows" (untouchable rule 17) rests on it.
+//!
+//! # Cost, and a hung application
+//!
+//! Measured through the managed client: 2-25 ms a read once the client exists,
+//! ~100 ms for the first on a thread. The client is made once per thread and
+//! kept. An application that does not answer would hold a UIA call for its
+//! default timeouts - seconds - so both are set to [`TIMEOUT_MS`], and a
+//! timeout is `Unknown`, never a frozen palette.
+
+use crate::WindowRef;
+
+/// What holds the keyboard focus in a window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FocusedInput {
+    /// A control that takes typed text: an edit box, an editable document, a
+    /// `contenteditable` region, a console.
+    TextField,
+    /// A control that takes no text by definition - a button, a link, a list
+    /// item, a page that is not editable. Keys sent there act on the control.
+    NotTextField,
+    /// Not recognised, not readable, not answered in time, or not in the window
+    /// in front. The send goes ahead exactly as before.
+    Unknown,
+}
+
+/// How long one UI Automation request may take before the answer is `Unknown`.
+///
+/// ⚠️ An estimate, not a measurement of a hung application: ten times the
+/// slowest read measured (25 ms), short enough that a tester does not feel a
+/// press hang. Applies to making the connection and to each request separately.
+pub const TIMEOUT_MS: u32 = 500;
+
+/// What holds the keyboard focus in `window`, asked fresh.
+///
+/// Returns [`FocusedInput::Unknown`] on systems without UI Automation.
+#[must_use]
+pub fn focused_input(window: WindowRef) -> FocusedInput {
+    platform::facts(window).map_or(FocusedInput::Unknown, |facts| classify(&facts))
+}
+
+/// What UI Automation said about the focused element - all of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Facts {
+    control_type: i32,
+    /// `Some(read_only)` when the element has the Value pattern.
+    value: Option<bool>,
+    /// Whether the element has the Text pattern.
+    text: bool,
+}
+
+/// UI Automation control type identifiers.
+///
+/// Fixed by the platform (`UIAutomationClient.h`), repeated here so the rule
+/// compiles and is tested on every system. A Windows-only test pins each one to
+/// the `windows-sys` constant of the same name, so they cannot drift.
+mod control {
+    pub const BUTTON: i32 = 50000;
+    pub const CHECK_BOX: i32 = 50002;
+    pub const COMBO_BOX: i32 = 50003;
+    pub const EDIT: i32 = 50004;
+    pub const HYPERLINK: i32 = 50005;
+    pub const IMAGE: i32 = 50006;
+    pub const LIST_ITEM: i32 = 50007;
+    pub const LIST: i32 = 50008;
+    pub const MENU: i32 = 50009;
+    pub const MENU_BAR: i32 = 50010;
+    pub const MENU_ITEM: i32 = 50011;
+    pub const PROGRESS_BAR: i32 = 50012;
+    pub const RADIO_BUTTON: i32 = 50013;
+    pub const SCROLL_BAR: i32 = 50014;
+    pub const SLIDER: i32 = 50015;
+    pub const STATUS_BAR: i32 = 50017;
+    pub const TAB: i32 = 50018;
+    pub const TAB_ITEM: i32 = 50019;
+    pub const TOOL_BAR: i32 = 50021;
+    pub const TOOL_TIP: i32 = 50022;
+    pub const TREE: i32 = 50023;
+    pub const TREE_ITEM: i32 = 50024;
+    pub const GROUP: i32 = 50026;
+    pub const THUMB: i32 = 50027;
+    pub const DOCUMENT: i32 = 50030;
+    pub const SPLIT_BUTTON: i32 = 50031;
+    // Named for the tests, which pin that it stays `Unknown`: the rule itself
+    // never mentions it, and that silence is the point.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub const PANE: i32 = 50033;
+    pub const HEADER: i32 = 50034;
+    pub const HEADER_ITEM: i32 = 50035;
+    pub const TITLE_BAR: i32 = 50037;
+    pub const SEPARATOR: i32 = 50038;
+}
+
+/// Control types that take no text by definition, whatever else they carry.
+///
+/// Measured in the probe: `BUTTON`, `CHECK_BOX`, `HYPERLINK`, `LIST_ITEM`,
+/// `SLIDER`. The rest by what the type is: a list or tree itself (the same
+/// clearing hazard as its items - `Home`, `Shift+End` select them all), menus
+/// (letters are mnemonics), tabs, headers (space sorts), and controls that show
+/// rather than take (an image, a progress bar, a status bar, a tooltip).
+///
+/// 🔴 Deliberately NOT here: `Pane` (Slint), `Custom`, `Window`, `Text`
+/// (terminals may report it), `Spinner` and `Calendar` (they take digits and
+/// dates), and the grid family - `DataGrid`, `DataItem`, `Table` - because a
+/// spreadsheet takes typing in its cells and none of it was measured.
+const NOT_TEXT: &[i32] = &[
+    control::BUTTON,
+    control::CHECK_BOX,
+    control::HYPERLINK,
+    control::IMAGE,
+    control::LIST_ITEM,
+    control::LIST,
+    control::MENU,
+    control::MENU_BAR,
+    control::MENU_ITEM,
+    control::PROGRESS_BAR,
+    control::RADIO_BUTTON,
+    control::SCROLL_BAR,
+    control::SLIDER,
+    control::STATUS_BAR,
+    control::TAB,
+    control::TAB_ITEM,
+    control::TOOL_BAR,
+    control::TOOL_TIP,
+    control::TREE,
+    control::TREE_ITEM,
+    control::THUMB,
+    control::SPLIT_BUTTON,
+    control::HEADER,
+    control::HEADER_ITEM,
+    control::TITLE_BAR,
+    control::SEPARATOR,
+];
+
+/// The decision, apart from the reading, so it can be checked on every system.
+fn classify(facts: &Facts) -> FocusedInput {
+    match facts.control_type {
+        control::EDIT => FocusedInput::TextField,
+        // A rich edit box is a writable `Document`, a console one with the Text
+        // pattern and no Value pattern - both take typing. A web page that is
+        // not editable is a READ-ONLY `Document`, and there a letter can be a
+        // command of the application under test.
+        control::DOCUMENT => match (facts.value, facts.text) {
+            (Some(true), _) => FocusedInput::NotTextField,
+            (Some(false), _) | (None, true) => FocusedInput::TextField,
+            (None, false) => FocusedInput::Unknown,
+        },
+        // `contenteditable` in Chromium. A group without text is a container
+        // of something else, and the module does not know of what.
+        control::GROUP if facts.text => FocusedInput::TextField,
+        // An editable combo box passes the focus to its edit box, so a focused
+        // combo box without text is a closed list - a `select` in a browser.
+        control::COMBO_BOX if facts.text => FocusedInput::TextField,
+        control::COMBO_BOX => FocusedInput::NotTextField,
+        other if NOT_TEXT.contains(&other) => FocusedInput::NotTextField,
+        _ => FocusedInput::Unknown,
+    }
+}
+
+#[cfg(windows)]
+mod platform {
+    use super::{Facts, TIMEOUT_MS};
+    use crate::WindowRef;
+    use core::ffi::c_void;
+    use core::ptr::{null, null_mut};
+    use std::cell::RefCell;
+    use windows_sys::Win32::Foundation::{HWND, RPC_E_CHANGED_MODE};
+    use windows_sys::Win32::System::Com::{
+        CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx,
+        CoUninitialize,
+    };
+    use windows_sys::Win32::System::Variant::{VARIANT, VT_BOOL, VT_I4, VariantClear};
+    use windows_sys::Win32::UI::Accessibility::CUIAutomation8;
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+    use windows_sys::core::{GUID, HRESULT};
+
+    /// `IUIAutomation2`, which adds the two timeouts to `IUIAutomation`.
+    const IID_IUIAUTOMATION2: GUID = GUID::from_u128(0x34723aff_0c9d_49d0_9896_7ab52df8cd8a);
+
+    // The five properties read, and the only ones - see the module text and
+    // `tests/field_reads_only_kinds.rs`, which holds this list.
+    pub(super) const PROPERTY_PROCESS_ID: i32 = 30002;
+    pub(super) const PROPERTY_CONTROL_TYPE: i32 = 30003;
+    pub(super) const PROPERTY_IS_TEXT_PATTERN_AVAILABLE: i32 = 30040;
+    pub(super) const PROPERTY_IS_VALUE_PATTERN_AVAILABLE: i32 = 30043;
+    pub(super) const PROPERTY_VALUE_IS_READ_ONLY: i32 = 30046;
+
+    // Positions in the COM method tables, counted from the start of each
+    // table: `IUnknown` takes 0-2. Taken from the `windows` crate 0.62.2
+    // (`IUIAutomation_Vtbl`, `IUIAutomation2_Vtbl`, `IUIAutomationElement_Vtbl`)
+    // rather than counted from memory, 2026-09-24.
+    const SLOT_RELEASE: usize = 2;
+    const SLOT_GET_FOCUSED_ELEMENT: usize = 8;
+    const SLOT_GET_CURRENT_PROPERTY_VALUE: usize = 10;
+    const SLOT_SET_CONNECTION_TIMEOUT: usize = 61;
+    const SLOT_SET_TRANSACTION_TIMEOUT: usize = 63;
+
+    type Raw = *mut c_void;
+
+    /// The function at `slot` of `object`'s method table.
+    ///
+    /// # Safety
+    ///
+    /// `object` must be a live COM interface pointer whose table has `slot`,
+    /// and `F` must be that method's exact signature.
+    unsafe fn method<F: Copy>(object: Raw, slot: usize) -> F {
+        let table = unsafe { *object.cast::<*const *const c_void>() };
+        let entry = unsafe { *table.add(slot) };
+        unsafe { core::mem::transmute_copy::<*const c_void, F>(&entry) }
+    }
+
+    /// A COM reference this module holds, released on every path out.
+    struct Com(Raw);
+
+    impl Drop for Com {
+        fn drop(&mut self) {
+            let release: unsafe extern "system" fn(Raw) -> u32 =
+                unsafe { method(self.0, SLOT_RELEASE) };
+            unsafe { release(self.0) };
+        }
+    }
+
+    /// One `CoInitializeEx` this thread owns, undone when the client goes.
+    struct Apartment {
+        owned: bool,
+    }
+
+    impl Drop for Apartment {
+        fn drop(&mut self) {
+            if self.owned {
+                unsafe { CoUninitialize() };
+            }
+        }
+    }
+
+    /// The UI Automation client of this thread. Field order is drop order:
+    /// the reference goes before the apartment it lives in.
+    struct Client {
+        automation: Com,
+        _apartment: Apartment,
+    }
+
+    thread_local! {
+        static CLIENT: RefCell<Option<Client>> = const { RefCell::new(None) };
+    }
+
+    impl Client {
+        fn new() -> Option<Self> {
+            let joined = unsafe { CoInitializeEx(null(), COINIT_MULTITHREADED as u32) };
+            // S_OK and S_FALSE both count and both must be undone. A thread that
+            // chose a single-threaded apartment before us answers
+            // RPC_E_CHANGED_MODE: UI Automation works there too, and there is
+            // nothing of ours to undo.
+            let apartment = Apartment { owned: joined >= 0 };
+            if joined < 0 && joined != RPC_E_CHANGED_MODE {
+                return None;
+            }
+            let mut raw: Raw = null_mut();
+            let made: HRESULT = unsafe {
+                CoCreateInstance(
+                    &CUIAutomation8,
+                    null_mut(),
+                    CLSCTX_INPROC_SERVER,
+                    &IID_IUIAUTOMATION2,
+                    &mut raw,
+                )
+            };
+            if made < 0 || raw.is_null() {
+                return None;
+            }
+            let automation = Com(raw);
+            // Without both timeouts a hung application would hold the press for
+            // seconds, so a client that cannot set them is not used at all.
+            let set_connection: unsafe extern "system" fn(Raw, u32) -> HRESULT =
+                unsafe { method(raw, SLOT_SET_CONNECTION_TIMEOUT) };
+            let set_transaction: unsafe extern "system" fn(Raw, u32) -> HRESULT =
+                unsafe { method(raw, SLOT_SET_TRANSACTION_TIMEOUT) };
+            if unsafe { set_connection(raw, TIMEOUT_MS) } < 0
+                || unsafe { set_transaction(raw, TIMEOUT_MS) } < 0
+            {
+                return None;
+            }
+            Some(Self {
+                automation,
+                _apartment: apartment,
+            })
+        }
+
+        fn facts(&self, process: u32) -> Option<Facts> {
+            let get_focused: unsafe extern "system" fn(Raw, *mut Raw) -> HRESULT =
+                unsafe { method(self.automation.0, SLOT_GET_FOCUSED_ELEMENT) };
+            let mut raw: Raw = null_mut();
+            if unsafe { get_focused(self.automation.0, &mut raw) } < 0 || raw.is_null() {
+                return None;
+            }
+            let element = Com(raw);
+            // The focus of the SYSTEM, which is not always inside the window in
+            // front - a race, a focus left in another application. An element
+            // of another process says nothing about this window.
+            let owner = u32::try_from(int_property(&element, PROPERTY_PROCESS_ID)?).ok()?;
+            if owner != process {
+                return None;
+            }
+            let control_type = int_property(&element, PROPERTY_CONTROL_TYPE)?;
+            let value = if bool_property(&element, PROPERTY_IS_VALUE_PATTERN_AVAILABLE)? {
+                Some(bool_property(&element, PROPERTY_VALUE_IS_READ_ONLY)?)
+            } else {
+                None
+            };
+            let text = bool_property(&element, PROPERTY_IS_TEXT_PATTERN_AVAILABLE)?;
+            Some(Facts {
+                control_type,
+                value,
+                text,
+            })
+        }
+    }
+
+    /// A `VARIANT` this module received, cleared on every path out - a
+    /// property UIA does not support comes back as an object reference.
+    struct Variant(VARIANT);
+
+    impl Drop for Variant {
+        fn drop(&mut self) {
+            unsafe { VariantClear(&mut self.0) };
+        }
+    }
+
+    fn property(element: &Com, id: i32) -> Option<Variant> {
+        let get: unsafe extern "system" fn(Raw, i32, *mut VARIANT) -> HRESULT =
+            unsafe { method(element.0, SLOT_GET_CURRENT_PROPERTY_VALUE) };
+        let mut value = Variant(VARIANT::default());
+        if unsafe { get(element.0, id, &mut value.0) } < 0 {
+            return None;
+        }
+        Some(value)
+    }
+
+    // The tag is checked BEFORE the union is read, and written as a plain `if`
+    // on purpose: `then_some` would read the member first and compare after.
+    fn int_property(element: &Com, id: i32) -> Option<i32> {
+        let value = property(element, id)?;
+        let inner = unsafe { &value.0.Anonymous.Anonymous };
+        if inner.vt != VT_I4 {
+            return None;
+        }
+        Some(unsafe { inner.Anonymous.lVal })
+    }
+
+    fn bool_property(element: &Com, id: i32) -> Option<bool> {
+        let value = property(element, id)?;
+        let inner = unsafe { &value.0.Anonymous.Anonymous };
+        if inner.vt != VT_BOOL {
+            return None;
+        }
+        Some(unsafe { inner.Anonymous.boolVal } != 0)
+    }
+
+    pub fn facts(window: WindowRef) -> Option<Facts> {
+        let mut process = 0u32;
+        unsafe { GetWindowThreadProcessId(window.0 as usize as HWND, &mut process) };
+        if process == 0 {
+            return None;
+        }
+        CLIENT.with_borrow_mut(|slot| {
+            if slot.is_none() {
+                *slot = Client::new();
+            }
+            slot.as_ref()?.facts(process)
+        })
+    }
+}
+
+#[cfg(not(windows))]
+mod platform {
+    use super::Facts;
+    use crate::WindowRef;
+
+    // No route to type into other windows exists here yet (`send_text` says so
+    // by name), so there is no focus to ask about. `None` makes the answer
+    // `Unknown`, never a claim this build cannot see.
+    pub fn facts(_window: WindowRef) -> Option<Facts> {
+        None
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::panic,
+    reason = "a failed expectation in a test is a failed test"
+)]
+mod tests {
+    use super::*;
+
+    fn facts(control_type: i32, value: Option<bool>, text: bool) -> Facts {
+        Facts {
+            control_type,
+            value,
+            text,
+        }
+    }
+
+    const RW: Option<bool> = Some(false);
+    const RO: Option<bool> = Some(true);
+
+    /// The probe of 2026-09-24, row for row: what UI Automation said with the
+    /// probed window in front, and what the focus really was. A change to the
+    /// rule that turns any of these around is a change to what was MEASURED.
+    #[test]
+    fn every_measured_focus_is_answered_as_it_was() {
+        use FocusedInput::{NotTextField, TextField, Unknown};
+        let rows: &[(&str, Facts, FocusedInput)] = &[
+            // Classic Win32 controls, through WinForms.
+            ("edit box", facts(control::EDIT, RW, true), TextField),
+            (
+                "multi-line edit box",
+                facts(control::EDIT, RW, true),
+                TextField,
+            ),
+            (
+                "rich edit box",
+                facts(control::DOCUMENT, RW, true),
+                TextField,
+            ),
+            (
+                "read-only edit box",
+                facts(control::EDIT, RO, true),
+                TextField,
+            ),
+            ("button", facts(control::BUTTON, None, false), NotTextField),
+            (
+                "check box",
+                facts(control::CHECK_BOX, None, false),
+                NotTextField,
+            ),
+            (
+                "list view item",
+                facts(control::LIST_ITEM, None, false),
+                NotTextField,
+            ),
+            (
+                "editable combo box",
+                facts(control::EDIT, RW, true),
+                TextField,
+            ),
+            (
+                "drop-down list",
+                facts(control::COMBO_BOX, RW, false),
+                NotTextField,
+            ),
+            // Slint: the focus is in a TextInput, UIA sees winit's event target.
+            (
+                "slint text input",
+                facts(control::PANE, None, false),
+                Unknown,
+            ),
+            (
+                "slint read-only input",
+                facts(control::PANE, None, false),
+                Unknown,
+            ),
+            // Edge (Chromium).
+            ("web input", facts(control::EDIT, RW, true), TextField),
+            ("web password", facts(control::EDIT, RW, true), TextField),
+            (
+                "web read-only input",
+                facts(control::EDIT, RO, true),
+                TextField,
+            ),
+            ("web textarea", facts(control::EDIT, RW, true), TextField),
+            (
+                "web contenteditable",
+                facts(control::GROUP, None, true),
+                TextField,
+            ),
+            (
+                "web button",
+                facts(control::BUTTON, None, false),
+                NotTextField,
+            ),
+            (
+                "web link",
+                facts(control::HYPERLINK, RO, false),
+                NotTextField,
+            ),
+            (
+                "web select",
+                facts(control::COMBO_BOX, RW, false),
+                NotTextField,
+            ),
+            (
+                "web check box",
+                facts(control::CHECK_BOX, RW, false),
+                NotTextField,
+            ),
+            ("web range", facts(control::SLIDER, RW, false), NotTextField),
+            (
+                "web page, nothing focused",
+                facts(control::DOCUMENT, RO, true),
+                NotTextField,
+            ),
+            // The console, and a File Explorer list of files.
+            ("console", facts(control::DOCUMENT, None, true), TextField),
+            (
+                "file explorer list",
+                facts(control::LIST_ITEM, RW, false),
+                NotTextField,
+            ),
+        ];
+        for (what, reading, expected) in rows {
+            assert_eq!(classify(reading), *expected, "{what}: {reading:?}");
+        }
+    }
+
+    #[test]
+    fn only_a_type_that_takes_no_text_stops_a_send() {
+        // Everything outside the known list is Unknown, including the types a
+        // spreadsheet or a custom widget reports - the send goes ahead there.
+        for unknown in [
+            50001, 50016, 50020, 50025, 50028, 50029, 50032, 50036, 50039, 50040,
+        ] {
+            assert_eq!(
+                classify(&facts(unknown, None, false)),
+                FocusedInput::Unknown,
+                "control type {unknown}"
+            );
+        }
+        // A type nobody knows yet, from a future version of the platform.
+        assert_eq!(classify(&facts(59_999, None, false)), FocusedInput::Unknown);
+        // A group or a document with nothing to say is not a claim either way.
+        assert_eq!(
+            classify(&facts(control::GROUP, None, false)),
+            FocusedInput::Unknown
+        );
+        assert_eq!(
+            classify(&facts(control::DOCUMENT, None, false)),
+            FocusedInput::Unknown
+        );
+    }
+
+    #[test]
+    fn no_type_is_both_a_field_and_not_one() {
+        // `EDIT`, `DOCUMENT`, `GROUP` and `COMBO_BOX` are decided by their
+        // patterns, and the list of types that take no text must not name them,
+        // or the order of the match arms would decide instead of the rule.
+        for decided_by_patterns in [
+            control::EDIT,
+            control::DOCUMENT,
+            control::GROUP,
+            control::COMBO_BOX,
+        ] {
+            assert!(
+                !NOT_TEXT.contains(&decided_by_patterns),
+                "{decided_by_patterns}"
+            );
+        }
+        assert!(
+            !NOT_TEXT.contains(&control::PANE),
+            "Pane is how Slint reports a text input"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_control_type_numbers_are_the_platform_s() {
+        use windows_sys::Win32::UI::Accessibility as uia;
+        let pairs = [
+            (control::BUTTON, uia::UIA_ButtonControlTypeId),
+            (control::CHECK_BOX, uia::UIA_CheckBoxControlTypeId),
+            (control::COMBO_BOX, uia::UIA_ComboBoxControlTypeId),
+            (control::EDIT, uia::UIA_EditControlTypeId),
+            (control::HYPERLINK, uia::UIA_HyperlinkControlTypeId),
+            (control::IMAGE, uia::UIA_ImageControlTypeId),
+            (control::LIST_ITEM, uia::UIA_ListItemControlTypeId),
+            (control::LIST, uia::UIA_ListControlTypeId),
+            (control::MENU, uia::UIA_MenuControlTypeId),
+            (control::MENU_BAR, uia::UIA_MenuBarControlTypeId),
+            (control::MENU_ITEM, uia::UIA_MenuItemControlTypeId),
+            (control::PROGRESS_BAR, uia::UIA_ProgressBarControlTypeId),
+            (control::RADIO_BUTTON, uia::UIA_RadioButtonControlTypeId),
+            (control::SCROLL_BAR, uia::UIA_ScrollBarControlTypeId),
+            (control::SLIDER, uia::UIA_SliderControlTypeId),
+            (control::STATUS_BAR, uia::UIA_StatusBarControlTypeId),
+            (control::TAB, uia::UIA_TabControlTypeId),
+            (control::TAB_ITEM, uia::UIA_TabItemControlTypeId),
+            (control::TOOL_BAR, uia::UIA_ToolBarControlTypeId),
+            (control::TOOL_TIP, uia::UIA_ToolTipControlTypeId),
+            (control::TREE, uia::UIA_TreeControlTypeId),
+            (control::TREE_ITEM, uia::UIA_TreeItemControlTypeId),
+            (control::GROUP, uia::UIA_GroupControlTypeId),
+            (control::THUMB, uia::UIA_ThumbControlTypeId),
+            (control::DOCUMENT, uia::UIA_DocumentControlTypeId),
+            (control::SPLIT_BUTTON, uia::UIA_SplitButtonControlTypeId),
+            (control::PANE, uia::UIA_PaneControlTypeId),
+            (control::HEADER, uia::UIA_HeaderControlTypeId),
+            (control::HEADER_ITEM, uia::UIA_HeaderItemControlTypeId),
+            (control::TITLE_BAR, uia::UIA_TitleBarControlTypeId),
+            (control::SEPARATOR, uia::UIA_SeparatorControlTypeId),
+        ];
+        for (ours, platform) in pairs {
+            assert_eq!(ours, platform);
+        }
+        let properties = [
+            (platform::PROPERTY_PROCESS_ID, uia::UIA_ProcessIdPropertyId),
+            (
+                platform::PROPERTY_CONTROL_TYPE,
+                uia::UIA_ControlTypePropertyId,
+            ),
+            (
+                platform::PROPERTY_IS_TEXT_PATTERN_AVAILABLE,
+                uia::UIA_IsTextPatternAvailablePropertyId,
+            ),
+            (
+                platform::PROPERTY_IS_VALUE_PATTERN_AVAILABLE,
+                uia::UIA_IsValuePatternAvailablePropertyId,
+            ),
+            (
+                platform::PROPERTY_VALUE_IS_READ_ONLY,
+                uia::UIA_ValueIsReadOnlyPropertyId,
+            ),
+        ];
+        for (ours, platform) in properties {
+            assert_eq!(ours, platform);
+        }
+    }
+
+    #[test]
+    fn a_window_that_does_not_exist_is_unknown() {
+        // A null handle has no process behind it, so no element can belong to
+        // it: the answer must be `Unknown`, and the call must come back.
+        assert_eq!(focused_input(WindowRef(0)), FocusedInput::Unknown);
+    }
+
+    #[test]
+    fn the_client_answers_where_the_route_exists() {
+        // The whole COM path on this machine, against whatever is in front:
+        // any of the three answers is fine, a crash or a hang is not. Asked
+        // twice, so the kept client is exercised as well as the new one.
+        if !crate::can_send() {
+            return;
+        }
+        if let Some(window) = crate::foreground_window() {
+            let _ = focused_input(window);
+            let _ = focused_input(window);
+        }
+    }
+}

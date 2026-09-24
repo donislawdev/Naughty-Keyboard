@@ -257,6 +257,11 @@ pub enum Message {
     /// tool READ - the integrity level of the window's process - never a guess:
     /// a level it could not read sends as before and says nothing.
     HigherPrivileges,
+    /// The keyboard focus is surely not in a text field, so nothing was sent
+    /// and nothing was cleared (`D73`). A cause the tool READ - the control
+    /// type of the focused element - never a guess: a focus it could not read
+    /// sends as before and says nothing.
+    NoTextField,
     /// Clipboard mode is on because the tester asked for it: values go to the
     /// clipboard, replacing what was there. Once, at the start.
     ClipboardMode,
@@ -791,6 +796,13 @@ fn classify(
             None,
             vec![Message::HigherPrivileges],
         ),
+        // `D73`: the focus is on a button, a link, a list item - nothing was
+        // pressed. Not a window problem, so no clipboard: the tester clicks into
+        // a field and the same value goes on the next press.
+        SendOutcome::NotDelivered {
+            error: DeliveryError::NoTextField,
+            ..
+        } => (Event::InsertionRefused, None, vec![Message::NoTextField]),
         // The three below are reported by the clipboard route alone - the
         // direct one presses keys and has no clipboard to be busy or to refuse.
         // A direct route that began to report them would need sentences of its
@@ -868,6 +880,9 @@ fn after_clearing(error: KeystrokeError) -> (Event, Message) {
         // Rerouted to the clipboard in `attempt` before it gets here; reached
         // only if that ever stops. No key was pressed and the field is intact.
         KeystrokeError::HigherPrivileges => (Event::InsertionRefused, Message::HigherPrivileges),
+        // `D73`, `OBS-135`: the clearing goes first, so this is where a focus on
+        // a list of files is caught - before `Home`, `Shift+End`, `Delete`.
+        KeystrokeError::NoTextField => (Event::InsertionRefused, Message::NoTextField),
     }
 }
 
@@ -1562,5 +1577,51 @@ mod tests {
         let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
         kit.direct.set_target(Some(TargetRef(9)));
         assert_eq!(advance.on_idle(&kit.ports()), None);
+    }
+
+    // ---- `D73`: the keyboard focus is not in a text field ----------------------
+
+    #[test]
+    fn a_focus_outside_a_field_refuses_before_the_clearing_and_keeps_the_counter() {
+        // The clearing goes first, so on a list of files this is where
+        // `Home`, `Shift+End`, `Delete` are stopped (`OBS-135`).
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_keys(FakeKeys::failing(KeystrokeError::NoTextField));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+
+        assert!(
+            kit.direct.handed.borrow().is_empty(),
+            "nothing may be typed when the focus is on a button or a list item"
+        );
+        assert!(
+            kit.by_clipboard.handed.borrow().is_empty(),
+            "not a window problem, so not the clipboard either - the tester clicks into a field"
+        );
+        assert_eq!(outcome.messages, vec![Message::NoTextField]);
+        assert!(outcome.sent.is_none());
+        assert_eq!(
+            advance.counter(),
+            Some((0, 3)),
+            "nothing went out, so the counter stays and the same value goes next"
+        );
+        assert!(!outcome.clipboard_for_window);
+    }
+
+    #[test]
+    fn a_refusal_from_the_send_itself_says_the_same_and_the_value_waits() {
+        // Without clearing - or when the focus moved between the clearing and
+        // the value - the send refuses on its own.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_delivery(FakeDelivery::failing(DeliveryError::NoTextField));
+        let first = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(first.messages, vec![Message::NoTextField]);
+        assert!(kit.by_clipboard.handed.borrow().is_empty());
+
+        // The tester clicks into a field: the next press sends the SAME value.
+        let ordinary = Kit::ready();
+        let second = advance.on_action(HotkeyAction::NextValue, &ordinary.ports());
+        assert_eq!(*ordinary.direct.handed.borrow(), vec!["alpha"]);
+        assert!(second.messages.is_empty());
+        assert_eq!(advance.counter(), Some((1, 3)));
     }
 }
