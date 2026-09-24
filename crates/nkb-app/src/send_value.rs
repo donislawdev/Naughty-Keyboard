@@ -94,33 +94,62 @@ pub struct SendRequest<'a> {
     pub clearing: Clearing,
 }
 
+/// What a person is told about the value a send was about, whether all of it
+/// arrived or not.
+///
+/// One name for the set, because two outcomes carry it: a value that arrived
+/// whole and a value that stopped part-way. Until `OBS-126` only the first did,
+/// so the palette kept the value BEFORE on screen beside a sentence about an
+/// interruption, while the report block described the interrupted one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValueFacts {
+    /// `pack-id/value-id`, the same shape `emit` prints.
+    pub reference: String,
+    pub name: String,
+    /// Clusters, as a person sees them. `nkb_core::graphemes` counts these,
+    /// and it is the only one of the four a tester can check by looking.
+    pub graphemes: usize,
+    pub code_points: usize,
+    pub bytes: usize,
+    /// Warnings the pack carried. It was still sent - warnings never block,
+    /// only errors do - but a silent send would hide them.
+    pub warnings: usize,
+    /// The value as a person can see it: its text with invisible characters
+    /// substituted, or - for a generated value - the recipe that makes it.
+    /// `ux-spec.md` 2 requires this line and `nkb_core::preview` builds it.
+    pub preview: ValuePreview,
+    /// What the value is made of, as facts rather than as a sentence.
+    pub shape: Vec<ShapeFact>,
+}
+
 /// What happened to one send.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SendOutcome {
     /// The value reached the field.
     Sent {
-        /// `pack-id/value-id`, the same shape `emit` prints.
-        reference: String,
-        name: String,
-        /// Clusters, as a person sees them. `nkb_core::graphemes` counts these,
-        /// and it is the only one of the four a tester can check by looking.
-        graphemes: usize,
-        code_points: usize,
-        bytes: usize,
+        facts: ValueFacts,
         /// What actually crossed the wire. Differs from `code_points` exactly
         /// when the value contains characters above the basic plane.
         utf16_units: usize,
-        /// Warnings the pack carried. It was still sent - warnings never block,
-        /// only errors do - but a silent send would hide them.
-        warnings: usize,
         /// What became of the clearing before the value.
         clearing: ClearingOutcome,
-        /// The value as a person can see it: its text with invisible characters
-        /// substituted, or - for a generated value - the recipe that makes it.
-        /// `ux-spec.md` 2 requires this line and `nkb_core::preview` builds it.
-        preview: ValuePreview,
-        /// What the value is made of, as facts rather than as a sentence.
-        shape: Vec<ShapeFact>,
+    },
+    /// Part of the value reached the field, and then delivery stopped. The
+    /// field holds a fragment. The facts are those of the WHOLE value, because
+    /// that is the value the fragment is a piece of, and the two numbers say
+    /// how much of it crossed.
+    ///
+    /// Its own variant rather than [`SendOutcome::NotDelivered`] with a
+    /// [`DeliveryError::Partial`] inside, because a caller must be able to say
+    /// WHICH value was left half-written - the palette shows it and the command
+    /// line names it (`OBS-126`). `NotDelivered` never carries `Partial`.
+    Interrupted {
+        facts: ValueFacts,
+        units_sent: usize,
+        units_expected: usize,
+        /// What became of the clearing before the value - the tester needs to
+        /// know the field is empty-plus-fragment, not old-content-plus-fragment.
+        clearing: ClearingOutcome,
     },
     /// No pack of that name.
     NotFound,
@@ -139,12 +168,12 @@ pub enum SendOutcome {
     /// [`KeystrokeError::InTerminal`]: those are skips, and the value goes on
     /// ([`ClearingOutcome::Skipped`]).
     NotCleared { error: KeystrokeError },
-    /// There is a route, and the value did not arrive, or not all of it.
+    /// There is a route, and none of the value arrived. A value that arrived
+    /// in part is [`SendOutcome::Interrupted`].
     NotDelivered {
         error: DeliveryError,
-        /// What became of the clearing when this happened - the tester needs
-        /// to know the field is empty-plus-fragment, not
-        /// old-content-plus-fragment.
+        /// What became of the clearing when this happened - a cleared field
+        /// with nothing sent is empty, not as the tester left it.
         clearing: ClearingOutcome,
     },
 }
@@ -286,35 +315,39 @@ pub fn deliver_value(
     };
 
     let expected_units = literal.encode_utf16().count();
+    // Built only when something reached the field, so a refusal costs no
+    // grapheme walk over a value that may be a million characters long.
+    let facts = || ValueFacts {
+        reference: format!("{}/{}", pack.id, value.id),
+        name: value.name.clone(),
+        // Counted from the literal that went out, like the preview below and
+        // for the same reason: the written form is escaped, so counting it
+        // would answer a question nobody asked.
+        graphemes: nkb_core::graphemes::count(&literal),
+        code_points: metrics.code_points,
+        bytes: metrics.bytes,
+        warnings,
+        // Built from the RECIPE, not from the literal: a generated value is
+        // shown as `255 × "a"`, and a written one as the text that went out
+        // (never the escaped form, which `nkb emit` already answers for).
+        // From the recipe also means a million-character value is not
+        // walked end to end to show a hundred characters of it.
+        preview: preview_of(&value.body),
+        shape: shape(&literal),
+    };
 
     match delivery.deliver(&literal) {
         Ok(delivered) => SendOutcome::Sent {
-            reference: format!("{}/{}", pack.id, value.id),
-            name: value.name.clone(),
-            // Counted from the literal that went out, like the preview below and
-            // for the same reason: the written form is escaped, so counting it
-            // would answer a question nobody asked.
-            graphemes: nkb_core::graphemes::count(&literal),
-            code_points: metrics.code_points,
-            bytes: metrics.bytes,
+            facts: facts(),
             utf16_units: delivered.utf16_units,
-            warnings,
             clearing,
-            // Built from the RECIPE, not from the literal: a generated value is
-            // shown as `255 × "a"`, and a written one as the text that went out
-            // (never the escaped form, which `nkb emit` already answers for).
-            // From the recipe also means a million-character value is not
-            // walked end to end to show a hundred characters of it.
-            preview: preview_of(&value.body),
-            shape: shape(&literal),
         },
-        Err(DeliveryError::Partial { units_sent, .. }) => SendOutcome::NotDelivered {
-            // Rebuilt with the count this layer knows, so the two halves of the
-            // bad news come from the same place and cannot disagree.
-            error: DeliveryError::Partial {
-                units_sent,
-                units_expected: expected_units,
-            },
+        Err(DeliveryError::Partial { units_sent, .. }) => SendOutcome::Interrupted {
+            facts: facts(),
+            units_sent,
+            // The count this layer knows, so the two halves of the bad news
+            // come from the same place and cannot disagree.
+            units_expected: expected_units,
             clearing,
         },
         Err(error) => SendOutcome::NotDelivered { error, clearing },
@@ -758,7 +791,7 @@ mod tests {
             &request(2, Clearing::Keep),
         );
         let SendOutcome::Sent {
-            code_points,
+            facts: ValueFacts { code_points, .. },
             utf16_units,
             ..
         } = outcome
@@ -788,8 +821,12 @@ mod tests {
         };
         let outcome = send_value(&Shelf, &generated, &spy, &keys, &request(1, Clearing::Keep));
         let SendOutcome::Sent {
-            preview,
-            code_points,
+            facts:
+                ValueFacts {
+                    preview,
+                    code_points,
+                    ..
+                },
             ..
         } = outcome
         else {
@@ -864,7 +901,7 @@ mod tests {
     }
 
     #[test]
-    fn a_partial_delivery_is_never_reported_as_a_send_and_says_whether_the_field_was_cleared() {
+    fn a_partial_delivery_is_interrupted_names_its_value_and_says_whether_the_field_was_cleared() {
         let log = log();
         let spy = Spy {
             available: Availability::Ready,
@@ -884,15 +921,25 @@ mod tests {
             &keys,
             &request(2, Clearing::Line),
         );
-        let SendOutcome::NotDelivered { error, clearing } = outcome else {
-            panic!("a partial delivery must not look like a send, got {outcome:?}");
+        // Never `Sent` - a fragment must not look like a value that arrived -
+        // and never a bare `NotDelivered`, which could not say WHICH value was
+        // left half-written (`OBS-126`).
+        let SendOutcome::Interrupted {
+            facts,
+            units_sent,
+            units_expected,
+            clearing,
+        } = outcome
+        else {
+            panic!("a partial delivery must be an interruption, got {outcome:?}");
         };
+        assert_eq!((units_sent, units_expected), (1, 3));
+        assert_eq!(facts.reference, "sample/second");
+        assert_eq!(facts.name, "Value second");
         assert_eq!(
-            error,
-            DeliveryError::Partial {
-                units_sent: 1,
-                units_expected: 3
-            }
+            (facts.code_points, facts.graphemes),
+            (2, 2),
+            "the facts are those of the whole value the fragment is a piece of"
         );
         assert_eq!(
             clearing,

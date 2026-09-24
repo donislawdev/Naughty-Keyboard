@@ -29,7 +29,7 @@ use nkb_app::ports::{
     Availability, Delivered, DeliveryError, KeystrokeError, KeystrokeSender, PackCatalogue,
     PackFormat, PackSource, TargetRef, ValueDelivery,
 };
-use nkb_app::{Clearing, SendOutcome, deliver_value};
+use nkb_app::{Clearing, SendOutcome, ValueFacts, deliver_value};
 use nkb_core::keys::KeyChord;
 use nkb_core::pack::Pack;
 use nkb_core::report::{Arrival, ReportBlock};
@@ -106,11 +106,15 @@ fn every_shipped_value_has_a_block_that_agrees_with_the_palette() {
                 .unwrap_or_else(|e| panic!("{}/{}: {e:?}", pack.id, value.id));
 
             let SendOutcome::Sent {
-                graphemes,
-                code_points,
-                bytes,
-                shape,
-                reference,
+                facts:
+                    ValueFacts {
+                        graphemes,
+                        code_points,
+                        bytes,
+                        shape,
+                        reference,
+                        ..
+                    },
                 ..
             } = deliver_value(&pack, value, &TakesEverything, &NoKeys, Clearing::Keep, 0)
             else {

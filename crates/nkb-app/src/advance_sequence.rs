@@ -72,7 +72,6 @@
 
 use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::pack::{Pack, Risk};
-use nkb_core::preview::{ShapeFact, ValuePreview};
 use nkb_core::report::{Arrival, ReportBlock};
 use nkb_core::sequence::{Delivery, Effect, Event, Sequence};
 
@@ -81,7 +80,9 @@ use crate::ports::{
     Availability, Clipboard, ClipboardError, DeliveryError, History, KeystrokeError,
     KeystrokeSender, PackFormat, PackSource, ReportText, SourceError, TargetRef, ValueDelivery,
 };
-use crate::send_value::{Clearing, ClearingOutcome, SendOutcome, SkipReason, deliver_value};
+use crate::send_value::{
+    Clearing, ClearingOutcome, SendOutcome, SkipReason, ValueFacts, deliver_value,
+};
 
 /// Everything an action may reach outside the sequence, one port each.
 ///
@@ -166,7 +167,7 @@ pub enum ChooseError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Outcome {
     pub sequence: Sequence,
-    /// The value that just reached the field, when one did.
+    /// The value that just reached the field, whole or in part, when one did.
     pub sent: Option<Sent>,
     /// What the palette must say, in order. Keys and numbers, never words.
     pub messages: Vec<Message>,
@@ -183,41 +184,32 @@ pub struct Outcome {
     pub clipboard_for_window: bool,
 }
 
-/// What the palette shows about the value that just went out.
+/// What the palette shows about the value that just went out - whole, or cut
+/// short part-way.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sent {
-    /// `pack-id/value-id`, the same shape `emit` prints.
-    pub reference: String,
-    pub name: String,
-    /// Clusters, as a person sees them - the counter `ux-spec.md` 2 puts first.
-    pub graphemes: usize,
-    pub code_points: usize,
-    pub bytes: usize,
-    /// What actually crossed the wire. Differs from `code_points` exactly when
-    /// the value holds characters above the basic plane.
+    /// Which value, what it looks like and how large it is - the same facts
+    /// `nkb send` reports. Its preview is a fragment when `elided_total` is
+    /// `Some`, and 🔴 the palette must then say the total: a preview that
+    /// silently showed a fragment would claim to answer "what did I send"
+    /// while hiding most of it.
+    pub facts: ValueFacts,
+    /// The value's size in UTF-16 units - what crossed the wire when it arrived
+    /// whole, and the whole value's size when it did not ([`Sent::arrival`]
+    /// says how much of it crossed then).
     pub utf16_units: usize,
     /// Whether the value is offensive - the effective risk, the value's own if
     /// it declares one and otherwise the pack's. The palette marks it before a
     /// tester can wonder, `product-spec.md` 10.2.
     pub offensive: bool,
-    pub warnings: usize,
     /// Whether the field was cleared before the value went in.
     pub cleared: bool,
-    /// Whether the value went to the clipboard for the tester to paste, rather
-    /// than into the field. Never together with `cleared`: on the clipboard
-    /// route nothing presses a key, so nothing clears the field.
-    pub on_clipboard: bool,
-    /// The value as a person can see it: invisible characters substituted by
-    /// `nkb_core::preview::MARKER`, long values elided at both ends, generated
-    /// values shown as their recipe.
-    ///
-    /// 🔴 The palette must say the total when a text preview's `elided_total`
-    /// is `Some`. A preview that silently showed a fragment would be the tool
-    /// claiming to answer "what did I send" while hiding most of it.
-    pub preview: ValuePreview,
-    /// What the value is made of. Facts, in a fixed order that puts what changes
-    /// how the field READS above what changes where the text sits.
-    pub shape: Vec<ShapeFact>,
+    /// How the value reached the field: typed whole, cut short, or put on the
+    /// clipboard for the tester to paste. The SAME answer the report block
+    /// gives, from the same function - until `OBS-126` the palette had a flag
+    /// for the clipboard and nothing for a fragment, so it showed the value
+    /// before beside a sentence about the one cut short.
+    pub arrival: Arrival,
 }
 
 /// A thing the palette must say. A key with its numbers - untouchable rule 9
@@ -654,6 +646,17 @@ fn arrival_of(outcome: &SendOutcome, on_clipboard: bool) -> Option<Arrival> {
     match outcome {
         SendOutcome::Sent { .. } if on_clipboard => Some(Arrival::OnClipboard),
         SendOutcome::Sent { .. } => Some(Arrival::Whole),
+        SendOutcome::Interrupted {
+            units_sent,
+            units_expected,
+            ..
+        } => Some(Arrival::Interrupted {
+            units_sent: *units_sent,
+            units_expected: *units_expected,
+        }),
+        // `deliver_value` reports a fragment as `Interrupted`, so this is
+        // reached only if a route ever reports one another way - and the block
+        // still describes the value the fragment belongs to.
         SendOutcome::NotDelivered {
             error:
                 DeliveryError::Partial {
@@ -727,45 +730,55 @@ fn classify(
     on_clipboard: bool,
     id: &str,
 ) -> (Event, Option<Sent>, Vec<Message>) {
+    // The one answer to "how did it get there", shared with the report block.
+    // `Some` for both outcomes that carry a value, so the fallbacks below name
+    // the case it already gave and are never what the palette shows.
+    let arrival = arrival_of(&outcome, on_clipboard);
     match outcome {
         SendOutcome::Sent {
-            reference,
-            name,
-            graphemes,
-            code_points,
-            bytes,
+            facts,
             utf16_units,
-            warnings,
             clearing,
-            preview,
-            shape,
         } => (
             Event::InsertionFinished,
             Some(Sent {
-                reference,
-                name,
-                graphemes,
-                code_points,
-                bytes,
+                facts,
                 utf16_units,
                 offensive,
-                warnings,
                 cleared: clearing == ClearingOutcome::Done,
-                on_clipboard,
-                preview,
-                shape,
+                arrival: arrival.unwrap_or(Arrival::Whole),
             }),
             // `D76`, `OBS-141`: the value landed, uncleared, and the tester is
             // told why.
-            match clearing {
-                ClearingOutcome::Skipped(SkipReason::Unconfirmed) => {
-                    vec![Message::ClearingSkipped]
-                }
-                ClearingOutcome::Skipped(SkipReason::Terminal) => {
-                    vec![Message::ClearingSkippedInTerminal]
-                }
-                ClearingOutcome::Done | ClearingOutcome::NotAsked => Vec::new(),
-            },
+            skipped_clearing(clearing).into_iter().collect(),
+        ),
+        // A fragment was left: interrupted, with how far it got - and WHICH
+        // value, so the palette shows the value the report block describes
+        // rather than the one before it (`OBS-126`). The interruption is said
+        // first, because it is the worse news.
+        SendOutcome::Interrupted {
+            facts,
+            units_sent,
+            units_expected,
+            clearing,
+        } => (
+            Event::Cancelled,
+            Some(Sent {
+                facts,
+                utf16_units: units_expected,
+                offensive,
+                cleared: clearing == ClearingOutcome::Done,
+                arrival: arrival.unwrap_or(Arrival::Interrupted {
+                    units_sent,
+                    units_expected,
+                }),
+            }),
+            std::iter::once(Message::Interrupted {
+                units_sent,
+                units_expected,
+            })
+            .chain(skipped_clearing(clearing))
+            .collect(),
         ),
         // No route at all: the one outcome that moves to the clipboard, and the
         // machine asks for the same value there in the same press.
@@ -777,7 +790,9 @@ fn classify(
             None,
             vec![Message::NoDirectRoute { system }],
         ),
-        // A fragment was left: interrupted, with how far it got.
+        // `deliver_value` reports a fragment as `Interrupted`, with its value.
+        // Reached only if a route ever reports one another way: still said as
+        // an interruption, with how far it got.
         SendOutcome::NotDelivered {
             error:
                 DeliveryError::Partial {
@@ -877,6 +892,16 @@ fn classify(
     }
 }
 
+/// The sentence a value that went in UNCLEARED carries, if it did (`D76`,
+/// `OBS-141`) - whole or cut short, the field held something before it.
+fn skipped_clearing(clearing: ClearingOutcome) -> Option<Message> {
+    match clearing {
+        ClearingOutcome::Skipped(SkipReason::Unconfirmed) => Some(Message::ClearingSkipped),
+        ClearingOutcome::Skipped(SkipReason::Terminal) => Some(Message::ClearingSkippedInTerminal),
+        ClearingOutcome::Done | ClearingOutcome::NotAsked => None,
+    }
+}
+
 /// What a clearing that did not go through means. Nothing was sent either way.
 /// The reason tells the machine where to go and the tester what to do.
 fn after_clearing(error: KeystrokeError) -> (Event, Message) {
@@ -936,8 +961,8 @@ mod tests {
         let mut advance = chosen(Risk::Normal);
         let outcome = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
         let sent = outcome.sent.expect("value one must have been sent");
-        assert_eq!(sent.reference, "sample/one");
-        assert_eq!(sent.name, "Value one");
+        assert_eq!(sent.facts.reference, "sample/one");
+        assert_eq!(sent.facts.name, "Value one");
         assert!(sent.cleared, "the palette clears by default");
         assert_eq!(advance.counter(), Some((1, 3)));
         assert!(outcome.messages.is_empty());
@@ -986,8 +1011,8 @@ mod tests {
         assert_eq!(advance.sequence().delivery, Delivery::ClipboardMode);
         assert_eq!(*kit.by_clipboard.handed.borrow(), vec!["alpha"]);
         let sent = outcome.sent.expect("value one went to the clipboard");
-        assert_eq!(sent.reference, "sample/one");
-        assert!(sent.on_clipboard);
+        assert_eq!(sent.facts.reference, "sample/one");
+        assert!(sent.arrival == Arrival::OnClipboard);
         assert!(!sent.cleared, "the clipboard route clears nothing");
         assert_eq!(
             advance.counter(),
@@ -1045,7 +1070,7 @@ mod tests {
             vec!["alpha", "beta", "alpha"]
         );
         let sent = outcome.sent.expect("value one went to the clipboard again");
-        assert!(sent.on_clipboard && !sent.cleared);
+        assert!(sent.arrival == Arrival::OnClipboard && !sent.cleared);
         assert!(
             outcome.messages.is_empty(),
             "the bar says it, not every press"
@@ -1393,6 +1418,76 @@ mod tests {
         );
     }
 
+    // ---- `OBS-126`: the palette shows the value that was cut short -------------
+
+    #[test]
+    fn an_interrupted_send_shows_the_value_it_cut_short_and_the_block_agrees() {
+        // The palette used to keep value ONE on screen beside a sentence about
+        // value TWO being half-written, while the block described value two.
+        // Now both answer from the same function, and this holds them to it.
+        let mut advance = chosen(Risk::Normal);
+        let _ = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
+        let outcome = advance.on_action(
+            HotkeyAction::NextValue,
+            &Kit::with_delivery(FakeDelivery::failing(DeliveryError::Partial {
+                units_sent: 2,
+                units_expected: 4,
+            }))
+            .ports(),
+        );
+        let shown = outcome.sent.expect("the value cut short is shown");
+        assert_eq!(shown.facts.reference, "sample/two");
+        let cut = Arrival::Interrupted {
+            units_sent: 2,
+            units_expected: 4,
+        };
+        assert_eq!(shown.arrival, cut);
+        assert_eq!(
+            advance.counter(),
+            Some((1, 3)),
+            "a value cut short is shown, and it is still not a value sent"
+        );
+
+        let kit = Kit::ready();
+        let _ = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+        let blocks = kit.text.blocks.borrow();
+        assert_eq!(blocks[0].reference, shown.facts.reference);
+        assert_eq!(blocks[0].arrival, shown.arrival);
+    }
+
+    #[test]
+    fn an_interrupted_send_on_an_uncleared_field_says_both_worst_first() {
+        // The field held something before, the clearing kept its keys out, and
+        // then the value stopped part-way: two true things, and the fragment is
+        // the worse one. Until `OBS-126` the second was not said at all.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit {
+            direct: FakeDelivery::failing(DeliveryError::Partial {
+                units_sent: 1,
+                units_expected: 5,
+            }),
+            keys: FakeKeys::failing(KeystrokeError::FieldUnconfirmed),
+            ..Kit::ready()
+        };
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(
+            outcome.messages,
+            vec![
+                Message::Interrupted {
+                    units_sent: 1,
+                    units_expected: 5
+                },
+                Message::ClearingSkipped,
+            ]
+        );
+        let shown = outcome.sent.expect("the value cut short is shown");
+        assert!(!shown.cleared);
+        assert_eq!(
+            shown.utf16_units, 5,
+            "the size of the whole value, not of the fragment"
+        );
+    }
+
     #[test]
     fn a_busy_clipboard_is_named_and_nothing_is_claimed_copied() {
         let mut advance = chosen(Risk::Normal);
@@ -1470,7 +1565,7 @@ mod tests {
         assert_eq!(*kit.by_clipboard.handed.borrow(), vec!["alpha"]);
         assert_eq!(outcome.messages, vec![Message::HigherPrivileges]);
         let sent = outcome.sent.expect("value one went to the clipboard");
-        assert!(sent.on_clipboard && !sent.cleared);
+        assert!(sent.arrival == Arrival::OnClipboard && !sent.cleared);
         assert_eq!(
             advance.counter(),
             Some((1, 3)),
@@ -1498,7 +1593,7 @@ mod tests {
             second.messages.is_empty(),
             "the bar says it, not every press"
         );
-        assert!(second.sent.expect("value two went out").on_clipboard);
+        assert!(second.sent.expect("value two went out").arrival == Arrival::OnClipboard);
         assert!(second.clipboard_for_window);
         assert_eq!(*kit.by_clipboard.handed.borrow(), vec!["alpha", "beta"]);
     }
@@ -1515,7 +1610,7 @@ mod tests {
 
         assert_eq!(*ordinary.direct.handed.borrow(), vec!["beta"]);
         assert!(ordinary.by_clipboard.handed.borrow().is_empty());
-        assert!(!outcome.sent.expect("typed").on_clipboard);
+        assert!(outcome.sent.expect("typed").arrival != Arrival::OnClipboard);
         assert!(!outcome.clipboard_for_window);
         assert!(outcome.messages.is_empty());
     }
@@ -1545,7 +1640,7 @@ mod tests {
 
         assert_eq!(*kit.by_clipboard.handed.borrow(), vec!["alpha"]);
         assert_eq!(outcome.messages, vec![Message::HigherPrivileges]);
-        assert!(outcome.sent.expect("on the clipboard").on_clipboard);
+        assert!(outcome.sent.expect("on the clipboard").arrival == Arrival::OnClipboard);
     }
 
     #[test]

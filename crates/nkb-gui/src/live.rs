@@ -51,6 +51,7 @@ use nkb_app::ports::HotkeyRegistrar;
 use nkb_app::{AdvanceSequence, Outcome, drive_sequence};
 use nkb_core::hotkeys::DEFAULT_BINDINGS;
 use nkb_core::preview::ValuePreview;
+use nkb_core::report::Arrival;
 use nkb_core::sequence::Delivery;
 use nkb_core::typeface::outside_guarantee;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
@@ -300,7 +301,7 @@ fn view_of(outcome: &Outcome, pack_shown: &str, pack: &str, standing: &Standing)
 
 /// The value band, every line finished.
 fn value_view(sent: &Sent) -> ValueView {
-    let (preview, elided) = match &sent.preview {
+    let (preview, elided) = match &sent.facts.preview {
         ValuePreview::Text(text) => (
             text.shown.clone(),
             // An empty string rather than an Option, because the view's switch
@@ -320,18 +321,18 @@ fn value_view(sent: &Sent) -> ValueView {
     let not_guaranteed =
         i18n::not_guaranteed(&outside_guarantee(&preview, &SHIPPED)).unwrap_or_default();
     ValueView {
-        name: sent.name.clone(),
-        reference: sent.reference.clone(),
+        name: sent.facts.name.clone(),
+        reference: sent.facts.reference.clone(),
         counts: i18n::counts(
-            sent.graphemes,
-            sent.code_points,
-            sent.bytes,
+            sent.facts.graphemes,
+            sent.facts.code_points,
+            sent.facts.bytes,
             sent.utf16_units,
         ),
         preview,
         elided,
         not_guaranteed,
-        shape: i18n::shape_line(&sent.shape),
+        shape: i18n::shape_line(&sent.facts.shape),
         markers: markers_of(sent),
     }
 }
@@ -345,8 +346,13 @@ fn markers_of(sent: &Sent) -> Vec<(String, bool)> {
     if sent.offensive {
         markers.push((i18n::label(PaletteLabel::Offensive).to_owned(), true));
     }
-    if sent.warnings > 0 {
-        markers.push((i18n::warnings(sent.warnings), true));
+    // A risk, right after the other one: the preview and the counts above are
+    // the WHOLE value, and the field holds only part of it (`OBS-126`).
+    if matches!(sent.arrival, Arrival::Interrupted { .. }) {
+        markers.push((i18n::label(PaletteLabel::Interrupted).to_owned(), true));
+    }
+    if sent.facts.warnings > 0 {
+        markers.push((i18n::warnings(sent.facts.warnings), true));
     }
     if sent.cleared {
         markers.push((i18n::label(PaletteLabel::Cleared).to_owned(), false));
@@ -354,7 +360,7 @@ fn markers_of(sent: &Sent) -> Vec<(String, bool)> {
     // Never beside `cleared first`: the clipboard route presses nothing, so it
     // clears nothing. It answers the same question from the other side - what
     // is in the field is what the tester pasted.
-    if sent.on_clipboard {
+    if sent.arrival == Arrival::OnClipboard {
         markers.push((i18n::label(PaletteLabel::OnClipboard).to_owned(), false));
     }
     markers
@@ -454,7 +460,9 @@ fn dim_later(palette: &Palette) {
 mod tests {
     use std::rc::Rc;
 
+    use nkb_app::ValueFacts;
     use nkb_app::advance_sequence::{Message, Sent};
+    use nkb_core::report::Arrival;
     use nkb_core::sequence::{Position, Sequence};
     use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
     use slint::platform::{Platform, PlatformError, WindowAdapter};
@@ -494,22 +502,27 @@ mod tests {
 
     fn a_sent() -> Sent {
         Sent {
-            reference: String::from("unicode-text/zero-width"),
-            name: String::from("Three zero-width spaces"),
-            // Seven, not four. The zero width space is its own cluster, which is
-            // the correction `OBS-105` made to the specification itself.
-            graphemes: 7,
-            code_points: 7,
-            bytes: 13,
+            facts: ValueFacts {
+                reference: String::from("unicode-text/zero-width"),
+                name: String::from("Three zero-width spaces"),
+                // Seven, not four. The zero width space is its own cluster,
+                // which is the correction `OBS-105` made to the specification
+                // itself.
+                graphemes: 7,
+                code_points: 7,
+                bytes: 13,
+                warnings: 2,
+                // The example from `ux-spec.md` 2, so the field-by-field test
+                // below checks the same value the document draws.
+                preview: ValuePreview::Text(nkb_core::preview::preview(
+                    "ab\u{200B}\u{200B}\u{200B}cd",
+                )),
+                shape: nkb_core::preview::shape("ab\u{200B}\u{200B}\u{200B}cd"),
+            },
             utf16_units: 7,
             offensive: true,
-            warnings: 2,
             cleared: true,
-            on_clipboard: false,
-            // The example from `ux-spec.md` 2, so the field-by-field test below
-            // checks the same value the document draws.
-            preview: ValuePreview::Text(nkb_core::preview::preview("ab\u{200B}\u{200B}\u{200B}cd")),
-            shape: nkb_core::preview::shape("ab\u{200B}\u{200B}\u{200B}cd"),
+            arrival: Arrival::Whole,
         }
     }
 
@@ -651,7 +664,7 @@ mod tests {
         // IS the preview, so nothing is elided - and the note is measured on
         // the recipe line, whose unit the shipped typeface does not carry.
         let mut generated = a_sent();
-        generated.preview = nkb_core::preview::preview_of(&nkb_core::ValueBody::Repeat {
+        generated.facts.preview = nkb_core::preview::preview_of(&nkb_core::ValueBody::Repeat {
             unit: nkb_core::LiteralText::new("\u{1F600}"),
             count: 64,
         });
@@ -716,10 +729,14 @@ mod tests {
 
     /// A value carrying `text`, with the preview and shape the product builds.
     fn sent_of(text: &str) -> Sent {
+        let base = a_sent();
         Sent {
-            preview: ValuePreview::Text(nkb_core::preview::preview(text)),
-            shape: nkb_core::preview::shape(text),
-            ..a_sent()
+            facts: ValueFacts {
+                preview: ValuePreview::Text(nkb_core::preview::preview(text)),
+                shape: nkb_core::preview::shape(text),
+                ..base.facts
+            },
+            ..base
         }
     }
 
@@ -765,13 +782,35 @@ mod tests {
     /// A value with nothing worth saying about it says nothing.
     #[test]
     fn an_ordinary_value_carries_no_marker() {
-        let plain = Sent {
+        assert!(markers_of(&quiet_sent()).is_empty());
+    }
+
+    /// A value with no marker of its own, for the tests that add exactly one.
+    fn quiet_sent() -> Sent {
+        let base = a_sent();
+        Sent {
+            facts: ValueFacts {
+                warnings: 0,
+                ..base.facts
+            },
             offensive: false,
-            warnings: 0,
             cleared: false,
-            ..a_sent()
+            ..base
+        }
+    }
+
+    /// A value cut short says so, as a risk: the preview above it is the whole
+    /// value and the field holds a piece of it (`OBS-126`).
+    #[test]
+    fn a_value_cut_short_is_marked_interrupted_as_a_risk() {
+        let cut = Sent {
+            arrival: Arrival::Interrupted {
+                units_sent: 2,
+                units_expected: 7,
+            },
+            ..quiet_sent()
         };
-        assert!(markers_of(&plain).is_empty());
+        assert_eq!(markers_of(&cut), vec![(String::from("interrupted"), true)]);
     }
 
     /// A value that went to the clipboard says so, where `cleared first` would
@@ -779,11 +818,8 @@ mod tests {
     #[test]
     fn a_value_on_the_clipboard_is_marked_so_in_place_of_cleared() {
         let pasted = Sent {
-            offensive: false,
-            warnings: 0,
-            cleared: false,
-            on_clipboard: true,
-            ..a_sent()
+            arrival: Arrival::OnClipboard,
+            ..quiet_sent()
         };
         assert_eq!(
             markers_of(&pasted),

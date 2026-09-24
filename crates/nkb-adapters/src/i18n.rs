@@ -237,7 +237,7 @@ fn pattern_message(message: &Message) -> &'static str {
         }
         Message::NoTarget => "The target window is gone. Click into a field and try again.",
         Message::Interrupted { .. } => {
-            "Stopped after {sent} of {expected} characters. The field holds a partial value - clear it before the next test."
+            "Stopped after {sent} of {expected} UTF-16 units. The field holds a partial value - clear it before the next test."
         }
         Message::EndOfPack { .. } => "End of pack ({total}/{total}). Press again to start over.",
         Message::CounterKept { .. } => {
@@ -750,6 +750,10 @@ pub enum PaletteLabel {
     /// of `Cleared`, never stands beside it: on the clipboard route nothing
     /// presses a key, so nothing clears the field (`D71`).
     OnClipboard,
+    /// Delivery stopped part-way and the field holds a fragment of the value
+    /// shown. A risk, because what the tester sees above it is the whole value,
+    /// not what the field holds (`OBS-126`).
+    Interrupted,
     /// The pack loaded, and it loaded with warnings.
     Warnings,
     /// The standing bar of clipboard mode, `ux-spec.md` 2. Until `D71` it read
@@ -790,6 +794,7 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::Offensive => "offensive",
         PaletteLabel::Cleared => "cleared first",
         PaletteLabel::OnClipboard => "on the clipboard",
+        PaletteLabel::Interrupted => "interrupted",
         PaletteLabel::Warnings => "pack warnings: {count}",
         PaletteLabel::ClipboardMode => "clipboard mode",
         PaletteLabel::ClipboardForWindow => "clipboard mode for this window",
@@ -1208,6 +1213,7 @@ mod tests {
             PaletteLabel::Offensive,
             PaletteLabel::Cleared,
             PaletteLabel::OnClipboard,
+            PaletteLabel::Interrupted,
             PaletteLabel::Warnings,
             PaletteLabel::ClipboardMode,
             PaletteLabel::ClipboardForWindow,
@@ -1230,6 +1236,7 @@ mod tests {
                 | PaletteLabel::Offensive
                 | PaletteLabel::Cleared
                 | PaletteLabel::OnClipboard
+                | PaletteLabel::Interrupted
                 | PaletteLabel::ClipboardMode
                 | PaletteLabel::ClipboardForWindow => false,
             };

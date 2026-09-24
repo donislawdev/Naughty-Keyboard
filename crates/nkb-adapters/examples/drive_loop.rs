@@ -36,6 +36,7 @@ use nkb_app::advance_sequence::Ports;
 use nkb_app::ports::{Clipboard, ClipboardError, History, HotkeyRegistrar};
 use nkb_app::{AdvanceSequence, Outcome, drive_sequence};
 use nkb_core::hotkeys::DEFAULT_BINDINGS;
+use nkb_core::report::Arrival;
 
 const PACK: &str = "whitespace";
 const RUN_FOR: Duration = Duration::from_secs(30);
@@ -116,9 +117,14 @@ fn describe(outcome: &Outcome) -> String {
     );
     let mut line = format!("[{counter}]");
     if let Some(sent) = &outcome.sent {
+        // A value cut short is shown too (`OBS-126`), and must not read as sent.
+        let verb = match sent.arrival {
+            Arrival::Interrupted { .. } => "interrupted",
+            Arrival::Whole | Arrival::OnClipboard => "sent",
+        };
         line.push_str(&format!(
-            " sent {} ({} code points, cleared: {})",
-            sent.reference, sent.code_points, sent.cleared
+            " {verb} {} ({} code points, cleared: {})",
+            sent.facts.reference, sent.facts.code_points, sent.cleared
         ));
     }
     for message in &outcome.messages {

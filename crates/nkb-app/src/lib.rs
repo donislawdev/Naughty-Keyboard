@@ -37,5 +37,6 @@ pub use ports::{
     SourceSkipped, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery, Wait,
 };
 pub use send_value::{
-    Clearing, ClearingOutcome, SendOutcome, SendRequest, SkipReason, deliver_value, send_value,
+    Clearing, ClearingOutcome, SendOutcome, SendRequest, SkipReason, ValueFacts, deliver_value,
+    send_value,
 };

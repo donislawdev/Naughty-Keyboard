@@ -26,8 +26,8 @@ use nkb_adapters::{
 use nkb_app::{
     Availability, Clearing, ClearingOutcome, DeliveryError, EmitOutcome, FormatOutcome,
     KeystrokeError, LintOutcome, NewPackOutcome, SendOutcome, SendRequest, ShowOutcome, SkipReason,
-    ValueDelivery, emit_values, format_pack, lint_pack, list_packs, new_pack, send_value,
-    show_pack,
+    ValueDelivery, ValueFacts, emit_values, format_pack, lint_pack, list_packs, new_pack,
+    send_value, show_pack,
 };
 use std::io::Write;
 use std::path::Path;
@@ -662,20 +662,24 @@ fn send(args: &[String]) -> ExitCode {
     // adapter, two ports, so the two cannot disagree about the target.
     match send_value(&catalogue, &TomlPackFormat, &delivery, &delivery, &request) {
         SendOutcome::Sent {
-            reference,
-            name,
-            graphemes,
-            code_points,
-            bytes,
+            facts:
+                ValueFacts {
+                    reference,
+                    name,
+                    graphemes,
+                    code_points,
+                    bytes,
+                    warnings,
+                    // The preview and the shape are for the PALETTE. The CLI
+                    // prints the escaped form through `nkb emit`, which answers
+                    // the same question without inventing a second format for
+                    // it - and a marker glyph in a pipeline would be worse than
+                    // the escape it replaced.
+                    preview: _,
+                    shape: _,
+                },
             utf16_units,
-            warnings,
             clearing,
-            // The preview and the shape are for the PALETTE. The CLI prints the
-            // escaped form through `nkb emit`, which answers the same question
-            // without inventing a second format for it - and a marker glyph in a
-            // pipeline would be worse than the escape it replaced.
-            preview: _,
-            shape: _,
         } => {
             match clearing {
                 ClearingOutcome::Done => {
@@ -795,19 +799,35 @@ fn send(args: &[String]) -> ExitCode {
             };
             ExitCode::InsertFailed
         }
+        SendOutcome::Interrupted {
+            facts,
+            units_sent,
+            units_expected,
+            clearing,
+        } => {
+            say_clearing_before_failure(&mut err, clearing);
+            // The loudest message in this command on purpose: the field now
+            // holds a fragment, and a person who does not know that will report
+            // the fragment as the application's doing. It names the value, as a
+            // value that arrived whole is named - until `OBS-126` a fragment was
+            // the one outcome that did not say whose it was.
+            let _ = writeln!(
+                err,
+                "nkb send: interrupted {} - {}",
+                facts.reference, facts.name
+            );
+            let _ = writeln!(
+                err,
+                "  only {units_sent} of {units_expected} UTF-16 units arrived."
+            );
+            let _ = writeln!(
+                err,
+                "The field holds a PARTIAL value. Clear it before testing."
+            );
+            ExitCode::InsertFailed
+        }
         SendOutcome::NotDelivered { error, clearing } => {
-            match clearing {
-                ClearingOutcome::Done => {
-                    let _ = writeln!(err, "nkb send: the line was cleared before this happened.");
-                }
-                ClearingOutcome::Skipped(SkipReason::Unconfirmed) => {
-                    let _ = writeln!(err, "{CLEARING_SKIPPED}");
-                }
-                ClearingOutcome::Skipped(SkipReason::Terminal) => {
-                    let _ = writeln!(err, "{CLEARING_SKIPPED_IN_TERMINAL}");
-                }
-                ClearingOutcome::NotAsked => {}
-            }
+            say_clearing_before_failure(&mut err, clearing);
             match &error {
                 DeliveryError::NoTarget => {
                     let _ = writeln!(err, "nkb send: nothing holds the keyboard focus.");
@@ -822,13 +842,13 @@ fn send(args: &[String]) -> ExitCode {
                         "nkb send: {which} is still held on the keyboard, so the value was not sent - release it and run again."
                     );
                 }
+                // `send_value` reports a fragment as `Interrupted`, above, with
+                // the value it belongs to. Reached only if a route ever reports
+                // one another way - still said, without the name it does not have.
                 DeliveryError::Partial {
                     units_sent,
                     units_expected,
                 } => {
-                    // The loudest message in this command on purpose: the field
-                    // now holds a fragment, and a person who does not know that
-                    // will report the fragment as the application's doing.
                     let _ = writeln!(
                         err,
                         "nkb send: only {units_sent} of {units_expected} UTF-16 units arrived."
@@ -868,6 +888,23 @@ fn send(args: &[String]) -> ExitCode {
             }
             ExitCode::InsertFailed
         }
+    }
+}
+
+/// What became of the clearing, said before the news that the value did not
+/// arrive whole - the tester needs to know what the field held before it.
+fn say_clearing_before_failure(err: &mut impl Write, clearing: ClearingOutcome) {
+    match clearing {
+        ClearingOutcome::Done => {
+            let _ = writeln!(err, "nkb send: the line was cleared before this happened.");
+        }
+        ClearingOutcome::Skipped(SkipReason::Unconfirmed) => {
+            let _ = writeln!(err, "{CLEARING_SKIPPED}");
+        }
+        ClearingOutcome::Skipped(SkipReason::Terminal) => {
+            let _ = writeln!(err, "{CLEARING_SKIPPED_IN_TERMINAL}");
+        }
+        ClearingOutcome::NotAsked => {}
     }
 }
 
