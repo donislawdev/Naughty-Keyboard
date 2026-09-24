@@ -1,0 +1,110 @@
+format = 1
+
+[pack]
+id          = "export-breakers"
+name        = "Export breakers"
+description = "Values that pass validation and break only in the exported file."
+version     = "1.0"
+updated     = 2026-09-24
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["csv", "spreadsheet", "export"]
+fields      = ["text", "name", "money", "id-number"]
+risk        = "normal"
+
+[[values]]
+id     = "formula-equals"
+name   = "Value starting with ="
+value  = "=1+1"
+breaks = "A value starting with an equals sign is treated as a formula by spreadsheet software; the exported file shows a computed result instead of the data."
+expect = "Escaped on export so the spreadsheet shows the text as entered."
+since  = "1.0"
+
+[[values]]
+id     = "sheet-date-mar1"
+name   = "Code that looks like a date"
+value  = "MAR1"
+breaks = "Spreadsheet software converts short codes that look like dates into dates, and the original value cannot be recovered from the file."
+expect = "Exported as text, with the column typed so the conversion never happens."
+since  = "1.0"
+
+[[values]]
+id     = "csv-comma"
+name   = "Comma inside a value"
+value  = "Kowalski, Jan"
+breaks = "A comma inside a value splits one column into two unless the value is quoted correctly at every export step."
+expect = "Quoted on export; the file parses back into the same number of columns."
+since  = "1.0"
+
+[[values]]
+id     = "csv-quote"
+name   = "Quotation marks inside a value"
+value  = "Jan \"Janek\" Kowalski"
+breaks = "Quotation marks inside a quoted value must be doubled; getting this wrong shifts every following column."
+expect = "Quoted and escaped so the round trip returns the original text."
+since  = "1.0"
+
+[[values]]
+id     = "csv-newline"
+name   = "Line break inside a value"
+value  = "Jan\u000AKowalski"
+breaks = "A line break inside a value turns one row into two for every parser that splits on lines before parsing."
+expect = "Quoted so the record stays one row, or rejected at input."
+since  = "1.0"
+
+[[values]]
+id     = "sheet-precision"
+name   = "Nineteen-digit identifier"
+value  = "1234567890123456789"
+breaks = "Spreadsheets keep about fifteen significant digits, so long identifiers come back rounded and in exponential notation."
+expect = "Exported as text; the identifier survives opening and saving the file."
+since  = "1.0"
+
+[[values]]
+id     = "leading-zero-code"
+name   = "Code with leading zeros"
+value  = "007"
+breaks = "Codes lose their leading zeros the moment a spreadsheet treats the column as numeric."
+expect = "Exported as text so the code stays as issued."
+since  = "1.0"
+
+[[values]]
+id     = "formula-plus"
+name   = "Phone number starting with +"
+value  = "+48123456789"
+breaks = "A phone number written with a country prefix is read as a formula, and the cell shows an error instead of the number."
+expect = "Escaped on export, or the column typed as text."
+since  = "1.0"
+
+[[values]]
+id     = "formula-minus"
+name   = "Value starting with -"
+value  = "-1+1"
+breaks = "Same as the equals sign, in a form that also looks like an ordinary negative number."
+expect = "Escaped on export."
+since  = "1.0"
+
+[[values]]
+id     = "formula-at"
+name   = "Value starting with @"
+value  = "@name"
+breaks = "A social handle or mention becomes a function call in some spreadsheet software."
+expect = "Escaped on export."
+since  = "1.0"
+
+[[values]]
+id     = "csv-semicolon"
+name   = "Semicolon inside a value"
+value  = "a;b"
+breaks = "The alternative column separator used in several locales; a file correct in one locale breaks in another."
+expect = "The separator declared in the file, and values quoted regardless of which one is used."
+since  = "1.0"
+
+[[values]]
+id     = "sheet-date-3-4"
+name   = "Fraction that looks like a date"
+value  = "3/4"
+breaks = "A fraction, a ratio or a house number, converted to a date on opening the file."
+expect = "Exported as text; opening and saving the file does not change the value."
+since  = "1.0"

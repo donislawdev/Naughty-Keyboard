@@ -1,0 +1,110 @@
+format = 1
+
+[pack]
+id          = "dates-impossible"
+name        = "Impossible dates"
+description = "Dates that do not exist, that are ambiguous, or that are written differently than the field assumes."
+version     = "1.0"
+updated     = 2026-09-24
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["calendar", "parsing", "locale"]
+fields      = ["date", "datetime", "text"]
+risk        = "normal"
+
+[[values]]
+id     = "feb-30"
+name   = "30 February"
+value  = "30.02.2026"
+breaks = "A date that cannot exist; naive parsers roll it over to the second of March instead of refusing it."
+expect = "Rejected with a message - never silently moved to another day."
+since  = "1.0"
+
+[[values]]
+id     = "feb-29-non-leap"
+name   = "29 February in a non-leap year"
+value  = "29.02.2026"
+breaks = "Valid in some years and not in others, so the same input is correct or incorrect depending on the year field next to it."
+expect = "Rejected for non-leap years, with the reason stated."
+since  = "1.0"
+
+[[values]]
+id     = "nov-31"
+name   = "31 November"
+value  = "31.11.2026"
+breaks = "The month-length check that most hand-written validators skip."
+expect = "Rejected, not rolled over into December."
+since  = "1.0"
+
+[[values]]
+id     = "ambiguous-day-month"
+name   = "Day and month in an ambiguous order"
+value  = "03/04/2026"
+breaks = "The same text means March or April depending on convention, and nothing on screen says which was assumed."
+expect = "The expected order stated next to the field, or an unambiguous format enforced."
+since  = "1.0"
+
+[[values]]
+id     = "iso-format"
+name   = "ISO 8601 date"
+value  = "2026-09-06"
+breaks = "A field expecting a local format receives the international one, and vice versa; both are legitimate user input."
+expect = "Both accepted, or one enforced with a visible example."
+since  = "1.0"
+
+[[values]]
+id     = "year-9999"
+name   = "Year 9999"
+value  = "31.12.9999"
+breaks = "The upper end of most date types; often accepted by the interface and rejected by storage."
+expect = "The same range enforced on both sides."
+since  = "1.0"
+
+[[values]]
+id     = "year-0000"
+name   = "Year 0000"
+value  = "01.01.0000"
+breaks = "Below the range of several date types, and the year zero does not exist in the common calendar."
+expect = "Rejected with a stated range."
+since  = "1.0"
+
+[[values]]
+id     = "year-10000"
+name   = "Five-digit year"
+value  = "01.01.10000"
+breaks = "Five-digit years break fixed-width parsing and column formats without producing an obvious error."
+expect = "Rejected with a stated range."
+since  = "1.0"
+
+[[values]]
+id     = "epoch-zero"
+name   = "Unix epoch"
+value  = "01.01.1970"
+breaks = "The zero point of the most common timestamp representation; frequently indistinguishable from \"no date set\"."
+expect = "Stored and displayed as a real date, distinct from an empty field."
+since  = "1.0"
+
+[[values]]
+id     = "negative-timestamp"
+name   = "Negative timestamp"
+value  = "-1"
+breaks = "Dates before the epoch are negative in many representations and are silently rejected or wrapped."
+expect = "Handled as an ordinary past date, or rejected with the supported range stated."
+since  = "1.0"
+
+[[values]]
+id     = "date-in-words"
+name   = "A date in words"
+value  = "tomorrow"
+breaks = "Text in a date field: accepted by lenient parsers, which then produce a different date every day."
+expect = "Rejected - natural-language dates belong to a deliberate feature, not to a parser's leniency."
+since  = "1.0"
+
+[[values]]
+id     = "dots-vs-slashes"
+name   = "Slashes instead of dots"
+value  = "06/09/2026"
+breaks = "The same date in another separator; forms often accept one and store the other without saying so."
+expect = "Accepted in both, normalised once, and shown in one consistent form."
+since  = "1.0"

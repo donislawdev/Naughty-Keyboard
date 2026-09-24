@@ -1,0 +1,110 @@
+format = 1
+
+[pack]
+id          = "magic-values"
+name        = "Magic values"
+description = "Words a human reads as text and a parser reads as a boolean, an absent value or a number."
+version     = "1.0"
+updated     = 2026-09-24
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["parsing", "config", "serialization"]
+fields      = ["text", "name", "country-code"]
+risk        = "normal"
+
+[[values]]
+id     = "bool-no"
+name   = "The word no"
+value  = "no"
+breaks = "YAML 1.1 and several config parsers read the unquoted word no as boolean false - and NO is the country code for Norway."
+expect = "Stored and returned as the two-character string no."
+since  = "1.0"
+
+[[values]]
+id     = "word-null"
+name   = "The word null"
+value  = "null"
+breaks = "Serializers and loosely typed interfaces turn the text into an absent value; the field looks saved and comes back empty."
+expect = "Stored and returned as the four-character string, distinct from an empty field."
+since  = "1.0"
+
+[[values]]
+id     = "bool-true"
+name   = "The word true"
+value  = "true"
+breaks = "A text field holding the word true becomes a boolean somewhere in the chain and stops round-tripping."
+expect = "Returned as text, exactly as entered."
+since  = "1.0"
+
+[[values]]
+id     = "word-nan"
+name   = "The word NaN"
+value  = "NaN"
+breaks = "Numeric parsers accept it, and then every comparison against it is false - filters and sorting quietly drop the row."
+expect = "Rejected in a numeric field; kept verbatim in a text field."
+since  = "1.0"
+
+[[values]]
+id     = "word-infinity"
+name   = "The word Infinity"
+value  = "Infinity"
+breaks = "Accepted as a number by some layers and rejected by others, so the same value validates differently at each step."
+expect = "One consistent verdict across the interface, the service layer and storage."
+since  = "1.0"
+
+[[values]]
+id     = "word-undefined"
+name   = "The word undefined"
+value  = "undefined"
+breaks = "Often the result of a bug elsewhere, so a real value spelled this way is indistinguishable from a defect."
+expect = "Stored and displayed as ordinary text, without special treatment."
+since  = "1.0"
+
+[[values]]
+id     = "bool-yes"
+name   = "The word yes"
+value  = "yes"
+breaks = "The same coercion problem as the word no, in the opposite direction, and equally invisible in review."
+expect = "Returned as the three-character string."
+since  = "1.0"
+
+[[values]]
+id     = "bool-off"
+name   = "The word off"
+value  = "off"
+breaks = "Another word coerced to a boolean by common configuration parsers."
+expect = "Returned as text."
+since  = "1.0"
+
+[[values]]
+id     = "word-none"
+name   = "The word None"
+value  = "None"
+breaks = "The absent-value keyword in one widely used language; travels through interfaces as a null."
+expect = "Returned as the four-character string."
+since  = "1.0"
+
+[[values]]
+id     = "word-nil"
+name   = "The word nil"
+value  = "nil"
+breaks = "The absent-value keyword in another; same failure, different layer."
+expect = "Returned as text."
+since  = "1.0"
+
+[[values]]
+id     = "na-slash"
+name   = "N/A with a slash"
+value  = "N/A"
+breaks = "Contains a separator, so it also breaks paths, CSV columns and anything splitting on a slash."
+expect = "Stored and displayed intact."
+since  = "1.0"
+
+[[values]]
+id     = "dash-only"
+name   = "A single dash"
+value  = "-"
+breaks = "A single dash is a real answer in forms and a \"no value\" marker in reports - the two meanings collide on export."
+expect = "Stored as a one-character value, distinguishable from an empty field."
+since  = "1.0"

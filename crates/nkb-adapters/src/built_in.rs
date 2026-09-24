@@ -46,6 +46,28 @@ pub const BUILT_IN_PACKS: &[(&str, &str)] = &[
         "length-bombs",
         include_str!("../../../packs/length-bombs.toml"),
     ),
+    (
+        "magic-values",
+        include_str!("../../../packs/magic-values.toml"),
+    ),
+    (
+        "numbers-extreme",
+        include_str!("../../../packs/numbers-extreme.toml"),
+    ),
+    (
+        "dates-impossible",
+        include_str!("../../../packs/dates-impossible.toml"),
+    ),
+    (
+        "export-breakers",
+        include_str!("../../../packs/export-breakers.toml"),
+    ),
+    // `locale-pl` and `injections` come here in the catalogue's order, when
+    // they ship.
+    (
+        "filenames-paths",
+        include_str!("../../../packs/filenames-paths.toml"),
+    ),
 ];
 
 #[cfg(test)]

@@ -1,0 +1,112 @@
+format = 1
+
+[pack]
+id          = "filenames-paths"
+name        = "File names and paths"
+description = "Names a file system rejects, alters, or reads differently than the user meant."
+version     = "1.0"
+updated     = 2026-09-24
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["filesystem", "reserved", "portability"]
+fields      = ["filename", "path", "text"]
+risk        = "normal"
+
+[[values]]
+id     = "reserved-con"
+name   = "Reserved device name"
+value  = "CON"
+breaks = "A device name reserved by one operating system; a file with this name cannot be created and the failure often surfaces as a generic error."
+expect = "Rejected at input with a message naming the reserved word, not at write time."
+since  = "1.0"
+
+[[values]]
+id     = "trailing-dot"
+name   = "Trailing dot"
+value  = "report."
+breaks = "Trailing dots are silently removed by some file systems, so the stored name differs from the requested one."
+expect = "Rejected, or normalised visibly so the user sees the name that will be used."
+since  = "1.0"
+
+[[values]]
+id     = "trailing-space-name"
+name   = "Trailing space in a file name"
+value  = "report\u0020"
+breaks = "A trailing space in a file name is invisible, sometimes removed and sometimes kept - two files that look identical."
+expect = "Trimmed consistently, and the resulting name shown to the user."
+since  = "1.0"
+
+[[values]]
+id     = "illegal-chars"
+name   = "Characters forbidden in file names"
+value  = "a:b*c?d\"e<f>g|h"
+breaks = "Characters legal on one system and forbidden on another; a file created on one machine cannot be copied to another."
+expect = "Rejected with the forbidden characters named, before the file is created."
+since  = "1.0"
+
+[[values]]
+id     = "double-extension"
+name   = "Double extension"
+value  = "report.txt.exe"
+breaks = "Interfaces hiding known extensions show this as report.txt, so the user sees a document and gets a program."
+expect = "The full name shown wherever the user makes a decision about the file."
+since  = "1.0"
+
+[[values]]
+id     = "rtl-extension"
+name   = "Right-to-left override in a file name"
+value  = "report\u202Etxt.exe"
+breaks = "A direction override makes the extension read in reverse, so a program looks like a text file."
+expect = "Direction-control characters stripped or neutralised in every file name display."
+since  = "1.0"
+
+[[values]]
+id     = "dot-only"
+name   = "A single dot"
+value  = "."
+breaks = "A single dot means \"this directory\"; used as a file name it either fails or does something unintended."
+expect = "Rejected at input."
+since  = "1.0"
+
+[[values]]
+id     = "dotdot"
+name   = "Two dots"
+value  = ".."
+breaks = "Two dots mean the parent directory; the shortest possible traversal test."
+expect = "Rejected at input."
+since  = "1.0"
+
+[[values]]
+id     = "leading-dot"
+name   = "Leading dot"
+value  = ".gitignore"
+breaks = "A leading dot hides the file on some systems, so an uploaded file disappears from listings."
+expect = "Accepted, and listed regardless of the leading dot."
+since  = "1.0"
+
+[[values]]
+id     = "unicode-filename"
+name   = "File name outside ASCII"
+value  = "\u0107wiczenie \u0105\u0119.txt"
+breaks = "Non-ASCII names break archives, transfers and any layer assuming a narrow encoding."
+expect = "Stored, listed, downloaded and archived with the name intact."
+since  = "1.0"
+
+[[values]]
+id     = "path-260"
+name   = "260 characters"
+type   = "repeat"
+unit   = "a"
+count  = 260
+breaks = "The classic path length limit; crossing it produces failures far from the place the name was entered."
+expect = "Rejected with the limit stated, at the point where the name is entered."
+since  = "1.0"
+
+[[values]]
+id     = "space-in-name"
+name   = "Space in a file name"
+value  = "my report.txt"
+breaks = "Names with spaces break command construction and links that are not quoted or encoded."
+expect = "Handled everywhere the file name is used, including download links."
+since  = "1.0"

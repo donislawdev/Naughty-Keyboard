@@ -1,0 +1,112 @@
+format = 1
+
+[pack]
+id          = "numbers-extreme"
+name        = "Extreme numbers"
+description = "Numbers at the edges of their types, in foreign notations, and where precision runs out."
+version     = "1.0"
+updated     = 2026-09-24
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["limits", "parsing", "precision"]
+fields      = ["number", "integer", "money"]
+risk        = "normal"
+
+[[values]]
+id     = "js-safe-plus-one"
+name   = "Largest safe JavaScript integer plus one"
+value  = "9007199254740992"
+breaks = "Above this value browsers and many interfaces stop representing whole numbers exactly, so an identifier returned by the server no longer matches what the user sees."
+expect = "Handled as text where exactness matters, or rejected with a stated limit."
+since  = "1.0"
+
+[[values]]
+id     = "int32-max-plus-one"
+name   = "32-bit integer maximum plus one"
+value  = "2147483648"
+breaks = "One past the most common integer limit - where counters, identifiers and quantities wrap to a negative number."
+expect = "Rejected with a message, or handled by a wider type consistently."
+since  = "1.0"
+
+[[values]]
+id     = "int32-max"
+name   = "32-bit integer maximum"
+value  = "2147483647"
+breaks = "The boundary itself: accepted here and failing one higher is the difference between a correct limit and an accident."
+expect = "Accepted where the limit allows it."
+since  = "1.0"
+
+[[values]]
+id     = "minus-one"
+name   = "Minus one"
+value  = "-1"
+breaks = "Quantity, price and count fields that never expected a negative value; often accepted and only noticed at invoicing."
+expect = "Rejected wherever a negative value is meaningless, with a message that says so."
+since  = "1.0"
+
+[[values]]
+id     = "zero"
+name   = "Zero"
+value  = "0"
+breaks = "Distinguishing \"zero\" from \"not filled in\" is one of the most commonly confused boundaries in forms."
+expect = "Stored as zero and displayed as zero, never as an empty field."
+since  = "1.0"
+
+[[values]]
+id     = "comma-decimal"
+name   = "Comma as the decimal separator"
+value  = "3,14"
+breaks = "The decimal separator used across most of Europe; parsers expecting a dot read it as a thousands separator or reject it."
+expect = "Accepted in locales that use it, or rejected with a message naming the expected format."
+since  = "1.0"
+
+[[values]]
+id     = "thousands-space"
+name   = "Spaces between thousands"
+value  = "1 000 000"
+breaks = "Copying a number out of a report brings the group separators with it; most numeric parsers refuse."
+expect = "Separators stripped before parsing, or a message explaining the expected format."
+since  = "1.0"
+
+[[values]]
+id     = "exp-notation"
+name   = "Exponential notation"
+value  = "1e10"
+breaks = "Spreadsheet exports produce this form for large numbers, so it arrives in fields that never expected it."
+expect = "Accepted and expanded, or rejected - never read as the digit 1."
+since  = "1.0"
+
+[[values]]
+id     = "leading-zeros"
+name   = "Leading zeros"
+value  = "007"
+breaks = "Codes, room numbers and article numbers lose their leading zeros the moment they are treated as numbers."
+expect = "Preserved where the value is a code, not a quantity."
+since  = "1.0"
+
+[[values]]
+id     = "minus-typographic"
+name   = "Typographic minus sign"
+value  = "\u22121234"
+breaks = "The typographic minus sign looks identical to the ASCII one and is rejected by every numeric parser."
+expect = "Normalised before parsing, or rejected with a message that names the character."
+since  = "1.0"
+
+[[values]]
+id     = "fifty-digits"
+name   = "50 digits"
+type   = "repeat"
+unit   = "9"
+count  = 50
+breaks = "A number wider than any numeric type; usually produces an overflow or a raw error rather than a message."
+expect = "A readable message instead of an error page."
+since  = "1.0"
+
+[[values]]
+id     = "plus-prefixed"
+name   = "Plus sign before a number"
+value  = "+5"
+breaks = "An explicitly positive number, valid in most notations and rejected by many simple validators."
+expect = "Accepted and normalised, or rejected with a stated format."
+since  = "1.0"

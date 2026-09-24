@@ -6,8 +6,8 @@
 //! clipboard ends its text there (`D71`). A refusal does not move the counter,
 //! so the next press asks for the same value and is refused again: the sequence
 //! stands still until the tester steps back (`OBS-130`). Nothing shipped today
-//! holds such a value - measured with `nkb emit` over all three packs - and the
-//! target catalogue holds two (`null-byte`, `nul-in-text`).
+//! holds such a value - measured with `nkb emit` over all eight packs on
+//! 2026-09-24 - and the target catalogue holds two (`null-byte`, `nul-in-text`).
 //!
 //! This goes red on the day one of them ships, which is the day `OBS-130` has
 //! to be decided: skip it, or say how to get past it. It pushes every shipped
@@ -72,8 +72,8 @@ fn every_shipped_value_goes_through_clipboard_mode_whole() {
     }
     // Anti-vacuity: a catalogue that listed nothing would pass the loop above.
     assert_eq!(
-        values, 36,
-        "the shipped catalogue holds 36 values (CLAUDE.md, `shipped_packs.rs`) - a \
+        values, 96,
+        "the shipped catalogue holds 96 values (CLAUDE.md, `shipped_packs.rs`) - a \
          different count means this walked something else"
     );
 }
