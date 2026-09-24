@@ -82,7 +82,7 @@ pub enum Typed {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SpelledOut {
     Written(Vec<char>),
-    /// The unit's code points; the value is `count` of them in a row.
+    /// The unit's code points. The value is `count` of them in a row.
     Recipe {
         unit: Vec<char>,
         count: u32,

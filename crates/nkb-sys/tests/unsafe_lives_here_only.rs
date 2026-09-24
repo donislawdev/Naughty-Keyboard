@@ -30,11 +30,11 @@
 //! 🔴 Written down rather than discovered later:
 //!
 //! - it reads `.rs` files under `crates/*/src` and `crates/*/tests`. Code
-//!   generated at build time is not on disk when this runs and is not seen;
+//!   generated at build time is not on disk when this runs and is not seen.
 //! - it strips `//` line comments before looking, so the prose above does not
 //!   trip it - but it does NOT strip `/* */` blocks or string literals. A file
 //!   using either around the word would be a false positive, loudly rather than
-//!   quietly, and no file in this workspace does today;
+//!   quietly, and no file in this workspace does today.
 //! - it says nothing about whether the `unsafe` in THIS package is correct. That
 //!   is what the probe and the review are for. This only answers "where".
 

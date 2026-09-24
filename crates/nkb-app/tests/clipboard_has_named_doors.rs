@@ -16,10 +16,10 @@
 //! A count of port calls alone is easy to walk around, so this guards all three
 //! routes to a clipboard this workspace has:
 //!
-//! 1. the port - `.put_text(` called from the named doors and nowhere else;
+//! 1. the port - `.put_text(` called from the named doors and nowhere else.
 //! 2. the library - `arboard` named in ONE manifest and ONE source file, the
 //!    adapter. Another package reaching for it directly would write the
-//!    clipboard without passing a door;
+//!    clipboard without passing a door.
 //! 3. the toolkit - Slint copies and pastes on its own inside a text field.
 //!    The palette has none, and a view gaining one opens a clipboard path no
 //!    Rust call shows. When the pack search (step 7) brings its field, it
@@ -28,7 +28,7 @@
 //! # What this checks, and what it cannot
 //!
 //! The same limits as `keystrokes_have_named_doors.rs`: text, not execution
-//! paths; `src/` only; test modules and `//` comments dropped. A helper wrapping
+//! paths. `src/` only. Test modules and `//` comments dropped. A helper wrapping
 //! the call would be one door with many callers, and this would not see them.
 
 // A failed expectation in a test is a failed test.
@@ -194,7 +194,7 @@ fn the_clipboard_port_is_called_only_through_the_named_doors() {
     assert_eq!(
         seen_doors,
         DOORS.len(),
-        "every named door must exist as a file; a renamed file would otherwise \
+        "every named door must exist as a file. A renamed file would otherwise \
          silently drop its door and this guard would guard a list of nothing"
     );
     assert!(

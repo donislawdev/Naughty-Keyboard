@@ -19,7 +19,7 @@
 //!
 //! Also from 6.5, and worth stating because the opposite is a common belief:
 //! `RegisterHotKey` is NOT a low-level keyboard hook. The message sits in our
-//! queue and we drain it at our own pace; nobody's keyboard is blocked while we
+//! queue and we drain it at our own pace. Nobody's keyboard is blocked while we
 //! are slow. The hot-path family (`WH_KEYBOARD_LL`) is a different mechanism the
 //! tool deliberately does not use - it would see every keystroke in every
 //! application, which a tool promising "reads nothing" may not do.
@@ -33,11 +33,11 @@
 //! - posting `WM_QUIT` to a thread that has not yet created its message queue
 //!   fails with `ERROR_INVALID_THREAD_ID` (1444). The queue is created as a
 //!   side effect of `RegisterHotKey`, so the thread reports "ready" only AFTER
-//!   registering, and the stop signal cannot be lost into that gap;
+//!   registering, and the stop signal cannot be lost into that gap.
 //! - a gated `WM_QUIT` makes `GetMessageW` return 0, the pump leaves its loop,
-//!   the thread unregisters ON ITS OWN THREAD, and it joins within the deadline;
+//!   the thread unregisters ON ITS OWN THREAD, and it joins within the deadline.
 //! - the same combination re-registers from a fresh thread afterwards, proving
-//!   the release actually freed it;
+//!   the release actually freed it.
 //! - a second registration of a held combination returns
 //!   `ERROR_HOTKEY_ALREADY_REGISTERED` (1409), which is the one failure that
 //!   means "taken" and must not be folded with any other.
@@ -47,7 +47,7 @@ use std::sync::mpsc::Receiver;
 /// The tag a caller gives a hotkey, echoed back when that hotkey fires.
 ///
 /// It is also the `RegisterHotKey` id, so it must fit the application range
-/// `0..=0xBFFF`; ids at `0xC000` and above are reserved for the atom-based
+/// `0..=0xBFFF`. Ids at `0xC000` and above are reserved for the atom-based
 /// registration that DLLs use. The tool has a handful of shortcuts, so this is
 /// room to spare rather than a constraint anyone will meet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -70,11 +70,11 @@ pub struct HotkeyId(pub u32);
 ///
 /// - ids within one [`listen`] call must be distinct. Two hotkeys sharing an id
 ///   would be indistinguishable when they fire, and the OS refuses the second
-///   registration of a duplicate id on one thread anyway;
+///   registration of a duplicate id on one thread anyway.
 /// - a hotkey with no modifier (`ctrl`/`alt`/`shift`/`win` all false) registers
 ///   a BARE key globally - it would take that key from every application. The
 ///   `ux-spec.md` 3 defaults always carry a modifier, and the app layer enforces
-///   that; this layer registers exactly what it is handed.
+///   that. This layer registers exactly what it is handed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Hotkey {
     pub id: HotkeyId,
@@ -115,7 +115,7 @@ pub enum HotkeyUnavailable {
     Unsupported { system: &'static str },
     /// A route exists, but the listener thread could not be started - the OS
     /// refused a new thread. Separate from `Unsupported` because it is not about
-    /// the platform and can pass on a retry; and here at all because
+    /// the platform and can pass on a retry. It exists at all because
     /// `std::thread::spawn` would otherwise panic, which product code may not do.
     CouldNotStart,
 }
@@ -137,7 +137,7 @@ impl core::fmt::Display for HotkeyUnavailable {
 /// `outcomes` runs in the same order as the hotkeys handed to [`listen`], one
 /// per hotkey, so a caller can tell which shortcut was taken without matching by
 /// anything but position. `fired` yields the [`HotkeyId`] of each shortcut as it
-/// is pressed. `listener` owns the thread; dropping it, or calling
+/// is pressed. `listener` owns the thread. Dropping it, or calling
 /// [`HotkeyListener::stop`], ends the thread and releases every shortcut.
 pub struct Listening {
     pub outcomes: Vec<HotkeyRegistration>,
@@ -160,8 +160,8 @@ impl HotkeyListener {
     ///
     /// Blocks until the thread has left its message loop and unregistered, which
     /// is prompt: the stop signal is a posted `WM_QUIT` and the thread's only
-    /// wait is on the message queue. Dropping the handle does the same thing;
-    /// this exists for a caller that wants the release to have happened by a
+    /// wait is on the message queue. Dropping the handle does the same thing.
+    /// This exists for a caller that wants the release to have happened by a
     /// known point rather than at end of scope.
     pub fn stop(self) {
         self.inner.stop();
@@ -235,7 +235,7 @@ mod platform {
 
     fn register_one(hotkey: &Hotkey) -> HotkeyRegistration {
         // `None` window: the WM_HOTKEY is posted to this thread's queue. The id
-        // is our tag; the cast is safe within the documented 0..=0xBFFF range.
+        // is our tag. The cast is safe within the documented 0..=0xBFFF range.
         let accepted = unsafe {
             RegisterHotKey(
                 core::ptr::null_mut(),
@@ -339,7 +339,7 @@ mod platform {
                 // Report the id and outcomes BEFORE pumping. Only now, with the
                 // queue created by RegisterHotKey, may the parent post WM_QUIT.
                 if ready_tx.send((thread_id, outcomes)).is_err() {
-                    // The parent went away between spawn and here; release and go.
+                    // The parent went away between spawn and here. Release and go.
                     release(&owned);
                     return;
                 }

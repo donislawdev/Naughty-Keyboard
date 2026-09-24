@@ -3,7 +3,7 @@
 //! # Why these are two functions and not one with a flag
 //!
 //! The two patterns differ in both ends. A pack identifier must start with a
-//! letter and is at least two characters long; a value identifier may start with
+//! letter and is at least two characters long. A value identifier may start with
 //! a digit and may be a single character. `bool-no` and `len-255` are real value
 //! identifiers from the catalogue, and a shared implementation with a switch
 //! would invite one of the two to drift while the other stayed correct.

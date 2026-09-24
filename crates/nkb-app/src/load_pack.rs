@@ -17,7 +17,7 @@
 //! # What makes the copies dangerous rather than merely repetitive
 //!
 //! 🔴 [`PackFormat::parse`] does not check `format = 1`. The version is guarded
-//! by `check` alone; the reading half never looks at that field. So a caller
+//! by `check` alone. The reading half never looks at that field. So a caller
 //! that reached for `parse` on its own would load a pack written for a format
 //! this build does not understand, and nothing would report it - while the
 //! `format` field exists precisely so that cannot happen.

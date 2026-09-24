@@ -123,7 +123,7 @@ mod tests {
     #[test]
     fn all_three_sources_the_format_defines_are_accounted_for() {
         // Not the same assertion as the one above. That one checks the two
-        // values; this one checks that nothing was FORGOTTEN - a fourth source
+        // values. This one checks that nothing was FORGOTTEN - a fourth source
         // added to the format with no line here would slip through unmentioned.
         let coverage = BuiltInCatalogue::new().coverage();
         let mut seen: Vec<CatalogueSource> = coverage.consulted.clone();

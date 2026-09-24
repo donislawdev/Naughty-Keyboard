@@ -66,7 +66,7 @@ mod tests {
     fn reporting_picks_a_channel_under_test() {
         // A test process has inherited handles, so this is the terminal case.
         // The desktop case is measured by tools/sonda-konsola against a real
-        // binary; it cannot be reached from inside a process that has handles,
+        // binary. It cannot be reached from inside a process that has handles,
         // and saying so here stops this test from looking like it covers both.
         assert_eq!(
             report_window_failure("startup probe, not a failure"),

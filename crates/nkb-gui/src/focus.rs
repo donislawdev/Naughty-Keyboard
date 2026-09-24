@@ -75,7 +75,7 @@ pub fn standing_line(standing: &Standing) -> Option<String> {
     standing.lock().ok().and_then(|held| held.clone())
 }
 
-/// Starts the poll. Returns immediately; the work happens on the event loop.
+/// Starts the poll. Returns immediately. The work happens on the event loop.
 ///
 /// Call it before `run()`: work handed to the loop beforehand is delivered once
 /// the loop starts, measured in `tools/sonda-petla` (`slint.md` 1.9).
@@ -135,7 +135,7 @@ fn window_handle(palette: &Palette) -> Option<u64> {
 ///
 /// Both halves are needed and neither is enough. The worker rebuilds the message
 /// band from scratch on every view, so writing only to the window would lose the
-/// sentence at the first shortcut; and the worker may be waiting on a press that
+/// sentence at the first shortcut. And the worker may be waiting on a press that
 /// never comes, so writing only to [`Standing`] would leave the tester with a
 /// palette that looks fine.
 fn say(palette: &Palette, standing: &Standing, line: &str) {

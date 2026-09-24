@@ -20,7 +20,7 @@
 // `surface-raised` at 4.55. The table is not copied anywhere - it is produced
 // by an internal script from THIS file, so a changed colour is re-measured
 // rather than re-remembered. (Until 2026-09-14 this comment quoted "ten pairs,
-// tightest 5.00" and pointed at ADR-4 for the table; no such table was ever
+// tightest 5.00" and pointed at ADR-4 for the table. No such table was ever
 // written down, and 5.00 was the tightest pair on `surface` alone.)
 //
 // Those ratios hold against an OPAQUE background. D49 puts the resting-state
@@ -37,7 +37,7 @@
 // The alpha is honoured only when the system allows translucency at all: with
 // transparency effects switched off (Windows), "reduce transparency" (macOS)
 // or high contrast on (anywhere), the resting state is opaque. That rule lives
-// in the application layer; this file only names the value.
+// in the application layer. This file only names the value.
 //
 // # One theme, and a second set of values that is not a theme
 //
@@ -58,7 +58,7 @@
 // WHERE those values come from was measured on 2026-09-14 and settled in D53:
 // Windows is the only system that offers COLOURS (eight system colours, every
 // pair above 5.3:1 in all four shipped schemes), so there the second set is
-// read from the system; macOS and Linux offer only a yes/no signal, so there
+// read from the system. macOS and Linux offer only a yes/no signal, so there
 // the second set is our own, kept in that second file. Neither set is in this
 // file yet - it arrives with the first screen.
 
@@ -83,7 +83,7 @@ export global Tokens {
 
     // ---- meaning -----------------------------------------------------------
     // Document 13 section 9: meaning never hangs on colour alone. Each of these
-    // is always accompanied by a shape or a label at the point of use; the
+    // is always accompanied by a shape or a label at the point of use. The
     // colour is the third carrier, never the only one.
     out property <color> accent: #7AA2F7;
     out property <color> risk: #E0AF68;
@@ -141,7 +141,7 @@ export global Tokens {
     //
     // DejaVu Sans Mono 2.37, shipped in ui/fonts/ and imported at the top of
     // this file. The name below must match the family the FILE declares, to the
-    // character; `typeface.rs` reads the font's own name table and fails if the
+    // character. `typeface.rs` reads the font's own name table and fails if the
     // two ever drift apart.
     //
     // # Why the product carries a font at all
@@ -172,14 +172,14 @@ export global Tokens {
     // 14 of the catalogue's code points to save 60 KB. Licence sieve, both
     // questions: (a) Bitstream Vera Fonts Copyright plus Arev - permissive and
     // GPL-3.0 compatible, and the rename clause is not engaged because the file
-    // ships unmodified; (b) not applicable, a typeface is not a reference
+    // ships unmodified. (b) not applicable, a typeface is not a reference
     // dataset. The full text sits beside the font in ui/fonts/.
     //
     // 🔴 # What this import does NOT do
     //
     // It does not give the product a fallback chain. Measured with a positive
     // control, same binary, same container: with this kind of import in place
-    // and no family named, 15 of the probe's code points had no glyph; naming
+    // and no family named, 15 of the probe's code points had no glyph. Naming
     // the embedded family brought that to 8. Slint registers an imported font
     // as a NAMED FAMILY and never adds it to the fallback chain - unlike the
     // `SLINT_FONT_PATH` route, which does, and which takes a loose file beside

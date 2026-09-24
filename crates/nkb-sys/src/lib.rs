@@ -18,10 +18,10 @@
 //! the run) sent nine characters through `SendInput` with `KEYEVENTF_UNICODE`
 //! and read back what the field actually held:
 //!
-//! - ASCII, `U+00A0`, `U+200B`, `U+4E2D` and `U+1F600` all arrived intact;
+//! - ASCII, `U+00A0`, `U+200B`, `U+4E2D` and `U+1F600` all arrived intact.
 //! - the astral character crossed as a SURROGATE PAIR - nine characters became
-//!   ten UTF-16 units and twenty events - and recombined on the far side;
-//! - the system accepted all twenty events it was given;
+//!   ten UTF-16 units and twenty events - and recombined on the far side.
+//! - the system accepted all twenty events it was given.
 //! - with the probe not run, the same window reported an empty field, so the
 //!   measurement distinguishes arrival from intent.
 //!
@@ -135,7 +135,7 @@ pub const MODIFIER_RELEASE_WAIT: core::time::Duration = core::time::Duration::fr
 ///
 /// Deliberately opaque, and deliberately NOT a title. architektura.md section 5
 /// makes "does not read the contents of windows" a promise held up by the
-/// absence of a port; a window title is the thin end of that, and it has its own
+/// absence of a port. A window title is the thin end of that, and it has its own
 /// type (`WindowTitle`) and its own port (`TargetInspector`) waiting for the day
 /// it is genuinely needed. Comparing two of these answers "is the target still
 /// the same one" without learning anything about either.
@@ -179,7 +179,7 @@ mod windows_impl {
 
     fn held_modifier() -> Option<&'static str> {
         MODIFIERS.iter().find_map(|(key, name)| {
-            // The high bit says "down right now"; the low bit is history and
+            // The high bit says "down right now". The low bit is history and
             // is deliberately ignored.
             let state = unsafe { GetAsyncKeyState(i32::from(*key)) };
             ((state as u16) & 0x8000 != 0).then_some(*name)
@@ -388,7 +388,7 @@ pub fn foreground_window() -> Option<WindowRef> {
 
 /// Send `text` to whatever holds the keyboard focus.
 ///
-/// The caller decides WHAT to send and WHERE the focus should be by then; this
+/// The caller decides WHAT to send and WHERE the focus should be by then. This
 /// function only puts the characters on the wire. It waits up to
 /// [`MODIFIER_RELEASE_WAIT`] for a physically held modifier to come up and
 /// refuses with [`SendError::ModifierHeld`] if it does not.
@@ -400,7 +400,7 @@ pub fn send_text(text: &str) -> Result<SendOutcome, SendError> {
 /// holds the keyboard focus. Returns how many chords were pressed.
 ///
 /// These are the keys that are NOT content. The caller (one place in the
-/// whole program, guarded there) decides the recipe; this function waits for
+/// whole program, guarded there) decides the recipe. This function waits for
 /// held modifiers exactly as [`send_text`] does and puts the presses on the
 /// wire one chord at a time.
 ///

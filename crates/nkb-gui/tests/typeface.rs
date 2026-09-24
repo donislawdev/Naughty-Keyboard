@@ -41,7 +41,7 @@
 //! that does nothing:
 //!
 //! - dictionary back to "Consolas" -> static fails, rendering passes (Consolas
-//!   is present and monospaced on Windows, so rendering has no complaint);
+//!   is present and monospaced on Windows, so rendering has no complaint).
 //! - ui/fonts/ holding DejaVu Sans instead of DejaVu Sans Mono, with the
 //!   dictionary naming it correctly -> static passes, rendering fails at 67%.
 //!
@@ -50,7 +50,7 @@
 //!
 //! # What neither check sees
 //!
-//! Coverage. This says the roles are monospaced; it says nothing about whether
+//! Coverage. This says the roles are monospaced. It says nothing about whether
 //! a given character has a glyph at all. That gap is OBS-66, it belongs to the
 //! preview rather than to the counters, and it is open.
 
@@ -135,7 +135,7 @@ fn declared_families(data: &[u8]) -> Vec<String> {
         let Some(raw) = data.get(from..from + usize::from(length)) else {
             continue;
         };
-        // Platform 3 is Windows and spells its strings in UTF-16BE; platform 1
+        // Platform 3 is Windows and spells its strings in UTF-16BE. Platform 1
         // is Macintosh and uses one byte per character.
         let text = if platform == 3 {
             let units: Vec<u16> = raw
@@ -180,7 +180,7 @@ fn the_dictionary_names_exactly_the_typeface_the_product_ships() {
     assert!(
         path.is_file(),
         "{} is missing. The dictionary names a family that the product is supposed to \
-         CARRY; without the file the name falls through to whatever the machine happens \
+         CARRY. Without the file the name falls through to whatever the machine happens \
          to have, which is the OBS-72 defect returning.",
         path.display()
     );
@@ -356,7 +356,7 @@ fn the_monospaced_roles_really_do_advance_by_equal_steps() {
          ({mono_narrow} against {mono_wide}), so it is NOT rendering monospaced. Two \
          causes look identical from here and both are real: the name resolved to \
          nothing and fell through to this machine's default face, whose own spread is \
-         {ctl_spread}%; or it resolved perfectly well to a shipped file that is simply \
+         {ctl_spread}%. Or it resolved perfectly well to a shipped file that is simply \
          not a monospaced face - ui/fonts/ holding the proportional sibling, whose \
          filename differs by three letters. Either way it is OBS-72 again: no error, \
          no log, just a counter that shifts the characters beside it."

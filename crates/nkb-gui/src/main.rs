@@ -35,7 +35,7 @@
 //! The attribute could not go in on its own. Slint has no runtime fallback from
 //! its hardware renderer to the software one, so a machine without a graphics
 //! context gets a `PlatformError` back out of `run()` and nothing else
-//! (`OBS-103`). Before this change that error reached a console; after it, with
+//! (`OBS-103`). Before this change that error reached a console. After it, with
 //! no channel of its own, it would reach NOBODY - which is exactly the silence
 //! untouchable rule 1 forbids. So the console disappears in the same commit as
 //! `report_window_failure`, which says the failure through standard error when
@@ -105,8 +105,8 @@ fn main() -> ExitCode {
 /// What the command line asked for.
 ///
 /// Deliberately tiny: three shapes, no flags to combine, no parser. `nkb` is
-/// the executable with a command surface and `ux-spec.md` 10 is its contract;
-/// this one is a window, and a window that grows an option grammar has started
+/// the executable with a command surface and `ux-spec.md` 10 is its contract.
+/// This one is a window, and a window that grows an option grammar has started
 /// to become the other binary.
 ///
 /// ⚠️ The third shape, `--clipboard`, went in on purpose (`D71`) and it is
@@ -149,7 +149,7 @@ fn start(request: &Request) -> Result<(), slint::PlatformError> {
 ///
 /// The main thread builds the window and then belongs to Slint. The worker
 /// registers the shortcuts, runs the sequence and hands finished views back
-/// (`live`). `run()` returns when the window closes; the flag then stops the
+/// (`live`). `run()` returns when the window closes. The flag then stops the
 /// worker within one tick.
 ///
 /// 🔴 The worker is JOINED, never detached. It owns the registered shortcuts and
@@ -174,7 +174,7 @@ fn run_palette(pack: &str, route: RouteRequest) -> Result<(), slint::PlatformErr
     palette.set_has_value(false);
 
     // The two threads meet here. `focus` runs on this one and may produce a
-    // sentence saying the palette could not refuse the focus; the worker rebuilds
+    // sentence saying the palette could not refuse the focus. The worker rebuilds
     // the message band on every view and has to find that sentence again.
     let standing = focus::standing();
     focus::refuse_focus(&palette, kept, &standing);

@@ -53,7 +53,7 @@ pub enum Position {
     NoPack,
     /// A pack is chosen and nothing has been sent from it.
     Ready { total: usize },
-    /// `done` values have been sent; the next one is number `done + 1`.
+    /// `done` values have been sent. The next one is number `done + 1`.
     Running { done: usize, total: usize },
     /// A value is on its way into the field right now.
     ///
@@ -272,7 +272,7 @@ impl Sequence {
             // Nothing is in flight, so none of these describes anything.
             // `W3`: `Escape` belongs to `inserting` and is not captured outside
             // it, so arriving here at all means somebody wired it globally. A
-            // failure outside a send switched the route until `D71`; entering the
+            // failure outside a send switched the route until `D71`. Entering the
             // mode outside a send is `UseClipboard` now, with its own name.
             Event::InsertionFinished
             | Event::InsertionFailed
@@ -992,7 +992,7 @@ mod tests {
         let step = sequence.apply(Event::TargetChanged);
         assert_eq!(
             step.sequence, sequence,
-            "product-spec.md 8.2 chose a global counter; changing field does not reset it"
+            "product-spec.md 8.2 chose a global counter. Changing field does not reset it"
         );
         assert_eq!(
             step.effects,
@@ -1019,7 +1019,7 @@ mod tests {
 
     #[test]
     fn a_pack_with_no_values_cannot_be_started_and_never_pretends_otherwise() {
-        // The validator refuses such a pack; this layer does not get to assume
+        // The validator refuses such a pack. This layer does not get to assume
         // the validator ran.
         let step = Sequence::new().apply(Event::PackChosen { total: 0 });
         assert_eq!(step.sequence.counter(), Some((0, 0)));
@@ -1113,7 +1113,7 @@ mod tests {
         assert_eq!(step.sequence.counter(), Some((0, 5)));
         assert!(
             step.effects.is_empty(),
-            "restarting sets a position; it does not fire a value at the field"
+            "restarting sets a position. It does not fire a value at the field"
         );
     }
 

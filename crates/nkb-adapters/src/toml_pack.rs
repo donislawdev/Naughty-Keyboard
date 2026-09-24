@@ -120,7 +120,7 @@ const TRANSLATION_PACK_KEYS: [&str; 2] = ["name", "description"];
 ///
 /// Three, and the shortness is the rule rather than an oversight: a translation
 /// changes prose and nothing else. E050 refuses the four fields that decide what
-/// gets inserted; this refuses everything else the format did not put here,
+/// gets inserted. This refuses everything else the format did not put here,
 /// including fields that are harmless in a source pack.
 const TRANSLATION_ENTRY_KEYS: [&str; 3] = ["name", "breaks", "expect"];
 
@@ -1788,7 +1788,7 @@ mod tests {
         // 🔴 Found by accident rather than by review: writing the first real pack,
         // one value lost an escape and became byte-identical to the value above
         // it. The validator said nothing, and a pack claiming twelve test values
-        // carried eleven. E011 is about identifiers; this is about what they
+        // carried eleven. E011 is about identifiers. This is about what they
         // stand for.
         let text = with_second_value("value = \"Kowalski\\u0020\"\n");
         let problems = check(&text, PACK_ID);

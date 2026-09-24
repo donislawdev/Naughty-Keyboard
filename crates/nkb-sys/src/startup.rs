@@ -59,7 +59,7 @@ pub enum StartupChannel {
 
 /// Says `text` by whatever channel exists, and reports which one that was.
 ///
-/// `title` names the window when it comes to that; it is not used otherwise.
+/// `title` names the window when it comes to that. It is not used otherwise.
 ///
 /// The order is fixed and each step earns its place: attach a parent console if
 /// this process has none, then ask whether a standard error handle exists at
@@ -80,7 +80,7 @@ mod platform {
 
     /// Whether standard error leads anywhere.
     ///
-    /// A null handle means the parent passed none; `INVALID_HANDLE_VALUE` means
+    /// A null handle means the parent passed none. `INVALID_HANDLE_VALUE` means
     /// the request itself failed. Both mean "do not write", and they are checked
     /// separately from each other only in the probe - here the answer is one bit.
     fn has_standard_error() -> bool {
@@ -174,7 +174,7 @@ mod tests {
         // Under `cargo test` the parent passes standard handles, so this is the
         // terminal case and the answer must be the text one. The desktop case -
         // no handles at all - cannot be reached from inside a test process that
-        // has them; it is measured by `tools/sonda-konsola`, which runs a real
+        // has them. It is measured by `tools/sonda-konsola`, which runs a real
         // binary both ways, and that is said here so the gap is not mistaken for
         // coverage.
         let channel = report_startup_failure("Naughty Keyboard", "startup probe, not a failure");

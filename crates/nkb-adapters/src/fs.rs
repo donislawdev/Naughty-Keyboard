@@ -137,7 +137,7 @@ impl PackSink for DirectoryPackSink {
     ///
     /// So the text lands under a neighbouring name and the file gets its real
     /// name by a rename, which the operating system does in one step. Either the
-    /// old content is there or the new content is; there is no third state.
+    /// old content is there or the new content is. There is no third state.
     ///
     /// The temporary file sits in the same folder deliberately. A rename across
     /// folders is a copy, and a copy is not atomic.

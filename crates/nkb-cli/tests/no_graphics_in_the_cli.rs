@@ -26,10 +26,10 @@
 //!
 //! - a graphical crate pulled in INDIRECTLY, by some other dependency. Today
 //!   the only external dependency under `nkb` is `toml_edit`, so the surface is
-//!   small - but it is not zero, and it grows with every dependency added;
+//!   small - but it is not zero, and it grows with every dependency added.
 //! - a graphical crate whose name is not on the list. The list is a list of
 //!   names, so it is incomplete by construction. It catches the realistic case,
-//!   which is a session adding the toolkit it happens to be working with;
+//!   which is a session adding the toolkit it happens to be working with.
 //! - anything about the size of the produced binary. The deep version of this
 //!   check is `cargo tree -p nkb-cli`, which is what measured criterion 7 in the
 //!   first place. It is not run here because invoking cargo from inside a cargo
@@ -75,7 +75,7 @@ const GRAPHICAL: &[&str] = &[
 ];
 
 fn workspace_root() -> PathBuf {
-    // CARGO_MANIFEST_DIR is crates/nkb-cli; the workspace is two levels up.
+    // CARGO_MANIFEST_DIR is crates/nkb-cli. The workspace is two levels up.
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)

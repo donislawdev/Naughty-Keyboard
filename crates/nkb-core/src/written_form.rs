@@ -120,7 +120,7 @@ pub fn check(raw: &str, expanded: &str) -> Vec<LintProblem> {
         let at_edge = position == 0 || position + 1 == length;
         if needs_escaping(character, at_edge) && !reported_unescaped {
             // One fault, one code. In a literal string the repair is to change
-            // the quoting, which is what E022 says; escaping in place is not
+            // the quoting, which is what E022 says. Escaping in place is not
             // available there, so reporting E020 would name an impossible fix.
             let code = if quoting.escapes() {
                 RuleCode::UnescapedCharacter

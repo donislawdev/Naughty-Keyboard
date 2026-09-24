@@ -49,7 +49,7 @@ impl fmt::Display for SourceError {
 /// Counted in UTF-16 code units rather than characters, and that is not an
 /// implementation detail leaking upwards - it is the only count that cannot
 /// lie. A character above the basic plane crosses as a surrogate PAIR, so a
-/// delivery cut short can end between the halves; reporting "seven characters
+/// delivery cut short can end between the halves. Reporting "seven characters
 /// arrived" would then be a guess about something that is not a character.
 /// The layer that talks to a person converts, and says so.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -661,7 +661,7 @@ pub enum TranslationTarget {
     Pack(String),
     /// A translation whose `translates` names no pack: not text, or text outside
     /// the pack identifier alphabet. The rule about that has already been
-    /// reported by [`PackFormat::check`]; nothing here can be resolved.
+    /// reported by [`PackFormat::check`]. Nothing here can be resolved.
     Unusable,
 }
 
@@ -760,8 +760,8 @@ pub trait LiveShortcuts {
     ///
     /// A zero wait asks only for what is already queued, which is how a caller
     /// drains presses that arrived while it was busy. A caller that wants to
-    /// stop on its own terms waits in short slices and checks between them;
-    /// nothing here blocks for longer than it was asked to.
+    /// stop on its own terms waits in short slices and checks between them.
+    /// Nothing here blocks for longer than it was asked to.
     fn next(&self, wait: Duration) -> Wait;
 }
 
@@ -770,11 +770,11 @@ pub trait LiveShortcuts {
 /// All bindings go in at once and come back with one outcome each, so a
 /// shortcut that is taken is reported beside the ones that are not, rather than
 /// aborting the set. What to do about a taken shortcut is the caller's to
-/// decide - the palette says so and keeps running; this port only answers
+/// decide - the palette says so and keeps running. This port only answers
 /// truthfully.
 ///
-/// The bindings are `HotkeyAction` with `HotkeyChord`, the core's vocabulary;
-/// the mapping to a platform key code belongs to the implementation, exactly as
+/// The bindings are `HotkeyAction` with `HotkeyChord`, the core's vocabulary.
+/// The mapping to a platform key code belongs to the implementation, exactly as
 /// the clearing keys are mapped by the keyboard adapter. The handle is `Send`
 /// because the presses are consumed on a worker thread, never on the thread
 /// that draws (`architektura.md` 6.5).

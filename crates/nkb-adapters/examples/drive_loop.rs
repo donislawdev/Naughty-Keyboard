@@ -70,7 +70,7 @@ fn main() {
         }
     }
     println!(
-        "pack {PACK} chosen, {total} values; click into a text field and press Ctrl+Alt+N (next), \
+        "pack {PACK} chosen, {total} values. Click into a text field and press Ctrl+Alt+N (next), \
          Ctrl+Alt+P (previous), Ctrl+Alt+0 (restart) - stopping in {} s",
         RUN_FOR.as_secs()
     );

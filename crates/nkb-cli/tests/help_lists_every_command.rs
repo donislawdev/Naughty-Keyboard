@@ -18,9 +18,9 @@
 //! the help body prints lines starting with two spaces and the command name. So:
 //!
 //! - it does NOT run the program, and does not see the rendered output. A help
-//!   line that is unreachable at runtime would still satisfy it;
+//!   line that is unreachable at runtime would still satisfy it.
 //! - it says nothing about whether the DESCRIPTION is right, only that the name
-//!   appears;
+//!   appears.
 //! - it knows nothing about `nkb-gui`, which has its own surfaces.
 
 #![allow(clippy::panic, clippy::expect_used)]
@@ -49,7 +49,7 @@ fn commands_in_the_dispatcher() -> Vec<String> {
         if !tail.trim_start().starts_with("=>") {
             continue;
         }
-        // Switches are handled in the same match; they are not commands.
+        // Switches are handled in the same match. They are not commands.
         if name.starts_with('-') || name.is_empty() {
             continue;
         }
@@ -106,7 +106,7 @@ fn the_general_help_names_every_command_the_dispatcher_accepts() {
 /// general help and nothing about what happens when somebody asks that command
 /// for help. Measured 2026-09-08: all seven answered, and `nkb send` answered in
 /// a different shape - no first line naming the command, no `Usage:`, no
-/// `Options:` entry for `--help` itself. Nothing was broken; the surface was
+/// `Options:` entry for `--help` itself. Nothing was broken. The surface was
 /// simply not uniform, which is the kind of drift that arrives one command at a
 /// time and is never worth fixing on its own day.
 ///

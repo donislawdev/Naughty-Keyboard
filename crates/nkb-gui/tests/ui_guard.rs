@@ -35,10 +35,10 @@
 //! break that, and not for convenience:
 //!
 //! - its labels NAME COMPONENTS, in the language the code is written in
-//!   (untouchable rule 6). Translated, they stop naming them;
+//!   (untouchable rule 6). Translated, they stop naming them.
 //! - fed from Rust, it would render in `appearance.rs` as a screen of empty
 //!   labels - and that off-screen render is the only mechanism this project has
-//!   for looking at its own interface;
+//!   for looking at its own interface.
 //! - document 13 section 3 asks the catalogue to carry a very long label and an
 //!   empty one BY NAME. Those are the catalogue's data, not the product's
 //!   sentences.
@@ -62,18 +62,18 @@
 //! whose blind spots are unwritten gets trusted for things it never checked.
 //!
 //! - a named value multiplied by a number: `Tokens.space-2 * 3` passes, and it
-//!   is a hole in the closed scale of section 2.3;
+//!   is a hole in the closed scale of section 2.3.
 //! - a value computed in Rust and pushed in through a property - the literal is
-//!   then in a `.rs` file, and only SENTENCES are followed there, not lengths;
+//!   then in a `.rs` file, and only SENTENCES are followed there, not lengths.
 //! - the right component used in the wrong place. This checks vocabulary, not
-//!   meaning, and no guard of this shape ever could;
+//!   meaning, and no guard of this shape ever could.
 //! - appearance literals inside `ui/components/*.slint`. Deliberate: components
-//!   are where primitives are allowed to live. Sentences are NOT - see below;
+//!   are where primitives are allowed to live. Sentences are NOT - see below.
 //! - block comments spanning several lines. Line comments are stripped, `/* */`
 //!   is not, so a colour or a sentence inside one would be reported. That is the
-//!   loud direction, not the silent one;
+//!   loud direction, not the silent one.
 //! - a built-in colour name such as `Colors.red`, which is a literal in spirit
-//!   but not in syntax;
+//!   but not in syntax.
 //! - on the Rust side: a sentence assembled into a variable and then pushed, a
 //!   raw string (`r"..."`), and a char literal holding a quote (`'"'`). All three
 //!   are absent from this crate today and all three would walk past.
@@ -247,7 +247,7 @@ fn instantiated_elements(line: &str) -> Vec<&str> {
     let mut found = Vec::new();
     for (i, _) in line.match_indices('{') {
         let head = line[..i].trim_end();
-        // `Foo := Bar {` declares a component; `bar := Baz {` names an instance.
+        // `Foo := Bar {` declares a component. `bar := Baz {` names an instance.
         let head = head
             .rsplit_once(":=")
             .map_or(head, |(_, right)| right)

@@ -23,7 +23,7 @@
 //! - work handed to the event loop BEFORE `run()` is delivered once the loop
 //!   starts. So this thread may start before the window is running and does not
 //!   need a gate, a handshake or a first-view buffer. The first design had all
-//!   three;
+//!   three.
 //! - 🔴 work handed to the loop AFTER it has quit returns `Ok(())` and the
 //!   closure NEVER RUNS. That is the same shape as `eprintln!` with no handle
 //!   (`slint.md` 2.17): a success returned for work nobody did. Nothing here may
@@ -695,7 +695,7 @@ mod tests {
         );
     }
 
-    /// Two conditions share one bar; the mode wins, because in clipboard mode
+    /// Two conditions share one bar. The mode wins, because in clipboard mode
     /// every value goes there and "for this window" would suggest otherwise.
     #[test]
     fn the_clipboard_bar_names_the_mode_before_the_window() {

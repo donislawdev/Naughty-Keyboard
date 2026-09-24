@@ -17,10 +17,10 @@
 //! system copy to hand it to unless a clipboard manager runs. So the handle is
 //! opened the first time a report is copied (a palette that never copies never
 //! connects) and held until the worker thread ends, which is when the palette
-//! closes. `arboard` offers the content to a clipboard manager on that drop; with
+//! closes. `arboard` offers the content to a clipboard manager on that drop. With
 //! none running, the block leaves with the palette. Named in `ux-spec.md` 7.
 //!
-//! # 🔴 Kept off the cloud; in the history or out of it, as asked
+//! # 🔴 Kept off the cloud. In the history or out of it, as asked
 //!
 //! Windows can upload the clipboard to the owner's account and sync it to their
 //! other devices. The tool promises to send nothing over the network, and a copy

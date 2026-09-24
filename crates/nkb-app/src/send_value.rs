@@ -15,7 +15,7 @@
 //!
 //! The order matters and is fixed here: the value is BUILT before the field is
 //! touched, so a value the format refuses (`E026`) refuses before a single key
-//! goes out; then the clearing keys; then the value. If clearing does not go
+//! goes out. Then the clearing keys. Then the value. If clearing does not go
 //! through, the value is NOT sent - a half-cleared field with a whole value on
 //! top of it is the worst of both outcomes, and the caller is told which half
 //! happened.
@@ -24,11 +24,11 @@
 //!
 //! - it does not ask before clearing a multi-line field. The recipe clears the
 //!   current line only, which is the safe direction, and the question belongs
-//!   to the palette (`ux-spec.md` 4, answer 2);
+//!   to the palette (`ux-spec.md` 4, answer 2).
 //! - it does not check what the target is. `product-spec.md` 10.1 requires the
 //!   application name and window title before every insert, and that needs
 //!   `TargetInspector` and the `WindowTitle` type - a separate piece, because
-//!   the type is what keeps titles out of the log;
+//!   the type is what keeps titles out of the log.
 //! - it does not re-check the target mid-insert (race `W2`), does not handle
 //!   `Escape` (`W3`), and writes nothing to a session file (`W4`).
 //!
@@ -201,7 +201,7 @@ fn deliver_one(
 /// changed underneath. So `AdvanceSequence` holds the pack and calls THIS, which
 /// takes the value it already has rather than an index to look up.
 ///
-/// The clearing keys go out before the value; if clearing does not go through,
+/// The clearing keys go out before the value. If clearing does not go through,
 /// the value is not sent, and the outcome says which half happened. The returned
 /// [`SendOutcome`] carries both the delivery result and the numbers the palette
 /// shows, so one call answers both questions.

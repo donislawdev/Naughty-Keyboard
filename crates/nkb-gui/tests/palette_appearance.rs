@@ -165,7 +165,7 @@ fn surface_edge(buffer: &[offscreen::Pixel]) -> usize {
 const SURFACE_PROBE_INSET: u32 = 6;
 
 /// Rows the rounded corner may take off the surface at the probe column. The
-/// corner is `radius-window`; at six pixels in from the edge its curve rises by
+/// corner is `radius-window`. At six pixels in from the edge its curve rises by
 /// less than two rows, so three is a margin and not a hiding place.
 const CORNER_ROWS: usize = 3;
 

@@ -34,12 +34,12 @@
 //! - **it does not count anything.** The counters under the preview come from
 //!   [`crate::metrics`] and [`crate::graphemes`], which are separate on purpose:
 //!   this module answers "what does this look like", those answer "how much of
-//!   it is there", and a value can need one without the other;
+//!   it is there", and a value can need one without the other.
 //! - **it does not know which characters the shipped typeface covers.** The
 //!   guarantee table is `D52` point 1 and lives in `gui`, read from the file's
 //!   `cmap`. The rule that uses it is `D52` point 2 and sits beside this module,
 //!   in [`crate::typeface`] - separate because a preview is needed by every
-//!   surface and a typeface only by the one that draws;
+//!   surface and a typeface only by the one that draws.
 //! - **it does not decide how many digits a number gets.** [`preview_of`] shows
 //!   a generated value as its recipe, `ux-spec.md` 2's `100 000 × "a"`, and
 //!   carries the count as a number. Grouping its digits is a locale's business
@@ -126,7 +126,7 @@ pub enum ShapeFact {
 
 /// Whether `c` has no visible glyph of its own, so the preview must stand in.
 ///
-/// Deliberately NOT "is it whitespace". `U+00A0` is whitespace and needs marking;
+/// Deliberately NOT "is it whitespace". `U+00A0` is whitespace and needs marking.
 /// `U+200B` is not whitespace by most definitions and needs marking more.
 #[must_use]
 pub fn is_invisible(c: char) -> bool {
@@ -210,7 +210,7 @@ pub struct Recipe {
 /// preview, at every length. Measured on the shipped packs: `len-254`,
 /// `len-255` and `len-256` all previewed as the same wall of `a`, and the one
 /// thing those three values exist to tell apart sat in a footnote. `64 × "😀"`
-/// answers "what did I send" exactly; sixty-four emoji have to be counted.
+/// answers "what did I send" exactly. Sixty-four emoji have to be counted.
 ///
 /// A unit longer than a preview (the format allows it, no catalogue value has
 /// one) falls back to the text, elided at both ends like any long value - and

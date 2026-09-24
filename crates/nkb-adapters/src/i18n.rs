@@ -161,7 +161,7 @@ fn key_name(key: HotkeyKey) -> &'static str {
 ///
 /// ⚠️ This is the WINDOWS AND LINUX convention, and on macOS it is wrong in a
 /// way worth naming rather than discovering. `ux-spec.md` 3 writes the macOS
-/// defaults as `⌥⌘N`; the adapter that registers there swaps the primary
+/// defaults as `⌥⌘N`. The adapter that registers there swaps the primary
 /// modifier for the Command bit, so this function would print `Alt+Win+N` -
 /// three things a Mac user does not call those keys. Delivery on macOS is
 /// blocked anyway (`OBS-70`), so the palette does not run there yet and this has
@@ -522,7 +522,7 @@ pub fn startup_failure(failure: Startup, reason: &str) -> String {
 ///
 /// 🔴 Because there is no plural mechanism here, and two patterns would not be
 /// enough to build one. The sketch in `ux-spec.md` 2 draws `3 zero-width spaces`,
-/// which needs English plural agreement; Polish needs THREE forms for the same
+/// which needs English plural agreement. Polish needs THREE forms for the same
 /// sentence, and the next language may need more. A form that carries the number
 /// beside an uninflected name is the only one that survives translation without
 /// a mechanism we do not have. The sketch says of itself that it is "content, not

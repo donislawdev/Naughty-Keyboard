@@ -50,7 +50,7 @@ toml_edit = "0.25.13"
 
 # The operating system, on Windows. Version checked against the registry on
 # 2026-09-08 - not recalled. Used by nkb-sys alone, and only under
-# `cfg(windows)`; the features are named there rather than here so that the
+# `cfg(windows)`. The features are named there rather than here so that the
 # package asking for them is the package that documents why.
 #
 # Licence sieve is in nkb-sys/Cargo.toml beside the dependency itself, because
@@ -76,12 +76,12 @@ slint-build = "1.18.1"
 # through which every Rust windowing library reports "here is the native window",
 # and Slint hands its handle out through it behind the `raw-window-handle-06`
 # feature. Added 2026-09-22 for C5b, where the palette has to put
-# `WS_EX_NOACTIVATE` on its own window; version checked against the registry the
+# `WS_EX_NOACTIVATE` on its own window. Version checked against the registry the
 # same day.
 #
 # Licence sieve, both questions:
 #   (a) MIT OR Apache-2.0 OR Zlib. All three are compatible with GPL-3.0 and the
-#       choice is ours, so nothing here narrows the workspace licence;
+#       choice is ours, so nothing here narrows the workspace licence.
 #   (b) not applicable - a set of types, not a reference dataset.
 #
 # 🔴 Only nkb-gui depends on this, and the reason is the layer rather than the
@@ -103,7 +103,7 @@ raw-window-handle = "0.6.2"
 # it the same way.
 #
 # Licence sieve, both questions:
-#   (a) MIT OR Apache-2.0 - compatible with GPL-3.0, and the choice is ours;
+#   (a) MIT OR Apache-2.0 - compatible with GPL-3.0, and the choice is ours.
 #   (b) not applicable - a library, not a reference dataset.
 #
 # 🔴 Only nkb-gui depends on this, and that is D25 once more: in nkb-adapters,

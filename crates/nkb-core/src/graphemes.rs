@@ -188,9 +188,9 @@ fn properties(c: char) -> Properties {
 ///
 /// - GB12 and GB13 need the PARITY of the regional indicators immediately
 ///   before the boundary, because flags come in pairs and a third one starts a
-///   new cluster rather than joining;
+///   new cluster rather than joining.
 /// - GB11 needs to know that an `Extended_Pictographic` character was followed
-///   by zero or more `Extend` and then by a zero width joiner;
+///   by zero or more `Extend` and then by a zero width joiner.
 /// - GB9c needs to know that a consonant was followed by a linker, possibly
 ///   with `Extend` characters mixed in.
 ///

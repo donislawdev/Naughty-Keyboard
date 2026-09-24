@@ -25,7 +25,7 @@
 //!   handle only after the window manager has created the window, measured here
 //!   at 258 to 489 ms after the first ask, so the flag necessarily arrives after
 //!   the system had its chance to activate. Worse, it is NON-DETERMINISTIC at
-//!   nine out of ten, which is the least useful kind of repair;
+//!   nine out of ten, which is the least useful kind of repair.
 //! - **the flag and the hand-back do different jobs and both are needed.** The
 //!   hand-back settles the start. The flag settles the click: without it a click
 //!   on the palette takes the focus away from the field every time, with it

@@ -4,7 +4,7 @@
 //! it is as thin as `DirectInjection` next door: one port becomes one call
 //! into `nkb-sys`, and two vocabularies are mapped in one named place. The
 //! thread that holds the shortcuts, the message pump and every `unsafe` line
-//! live in `nkb_sys::hotkey`; nothing here needs any of them.
+//! live in `nkb_sys::hotkey`. Nothing here needs any of them.
 //!
 //! # What the handle owns, and why that is all it owns
 //!
@@ -97,7 +97,7 @@ impl LiveShortcuts for Live {
 /// The action a fired id stands for: its position in the binding table.
 ///
 /// The system echoes only ids this handle registered (documented at
-/// [`HotkeyId`]), so a miss cannot happen; if it ever did, an id nobody bound
+/// [`HotkeyId`]), so a miss cannot happen. If it ever did, an id nobody bound
 /// is reported as nothing pressed rather than as a made-up action.
 fn pressed(actions: &[HotkeyAction], id: HotkeyId) -> Wait {
     usize::try_from(id.0)
@@ -111,7 +111,7 @@ fn pressed(actions: &[HotkeyAction], id: HotkeyId) -> Wait {
 ///
 /// The key codes are the Windows `VK_*` values, which for letters and digits
 /// are their ASCII codes and for Space is `VK_SPACE`. They go through
-/// `nkb-sys`, whose route today is Windows only; the day a Linux route exists
+/// `nkb-sys`, whose route today is Windows only. The day a Linux route exists
 /// it will want X11 keysyms here, and this is the one function that changes.
 ///
 /// On macOS the primary modifier is Command, not Control - `ux-spec.md` 3
@@ -119,7 +119,7 @@ fn pressed(actions: &[HotkeyAction], id: HotkeyId) -> Wait {
 /// Windows and Linux convention (`nkb_core::hotkeys` says why), and the swap
 /// happens here, where the system is known: `ctrl` becomes the `win` bit,
 /// which is Command on that platform. Unmeasured on macOS, where no route
-/// exists yet (`OBS-70`); the shape is fixed so the swap is not forgotten.
+/// exists yet (`OBS-70`). The shape is fixed so the swap is not forgotten.
 fn hotkey_for(index: usize, chord: &HotkeyChord) -> Hotkey {
     let command_is_primary = cfg!(target_os = "macos");
     let (ctrl, win) = if command_is_primary {
@@ -128,7 +128,7 @@ fn hotkey_for(index: usize, chord: &HotkeyChord) -> Hotkey {
         (chord.ctrl, chord.win)
     };
     Hotkey {
-        // The application id range is `0..=0xBFFF`; a binding table is ten
+        // The application id range is `0..=0xBFFF`. A binding table is ten
         // entries, so the narrowing cannot lose anything, and if a table ever
         // grew past the range the system would refuse the id, which the
         // outcome reports as `Failed` rather than hiding.

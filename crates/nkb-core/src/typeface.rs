@@ -35,10 +35,10 @@
 //!   not report it - would produce a FALSE guarantee. The layout counts that
 //!   selector when choosing a typeface, the shipped one does not map it, and so
 //!   `U+2764` followed by it is drawn by the machine's typeface although the
-//!   heart itself IS in ours. Reporting the selector is what tells the truth;
+//!   heart itself IS in ours. Reporting the selector is what tells the truth.
 //! - **characters the preview replaces are skipped.** Every character
 //!   [`crate::preview::is_invisible`] names is drawn as the marker, never as
-//!   itself, so its own glyph is never asked for;
+//!   itself, so its own glyph is never asked for.
 //! - **the answer errs on the side of saying too much, never too little.** The
 //!   layout also tries a character's composed and decomposed forms, so a
 //!   precomposed letter missing from the table can still be drawn by the
@@ -51,7 +51,7 @@
 //! It does not report CLUSTERS. When one character of a cluster is outside the
 //! guarantee, the whole cluster is drawn by another typeface - the `1` of a
 //! keycap included. The characters listed are the cause of that, and they are
-//! what a tester can look up; the cluster is visible in the preview right above.
+//! what a tester can look up. The cluster is visible in the preview right above.
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;

@@ -1,7 +1,7 @@
 # Project memory - deliberately kept out of the product repository.
 #
 # Reason: untouchable rule 7 - the language criterion is PLACE, not audience.
-# Everything inside the repository is English; these files are in the owner's
+# Everything inside the repository is English. These files are in the owner's
 # language, so they cannot live here. Their history is kept in a separate,
 # private repository rooted at docs/.
 #

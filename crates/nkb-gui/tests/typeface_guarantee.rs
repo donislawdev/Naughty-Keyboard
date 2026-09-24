@@ -19,15 +19,15 @@
 //!    measured in its source 2026-09-23) - and compared with the table. Not "the
 //!    table equals our parser", which would be a circle: there is no parser of
 //!    ours, and the table was first produced by a different implementation
-//!    (fontTools) before this check agreed with it;
+//!    (fontTools) before this check agreed with it.
 //! 2. **every promised character leaves ink.** A font can map a character to a
 //!    glyph with no outline, and the character map would still say "covered".
 //!    Only a render tells, so every promised character is drawn without a screen
-//!    and its cell measured - GUI rule 10, the effect rather than the claim;
+//!    and its cell measured - GUI rule 10, the effect rather than the claim.
 //! 3. **the shipped packs reach outside the guarantee exactly here.** The list
 //!    is written out below, so a pack bringing a new script turns this red until
 //!    somebody acknowledges it - the lesson of `OBS-85`, that added data must be
-//!    visible. `D52` placed this in `shipped_packs.rs`; that test lives in the
+//!    visible. `D52` placed this in `shipped_packs.rs`. That test lives in the
 //!    CLI crate, which may not depend on the interface (`D25`), so it is here.
 //!
 //! # What none of them can check
@@ -337,11 +337,11 @@ fn every_character_the_table_promises_leaves_ink() {
 /// itself, with the first value (in catalogue order) that brings it.
 ///
 /// Counted over the WHOLE value, not over the preview. The palette asks about
-/// what it draws; this asks about what the catalogue carries, so a new script in
+/// what it draws. This asks about what the catalogue carries, so a new script in
 /// the middle of a long value still has to be acknowledged here.
 ///
 /// ⚠️ Eighteen, not the twenty-nine `D52` gives. That number is the whole
-/// catalogue of `catalog-v0.1.md`; three of its twenty packs are shipped today.
+/// catalogue of `catalog-v0.1.md`. Three of its twenty packs are shipped today.
 const SHIPPED_OUTSIDE: [(char, &str); 18] = [
     ('\u{30B9}', "unicode-text/cjk-mixed"),
     ('\u{30C6}', "unicode-text/cjk-mixed"),
@@ -360,7 +360,7 @@ const SHIPPED_OUTSIDE: [(char, &str); 18] = [
     ('\u{1D41E}', "unicode-text/math-bold"),
     ('\u{1D425}', "unicode-text/math-bold"),
     ('\u{1D428}', "unicode-text/math-bold"),
-    // Also in `length-bombs/emoji-truncation`; named by the value the catalogue
+    // Also in `length-bombs/emoji-truncation`. Named by the value the catalogue
     // lists first.
     ('\u{1F600}', "unicode-text/emoji-in-name"),
 ];

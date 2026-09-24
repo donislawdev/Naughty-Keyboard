@@ -56,7 +56,7 @@ fn name(id: HotkeyId) -> &'static str {
 
 fn main() {
     if !hotkey::can_register() {
-        println!("This build has no global-shortcut route; nothing to listen for here.");
+        println!("This build has no global-shortcut route. Nothing to listen for here.");
         return;
     }
 

@@ -73,7 +73,7 @@ impl ValueDelivery for DirectInjection {
             Err(nkb_sys::SendError::ModifierHeld { key }) => Err(DeliveryError::ModifierHeld {
                 which: key.to_owned(),
             }),
-            // `send_text` never reports in chords; if it ever did, the honest
+            // `send_text` never reports in chords. If it ever did, the honest
             // translation is "nothing is known to have arrived".
             Err(nkb_sys::SendError::ChordsTruncated { .. }) => Err(DeliveryError::Partial {
                 units_sent: 0,
@@ -158,7 +158,7 @@ impl KeystrokeSender for DirectInjection {
                 chords_sent,
                 chords_expected,
             }),
-            // `send_chords` never reports in UTF-16 units; if it ever did, the
+            // `send_chords` never reports in UTF-16 units. If it ever did, the
             // honest translation is "some of it went out", not success.
             Err(nkb_sys::SendError::Truncated { .. }) => Err(KeystrokeError::Partial {
                 chords_sent: 0,
@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn every_key_of_the_vocabulary_maps_to_a_navigation_key_and_shift_survives() {
-        // The mapping is the only place the two vocabularies meet; a key that
+        // The mapping is the only place the two vocabularies meet. A key that
         // fell through to a wrong neighbour would clear the wrong thing.
         assert_eq!(
             chord_for(&KeyChord::plain(Key::Home)),

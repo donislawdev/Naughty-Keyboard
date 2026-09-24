@@ -107,7 +107,7 @@ mod platform {
         }
         let token = Owned(token);
 
-        // First call asks for the size; it "fails" by design and fills `needed`.
+        // First call asks for the size. It "fails" by design and fills `needed`.
         let mut needed = 0u32;
         unsafe {
             GetTokenInformation(

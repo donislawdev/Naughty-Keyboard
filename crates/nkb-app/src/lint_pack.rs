@@ -70,7 +70,7 @@ pub fn lint_pack(source: &dyn PackSource, format: &dyn PackFormat, id: &str) -> 
 /// # Why the layer above the parser owns this
 ///
 /// Reading a second file is addressing, and addressing belongs to the source
-/// port. The parser knows what `translates` says; only this layer knows how to
+/// port. The parser knows what `translates` says. Only this layer knows how to
 /// turn an identifier into a pack. Letting the parser fetch the file would put a
 /// file system behind a trait that is supposed to be satisfiable by a string.
 ///
@@ -384,7 +384,7 @@ mod tests {
 
     #[test]
     fn a_translation_of_a_pack_that_is_not_there_reports_it_and_records_what_it_could_not_check() {
-        // Two answers, not one. E051 is the finding; the skip is the honesty about
+        // Two answers, not one. E051 is the finding. The skip is the honesty about
         // W052, which this build runs and could not run here. Reporting only the
         // first leaves a summary saying every rule was checked.
         let source = InMemory::holding("unicode-text.pl", "format = 1\n");

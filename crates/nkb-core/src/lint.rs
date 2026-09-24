@@ -813,7 +813,7 @@ mod tests {
     fn a_rule_that_runs_only_in_part_is_not_reported_as_either_neighbour() {
         // E020 finds control characters, format characters and edge spaces today,
         // and cannot find look-alikes until a confusable set is chosen. Calling it
-        // checked would overstate the verdict; calling it unchecked would
+        // checked would overstate the verdict. Calling it unchecked would
         // contradict every E020 the tool actually reports.
         assert_eq!(
             rule_for(RuleCode::UnescapedCharacter).status,

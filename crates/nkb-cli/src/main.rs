@@ -808,7 +808,7 @@ fn send(args: &[String]) -> ExitCode {
                 }
                 // The three below belong to the clipboard route of the palette,
                 // which this command does not have and will not have (D71,
-                // OBS-131). Typing reports none of them; they are answered in
+                // OBS-131). Typing reports none of them. They are answered in
                 // plain words rather than folded into a guess, should a route
                 // ever start to.
                 DeliveryError::Busy => {
@@ -844,7 +844,7 @@ fn send(args: &[String]) -> ExitCode {
 /// One sentence for both places it can come from - the clearing, which goes
 /// first, and the send without `--clear` - because the fact is the same and no
 /// key was pressed in either. Until `D72` this case printed "sent" and exited
-/// with 0 while nothing reached the field (`OBS-128`); code 4 is the existing
+/// with 0 while nothing reached the field (`OBS-128`). Code 4 is the existing
 /// "the value could not be inserted", not a new code (`D46`).
 const HIGHER_PRIVILEGES: &str = "nkb send: the window in front runs with higher privileges than nkb, so the system would drop the keystrokes without a word. Nothing was sent - run nkb with the same privileges to type into it.";
 
@@ -908,7 +908,7 @@ fn print_send_help() {
 /// `nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]`
 ///
 /// The command that takes the catalogue out of the tool. Everything it prints on
-/// standard output is values; the account of what came out, and every note about
+/// standard output is values. The account of what came out, and every note about
 /// what a format could not carry, goes to the error stream - `ux-spec.md` 10.
 fn emit(args: &[String]) -> ExitCode {
     let mut wanted: Option<&str> = None;

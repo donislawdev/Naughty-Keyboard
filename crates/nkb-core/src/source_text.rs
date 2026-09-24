@@ -38,7 +38,7 @@ const BYTE_ORDER_MARK: char = '\u{FEFF}';
 /// - an offset **past the end** returns the last line rather than nothing,
 /// - an offset **inside a character** does the same.
 ///
-/// A problem with a slightly wrong line number is still findable; a problem with
+/// A problem with a slightly wrong line number is still findable. A problem with
 /// no line number sends the reader to search a file by eye. The tests below pin
 /// both against an independent oracle that counts the slow way.
 #[derive(Debug, Clone)]

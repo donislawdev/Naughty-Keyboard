@@ -227,6 +227,7 @@ mod tests {
     fn english_descriptions_from_this_repository_are_recognised() {
         for text in [
             REAL,
+            // prose-punctuation-exempt: quoted pack prose, which D31 lets use a semicolon
             "Rejected in a numeric field; kept verbatim in a text field.",
             "Stored and returned as the two-character string 'no'.",
             "Nothing on its own - this value only exists so the file is otherwise complete.",

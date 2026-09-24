@@ -334,7 +334,7 @@ fn set_range<T: Copy>(slots: &mut [T], low: u32, high: u32, value: T) {
 
 /// The answer of one quick check property for every code point.
 ///
-/// The file lists only `No` and `Maybe`; a code point it does not name is `Yes`
+/// The file lists only `No` and `Maybe`. A code point it does not name is `Yes`
 /// by the file's own convention.
 fn quick_check(property: &str) -> Vec<Quick> {
     let mut answers = every_code_point(Quick::Yes);

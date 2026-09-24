@@ -22,10 +22,10 @@
 //! # What the recipe does in each kind of field
 //!
 //! - single-line field: `Home`, `Shift+End`, `Delete` selects and removes the
-//!   whole content;
+//!   whole content.
 //! - multi-line field: the same keys act on the CURRENT LINE, so the recipe
 //!   under-clears. That is the safe direction, and `ux-spec.md` 4 says a
-//!   multi-line field gets a question before any stronger clearing;
+//!   multi-line field gets a question before any stronger clearing.
 //! - wrapped editors treat `Home`/`End` as the visual line, which under-clears
 //!   further. Still the safe direction.
 //!

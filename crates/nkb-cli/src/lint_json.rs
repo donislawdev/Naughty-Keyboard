@@ -159,7 +159,7 @@ fn skipped_rule(skipped: &SkippedRule) -> Json {
 ///
 /// `subject` and `owner` sit beside the message rather than inside it, so that a
 /// check can match on a field instead of reading a sentence. The sentence is for
-/// a person and may be reworded; the two fields beside it may not.
+/// a person and may be reworded. The two fields beside it may not.
 fn problem(problem: &LintProblem, path: &str) -> Json {
     Json::Object(vec![
         ("rule".to_owned(), Json::text(problem.code.as_str())),

@@ -3,7 +3,7 @@
 //! This is the use case behind "next value", and it holds the one piece of
 //! mutable state the whole product has - the [`Sequence`] - which
 //! `architektura.md` 6a puts in `app`, behind one gate, and nowhere else. The
-//! sequence machine in the core decides WHAT a keystroke means; this decides
+//! sequence machine in the core decides WHAT a keystroke means. This decides
 //! what to DO about it: load the pack once, deliver a value from memory, and
 //! feed the result back to the machine.
 //!
@@ -25,20 +25,20 @@
 //! | delivery outcome | event | why |
 //! |---|---|---|
 //! | the value landed, or was put on the clipboard | `InsertionFinished` | it is done |
-//! | no route on this system, from the send OR from the clearing before it | `InsertionFailed` | direct delivery cannot work; the same value goes to the clipboard now |
+//! | no route on this system, from the send OR from the clearing before it | `InsertionFailed` | direct delivery cannot work. The same value goes to the clipboard now |
 //! | part of it landed | `Cancelled` | a fragment was left in the field |
 //! | nothing was sent (no target, held modifier, clear failed, clipboard busy or refusing, a character the clipboard cannot carry) | `InsertionRefused` | try again, and do NOT switch routes for a passing hiccup |
 //!
 //! The last row is why `InsertionRefused` exists: folding it into
 //! `InsertionFailed` would turn a held Ctrl+Alt into a permanent clipboard mode.
-//! The machine returns the STATE for each; the MESSAGE that says which and with
+//! The machine returns the STATE for each. The MESSAGE that says which and with
 //! what numbers is built here, because the numbers are facts about delivery.
 //!
 //! # Two routes, one choice (`D71`)
 //!
 //! Values reach the field straight, or through the clipboard for the tester to
 //! paste. Both are implementations of `ValueDelivery`, and [`AdvanceSequence`]
-//! picks one by the sequence's delivery axis in exactly one place; everything
+//! picks one by the sequence's delivery axis in exactly one place. Everything
 //! after that choice - building the value, counting it, reporting it - is the
 //! same code. On the clipboard route nothing clears the field and NOTHING is
 //! pressed: the tester selects and pastes.
@@ -60,11 +60,11 @@
 //! # What this deliberately does not do yet
 //!
 //! - only `Next`, `Previous`, `Restart` and the report copy are wired. Repeat,
-//!   the result marks, the pack search and show/hide belong to later steps; an
-//!   action that is not wired says so rather than doing nothing in silence;
+//!   the result marks, the pack search and show/hide belong to later steps. An
+//!   action that is not wired says so rather than doing nothing in silence.
 //! - the send is atomic - one blocking [`deliver_value`] - so `Inserting` is
 //!   passed straight through. The progress bar, `Escape` mid-send and the
-//!   char-by-char mode (`W2`/`W3`) are the char-by-char delivery, still to come;
+//!   char-by-char mode (`W2`/`W3`) are the char-by-char delivery, still to come.
 //! - it does not watch the target for a change mid-send (`TargetChanged`),
 //!   because that needs `TargetInspector`, which does not exist yet. It checks
 //!   the target ONCE before each send instead, which is what stops a value from
@@ -173,7 +173,7 @@ pub struct Outcome {
     /// Whether this action went as far as the field - the machine asked for a
     /// send and the send was attempted, landed or not. A caller draining
     /// presses that queued in the meantime keys on this: presses queued behind
-    /// an attempt were pressed while the tool was busy (`W1`); presses queued
+    /// an attempt were pressed while the tool was busy (`W1`). Presses queued
     /// behind an instant answer, such as an end-of-pack warning, were not.
     pub attempted_send: bool,
     /// Whether values for the window in front go to the clipboard because it
@@ -452,7 +452,7 @@ impl AdvanceSequence {
     /// `tests/clipboard_has_named_doors.rs`. Nothing is written unless the
     /// tester asked, and nothing is reported as copied that the clipboard did
     /// not take. The block stays in the system's clipboard history on purpose
-    /// (`D68`); the values of clipboard mode do not (`D71`).
+    /// (`D68`). The values of clipboard mode do not (`D71`).
     fn copy_report(&self, ports: &Ports<'_>) -> Outcome {
         let message = match self.last_block() {
             None => Message::NothingToReport,
@@ -806,7 +806,7 @@ fn classify(
         // The three below are reported by the clipboard route alone - the
         // direct one presses keys and has no clipboard to be busy or to refuse.
         // A direct route that began to report them would need sentences of its
-        // own; the words here name the clipboard, because only it gets here.
+        // own. The words here name the clipboard, because only it gets here.
         // Nothing reached the clipboard in any of them, so the counter stays.
         SendOutcome::NotDelivered {
             error: DeliveryError::Busy,
@@ -845,7 +845,7 @@ fn classify(
             vec![Message::ValueTooLarge { id }],
         ),
         // deliver_value returns only the four families above. The load-path
-        // outcomes cannot arise from an already-loaded value; if one somehow
+        // outcomes cannot arise from an already-loaded value. If one somehow
         // did, nothing is known to have been sent, so refuse and stay quiet
         // rather than invent a message.
         SendOutcome::NotFound
@@ -856,8 +856,8 @@ fn classify(
     }
 }
 
-/// What a clearing that did not go through means. Nothing was sent either way;
-/// the reason tells the machine where to go and the tester what to do.
+/// What a clearing that did not go through means. Nothing was sent either way.
+/// The reason tells the machine where to go and the tester what to do.
 fn after_clearing(error: KeystrokeError) -> (Event, Message) {
     match error {
         // 🔴 No route to press keys is no route at all - the SAME fact a send
@@ -877,7 +877,7 @@ fn after_clearing(error: KeystrokeError) -> (Event, Message) {
         // A partial clear leaves the field in an unknown state: it cannot be
         // trusted to be clear, and nothing goes on top of it.
         KeystrokeError::Partial { .. } => (Event::InsertionRefused, Message::ClearingFailed),
-        // Rerouted to the clipboard in `attempt` before it gets here; reached
+        // Rerouted to the clipboard in `attempt` before it gets here. Reached
         // only if that ever stops. No key was pressed and the field is intact.
         KeystrokeError::HigherPrivileges => (Event::InsertionRefused, Message::HigherPrivileges),
         // `D73`, `OBS-135`: the clearing goes first, so this is where a focus on

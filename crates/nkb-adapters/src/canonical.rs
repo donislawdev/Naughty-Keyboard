@@ -30,7 +30,7 @@ use toml_edit::{Decor, DocumentMut, Item, Key, Table};
 
 /// Order of the keys at the top of a file.
 ///
-/// A source pack declares the first alone; a translation declares all three.
+/// A source pack declares the first alone. A translation declares all three.
 const ROOT_ORDER: [&str; 3] = ["format", "translates", "language"];
 
 /// Order of the keys in `[pack]`, from the data model in `pack-format.md` 4.
@@ -216,7 +216,7 @@ fn order_table(table: &mut Table, order: &[&str]) {
         }
     }
     // A field the format does not define keeps its relative place, after the
-    // ones that are named. It is already reported as an unknown key; moving it
+    // ones that are named. It is already reported as an unknown key. Moving it
     // somewhere surprising on top of that would help nobody.
     for (key, item) in table.iter() {
         if item.is_value() && !order.contains(&key) {

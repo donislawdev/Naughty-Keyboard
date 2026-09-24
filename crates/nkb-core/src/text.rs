@@ -114,7 +114,7 @@ pub fn needs_escaping(character: char, at_edge: bool) -> bool {
 /// 🔴 The isolates `U+2066`-`U+2069`, the deprecated format characters up to
 /// `U+206F` and the Arabic letter mark `U+061C` arrived on 2026-09-23 (`OBS-125`,
 /// `D69`). `pack-format.md` 2 had always named "characters that change the
-/// direction of text"; the list here did not, so a value holding an isolate
+/// direction of text". The list here did not, so a value holding an isolate
 /// passed `E020` and was shown by `nkb show` as nothing - half of what "Trojan
 /// Source" is made of. A test below walks every code point and fails if the
 /// preview ever hides a character this list lets through.

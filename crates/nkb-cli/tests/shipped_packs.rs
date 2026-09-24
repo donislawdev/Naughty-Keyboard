@@ -15,7 +15,7 @@
 //!
 //! # What this cannot check, and it matters
 //!
-//! 🔴 The pack files live in this repository; the document that decides their
+//! 🔴 The pack files live in this repository. The document that decides their
 //! content does not. Nothing here can tell whether a pack still matches the
 //! catalogue it was written from - that drift is unguarded by construction, and
 //! saying so is better than leaving a reader to assume otherwise.

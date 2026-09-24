@@ -20,7 +20,7 @@
 //! modifier. The tables below carry the Windows and Linux convention, because
 //! that is the platform the core loop is wired on first and delivering a value
 //! on macOS is blocked anyway (`OBS-70`). The adapter that registers on macOS
-//! swaps `ctrl` for `win` (the Command bit); doing that here would mean a `cfg`
+//! swaps `ctrl` for `win` (the Command bit). Doing that here would mean a `cfg`
 //! in a crate that has none, and the swap is one line where the system is known.
 
 /// One of the ten global actions the palette answers to.

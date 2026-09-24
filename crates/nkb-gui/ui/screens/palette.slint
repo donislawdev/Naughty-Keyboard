@@ -200,7 +200,7 @@ export component Palette inherits Window {
                 // the value would mean one element per segment, and a horizontal
                 // layout in Slint does not wrap - a hundred-code-point value at
                 // preview size would run off the window. `TextPreviewInvisible`
-                // therefore stays unused for now; the marker is told apart by its
+                // therefore stays unused for now. The marker is told apart by its
                 // SHAPE, which is a visible box, rather than by colour.
                 TextPreview {
                     text: root.value-preview;
@@ -224,7 +224,7 @@ export component Palette inherits Window {
                 // Both wrap, and both did not until 2026-09-23: a render with the
                 // shipped `len-100000` cut the counters off at the window's edge,
                 // mid-word. A reference is up to 89 characters with no space in
-                // it (`pack-format.md` 7), so it breaks anywhere; the counters
+                // it (`pack-format.md` 7), so it breaks anywhere. The counters
                 // have spaces, so they break between words.
                 TextMono {
                     text: root.value-reference;

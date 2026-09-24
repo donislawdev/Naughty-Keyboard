@@ -6,7 +6,7 @@
 //! the thousand characters it stands for. That is `architektura.md` 6.1, and it
 //! is the same requirement arriving from two directions: the size has to be
 //! known before the text exists, or the promised warning about a length bomb
-//! comes after the bomb; and the preview would freeze on exactly the values it
+//! comes after the bomb. And the preview would freeze on exactly the values it
 //! was built to show.
 //!
 //! A literal value is shown ESCAPED, which is the only form that can be read at

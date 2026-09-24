@@ -13,10 +13,10 @@
 //! - a build script needs a font parser, and a parser needs an oracle to be
 //!   trusted. The oracle is `skrifa`, the library the toolkit's own text layout
 //!   asks - so the parser would be a second answer checked against the first,
-//!   and the first one is enough;
+//!   and the first one is enough.
 //! - the table is visible in review. A font swapped for another one changes
 //!   this file line by line, where a build script would change nothing anybody
-//!   reads;
+//!   reads.
 //! - it is the same shape as the grapheme table in `nkb-core` (`D65`), so one
 //!   pattern covers both.
 //!
@@ -32,7 +32,7 @@ mod table;
 /// here rather than answering wrongly for part of the standard at run time.
 #[allow(
     clippy::panic,
-    reason = "evaluated by the compiler; a malformed table is a build error, never a crash"
+    reason = "evaluated by the compiler. A malformed table is a build error, never a crash"
 )]
 pub static SHIPPED: TypefaceGuarantee = match TypefaceGuarantee::new(&table::RANGES) {
     Some(guarantee) => guarantee,

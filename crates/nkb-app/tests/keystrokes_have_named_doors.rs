@@ -6,7 +6,7 @@
 //! the value's own characters. `ux-spec.md` 4 narrows that to ONE exception,
 //! clearing the field, and architektura.md 5 turns the exception into a list
 //! of call sites with ONE entry. Until the port existed that row read
-//! "nothing" in the column of what goes red; this file is the guard the row
+//! "nothing" in the column of what goes red. This file is the guard the row
 //! promised, written together with the port.
 //!
 //! ⚠️ Until 2026-09-23 this header said there would be TWO doors, the second
@@ -25,15 +25,15 @@
 //! # What this checks, and what it cannot
 //!
 //! - it reads `.rs` files under `crates/*/src` (not `tests/`: a test that
-//!   calls the port through a spy is not a door into somebody's window);
+//!   calls the port through a spy is not a door into somebody's window).
 //! - it drops everything from the first `#[cfg(test)]` line to the end of a
 //!   file, because this workspace keeps test modules at the bottom, and it
 //!   strips `//` comments. It does NOT strip `/* */` blocks or string
-//!   literals; a file using either around the method name would be a false
-//!   positive, loudly rather than quietly;
+//!   literals. A file using either around the method name would be a false
+//!   positive, loudly rather than quietly.
 //! - it looks for the CALL shape `.send_keystrokes(`. The definition in
 //!   `ports.rs` and the `fn send_keystrokes(` of an implementation have no
-//!   leading dot and are not counted;
+//!   leading dot and are not counted.
 //! - it counts textual call sites, not execution paths: a helper function that
 //!   wrapped the call would be one door with many callers, and this guard would
 //!   not see the callers. architektura.md 5 says so of every guard of this
@@ -147,7 +147,7 @@ fn the_keystroke_port_is_called_only_through_the_named_doors() {
     assert_eq!(
         seen_doors,
         DOORS.len(),
-        "every named door must exist as a file; a renamed file would otherwise \
+        "every named door must exist as a file. A renamed file would otherwise \
          silently drop its door and this guard would guard a list of nothing"
     );
     assert!(
@@ -168,14 +168,14 @@ fn the_scan_sees_a_call_when_there_is_one() {
     let expected: usize = DOORS.iter().map(|(_, n)| n).sum();
     assert_eq!(
         total, expected,
-        "the scanner must find exactly the doors' calls; zero means it is blind"
+        "the scanner must find exactly the doors' calls. Zero means it is blind"
     );
     assert!(expected > 0, "there is at least one door today");
 }
 
 #[test]
 fn the_definition_and_the_implementations_are_not_counted_as_doors() {
-    // `fn send_keystrokes(` has no leading dot; a scanner matching the bare
+    // `fn send_keystrokes(` has no leading dot. A scanner matching the bare
     // name would count ports.rs and every adapter as a door.
     let sample = "    fn send_keystrokes(&self, chords: &[KeyChord]) -> Result<(), KeystrokeError> {\n        keys.send_keystrokes(&x)\n";
     assert_eq!(calls_in(sample), 1);

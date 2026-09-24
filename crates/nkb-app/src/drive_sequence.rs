@@ -15,9 +15,9 @@
 //! (`architektura.md` 6.5). It supplies:
 //!
 //! - the live shortcuts it registered at startup, so it has already seen which
-//!   were taken and said so;
+//!   were taken and said so.
 //! - `present`, which carries each [`Outcome`] to the view - for Slint, an
-//!   `invoke_from_event_loop`. Nothing here knows that;
+//!   `invoke_from_event_loop`. Nothing here knows that.
 //! - `keep_going`, consulted once per `tick`, which is how the loop is stopped
 //!   from outside without a channel of its own: the caller flips a flag when
 //!   the window closes and the loop notices within one tick.
@@ -62,7 +62,7 @@ pub enum Ended {
 /// Runs the sequence from the shortcuts until stopped.
 ///
 /// `tick` is how long one wait for a press lasts before `keep_going` is asked
-/// again; it bounds how long a stop request can go unnoticed. A real caller
+/// again. It bounds how long a stop request can go unnoticed. A real caller
 /// gives it a fraction of a second. A zero tick is not refused - a test with a
 /// scripted source wants exactly that - but in a product it would spin.
 ///
@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn nothing_pressed_within_a_tick_just_asks_again() {
-        // An empty script answers Nothing to every wait; the loop must keep
+        // An empty script answers Nothing to every wait. The loop must keep
         // asking, once per tick, until told to stop.
         let shortcuts = Scripted::of(&[]);
         let mut sequence = chosen(Risk::Normal);

@@ -120,7 +120,7 @@ fn value_of(table: &Table) -> Option<PackValue> {
         fields: words(table, "fields"),
         tags: words(table, "tags"),
         // Absent stays absent for all three. `source` inherits from the pack and
-        // `Pack::source_of` is what performs that; flattening it here would
+        // `Pack::source_of` is what performs that. Flattening it here would
         // leave W033 unable to ask who declared what.
         source: text(table, "source"),
         since: text(table, "since"),
@@ -245,7 +245,7 @@ mod tests {
     #[test]
     fn an_invisible_value_arrives_expanded_rather_than_as_its_escape() {
         // The single most important property of this direction. The file stores
-        // a zero width space as six visible characters, backslash included; what a
+        // a zero width space as six visible characters, backslash included. What a
         // field must receive is one invisible character. Getting this backwards
         // is the exact silent falsehood
         // the tool exists to find in other people's software.

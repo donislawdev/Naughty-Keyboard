@@ -8,10 +8,10 @@
 # first real system call needed a decision, and three were weighed:
 #
 #   - loosen the workspace to `deny` and allow per site: weakens the rule for
-#     nkb-core too, which today has the strongest guarantee of the four;
+#     nkb-core too, which today has the strongest guarantee of the four.
 #   - give nkb-adapters its own lints, the way nkb-gui already does: cheaper,
 #     but `unsafe` then becomes legal in the TOML and filesystem code as well,
-#     where it has no business being;
+#     where it has no business being.
 #   - THIS: one small package that does nothing but talk to the operating
 #     system. Everything else keeps `forbid`, untouched.
 #
@@ -54,7 +54,7 @@ panic = "deny"
 # features pull exactly one further crate, `windows-link`. `Win32_System_Threading`
 # was added 2026-09-15 for `GetCurrentThreadId`, needed so the hotkey thread can
 # be told to stop by `PostThreadMessageW` - see `hotkey.rs`. It is part of the
-# same crate and pulls no new dependency; the layer guard confirms the tree is
+# same crate and pulls no new dependency. The layer guard confirms the tree is
 # unchanged. `Win32_Security` was added 2026-09-23 for the token reads in
 # `privilege.rs` (`OpenProcessToken`'s signature and `GetTokenInformation` live
 # behind it) - same crate, no new dependency. `Win32_System_Com`,

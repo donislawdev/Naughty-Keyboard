@@ -170,7 +170,7 @@ mod tests {
     #[test]
     fn the_empty_value_is_put_as_it_is() {
         // `len-0` is a legal test value. What an application pastes for an
-        // empty clipboard text is unmeasured (`D71`); this route does not guess.
+        // empty clipboard text is unmeasured (`D71`). This route does not guess.
         let clipboard = Recording::working();
         let delivered = ClipboardDelivery::new(&clipboard)
             .deliver("")

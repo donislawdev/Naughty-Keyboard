@@ -12,7 +12,7 @@
 //! a caller reaching for it directly gets exactly what it asked for.
 //!
 //! 🔴 What it would not get is the version check. `PackFormat::parse` never
-//! looks at `format`; only `check` does. A caller skipping straight to `parse`
+//! looks at `format`. Only `check` does. A caller skipping straight to `parse`
 //! would load a pack written for a format this build does not understand, and
 //! report nothing.
 //!
