@@ -39,6 +39,9 @@ const TEXT_MUTED: (u8, u8, u8) = (0x7E, 0x87, 0x97);
 /// `text-primary` from the dictionary, for the same reason as the role above.
 const TEXT_PRIMARY: (u8, u8, u8) = (0xE6, 0xE9, 0xEF);
 
+/// `text-secondary`, the role of the value band's empty state.
+const TEXT_SECONDARY: (u8, u8, u8) = (0x9A, 0xA4, 0xB4);
+
 /// `accent` and `risk` from the dictionary, copied for the same reason: the
 /// clipboard-mode bar must wear the first and never the second (D71).
 const ACCENT: (u8, u8, u8) = (0x7A, 0xA2, 0xF7);
@@ -97,8 +100,8 @@ fn fill(palette: &Palette) {
     // below, with a value that earns one.
     palette.set_has_not_guaranteed(false);
     palette.set_clipboard_mode_label("clipboard mode".into());
-    // There IS a value, so the value band is gated by `showing` alone - which is
-    // what the resting rule below is about, and what mutation M51 flips.
+    // There IS a value, so the value band is gated by `compact` alone - which is
+    // what the compact rule below is about, and what mutation M52 flips.
     palette.set_has_value(true);
 
     palette.set_markers(ModelRc::new(VecModel::from(vec![
@@ -122,15 +125,15 @@ fn fill(palette: &Palette) {
 
     palette.set_hints(ModelRc::new(VecModel::from(vec![
         HintRow {
-            key: "Ctrl+Alt+N".into(),
+            key: "Alt+Shift+N".into(),
             action: "Next value".into(),
         },
         HintRow {
-            key: "Ctrl+Alt+P".into(),
+            key: "Alt+Shift+P".into(),
             action: "Previous value".into(),
         },
         HintRow {
-            key: "Ctrl+Alt+B".into(),
+            key: "Alt+Shift+B".into(),
             action: "Copy report block".into(),
         },
     ])));
@@ -202,7 +205,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     // In clipboard mode as well, because that is the WORST resting case: the
     // standing bar is the only extra thing the dimmed palette ever shows, so if
     // any role in it were muted this is where it would appear.
-    palette.set_showing(false);
+    palette.set_compact(true);
     palette.set_clipboard_mode(true);
     let resting = render(&window);
     let resting_again = render(&window);
@@ -214,7 +217,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     let resting_path = offscreen::save_cropped(&resting, WIDTH, HEIGHT, "palette-resting.png");
 
     // ---- showing: the positive control, and the rest of the window ---------
-    palette.set_showing(true);
+    palette.set_compact(false);
     palette.set_clipboard_mode(false);
     let showing = render(&window);
     let showing_path = offscreen::save_cropped(&showing, WIDTH, HEIGHT, "palette-showing.png");
@@ -279,7 +282,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     // never tried. A line that wraps pushes the palette's bottom edge down, and a
     // line that is cut leaves it where it was - so the edge is the measurement.
     fill(&palette);
-    palette.set_showing(true);
+    palette.set_compact(false);
     let edge_short = bottom_edge(&render(&window));
     palette.set_value_counts(longest_counts().into());
     let edge_counts = bottom_edge(&render(&window));
@@ -305,10 +308,49 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
         long_path.display()
     );
 
+    // ---- the expanded palette never gets shorter by itself (D83) ----------
+    // Through the product's own wiring: the `changed` handler in the view and
+    // `hold_height` in the worker module. Measured on the SURFACE, because the
+    // surface is what the window's height draws - a floor that only moved a
+    // property would leave the bottom edge where the content ends.
+    nkb_gui::live::hold_height_on_change(&palette);
+    fill(&palette);
+    palette.set_compact(false);
+    palette.set_value_preview("\u{2423}".repeat(100).into());
+    render(&window);
+    let tall = render(&window);
+    let edge_tall = surface_edge(&tall);
+    palette.set_value_preview("a".into());
+    render(&window);
+    let after = render(&window);
+    let after_path = offscreen::save_cropped(&after, WIDTH, HEIGHT, "palette-height-held.png");
+    assert_eq!(
+        surface_edge(&after),
+        edge_tall,
+        "a one-letter value after a hundred-character one moved the palette's bottom edge \
+         ({edge_tall} -> {}), so the window shrinks under the tester's eyes. Look at {}",
+        surface_edge(&after),
+        after_path.display()
+    );
+    // The positive control: collapsing and expanding starts the floor over, so
+    // the same short value now gets a SHORTER palette. Without this, a floor
+    // stuck at the buffer's height would pass the check above.
+    nkb_gui::live::toggle_compact(&palette);
+    render(&window);
+    nkb_gui::live::toggle_compact(&palette);
+    render(&window);
+    let refit = render(&window);
+    assert!(
+        surface_edge(&refit) < edge_tall,
+        "expanding again did not fit the palette to the short value ({} vs {edge_tall}), so \
+         the check above cannot tell a held height from one that never moves",
+        surface_edge(&refit)
+    );
+
     // Put the specimen back, so the renders saved below are the ones the gallery
     // and the calibration tool compare against.
     fill(&palette);
-    palette.set_showing(true);
+    palette.set_compact(false);
 
     // ---- clipboard mode: the standing bar wears the accent, never risk -----
     // D71. Measured as a DIFFERENCE of two renders, like the preview above:
@@ -354,6 +396,33 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
         clipboard_path.display()
     );
 
+    // ---- before the first value: the empty state draws (D83) ---------------
+    // GUI rule 3: the value band has an empty state and it is on screen from
+    // the first frame. Measured as a difference of two renders, like everything
+    // above: the sentence must ADD ink in its own role, `text-secondary`.
+    palette.set_clipboard_mode(false);
+    palette.set_has_value(false);
+    palette.set_no_value("".into());
+    let secondary_without = offscreen::count_exactly(&render(&window), TEXT_SECONDARY);
+    palette.set_no_value(
+        "Nothing sent yet. Put the cursor in any field and press Alt+Shift+N.".into(),
+    );
+    let empty_state = render(&window);
+    let empty_path = offscreen::save_cropped(&empty_state, WIDTH, HEIGHT, "palette-empty.png");
+    assert_nothing_escapes_the_surface(
+        &empty_state,
+        "before the first value",
+        &empty_path.display().to_string(),
+    );
+    assert!(
+        offscreen::count_exactly(&empty_state, TEXT_SECONDARY) > secondary_without,
+        "the empty-state sentence left no ink, so the value band shows nothing before the \
+         first value. Look at {}",
+        empty_path.display()
+    );
+    fill(&palette);
+    palette.set_compact(false);
+
     // ---- anti-vacuity ------------------------------------------------------
     // An empty buffer compares equal to itself and holds no muted pixel either,
     // so without this every assertion below would pass on a palette that drew
@@ -392,7 +461,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     // pictures, and every assertion above would still hold.
     assert!(
         resting != showing,
-        "resting and showing rendered identically, so `showing` gates nothing"
+        "compact and expanded rendered identically, so `compact` gates nothing"
     );
     assert!(
         direct != clipboard,

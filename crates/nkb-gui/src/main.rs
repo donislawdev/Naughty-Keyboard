@@ -54,9 +54,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use nkb_adapters::i18n::PaletteLabel;
-use nkb_adapters::{KeptFocus, i18n, report_window_failure};
+use nkb_adapters::{KeptFocus, default_bindings, i18n, report_window_failure};
 use nkb_app::RouteRequest;
-use nkb_core::hotkeys::{DEFAULT_BINDINGS, HotkeyAction};
+use nkb_core::hotkeys::HotkeyAction;
 use nkb_gui::{Gallery, HintRow, Palette, focus, live};
 use slint::{ComponentHandle, ModelRc, VecModel};
 
@@ -164,14 +164,20 @@ fn run_palette(pack: &str, route: RouteRequest) -> Result<(), slint::PlatformErr
     let kept = KeptFocus::remember();
     let palette = Palette::new()?;
     palette.set_window_title(i18n::label(PaletteLabel::Title).into());
+    // Before anything is shown, so the first height the content asks for
+    // already sets the floor (`D83`).
+    live::hold_height_on_change(&palette);
     // The clipboard bar's words come with each view, because two conditions
     // share the bar and say different things (`D72`) - see `live::View`.
     palette.set_hints(ModelRc::new(VecModel::from(hints())));
-    // Awake at first run, with the hints up and nothing sent yet - `ux-spec.md`
-    // 5.1. The worker fills the pack and the counter, because the sequence that
-    // knows them lives over there.
-    palette.set_showing(true);
+    // Expanded at first run, with the hints up and nothing sent yet -
+    // `ux-spec.md` 5.1. The worker fills the pack and the counter, because the
+    // sequence that knows them lives over there.
+    palette.set_compact(false);
     palette.set_has_value(false);
+    if let Some(chord) = chord_of(HotkeyAction::NextValue) {
+        palette.set_no_value(i18n::no_value_yet(chord).into());
+    }
 
     // The two threads meet here. `focus` runs on this one and may produce a
     // sentence saying the palette could not refuse the focus. The worker rebuilds
@@ -203,7 +209,7 @@ fn run_palette(pack: &str, route: RouteRequest) -> Result<(), slint::PlatformErr
 
 /// The hint bar's rows, built from the bindings rather than written out.
 fn hints() -> Vec<HintRow> {
-    DEFAULT_BINDINGS
+    default_bindings()
         .iter()
         .filter(|(action, _)| HINTED.contains(action))
         .map(|(action, chord)| HintRow {
@@ -211,4 +217,11 @@ fn hints() -> Vec<HintRow> {
             action: i18n::action_name(*action).into(),
         })
         .collect()
+}
+
+/// The chord this palette registers for one action.
+fn chord_of(action: HotkeyAction) -> Option<nkb_core::hotkeys::HotkeyChord> {
+    default_bindings()
+        .iter()
+        .find_map(|(candidate, chord)| (*candidate == action).then_some(*chord))
 }

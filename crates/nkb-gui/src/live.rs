@@ -39,17 +39,17 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use nkb_adapters::i18n::PaletteLabel;
 use nkb_adapters::{
     BuiltInCatalogue, ClipboardDelivery, DirectInjection, EnglishReport, GlobalShortcuts,
-    TomlPackFormat, i18n,
+    TomlPackFormat, default_bindings, i18n,
 };
 use nkb_app::advance_sequence::{Ports, RouteRequest, Sent};
-use nkb_app::ports::HotkeyRegistrar;
+use nkb_app::ports::{HotkeyRegistrar, LiveShortcuts, ShortcutRegistration, Wait};
 use nkb_app::{AdvanceSequence, Outcome, drive_sequence};
-use nkb_core::hotkeys::DEFAULT_BINDINGS;
+use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::preview::ValuePreview;
 use nkb_core::report::Arrival;
 use nkb_core::sequence::Delivery;
@@ -67,13 +67,6 @@ use crate::{Marker, Palette};
 /// nothing else: a press arriving mid-tick is delivered immediately, because the
 /// wait returns on the press rather than on the timeout.
 const TICK: Duration = Duration::from_millis(100);
-
-/// How long the palette stays bright after a value goes out.
-///
-/// ⚠️ An estimate, not a measurement: long enough to read four short lines,
-/// short enough that the palette is out of the way before the tester looks back
-/// at the application. `ux-spec.md` 2 says "a few seconds" and does not pick one.
-const BRIGHT_FOR: Duration = Duration::from_secs(4);
 
 /// One turn of the loop, as plain data that can cross a thread boundary.
 ///
@@ -93,15 +86,6 @@ pub struct View {
     /// and the window in front taking no typing (`D72`). The words differ, so
     /// the view carries them rather than a flag.
     clipboard_bar: Option<&'static str>,
-    /// Whether this view starts the countdown back to the resting state.
-    ///
-    /// 🔴 False for the OPENING view, and that is a correction rather than a
-    /// detail. The first version restarted the countdown on every view, so four
-    /// seconds after launch the palette dimmed and took the hint bar with it -
-    /// before a first-time tester had read it. `ux-spec.md` 2 ties the bright
-    /// state to "after an insertion", and the hints to the first twenty uses.
-    /// The opening view is neither.
-    transient: bool,
 }
 
 struct ValueView {
@@ -159,7 +143,7 @@ pub fn drive(
     // loop and the closure that builds each view cannot reach it.
     let pack_shown = sequence.pack_name().unwrap_or(pack).to_owned();
 
-    let live = match GlobalShortcuts.register(&DEFAULT_BINDINGS) {
+    let live = match GlobalShortcuts.register(default_bindings()) {
         Ok(live) => live,
         Err(error) => {
             // Nothing can drive the sequence, so the palette says why and stays
@@ -199,8 +183,13 @@ pub fn drive(
     let mut keep_going = || !stop.load(Ordering::Relaxed);
     let mut present =
         |outcome: Outcome| show(palette, view_of(&outcome, &pack_shown, pack, standing));
+    let on_toggle = || toggle_later(palette);
+    let shortcuts = PaletteShortcuts {
+        inner: live.as_ref(),
+        on_toggle: &on_toggle,
+    };
     let ended = drive_sequence(
-        live.as_ref(),
+        &shortcuts,
         &mut sequence,
         &ports,
         TICK,
@@ -258,7 +247,6 @@ fn opening_view(
             sequence.sequence().delivery,
             sequence.clipboard_for_window(),
         ),
-        transient: false,
     }
 }
 
@@ -293,9 +281,6 @@ fn view_of(outcome: &Outcome, pack_shown: &str, pack: &str, standing: &Standing)
             standing,
         ),
         clipboard_bar: clipboard_bar(outcome.sequence.delivery, outcome.clipboard_for_window),
-        // Every outcome is something that just happened, so every outcome gets
-        // looked at and then gets out of the way.
-        transient: true,
     }
 }
 
@@ -379,7 +364,6 @@ fn show(palette: &Weak<Palette>, view: View) {
 
 /// Runs on the MAIN thread. Everything Slint touches happens here.
 fn apply(palette: &Palette, view: View) {
-    let transient = view.transient;
     palette.set_pack(view.pack.into());
     palette.set_counter(view.counter.into());
     palette.set_clipboard_mode(view.clipboard_bar.is_some());
@@ -418,37 +402,96 @@ fn apply(palette: &Palette, view: View) {
         palette.set_has_value(true);
     }
 
-    palette.set_showing(true);
-    if transient {
-        dim_later(palette);
+    // 🔴 No timer and no state change here, and that is `D83`: until then every
+    // view woke the palette and a timer put it back to rest four seconds later,
+    // taking the value with it. Whether the palette is compact is the tester's
+    // choice alone - see `toggle_compact`.
+}
+
+/// Keeps the expanded palette from getting shorter by itself (`D83`).
+///
+/// Call once, on the main thread, after the window is built. From then on every
+/// change in what the content asks for goes through [`hold_height`].
+pub fn hold_height_on_change(palette: &Palette) {
+    let weak = palette.as_weak();
+    palette.on_content_height_changed(move |content| {
+        if let Some(palette) = weak.upgrade() {
+            hold_height(&palette, content);
+        }
+    });
+}
+
+/// Moves the height floor up to what the content asks for, never down.
+///
+/// The expanded palette then keeps the height of its tallest content since it
+/// was last expanded, so a short value after a long one leaves room below
+/// rather than pulling the bottom edge up. Only `toggle_compact` lowers it.
+///
+/// Takes the height as an argument rather than reading it, because a read
+/// straight after the properties change is stale (`slint.md` 2.27): the palette
+/// calls this from its `changed` handler, after the new bands exist.
+pub(crate) fn hold_height(palette: &Palette, content: f32) {
+    if palette.get_compact() {
+        return;
+    }
+    if content > palette.get_height_floor() {
+        palette.set_height_floor(content);
     }
 }
 
-// The timer that returns the palette to rest. It has to outlive this call, and
-// dropping a `slint::Timer` cancels it - so it is kept here, on the thread that
-// started it. A thread local rather than a field because nothing else about the
-// palette is owned by this crate's Rust: the window is generated code.
-thread_local! {
-    static REST: std::cell::RefCell<Option<slint::Timer>> = const { std::cell::RefCell::new(None) };
-}
-
-/// Restarts the countdown back to the resting state.
+/// Switches between the expanded and the compact palette.
 ///
 /// 🔴 The window is never hidden - `OBS-80` measured that `hide()` destroys it
-/// on Windows and loses `WS_EX_NOACTIVATE` with it. Resting is the background
+/// on Windows and loses `WS_EX_NOACTIVATE` with it. Compact is the background
 /// going translucent and the bands below the counter going away.
-fn dim_later(palette: &Palette) {
-    let weak = palette.as_weak();
-    let timer = slint::Timer::default();
-    timer.start(slint::TimerMode::SingleShot, BRIGHT_FOR, move || {
-        if let Some(palette) = weak.upgrade() {
-            palette.set_showing(false);
+///
+/// The floor starts again from nothing, so the palette expands to fit what it
+/// shows now rather than to the tallest thing it ever showed. The height the
+/// expanded content asks for arrives through the `changed` handler.
+pub fn toggle_compact(palette: &Palette) {
+    palette.set_compact(!palette.get_compact());
+    palette.set_height_floor(0.0);
+}
+
+/// The palette's own shortcuts in front of the sequence.
+///
+/// `ToggleVisibility` is about the window, not about the pack, so it never
+/// reaches `AdvanceSequence` - which would answer it with `Unhandled`. Every
+/// other press passes through untouched, in order.
+///
+/// ⚠️ An intercepted press does not end the wait. The wait goes on for what is
+/// left of it, and a zero wait - the drain after a send, `W1` - keeps draining.
+/// Returning `Nothing` early would end that drain and leave a `NextValue`
+/// pressed during the send in the queue, to be acted on afterwards: exactly the
+/// queueing `ux-spec.md` 3 rejects.
+struct PaletteShortcuts<'a> {
+    inner: &'a dyn LiveShortcuts,
+    /// What a `ToggleVisibility` press does. A closure rather than the window
+    /// handle, so the interception can be tested without a window.
+    on_toggle: &'a dyn Fn(),
+}
+
+impl LiveShortcuts for PaletteShortcuts<'_> {
+    fn outcomes(&self) -> &[(HotkeyAction, ShortcutRegistration)] {
+        self.inner.outcomes()
+    }
+
+    fn next(&self, wait: Duration) -> Wait {
+        let deadline = Instant::now() + wait;
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            match self.inner.next(left) {
+                Wait::Pressed(HotkeyAction::ToggleVisibility) => (self.on_toggle)(),
+                other => return other,
+            }
         }
-    });
-    // Replacing the previous timer cancels it, which is exactly the wanted
-    // behaviour: every new value restarts the countdown rather than queueing a
-    // second one behind it.
-    REST.with_borrow_mut(|slot| *slot = Some(timer));
+    }
+}
+
+/// Hands a compact-state switch to the thread that owns the window.
+fn toggle_later(palette: &Weak<Palette>) {
+    // Dropped for the reason `show` gives.
+    let _ = palette.upgrade_in_event_loop(|palette| toggle_compact(&palette));
 }
 
 #[cfg(test)]
@@ -468,8 +511,9 @@ mod tests {
     use slint::platform::{Platform, PlatformError, WindowAdapter};
 
     use super::{
-        Delivery, Outcome, Palette, Standing, ValuePreview, apply, clipboard_bar, markers_of,
-        view_of, with_standing,
+        Delivery, Duration, HotkeyAction, LiveShortcuts, Outcome, Palette, PaletteShortcuts,
+        ShortcutRegistration, Standing, ValuePreview, Wait, apply, clipboard_bar, hold_height,
+        markers_of, toggle_compact, view_of, with_standing,
     };
 
     /// No standing sentence: the ordinary case, and the one the field-by-field
@@ -596,7 +640,10 @@ mod tests {
             palette.get_has_value(),
             "a value went out, so the band shows"
         );
-        assert!(palette.get_showing(), "an outcome wakes the palette");
+        assert!(
+            !palette.get_compact(),
+            "an outcome never collapses the palette - only the tester does (D83)"
+        );
         assert!(
             !palette.get_clipboard_mode(),
             "direct delivery is not clipboard mode"
@@ -705,6 +752,108 @@ mod tests {
         assert!(
             !palette.get_clipboard_mode(),
             "the window left the front, so the bar goes"
+        );
+
+        // ---- the window never gets shorter by itself (`D83`) ---------------
+        // The heights are given, as the `changed` handler gives them: a read
+        // of the content height here would be stale (`slint.md` 2.27). The
+        // render test measures the same rule in pixels.
+        palette.set_height_floor(0.0);
+        hold_height(&palette, 300.0);
+        assert_eq!(
+            palette.get_height_floor(),
+            300.0,
+            "the floor follows the content up"
+        );
+        hold_height(&palette, 120.0);
+        assert_eq!(
+            palette.get_height_floor(),
+            300.0,
+            "a shorter content pulled the floor down"
+        );
+
+        // ---- the tester collapses it, and only the tester expands it -------
+        toggle_compact(&palette);
+        assert!(palette.get_compact());
+        assert_eq!(
+            palette.get_height_floor(),
+            0.0,
+            "compact starts the floor over"
+        );
+        hold_height(&palette, 60.0);
+        assert_eq!(
+            palette.get_height_floor(),
+            0.0,
+            "the floor moved while compact"
+        );
+        apply(
+            &palette,
+            view_of(
+                &an_outcome(Some(sent_of("b")), Vec::new()),
+                "p",
+                "p",
+                &quiet(),
+            ),
+        );
+        assert!(
+            palette.get_compact(),
+            "a value expanded what the tester collapsed"
+        );
+        toggle_compact(&palette);
+        assert!(!palette.get_compact());
+        hold_height(&palette, 120.0);
+        assert_eq!(
+            palette.get_height_floor(),
+            120.0,
+            "expanding fits what is shown now, not the tallest thing ever shown"
+        );
+    }
+
+    /// A queue of presses standing in for the system, for the interception test.
+    struct Queued(std::cell::RefCell<std::collections::VecDeque<HotkeyAction>>);
+
+    impl LiveShortcuts for Queued {
+        fn outcomes(&self) -> &[(HotkeyAction, ShortcutRegistration)] {
+            &[]
+        }
+
+        fn next(&self, _wait: Duration) -> Wait {
+            self.0
+                .borrow_mut()
+                .pop_front()
+                .map_or(Wait::Nothing, Wait::Pressed)
+        }
+    }
+
+    /// The palette's own shortcut never reaches the sequence, and taking it out
+    /// does not end the drain after a send (`W1`).
+    #[test]
+    fn toggling_is_answered_by_the_palette_and_does_not_cut_the_drain_short() {
+        let queued = Queued(std::cell::RefCell::new(
+            [
+                HotkeyAction::ToggleVisibility,
+                HotkeyAction::NextValue,
+                HotkeyAction::ToggleVisibility,
+            ]
+            .into(),
+        ));
+        let toggles = std::cell::Cell::new(0);
+        let on_toggle = || toggles.set(toggles.get() + 1);
+        let shortcuts = PaletteShortcuts {
+            inner: &queued,
+            on_toggle: &on_toggle,
+        };
+        // A zero wait, as the drain after a send asks: the toggle in front must
+        // not hide the NextValue behind it.
+        assert_eq!(
+            shortcuts.next(Duration::ZERO),
+            Wait::Pressed(HotkeyAction::NextValue)
+        );
+        assert_eq!(shortcuts.next(Duration::ZERO), Wait::Nothing);
+        assert_eq!(
+            toggles.get(),
+            2,
+            "both toggles were answered, none was dropped"
         );
     }
 

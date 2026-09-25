@@ -11,22 +11,32 @@
 // `OBS-94` settled this for the core and it holds for the window: clipboard mode
 // is a SECOND AXIS, not another state. So:
 //
-//     showing          false = resting, true = a value just went out
+//     compact          the tester's choice: only the pack band, background dimmed
 //     clipboard-mode   a standing condition, visible in both
 //     hints            the first twenty uses, and on demand afterwards
 //
 // 🔴 Nothing here ever hides the WINDOW. `OBS-80` measured that `hide()` and
 // `show()` destroy the window on Windows and lose `WS_EX_NOACTIVATE` with it, so
-// the three states of `ux-spec.md` 2 are transparency and which bands are
-// visible - never the window itself.
+// the states are transparency and which bands are visible - never the window.
 //
-// # What the resting state may show, and why it is so short
+// # Why the window no longer shrinks by itself (D83)
 //
-// D53: at the resting alpha, `text-muted` no longer holds 4.5:1 over a white
+// Until D83 the palette dimmed four seconds after every value and dropped every
+// band but the pack, which is what `ux-spec.md` 2 drew. In use it was the wrong
+// design: the window jumped from a full panel to one line under the tester's
+// eyes, and what had just gone out was gone before they looked back. So the
+// value stays until the next one replaces it, the window never gets shorter on
+// its own, and the compact form is a shortcut the tester presses.
+//
+// # What the compact state may show, and why it is so short
+//
+// D53: at the dimmed alpha, `text-muted` no longer holds 4.5:1 over a white
 // window lying under the palette - it would need 0.96 - so it MUST NOT appear
 // while the palette is dimmed. Every muted role therefore lives inside a band
-// gated on `showing`, and `appearance.rs` measures the rendered pixels rather
-// than trusting this sentence.
+// gated on `compact`, and `palette_appearance.rs` measures the rendered pixels
+// rather than trusting this sentence. The message band stays in both states:
+// rule 1 of this project forbids a palette that goes quiet because the tester
+// made it small, and its text is not muted.
 //
 // # One zone from the sketch in `ux-spec.md` 2 is absent, on purpose
 //
@@ -64,9 +74,14 @@ export component Palette inherits Window {
     // refuses - untouchable rule 9, D58.
     in property <string> window-title;
 
-    // ---- the pack band, the only one the resting state shows ----------------
+    // ---- the pack band, the only one the compact state shows ----------------
     in property <string> pack;
     in property <string> counter;
+
+    // ---- the value band before the first value ------------------------------
+    // Finished text naming the shortcut that sends one. GUI rule 3: a view with
+    // data has an empty state, and this band is there from the first frame.
+    in property <string> no-value;
 
     // ---- the value band ----------------------------------------------------
     in property <string> value-name;
@@ -106,11 +121,11 @@ export component Palette inherits Window {
     in property <[HintRow]> hints;
 
     // ---- state -------------------------------------------------------------
-    in property <bool> showing;
-    // Whether there is a value to show at all. Separate from `showing` because
-    // the palette is awake and opaque at first run, with the hints up and
-    // nothing sent yet - `ux-spec.md` 5.1. Without this the value band would
-    // then draw three empty lines and a row of no markers.
+    // The tester's choice, made with a shortcut and never by a timer (D83).
+    in property <bool> compact;
+    // Whether a value has gone out yet. Before the first one the value band
+    // shows its empty state instead of three empty lines and a row of no
+    // markers - `ux-spec.md` 5.1.
     in property <bool> has-value;
     // Values go through the clipboard and the tester pastes them. Named after
     // the glossary (`ClipboardMode`), never "degraded": `ux-spec.md` 8 forbids
@@ -121,6 +136,27 @@ export component Palette inherits Window {
     // `showing` because it is the system's answer, not the palette's state.
     in property <bool> translucency-allowed: true;
 
+    // ---- height ------------------------------------------------------------
+    // The tallest the expanded palette has been since it was last expanded.
+    // Kept by the worker (`live.rs`), because remembering is logic and a view
+    // holds none: without it, a value with a one-line preview after one with a
+    // three-line preview would pull the window's bottom edge up under the
+    // tester's eyes - the jump D83 removed, only smaller.
+    in property <length> height-floor;
+    // What the content asks for right now.
+    out property <length> content-height: surface.preferred-height;
+    // Said whenever that changes, so Rust can move the floor.
+    //
+    // 🔴 An event and not a value Rust reads, and the reason is measured: bands
+    // behind `if` are built when the window is next drawn, not when a property
+    // is read (`slint.md` 2.27). Read straight after the properties were set,
+    // this height still lacks the band that was just switched on - 105 px for a
+    // one-letter value and for a three-hundred-letter one alike.
+    callback content-height-changed(length);
+    changed content-height => {
+        root.content-height-changed(self.content-height);
+    }
+
     title: root.window-title;
     // The colour lives on the surface below, so that the palette can have
     // rounded corners - a window background cannot.
@@ -129,12 +165,12 @@ export component Palette inherits Window {
     width: Tokens.palette-width;
     // The palette follows its own content. Measured 2026-09-22: Slint does NOT
     // resize a window when what is inside it changes, so without this binding
-    // the resting state would be one line of text at the top of a panel the size
-    // of the shown state - the opposite of what `ux-spec.md` 2 asks of it.
-    height: surface.preferred-height;
+    // the compact state would be one line of text at the top of a panel the size
+    // of the expanded one. Expanded, it never gets shorter than the floor.
+    height: root.compact ? surface.preferred-height : max(root.height-floor, surface.preferred-height);
 
     surface := WindowSurface {
-        dimmed: !root.showing && root.translucency-allowed;
+        dimmed: root.compact && root.translucency-allowed;
 
         VerticalLayout {
             // Packed to the top: the window sizes to its content, and where the
@@ -186,8 +222,16 @@ export component Palette inherits Window {
                 }
             }
 
-            // The value that just went out.
-            if root.showing && root.has-value: Zone {
+            // Before the first value: what to do to send one.
+            if !root.compact && !root.has-value: Zone {
+                TextBody {
+                    text: root.no-value;
+                    wrap: word-wrap;
+                }
+            }
+
+            // The value that went out last. It stays until the next one.
+            if !root.compact && root.has-value: Zone {
                 TextName {
                     text: root.value-name;
                     wrap: word-wrap;
@@ -241,17 +285,18 @@ export component Palette inherits Window {
 
             // What the tool has to say about it. Rule 1 of this project: a run
             // that did less than it promised says so, and this band is where
-            // the palette says it.
-            if root.showing && root.messages.length > 0: Zone {
+            // the palette says it - in the compact state as well, because a
+            // palette the tester made small must not go quiet.
+            if root.messages.length > 0: Zone {
                 for message in root.messages: TextBody {
                     text: message;
                     wrap: word-wrap;
                 }
             }
 
-            // The hints. Hidden at rest, because the resting state is meant to
-            // take little room and take no attention.
-            if root.hints-visible && root.showing: Zone {
+            // The hints. Hidden in the compact state, which is meant to take
+            // little room and no attention.
+            if root.hints-visible && !root.compact: Zone {
                 HintBar {
                     rows: root.hints;
                 }

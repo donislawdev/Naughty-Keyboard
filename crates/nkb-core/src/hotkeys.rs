@@ -13,15 +13,30 @@
 //! keys. This module knows nothing of any system, which is what keeps it in the
 //! core.
 //!
-//! # The one thing this file does NOT settle: the modifier on macOS
+//! # Why the family is `Alt+Shift` and not `Ctrl+Alt`
 //!
-//! `ux-spec.md` 3 writes the Windows and Linux defaults as `Ctrl+Alt+<key>` and
-//! the macOS defaults as `Cmd+Alt+<key>` - the same key, a different primary
-//! modifier. The tables below carry the Windows and Linux convention, because
-//! that is the platform the core loop is wired on first and delivering a value
-//! on macOS is blocked anyway (`OBS-70`). The adapter that registers on macOS
-//! swaps `ctrl` for `win` (the Command bit). Doing that here would mean a `cfg`
-//! in a crate that has none, and the swap is one line where the system is known.
+//! Until `D82` every default was `Ctrl+Alt+<key>`, as `ux-spec.md` 3 first
+//! proposed. On Windows `Ctrl+Alt` IS `AltGr`, and a global shortcut matches the
+//! modifiers exactly, so `Ctrl+Alt+N` swallowed `AltGr+N` - the letter `ń` on the
+//! Polish layout - in every application for as long as the palette ran. Measured
+//! on the owner's machine (layout `0415`) with the system's own layout table:
+//! `Ctrl+Alt` types a character on ten letters there, and `Ctrl+Alt+Space` was
+//! held by another application. Microsoft's keyboard guidelines say the same in
+//! one line: do not use `Ctrl+Alt` combinations.
+//!
+//! `Alt+Shift` cannot collide with `AltGr` on ANY layout, because `AltGr` adds
+//! `Ctrl` and the combination then no longer matches. Measured free of other
+//! applications on the same machine. What it still costs is named in `D82`.
+//!
+//! # Two conventions, both as data
+//!
+//! macOS keeps `Cmd+Alt+<key>` (`ux-spec.md` 3): there `Option` types
+//! characters and `Command` does not. Until `D82` the macOS table did not exist
+//! and the registering adapter swapped `ctrl` for the Command bit on every
+//! chord. That worked for a table whose every entry held `ctrl`, and it would
+//! have rewritten a chord the tester chose. So both tables live here, and the
+//! layer that knows the system picks one - this crate has no `cfg` and keeps
+//! none.
 
 /// One of the ten global actions the palette answers to.
 ///
@@ -50,8 +65,8 @@ pub enum HotkeyAction {
     MarkSuspect,
     /// Open the pack search.
     OpenPacks,
-    /// Show the palette if hidden by opacity, or dim it - never `hide()`,
-    /// `OBS-80`.
+    /// Collapse the palette to its pack band, or expand it again - never
+    /// `hide()`, `OBS-80`. The tester's choice, never a timer's (`D83`).
     ToggleVisibility,
 }
 
@@ -109,66 +124,103 @@ pub struct HotkeyChord {
 }
 
 impl HotkeyChord {
-    /// The `Ctrl+Alt+<key>` shape every default uses on Windows and Linux.
-    const fn ctrl_alt(key: HotkeyKey) -> Self {
+    /// The `Alt+Shift+<key>` shape every default uses on Windows and Linux.
+    const fn alt_shift(key: HotkeyKey) -> Self {
         Self {
-            ctrl: true,
+            ctrl: false,
+            alt: true,
+            shift: true,
+            win: false,
+            key,
+        }
+    }
+
+    /// The `Cmd+Alt+<key>` shape every default uses on macOS. `win` is the
+    /// Command key there.
+    const fn command_alt(key: HotkeyKey) -> Self {
+        Self {
+            ctrl: false,
             alt: true,
             shift: false,
-            win: false,
+            win: true,
             key,
         }
     }
 }
 
+/// Which set of default shortcuts a system follows.
+///
+/// Chosen by the layer that knows the system. The core only holds the tables.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Convention {
+    /// `Alt+Shift+<key>` - Windows and Linux.
+    WindowsAndLinux,
+    /// `Cmd+Alt+<key>` - macOS.
+    MacOs,
+}
+
+/// The key each action is bound to by default, the same on every system.
+///
+/// One entry per action, in the order of [`HotkeyAction::ALL`]. Only the
+/// modifiers differ between the conventions, so a tester who moves between
+/// systems keeps the letters. The letters are the ones `ux-spec.md` 3 chose, so
+/// the move from `Ctrl+Alt` changed the family and nothing else.
+const DEFAULT_KEYS: [(HotkeyAction, HotkeyKey); 10] = [
+    (HotkeyAction::NextValue, HotkeyKey::N),
+    (HotkeyAction::PreviousValue, HotkeyKey::P),
+    (HotkeyAction::RepeatLast, HotkeyKey::R),
+    (HotkeyAction::RestartPack, HotkeyKey::Digit0),
+    (HotkeyAction::CopyReport, HotkeyKey::B),
+    (HotkeyAction::MarkOk, HotkeyKey::Digit1),
+    (HotkeyAction::MarkProblem, HotkeyKey::Digit2),
+    (HotkeyAction::MarkSuspect, HotkeyKey::Digit3),
+    (HotkeyAction::OpenPacks, HotkeyKey::Space),
+    (HotkeyAction::ToggleVisibility, HotkeyKey::H),
+];
+
+/// One convention's table, built from [`DEFAULT_KEYS`] so the two cannot
+/// disagree about which letter belongs to which action.
+const fn table(convention: Convention) -> [(HotkeyAction, HotkeyChord); 10] {
+    let mut out = [(
+        HotkeyAction::NextValue,
+        HotkeyChord::alt_shift(HotkeyKey::N),
+    ); 10];
+    let mut index = 0;
+    while index < DEFAULT_KEYS.len() {
+        let (action, key) = DEFAULT_KEYS[index];
+        let chord = match convention {
+            Convention::WindowsAndLinux => HotkeyChord::alt_shift(key),
+            Convention::MacOs => HotkeyChord::command_alt(key),
+        };
+        out[index] = (action, chord);
+        index += 1;
+    }
+    out
+}
+
 /// The default shortcut for every action, in the Windows and Linux convention.
 ///
-/// One entry per action, in the order of [`HotkeyAction::ALL`]. Every default is
-/// `Ctrl+Alt+<key>`: `ux-spec.md` 3 keeps them one family so a tester learns
-/// them as a set rather than as ten separate things. The table is checked
-/// against the catalogue of its own kind before any code depended on it - every
-/// action present exactly once, and no two actions on the same combination -
-/// because a duplicate combination would be a registration that reports the
-/// second action as `Taken` against the first.
-pub const DEFAULT_BINDINGS: [(HotkeyAction, HotkeyChord); 10] = [
-    (HotkeyAction::NextValue, HotkeyChord::ctrl_alt(HotkeyKey::N)),
-    (
-        HotkeyAction::PreviousValue,
-        HotkeyChord::ctrl_alt(HotkeyKey::P),
-    ),
-    (
-        HotkeyAction::RepeatLast,
-        HotkeyChord::ctrl_alt(HotkeyKey::R),
-    ),
-    (
-        HotkeyAction::RestartPack,
-        HotkeyChord::ctrl_alt(HotkeyKey::Digit0),
-    ),
-    (
-        HotkeyAction::CopyReport,
-        HotkeyChord::ctrl_alt(HotkeyKey::B),
-    ),
-    (
-        HotkeyAction::MarkOk,
-        HotkeyChord::ctrl_alt(HotkeyKey::Digit1),
-    ),
-    (
-        HotkeyAction::MarkProblem,
-        HotkeyChord::ctrl_alt(HotkeyKey::Digit2),
-    ),
-    (
-        HotkeyAction::MarkSuspect,
-        HotkeyChord::ctrl_alt(HotkeyKey::Digit3),
-    ),
-    (
-        HotkeyAction::OpenPacks,
-        HotkeyChord::ctrl_alt(HotkeyKey::Space),
-    ),
-    (
-        HotkeyAction::ToggleVisibility,
-        HotkeyChord::ctrl_alt(HotkeyKey::H),
-    ),
-];
+/// Every default is `Alt+Shift+<key>`: `ux-spec.md` 3 keeps them one family so
+/// a tester learns them as a set rather than as ten separate things. The table
+/// is checked before any code depends on it - every action present exactly once,
+/// and no two actions on the same combination - because a duplicate combination
+/// would be a registration that reports the second action as `Taken` against the
+/// first.
+pub const DEFAULT_BINDINGS: [(HotkeyAction, HotkeyChord); 10] = table(Convention::WindowsAndLinux);
+
+/// The same table in the macOS convention, `Cmd+Alt+<key>`.
+pub const MACOS_DEFAULT_BINDINGS: [(HotkeyAction, HotkeyChord); 10] = table(Convention::MacOs);
+
+/// The default table a convention uses.
+#[must_use]
+pub const fn default_bindings(
+    convention: Convention,
+) -> &'static [(HotkeyAction, HotkeyChord); 10] {
+    match convention {
+        Convention::WindowsAndLinux => &DEFAULT_BINDINGS,
+        Convention::MacOs => &MACOS_DEFAULT_BINDINGS,
+    }
+}
 
 /// The default chord for one action, if the default table names it.
 ///
@@ -176,8 +228,8 @@ pub const DEFAULT_BINDINGS: [(HotkeyAction, HotkeyChord); 10] = [
 /// only `None` for a hypothetical action added without a default - which the
 /// test refuses.
 #[must_use]
-pub fn default_chord(action: HotkeyAction) -> Option<HotkeyChord> {
-    DEFAULT_BINDINGS
+pub fn default_chord(convention: Convention, action: HotkeyAction) -> Option<HotkeyChord> {
+    default_bindings(convention)
         .iter()
         .find_map(|(candidate, chord)| (*candidate == action).then_some(*chord))
 }
@@ -191,23 +243,26 @@ pub fn default_chord(action: HotkeyAction) -> Option<HotkeyChord> {
 mod tests {
     use super::*;
 
+    const CONVENTIONS: [Convention; 2] = [Convention::WindowsAndLinux, Convention::MacOs];
+
     #[test]
     fn every_action_has_exactly_one_default() {
         // The registrar reserves a combination per action, so a missing default
         // is an action that can never be pressed, and a doubled one is a table
         // that disagrees with itself.
-        for action in HotkeyAction::ALL {
-            let count = DEFAULT_BINDINGS
-                .iter()
-                .filter(|(candidate, _)| *candidate == action)
-                .count();
-            assert_eq!(count, 1, "{action:?} must have exactly one default binding");
+        for convention in CONVENTIONS {
+            let table = default_bindings(convention);
+            for action in HotkeyAction::ALL {
+                let count = table
+                    .iter()
+                    .filter(|(candidate, _)| *candidate == action)
+                    .count();
+                assert_eq!(
+                    count, 1,
+                    "{convention:?}: {action:?} must have exactly one default binding"
+                );
+            }
         }
-        assert_eq!(
-            DEFAULT_BINDINGS.len(),
-            HotkeyAction::ALL.len(),
-            "the default table and the action set must be the same size"
-        );
     }
 
     #[test]
@@ -215,36 +270,64 @@ mod tests {
         // Applied to this table before any code leaned on it - the lesson from
         // OBS-48. Two actions on one combination would make the second register
         // as Taken against the first, silently losing a shortcut.
-        for (i, (action_a, chord_a)) in DEFAULT_BINDINGS.iter().enumerate() {
-            for (action_b, chord_b) in &DEFAULT_BINDINGS[i + 1..] {
-                assert_ne!(
-                    chord_a, chord_b,
-                    "{action_a:?} and {action_b:?} share a combination"
-                );
+        for convention in CONVENTIONS {
+            let table = default_bindings(convention);
+            for (i, (action_a, chord_a)) in table.iter().enumerate() {
+                for (action_b, chord_b) in &table[i + 1..] {
+                    assert_ne!(
+                        chord_a, chord_b,
+                        "{convention:?}: {action_a:?} and {action_b:?} share a combination"
+                    );
+                }
             }
         }
     }
 
     #[test]
-    fn every_default_is_ctrl_alt_and_nothing_stranger() {
-        // ux-spec.md 3: one family, Ctrl+Alt plus a key. A default that grew a
-        // Shift or a Win bit would be a shortcut a tester cannot guess from the
-        // others, so the family property is guarded rather than trusted.
+    fn every_default_on_windows_and_linux_is_alt_shift_and_never_ctrl_alt() {
+        // D82: Ctrl+Alt is AltGr on Windows, so a default holding both would
+        // swallow a letter of somebody's alphabet in every application while the
+        // palette runs. One family, so a tester can guess the rest from one.
         for (action, chord) in DEFAULT_BINDINGS {
             assert!(
-                chord.ctrl && chord.alt && !chord.shift && !chord.win,
-                "{action:?} default is not Ctrl+Alt: {chord:?}"
+                chord.alt && chord.shift && !chord.ctrl && !chord.win,
+                "{action:?} default is not Alt+Shift: {chord:?}"
             );
         }
     }
 
     #[test]
-    fn default_chord_is_total_over_the_action_set() {
-        for action in HotkeyAction::ALL {
+    fn every_default_on_macos_is_command_alt() {
+        // Option alone types characters on macOS, Command does not.
+        for (action, chord) in MACOS_DEFAULT_BINDINGS {
             assert!(
-                default_chord(action).is_some(),
-                "{action:?} has no default chord"
+                chord.win && chord.alt && !chord.ctrl && !chord.shift,
+                "{action:?} macOS default is not Cmd+Alt: {chord:?}"
             );
+        }
+    }
+
+    #[test]
+    fn both_conventions_bind_the_same_key_to_the_same_action() {
+        // Only the modifiers differ, so a tester moving between systems keeps
+        // the letters - and a table edited on one side only is caught here.
+        for ((action_a, chord_a), (action_b, chord_b)) in
+            DEFAULT_BINDINGS.iter().zip(MACOS_DEFAULT_BINDINGS.iter())
+        {
+            assert_eq!(action_a, action_b);
+            assert_eq!(chord_a.key, chord_b.key, "{action_a:?}");
+        }
+    }
+
+    #[test]
+    fn default_chord_is_total_over_the_action_set() {
+        for convention in CONVENTIONS {
+            for action in HotkeyAction::ALL {
+                assert!(
+                    default_chord(convention, action).is_some(),
+                    "{convention:?}: {action:?} has no default chord"
+                );
+            }
         }
     }
 }

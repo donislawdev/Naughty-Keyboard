@@ -20,8 +20,22 @@ use std::time::Duration;
 use nkb_app::ports::{
     HotkeyRegistrar, LiveShortcuts, ShortcutRegistration, ShortcutsUnavailable, Wait,
 };
-use nkb_core::hotkeys::{HotkeyAction, HotkeyChord, HotkeyKey};
+use nkb_core::hotkeys::{Convention, HotkeyAction, HotkeyChord, HotkeyKey};
 use nkb_sys::hotkey::{self, Hotkey, HotkeyId, HotkeyListener, HotkeyRegistration};
+
+/// Which default table this build follows. The one place that knows the system,
+/// because `nkb_core::hotkeys` holds both tables and no `cfg` (`D82`).
+pub const CONVENTION: Convention = if cfg!(target_os = "macos") {
+    Convention::MacOs
+} else {
+    Convention::WindowsAndLinux
+};
+
+/// The default shortcuts on the system this build runs on.
+#[must_use]
+pub fn default_bindings() -> &'static [(HotkeyAction, HotkeyChord); 10] {
+    nkb_core::hotkeys::default_bindings(CONVENTION)
+}
 
 /// Registers shortcuts through `nkb_sys::hotkey::listen`.
 ///
@@ -114,29 +128,23 @@ fn pressed(actions: &[HotkeyAction], id: HotkeyId) -> Wait {
 /// `nkb-sys`, whose route today is Windows only. The day a Linux route exists
 /// it will want X11 keysyms here, and this is the one function that changes.
 ///
-/// On macOS the primary modifier is Command, not Control - `ux-spec.md` 3
-/// writes the defaults as `Cmd+Alt+<key>` there. The core table carries the
-/// Windows and Linux convention (`nkb_core::hotkeys` says why), and the swap
-/// happens here, where the system is known: `ctrl` becomes the `win` bit,
-/// which is Command on that platform. Unmeasured on macOS, where no route
-/// exists yet (`OBS-70`). The shape is fixed so the swap is not forgotten.
+/// 🔴 The chord is registered AS WRITTEN, on every system. Until `D82` the macOS
+/// branch swapped `ctrl` for the Command bit here, because the core carried one
+/// table in the Windows convention. That was right for a table whose every entry
+/// held `ctrl`, and it would have rewritten any chord a tester chose. The macOS
+/// defaults are now their own table (`nkb_core::hotkeys::MACOS_DEFAULT_BINDINGS`),
+/// so nothing here needs to know which system it is on.
 fn hotkey_for(index: usize, chord: &HotkeyChord) -> Hotkey {
-    let command_is_primary = cfg!(target_os = "macos");
-    let (ctrl, win) = if command_is_primary {
-        (chord.win, chord.ctrl)
-    } else {
-        (chord.ctrl, chord.win)
-    };
     Hotkey {
         // The application id range is `0..=0xBFFF`. A binding table is ten
         // entries, so the narrowing cannot lose anything, and if a table ever
         // grew past the range the system would refuse the id, which the
         // outcome reports as `Failed` rather than hiding.
         id: HotkeyId(u32::try_from(index).unwrap_or(u32::MAX)),
-        ctrl,
+        ctrl: chord.ctrl,
         alt: chord.alt,
         shift: chord.shift,
-        win,
+        win: chord.win,
         vk: virtual_key(chord.key),
     }
 }
@@ -215,31 +223,39 @@ mod tests {
         for (index, (_, chord)) in DEFAULT_BINDINGS.iter().enumerate() {
             let hotkey = hotkey_for(index, chord);
             assert_eq!(hotkey.id, HotkeyId(u32::try_from(index).expect("ten fits")));
-            assert!(
-                hotkey.alt && !hotkey.shift,
-                "defaults keep Alt and no Shift"
+        }
+    }
+
+    #[test]
+    fn every_chord_is_registered_as_written_on_every_system() {
+        // D82: no modifier is swapped anywhere. Every combination of the four
+        // bits goes through unchanged, so a chord a tester picks is the chord
+        // the system is asked for.
+        for bits in 0u8..16 {
+            let chord = HotkeyChord {
+                ctrl: bits & 1 != 0,
+                alt: bits & 2 != 0,
+                shift: bits & 4 != 0,
+                win: bits & 8 != 0,
+                key: HotkeyKey::N,
+            };
+            let hotkey = hotkey_for(0, &chord);
+            assert_eq!(
+                (hotkey.ctrl, hotkey.alt, hotkey.shift, hotkey.win),
+                (chord.ctrl, chord.alt, chord.shift, chord.win),
+                "{chord:?}"
             );
         }
     }
 
     #[test]
-    fn the_primary_modifier_is_control_except_where_command_is() {
-        let chord = HotkeyChord {
-            ctrl: true,
-            alt: true,
-            shift: false,
-            win: false,
-            key: HotkeyKey::N,
-        };
-        let hotkey = hotkey_for(0, &chord);
-        if cfg!(target_os = "macos") {
-            assert!(
-                hotkey.win && !hotkey.ctrl,
-                "Command carries the shortcut on macOS"
-            );
+    fn this_build_uses_the_table_of_its_own_system() {
+        let expected = if cfg!(target_os = "macos") {
+            &nkb_core::hotkeys::MACOS_DEFAULT_BINDINGS
         } else {
-            assert!(hotkey.ctrl && !hotkey.win, "Control carries it elsewhere");
-        }
+            &DEFAULT_BINDINGS
+        };
+        assert_eq!(default_bindings(), expected);
     }
 
     #[test]
@@ -270,8 +286,8 @@ mod tests {
     }
 
     /// A combination nothing on the machine is likely to hold, so the live
-    /// test does not depend on what else is running. Shift is added on top of
-    /// the family so this never collides with a real default.
+    /// test does not depend on what else is running. Three modifiers, so it
+    /// never collides with a real default of either convention.
     fn obscure(key: HotkeyKey) -> (HotkeyAction, HotkeyChord) {
         (
             HotkeyAction::MarkSuspect,

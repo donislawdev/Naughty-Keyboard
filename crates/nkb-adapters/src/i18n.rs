@@ -68,6 +68,8 @@ use nkb_app::ports::{ShortcutRegistration, ShortcutsUnavailable};
 use nkb_core::hotkeys::{HotkeyAction, HotkeyChord, HotkeyKey, default_chord};
 use nkb_core::preview::ShapeFact;
 
+use crate::shortcuts::CONVENTION;
+
 /// Substitutes `{name}` placeholders in one pass over the pattern.
 ///
 /// One pass, not a chain of `replace` calls, and the difference is not style: a
@@ -118,10 +120,11 @@ pub(crate) fn fill(pattern: &str, values: &[(&str, &str)]) -> String {
 /// to hand a name to `fill` would be waste for nothing.
 ///
 /// The names come from the shortcut table in `ux-spec.md` 3. One of them says
-/// something the table does not: `ToggleVisibility` is "show or DIM", never
-/// "show or hide", because the palette never hides - `hide()` destroys the
+/// something the table does not: `ToggleVisibility` is "collapse or expand",
+/// never "show or hide", because the palette never hides - `hide()` destroys the
 /// window and loses `WS_EX_NOACTIVATE` (`OBS-80`). A name promising a behaviour
-/// the product will not have is a defect in the name.
+/// the product will not have is a defect in the name. Until `D83` it read "show
+/// or dim", which stopped being true when the timer that dimmed it went.
 #[must_use]
 pub fn action_name(action: HotkeyAction) -> &'static str {
     match action {
@@ -134,7 +137,7 @@ pub fn action_name(action: HotkeyAction) -> &'static str {
         HotkeyAction::MarkProblem => "Mark as a problem",
         HotkeyAction::MarkSuspect => "Mark as suspect",
         HotkeyAction::OpenPacks => "Open pack search",
-        HotkeyAction::ToggleVisibility => "Show or dim the palette",
+        HotkeyAction::ToggleVisibility => "Collapse or expand the palette",
     }
 }
 
@@ -157,15 +160,14 @@ fn key_name(key: HotkeyKey) -> &'static str {
     }
 }
 
-/// A shortcut written the way a tester reads it: `Ctrl+Alt+N`.
+/// A shortcut written the way a tester reads it: `Alt+Shift+N`.
 ///
-/// ⚠️ This is the WINDOWS AND LINUX convention, and on macOS it is wrong in a
-/// way worth naming rather than discovering. `ux-spec.md` 3 writes the macOS
-/// defaults as `⌥⌘N`. The adapter that registers there swaps the primary
-/// modifier for the Command bit, so this function would print `Alt+Win+N` -
-/// three things a Mac user does not call those keys. Delivery on macOS is
-/// blocked anyway (`OBS-70`), so the palette does not run there yet and this has
-/// no victim today. `OBS-115`.
+/// ⚠️ This is the WINDOWS AND LINUX way of writing keys, and on macOS it is
+/// wrong in a way worth naming rather than discovering. `ux-spec.md` 3 writes the
+/// macOS defaults as `⌥⌘N`, and this function prints the same chord as
+/// `Alt+Win+N` - words a Mac user does not use for those keys. Delivery on macOS
+/// is blocked anyway (`OBS-70`), so the palette does not run there yet and this
+/// has no victim today. `OBS-115`.
 #[must_use]
 pub fn chord(chord: HotkeyChord) -> String {
     let mut out = String::new();
@@ -191,7 +193,9 @@ pub fn chord(chord: HotkeyChord) -> String {
 /// that does not exist. When it does, this is the one function that gains a
 /// source - not every sentence that mentions a shortcut.
 fn chord_text(action: HotkeyAction) -> String {
-    default_chord(action).map(chord).unwrap_or_default()
+    default_chord(CONVENTION, action)
+        .map(chord)
+        .unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
@@ -782,6 +786,10 @@ pub enum PaletteLabel {
     /// the preview - exact at every length, where a hundred characters of `a`
     /// would say nothing about whether there were 254 or 256 of them.
     Recipe,
+    /// What the value band says before anything has gone out. The band is there
+    /// from the start and never disappears (`D83`), so its empty state is a
+    /// sentence that tells the tester the one thing to do next.
+    NoValueYet,
 }
 
 fn pattern_palette_label(label: PaletteLabel) -> &'static str {
@@ -804,6 +812,9 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
             "not guaranteed by the bundled font: {list} and {rest} more"
         }
         PaletteLabel::Recipe => "{count} × \"{unit}\"",
+        PaletteLabel::NoValueYet => {
+            "Nothing sent yet. Put the cursor in any field and press {shortcut}."
+        }
     }
 }
 
@@ -856,6 +867,18 @@ pub fn counts(graphemes: usize, code_points: usize, bytes: usize, utf16_units: u
     )
 }
 
+/// The value band before the first value: names the shortcut that sends one.
+///
+/// Takes the chord rather than looking it up, because the palette knows which
+/// chord it registered and a default read here could be the wrong one.
+#[must_use]
+pub fn no_value_yet(next_value: HotkeyChord) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::NoValueYet),
+        &[("shortcut", &chord(next_value))],
+    )
+}
+
 /// How many warnings the pack carried when it loaded.
 ///
 /// Written as `pack warnings: 1` rather than `1 pack warnings` on purpose: the
@@ -877,6 +900,7 @@ pub fn warnings(count: usize) -> String {
 )]
 mod tests {
     use super::*;
+    use nkb_core::hotkeys::Convention;
 
     /// One of every message, with arguments chosen so the test can check the
     /// substitution as well as the sentence.
@@ -1109,10 +1133,13 @@ mod tests {
             names.push(name);
 
             let text = chord_text(action);
-            assert!(
-                text.starts_with("Ctrl+Alt+"),
-                "{action:?} reads as {text}, and every default is Ctrl+Alt+<key>"
-            );
+            assert!(!text.is_empty(), "{action:?} has no shortcut text");
+            if CONVENTION == Convention::WindowsAndLinux {
+                assert!(
+                    text.starts_with("Alt+Shift+"),
+                    "{action:?} reads as {text}, and every default is Alt+Shift+<key> (D82)"
+                );
+            }
         }
         names.sort_unstable();
         let before = names.len();
@@ -1126,9 +1153,11 @@ mod tests {
 
     #[test]
     fn a_shortcut_reads_the_way_a_tester_writes_it() {
-        assert_eq!(chord_text(HotkeyAction::NextValue), "Ctrl+Alt+N");
-        assert_eq!(chord_text(HotkeyAction::RestartPack), "Ctrl+Alt+0");
-        assert_eq!(chord_text(HotkeyAction::OpenPacks), "Ctrl+Alt+Space");
+        if CONVENTION == Convention::WindowsAndLinux {
+            assert_eq!(chord_text(HotkeyAction::NextValue), "Alt+Shift+N");
+            assert_eq!(chord_text(HotkeyAction::RestartPack), "Alt+Shift+0");
+            assert_eq!(chord_text(HotkeyAction::OpenPacks), "Alt+Shift+Space");
+        }
         assert_eq!(
             chord(HotkeyChord {
                 ctrl: true,
@@ -1149,7 +1178,15 @@ mod tests {
         let out = message(&Message::CounterKept { done: 7, total: 34 }, "unicode-text");
         assert_eq!(
             out,
-            "New field - the counter is still at 7/34. Press Ctrl+Alt+0 to start this pack from the beginning."
+            format!(
+                "New field - the counter is still at 7/34. Press {} to start this pack from the beginning.",
+                chord_text(HotkeyAction::RestartPack)
+            )
+        );
+        assert_ne!(
+            chord_text(HotkeyAction::RestartPack),
+            chord_text(HotkeyAction::NextValue),
+            "the check above would not tell RestartPack from the first entry"
         );
     }
 
@@ -1227,6 +1264,7 @@ mod tests {
             PaletteLabel::NotGuaranteed,
             PaletteLabel::NotGuaranteedMore,
             PaletteLabel::Recipe,
+            PaletteLabel::NoValueYet,
         ] {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
@@ -1237,7 +1275,8 @@ mod tests {
                 | PaletteLabel::PreviewElided
                 | PaletteLabel::NotGuaranteed
                 | PaletteLabel::NotGuaranteedMore
-                | PaletteLabel::Recipe => true,
+                | PaletteLabel::Recipe
+                | PaletteLabel::NoValueYet => true,
                 PaletteLabel::Title
                 | PaletteLabel::Offensive
                 | PaletteLabel::Cleared
@@ -1276,11 +1315,16 @@ mod tests {
             preview_elided(100, 100_000),
             recipe(1, "a"),
             recipe(100_000, "\u{2423}"),
+            no_value_yet(nkb_core::hotkeys::DEFAULT_BINDINGS[0].1),
         ] {
             assert!(!text.is_empty(), "a label produced nothing");
             assert!(!text.contains('{'), "a label left a placeholder: {text}");
         }
         assert_eq!(counter(7, 34), "7 / 34");
+        assert_eq!(
+            no_value_yet(nkb_core::hotkeys::DEFAULT_BINDINGS[0].1),
+            "Nothing sent yet. Put the cursor in any field and press Alt+Shift+N."
+        );
         // The count after the label, so one of anything reads right in every
         // language without a plural rule (`D80`, `OBS-120`).
         assert_eq!(

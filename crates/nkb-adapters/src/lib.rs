@@ -28,6 +28,6 @@ pub use focus::KeptFocus;
 pub use fs::{DirectoryPackSink, DirectoryPackSource, SystemClock};
 pub use keyboard::DirectInjection;
 pub use report_text::EnglishReport;
-pub use shortcuts::GlobalShortcuts;
+pub use shortcuts::{GlobalShortcuts, default_bindings};
 pub use startup::report_window_failure;
 pub use toml_pack::TomlPackFormat;

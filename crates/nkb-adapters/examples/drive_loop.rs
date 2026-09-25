@@ -3,15 +3,15 @@
 //!
 //! The deterministic tests prove the port, the adapter and the loop apart.
 //! What they cannot prove is the chain end to end through the production
-//! path - a real press on `Ctrl+Alt+N` arriving as `HotkeyAction::NextValue`,
+//! path - a real press on `Alt+Shift+N` arriving as `HotkeyAction::NextValue`,
 //! going through `AdvanceSequence`, and landing as the next value of a
 //! built-in pack in a real field. This example is that proof, and it is the
 //! runnable artefact for the rest of piece C4a-R of step 3 - the thing piece
 //! C5 wraps in a window.
 //!
 //! Run it, click into any text field (a notepad will do), and press
-//! `Ctrl+Alt+N` a few times, `Ctrl+Alt+P` for the previous value, or
-//! `Ctrl+Alt+0` to start over. Each press prints one line naming what
+//! `Alt+Shift+N` a few times, `Alt+Shift+P` for the previous value, or
+//! `Alt+Shift+0` to start over. Each press prints one line naming what
 //! happened. It stops on its own after a short window, releasing every
 //! shortcut:
 //!
@@ -35,7 +35,6 @@ use nkb_adapters::{
 use nkb_app::advance_sequence::Ports;
 use nkb_app::ports::{Clipboard, ClipboardError, History, HotkeyRegistrar};
 use nkb_app::{AdvanceSequence, Outcome, drive_sequence};
-use nkb_core::hotkeys::DEFAULT_BINDINGS;
 use nkb_core::report::Arrival;
 
 const PACK: &str = "whitespace";
@@ -55,7 +54,7 @@ fn main() {
         std::process::exit(1);
     };
 
-    let live = match GlobalShortcuts.register(&DEFAULT_BINDINGS) {
+    let live = match GlobalShortcuts.register(nkb_adapters::default_bindings()) {
         Ok(live) => live,
         Err(error) => {
             eprintln!("{}", i18n::shortcuts_unavailable(&error));
@@ -71,8 +70,8 @@ fn main() {
         }
     }
     println!(
-        "pack {PACK} chosen, {total} values. Click into a text field and press Ctrl+Alt+N (next), \
-         Ctrl+Alt+P (previous), Ctrl+Alt+0 (restart) - stopping in {} s",
+        "pack {PACK} chosen, {total} values. Click into a text field and press Alt+Shift+N (next), \
+         Alt+Shift+P (previous), Alt+Shift+0 (restart) - stopping in {} s",
         RUN_FOR.as_secs()
     );
 
@@ -134,7 +133,7 @@ fn describe(outcome: &Outcome) -> String {
     line
 }
 
-/// This example has no clipboard, and says so when `Ctrl+Alt+B` asks for one.
+/// This example has no clipboard, and says so when `Alt+Shift+B` asks for one.
 ///
 /// The real one lives in `nkb-gui`, and it cannot live here: its library would
 /// reach `nkb` through this package (D25). A clipboard that refused in silence
