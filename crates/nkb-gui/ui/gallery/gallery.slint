@@ -34,7 +34,7 @@ import {
     Zone,
     WindowSurface,
     ChromeBand,
-    TextField,
+    QueryField,
     PickList,
 } from "../components.slint";
 
@@ -143,14 +143,16 @@ export component Gallery inherits Window {
 
         Hairline {}
 
-        // The pack window's pieces (step 7). The text field in the states a
-        // still picture can hold: at rest, cannot be used, a wrong value, and a
-        // text far too long. The pointer and keyboard states need a pointer and
+        // The pack window's pieces (step 7). The query line in the states a
+        // still picture can hold: empty, at rest, cannot be used, a wrong
+        // value, and a query far too long - which must show its END, where the
+        // next letter goes. The pointer and keyboard states need a pointer and
         // a focus, so `packs_appearance.rs` measures them on the real window.
-        TextField { text: "unicode"; }
-        TextField { text: "cannot be used"; enabled: false; }
-        TextField { text: "a wrong value"; invalid: true; }
-        TextField { text: "a search long enough to run past the right edge of the field, as a translation will"; }
+        QueryField { }
+        QueryField { query: "unicode"; }
+        QueryField { query: "cannot be used"; enabled: false; }
+        QueryField { query: "a wrong value"; invalid: true; }
+        QueryField { query: "a query long enough to run past the right edge of the line - so it shows this end"; }
 
         // A band of a window's chrome, as the pack window's header uses it.
         ChromeBand {

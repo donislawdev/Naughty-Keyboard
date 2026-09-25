@@ -1,5 +1,5 @@
-// Controls that take the keyboard: the text field, and the keys a picker
-// answers before the field sees them.
+// Controls that take the keyboard: the query line, and the keys a picker
+// answers before the line sees them.
 //
 // Separate from `chrome.slint` because these RECEIVE - they have a focus, a
 // pointer state and callbacks - while everything there only arranges. Document
@@ -8,84 +8,134 @@
 
 import { Tokens } from "../tokens.slint";
 
-// A single-line text field.
+// A line that takes letters without being a text field.
+//
+// # Why not a text field (`OBS-145`)
+//
+// The toolkit's text input copies and pastes on its own - `Ctrl+C` and
+// `Ctrl+X` write the clipboard, `Ctrl+V` reads it - and untouchable rule 17
+// promises the clipboard in two places. So this line holds no text input at
+// all: a focus scope hands each key press to Rust, Rust keeps the query
+// (`nkb_gui::query`) and sends it back, and the line draws it as plain text.
+// There is nothing here to copy from or paste into, and that is a property of
+// the structure, not of a list of keys somebody remembered to swallow.
+// `clipboard_has_named_doors.rs` still refuses every text field.
+//
+// What that costs: no caret to move, no selection, no input-method composition.
+// A search needs none of them. The mark after the text shows where the next
+// letter goes and that the keyboard is here - it does not move and it does not
+// blink, because nothing in this tool changes on a timer (`D83`).
 //
 // # One language of states (PORADNIK-GUI 10.9)
 //
 //     pointer here      the edge one step brighter (`border-strong`)
-//     keyboard here     the edge in the accent - a different axis from the
-//                       pointer, so both at once are still told apart
+//     keyboard here     the edge in the accent, and the mark after the text -
+//                       a different axis from the pointer, so both at once are
+//                       still told apart
 //     cannot be used    no edge, the text faded - no invitation
-//     value is wrong    the edge in `risk`, and a sentence under the field
+//     value is wrong    the edge in `risk`, and a sentence under the line
 //                       carries the meaning, and the colour is the third carrier
 //
 // The TEXT colour never changes with the pointer - the owner's rule at the end
 // of PORADNIK-GUI.
 //
-// # Why the pointer area wraps the input rather than sitting beside it
+// # A query longer than the line
 //
-// Read in the Slint 1.18.1 source: a `TouchArea` sets its hover in the filter
-// that runs BEFORE its children and then forwards the event, so as a parent it
-// knows the pointer is over the field while the `TextInput` inside still gets
-// every click and drag for the caret. Beside it, one of the two would starve.
-export component TextField inherits Rectangle {
-    in-out property <string> text <=> input.text;
+// The line shows the END, where the next letter lands, and clips the start at
+// the inner padding. The text measures its own width and the line scrolls it -
+// in a layout, a text that does not wrap may not be narrower than itself, and
+// a long query would have widened the whole window (`slint.md` 2.29).
+export component QueryField inherits Rectangle {
+    in property <string> query;
     in property <bool> enabled: true;
     in property <bool> invalid;
-    // What UI Automation calls the field - the address a harness finds it by
+    // What UI Automation calls the line - the address a harness finds it by
     // (`slint.md` 2.11). A key from `i18n`, like every word a person meets.
     in property <string> accessible-name;
-    out property <bool> has-focus: input.has-focus;
-    callback edited(string);
-    callback accepted();
+    out property <bool> has-focus: scope.has-focus;
+    // One key press, as the text it produced and the modifiers held. Rust
+    // answers whether the press was the query's: false lets it travel on, so a
+    // key the query does not want is not silently eaten.
+    callback pressed(text: string, control: bool, alt: bool, meta: bool) -> bool;
 
-    // Moves the keyboard into the field. A function rather than a property,
+    // Moves the keyboard to the line. A function rather than a property,
     // because focusing is an act, not a state the view could hold.
     public function focus-field() {
-        input.focus();
+        scope.focus();
     }
 
     background: root.enabled ? Tokens.surface-sample : Tokens.surface;
-    // Measured in the first render of the catalogue: without it, a text longer
-    // than the field ran through the inner padding and under the border.
     clip: true;
     border-radius: Tokens.radius;
     border-width: Tokens.hairline;
     border-color: !root.enabled ? transparent
         : root.invalid ? Tokens.risk
-        : input.has-focus ? Tokens.accent
+        : scope.has-focus ? Tokens.accent
         : area.has-hover ? Tokens.border-strong
         : Tokens.border;
-    // The field is as tall as its text and padding, and never taller: stretched
-    // in a column it would become an empty bordered box, which reads as a
-    // failure rather than as room (PORADNIK-GUI 6).
+    // As tall as its text and padding, and never taller: stretched in a column
+    // it would become an empty bordered box, which reads as a failure rather
+    // than as room (PORADNIK-GUI 6).
     height: row.preferred-height;
+    // 🔴 Stated, because a fixed height does not say it. The line inside
+    // stretches sideways, the stretch travels up through the layout, and the
+    // first render of the pack window gave the column holding this line half
+    // of the spare height - the search label floated in the middle of it
+    // (`slint.md` 2.29).
+    vertical-stretch: 0;
 
-    area := TouchArea {
+    scope := FocusScope {
         enabled: root.enabled;
-        // Qualified: bare `text` resolves to the field's own text property.
-        mouse-cursor: MouseCursor.text;
+        accessible-role: text-input;
+        accessible-label: root.accessible-name;
+        accessible-value: root.query;
+        key-pressed(event) => {
+            return root.pressed(event.text, event.modifiers.control, event.modifiers.alt, event.modifiers.meta) ? accept : reject;
+        }
 
-        row := HorizontalLayout {
-            padding-left: Tokens.space-3;
-            padding-right: Tokens.space-3;
-            padding-top: Tokens.space-2;
-            padding-bottom: Tokens.space-2;
+        area := TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: MouseCursor.text;
+            clicked => {
+                scope.focus();
+            }
 
-            input := TextInput {
-                enabled: root.enabled;
-                single-line: true;
-                color: root.enabled ? Tokens.text-primary : Tokens.text-muted;
-                font-size: Tokens.type-body;
-                vertical-alignment: center;
-                selection-background-color: Tokens.accent.with-alpha(Tokens.alpha-selection);
-                selection-foreground-color: Tokens.text-primary;
-                accessible-label: root.accessible-name;
-                edited => {
-                    root.edited(self.text);
-                }
-                accepted => {
-                    root.accepted();
+            row := HorizontalLayout {
+                padding-left: Tokens.space-3;
+                padding-right: Tokens.space-3;
+                padding-top: Tokens.space-2;
+                padding-bottom: Tokens.space-2;
+
+                // Clipped here, at the padding, rather than only at the border:
+                // a scrolled query must not run under the edge.
+                Rectangle {
+                    clip: true;
+                    horizontal-stretch: 1;
+                    // Stated, not left to the text inside: see the header.
+                    min-width: 0px;
+                    preferred-width: 0px;
+                    min-height: shown.preferred-height;
+                    preferred-height: shown.preferred-height;
+
+                    shown := Text {
+                        text: root.query;
+                        color: root.enabled ? Tokens.text-primary : Tokens.text-muted;
+                        font-size: Tokens.type-body;
+                        vertical-alignment: center;
+                        width: self.preferred-width;
+                        height: parent.height;
+                        // At the left while it fits, scrolled so the end and
+                        // the mark stay in view once it does not.
+                        x: min(0px, parent.width - self.width - Tokens.caret-width);
+                    }
+
+                    Rectangle {
+                        visible: scope.has-focus;
+                        x: shown.x + shown.width;
+                        width: Tokens.caret-width;
+                        height: parent.height;
+                        background: Tokens.accent;
+                    }
                 }
             }
         }
@@ -94,13 +144,13 @@ export component TextField inherits Rectangle {
 
 // The keys a list picker answers: move, choose, close.
 //
-// Caught on the way DOWN, before the focused field sees them - `FocusScope`'s
-// `capture-key-pressed`, read in the 1.18.1 source. The field keeps every other
-// key, so typing still types, while Up and Down move through the list rather
-// than through the text and Enter chooses rather than doing nothing.
+// Caught on the way DOWN, before the focused query line sees them -
+// `FocusScope`'s `capture-key-pressed`, read in the 1.18.1 source. The line
+// gets every other key, so typing still types, while Up and Down move through
+// the list and Enter chooses.
 //
 // It never takes the focus itself: a click on the list must leave the keyboard
-// in the search field, where the tester's next letter belongs.
+// on the query line, where the tester's next letter belongs.
 export component PickerKeys inherits FocusScope {
     callback previous();
     callback next();

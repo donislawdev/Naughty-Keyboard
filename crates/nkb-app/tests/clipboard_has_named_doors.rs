@@ -21,9 +21,10 @@
 //!    adapter. Another package reaching for it directly would write the
 //!    clipboard without passing a door.
 //! 3. the toolkit - Slint copies and pastes on its own inside a text field.
-//!    The palette has none, and a view gaining one opens a clipboard path no
-//!    Rust call shows. When the pack search (step 7) brings its field, it
-//!    brings a deliberate edit here with it.
+//!    No view has one, and a view gaining one opens a clipboard path no Rust
+//!    call shows. The pack search (step 7) was built to this rule rather than
+//!    given an exception to it: its query line takes key presses in a focus
+//!    scope and draws the query as plain text (`OBS-145`, `D85`).
 //!
 //! # What this checks, and what it cannot
 //!

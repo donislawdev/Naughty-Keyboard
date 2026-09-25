@@ -132,7 +132,7 @@ export global Tokens {
 
     // The pack window (step 7). An ordinary window the tester resizes, so the
     // default is where it opens and the minimum is where the layout still
-    // reads: the search field, three rows of the list and the key hints. GUI
+    // reads: the query line, three rows of the list and the key hints. GUI
     // rules 21 and 22 - both are dimensions, and dimensions are tokens.
     out property <length> packs-width: 440px;
     out property <length> packs-height: 560px;
@@ -141,6 +141,10 @@ export global Tokens {
     // The thumb that says a list scrolls. Thin, because it is a sign rather
     // than a control - the list scrolls with the wheel and the arrow keys.
     out property <length> scroll-thumb: 4px;
+    // The mark after the query that says where the next letter goes. Two
+    // pixels rather than a hairline: it is the only sign of the keyboard INSIDE
+    // the line, and one pixel of accent beside text reads as a stray stroke.
+    out property <length> caret-width: 2px;
 
     // ---- opacity -----------------------------------------------------------
     // Background alpha of the palette in its resting state (ux-spec.md 2,
@@ -148,9 +152,6 @@ export global Tokens {
     // at rest lose 4.5:1 over a white window beneath. Applied to the surface
     // only, never to text, and only when the system permits translucency.
     out property <float> alpha-resting: 0.90;
-    // Text selected in a field: the accent at this alpha over the field's
-    // inset ground, with the text staying `text-primary`.
-    out property <float> alpha-selection: 0.35;
     // A control that cannot be used. Faded as a whole, because "no invitation"
     // is the message (PORADNIK-GUI 10.9), and WCAG exempts an inactive control
     // from the contrast floor - it is not text the tester must read to act.

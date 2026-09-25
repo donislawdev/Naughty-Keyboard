@@ -13,7 +13,7 @@
 // # Chrome, content, chrome (PORADNIK-GUI 4)
 //
 //     header    the title and how many packs there are
-//     content   the search field above the list
+//     content   the query line above the list
 //     footer    the keys the window answers - the hint bar the palette uses
 //
 // The main action has no button: it is the selected row, edged in the accent,
@@ -37,7 +37,7 @@ import {
     HintRow,
     HintBar,
     ChromeBand,
-    TextField,
+    QueryField,
     PickerKeys,
     PickRow,
     PickList,
@@ -55,16 +55,18 @@ export component PacksWindow inherits Window {
     in property <[PickRow]> rows;
     in property <int> selected;
     in property <[HintRow]> hints;
-    in-out property <string> query <=> field.text;
+    // What the tester has typed so far. Rust keeps it (`nkb_gui::query`) and
+    // sends it back after every press - the line has no text of its own.
+    in property <string> query;
 
-    callback query-edited <=> field.edited;
+    callback query-pressed <=> field.pressed;
     callback previous <=> keys.previous;
     callback next <=> keys.next;
     callback choose <=> keys.choose;
     callback cancel <=> keys.cancel;
     callback clicked <=> list.clicked;
 
-    // The keyboard goes to the search field when the window opens, so the
+    // The keyboard goes to the query line when the window opens, so the
     // first letter the tester types filters the list (PORADNIK-GUI: the focus
     // stands on the first field, never on a close button).
     public function focus-search() {
@@ -101,15 +103,16 @@ export component PacksWindow inherits Window {
                 spacing: Tokens.space-3;
                 vertical-stretch: 1;
 
-                // A visible label above the field, not a placeholder inside it:
+                // A visible label above the line, not a placeholder inside it:
                 // a placeholder disappears with the first letter, and with it
-                // the only sentence saying what the field searches.
+                // the only sentence saying what the line searches.
                 VerticalLayout {
                     spacing: Tokens.space-1;
                     TextSmallMuted {
                         text: root.search-label;
                     }
-                    field := TextField {
+                    field := QueryField {
+                        query: root.query;
                         accessible-name: root.search-label;
                     }
                 }
