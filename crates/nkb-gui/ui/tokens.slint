@@ -75,6 +75,12 @@ export global Tokens {
     // of invisible characters still reads as an object with edges.
     out property <color> surface-sample: #0E1014;
     out property <color> border: #2A2F3A;
+    // The edge of a control under the pointer. NOT a text colour and never a
+    // background: it is measured as an edge, 1.56:1 against `border` so the
+    // change is visible, and the keyboard focus (`accent`) still stands out
+    // from it at 3.42:1 - document 13 and PORADNIK-GUI 10.10: a new state is
+    // judged against the OLD state, not only against the ground.
+    out property <color> border-strong: #454C5C;
 
     // ---- text --------------------------------------------------------------
     out property <color> text-primary: #E6E9EF;
@@ -124,12 +130,31 @@ export global Tokens {
     out property <length> palette-width: 420px;
     out property <length> sample-height: 40px;
 
+    // The pack window (step 7). An ordinary window the tester resizes, so the
+    // default is where it opens and the minimum is where the layout still
+    // reads: the search field, three rows of the list and the key hints. GUI
+    // rules 21 and 22 - both are dimensions, and dimensions are tokens.
+    out property <length> packs-width: 440px;
+    out property <length> packs-height: 560px;
+    out property <length> packs-min-width: 360px;
+    out property <length> packs-min-height: 360px;
+    // The thumb that says a list scrolls. Thin, because it is a sign rather
+    // than a control - the list scrolls with the wheel and the arrow keys.
+    out property <length> scroll-thumb: 4px;
+
     // ---- opacity -----------------------------------------------------------
     // Background alpha of the palette in its resting state (ux-spec.md 2,
     // D49, D53). A measured floor, see the header: below 0.90 the roles shown
     // at rest lose 4.5:1 over a white window beneath. Applied to the surface
     // only, never to text, and only when the system permits translucency.
     out property <float> alpha-resting: 0.90;
+    // Text selected in a field: the accent at this alpha over the field's
+    // inset ground, with the text staying `text-primary`.
+    out property <float> alpha-selection: 0.35;
+    // A control that cannot be used. Faded as a whole, because "no invitation"
+    // is the message (PORADNIK-GUI 10.9), and WCAG exempts an inactive control
+    // from the contrast floor - it is not text the tester must read to act.
+    out property <float> alpha-disabled: 0.5;
 
     // ---- shape -------------------------------------------------------------
     out property <length> radius-small: 4px;

@@ -1,0 +1,132 @@
+// Controls that take the keyboard: the text field, and the keys a picker
+// answers before the field sees them.
+//
+// Separate from `chrome.slint` because these RECEIVE - they have a focus, a
+// pointer state and callbacks - while everything there only arranges. Document
+// 13 and PORADNIK-GUI 11 point 5: what draws and what reacts live apart, so a
+// control cannot grow unnoticed inside the file of things that are only shapes.
+
+import { Tokens } from "../tokens.slint";
+
+// A single-line text field.
+//
+// # One language of states (PORADNIK-GUI 10.9)
+//
+//     pointer here      the edge one step brighter (`border-strong`)
+//     keyboard here     the edge in the accent - a different axis from the
+//                       pointer, so both at once are still told apart
+//     cannot be used    no edge, the text faded - no invitation
+//     value is wrong    the edge in `risk`, and a sentence under the field
+//                       carries the meaning, and the colour is the third carrier
+//
+// The TEXT colour never changes with the pointer - the owner's rule at the end
+// of PORADNIK-GUI.
+//
+// # Why the pointer area wraps the input rather than sitting beside it
+//
+// Read in the Slint 1.18.1 source: a `TouchArea` sets its hover in the filter
+// that runs BEFORE its children and then forwards the event, so as a parent it
+// knows the pointer is over the field while the `TextInput` inside still gets
+// every click and drag for the caret. Beside it, one of the two would starve.
+export component TextField inherits Rectangle {
+    in-out property <string> text <=> input.text;
+    in property <bool> enabled: true;
+    in property <bool> invalid;
+    // What UI Automation calls the field - the address a harness finds it by
+    // (`slint.md` 2.11). A key from `i18n`, like every word a person meets.
+    in property <string> accessible-name;
+    out property <bool> has-focus: input.has-focus;
+    callback edited(string);
+    callback accepted();
+
+    // Moves the keyboard into the field. A function rather than a property,
+    // because focusing is an act, not a state the view could hold.
+    public function focus-field() {
+        input.focus();
+    }
+
+    background: root.enabled ? Tokens.surface-sample : Tokens.surface;
+    // Measured in the first render of the catalogue: without it, a text longer
+    // than the field ran through the inner padding and under the border.
+    clip: true;
+    border-radius: Tokens.radius;
+    border-width: Tokens.hairline;
+    border-color: !root.enabled ? transparent
+        : root.invalid ? Tokens.risk
+        : input.has-focus ? Tokens.accent
+        : area.has-hover ? Tokens.border-strong
+        : Tokens.border;
+    // The field is as tall as its text and padding, and never taller: stretched
+    // in a column it would become an empty bordered box, which reads as a
+    // failure rather than as room (PORADNIK-GUI 6).
+    height: row.preferred-height;
+
+    area := TouchArea {
+        enabled: root.enabled;
+        // Qualified: bare `text` resolves to the field's own text property.
+        mouse-cursor: MouseCursor.text;
+
+        row := HorizontalLayout {
+            padding-left: Tokens.space-3;
+            padding-right: Tokens.space-3;
+            padding-top: Tokens.space-2;
+            padding-bottom: Tokens.space-2;
+
+            input := TextInput {
+                enabled: root.enabled;
+                single-line: true;
+                color: root.enabled ? Tokens.text-primary : Tokens.text-muted;
+                font-size: Tokens.type-body;
+                vertical-alignment: center;
+                selection-background-color: Tokens.accent.with-alpha(Tokens.alpha-selection);
+                selection-foreground-color: Tokens.text-primary;
+                accessible-label: root.accessible-name;
+                edited => {
+                    root.edited(self.text);
+                }
+                accepted => {
+                    root.accepted();
+                }
+            }
+        }
+    }
+}
+
+// The keys a list picker answers: move, choose, close.
+//
+// Caught on the way DOWN, before the focused field sees them - `FocusScope`'s
+// `capture-key-pressed`, read in the 1.18.1 source. The field keeps every other
+// key, so typing still types, while Up and Down move through the list rather
+// than through the text and Enter chooses rather than doing nothing.
+//
+// It never takes the focus itself: a click on the list must leave the keyboard
+// in the search field, where the tester's next letter belongs.
+export component PickerKeys inherits FocusScope {
+    callback previous();
+    callback next();
+    callback choose();
+    callback cancel();
+
+    focus-on-click: false;
+    focus-on-tab-navigation: false;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.UpArrow {
+            root.previous();
+            return accept;
+        }
+        if event.text == Key.DownArrow {
+            root.next();
+            return accept;
+        }
+        if event.text == Key.Return {
+            root.choose();
+            return accept;
+        }
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        return reject;
+    }
+}

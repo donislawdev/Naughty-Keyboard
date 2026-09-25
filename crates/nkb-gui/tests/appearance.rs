@@ -93,7 +93,7 @@ impl Platform for Headless {
 }
 
 const WIDTH: u32 = 420;
-const HEIGHT: u32 = 640;
+const HEIGHT: u32 = 1280;
 
 fn draw(window: &Rc<MinimalSoftwareWindow>) -> Vec<Pixel> {
     let mut buffer = vec![Pixel::default(); (WIDTH * HEIGHT) as usize];
