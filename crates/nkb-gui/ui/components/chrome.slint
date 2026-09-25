@@ -180,6 +180,38 @@ export component Zone inherits Rectangle {
     }
 }
 
+// A band of an ordinary window's chrome: the header above the content, or the
+// footer below it.
+//
+// PORADNIK-GUI 4: chrome touches the window's edge, stands on a ground of its
+// own and is parted from the content by a hairline - no rounding and no frame,
+// because chrome is not content. The hairline sits on the side that faces the
+// content, which is why the band is told where it is rather than left to guess.
+//
+// The height is stated from the band's own layout for the reason `Zone` gives
+// (`slint.md` 2.23): a band that only reports it can come out short.
+export component ChromeBand inherits Rectangle {
+    in property <bool> at-bottom;
+
+    background: Tokens.surface-raised;
+    height: band.preferred-height;
+
+    band := VerticalLayout {
+        if root.at-bottom: Hairline { }
+
+        VerticalLayout {
+            padding-left: Tokens.space-4;
+            padding-right: Tokens.space-4;
+            padding-top: Tokens.space-3;
+            padding-bottom: Tokens.space-3;
+            spacing: Tokens.space-2;
+            @children
+        }
+
+        if !root.at-bottom: Hairline { }
+    }
+}
+
 // One thing worth knowing about the value that just went out.
 //
 // 🔴 `risky` is a fact, not a colour. The layer that fills this model must not

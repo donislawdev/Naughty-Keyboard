@@ -1,0 +1,137 @@
+// The pack window: find a pack by typing, choose it with Enter.
+//
+// # An ordinary window, and the one moment the tool takes the keyboard
+//
+// `ux-spec.md` 5.2 calls choosing a pack the only moment the tool holds the
+// keyboard focus. The palette cannot be that window: it refuses the focus by
+// design (`D62`), and `hide()`/`show()` would destroy it and lose the flag
+// (`OBS-80`). So this is a window of its own, opened on request by the
+// shortcut or a click on the pack's name in the palette, and closed by Enter or
+// Escape - after which the focus goes back to the field it came from. Rust
+// does that, and this file only lays the window out.
+//
+// # Chrome, content, chrome (PORADNIK-GUI 4)
+//
+//     header    the title and how many packs there are
+//     content   the query line above the list
+//     footer    the keys the window answers - the hint bar the palette uses
+//
+// The main action has no button: it is the selected row, edged in the accent,
+// and Enter - which the footer names first. A button saying "Open" beside a
+// list whose row already opens on Enter and on a click would be a second way
+// to do one thing (GUI rule 2).
+//
+// # Nothing is decided here
+//
+// Which packs match, which one is selected and what Enter does are Rust's: the
+// filter and the cursor live in a type that knows no toolkit (GUI rule 15), and
+// the callbacks below are ALIASES of the components' own, so this file holds no
+// handler body at all (GUI rule 11). Every word arrives finished from
+// `nkb-adapters::i18n` - untouchable rule 9, and `ui_guard.rs` refuses a quote.
+
+import {
+    Tokens,
+    TextName,
+    TextSmallMuted,
+    Spacer,
+    HintRow,
+    HintBar,
+    ChromeBand,
+    QueryField,
+    PickerKeys,
+    PickRow,
+    PickList,
+} from "../components.slint";
+
+export component PacksWindow inherits Window {
+    in property <string> window-title;
+    in property <string> heading;
+    // How many packs the list holds, as a finished line.
+    in property <string> summary;
+    in property <string> search-label;
+    in property <string> current-label;
+    // What the list says when nothing matches, or when it could not be read.
+    in property <string> empty-text;
+    in property <[PickRow]> rows;
+    in property <int> selected;
+    in property <[HintRow]> hints;
+    // What the tester has typed so far. Rust keeps it (`nkb_gui::query`) and
+    // sends it back after every press - the line has no text of its own.
+    in property <string> query;
+
+    callback query-pressed <=> field.pressed;
+    callback previous <=> keys.previous;
+    callback next <=> keys.next;
+    callback choose <=> keys.choose;
+    callback cancel <=> keys.cancel;
+    callback clicked <=> list.clicked;
+
+    // The keyboard goes to the query line when the window opens, so the
+    // first letter the tester types filters the list (PORADNIK-GUI: the focus
+    // stands on the first field, never on a close button).
+    public function focus-search() {
+        field.focus-field();
+    }
+
+    title: root.window-title;
+    background: Tokens.surface;
+    preferred-width: Tokens.packs-width;
+    preferred-height: Tokens.packs-height;
+    min-width: Tokens.packs-min-width;
+    min-height: Tokens.packs-min-height;
+    // Above the palette, which is always on top itself: the window the tester
+    // asked for must not open underneath the one it came from.
+    always-on-top: true;
+
+    keys := PickerKeys {
+        VerticalLayout {
+            ChromeBand {
+                HorizontalLayout {
+                    spacing: Tokens.space-2;
+                    TextName {
+                        text: root.heading;
+                    }
+                    Spacer { }
+                    TextSmallMuted {
+                        text: root.summary;
+                    }
+                }
+            }
+
+            VerticalLayout {
+                padding: Tokens.space-4;
+                spacing: Tokens.space-3;
+                vertical-stretch: 1;
+
+                // A visible label above the line, not a placeholder inside it:
+                // a placeholder disappears with the first letter, and with it
+                // the only sentence saying what the line searches.
+                VerticalLayout {
+                    spacing: Tokens.space-1;
+                    TextSmallMuted {
+                        text: root.search-label;
+                    }
+                    field := QueryField {
+                        query: root.query;
+                        accessible-name: root.search-label;
+                    }
+                }
+
+                list := PickList {
+                    rows: root.rows;
+                    selected: root.selected;
+                    current-label: root.current-label;
+                    empty-text: root.empty-text;
+                    vertical-stretch: 1;
+                }
+            }
+
+            ChromeBand {
+                at-bottom: true;
+                HintBar {
+                    rows: root.hints;
+                }
+            }
+        }
+    }
+}

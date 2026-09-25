@@ -49,3 +49,6 @@ pub mod typeface;
 // The system clipboard, for the report block. Here rather than in nkb-adapters
 // because the library behind it must never reach `nkb` - the module says why.
 pub mod clipboard;
+// The pack search's query, typed without a text field (`OBS-145`). No toolkit
+// in it, so what a key press means is tested without a window (GUI rule 15).
+pub mod query;

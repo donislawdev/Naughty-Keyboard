@@ -27,7 +27,7 @@
 // shipped code, which is the setting that matters.
 #![allow(clippy::panic, clippy::expect_used)]
 
-use nkb_core::graphemes::count;
+use nkb_core::graphemes::{count, last_cluster_start};
 use std::path::{Path, PathBuf};
 
 /// The break sign, `U+00F7`. Written as an escape rather than as itself so that
@@ -54,6 +54,9 @@ struct Case {
     line: usize,
     text: String,
     clusters: usize,
+    /// The byte offset where the last cluster begins, from the last break sign
+    /// that is not the end of the text.
+    last_start: usize,
     source: String,
 }
 
@@ -65,6 +68,7 @@ fn parse(line_number: usize, line: &str) -> Option<Case> {
 
     let mut text = String::new();
     let mut clusters = 0usize;
+    let mut last_start = 0usize;
     let mut tokens = body.split_whitespace().peekable();
 
     while let Some(token) = tokens.next() {
@@ -74,6 +78,7 @@ fn parse(line_number: usize, line: &str) -> Option<Case> {
                 // text, which starts no cluster. Every other one does.
                 if tokens.peek().is_some() {
                     clusters += 1;
+                    last_start = text.len();
                 }
             }
             Some(NO_BREAK) => {}
@@ -92,6 +97,7 @@ fn parse(line_number: usize, line: &str) -> Option<Case> {
         line: line_number,
         text,
         clusters,
+        last_start,
         source: body.to_string(),
     })
 }
@@ -133,6 +139,47 @@ fn the_whole_official_suite_agrees_with_this_counter() {
         wrong.len(),
         cases.len(),
         wrong.join("\n")
+    );
+}
+
+#[test]
+fn the_whole_official_suite_agrees_where_the_last_cluster_begins() {
+    // The erasing point of a search line (`OBS-145`) is read from the same scan
+    // as the count, so the suite that judges one judges the other. Every case,
+    // not a sample: the cases a sample leaves out are the flag and conjunct
+    // runs, which are the ones a point found from the end gets wrong.
+    let cases = cases();
+    let mut wrong = Vec::new();
+    for case in &cases {
+        let got = last_cluster_start(&case.text);
+        if got != case.last_start {
+            wrong.push(format!(
+                "  line {}: expected byte {}, got {}\n    {}",
+                case.line, case.last_start, got, case.source
+            ));
+        }
+    }
+
+    assert!(
+        wrong.is_empty(),
+        "{} of {} conformance cases disagree on where the last cluster begins:\n{}",
+        wrong.len(),
+        cases.len(),
+        wrong.join("\n")
+    );
+
+    // The positive control: an answer of "the last code point" must disagree
+    // with the suite often enough for the green above to mean something.
+    let by_code_point = cases
+        .iter()
+        .filter(|case| {
+            let last_char = case.text.char_indices().last().map_or(0, |(at, _)| at);
+            last_char != case.last_start
+        })
+        .count();
+    assert!(
+        by_code_point > 100,
+        "only {by_code_point} cases tell the last cluster from the last code point"
     );
 }
 

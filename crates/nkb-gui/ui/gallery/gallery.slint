@@ -33,6 +33,9 @@ import {
     MarkerRow,
     Zone,
     WindowSurface,
+    ChromeBand,
+    QueryField,
+    PickList,
 } from "../components.slint";
 
 export component Gallery inherits Window {
@@ -136,6 +139,44 @@ export component Gallery inherits Window {
             height: Tokens.sample-height;
             WindowSurface { }
             WindowSurface { dimmed: true; }
+        }
+
+        Hairline {}
+
+        // The pack window's pieces (step 7). The query line in the states a
+        // still picture can hold: empty, at rest, cannot be used, a wrong
+        // value, and a query far too long - which must show its END, where the
+        // next letter goes. The pointer and keyboard states need a pointer and
+        // a focus, so `packs_appearance.rs` measures them on the real window.
+        QueryField { }
+        QueryField { query: "unicode"; }
+        QueryField { query: "cannot be used"; enabled: false; }
+        QueryField { query: "a wrong value"; invalid: true; }
+        QueryField { query: "a query long enough to run past the right edge of the line - so it shows this end"; }
+
+        // A band of a window's chrome, as the pack window's header uses it.
+        ChromeBand {
+            HorizontalLayout {
+                TextName { text: "ChromeBand"; }
+                Spacer { }
+                TextSmallMuted { text: "packs: 9"; }
+            }
+        }
+
+        // The pick list: selected, in use, a risk badge, a row that cannot be
+        // chosen, and a name far too long - then the same list with nothing in it.
+        PickList {
+            selected: 0;
+            current-label: "in use";
+            rows: [
+                { title: "Unicode & text", detail: "unicode-text . values: 34", current: true, enabled: true },
+                { title: "Injections", detail: "injections . values: 40", badge: "offensive", has-badge: true, badge-risky: true, enabled: true },
+                { title: "A pack whose name is far too long for one line of the list", detail: "long-name . values: 1", enabled: true },
+                { title: "Broken pack", detail: "broken . problems: 3", badge: "problems: 3", has-badge: true, badge-risky: true, enabled: false },
+            ];
+        }
+        PickList {
+            empty-text: "PickList with no rows says why, in its own sentence.";
         }
 
         Hairline {}

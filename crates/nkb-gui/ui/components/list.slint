@@ -1,0 +1,198 @@
+// A list to pick one thing from: the packs today, the shortcuts next.
+//
+// # Built for the count the list WILL have, not the count it has
+//
+// PORADNIK-GUI 8: the catalogue ships nine packs today, twenty are specified,
+// and team and personal folders add more. So the list sits under a search
+// field (the screen's job) and scrolls (this file's job), and its rows come
+// from DATA - a model of `PickRow` - so a longer list is more data, never more
+// markup (GUI rule 8).
+
+import { Tokens } from "../tokens.slint";
+import { TextName, TextBody } from "typography.slint";
+import { Pill } from "chrome.slint";
+
+// One row, as finished strings and facts.
+//
+// The flags are FACTS and the view picks the look: `badge-risky` says the badge
+// names a risk, and which colour a risk wears is the dictionary's business
+// (document 13 section 2.1). `has-badge` exists because comparing `badge` with
+// an empty string would put a quoted string in a view, which `ui_guard.rs`
+// refuses (D58).
+export struct PickRow {
+    title: string,
+    detail: string,
+    badge: string,
+    has-badge: bool,
+    badge-risky: bool,
+    // The thing in use right now - the pack the palette holds.
+    current: bool,
+    // False for a row that cannot be chosen, such as a pack that does not load.
+    // It stays in the list, faded, because a thing that vanished from a list
+    // cannot be asked about - untouchable rule 1.
+    enabled: bool,
+}
+
+// One row, in every state.
+//
+//     pointer here     ground one step brighter (`surface-raised`)
+//     pressed          ground one step DARKER (`surface-sample`)
+//     keyboard here    the edge in the accent
+//     in use           a pill with the word - never the colour alone
+//     cannot be used   faded as a whole, no pointer state
+//
+// 🔴 Pressed goes DARKER, and that is measured rather than a style. Every
+// ground brighter than `surface-raised` takes `text-muted` below 4.5:1 - the
+// best candidate gave 4.11 - so a brighter pressed step would have been one
+// more colour pair that fails. The inset ground is already measured with every
+// text role, and a row that sinks when pressed reads as pressed.
+component PickRowView inherits Rectangle {
+    in property <PickRow> item;
+    in property <bool> selected;
+    in property <string> current-label;
+    callback clicked();
+    // Asks the list to scroll so that this row is visible.
+    callback reveal(length, length);
+
+    border-radius: Tokens.radius;
+    border-width: Tokens.hairline;
+    border-color: root.selected ? Tokens.accent : transparent;
+    background: !root.item.enabled ? transparent
+        : area.pressed ? Tokens.surface-sample
+        : area.has-hover ? Tokens.surface-raised
+        : transparent;
+    opacity: root.item.enabled ? 1 : Tokens.alpha-disabled;
+    height: content.preferred-height;
+
+    // A row that becomes the selected one brings itself into view - the arrow
+    // keys move the selection, and a selection below the fold is a selection
+    // the tester cannot see. Asked on creation as well, because the list opens
+    // with the pack in use already selected.
+    changed selected => {
+        if self.selected {
+            root.reveal(self.y, self.height);
+        }
+    }
+    init => {
+        if self.selected {
+            root.reveal(self.y, self.height);
+        }
+    }
+
+    area := TouchArea {
+        enabled: root.item.enabled;
+        clicked => {
+            root.clicked();
+        }
+
+        content := HorizontalLayout {
+            padding: Tokens.space-2;
+            spacing: Tokens.space-2;
+
+            VerticalLayout {
+                alignment: center;
+                spacing: Tokens.space-1;
+                horizontal-stretch: 1;
+
+                // Elided, not wrapped: a row that grows a line because of a long
+                // name moves every row below it, and a list must hold still.
+                TextName {
+                    text: root.item.title;
+                    overflow: elide;
+                }
+                TextBody {
+                    text: root.item.detail;
+                    overflow: elide;
+                }
+            }
+
+            HorizontalLayout {
+                alignment: end;
+                spacing: Tokens.space-2;
+                horizontal-stretch: 0;
+
+                if root.item.current: VerticalLayout {
+                    alignment: center;
+                    Pill {
+                        text: root.current-label;
+                        tint: Tokens.accent;
+                    }
+                }
+                if root.item.has-badge: VerticalLayout {
+                    alignment: center;
+                    Pill {
+                        text: root.item.badge;
+                        tint: root.item.badge-risky ? Tokens.risk : Tokens.text-muted;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// The list: rows from a model, one of them selected, scrolling when it has to.
+//
+// With no rows it says why, in `empty-text` - a list that is empty and silent
+// looks the same as a list that failed (GUI rule 3).
+export component PickList inherits Rectangle {
+    in property <[PickRow]> rows;
+    in property <int> selected;
+    in property <string> current-label;
+    in property <string> empty-text;
+    callback clicked(int);
+
+    // As tall as its rows, or as its empty sentence, when nothing asks for
+    // more - so the catalogue shows the whole list. A window that gives it
+    // `vertical-stretch` makes it fill the room and scroll inside it.
+    preferred-height: root.rows.length == 0 ? empty-note.preferred-height : stack.preferred-height;
+
+    flick := Flickable {
+        content-width: self.width;
+        content-height: stack.preferred-height;
+
+        stack := VerticalLayout {
+            width: flick.width;
+            alignment: start;
+            spacing: Tokens.space-1;
+
+            for row[index] in root.rows: PickRowView {
+                item: row;
+                selected: index == root.selected;
+                current-label: root.current-label;
+                clicked => {
+                    root.clicked(index);
+                }
+                // The smallest move that shows the whole row: up to its top
+                // when it is above the view, down to its bottom when below.
+                reveal(top, tall) => {
+                    if top + flick.content-y < 0 {
+                        flick.content-y = -top;
+                    } else if top + tall + flick.content-y > flick.height {
+                        flick.content-y = flick.height - top - tall;
+                    }
+                }
+            }
+        }
+    }
+
+    // The thumb: a sign that there is more below, drawn only when there is.
+    if stack.preferred-height > flick.height: Rectangle {
+        x: root.width - Tokens.scroll-thumb;
+        y: -flick.content-y * flick.height / stack.preferred-height;
+        width: Tokens.scroll-thumb;
+        height: flick.height * flick.height / stack.preferred-height;
+        border-radius: Tokens.scroll-thumb / 2;
+        background: Tokens.border-strong;
+    }
+
+    // Always built and shown only when empty, so its height can be read above.
+    empty-note := VerticalLayout {
+        visible: root.rows.length == 0;
+        alignment: start;
+        padding: Tokens.space-2;
+        TextBody {
+            text: root.empty-text;
+            wrap: word-wrap;
+        }
+    }
+}

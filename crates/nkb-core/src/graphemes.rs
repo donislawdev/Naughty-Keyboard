@@ -293,26 +293,69 @@ fn is_boundary(trail: &Trail, before: Properties, after: Properties) -> bool {
 /// because an empty value is a value this catalogue ships on purpose.
 #[must_use]
 pub fn count(text: &str) -> usize {
-    let mut characters = text.chars();
-    let Some(first) = characters.next() else {
-        return 0;
-    };
+    ClusterStarts::new(text).count()
+}
 
-    let mut previous = properties(first);
-    let mut trail = Trail::new();
-    trail.push(previous);
-    let mut clusters = 1usize;
+/// The byte offset at which the last cluster of `text` begins - where a
+/// Backspace that erases one character a person can see has to cut.
+///
+/// Zero for empty text, which has no last cluster to begin anywhere. Always a
+/// character boundary, so `&text[..at]` never panics.
+///
+/// # Why a forward scan to erase from the end
+///
+/// UAX #29 is written forwards and two of its rules count what came before: a
+/// flag pairs regional indicators from the START of the run (GB12, GB13), and a
+/// conjunct needs the consonant that opened it (GB9c). Read backwards, a run of
+/// five indicators cannot say whether the last one stands alone. The scan is
+/// linear in the text, and the text this serves is a line a person typed.
+#[must_use]
+pub fn last_cluster_start(text: &str) -> usize {
+    ClusterStarts::new(text).last().unwrap_or(0)
+}
 
-    for character in characters {
-        let current = properties(character);
-        if is_boundary(&trail, previous, current) {
-            clusters = clusters.saturating_add(1);
+/// The byte offsets at which the clusters of a text begin, in order.
+///
+/// The one place the rules are applied, so the count and the erasing point
+/// cannot disagree about where a cluster ends - the conformance suite checks
+/// both through this.
+struct ClusterStarts<'a> {
+    rest: std::str::CharIndices<'a>,
+    /// The last character read and the trail it ends. `None` before the first.
+    seen: Option<(Properties, Trail)>,
+}
+
+impl<'a> ClusterStarts<'a> {
+    fn new(text: &'a str) -> Self {
+        Self {
+            rest: text.char_indices(),
+            seen: None,
         }
-        trail.push(current);
-        previous = current;
     }
+}
 
-    clusters
+impl Iterator for ClusterStarts<'_> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<usize> {
+        for (at, character) in self.rest.by_ref() {
+            let current = properties(character);
+            let Some((previous, trail)) = self.seen.as_mut() else {
+                // GB1: the start of a non-empty text is always a boundary.
+                let mut trail = Trail::new();
+                trail.push(current);
+                self.seen = Some((current, trail));
+                return Some(at);
+            };
+            let boundary = is_boundary(trail, *previous, current);
+            trail.push(current);
+            *previous = current;
+            if boundary {
+                return Some(at);
+            }
+        }
+        None
+    }
 }
 
 #[cfg(test)]
@@ -405,6 +448,39 @@ mod tests {
     fn a_skin_tone_modifier_does_not_start_a_second_cluster() {
         let waving = format!("{}{}", cp(0x1F44B), cp(0x1F3FD));
         assert_eq!(count(&waving), 1);
+    }
+
+    #[test]
+    fn the_last_cluster_of_empty_text_begins_nowhere_but_zero() {
+        assert_eq!(last_cluster_start(""), 0);
+    }
+
+    #[test]
+    fn erasing_the_last_cluster_takes_its_combining_mark_with_it() {
+        // "e" and a combining acute accent are one cluster. Erasing one code
+        // point would leave a bare "e" and a person who saw one letter vanish
+        // only half-way.
+        let text = format!("ab{}{}", 'e', cp(0x0301));
+        assert_eq!(last_cluster_start(&text), 2);
+    }
+
+    #[test]
+    fn a_flag_after_a_lone_indicator_is_found_by_counting_from_the_start() {
+        // Three indicators: the first two are a flag, the third stands alone.
+        // Five: two flags and a lone one. A backwards reader cannot tell these
+        // apart from the end - the reason the scan runs forwards.
+        let one = cp(0x1F1F5);
+        let three = one.repeat(3);
+        assert_eq!(last_cluster_start(&three), one.len() * 2);
+        let four = one.repeat(4);
+        assert_eq!(last_cluster_start(&four), one.len() * 2);
+    }
+
+    #[test]
+    fn the_last_cluster_start_is_always_a_character_boundary() {
+        let text = format!("x{}{}", cp(0x1F468), cp(0x200D));
+        let at = last_cluster_start(&text);
+        assert!(text.is_char_boundary(at));
     }
 
     #[test]
