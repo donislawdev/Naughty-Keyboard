@@ -413,6 +413,14 @@ impl SettingsStore for SettingsFile {
         if !set(&mut document, change) {
             return Ok(());
         }
+        // 🔴 Asked here rather than left to the rename, and measured on three
+        // systems: on Windows a rename over a read-only file fails, on Linux and
+        // macOS it SUCCEEDS - the folder's permission decides there, not the
+        // file's - so the tester's lock held on one system of three. Asked after
+        // `set`, so a change already in the file still answers without a write.
+        if std::fs::metadata(&target).is_ok_and(|meta| meta.permissions().readonly()) {
+            return Err(SaveError::Unwritable);
+        }
         let mut text = document.to_string();
         if crlf {
             text = text.replace("\r\n", "\n").replace('\n', "\r\n");
