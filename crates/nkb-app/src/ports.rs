@@ -460,7 +460,7 @@ impl CatalogueSource {
 /// Why a source was not read. Never a bare "no".
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceSkipped {
-    /// This build has no settings file yet, so the folder cannot be named.
+    /// The settings file has no key for this folder yet, so it cannot be named.
     NotImplementedYet,
     /// Configured, but nothing is at that location.
     NotConfigured,

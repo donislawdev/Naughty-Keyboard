@@ -52,3 +52,6 @@ pub mod clipboard;
 // The pack search's query, typed without a text field (`OBS-145`). No toolkit
 // in it, so what a key press means is tested without a window (GUI rule 15).
 pub mod query;
+// Choosing a pack: the list, the query and the selected row, tested without a
+// window. The pack window draws what this decides (step 7, K3.2).
+pub mod picker;

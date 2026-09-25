@@ -66,7 +66,8 @@ use nkb_app::advance_sequence::{ChooseError, Message};
 use nkb_app::drive_sequence::Ended;
 use nkb_app::keep_settings::SettingsMessage;
 use nkb_app::ports::{
-    SaveError, SettingsNote, SettingsUnusable, ShortcutRegistration, ShortcutsUnavailable,
+    CatalogueCoverage, CatalogueSource, SaveError, SettingsNote, SettingsUnusable,
+    ShortcutRegistration, ShortcutsUnavailable, SourceSkipped,
 };
 use nkb_core::hotkeys::{HotkeyAction, HotkeyChord, HotkeyKey, default_chord};
 use nkb_core::preview::ShapeFact;
@@ -1085,6 +1086,212 @@ pub fn warnings(count: usize) -> String {
     )
 }
 
+/// The words of the pack window (`ux-spec.md` 5.2 and 6 K).
+///
+/// Its own enum rather than more `PaletteLabel` variants: the pack window is a
+/// second window with its own words, and a label is found by the window it
+/// stands in. Like `PaletteLabel`, it lives here and not in `app`, because only
+/// a window needs to know that a pack is listed on two lines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PacksLabel {
+    /// The window's title, which the system shows in the task switcher.
+    Title,
+    /// The heading above the list.
+    Heading,
+    /// How many packs the list holds.
+    Summary,
+    /// The same, while the query hides some of them - so a short list is never
+    /// mistaken for a small catalogue.
+    SummaryFiltered,
+    /// The label above the query line, saying what it searches.
+    Search,
+    /// The pill on the pack the palette holds now.
+    InUse,
+    /// The second line of a pack that loads: its id and how many values.
+    Detail,
+    /// The pill on a pack with any offensive value (`product-spec.md` 10.2).
+    Offensive,
+    /// The second line of a pack that is present and refused.
+    Refused,
+    /// The pill on it: how many problems block it.
+    Problems,
+    /// The second line of a pack whose file would not open.
+    Unreadable,
+    /// The list is empty because nothing matches the query.
+    NoMatch,
+    /// The catalogue holds no pack at all.
+    NoPacks,
+    /// The catalogue itself could not be read.
+    ListUnavailable,
+    /// Which sources the list did not read, and why. 🔴 Said on every opening
+    /// while a source is unread: a list from one source of three looks exactly
+    /// like a complete one (untouchable rule 1, the same rule `nkb packs` keeps).
+    NotRead,
+    /// The words for the sources, inside `NotRead`.
+    SourceBuiltIn,
+    SourceTeam,
+    SourceOwn,
+    /// The reasons, inside `NotRead`.
+    ReasonNotCarried,
+    ReasonCannotBeSet,
+    ReasonNotSet,
+    ReasonUnreadable,
+    /// The footer: each key, and what it does here.
+    KeyEnter,
+    UsePack,
+    KeyEscape,
+    Close,
+    KeyArrows,
+    Move,
+}
+
+fn pattern_packs_label(label: PacksLabel) -> &'static str {
+    match label {
+        PacksLabel::Title => "Naughty Keyboard - packs",
+        PacksLabel::Heading => "Packs",
+        PacksLabel::Summary => "packs: {count}",
+        PacksLabel::SummaryFiltered => "packs: {shown} of {total}",
+        PacksLabel::Search => "Search by name, tag, description or id",
+        PacksLabel::InUse => "in use",
+        PacksLabel::Detail => "{id}, values: {count}",
+        PacksLabel::Offensive => "offensive",
+        PacksLabel::Refused => "{id}, does not load",
+        PacksLabel::Problems => "problems: {count}",
+        PacksLabel::Unreadable => "{id}, cannot be read",
+        PacksLabel::NoMatch => "No pack matches \"{query}\". Press Backspace to widen the search.",
+        PacksLabel::NoPacks => {
+            "No pack was found, so there is nothing to choose from. The note below says which sources were read."
+        }
+        PacksLabel::ListUnavailable => {
+            "The pack list could not be read, so there is nothing to choose from. Close this window and start the palette with a pack name."
+        }
+        PacksLabel::NotRead => "Not read: {sources} - {reason}.",
+        PacksLabel::SourceBuiltIn => "built-in packs",
+        PacksLabel::SourceTeam => "team folder",
+        PacksLabel::SourceOwn => "own folder",
+        PacksLabel::ReasonNotCarried => "not carried by this build",
+        PacksLabel::ReasonCannotBeSet => "cannot be set in this version",
+        PacksLabel::ReasonNotSet => "no folder is set",
+        PacksLabel::ReasonUnreadable => "the folder could not be read",
+        PacksLabel::KeyEnter => "Enter",
+        PacksLabel::UsePack => "Use the pack",
+        PacksLabel::KeyEscape => "Esc",
+        PacksLabel::Close => "Close",
+        PacksLabel::KeyArrows => "↑ ↓",
+        PacksLabel::Move => "Move through the list",
+    }
+}
+
+/// A pack window label that carries nothing, ready to show.
+///
+/// The same division as [`label`]: a pattern with a placeholder has a typed
+/// function below, and the test at the bottom refuses one reached from here.
+#[must_use]
+pub fn packs_label(label: PacksLabel) -> &'static str {
+    pattern_packs_label(label)
+}
+
+/// How many packs the list shows - and of how many, while a query hides some.
+#[must_use]
+pub fn packs_summary(shown: usize, total: usize) -> String {
+    if shown == total {
+        fill(
+            pattern_packs_label(PacksLabel::Summary),
+            &[("count", &total.to_string())],
+        )
+    } else {
+        fill(
+            pattern_packs_label(PacksLabel::SummaryFiltered),
+            &[("shown", &shown.to_string()), ("total", &total.to_string())],
+        )
+    }
+}
+
+/// The second line of a pack that loads.
+#[must_use]
+pub fn pack_detail(id: &str, values: usize) -> String {
+    fill(
+        pattern_packs_label(PacksLabel::Detail),
+        &[("id", id), ("count", &values.to_string())],
+    )
+}
+
+/// The second line of a pack that is present and refused.
+#[must_use]
+pub fn pack_refused(id: &str) -> String {
+    fill(pattern_packs_label(PacksLabel::Refused), &[("id", id)])
+}
+
+/// The pill on a refused pack.
+#[must_use]
+pub fn pack_problems(count: usize) -> String {
+    fill(
+        pattern_packs_label(PacksLabel::Problems),
+        &[("count", &count.to_string())],
+    )
+}
+
+/// The second line of a pack whose file would not open.
+#[must_use]
+pub fn pack_unreadable(id: &str) -> String {
+    fill(pattern_packs_label(PacksLabel::Unreadable), &[("id", id)])
+}
+
+/// What the list says when nothing matches the query.
+///
+/// The query is copied as typed and never substituted again - a query holding
+/// braces is text, not a pattern.
+#[must_use]
+pub fn no_match(query: &str) -> String {
+    fill(
+        pattern_packs_label(PacksLabel::NoMatch),
+        &[("query", query)],
+    )
+}
+
+/// One line per reason a source went unread, naming the sources it covers.
+///
+/// Empty when every source was read. Grouped by reason, so the build today says
+/// one line for the team and own folders rather than two lines that differ in
+/// one word.
+#[must_use]
+pub fn not_read(coverage: &CatalogueCoverage) -> Vec<String> {
+    let mut groups: Vec<(PacksLabel, Vec<&'static str>)> = Vec::new();
+    for (source, skipped) in &coverage.skipped {
+        let reason = match (skipped, source) {
+            (SourceSkipped::NotImplementedYet, CatalogueSource::BuiltIn) => {
+                PacksLabel::ReasonNotCarried
+            }
+            (SourceSkipped::NotImplementedYet, CatalogueSource::Team | CatalogueSource::Own) => {
+                PacksLabel::ReasonCannotBeSet
+            }
+            (SourceSkipped::NotConfigured, _) => PacksLabel::ReasonNotSet,
+            (SourceSkipped::Unreadable, _) => PacksLabel::ReasonUnreadable,
+        };
+        let name = pattern_packs_label(match source {
+            CatalogueSource::BuiltIn => PacksLabel::SourceBuiltIn,
+            CatalogueSource::Team => PacksLabel::SourceTeam,
+            CatalogueSource::Own => PacksLabel::SourceOwn,
+        });
+        match groups.iter_mut().find(|(known, _)| *known == reason) {
+            Some((_, names)) => names.push(name),
+            None => groups.push((reason, vec![name])),
+        }
+    }
+    groups
+        .into_iter()
+        .map(|(reason, names)| {
+            fill(
+                pattern_packs_label(PacksLabel::NotRead),
+                &[
+                    ("sources", &names.join(", ")),
+                    ("reason", pattern_packs_label(reason)),
+                ],
+            )
+        })
+        .collect()
+}
+
 #[cfg(test)]
 #[allow(
     clippy::expect_used,
@@ -1191,7 +1398,25 @@ mod tests {
                 .iter()
                 .filter_map(|message| settings_message(message, "the-settings-file")),
         );
+        out.push(no_match("zzz"));
+        out.push(packs_label(PacksLabel::NoPacks).to_owned());
+        out.push(packs_label(PacksLabel::ListUnavailable).to_owned());
+        out.extend(not_read(&every_skip()));
         out
+    }
+
+    /// A coverage that skips every source for every reason it can be skipped
+    /// for, so each reason word is exercised at least once.
+    fn every_skip() -> CatalogueCoverage {
+        CatalogueCoverage {
+            consulted: Vec::new(),
+            skipped: vec![
+                (CatalogueSource::BuiltIn, SourceSkipped::NotImplementedYet),
+                (CatalogueSource::Team, SourceSkipped::NotImplementedYet),
+                (CatalogueSource::Own, SourceSkipped::NotConfigured),
+                (CatalogueSource::Team, SourceSkipped::Unreadable),
+            ],
+        }
     }
 
     /// One of every settings message that has a sentence.
@@ -1559,6 +1784,127 @@ mod tests {
             assert!(!out.is_empty(), "{message:?} produced nothing");
             assert!(!out.contains('{'), "{message:?} left a placeholder: {out}");
         }
+    }
+
+    /// The pack window's labels divide the same way as the palette's.
+    ///
+    /// Exhaustive on the takes-a-value side, so a new variant must be placed
+    /// before this compiles. The array can still miss one, and the contract
+    /// bridge (`sprawdz-kontrakt.py`) is the second net, as for the palette.
+    #[test]
+    fn a_pack_window_label_carrying_a_value_has_a_typed_function() {
+        for label in [
+            PacksLabel::Title,
+            PacksLabel::Heading,
+            PacksLabel::Summary,
+            PacksLabel::SummaryFiltered,
+            PacksLabel::Search,
+            PacksLabel::InUse,
+            PacksLabel::Detail,
+            PacksLabel::Offensive,
+            PacksLabel::Refused,
+            PacksLabel::Problems,
+            PacksLabel::Unreadable,
+            PacksLabel::NoMatch,
+            PacksLabel::NoPacks,
+            PacksLabel::ListUnavailable,
+            PacksLabel::NotRead,
+            PacksLabel::SourceBuiltIn,
+            PacksLabel::SourceTeam,
+            PacksLabel::SourceOwn,
+            PacksLabel::ReasonNotCarried,
+            PacksLabel::ReasonCannotBeSet,
+            PacksLabel::ReasonNotSet,
+            PacksLabel::ReasonUnreadable,
+            PacksLabel::KeyEnter,
+            PacksLabel::UsePack,
+            PacksLabel::KeyEscape,
+            PacksLabel::Close,
+            PacksLabel::KeyArrows,
+            PacksLabel::Move,
+        ] {
+            let takes_values = match label {
+                PacksLabel::Summary
+                | PacksLabel::SummaryFiltered
+                | PacksLabel::Detail
+                | PacksLabel::Refused
+                | PacksLabel::Problems
+                | PacksLabel::Unreadable
+                | PacksLabel::NoMatch
+                | PacksLabel::NotRead => true,
+                PacksLabel::Title
+                | PacksLabel::Heading
+                | PacksLabel::Search
+                | PacksLabel::InUse
+                | PacksLabel::Offensive
+                | PacksLabel::NoPacks
+                | PacksLabel::ListUnavailable
+                | PacksLabel::SourceBuiltIn
+                | PacksLabel::SourceTeam
+                | PacksLabel::SourceOwn
+                | PacksLabel::ReasonNotCarried
+                | PacksLabel::ReasonCannotBeSet
+                | PacksLabel::ReasonNotSet
+                | PacksLabel::ReasonUnreadable
+                | PacksLabel::KeyEnter
+                | PacksLabel::UsePack
+                | PacksLabel::KeyEscape
+                | PacksLabel::Close
+                | PacksLabel::KeyArrows
+                | PacksLabel::Move => false,
+            };
+            let pattern = pattern_packs_label(label);
+            assert_eq!(
+                pattern.contains('{'),
+                takes_values,
+                "{label:?}: pattern was {pattern:?}"
+            );
+            assert!(!pattern.is_empty(), "{label:?} produced nothing");
+        }
+    }
+
+    #[test]
+    fn the_pack_window_says_how_many_and_of_how_many_while_filtered() {
+        assert_eq!(packs_summary(9, 9), "packs: 9");
+        assert_eq!(packs_summary(2, 9), "packs: 2 of 9");
+        assert_eq!(pack_detail("unicode-text", 34), "unicode-text, values: 34");
+        assert_eq!(pack_problems(3), "problems: 3");
+        assert_eq!(pack_refused("broken"), "broken, does not load");
+        assert_eq!(pack_unreadable("gone"), "gone, cannot be read");
+    }
+
+    #[test]
+    fn a_query_with_braces_is_copied_not_substituted() {
+        assert_eq!(
+            no_match("{id}"),
+            "No pack matches \"{id}\". Press Backspace to widen the search."
+        );
+    }
+
+    #[test]
+    fn unread_sources_are_one_line_per_reason_and_nothing_when_all_were_read() {
+        // Today's build: the built-in catalogue's own coverage.
+        let today = CatalogueCoverage {
+            consulted: vec![CatalogueSource::BuiltIn],
+            skipped: vec![
+                (CatalogueSource::Team, SourceSkipped::NotImplementedYet),
+                (CatalogueSource::Own, SourceSkipped::NotImplementedYet),
+            ],
+        };
+        assert_eq!(
+            not_read(&today),
+            vec!["Not read: team folder, own folder - cannot be set in this version."]
+        );
+        let complete = CatalogueCoverage {
+            consulted: vec![
+                CatalogueSource::BuiltIn,
+                CatalogueSource::Team,
+                CatalogueSource::Own,
+            ],
+            skipped: Vec::new(),
+        };
+        assert!(not_read(&complete).is_empty());
+        assert_eq!(not_read(&every_skip()).len(), 4);
     }
 
     /// The palette's labels divide in two, and the division has to hold.

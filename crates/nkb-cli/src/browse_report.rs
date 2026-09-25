@@ -86,7 +86,7 @@ fn explain_skip(source: CatalogueSource, reason: SourceSkipped) -> &'static str 
         SourceSkipped::NotImplementedYet => match source {
             CatalogueSource::BuiltIn => "this build carries none",
             CatalogueSource::Team | CatalogueSource::Own => {
-                "this build has no settings file, so the folder cannot be named"
+                "the settings file has no key for this folder yet, so it cannot be named"
             }
         },
         SourceSkipped::NotConfigured => "no folder is configured for it",

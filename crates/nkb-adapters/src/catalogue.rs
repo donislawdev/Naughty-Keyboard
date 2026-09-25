@@ -4,8 +4,8 @@
 //!
 //! `pack-format.md` 12 defines three sources - built in, a team folder named in
 //! settings, and the user's own folder - loaded in that order, with a later one
-//! overriding an earlier one by `pack.id`. This build has no settings file, so
-//! two of the three cannot be located at all.
+//! overriding an earlier one by `pack.id`. The settings file has no key for
+//! either folder yet (`OBS-78`), so two of the three cannot be located at all.
 //!
 //! 🔴 The temptation is to print the one list and move on, and untouchable rule
 //! 1 exists for exactly that temptation: a run that did less than it promised
