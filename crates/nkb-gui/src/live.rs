@@ -37,6 +37,7 @@
 //! saying the promise could not be kept, which this module reads again on every
 //! view because it rebuilds the message band from scratch each time.
 
+use std::cell::{Cell, RefCell};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
@@ -44,11 +45,14 @@ use std::time::{Duration, Instant};
 use nkb_adapters::i18n::PaletteLabel;
 use nkb_adapters::{
     BuiltInCatalogue, ClipboardDelivery, DirectInjection, EnglishReport, GlobalShortcuts,
-    TomlPackFormat, default_bindings, i18n,
+    SettingsFile, TomlPackFormat, default_bindings, i18n,
 };
 use nkb_app::advance_sequence::{Ports, RouteRequest, Sent};
-use nkb_app::ports::{HotkeyRegistrar, LiveShortcuts, ShortcutRegistration, Wait};
-use nkb_app::{AdvanceSequence, Outcome, drive_sequence};
+use nkb_app::ports::{
+    HotkeyRegistrar, LiveShortcuts, SettingChange, Settings, SettingsStore, ShortcutRegistration,
+    Wait,
+};
+use nkb_app::{AdvanceSequence, KeptSettings, Opening, Outcome, SettingsMessage, drive_sequence};
 use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::preview::ValuePreview;
 use nkb_core::report::Arrival;
@@ -107,21 +111,58 @@ struct ValueView {
     markers: Vec<(String, bool)>,
 }
 
+/// What the worker starts from.
+///
+/// The settings were read on the main thread, before the window existed,
+/// because whether the palette starts collapsed has to be known before it is
+/// drawn. Everything after that - saving included - happens here: a settings
+/// folder on a network profile can take seconds to write, and the main thread
+/// belongs to Slint.
+pub struct Start {
+    /// The pack named on the command line, if any.
+    pub asked: Option<String>,
+    /// The pack opened when nothing is asked for or remembered.
+    pub default_pack: &'static str,
+    /// How the palette was started - `nkb-gui --clipboard` asks for clipboard
+    /// mode (`D71`).
+    pub route: RouteRequest,
+    pub store: SettingsFile,
+    pub kept: KeptSettings,
+    /// What reading the settings had to say.
+    pub said: Vec<SettingsMessage>,
+}
+
+/// Whether the palette starts collapsed. One function for both threads, so
+/// the window and the worker cannot start from two different answers.
+#[must_use]
+pub fn starts_compact(settings: &Settings) -> bool {
+    settings.compact.unwrap_or(false)
+}
+
 /// Runs until the flag is set or the shortcuts die.
 ///
 /// Takes the pack by name rather than a loaded sequence, because the sequence
 /// must live on this thread: it is the one gate over the sequence state
-/// (`architektura.md` 6a) and it never crosses back. `route` is how the palette
-/// was started - `nkb-gui --clipboard` asks for clipboard mode (`D71`).
-pub fn drive(
-    palette: &Weak<Palette>,
-    stop: &Arc<AtomicBool>,
-    pack: &str,
-    route: RouteRequest,
-    standing: &Standing,
-) {
+/// (`architektura.md` 6a) and it never crosses back.
+pub fn drive(palette: &Weak<Palette>, stop: &Arc<AtomicBool>, start: Start, standing: &Standing) {
+    let Start {
+        asked,
+        default_pack,
+        route,
+        store,
+        kept,
+        said,
+    } = start;
+    // Where the settings live, for the sentences that send the tester there.
+    let file = store
+        .path()
+        .map(|path| path.display().to_string())
+        .unwrap_or_default();
     let mut sequence = AdvanceSequence::new();
-    let mut opening: Vec<String> = Vec::new();
+    let mut opening: Vec<String> = said
+        .iter()
+        .filter_map(|message| i18n::settings_message(message, &file))
+        .collect();
     // Created here, on the thread that uses it, and dropped with it - which is
     // when a Linux clipboard stops serving what it holds (`clipboard` says why).
     // Nothing connects until the first write, so a palette that never copies
@@ -136,9 +177,20 @@ pub fn drive(
         report_text: &EnglishReport,
     };
 
-    if let Err(error) = sequence.choose_pack(&BuiltInCatalogue::new(), &TomlPackFormat, pack) {
-        opening.push(i18n::choose_error(&error, pack));
+    let mut kept = kept;
+    let opened = kept.open_pack(&store, asked.as_deref(), default_pack, &mut |pack| {
+        sequence.choose_pack(&BuiltInCatalogue::new(), &TomlPackFormat, pack)
+    });
+    for note in &opened.notes {
+        match note {
+            Opening::CouldNotChoose { pack, error } => {
+                opening.push(i18n::choose_error(error, pack));
+            }
+            Opening::Settings(message) => opening.extend(i18n::settings_message(message, &file)),
+        }
     }
+    // The pack the messages are about - the one opened, or the last one tried.
+    let pack = opened.pack.as_str();
     // Captured now, because `drive_sequence` borrows the sequence for the whole
     // loop and the closure that builds each view cannot reach it.
     let pack_shown = sequence.pack_name().unwrap_or(pack).to_owned();
@@ -183,7 +235,14 @@ pub fn drive(
     let mut keep_going = || !stop.load(Ordering::Relaxed);
     let mut present =
         |outcome: Outcome| show(palette, view_of(&outcome, &pack_shown, pack, standing));
-    let on_toggle = || toggle_later(palette);
+    let collapse = Collapse::new(kept, &store, file);
+    let on_toggle = || {
+        let (compact, line) = collapse.toggle();
+        set_compact_later(palette, compact);
+        if let Some(line) = line {
+            say_later(palette, line);
+        }
+    };
     let shortcuts = PaletteShortcuts {
         inner: live.as_ref(),
         on_toggle: &on_toggle,
@@ -405,7 +464,7 @@ fn apply(palette: &Palette, view: View) {
     // 🔴 No timer and no state change here, and that is `D83`: until then every
     // view woke the palette and a timer put it back to rest four seconds later,
     // taking the value with it. Whether the palette is compact is the tester's
-    // choice alone - see `toggle_compact`.
+    // choice alone - see `Collapse`.
 }
 
 /// Keeps the expanded palette from getting shorter by itself (`D83`).
@@ -425,7 +484,7 @@ pub fn hold_height_on_change(palette: &Palette) {
 ///
 /// The expanded palette then keeps the height of its tallest content since it
 /// was last expanded, so a short value after a long one leaves room below
-/// rather than pulling the bottom edge up. Only `toggle_compact` lowers it.
+/// rather than pulling the bottom edge up. Only `set_compact` lowers it.
 ///
 /// Takes the height as an argument rather than reading it, because a read
 /// straight after the properties change is stale (`slint.md` 2.27): the palette
@@ -439,7 +498,7 @@ pub(crate) fn hold_height(palette: &Palette, content: f32) {
     }
 }
 
-/// Switches between the expanded and the compact palette.
+/// Puts the palette into the compact or the expanded state.
 ///
 /// 🔴 The window is never hidden - `OBS-80` measured that `hide()` destroys it
 /// on Windows and loses `WS_EX_NOACTIVATE` with it. Compact is the background
@@ -448,9 +507,53 @@ pub(crate) fn hold_height(palette: &Palette, content: f32) {
 /// The floor starts again from nothing, so the palette expands to fit what it
 /// shows now rather than to the tallest thing it ever showed. The height the
 /// expanded content asks for arrives through the `changed` handler.
-pub fn toggle_compact(palette: &Palette) {
-    palette.set_compact(!palette.get_compact());
+///
+/// Takes the state rather than flipping it: the worker owns the switch from
+/// the start (`Collapse`), so the state it saves is the state drawn.
+pub fn set_compact(palette: &Palette, compact: bool) {
+    palette.set_compact(compact);
     palette.set_height_floor(0.0);
+}
+
+/// The compact switch and the memory of it, both owned by the worker.
+///
+/// # Why the worker and not the window
+///
+/// Until `D84` the main thread flipped the window's own property. With the
+/// state remembered, two owners would mean two answers to "is it collapsed":
+/// the one drawn and the one saved. So the worker holds the switch from the
+/// start, tells the window what to draw, and saves the same value - on this
+/// thread, where a slow settings folder costs a press nothing.
+struct Collapse<'a> {
+    compact: Cell<bool>,
+    kept: RefCell<KeptSettings>,
+    store: &'a dyn SettingsStore,
+    /// Where the settings live, for a sentence saying they were not saved.
+    file: String,
+}
+
+impl<'a> Collapse<'a> {
+    fn new(kept: KeptSettings, store: &'a dyn SettingsStore, file: String) -> Self {
+        Self {
+            compact: Cell::new(starts_compact(kept.settings())),
+            kept: RefCell::new(kept),
+            store,
+            file,
+        }
+    }
+
+    /// Flips the switch and remembers it. The new state, and a line to say
+    /// when saving failed for a reason not said before.
+    fn toggle(&self) -> (bool, Option<String>) {
+        let compact = !self.compact.get();
+        self.compact.set(compact);
+        let line = self
+            .kept
+            .borrow_mut()
+            .keep(self.store, SettingChange::Compact(compact))
+            .and_then(|message| i18n::settings_message(&message, &self.file));
+        (compact, line)
+    }
 }
 
 /// The palette's own shortcuts in front of the sequence.
@@ -488,10 +591,25 @@ impl LiveShortcuts for PaletteShortcuts<'_> {
     }
 }
 
-/// Hands a compact-state switch to the thread that owns the window.
-fn toggle_later(palette: &Weak<Palette>) {
+/// Hands the compact state to the thread that owns the window.
+fn set_compact_later(palette: &Weak<Palette>, compact: bool) {
     // Dropped for the reason `show` gives.
-    let _ = palette.upgrade_in_event_loop(|palette| toggle_compact(&palette));
+    let _ = palette.upgrade_in_event_loop(move |palette| set_compact(&palette, compact));
+}
+
+/// Adds one line to the message band, below what is already there.
+///
+/// Below, not instead: a line about the settings must not take away "End of
+/// pack" or the reason the last value was refused - nor the standing sentence,
+/// which the last view already put in front. The next view rebuilds the band
+/// as usual.
+fn say_later(palette: &Weak<Palette>, line: String) {
+    // Dropped for the reason `show` gives.
+    let _ = palette.upgrade_in_event_loop(move |palette| {
+        let mut lines: Vec<SharedString> = slint::Model::iter(&palette.get_messages()).collect();
+        lines.push(line.into());
+        palette.set_messages(ModelRc::new(VecModel::from(lines)));
+    });
 }
 
 #[cfg(test)]
@@ -513,7 +631,7 @@ mod tests {
     use super::{
         Delivery, Duration, HotkeyAction, LiveShortcuts, Outcome, Palette, PaletteShortcuts,
         ShortcutRegistration, Standing, ValuePreview, Wait, apply, clipboard_bar, hold_height,
-        markers_of, toggle_compact, view_of, with_standing,
+        markers_of, set_compact, view_of, with_standing,
     };
 
     /// No standing sentence: the ordinary case, and the one the field-by-field
@@ -773,7 +891,7 @@ mod tests {
         );
 
         // ---- the tester collapses it, and only the tester expands it -------
-        toggle_compact(&palette);
+        set_compact(&palette, true);
         assert!(palette.get_compact());
         assert_eq!(
             palette.get_height_floor(),
@@ -799,7 +917,7 @@ mod tests {
             palette.get_compact(),
             "a value expanded what the tester collapsed"
         );
-        toggle_compact(&palette);
+        set_compact(&palette, false);
         assert!(!palette.get_compact());
         hold_height(&palette, 120.0);
         assert_eq!(
@@ -926,6 +1044,66 @@ mod tests {
             vec![String::from("kept")],
             "a view with nothing to say still carries it"
         );
+    }
+
+    /// A settings store that keeps every save and fails when told to.
+    struct Remembered {
+        saved: std::cell::RefCell<Vec<nkb_app::ports::SettingChange>>,
+        fail: bool,
+    }
+
+    impl nkb_app::ports::SettingsStore for Remembered {
+        fn load(&self) -> nkb_app::ports::SettingsLoad {
+            nkb_app::ports::SettingsLoad::Absent
+        }
+        fn save(
+            &self,
+            change: &nkb_app::ports::SettingChange,
+        ) -> Result<(), nkb_app::ports::SaveError> {
+            self.saved.borrow_mut().push(change.clone());
+            if self.fail {
+                Err(nkb_app::ports::SaveError::Unwritable)
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    /// 🔴 The state drawn and the state saved are one value (`D84`): every
+    /// toggle flips it, hands it on and saves the same thing.
+    #[test]
+    fn a_collapse_flips_the_state_and_saves_exactly_the_state_it_draws() {
+        use nkb_app::ports::SettingChange;
+        let store = Remembered {
+            saved: std::cell::RefCell::new(Vec::new()),
+            fail: false,
+        };
+        let (kept, _) = nkb_app::KeptSettings::open(&store);
+        let collapse = super::Collapse::new(kept, &store, String::from("f"));
+        assert_eq!(collapse.toggle(), (true, None));
+        assert_eq!(collapse.toggle(), (false, None));
+        assert_eq!(
+            *store.saved.borrow(),
+            vec![SettingChange::Compact(true), SettingChange::Compact(false)]
+        );
+    }
+
+    /// A save that fails is said once, and the palette collapses anyway.
+    #[test]
+    fn a_collapse_that_cannot_be_saved_is_said_once_and_still_happens() {
+        let store = Remembered {
+            saved: std::cell::RefCell::new(Vec::new()),
+            fail: true,
+        };
+        let (kept, _) = nkb_app::KeptSettings::open(&store);
+        let collapse = super::Collapse::new(kept, &store, String::from("f"));
+        let (compact, line) = collapse.toggle();
+        assert!(compact, "the palette collapsed although the save failed");
+        assert!(
+            line.is_some_and(|line| line.contains("could not be saved to f")),
+            "the first failure is said"
+        );
+        assert_eq!(collapse.toggle(), (false, None), "and only once");
     }
 
     /// A value with nothing worth saying about it says nothing.

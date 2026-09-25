@@ -64,10 +64,14 @@
 
 use nkb_app::advance_sequence::{ChooseError, Message};
 use nkb_app::drive_sequence::Ended;
-use nkb_app::ports::{ShortcutRegistration, ShortcutsUnavailable};
+use nkb_app::keep_settings::SettingsMessage;
+use nkb_app::ports::{
+    SaveError, SettingsNote, SettingsUnusable, ShortcutRegistration, ShortcutsUnavailable,
+};
 use nkb_core::hotkeys::{HotkeyAction, HotkeyChord, HotkeyKey, default_chord};
 use nkb_core::preview::ShapeFact;
 
+use crate::settings_file::SCHEMA;
 use crate::shortcuts::CONVENTION;
 
 /// Substitutes `{name}` placeholders in one pass over the pattern.
@@ -711,6 +715,195 @@ pub fn environment(limit: Environment, reason: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Settings - what the palette remembers, and when it cannot
+// ---------------------------------------------------------------------------
+
+/// How many unknown keys a sentence names before it counts the rest.
+///
+/// A file of garbage that happens to be valid TOML would otherwise put a line
+/// per key into the message band and push the palette off the screen. Five
+/// catches the typo a tester made, which is what the sentence is for.
+const UNKNOWN_KEYS_NAMED: usize = 5;
+
+/// The pattern for a file that is there and cannot be used. `ux-spec.md` 6,
+/// section J.
+///
+/// Every one of them ends the same way on purpose: the palette starts from its
+/// defaults and does NOT save over the file. The tester needs to hear the
+/// second half most, because it is why a collapse or a pack chosen now will not
+/// be remembered, and why the file they wrote is still exactly as they wrote it.
+fn pattern_settings_unusable(why: &SettingsUnusable) -> &'static str {
+    match why {
+        SettingsUnusable::Unreadable => {
+            "The settings file {file} could not be read, so the palette starts from its defaults and saves nothing. Check that the file can be opened, then start the palette again."
+        }
+        SettingsUnusable::NotUtf8 => {
+            "The settings file {file} is not valid UTF-8, so the palette starts from its defaults and will not save over it. Save the file as UTF-8, or remove it."
+        }
+        SettingsUnusable::TooLarge { .. } => {
+            "The settings file {file} is larger than {limit} bytes, so the palette did not read it and will not save over it. Check that the path names the right file."
+        }
+        SettingsUnusable::NotToml { .. } => {
+            "The settings file {file} cannot be read at line {line} ({detail}), so the palette starts from its defaults and will not save over it. Fix that line, or remove the file."
+        }
+        SettingsUnusable::SchemaNotDeclared => {
+            "The settings file {file} does not declare its schema, so the palette starts from its defaults and will not save over it. Add the line schema = 1 at the top, or remove the file."
+        }
+        SettingsUnusable::SchemaTooNew { .. } => {
+            "The settings file {file} was written for schema {found} and this version reads schema {supported}, so the palette starts from its defaults and will not save over it. Use the newer version, or remove the file."
+        }
+    }
+}
+
+/// The pattern for something in a readable file that was not used.
+///
+/// Two patterns for `UnknownKeys`, like `ChooseError::Refused`: one names every
+/// key, the other names the first few and counts the rest. The count is never
+/// 1 - see `unknown_keys` - so "1 more keys" cannot be written.
+fn pattern_settings_note(note: &SettingsNote) -> &'static str {
+    match note {
+        SettingsNote::UnknownKeys { keys } if keys.len() <= UNKNOWN_KEYS_NAMED + 1 => {
+            "The settings file {file} holds {keys}, which this version does not know - kept as written, with no effect. Check the spelling if you added them yourself."
+        }
+        SettingsNote::UnknownKeys { .. } => {
+            "The settings file {file} holds {keys} and {more} more keys this version does not know - kept as written, with no effect. Check the spelling if you added them yourself."
+        }
+        SettingsNote::NotTrueOrFalse { .. } => {
+            "In the settings file {file}, {key} should be true or false, so its default is used. Fix the value, or remove the line."
+        }
+        SettingsNote::NotAPackName { .. } => {
+            "In the settings file {file}, {key} should name a pack such as whitespace, so the default pack is used. Fix the value, or remove the line."
+        }
+        SettingsNote::NotATable { .. } => {
+            "In the settings file {file}, {key} should be a table of settings, so every setting in it takes its default. Fix it, or remove the line."
+        }
+    }
+}
+
+/// The pattern for a change that was not saved, or nothing.
+///
+/// ⚠️ `Nowhere` has no sentence: the load already said there is no place, and
+/// `KeptSettings` does not even attempt a save after that. A sentence here
+/// would be a second telling of one fact.
+fn pattern_save_error(error: &SaveError) -> Option<&'static str> {
+    match error {
+        SaveError::Nowhere => None,
+        SaveError::Unusable(_) => Some(
+            "The settings file {file} can no longer be read, so it was not saved over and this change will be forgotten when the palette closes. Fix the file, then start the palette again.",
+        ),
+        SaveError::Unwritable => Some(
+            "The settings could not be saved to {file}, so this change will be forgotten when the palette closes. Check that the folder can be written to and the file is not read-only.",
+        ),
+    }
+}
+
+/// The pattern for the two settings messages that carry no inner type.
+///
+/// 🔴 `RememberedPackUnavailable` sends the tester to the command line because
+/// that is the one way to choose a pack in this build. The pack window (step 7)
+/// changes the second sentence - the same rule that made `Taken` stop naming a
+/// settings screen that did not exist.
+fn pattern_settings_message(message: &SettingsMessage) -> Option<&'static str> {
+    match message {
+        SettingsMessage::Nowhere { .. } => Some(
+            "Settings cannot be kept because {variable} does not name a folder, so nothing will be remembered after the palette closes. Set {variable} to a full path and start the palette again.",
+        ),
+        SettingsMessage::RememberedPackUnavailable { .. } => Some(
+            "The remembered pack \"{remembered}\" could not be opened, so the palette opened \"{opened}\" for now. Start the palette with a pack name to remember a different one.",
+        ),
+        SettingsMessage::Unusable(_) | SettingsMessage::Note(_) | SettingsMessage::NotSaved(_) => {
+            None
+        }
+    }
+}
+
+/// The keys an `UnknownKeys` sentence names, and how many it only counts.
+///
+/// All of them up to one past the limit, because naming six costs less than
+/// "and 1 more keys". Past that, the first five and the count of the rest,
+/// which is then at least two.
+fn unknown_keys(keys: &[String]) -> (String, usize) {
+    if keys.len() <= UNKNOWN_KEYS_NAMED + 1 {
+        (keys.join(", "), 0)
+    } else {
+        (
+            keys[..UNKNOWN_KEYS_NAMED].join(", "),
+            keys.len() - UNKNOWN_KEYS_NAMED,
+        )
+    }
+}
+
+/// What the palette says about its settings, or nothing when there is nothing
+/// to say. `file` is where the settings live, for the tester to find.
+#[must_use]
+pub fn settings_message(message: &SettingsMessage, file: &str) -> Option<String> {
+    match message {
+        SettingsMessage::Unusable(why) => {
+            let (limit, line, detail, found) = match why {
+                SettingsUnusable::TooLarge { limit_bytes } => {
+                    (limit_bytes.to_string(), String::new(), "", String::new())
+                }
+                SettingsUnusable::NotToml { line, detail } => (
+                    String::new(),
+                    line.to_string(),
+                    detail.as_str(),
+                    String::new(),
+                ),
+                SettingsUnusable::SchemaTooNew { found } => {
+                    (String::new(), String::new(), "", found.to_string())
+                }
+                SettingsUnusable::Unreadable
+                | SettingsUnusable::NotUtf8
+                | SettingsUnusable::SchemaNotDeclared => {
+                    (String::new(), String::new(), "", String::new())
+                }
+            };
+            Some(fill(
+                pattern_settings_unusable(why),
+                &[
+                    ("file", file),
+                    ("limit", &limit),
+                    ("line", &line),
+                    ("detail", detail),
+                    ("found", &found),
+                    ("supported", &SCHEMA.to_string()),
+                ],
+            ))
+        }
+        SettingsMessage::Note(note) => {
+            let (key, keys, more) = match note {
+                SettingsNote::UnknownKeys { keys } => {
+                    let (named, more) = unknown_keys(keys);
+                    ("", named, more.to_string())
+                }
+                SettingsNote::NotTrueOrFalse { key }
+                | SettingsNote::NotAPackName { key }
+                | SettingsNote::NotATable { key } => (key.as_str(), String::new(), String::new()),
+            };
+            Some(fill(
+                pattern_settings_note(note),
+                &[
+                    ("file", file),
+                    ("key", key),
+                    ("keys", &keys),
+                    ("more", &more),
+                ],
+            ))
+        }
+        SettingsMessage::NotSaved(error) => {
+            pattern_save_error(error).map(|pattern| fill(pattern, &[("file", file)]))
+        }
+        SettingsMessage::Nowhere { missing } => {
+            pattern_settings_message(message).map(|pattern| fill(pattern, &[("variable", missing)]))
+        }
+        SettingsMessage::RememberedPackUnavailable { remembered, opened } => {
+            pattern_settings_message(message)
+                .map(|pattern| fill(pattern, &[("remembered", remembered), ("opened", opened)]))
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // The palette's own labels
 // ---------------------------------------------------------------------------
 
@@ -993,7 +1186,135 @@ mod tests {
         // is about OUR sentence, and a library error text carrying three full
         // stops would fail it for something we did not write.
         out.push(startup_failure(Startup::WindowFailed, "no OpenGL context"));
+        out.extend(
+            every_settings_message()
+                .iter()
+                .filter_map(|message| settings_message(message, "the-settings-file")),
+        );
         out
+    }
+
+    /// One of every settings message that has a sentence.
+    ///
+    /// The file and the keys carry no full stop on purpose, for the reason the
+    /// startup line above gives: the sentence count is about OUR sentence, and
+    /// `settings.toml` would add a stop that is not ours.
+    fn every_settings_message() -> Vec<SettingsMessage> {
+        let mut all = vec![
+            SettingsMessage::Nowhere {
+                missing: String::from("APPDATA"),
+            },
+            SettingsMessage::RememberedPackUnavailable {
+                remembered: String::from("team-pack"),
+                opened: String::from("whitespace"),
+            },
+            SettingsMessage::NotSaved(SaveError::Unwritable),
+            SettingsMessage::NotSaved(SaveError::Unusable(SettingsUnusable::NotUtf8)),
+        ];
+        for why in [
+            SettingsUnusable::Unreadable,
+            SettingsUnusable::NotUtf8,
+            SettingsUnusable::TooLarge { limit_bytes: 65536 },
+            SettingsUnusable::NotToml {
+                line: 3,
+                detail: String::from("unclosed table, expected `]`"),
+            },
+            SettingsUnusable::SchemaNotDeclared,
+            SettingsUnusable::SchemaTooNew { found: 2 },
+        ] {
+            all.push(SettingsMessage::Unusable(why));
+        }
+        for note in [
+            SettingsNote::UnknownKeys {
+                keys: vec![String::from("compct")],
+            },
+            SettingsNote::UnknownKeys {
+                keys: (1..=9).map(|n| format!("key{n}")).collect(),
+            },
+            SettingsNote::NotTrueOrFalse {
+                key: String::from("compact"),
+            },
+            SettingsNote::NotAPackName {
+                key: String::from("pack"),
+            },
+            SettingsNote::NotATable {
+                key: String::from("palette"),
+            },
+        ] {
+            all.push(SettingsMessage::Note(note));
+        }
+        all
+    }
+
+    #[test]
+    fn a_settings_sentence_says_where_the_file_is_and_what_went_wrong_in_it() {
+        assert_eq!(
+            settings_message(
+                &SettingsMessage::Unusable(SettingsUnusable::NotToml {
+                    line: 3,
+                    detail: String::from("unclosed table, expected `]`"),
+                }),
+                "C:\\Users\\t\\AppData\\Roaming\\Naughty Keyboard\\settings.toml",
+            )
+            .as_deref(),
+            Some(
+                "The settings file C:\\Users\\t\\AppData\\Roaming\\Naughty Keyboard\\settings.toml cannot be read at line 3 (unclosed table, expected `]`), so the palette starts from its defaults and will not save over it. Fix that line, or remove the file."
+            )
+        );
+        assert_eq!(
+            settings_message(
+                &SettingsMessage::Unusable(SettingsUnusable::SchemaTooNew { found: 2 }),
+                "f",
+            )
+            .as_deref(),
+            Some(
+                "The settings file f was written for schema 2 and this version reads schema 1, so the palette starts from its defaults and will not save over it. Use the newer version, or remove the file."
+            )
+        );
+    }
+
+    #[test]
+    fn unknown_keys_are_named_up_to_six_and_counted_past_that() {
+        // Six are named rather than five and "1 more keys".
+        let six: Vec<String> = (1..=6).map(|n| format!("k{n}")).collect();
+        assert_eq!(
+            settings_message(
+                &SettingsMessage::Note(SettingsNote::UnknownKeys { keys: six }),
+                "f"
+            )
+            .as_deref(),
+            Some(
+                "The settings file f holds k1, k2, k3, k4, k5, k6, which this version does not know - kept as written, with no effect. Check the spelling if you added them yourself."
+            )
+        );
+        let seven: Vec<String> = (1..=7).map(|n| format!("k{n}")).collect();
+        assert_eq!(
+            settings_message(
+                &SettingsMessage::Note(SettingsNote::UnknownKeys { keys: seven }),
+                "f"
+            )
+            .as_deref(),
+            Some(
+                "The settings file f holds k1, k2, k3, k4, k5 and 2 more keys this version does not know - kept as written, with no effect. Check the spelling if you added them yourself."
+            )
+        );
+    }
+
+    #[test]
+    fn no_place_for_settings_is_said_at_the_start_and_not_again_at_each_save() {
+        assert!(
+            settings_message(&SettingsMessage::NotSaved(SaveError::Nowhere), "f").is_none(),
+            "the load already said there is no place"
+        );
+        assert!(
+            settings_message(
+                &SettingsMessage::Nowhere {
+                    missing: String::from("HOME")
+                },
+                "f"
+            )
+            .is_some_and(|line| line.contains("HOME does not name a folder"))
+        );
     }
 
     #[test]

@@ -660,6 +660,129 @@ pub trait PackSink {
     fn replace(&self, id: &str, text: &str) -> Result<(), SinkError>;
 }
 
+/// What the tool remembers between two runs of the palette.
+///
+/// Every field is an `Option`, and `None` means "the file does not say" - never
+/// "false" and never "empty". The caller picks the default, because only the
+/// caller knows it: the palette opens `whitespace` and starts expanded, and the
+/// next caller may want something else. A default written in here would be a
+/// second place that decides it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Settings {
+    /// The pack the palette last opened on request (`D84`). Only a name with
+    /// the shape of a pack identifier ever arrives here.
+    pub pack: Option<String>,
+    /// Whether the tester last left the palette collapsed (`D83`).
+    pub compact: Option<bool>,
+}
+
+/// One setting the tester changed. A save carries exactly one, so a save can
+/// never write back a value it did not mean to touch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SettingChange {
+    Pack(String),
+    Compact(bool),
+}
+
+/// What reading the settings produced.
+///
+/// Four answers, not two - document `15` section 5. "No file yet" and "a file
+/// nobody can use" both end with the defaults, and they are still different
+/// answers: after the first the palette saves as usual, after the second it
+/// must not write over what the tester wrote.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SettingsLoad {
+    /// Nothing is there yet - the first run, or a file the tester removed.
+    /// Nothing is created until something is saved.
+    Absent,
+    /// Read. What was in the file and not used is in `notes`, and an empty list
+    /// means the file was read and everything in it was used.
+    Read {
+        settings: Settings,
+        notes: Vec<SettingsNote>,
+    },
+    /// A file is there and cannot be used. It stays exactly as it is.
+    Unusable(SettingsUnusable),
+    /// This machine gives the tool no place for settings: the variable that
+    /// names the place is not set, or names no absolute path.
+    Nowhere { missing: String },
+}
+
+/// Something in a readable settings file that was not used - said, not skipped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SettingsNote {
+    /// Keys this version does not know, as dotted paths. They stay in the file
+    /// exactly as written: a newer version may have put them there, and a typo
+    /// the tester made is theirs to see and fix.
+    UnknownKeys { keys: Vec<String> },
+    /// A key that must be `true` or `false` holds something else.
+    NotTrueOrFalse { key: String },
+    /// A key that must name a pack holds something that cannot be one.
+    NotAPackName { key: String },
+    /// A key that must hold a table of settings holds a single value.
+    NotATable { key: String },
+}
+
+/// Why a settings file that is there cannot be used.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SettingsUnusable {
+    /// The file could not be read - permissions, a device, a folder where the
+    /// file should be.
+    Unreadable,
+    /// Read, but not valid UTF-8.
+    NotUtf8,
+    /// Larger than any settings file this tool writes, so it was not read: a
+    /// path pointing at the wrong file is likelier than a real one this big.
+    TooLarge { limit_bytes: u64 },
+    /// Not TOML. `line` counts from 1, and `detail` is the parser's own words -
+    /// English, and the one thing a tester can quote.
+    NotToml { line: usize, detail: String },
+    /// No `schema`, or one that is not a whole number.
+    SchemaNotDeclared,
+    /// Written for a schema this version does not know.
+    SchemaTooNew { found: i64 },
+}
+
+/// Why a change was not saved. Nothing else was touched either way.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SaveError {
+    /// There is no place for settings on this machine.
+    Nowhere,
+    /// The file on disk cannot be read now, so it was left as it is rather
+    /// than replaced by a file holding only what this version understands.
+    Unusable(SettingsUnusable),
+    /// The place cannot be written to: permissions, a device, a read-only
+    /// file, or a file somebody else holds open.
+    Unwritable,
+}
+
+/// Keeps the settings between two runs of the palette.
+///
+/// # What the implementation owes the tester
+///
+/// - Reading creates nothing. A first run leaves no file behind until the
+///   tester changes something.
+/// - A save changes ONE key and leaves every other byte the tester wrote -
+///   comments, keys it does not know, their order - as it was. Document `15`
+///   sections 9 and 10.
+/// - A file that cannot be understood is never replaced. It is the tester's,
+///   and the only copy.
+/// - A place that cannot be written to is a state, not a failure
+///   (`architektura.md` 6.4): an error comes back, and the caller keeps
+///   working without remembering.
+pub trait SettingsStore {
+    /// Reads the settings. Never fails: every way it can go is an answer.
+    fn load(&self) -> SettingsLoad;
+
+    /// Saves one change, and nothing but it.
+    ///
+    /// # Errors
+    ///
+    /// [`SaveError`] when there is no place, when the file on disk cannot be
+    /// read now, or when the write itself fails.
+    fn save(&self, change: &SettingChange) -> Result<(), SaveError>;
+}
+
 /// What a file's `translates` field points at.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TranslationTarget {

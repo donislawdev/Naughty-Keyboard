@@ -54,13 +54,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use nkb_adapters::i18n::PaletteLabel;
-use nkb_adapters::{KeptFocus, default_bindings, i18n, report_window_failure};
-use nkb_app::RouteRequest;
+use nkb_adapters::{KeptFocus, SettingsFile, default_bindings, i18n, report_window_failure};
+use nkb_app::{KeptSettings, RouteRequest};
 use nkb_core::hotkeys::HotkeyAction;
 use nkb_gui::{Gallery, HintRow, Palette, focus, live};
 use slint::{ComponentHandle, ModelRc, VecModel};
 
-/// The pack the palette opens on when the command line names none.
+/// The pack the palette opens on when the command line names none and the
+/// settings remember none.
 ///
 /// One of the three that ship inside the binary (D51), so the palette has
 /// something real to show on a machine with no catalogue on disk at all.
@@ -85,7 +86,7 @@ const HINTED: [HotkeyAction; 4] = [
 ];
 
 fn main() -> ExitCode {
-    match start(&request()) {
+    match start(request()) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             // The channel is reported rather than ignored, but there is nothing
@@ -115,8 +116,12 @@ fn main() -> ExitCode {
 /// palette runs belongs to the settings (step 7), never to another global
 /// shortcut: each one is a new collision in somebody's application.
 enum Request {
-    /// The palette, on this pack, delivering values this way.
-    Palette { pack: String, route: RouteRequest },
+    /// The palette, on this pack or on the one it remembers, delivering values
+    /// this way.
+    Palette {
+        pack: Option<String>,
+        route: RouteRequest,
+    },
     /// The component catalogue - document 13 section 3.
     Gallery,
 }
@@ -129,17 +134,14 @@ fn request() -> Request {
         Some("--clipboard") => (RouteRequest::Clipboard, arguments.next()),
         _ => (RouteRequest::Direct, first),
     };
-    Request::Palette {
-        pack: pack.unwrap_or_else(|| DEFAULT_PACK.to_owned()),
-        route,
-    }
+    Request::Palette { pack, route }
 }
 
 /// Everything that can fail before there is a window to fail in.
-fn start(request: &Request) -> Result<(), slint::PlatformError> {
+fn start(request: Request) -> Result<(), slint::PlatformError> {
     match request {
         Request::Gallery => Gallery::new()?.run(),
-        Request::Palette { pack, route } => run_palette(pack, *route),
+        Request::Palette { pack, route } => run_palette(pack, route),
     }
 }
 
@@ -157,11 +159,17 @@ fn start(request: &Request) -> Result<(), slint::PlatformError> {
 /// `Ctrl+Alt+N` and nine others taken from whoever wants them next, for as long
 /// as the process lingers. Joining also means a send in flight finishes writing
 /// rather than being cut in half inside somebody's field.
-fn run_palette(pack: &str, route: RouteRequest) -> Result<(), slint::PlatformError> {
+fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::PlatformError> {
     // 🔴 BEFORE the window exists. Afterwards the answer is the palette itself,
     // and handing the focus back to ourselves is a no-op that reports success -
     // the failure shape this project keeps meeting (`slint.md` 2.17).
     let kept = KeptFocus::remember();
+    // Also before the window: whether it starts collapsed has to be known
+    // before it is drawn (`D84`). A small file, read once - the saving happens
+    // on the worker.
+    let store = SettingsFile::for_this_user();
+    let (settings, said) = KeptSettings::open(&store);
+    let compact = live::starts_compact(settings.settings());
     let palette = Palette::new()?;
     palette.set_window_title(i18n::label(PaletteLabel::Title).into());
     // Before anything is shown, so the first height the content asks for
@@ -171,9 +179,10 @@ fn run_palette(pack: &str, route: RouteRequest) -> Result<(), slint::PlatformErr
     // share the bar and say different things (`D72`) - see `live::View`.
     palette.set_hints(ModelRc::new(VecModel::from(hints())));
     // Expanded at first run, with the hints up and nothing sent yet -
-    // `ux-spec.md` 5.1. The worker fills the pack and the counter, because the
-    // sequence that knows them lives over there.
-    palette.set_compact(false);
+    // `ux-spec.md` 5.1 - and as the tester left it on every run after that.
+    // The worker fills the pack and the counter, because the sequence that
+    // knows them lives over there.
+    palette.set_compact(compact);
     palette.set_has_value(false);
     if let Some(chord) = chord_of(HotkeyAction::NextValue) {
         palette.set_no_value(i18n::no_value_yet(chord).into());
@@ -189,12 +198,19 @@ fn run_palette(pack: &str, route: RouteRequest) -> Result<(), slint::PlatformErr
     let worker = std::thread::spawn({
         let palette = palette.as_weak();
         let stop = Arc::clone(&stop);
-        let pack = pack.to_owned();
         let standing = std::sync::Arc::clone(&standing);
+        let start = live::Start {
+            asked: pack,
+            default_pack: DEFAULT_PACK,
+            route,
+            store,
+            kept: settings,
+            said,
+        };
         // Measured: work handed to the event loop before `run()` is delivered
         // once it starts (`slint.md` 1.9), so this thread may say something
         // before the window is running and nothing is lost.
-        move || live::drive(&palette, &stop, &pack, route, &standing)
+        move || live::drive(&palette, &stop, start, &standing)
     });
 
     let ran = palette.run();

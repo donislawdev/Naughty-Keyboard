@@ -335,9 +335,9 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     // The positive control: collapsing and expanding starts the floor over, so
     // the same short value now gets a SHORTER palette. Without this, a floor
     // stuck at the buffer's height would pass the check above.
-    nkb_gui::live::toggle_compact(&palette);
+    nkb_gui::live::set_compact(&palette, true);
     render(&window);
-    nkb_gui::live::toggle_compact(&palette);
+    nkb_gui::live::set_compact(&palette, false);
     render(&window);
     let refit = render(&window);
     assert!(
