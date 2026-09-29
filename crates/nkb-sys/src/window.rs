@@ -53,6 +53,13 @@ pub enum FocusError {
     /// Reported rather than swallowed: it means the next shortcut will deliver
     /// into our own window, which is precisely the symptom of `OBS-119`.
     StillForeground,
+    /// A window of ours asked for the foreground and the system kept another
+    /// one in front - read back, not taken from the call's return value.
+    ///
+    /// It matters because of what happens next: the tester sees our window and
+    /// types, and the letters go to the window that stayed in front, which is
+    /// the application under test.
+    NotTaken,
     /// The window manager has not created the window, so there is no handle to
     /// put the style on.
     ///
@@ -68,7 +75,7 @@ impl core::fmt::Display for FocusError {
         match self {
             Self::Unsupported { system } => write!(
                 f,
-                "a window cannot be told to refuse the keyboard focus on {system} yet"
+                "the tool cannot move the keyboard focus between windows on {system} yet"
             ),
             Self::StyleRefused => write!(
                 f,
@@ -77,8 +84,13 @@ impl core::fmt::Display for FocusError {
             ),
             Self::StillForeground => write!(
                 f,
-                "the palette is still the foreground window, so the next shortcut \
-                 would type into it"
+                "a window of this tool is still the foreground window, so the next \
+                 shortcut would type into it"
+            ),
+            Self::NotTaken => write!(
+                f,
+                "the system kept another window in front, so what is typed now goes \
+                 to that window"
             ),
             Self::HandleUnavailable => write!(
                 f,
@@ -123,6 +135,28 @@ pub fn hand_back_foreground(
     previous: Option<WindowRef>,
 ) -> Result<(), FocusError> {
     platform::hand_back_foreground(ours, previous)
+}
+
+/// Brings `window` - one of ours - to the foreground, with the keyboard.
+///
+/// The opposite of everything above, and needed by exactly one window: the pack
+/// window, the one moment the tool holds the keyboard (`ux-spec.md` 5.2). It
+/// opens on a global shortcut while the application under test is in front.
+///
+/// 🔴 Showing the window is NOT enough, measured 2026-09-29 with
+/// `tools/sonda-okno-paczek` (Windows 11, the shortcut sent from a third
+/// process, three runs per variant): shown alone, the window never got the
+/// foreground (0 of 3) and the letters meant for its search went into the
+/// field under test (3 of 3). With this call on the main thread after the
+/// hotkey, 3 of 3 - the process that receives the hotkey may take the
+/// foreground, which is the condition "received the last input event".
+///
+/// # Errors
+///
+/// [`FocusError::NotTaken`] when the read-back shows another window in front,
+/// [`FocusError::Unsupported`] where there is no route.
+pub fn take_foreground(window: WindowRef) -> Result<(), FocusError> {
+    platform::take_foreground(window)
 }
 
 #[cfg(windows)]
@@ -176,6 +210,18 @@ mod platform {
         }
         Ok(())
     }
+
+    pub fn take_foreground(window: WindowRef) -> Result<(), FocusError> {
+        if super::super::foreground_window() == Some(window) {
+            return Ok(());
+        }
+        unsafe { SetForegroundWindow(handle(window)) };
+        // The verdict from a READ, as everywhere in this file.
+        if super::super::foreground_window() != Some(window) {
+            return Err(FocusError::NotTaken);
+        }
+        Ok(())
+    }
 }
 
 #[cfg(not(windows))]
@@ -200,6 +246,10 @@ mod platform {
         _ours: WindowRef,
         _previous: Option<WindowRef>,
     ) -> Result<(), FocusError> {
+        Err(FocusError::Unsupported { system: SYSTEM })
+    }
+
+    pub fn take_foreground(_window: WindowRef) -> Result<(), FocusError> {
         Err(FocusError::Unsupported { system: SYSTEM })
     }
 }
@@ -269,6 +319,28 @@ mod tests {
             text.contains("window handle") && text.contains("style"),
             "got: {text}"
         );
+    }
+
+    #[test]
+    fn a_window_not_taken_says_where_the_typing_goes() {
+        let text = FocusError::NotTaken.to_string();
+        assert!(
+            text.contains("in front") && text.contains("typed"),
+            "got: {text}"
+        );
+    }
+
+    #[test]
+    fn taking_the_foreground_for_no_window_fails_rather_than_reporting_success() {
+        // Zero is never a window, so the read-back cannot show it in front. A
+        // version that trusted the call instead of the read would say the pack
+        // window holds the keyboard while the letters go elsewhere.
+        let outcome = take_foreground(WindowRef(0));
+        if can_refuse_focus() {
+            assert_eq!(outcome, Err(FocusError::NotTaken));
+        } else {
+            assert!(matches!(outcome, Err(FocusError::Unsupported { .. })));
+        }
     }
 
     #[test]

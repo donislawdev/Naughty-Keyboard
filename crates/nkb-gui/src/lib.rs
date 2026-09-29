@@ -55,3 +55,7 @@ pub mod query;
 // Choosing a pack: the list, the query and the selected row, tested without a
 // window. The pack window draws what this decides (step 7, K3.2).
 pub mod picker;
+// The pack window itself, on the main thread: what `picker` decides moved onto
+// the window, the keyboard taken on opening and handed back on closing. Beside
+// `focus` for the reason `focus` gives - it is main-thread code.
+pub mod packs;

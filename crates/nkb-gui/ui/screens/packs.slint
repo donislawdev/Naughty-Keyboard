@@ -58,6 +58,10 @@ export component PacksWindow inherits Window {
     // What the tester has typed so far. Rust keeps it (`nkb_gui::query`) and
     // sends it back after every press - the line has no text of its own.
     in property <string> query;
+    // One line per catalogue source the list did not read, and why. Below the
+    // list on every opening while a source is unread: a list from one source
+    // of three looks exactly like a complete one (untouchable rule 1).
+    in property <[string]> notes;
 
     callback query-pressed <=> field.pressed;
     callback previous <=> keys.previous;
@@ -123,6 +127,14 @@ export component PacksWindow inherits Window {
                     current-label: root.current-label;
                     empty-text: root.empty-text;
                     vertical-stretch: 1;
+                }
+
+                // Wrapped, because a text that does not wrap may not be
+                // narrower than itself and would widen the window past its
+                // minimum (`slint.md` 2.29).
+                for note in root.notes: TextSmallMuted {
+                    text: note;
+                    wrap: word-wrap;
                 }
             }
 

@@ -156,6 +156,11 @@ export component Palette inherits Window {
     changed content-height => {
         root.content-height-changed(self.content-height);
     }
+    // Asks for the pack window. Rust invokes it when the shortcut arrives on
+    // the worker, and a click on the pack's name will be the second way in -
+    // so both reach the same Rust on the main thread, and the view holds no
+    // handler body.
+    callback open-packs();
 
     title: root.window-title;
     // The colour lives on the surface below, so that the palette can have

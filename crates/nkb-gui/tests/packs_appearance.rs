@@ -256,4 +256,46 @@ fn the_pack_window_shows_where_the_keyboard_is_and_which_row_it_reached() {
         empty == offscreen::draw(&surface, WIDTH, HEIGHT),
         "two renders of an unchanged window differ"
     );
+
+    // ---- the notes below the list (K3.2c) ------------------------------------
+    // The sentence the product says today, and one twice as long. Drawn, below
+    // the list and above the footer, and WRAPPED: a text that does not wrap may
+    // not be narrower than itself (`slint.md` 2.29), so it would run into the
+    // right margin - which must stay exactly as it was without the notes.
+    window.set_rows(ModelRc::new(VecModel::from(specimen())));
+    let bare = offscreen::draw(&surface, WIDTH, HEIGHT);
+    window.set_notes(ModelRc::new(VecModel::from(vec![
+        slint::SharedString::from(
+            "Not read: team folder, own folder - cannot be set in this version.",
+        ),
+        slint::SharedString::from(
+            "Not read: a source with a very long name that nobody would choose - the folder \
+             could not be read, and this sentence is long enough to need a second line.",
+        ),
+    ])));
+    let noted = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let noted_path = offscreen::save(&noted, WIDTH, HEIGHT, "packs-notes.png");
+    let footer = (HEIGHT - 44)..HEIGHT;
+    let differ = |rows: std::ops::Range<u32>, columns: std::ops::Range<u32>| {
+        rows.flat_map(|y| columns.clone().map(move |x| (y * WIDTH + x) as usize))
+            .filter(|&at| bare[at] != noted[at])
+            .count()
+    };
+    assert_eq!(
+        differ(footer, 0..WIDTH),
+        0,
+        "the notes moved the footer. Look at {}",
+        noted_path.display()
+    );
+    assert!(
+        differ((HEIGHT - 200)..(HEIGHT - 44), 0..WIDTH) > 300,
+        "the notes are not drawn above the footer. Look at {}",
+        noted_path.display()
+    );
+    assert_eq!(
+        differ(0..HEIGHT, (WIDTH - 12)..WIDTH),
+        0,
+        "a note ran into the right margin instead of wrapping. Look at {}",
+        noted_path.display()
+    );
 }

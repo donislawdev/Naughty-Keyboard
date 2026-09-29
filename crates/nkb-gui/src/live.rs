@@ -53,9 +53,9 @@
 //! view because it rebuilds the message band from scratch each time.
 
 use std::cell::{Cell, RefCell};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use nkb_adapters::i18n::PaletteLabel;
@@ -165,6 +165,34 @@ pub enum Command {
     Choose(String),
 }
 
+/// The identifier of the pack in use, published by the worker for the pack
+/// window, which marks it and opens on it.
+///
+/// A shared slot rather than a message, for the reason [`Standing`] gives: the
+/// window reads it whenever it opens, which may be long after the last change.
+/// The worker is the one writer, because the sequence that knows the answer
+/// lives there.
+pub type InUse = Arc<Mutex<Option<String>>>;
+
+/// A fresh slot, empty until the worker opens a pack.
+#[must_use]
+pub fn in_use() -> InUse {
+    Arc::new(Mutex::new(None))
+}
+
+/// The pack in use, as last published. A poisoned lock answers `None` - the
+/// window then marks no row, which is a smaller failure than a crash.
+#[must_use]
+pub fn in_use_now(in_use: &InUse) -> Option<String> {
+    in_use.lock().ok().and_then(|held| held.clone())
+}
+
+fn publish(in_use: &InUse, sequence: &AdvanceSequence) {
+    if let Ok(mut held) = in_use.lock() {
+        *held = sequence.pack_id().map(str::to_owned);
+    }
+}
+
 /// Whether the palette starts collapsed. One function for both threads, so
 /// the window and the worker cannot start from two different answers.
 #[must_use]
@@ -182,6 +210,7 @@ pub fn drive(
     palette: &Weak<Palette>,
     stop: &Arc<AtomicBool>,
     commands: &Receiver<Command>,
+    in_use: &InUse,
     start: Start,
     standing: &Standing,
 ) {
@@ -232,6 +261,7 @@ pub fn drive(
     // The pack the messages are about - the one opened, or the last one tried.
     // It changes when the tester chooses another one that opens.
     let mut pack = opened.pack;
+    publish(in_use, &sequence);
 
     let live = match GlobalShortcuts.register(default_bindings()) {
         Ok(live) => live,
@@ -283,9 +313,11 @@ pub fn drive(
             say_later(palette, line);
         }
     };
+    let on_open = || open_packs_later(palette);
     let shortcuts = PaletteShortcuts {
         inner: live.as_ref(),
         on_toggle: &on_toggle,
+        on_open: &on_open,
     };
     let pending = Cell::new(None);
     let ended = loop {
@@ -312,6 +344,7 @@ pub fn drive(
         if let Some(view) = choose(&mut sequence, &memory, &mut pack, &asked, standing) {
             show(palette, view);
         }
+        publish(in_use, &sequence);
     };
     // Before anything else: the shortcuts go back to the system. Holding them
     // after the palette is gone would take `Ctrl+Alt+N` away from whoever wants
@@ -719,9 +752,9 @@ impl Memory<'_> {
 
 /// The palette's own shortcuts in front of the sequence.
 ///
-/// `ToggleVisibility` is about the window, not about the pack, so it never
-/// reaches `AdvanceSequence` - which would answer it with `Unhandled`. Every
-/// other press passes through untouched, in order.
+/// `ToggleVisibility` and `OpenPacks` are about windows, not about the pack in
+/// use, so they never reach `AdvanceSequence` - which would answer them with
+/// `Unhandled`. Every other press passes through untouched, in order.
 ///
 /// ⚠️ An intercepted press does not end the wait. The wait goes on for what is
 /// left of it, and a zero wait - the drain after a send, `W1` - keeps draining.
@@ -733,6 +766,10 @@ struct PaletteShortcuts<'a> {
     /// What a `ToggleVisibility` press does. A closure rather than the window
     /// handle, so the interception can be tested without a window.
     on_toggle: &'a dyn Fn(),
+    /// What an `OpenPacks` press does - asks the main thread to open the pack
+    /// window. A press during a send is answered after it, like a toggle: the
+    /// window opens once the value is in, and no value is replayed.
+    on_open: &'a dyn Fn(),
 }
 
 impl LiveShortcuts for PaletteShortcuts<'_> {
@@ -746,6 +783,7 @@ impl LiveShortcuts for PaletteShortcuts<'_> {
             let left = deadline.saturating_duration_since(Instant::now());
             match self.inner.next(left) {
                 Wait::Pressed(HotkeyAction::ToggleVisibility) => (self.on_toggle)(),
+                Wait::Pressed(HotkeyAction::OpenPacks) => (self.on_open)(),
                 other => return other,
             }
         }
@@ -766,11 +804,24 @@ fn set_compact_later(palette: &Weak<Palette>, compact: bool) {
 /// as usual.
 fn say_later(palette: &Weak<Palette>, line: String) {
     // Dropped for the reason `show` gives.
-    let _ = palette.upgrade_in_event_loop(move |palette| {
-        let mut lines: Vec<SharedString> = slint::Model::iter(&palette.get_messages()).collect();
-        lines.push(line.into());
-        palette.set_messages(ModelRc::new(VecModel::from(lines)));
-    });
+    let _ = palette.upgrade_in_event_loop(move |palette| say_now(&palette, line));
+}
+
+/// Adds one line to the message band, on the main thread - what `say_later`
+/// hands over, and what the pack window says about the keyboard focus.
+pub fn say_now(palette: &Palette, line: String) {
+    let mut lines: Vec<SharedString> = slint::Model::iter(&palette.get_messages()).collect();
+    lines.push(line.into());
+    palette.set_messages(ModelRc::new(VecModel::from(lines)));
+}
+
+/// Asks the main thread to open the pack window.
+///
+/// Through the palette's own callback, the one a click on the pack's name will
+/// use as well, so both ways in reach the same code on the main thread. Dropped
+/// for the reason `show` gives.
+fn open_packs_later(palette: &Weak<Palette>) {
+    let _ = palette.upgrade_in_event_loop(|palette| palette.invoke_open_packs());
 }
 
 #[cfg(test)]
@@ -1303,6 +1354,7 @@ mod tests {
         let queued = Queued(std::cell::RefCell::new(
             [
                 HotkeyAction::ToggleVisibility,
+                HotkeyAction::OpenPacks,
                 HotkeyAction::NextValue,
                 HotkeyAction::ToggleVisibility,
             ]
@@ -1310,9 +1362,12 @@ mod tests {
         ));
         let toggles = std::cell::Cell::new(0);
         let on_toggle = || toggles.set(toggles.get() + 1);
+        let opens = std::cell::Cell::new(0);
+        let on_open = || opens.set(opens.get() + 1);
         let shortcuts = PaletteShortcuts {
             inner: &queued,
             on_toggle: &on_toggle,
+            on_open: &on_open,
         };
         // A zero wait, as the drain after a send asks: the toggle in front must
         // not hide the NextValue behind it.
@@ -1326,6 +1381,7 @@ mod tests {
             2,
             "both toggles were answered, none was dropped"
         );
+        assert_eq!(opens.get(), 1, "the pack window was asked for, once");
     }
 
     /// Two conditions share one bar. The mode wins, because in clipboard mode

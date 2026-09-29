@@ -686,6 +686,13 @@ pub fn not_guaranteed(outside: &[char]) -> Option<String> {
 pub enum Environment {
     /// The palette could not be made to refuse the keyboard focus.
     FocusNotRefused,
+    /// The pack window opened, and the system kept the keyboard somewhere
+    /// else - the letters of the search would go to the application under
+    /// test (`ux-spec.md` 5.2, measured by `tools/sonda-okno-paczek`).
+    PacksFocusNotTaken,
+    /// The pack window closed, and the keyboard could not be handed back to
+    /// the window it was taken from (`ux-spec.md` 5.2).
+    FocusNotReturned,
 }
 
 /// The pattern for an environment limit. `ux-spec.md` 6, section B.
@@ -700,6 +707,12 @@ fn pattern_environment(limit: Environment) -> &'static str {
     match limit {
         Environment::FocusNotRefused => {
             "The palette could not refuse the keyboard focus: {reason}. Click into the field you are testing before pressing a shortcut."
+        }
+        Environment::PacksFocusNotTaken => {
+            "The pack window could not take the keyboard focus: {reason}. Click the pack window before typing, or the letters go to the application you are testing."
+        }
+        Environment::FocusNotReturned => {
+            "The keyboard focus could not be returned to the window you were in: {reason}. Click into the field you are testing before pressing a shortcut."
         }
     }
 }
@@ -800,17 +813,18 @@ fn pattern_save_error(error: &SaveError) -> Option<&'static str> {
 
 /// The pattern for the two settings messages that carry no inner type.
 ///
-/// 🔴 `RememberedPackUnavailable` sends the tester to the command line because
-/// that is the one way to choose a pack in this build. The pack window (step 7)
-/// changes the second sentence - the same rule that made `Taken` stop naming a
-/// settings screen that did not exist.
+/// 🔴 `RememberedPackUnavailable` names the shortcut of the pack window, and it
+/// could only start doing so once that window opened (K3.2c). Until then it sent
+/// the tester to the command line, the one way to choose a pack - the same rule
+/// that made `Taken` stop naming a settings screen that did not exist. A pack
+/// chosen there is remembered (`D84`), so the sentence needs no second half.
 fn pattern_settings_message(message: &SettingsMessage) -> Option<&'static str> {
     match message {
         SettingsMessage::Nowhere { .. } => Some(
             "Settings cannot be kept because {variable} does not name a folder, so nothing will be remembered after the palette closes. Set {variable} to a full path and start the palette again.",
         ),
         SettingsMessage::RememberedPackUnavailable { .. } => Some(
-            "The remembered pack \"{remembered}\" could not be opened, so the palette opened \"{opened}\" for now. Start the palette with a pack name to remember a different one.",
+            "The remembered pack \"{remembered}\" could not be opened, so the palette opened \"{opened}\" for now. Press {shortcut} to choose another.",
         ),
         SettingsMessage::Unusable(_) | SettingsMessage::Note(_) | SettingsMessage::NotSaved(_) => {
             None
@@ -898,8 +912,16 @@ pub fn settings_message(message: &SettingsMessage, file: &str) -> Option<String>
             pattern_settings_message(message).map(|pattern| fill(pattern, &[("variable", missing)]))
         }
         SettingsMessage::RememberedPackUnavailable { remembered, opened } => {
-            pattern_settings_message(message)
-                .map(|pattern| fill(pattern, &[("remembered", remembered), ("opened", opened)]))
+            pattern_settings_message(message).map(|pattern| {
+                fill(
+                    pattern,
+                    &[
+                        ("remembered", remembered),
+                        ("opened", opened),
+                        ("shortcut", &chord_text(HotkeyAction::OpenPacks)),
+                    ],
+                )
+            })
         }
     }
 }

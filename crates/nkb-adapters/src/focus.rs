@@ -27,7 +27,9 @@
 //! [`KeptFocus::remember`] cannot be either.
 
 use nkb_sys::WindowRef;
-use nkb_sys::window::{FocusError, can_refuse_focus, hand_back_foreground, refuse_activation};
+use nkb_sys::window::{
+    FocusError, can_refuse_focus, hand_back_foreground, refuse_activation, take_foreground,
+};
 
 /// Which window held the keyboard focus before the palette opened.
 ///
@@ -90,6 +92,57 @@ impl KeptFocus {
     }
 }
 
+/// The keyboard focus lent to the one window of ours that must take it - the
+/// pack window - and the window it goes back to.
+///
+/// The palette's [`KeptFocus`] turned inside out: that window never takes the
+/// focus, this one takes it on opening and gives it back on closing
+/// (`ux-spec.md` 5.2). A separate type rather than a mode of the other, so a
+/// caller cannot take the focus for the palette by picking the wrong flag.
+///
+/// Remembered BEFORE the window shows, for the reason [`KeptFocus::remember`]
+/// gives: afterwards the answer is our own window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LentFocus {
+    /// `None` when nothing held the foreground - then there is nobody to give
+    /// it back to, and giving back says so.
+    previous: Option<WindowRef>,
+}
+
+impl LentFocus {
+    /// Reads who holds the keyboard focus right now.
+    #[must_use]
+    pub fn remember() -> Self {
+        Self {
+            previous: nkb_sys::foreground_window(),
+        }
+    }
+
+    /// Brings `window` - the raw handle of our own window, `None` while the
+    /// library has none to give - to the foreground.
+    ///
+    /// # Errors
+    ///
+    /// The handle missing, the system keeping another window in front, or no
+    /// route on this system.
+    pub fn take_for(&self, window: Option<u64>) -> Result<(), FocusError> {
+        take_foreground(WindowRef(window.ok_or(FocusError::HandleUnavailable)?))
+    }
+
+    /// Gives the foreground back to the window remembered, if `window` holds
+    /// it. A window that lost it already - the tester clicked elsewhere - has
+    /// nothing to give back, and that is a success.
+    ///
+    /// # Errors
+    ///
+    /// The handle missing, our window still in front after the attempt, or no
+    /// route on this system.
+    pub fn give_back(self, window: Option<u64>) -> Result<(), FocusError> {
+        let window = WindowRef(window.ok_or(FocusError::HandleUnavailable)?);
+        hand_back_foreground(window, self.previous)
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::expect_used,
@@ -98,6 +151,24 @@ impl KeptFocus {
 )]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_lent_focus_with_no_handle_says_the_handle_is_missing_on_every_system() {
+        let lent = LentFocus::remember();
+        assert_eq!(lent.take_for(None), Err(FocusError::HandleUnavailable));
+        assert_eq!(lent.give_back(None), Err(FocusError::HandleUnavailable));
+    }
+
+    #[test]
+    fn a_lent_focus_never_reports_taking_a_window_that_is_not_there() {
+        // The read-back is the verdict: a null handle is never in front.
+        let outcome = LentFocus::remember().take_for(Some(0));
+        if KeptFocus::possible() {
+            assert_eq!(outcome, Err(FocusError::NotTaken));
+        } else {
+            assert!(matches!(outcome, Err(FocusError::Unsupported { .. })));
+        }
+    }
 
     #[test]
     fn no_handle_at_all_is_reported_as_the_missing_handle_on_every_system() {

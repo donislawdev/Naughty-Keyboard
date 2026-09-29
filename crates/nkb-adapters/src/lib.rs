@@ -25,7 +25,7 @@ pub mod toml_pack;
 pub use built_in::BUILT_IN_PACKS;
 pub use catalogue::BuiltInCatalogue;
 pub use clipboard_delivery::ClipboardDelivery;
-pub use focus::KeptFocus;
+pub use focus::{KeptFocus, LentFocus};
 pub use fs::{DirectoryPackSink, DirectoryPackSource, SystemClock};
 pub use keyboard::DirectInjection;
 pub use report_text::EnglishReport;

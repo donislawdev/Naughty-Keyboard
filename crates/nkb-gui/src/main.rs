@@ -57,7 +57,8 @@ use nkb_adapters::i18n::PaletteLabel;
 use nkb_adapters::{KeptFocus, SettingsFile, default_bindings, i18n, report_window_failure};
 use nkb_app::{KeptSettings, RouteRequest};
 use nkb_core::hotkeys::HotkeyAction;
-use nkb_gui::{Gallery, HintRow, Palette, focus, live};
+use nkb_gui::packs::{Packs, SystemKeyboard};
+use nkb_gui::{Gallery, HintRow, PacksWindow, Palette, focus, live};
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 /// The pack the palette opens on when the command line names none and the
@@ -73,11 +74,9 @@ const DEFAULT_PACK: &str = "whitespace";
 /// list of ten stops being a hint. These four are the ones the first five
 /// minutes need: move through the pack, and get the report out.
 ///
-/// ⚠️ `OpenPacks` is here although the pack search is step 7 and does not exist.
-/// It stays because the shortcut IS registered - `nkb_core::hotkeys` reserves
-/// all ten so another application cannot take them - and an unwired one answers
-/// with `Message::Unhandled` rather than with silence. A tester who presses it
-/// learns something true either way.
+/// `OpenPacks` opens the pack window (step 7, K3.2c): the worker takes the
+/// press before the sequence sees it and asks this thread through the
+/// palette's `open-packs` callback.
 const HINTED: [HotkeyAction; 4] = [
     HotkeyAction::NextValue,
     HotkeyAction::PreviousValue,
@@ -195,17 +194,47 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     focus::refuse_focus(&palette, kept, &standing);
 
     let stop = Arc::new(AtomicBool::new(false));
-    // What the window asks of the worker between presses - another pack. The
-    // closing goes through `stop`, never through this: a channel whose sender
-    // is gone answers "nothing waiting", which must not read as "stop".
-    //
-    // ⚠️ Held and not yet used: the pack window that sends on it is the next
-    // piece of step 7. Until then nothing sends and every wait finds it empty.
-    let (_choose, commands) = std::sync::mpsc::channel::<live::Command>();
+    // What the pack window asks of the worker between presses - another pack.
+    // The closing goes through `stop`, never through this: a channel whose
+    // sender is gone answers "nothing waiting", which must not read as "stop".
+    let (choose, commands) = std::sync::mpsc::channel::<live::Command>();
+    // The pack in use, published by the worker, read by the pack window.
+    let in_use = live::in_use();
+
+    // Created once and shown on request. Unlike the palette it has no flag to
+    // lose when hidden, so hiding it between openings costs nothing.
+    let packs = Packs::new(
+        PacksWindow::new()?,
+        Box::new(SystemKeyboard::default()),
+        choose,
+        Arc::clone(&in_use),
+        {
+            let palette = palette.as_weak();
+            Box::new(move |line| {
+                if let Some(palette) = palette.upgrade() {
+                    live::say_now(&palette, line);
+                }
+            })
+        },
+    );
+    palette.on_open_packs({
+        let packs = std::rc::Rc::clone(&packs);
+        move || packs.open()
+    });
+    // Closing the palette closes the pack window too - otherwise the event
+    // loop would wait for it, and the process would outlive the palette.
+    palette.window().on_close_requested({
+        let packs = std::rc::Rc::clone(&packs);
+        move || {
+            packs.close();
+            slint::CloseRequestResponse::HideWindow
+        }
+    });
     let worker = std::thread::spawn({
         let palette = palette.as_weak();
         let stop = Arc::clone(&stop);
         let standing = std::sync::Arc::clone(&standing);
+        let in_use = Arc::clone(&in_use);
         let start = live::Start {
             asked: pack,
             default_pack: DEFAULT_PACK,
@@ -217,7 +246,7 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         // Measured: work handed to the event loop before `run()` is delivered
         // once it starts (`slint.md` 1.9), so this thread may say something
         // before the window is running and nothing is lost.
-        move || live::drive(&palette, &stop, &commands, start, &standing)
+        move || live::drive(&palette, &stop, &commands, &in_use, start, &standing)
     });
 
     let ran = palette.run();

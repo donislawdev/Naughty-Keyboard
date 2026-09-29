@@ -50,7 +50,7 @@ pub const HANDLE_WAIT: Duration = Duration::from_secs(3);
 ///
 /// One screen frame at 60 Hz. Short enough that nothing perceptible is added to
 /// the 258 ms the handle costs anyway, long enough that the poll is not a spin.
-const POLL: Duration = Duration::from_millis(16);
+pub(crate) const POLL: Duration = Duration::from_millis(16);
 
 /// A sentence that stays true for the rest of the run, shared with the worker.
 ///
@@ -93,7 +93,7 @@ pub fn refuse_focus(palette: &Palette, kept: KeptFocus, standing: &Standing) {
             itself.stop();
             return;
         };
-        let handle = window_handle(&palette);
+        let handle = window_handle(palette.window());
         if handle.is_none() && started.elapsed() < HANDLE_WAIT {
             return;
         }
@@ -116,15 +116,16 @@ thread_local! {
         const { std::cell::RefCell::new(None) };
 }
 
-/// The palette's own window handle, if the window manager has made one.
+/// A window's own handle, if the window manager has made one - the palette's
+/// here, the pack window's in `packs`.
 ///
 /// A number rather than a type: it is what the adapter takes, and it is all this
 /// layer knows. Anything that is not a Win32 handle answers `None`, which on
 /// macOS and Linux is the honest answer today - there is no route there either
 /// way, and the adapter says so in words.
-fn window_handle(palette: &Palette) -> Option<u64> {
+pub(crate) fn window_handle(window: &slint::Window) -> Option<u64> {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    let window = palette.window().window_handle();
+    let window = window.window_handle();
     match window.window_handle().ok()?.as_raw() {
         RawWindowHandle::Win32(handle) => Some(handle.hwnd.get() as u64),
         _ => None,
