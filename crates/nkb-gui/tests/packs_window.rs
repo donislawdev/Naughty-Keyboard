@@ -7,7 +7,8 @@
 //! sends keys to a window wired by hand. Neither sees the product's own wiring
 //! in `nkb_gui::packs`: which callback moves the selection, whether Enter on
 //! another pack reaches the worker as a command, whether Escape closes without
-//! one, and whether the keyboard is handed back on EVERY way out. Here the keys
+//! one, whether the keyboard is handed back on EVERY way out the window offers -
+//! and NOT when the tester leaves for another window. Here the keys
 //! go to the window as the system would send them, and the answers are read
 //! from the channel, the window and a keyboard that records what it was asked.
 //!
@@ -237,6 +238,62 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     window.window().dispatch_event(WindowEvent::CloseRequested);
     assert!(!packs.is_open());
     assert_eq!(calls(&keyboard), vec!["give back"]);
+
+    // ---- the tester clicks another window: closed, and NOT handed back ------
+    // The keyboard is where the tester put it, and handing it back would take
+    // it from there (`OBS-147`). What the system sends is the window going
+    // inactive - Slint's `WindowActiveChanged`, reaching the query line as
+    // focus lost for `window-activation`.
+    packs.open();
+    type_text(window, "uni");
+    let _ = calls(&keyboard);
+    window
+        .window()
+        .dispatch_event(WindowEvent::WindowActiveChanged(true));
+    assert!(
+        packs.is_open(),
+        "becoming active is not leaving - the window must survive its own opening"
+    );
+    window
+        .window()
+        .dispatch_event(WindowEvent::WindowActiveChanged(false));
+    assert!(
+        !packs.is_open(),
+        "a window the tester left stays on top without the keyboard (OBS-147)"
+    );
+    assert!(!window.window().is_visible(), "closed means hidden");
+    assert!(
+        calls(&keyboard).is_empty(),
+        "leaving hands nothing back - the keyboard stays where the tester put it"
+    );
+    assert_eq!(
+        commands.try_recv(),
+        Err(mpsc::TryRecvError::Empty),
+        "leaving is not a choice"
+    );
+    assert!(said.borrow().is_empty(), "{:?}", said.borrow());
+
+    // ---- the next opening after leaving is a fresh one ----------------------
+    packs.open();
+    assert_eq!(
+        calls(&keyboard),
+        vec!["remember"],
+        "remembered anew - the old place to go back to is gone"
+    );
+    assert_eq!(window.get_query(), "", "the search starts empty again");
+
+    // ---- our own hand-back makes the window inactive too: nothing more ------
+    // Enter and Escape give the keyboard back, the system then reports the
+    // window inactive - after the window is closed. That report must not do
+    // anything a second time.
+    tap(window, ESCAPE);
+    assert_eq!(calls(&keyboard), vec!["give back"]);
+    window
+        .window()
+        .dispatch_event(WindowEvent::WindowActiveChanged(false));
+    assert!(!packs.is_open());
+    assert!(calls(&keyboard).is_empty());
+    assert!(said.borrow().is_empty(), "{:?}", said.borrow());
 
     // ---- a keyboard that stays elsewhere is said, in both directions --------
     *keyboard.take_fails.borrow_mut() = true;

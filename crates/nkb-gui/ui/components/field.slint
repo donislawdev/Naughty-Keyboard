@@ -57,6 +57,11 @@ export component QueryField inherits Rectangle {
     // answers whether the press was the query's: false lets it travel on, so a
     // key the query does not want is not silently eaten.
     callback pressed(text: string, control: bool, alt: bool, meta: bool) -> bool;
+    // The window holding the line stopped being the active one - the tester
+    // clicked another window or switched away. Only that reason: focus moved
+    // by code or by a click inside the window is not the tester leaving
+    // (`OBS-147`). Rust cannot name the reason itself, the type is not public.
+    callback window-left();
 
     // Moves the keyboard to the line. A function rather than a property,
     // because focusing is an act, not a state the view could hold.
@@ -91,6 +96,11 @@ export component QueryField inherits Rectangle {
         accessible-value: root.query;
         key-pressed(event) => {
             return root.pressed(event.text, event.modifiers.control, event.modifiers.alt, event.modifiers.meta) ? accept : reject;
+        }
+        focus-lost(reason) => {
+            if (reason == FocusReason.window-activation) {
+                root.window-left();
+            }
         }
 
         area := TouchArea {

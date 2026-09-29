@@ -7,8 +7,10 @@
 // design (`D62`), and `hide()`/`show()` would destroy it and lose the flag
 // (`OBS-80`). So this is a window of its own, opened on request by the
 // shortcut or a click on the pack's name in the palette, and closed by Enter or
-// Escape - after which the focus goes back to the field it came from. Rust
-// does that, and this file only lays the window out.
+// Escape - after which the focus goes back to the field it came from. It also
+// closes when the tester clicks another window, and then the focus stays where
+// they put it (`OBS-147`). Rust does that, and this file only lays the window
+// out.
 //
 // # Chrome, content, chrome (PORADNIK-GUI 4)
 //
@@ -69,6 +71,7 @@ export component PacksWindow inherits Window {
     callback choose <=> keys.choose;
     callback cancel <=> keys.cancel;
     callback clicked <=> list.clicked;
+    callback deactivated <=> field.window-left;
 
     // The keyboard goes to the query line when the window opens, so the
     // first letter the tester types filters the list (PORADNIK-GUI: the focus

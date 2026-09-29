@@ -30,9 +30,15 @@
 //! them - and nothing in it needs a screen to be tested: the keyboard is a
 //! trait, the worker a channel, the palette's message band a closure.
 //!
-//! ⚠️ Not done: the window does not close when the tester clicks elsewhere. It
-//! stays on top without the keyboard until Enter, Escape or its close button -
-//! whether Slint reports the window losing activation is unmeasured (`OBS-147`).
+//! # Leaving it for another window
+//!
+//! A tester who clicks another window, or switches away, has put the keyboard
+//! there. The window closes and does NOT hand the keyboard back - handing it
+//! back would take it from where the tester just put it (`OBS-147`). Before
+//! this it stayed on top without the keyboard, and once, after a real
+//! shortcut, without a word either (`OBS-149`). Slint reports the change as the
+//! query line losing focus for `window-activation`, the only reason the view
+//! passes on.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -181,6 +187,12 @@ impl Packs {
             }
         });
         let weak = Rc::downgrade(&packs);
+        packs.window.on_deactivated(move || {
+            if let Some(packs) = weak.upgrade() {
+                packs.left();
+            }
+        });
+        let weak = Rc::downgrade(&packs);
         packs.window.window().on_close_requested(move || {
             if let Some(packs) = weak.upgrade() {
                 packs.close();
@@ -199,9 +211,11 @@ impl Packs {
 
     /// Opens the window on the pack in use, or brings it back to the front.
     ///
-    /// Asked again while open, it keeps the list, the query and the window it
-    /// will hand the keyboard back to - and takes the keyboard again, which is
-    /// what a tester who clicked away and pressed the shortcut wants.
+    /// Asked again while open - the shortcut, or a click on the pack's name in
+    /// the palette, with the window already up - it keeps the list, the query
+    /// and the window it will hand the keyboard back to, and asks for the
+    /// keyboard again. A tester who clicked away finds it closed instead (the
+    /// module header, "Leaving it for another window").
     pub fn open(self: &Rc<Self>) {
         if !self.is_open() {
             self.keyboard.remember();
@@ -239,6 +253,20 @@ impl Packs {
         }
         let _ = self.window.hide();
         *self.picker.borrow_mut() = None;
+    }
+
+    /// The window stopped being the active one: the tester is elsewhere.
+    ///
+    /// Closes without a word and without handing the keyboard back - it is
+    /// where the tester put it. Our own hand-back in [`Packs::close`] makes the
+    /// window inactive too, and whenever that report arrives, this finds the
+    /// window already closed or closes what `close` closes anyway: the first
+    /// line is the whole guard.
+    fn left(&self) {
+        if self.picker.borrow_mut().take().is_none() {
+            return;
+        }
+        let _ = self.window.hide();
     }
 
     /// Asks for the keyboard as soon as the window has a handle to ask with.
