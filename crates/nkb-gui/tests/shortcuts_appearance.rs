@@ -262,14 +262,17 @@ fn the_shortcuts_window_keeps_its_promises() {
     window.set_rows(ModelRc::new(VecModel::from(specimen(false))));
     let double = offscreen::draw(&surface, WIDTH, TALL);
     let double_path = offscreen::save(&double, WIDTH, TALL, "shortcuts-two-lines.png");
+    // Measured by where the list ENDS, not by bands: with a typeface whose
+    // lines stand further apart, a title and its detail are two bands of ink
+    // with the ground between them - measured under WSL, 18 bands for ten
+    // rows. Ten detail lines push the end down by at least eight pixels each.
     let two = ink_bands(&double, WIDTH, content(&double, WIDTH, TALL));
-    let tallest_single = single.iter().map(|b| b.end - b.start).max().unwrap_or(0);
-    let shortest_double = two.iter().map(|b| b.end - b.start).min().unwrap_or(0);
+    let single_end = single.last().map_or(0, |band| band.end);
+    let double_end = two.last().map_or(0, |band| band.end);
     assert!(
-        two.len() == 10 && shortest_double > tallest_single + 8,
-        "rows with a detail line are not taller than rows without one ({} bands, shortest \
-         {shortest_double} px, against {tallest_single} px). Look at {}",
-        two.len(),
+        two.len() >= 10 && double_end > single_end + 10 * 8,
+        "rows with a detail line are not taller than rows without one: the list ends at \
+         y={double_end} with them and y={single_end} without. Look at {}",
         double_path.display()
     );
     window.set_rows(ModelRc::new(VecModel::from(specimen(true))));
@@ -283,10 +286,12 @@ fn the_shortcuts_window_keeps_its_promises() {
     window.set_rows(ModelRc::new(VecModel::from(rows)));
     let recording = offscreen::draw(&surface, WIDTH, TALL);
     let recording_path = offscreen::save(&recording, WIDTH, TALL, "shortcuts-recording.png");
-    // The row's box reaches past its ink by its padding (`space-2`), and the
-    // selection edge is drawn on the box - so the band is widened by a little
-    // more than that. The next row is not selected and adds no accent.
-    let first_row = single[0].start.saturating_sub(12)..single[0].end + 12;
+    // The selection edge is drawn on the row's BOX, which reaches past its ink
+    // by the padding and by whatever the typeface leaves above and below its
+    // letters. So the band runs from the top of the content to halfway to the
+    // second row's ink - a fixed margin around the letters held on Windows
+    // and missed the edge under WSL, where the lines stand further apart.
+    let first_row = area.start..(single[0].end + single[1].start) / 2;
     let edge_only = count(&selected, WIDTH, first_row.clone(), 0..WIDTH, ACCENT);
     let with_pill = count(&recording, WIDTH, first_row, 0..WIDTH, ACCENT);
     assert!(
