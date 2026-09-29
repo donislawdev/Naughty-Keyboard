@@ -161,6 +161,53 @@ export component QueryField inherits Rectangle {
     }
 }
 
+// The keyboard of a whole window, handed to Rust one press and one release at
+// a time.
+//
+// For a window where every key means something - the shortcuts window, where
+// a combination is recorded by pressing it (K5). Unlike `PickerKeys` it takes
+// the keyboard, and unlike `QueryField` it draws nothing: the window's content
+// sits inside it, and what a key does is Rust's decision (GUI rule 11).
+//
+// 🔴 The text and the modifiers passed on are what the TOOLKIT believes, and
+// for a key combination that is not enough: the text of a key depends on the
+// layout (`Shift+1` arrives as `!`), and a left `Ctrl` with a left `Alt` over a
+// key the layout types a character on arrives as that character with neither
+// modifier (`slint.md` 2.29). Which key was pressed is therefore asked of the
+// system by Rust, and a press here is only the moment to ask.
+//
+// Releases are passed on because a combination is built while keys are held:
+// letting go of `Shift` before the key changes what is being recorded.
+export component KeyScope inherits FocusScope {
+    // Rust answers whether the press was the window's: false lets it travel
+    // on, so a key the window does not want is not silently eaten.
+    callback pressed(text: string, control: bool, alt: bool, shift: bool, meta: bool) -> bool;
+    callback released(text: string) -> bool;
+    // The window stopped being the active one - see `QueryField`.
+    callback window-left();
+    // The window became the active one - see `QueryField` (`OBS-151`).
+    callback window-entered();
+
+    focus-on-tab-navigation: false;
+
+    key-pressed(event) => {
+        return root.pressed(event.text, event.modifiers.control, event.modifiers.alt, event.modifiers.shift, event.modifiers.meta) ? accept : reject;
+    }
+    key-released(event) => {
+        return root.released(event.text) ? accept : reject;
+    }
+    focus-lost(reason) => {
+        if (reason == FocusReason.window-activation) {
+            root.window-left();
+        }
+    }
+    focus-gained(reason) => {
+        if (reason == FocusReason.window-activation) {
+            root.window-entered();
+        }
+    }
+}
+
 // The keys a list picker answers: move, choose, close.
 //
 // Caught on the way DOWN, before the focused query line sees them -

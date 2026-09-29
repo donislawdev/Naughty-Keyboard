@@ -138,6 +138,15 @@ export global Tokens {
     out property <length> packs-height: 560px;
     out property <length> packs-min-width: 360px;
     out property <length> packs-min-height: 360px;
+    // The shortcuts window (step 7, K5). Wider than the pack window because a
+    // row carries an action, up to two pills and a combination as long as
+    // `Ctrl+Alt+Shift+Win+F24`. No default HEIGHT, on purpose: the window
+    // opens as tall as its ten rows ask, so the list does not scroll when it
+    // first appears - a number here would be fitted to one typeface on one
+    // machine (GUI rule 14). The minimum still keeps three rows and the keys.
+    out property <length> shortcuts-width: 480px;
+    out property <length> shortcuts-min-width: 400px;
+    out property <length> shortcuts-min-height: 360px;
     // The thumb that says a list scrolls. Thin, because it is a sign rather
     // than a control - the list scrolls with the wheel and the arrow keys.
     out property <length> scroll-thumb: 4px;

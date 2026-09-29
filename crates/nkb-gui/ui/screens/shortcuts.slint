@@ -1,0 +1,150 @@
+// The shortcuts window: the ten global shortcuts, and a new one recorded by
+// pressing it.
+//
+// # An ordinary window that holds the keyboard
+//
+// The palette refuses the keyboard (`D62`), and a combination can only be
+// recorded by a window that receives it. So, like the pack window, this is a
+// window of its own, opened on request - a click on the palette's link under
+// the hint bar - and closed by Escape, after which the keyboard goes back to
+// the field it came from. While it is open the palette's own shortcuts are
+// paused: a combination the palette holds never reaches any window, this one
+// included, and a shortcut pressed here would send a value into this window.
+// The intro line says so, because a palette that stops answering without a
+// word looks broken (untouchable rule 1).
+//
+// # Chrome, content, chrome (PORADNIK-GUI 4)
+//
+//     header    the title and how many shortcuts are the tester's own
+//     content   what the window does, the list, what the last key press did
+//     footer    the keys the window answers - the hint bar the palette uses
+//
+// The main action has no button, for the reason the pack window gives: it is
+// the selected row, edged in the accent, and Enter - which the footer names
+// first. Recording is the same row with a pill that says so.
+//
+// # One line per shortcut, the combination at the end
+//
+// The way a menu shows its shortcuts: the action on the left, the combination
+// in the typeface keys are written in, ending in one column at the right. A
+// second line per row would repeat "default" eight times out of ten, so what
+// differs from the default says it in a pill - `changed`, or `taken` in the
+// risk colour - and the full sentence about the last press stands under the
+// list, where it can wrap.
+//
+// # No text field
+//
+// `D85` holds here too: a text field copies and pastes on its own. The keyboard
+// goes to `KeyScope`, which draws nothing and hands every press to Rust, and
+// Rust asks the SYSTEM which key it was - see `KeyScope` for why the toolkit's
+// answer is not enough.
+//
+// # Nothing is decided here
+//
+// What a key does, which row is selected, what the rows and sentences say:
+// Rust's, and every word arrives finished from `nkb-adapters::i18n` -
+// untouchable rule 9. The callbacks are ALIASES of the components' own, so
+// this file holds no handler body (GUI rule 11).
+
+import {
+    Tokens,
+    TextName,
+    TextBody,
+    TextSmallMuted,
+    Spacer,
+    HintRow,
+    HintBar,
+    ChromeBand,
+    KeyScope,
+    PickRow,
+    PickList,
+} from "../components.slint";
+
+export component ShortcutsWindow inherits Window {
+    in property <string> window-title;
+    in property <string> heading;
+    // How many shortcuts are the tester's own, as a finished line.
+    in property <string> summary;
+    // What the window does, and that the palette does not answer while it is
+    // open.
+    in property <string> intro;
+    in property <[PickRow]> rows;
+    in property <int> selected;
+    // The pill on the row being recorded.
+    in property <string> current-label;
+    in property <[HintRow]> hints;
+    // What the last press came to - a shortcut kept, refused and why, or the
+    // combination recording is waiting for. Under the list, wrapped.
+    in property <[string]> messages;
+
+    callback pressed <=> keys.pressed;
+    callback released <=> keys.released;
+    callback clicked <=> list.clicked;
+    callback deactivated <=> keys.window-left;
+    callback activated <=> keys.window-entered;
+
+    // The keyboard goes to the window as it opens, so the first key the
+    // tester presses already moves or records.
+    public function focus-keys() {
+        keys.focus();
+    }
+
+    title: root.window-title;
+    background: Tokens.surface;
+    preferred-width: Tokens.shortcuts-width;
+    min-width: Tokens.shortcuts-min-width;
+    min-height: Tokens.shortcuts-min-height;
+    // Above the palette, which is always on top itself - the same reason as
+    // the pack window.
+    always-on-top: true;
+
+    keys := KeyScope {
+        VerticalLayout {
+            ChromeBand {
+                HorizontalLayout {
+                    spacing: Tokens.space-2;
+                    TextName {
+                        text: root.heading;
+                    }
+                    Spacer { }
+                    TextSmallMuted {
+                        text: root.summary;
+                    }
+                }
+            }
+
+            VerticalLayout {
+                padding: Tokens.space-4;
+                spacing: Tokens.space-3;
+                vertical-stretch: 1;
+
+                // Wrapped, for the reason the pack window's notes give: a text
+                // that does not wrap may not be narrower than itself
+                // (`slint.md` 2.29).
+                TextSmallMuted {
+                    text: root.intro;
+                    wrap: word-wrap;
+                }
+
+                list := PickList {
+                    rows: root.rows;
+                    selected: root.selected;
+                    current-label: root.current-label;
+                    vertical-stretch: 1;
+                }
+
+                for message in root.messages: TextBody {
+                    text: message;
+                    wrap: word-wrap;
+                }
+            }
+
+            ChromeBand {
+                at-bottom: true;
+                HintBar {
+                    rows: root.hints;
+                }
+            }
+        }
+    }
+}

@@ -73,6 +73,9 @@ fn row(title: &str, detail: &str, current: bool) -> PickRow {
         badge_risky: false,
         current,
         enabled: true,
+        single_line: false,
+        key: "".into(),
+        has_key: false,
     }
 }
 

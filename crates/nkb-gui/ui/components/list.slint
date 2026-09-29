@@ -1,4 +1,4 @@
-// A list to pick one thing from: the packs today, the shortcuts next.
+// A list to pick one thing from: the packs, and the shortcuts (K5).
 //
 // # Built for the count the list WILL have, not the count it has
 //
@@ -20,18 +20,32 @@ import { Pill } from "chrome.slint";
 // (document 13 section 2.1). `has-badge` exists because comparing `badge` with
 // an empty string would put a quoted string in a view, which `ui_guard.rs`
 // refuses (D58).
+//
+// Two shapes, one row (K5): a pack is a name over a detail line, a shortcut is
+// an action on ONE line with its key combination at the end - the way a menu
+// shows its shortcuts. `single-line` and `key` are the whole difference, so a
+// change to how a row is selected, pressed or faded reaches both lists at once
+// (GUI rule 5).
 export struct PickRow {
     title: string,
     detail: string,
     badge: string,
     has-badge: bool,
     badge-risky: bool,
-    // The thing in use right now - the pack the palette holds.
+    // The thing in use right now - the pack the palette holds, the shortcut
+    // being recorded.
     current: bool,
     // False for a row that cannot be chosen, such as a pack that does not load.
     // It stays in the list, faded, because a thing that vanished from a list
     // cannot be asked about - untouchable rule 1.
     enabled: bool,
+    // No detail line: the row is as tall as its title. The default is two lines,
+    // so a list that says nothing about this keeps the pack list's shape.
+    single-line: bool,
+    // A key combination at the end of the row, in the typeface the hint bar
+    // writes keys in: `Alt+Shift+N`.
+    key: string,
+    has-key: bool,
 }
 
 // One row, in every state.
@@ -101,7 +115,7 @@ component PickRowView inherits Rectangle {
                     text: root.item.title;
                     overflow: elide;
                 }
-                TextBody {
+                if !root.item.single-line: TextBody {
                     text: root.item.detail;
                     overflow: elide;
                 }
@@ -112,6 +126,18 @@ component PickRowView inherits Rectangle {
                 spacing: Tokens.space-2;
                 horizontal-stretch: 0;
 
+                // 🔴 A one-line row is as tall as a pill whether it shows one or
+                // not. Measured on the first render: a title is shorter than a
+                // pill, so the rows with a pill stood taller, and the pill that
+                // appears when recording starts moved every row below it. This
+                // pill is never drawn and takes no width - it only lends the row
+                // its height, so the floor follows the pill's own typeface and
+                // padding instead of a number fitted to one machine (GUI rule 14).
+                if root.item.single-line: Pill {
+                    text: root.current-label;
+                    width: 0px;
+                    visible: false;
+                }
                 if root.item.current: VerticalLayout {
                     alignment: center;
                     Pill {
@@ -125,6 +151,12 @@ component PickRowView inherits Rectangle {
                         text: root.item.badge;
                         tint: root.item.badge-risky ? Tokens.risk : Tokens.text-muted;
                     }
+                }
+                // Last, at the row's right edge, so the combinations of every
+                // row end in one column whatever the pills before them say.
+                if root.item.has-key: TextBody {
+                    text: root.item.key;
+                    font-family: Tokens.font-mono;
                 }
             }
         }

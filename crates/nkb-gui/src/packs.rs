@@ -473,6 +473,10 @@ fn pick_row(row: &Row) -> PickRow {
         badge_risky: row.badge.as_ref().is_some_and(|badge| badge.risky),
         current: row.current,
         enabled: row.enabled,
+        // A pack is a name over a detail line, with no key combination.
+        single_line: false,
+        key: SharedString::new(),
+        has_key: false,
     }
 }
 

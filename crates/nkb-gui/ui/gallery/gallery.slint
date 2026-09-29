@@ -180,6 +180,22 @@ export component Gallery inherits Window {
             empty-text: "PickList with no rows says why, in its own sentence.";
         }
 
+        // The same list with one-line rows and a key combination at the end -
+        // the shortcuts window (K5): selected and being recorded, the tester's
+        // own with the longest combination the vocabulary allows, one taken by
+        // another application, and an action name far too long, elided before
+        // the combination rather than pushing it out.
+        PickList {
+            selected: 0;
+            current-label: "recording";
+            rows: [
+                { title: "Next value", current: true, enabled: true, single-line: true, key: "Alt+Shift+...", has-key: true },
+                { title: "Previous value", badge: "changed", has-badge: true, enabled: true, single-line: true, key: "Ctrl+Alt+Shift+Win+F24", has-key: true },
+                { title: "Open pack search", badge: "taken", has-badge: true, badge-risky: true, enabled: true, single-line: true, key: "Alt+Shift+Space", has-key: true },
+                { title: "An action name long enough to be a translation into a longer language", enabled: true, single-line: true, key: "Alt+Shift+H", has-key: true },
+            ];
+        }
+
         // The pack's name in the palette, which opens the pack window: at rest,
         // and a name far too long for its row, elided before the counter. The
         // pointer states need a pointer, so `palette_opener.rs` measures them
