@@ -177,6 +177,9 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // The clipboard bar's words come with each view, because two conditions
     // share the bar and say different things (`D72`) - see `live::View`.
     palette.set_hints(ModelRc::new(VecModel::from(hints())));
+    // The pack's name opens the pack window when clicked, and UI Automation
+    // names that click with the words the hint bar gives the shortcut.
+    palette.set_open_packs_label(i18n::action_name(HotkeyAction::OpenPacks).into());
     // Expanded at first run, with the hints up and nothing sent yet -
     // `ux-spec.md` 5.1 - and as the tester left it on every run after that.
     // The worker fills the pack and the counter, because the sequence that

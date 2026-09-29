@@ -3,8 +3,11 @@
 // `ux-spec.md` 2 fixes the shape, and the one requirement that decides the rest
 // is that this window NEVER TAKES KEYBOARD FOCUS: if it did, the cursor would
 // leave the field under test at every insertion, which is the product. So there
-// is no control here to click, no button and no text field. Everything arrives
-// as a property and everything leaves as a shortcut.
+// is no text field here and nothing that wants the keyboard. Everything arrives
+// as a property and everything leaves as a shortcut - with one exception for
+// the pointer: the pack's name opens the pack window when clicked (K3.2d). A
+// click reaches this window without activating it (`D62`), so it takes nothing
+// from the field under test.
 //
 // # Two axes and a bar, not five states
 //
@@ -65,6 +68,7 @@ import {
     Marker,
     MarkerRow,
     WindowSurface,
+    PickerOpener,
 } from "../components.slint";
 
 export component Palette inherits Window {
@@ -156,11 +160,13 @@ export component Palette inherits Window {
     changed content-height => {
         root.content-height-changed(self.content-height);
     }
-    // Asks for the pack window. Rust invokes it when the shortcut arrives on
-    // the worker, and a click on the pack's name will be the second way in -
-    // so both reach the same Rust on the main thread, and the view holds no
-    // handler body.
-    callback open-packs();
+    // Asks for the pack window: a click on the pack's name, and Rust invokes
+    // the same callback when the shortcut arrives on the worker - so both ways
+    // in reach the same Rust on the main thread, and the view holds no handler
+    // body.
+    callback open-packs <=> opener.clicked;
+    // What the click does, in the hint bar's words, for UI Automation.
+    in property <string> open-packs-label;
 
     title: root.window-title;
     // The colour lives on the surface below, so that the palette can have
@@ -188,13 +194,14 @@ export component Palette inherits Window {
                 divided: false;
                 HorizontalLayout {
                     spacing: Tokens.space-2;
-                    TextBody {
-                        // A pack name is somebody else's string and can be any
-                        // length. Elided rather than wrapped: the counter beside
-                        // it must keep its place, and a band that grows a line
-                        // because of a long name moves everything below it.
+                    // A pack name is somebody else's string and can be any
+                    // length. Elided rather than wrapped: the counter beside
+                    // it must keep its place, and a band that grows a line
+                    // because of a long name moves everything below it. A click
+                    // on it opens the pack window.
+                    opener := PickerOpener {
                         text: root.pack;
-                        overflow: elide;
+                        action: root.open-packs-label;
                     }
                     Spacer { }
                     TextCounter {

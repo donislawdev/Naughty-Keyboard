@@ -12,6 +12,7 @@ import { Tokens } from "../tokens.slint";
 import { TextName, TextBody } from "typography.slint";
 import { Pill } from "chrome.slint";
 
+
 // One row, as finished strings and facts.
 //
 // The flags are FACTS and the view picks the look: `badge-risky` says the badge
@@ -193,6 +194,69 @@ export component PickList inherits Rectangle {
         TextBody {
             text: root.empty-text;
             wrap: word-wrap;
+        }
+    }
+}
+
+// The name of the thing in use, as the way to choose another - the pack's name
+// in the palette, which opens the pack window.
+//
+//     pointer here     the name in the accent, like a link
+//     pressed          the same - the pack window opens at once, so there is no
+//                      moment to show a second step in
+//     keyboard here    NEVER, on purpose: the palette refuses the keyboard focus
+//                      (`D62`), so the keyboard's way in is the shortcut the hint
+//                      bar names - and a focus ring that can never show is a
+//                      state the gallery would have to fake
+//     cannot be used   not a state it has: the pack window is how a pack is
+//                      chosen even when none opened
+//
+// A click reaches the palette without activating it (measured, `D62`), so the
+// field under test keeps the keyboard until the pack window takes it itself.
+// The name is elided, like the text it replaces: the counter beside it keeps
+// its place.
+//
+// ⚠️ The first design raised the GROUND under the pointer, as a list row does.
+// With no padding - which alignment demands, see below - the ground hugged the
+// letters and read as a text selection, barely visible in the render. The
+// colour of the letters is what changes now: visible, and the accent holds its
+// contrast even in the dimmed state (`D53`).
+export component PickerOpener inherits Rectangle {
+    in property <string> text;
+    // What a click does, as UI Automation reads it - the same words the hint
+    // bar gives the shortcut, so a tester and a harness find it by one name.
+    in property <string> action;
+    callback clicked();
+
+    min-width: content.min-width;
+    preferred-width: content.preferred-width;
+    height: content.preferred-height;
+    // Stated, because a fixed height does not say it (`slint.md` 2.29).
+    vertical-stretch: 0;
+    horizontal-stretch: 0;
+
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-description: root.action;
+    accessible-action-default => {
+        root.clicked();
+    }
+
+    area := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    // No padding of its own, on purpose: the name stays in the column every
+    // other band of the palette starts in (GUI rule 19). The first render with
+    // `space-1` each side put it four pixels right of the value name below.
+    content := HorizontalLayout {
+        TextBody {
+            text: root.text;
+            overflow: elide;
+            color: area.has-hover || area.pressed ? Tokens.accent : Tokens.text-secondary;
         }
     }
 }

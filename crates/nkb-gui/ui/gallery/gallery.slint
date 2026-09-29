@@ -36,6 +36,7 @@ import {
     ChromeBand,
     QueryField,
     PickList,
+    PickerOpener,
 } from "../components.slint";
 
 export component Gallery inherits Window {
@@ -177,6 +178,23 @@ export component Gallery inherits Window {
         }
         PickList {
             empty-text: "PickList with no rows says why, in its own sentence.";
+        }
+
+        // The pack's name in the palette, which opens the pack window: at rest,
+        // and a name far too long for its row, elided before the counter. The
+        // pointer states need a pointer, so `palette_opener.rs` measures them
+        // on the real palette.
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            PickerOpener { text: "PickerOpener"; action: "Open pack search"; }
+            Spacer { }
+            TextCounter { text: "7 / 34"; }
+        }
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            PickerOpener { text: "A pack whose name is far too long for the palette's first band"; action: "Open pack search"; }
+            Spacer { }
+            TextCounter { text: "100000 / 100000"; }
         }
 
         Hairline {}
