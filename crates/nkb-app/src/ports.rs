@@ -688,6 +688,14 @@ pub struct Settings {
 pub enum SettingChange {
     Pack(String),
     Compact(bool),
+    /// One action's shortcut (K5): `Some` is the chord the tester recorded,
+    /// `None` gives the action its default back - by REMOVING the key, so the
+    /// action follows the default table of whatever version reads the file
+    /// next, rather than pinning today's default (`settings-format.md` 4).
+    Shortcut {
+        action: HotkeyAction,
+        chord: Option<HotkeyChord>,
+    },
 }
 
 /// What reading the settings produced.

@@ -285,53 +285,148 @@ fn settings_of(document: &DocumentMut) -> (Settings, Vec<SettingsNote>) {
 /// Puts one change into the document. `false` when it was already there, so
 /// the file does not need writing at all.
 fn set(document: &mut DocumentMut, change: &SettingChange) -> bool {
-    let (key, same, new): (&str, bool, Value) = {
-        let current = document
-            .get("palette")
-            .and_then(Item::as_table_like)
-            .and_then(|palette| palette.get(change_key(change)));
-        match change {
-            SettingChange::Pack(pack) => (
-                "pack",
-                current.and_then(Item::as_str) == Some(pack.as_str()),
-                Value::from(pack.as_str()),
-            ),
-            SettingChange::Compact(compact) => (
-                "compact",
-                current.and_then(Item::as_bool) == Some(*compact),
-                Value::from(*compact),
-            ),
-        }
+    let (table_key, key) = place_of(change);
+    let current = document
+        .get(table_key)
+        .and_then(Item::as_table_like)
+        .and_then(|table| table.get(key));
+    let (same, new): (bool, Option<Value>) = match change {
+        SettingChange::Pack(pack) => (
+            current.and_then(Item::as_str) == Some(pack.as_str()),
+            Some(Value::from(pack.as_str())),
+        ),
+        SettingChange::Compact(compact) => (
+            current.and_then(Item::as_bool) == Some(*compact),
+            Some(Value::from(*compact)),
+        ),
+        // Read back through the grammar, so `alt + shift + n` the tester
+        // wrote is the same shortcut as `Alt+Shift+N` and stays as written.
+        SettingChange::Shortcut {
+            chord: Some(chord), ..
+        } => (
+            current
+                .and_then(Item::as_str)
+                .is_some_and(|text| HotkeyChord::parse(text) == Ok(*chord)),
+            Some(Value::from(chord.text())),
+        ),
+        // A restore removes the key, so it is already so when there is no key
+        // - including when the table itself is a single value (named when the
+        // file was read) and so holds no key at all.
+        SettingChange::Shortcut { chord: None, .. } => (current.is_none(), None),
     };
     if same {
         return false;
     }
+    let Some(new) = new else {
+        let inline = document
+            .get(table_key)
+            .and_then(Item::as_value)
+            .is_some_and(Value::is_inline_table);
+        if let Some(table) = document
+            .get_mut(table_key)
+            .and_then(Item::as_table_like_mut)
+        {
+            remove_keeping_comments(table, key, inline);
+        }
+        return true;
+    };
 
-    let palette_is_a_table = document
-        .get("palette")
+    let is_a_table = document
+        .get(table_key)
         .is_some_and(|item| item.as_table_like().is_some());
-    if !palette_is_a_table {
+    if !is_a_table {
         // Missing, or a single value where a table belongs. The second was
         // named when the file was read (`SettingsNote::NotATable`), and the
         // tester has now changed a setting inside it.
         let mut table = Table::new();
         table.insert(key, Item::Value(new));
-        document.insert("palette", Item::Table(table));
+        document.insert(table_key, Item::Table(table));
         return true;
     }
-    if let Some(palette) = document
-        .get_mut("palette")
+    if let Some(table) = document
+        .get_mut(table_key)
         .and_then(Item::as_table_like_mut)
     {
-        replace_in(palette, key, new);
+        replace_in(table, key, new);
     }
     true
 }
 
-fn change_key(change: &SettingChange) -> &'static str {
+/// The table and the key a change is written to.
+fn place_of(change: &SettingChange) -> (&'static str, &'static str) {
     match change {
-        SettingChange::Pack(_) => "pack",
-        SettingChange::Compact(_) => "compact",
+        SettingChange::Pack(_) => ("palette", "pack"),
+        SettingChange::Compact(_) => ("palette", "compact"),
+        SettingChange::Shortcut { action, .. } => ("shortcuts", action.id()),
+    }
+}
+
+/// Removes one key, and hands the lines written above it - comments, blank
+/// lines - to the key that follows, so they stay where the tester put them.
+///
+/// `toml_edit` keeps a comment above a key in that KEY's decoration, so a
+/// plain removal would take `# marking results` away with the first of the
+/// three keys it heads. Only the whole lines move: the indentation of the
+/// removed key's own line is its own and would double the next one's.
+///
+/// ⚠️ With no key after it in the table, the lines go with the key: they
+/// stood directly above the one setting the tester asked to remove, and there
+/// is no other key they could belong to (`settings-format.md` 4).
+///
+/// In a table written in one line the blank before `}` belongs to the LAST
+/// value, so removing the last entry would leave `"Alt+Shift+K"}` - valid,
+/// and not what the tester wrote. The entry before it takes that blank over.
+fn remove_keeping_comments(table: &mut dyn TableLike, key: &str, inline: bool) {
+    let lines_above = table
+        .key(key)
+        .and_then(|found| found.leaf_decor().prefix())
+        .and_then(|prefix| prefix.as_str())
+        .map(|prefix| {
+            prefix
+                .rfind('\n')
+                .map_or("", |end| &prefix[..=end])
+                .to_owned()
+        })
+        .unwrap_or_default();
+    let blank_before_brace = table
+        .get(key)
+        .and_then(Item::as_value)
+        .and_then(|value| value.decor().suffix())
+        .and_then(|suffix| suffix.as_str())
+        .map(str::to_owned);
+    let (previous, next) = {
+        let keys: Vec<&str> = table.iter().map(|(name, _)| name).collect();
+        let at = keys.iter().position(|name| *name == key);
+        (
+            at.and_then(|at| at.checked_sub(1))
+                .and_then(|before| keys.get(before))
+                .map(|name| (*name).to_owned()),
+            at.and_then(|at| keys.get(at + 1))
+                .map(|name| (*name).to_owned()),
+        )
+    };
+    table.remove(key);
+    if inline
+        && next.is_none()
+        && let Some(blank) = blank_before_brace
+        && let Some(value) = previous
+            .as_deref()
+            .and_then(|name| table.get_mut(name))
+            .and_then(Item::as_value_mut)
+    {
+        value.decor_mut().set_suffix(blank);
+    }
+    if lines_above.is_empty() {
+        return;
+    }
+    if let Some(mut following) = next.as_deref().and_then(|name| table.key_mut(name)) {
+        let decor = following.leaf_decor_mut();
+        let theirs = decor
+            .prefix()
+            .and_then(|prefix| prefix.as_str())
+            .unwrap_or_default()
+            .to_owned();
+        decor.set_prefix(format!("{lines_above}{theirs}"));
     }
 }
 
@@ -863,6 +958,240 @@ mod tests {
         let text = scratch.text();
         assert!(text.starts_with(written), "{text}");
         assert!(text.contains("compact = true"), "{text}");
+    }
+
+    fn recorded(action: HotkeyAction, text: &str) -> SettingChange {
+        SettingChange::Shortcut {
+            action,
+            chord: Some(HotkeyChord::parse(text).expect("the test's chord reads")),
+        }
+    }
+
+    fn restored(action: HotkeyAction) -> SettingChange {
+        SettingChange::Shortcut {
+            action,
+            chord: None,
+        }
+    }
+
+    fn make_read_only(scratch: &Scratch) {
+        let mut permissions = std::fs::metadata(scratch.file())
+            .expect("the file is there")
+            .permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(scratch.file(), permissions).expect("read-only");
+    }
+
+    #[test]
+    fn a_recorded_shortcut_is_written_in_its_own_table_and_reads_back() {
+        let scratch = Scratch::new("shortcut-first");
+        assert_eq!(
+            scratch
+                .store()
+                .save(&recorded(HotkeyAction::NextValue, "win+ctrl+alt+n")),
+            Ok(())
+        );
+        // In the order the core writes a chord, whatever order it was given in.
+        assert_eq!(
+            scratch.text(),
+            "schema = 1\n\n[shortcuts]\nnext-value = \"Ctrl+Alt+Win+N\"\n"
+        );
+        assert_eq!(
+            read(&scratch.store()).0.shortcuts,
+            vec![(
+                HotkeyAction::NextValue,
+                HotkeyChord::parse("Ctrl+Alt+Win+N").expect("reads")
+            )]
+        );
+    }
+
+    #[test]
+    fn a_recorded_shortcut_replaces_one_value_and_keeps_every_other_byte() {
+        let scratch = Scratch::new("shortcut-replace");
+        scratch.write(concat!(
+            "schema = 1\r\n",
+            "\r\n",
+            "[shortcuts]\r\n",
+            "# moving through the pack\r\n",
+            "next-value = \"Ctrl+Alt+Win+N\"   # left hand\r\n",
+            "previous-value = \"Ctrl+Alt+Win+P\"\r\n",
+        ));
+        assert_eq!(
+            scratch
+                .store()
+                .save(&recorded(HotkeyAction::NextValue, "Alt+Shift+M")),
+            Ok(())
+        );
+        assert_eq!(
+            scratch.text(),
+            concat!(
+                "schema = 1\r\n",
+                "\r\n",
+                "[shortcuts]\r\n",
+                "# moving through the pack\r\n",
+                "next-value = \"Alt+Shift+M\"   # left hand\r\n",
+                "previous-value = \"Ctrl+Alt+Win+P\"\r\n",
+            )
+        );
+    }
+
+    #[test]
+    fn a_shortcut_the_file_already_holds_in_any_spelling_is_not_written() {
+        // Read-only, so success proves no write was attempted - and the
+        // tester's own spelling stays.
+        let scratch = Scratch::new("shortcut-same");
+        let written = "schema = 1\n[shortcuts]\nnext-value = \"shift + ALT + m\"\n";
+        scratch.write(written);
+        make_read_only(&scratch);
+        assert_eq!(
+            scratch
+                .store()
+                .save(&recorded(HotkeyAction::NextValue, "Alt+Shift+M")),
+            Ok(()),
+            "the same shortcut in another spelling was written anyway"
+        );
+        assert_eq!(
+            scratch.store().save(&restored(HotkeyAction::PreviousValue)),
+            Ok(()),
+            "restoring a shortcut the file does not name was written anyway"
+        );
+        assert_eq!(
+            scratch
+                .store()
+                .save(&recorded(HotkeyAction::NextValue, "Alt+Shift+Q")),
+            Err(SaveError::Unwritable),
+            "a real change to a read-only file must be refused"
+        );
+        assert_eq!(scratch.text(), written);
+    }
+
+    #[test]
+    fn a_restore_removes_the_key_and_the_lines_above_it_move_to_the_next() {
+        // 🔴 The comment above the first key heads the whole group. Without the
+        // move it would leave with the key it happens to stand above.
+        let scratch = Scratch::new("shortcut-restore");
+        scratch.write(concat!(
+            "schema = 1\n",
+            "\n",
+            "[shortcuts]\n",
+            "\n",
+            "# marking results\n",
+            "  mark-ok = \"Ctrl+Alt+Win+1\"   # works\n",
+            "  mark-problem = \"Ctrl+Alt+Win+2\"\n",
+            "\n",
+            "[palette]\n",
+            "compact = true\n",
+        ));
+        assert_eq!(
+            scratch.store().save(&restored(HotkeyAction::MarkOk)),
+            Ok(())
+        );
+        assert_eq!(
+            scratch.text(),
+            concat!(
+                "schema = 1\n",
+                "\n",
+                "[shortcuts]\n",
+                "\n",
+                "# marking results\n",
+                "  mark-problem = \"Ctrl+Alt+Win+2\"\n",
+                "\n",
+                "[palette]\n",
+                "compact = true\n",
+            )
+        );
+        // The last key takes its own lines with it, and nothing else moves.
+        assert_eq!(
+            scratch.store().save(&restored(HotkeyAction::MarkProblem)),
+            Ok(())
+        );
+        assert_eq!(
+            scratch.text(),
+            "schema = 1\n\n[shortcuts]\n\n[palette]\ncompact = true\n"
+        );
+        assert!(read(&scratch.store()).0.shortcuts.is_empty());
+        assert!(scratch.leftovers().is_empty(), "{:?}", scratch.leftovers());
+    }
+
+    #[test]
+    fn a_restore_of_a_value_that_did_not_read_clears_it() {
+        // The key a restore exists for: the palette named it at start and fell
+        // back to the default, and the tester asks for that default.
+        let scratch = Scratch::new("shortcut-garbage");
+        scratch.write("schema = 1\n[shortcuts]\nrepeat-last = 5\nnext-value = \"Alt+Shift+M\"\n");
+        assert_eq!(
+            scratch.store().save(&restored(HotkeyAction::RepeatLast)),
+            Ok(())
+        );
+        assert_eq!(
+            scratch.text(),
+            "schema = 1\n[shortcuts]\nnext-value = \"Alt+Shift+M\"\n"
+        );
+        assert!(read(&scratch.store()).1.is_empty());
+    }
+
+    #[test]
+    fn shortcuts_in_an_inline_table_or_dotted_keys_keep_that_form() {
+        let scratch = Scratch::new("shortcut-forms");
+        scratch.write("schema = 1\nshortcuts = { next-value = \"Alt+Shift+M\", repeat-last = \"Alt+Shift+Q\" }\n");
+        assert_eq!(
+            scratch
+                .store()
+                .save(&recorded(HotkeyAction::NextValue, "Alt+Shift+K")),
+            Ok(())
+        );
+        assert_eq!(
+            scratch.store().save(&restored(HotkeyAction::RepeatLast)),
+            Ok(())
+        );
+        assert_eq!(
+            scratch.text(),
+            "schema = 1\nshortcuts = { next-value = \"Alt+Shift+K\" }\n"
+        );
+
+        scratch.write("schema = 1\nshortcuts.next-value = \"Alt+Shift+M\"\nshortcuts.repeat-last = \"Alt+Shift+Q\"\n");
+        assert_eq!(
+            scratch.store().save(&restored(HotkeyAction::NextValue)),
+            Ok(())
+        );
+        assert_eq!(
+            scratch.text(),
+            "schema = 1\nshortcuts.repeat-last = \"Alt+Shift+Q\"\n"
+        );
+    }
+
+    #[test]
+    fn a_single_value_where_the_shortcuts_belong_is_left_by_a_restore_and_replaced_by_a_record() {
+        let scratch = Scratch::new("shortcut-not-a-table");
+        scratch.write("schema = 1\nshortcuts = \"Alt+Shift+N\"\n");
+        make_read_only(&scratch);
+        assert_eq!(
+            scratch.store().save(&restored(HotkeyAction::NextValue)),
+            Ok(()),
+            "a restore found a key inside a single value"
+        );
+        let mut permissions = std::fs::metadata(scratch.file())
+            .expect("the file is there")
+            .permissions();
+        #[allow(
+            clippy::permissions_set_readonly_false,
+            reason = "the test undoes its own lock"
+        )]
+        permissions.set_readonly(false);
+        std::fs::set_permissions(scratch.file(), permissions).expect("writable again");
+        assert_eq!(
+            scratch
+                .store()
+                .save(&recorded(HotkeyAction::NextValue, "Alt+Shift+M")),
+            Ok(())
+        );
+        assert_eq!(
+            read(&scratch.store()).0.shortcuts,
+            vec![(
+                HotkeyAction::NextValue,
+                HotkeyChord::parse("Alt+Shift+M").expect("reads")
+            )]
+        );
     }
 
     #[test]

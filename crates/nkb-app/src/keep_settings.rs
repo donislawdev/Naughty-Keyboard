@@ -27,7 +27,7 @@
 
 use std::mem::{Discriminant, discriminant};
 
-use nkb_core::hotkeys::{Bindings, HotkeyChord, Refused};
+use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord, Refusal, Refused};
 
 use crate::advance_sequence::ChooseError;
 use crate::ports::{
@@ -273,15 +273,100 @@ impl KeptSettings {
         }
     }
 
+    /// What giving `action` the shortcut `chord` - or its default back, for
+    /// `None` - would come to, before anything is saved (K5).
+    ///
+    /// The table the shortcuts window shows after the change is the table the
+    /// next start computes from the file the change leaves behind - the same
+    /// rule, [`Bindings::with`] over the file's wishes. What may be refused is
+    /// decided BEFORE that, against the table in use NOW:
+    ///
+    /// - a chord that is no global shortcut, or that a keyboard layout types
+    ///   as `AltGr` - the reasons the palette gives about the settings file.
+    /// - a chord another action answers to now - recorded, or the default a
+    ///   restore asks for - refused, naming that action, rather than taken from
+    ///   it. The tester gives the other action something else first.
+    ///
+    /// 🔴 Not left to [`Bindings::with`], and measured why: it sends back the
+    /// later of two wishes in the order of [`HotkeyAction::ALL`], not the
+    /// order of the file, so a recording that clashed with a swap two actions
+    /// had made unravelled the swap and named an action that no longer held
+    /// the chord (the exhaustive test below found it).
+    ///
+    /// Once the chord is free the change can only GIVE: the chord the action
+    /// leaves may let another action's wish in the file come true. That is
+    /// the file's own wish and it happens, but it is named in `also`, because
+    /// a row that changes without being touched looks like a fault.
+    ///
+    /// ⚠️ `AlreadySo` for a RESTORE does not prove the file holds no key for
+    /// the action: a value that did not read as a shortcut is not in the
+    /// settings at all. The caller may save the restore anyway - the store
+    /// writes nothing when the key is not there.
+    #[must_use]
+    pub fn consider(
+        &self,
+        defaults: Bindings,
+        types: &dyn Fn(HotkeyChord) -> Option<char>,
+        action: HotkeyAction,
+        chord: Option<HotkeyChord>,
+    ) -> Considered {
+        let refuse = |chord, why| Considered::Refused(Refused { action, chord, why });
+        if let Some(chord) = chord {
+            if let Some(problem) = chord.problem() {
+                return refuse(chord, Refusal::Problem(problem));
+            }
+            if let Some(character) = chord.could_be_altgr().then(|| types(chord)).flatten() {
+                return refuse(chord, Refusal::TypesCharacter(character));
+            }
+        }
+        let (now, _) = defaults.with(&self.settings.shortcuts, types);
+        let default = defaults.chord(action);
+        let wanted = chord.unwrap_or(default);
+        if let Some(holder) = HotkeyAction::ALL
+            .iter()
+            .copied()
+            .find(|other| *other != action && now.chord(*other) == wanted)
+        {
+            return refuse(wanted, Refusal::SameAs(holder));
+        }
+        let mut after = self.settings.shortcuts.clone();
+        wish(&mut after, action, chord);
+        let (next, _) = defaults.with(&after, types);
+        let in_file = self
+            .settings
+            .shortcuts
+            .iter()
+            .find_map(|(wished, held)| (*wished == action).then_some(*held));
+        // A default the file does not name needs no key saying it.
+        let file_says_it = in_file == chord || (in_file.is_none() && chord == Some(default));
+        if next == now && file_says_it {
+            return Considered::AlreadySo;
+        }
+        Considered::Gives {
+            bindings: next,
+            also: HotkeyAction::ALL
+                .iter()
+                .copied()
+                .filter(|other| *other != action && next.chord(*other) != now.chord(*other))
+                .collect(),
+        }
+    }
+
     /// Whether this change is already in effect, so saving it changes nothing.
     ///
     /// Compared with what is IN EFFECT, not with a default: a setting the file
     /// does not hold is not the same as one set to its default value, and
     /// only the caller knows the default.
+    ///
+    /// A shortcut is never "already in effect" here. The settings hold only
+    /// the shortcuts that READ, so a key the file holds and nobody can read -
+    /// the very key a restore is meant to clear - is invisible from here. The
+    /// store answers instead: it writes nothing when the key is already so.
     fn holds(&self, change: &SettingChange) -> bool {
         match change {
             SettingChange::Pack(pack) => self.settings.pack.as_deref() == Some(pack.as_str()),
             SettingChange::Compact(compact) => self.settings.compact == Some(*compact),
+            SettingChange::Shortcut { .. } => false,
         }
     }
 
@@ -289,8 +374,46 @@ impl KeptSettings {
         match change {
             SettingChange::Pack(pack) => self.settings.pack = Some(pack),
             SettingChange::Compact(compact) => self.settings.compact = Some(compact),
+            SettingChange::Shortcut { action, chord } => {
+                wish(&mut self.settings.shortcuts, action, chord);
+            }
         }
     }
+}
+
+/// One action's wish put into a list of the file's wishes the way the store
+/// puts it into the file: in the place its key already stands, at the end
+/// when it has none, and gone for a restore. One function for the change in
+/// effect and for the change considered, so the two cannot drift apart.
+fn wish(
+    shortcuts: &mut Vec<(HotkeyAction, HotkeyChord)>,
+    action: HotkeyAction,
+    chord: Option<HotkeyChord>,
+) {
+    match chord {
+        Some(chord) => match shortcuts.iter_mut().find(|(held, _)| *held == action) {
+            Some(entry) => entry.1 = chord,
+            None => shortcuts.push((action, chord)),
+        },
+        None => shortcuts.retain(|(held, _)| *held != action),
+    }
+}
+
+/// What changing one shortcut would come to - [`KeptSettings::consider`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Considered {
+    /// The action already answers to it and the file already says so -
+    /// nothing to register and nothing to save.
+    AlreadySo,
+    /// The table the change gives, and every OTHER action whose shortcut
+    /// moves with it.
+    Gives {
+        bindings: Bindings,
+        also: Vec<HotkeyAction>,
+    },
+    /// Not possible, and why - the same refusals the palette says about the
+    /// settings file.
+    Refused(Refused),
 }
 
 #[cfg(test)]
@@ -691,5 +814,278 @@ mod tests {
             ]
         );
         assert!(store.saves().is_empty(), "reading shortcuts writes nothing");
+    }
+
+    // ---- changing one shortcut (K5) ------------------------------------------
+
+    fn chord(text: &str) -> HotkeyChord {
+        HotkeyChord::parse(text).unwrap_or_else(|error| panic!("{text}: {error:?}"))
+    }
+
+    const DEFAULTS: Bindings = Bindings::defaults(nkb_core::hotkeys::Convention::WindowsAndLinux);
+
+    fn no_layout(_: HotkeyChord) -> Option<char> {
+        None
+    }
+
+    fn wishing(shortcuts: Vec<(HotkeyAction, HotkeyChord)>) -> KeptSettings {
+        KeptSettings::open(&FakeStore::loading(SettingsLoad::Read {
+            settings: Settings {
+                shortcuts,
+                ..Settings::default()
+            },
+            notes: Vec::new(),
+        }))
+        .0
+    }
+
+    #[test]
+    fn a_free_chord_is_given_saved_and_then_already_so() {
+        let store = FakeStore::loading(SettingsLoad::Absent);
+        let (mut kept, _) = KeptSettings::open(&store);
+        let wanted = chord("Alt+Shift+M");
+        let Considered::Gives { bindings, also } =
+            kept.consider(DEFAULTS, &no_layout, HotkeyAction::NextValue, Some(wanted))
+        else {
+            panic!("a free chord was not given");
+        };
+        assert_eq!(bindings.chord(HotkeyAction::NextValue), wanted);
+        assert!(also.is_empty(), "{also:?}");
+
+        let change = SettingChange::Shortcut {
+            action: HotkeyAction::NextValue,
+            chord: Some(wanted),
+        };
+        assert_eq!(kept.keep(&store, change.clone()), None);
+        assert_eq!(store.saves(), vec![change]);
+        assert_eq!(kept.bindings(DEFAULTS, &no_layout).0, bindings);
+        assert_eq!(
+            kept.consider(DEFAULTS, &no_layout, HotkeyAction::NextValue, Some(wanted)),
+            Considered::AlreadySo
+        );
+    }
+
+    #[test]
+    fn a_chord_another_action_holds_is_refused_and_the_holder_named() {
+        // Held by default, and held by a wish in the file - the recording is
+        // wished last, so it never takes the chord, wherever its own key
+        // stands in the file.
+        let kept = wishing(vec![
+            (HotkeyAction::NextValue, chord("Ctrl+Alt+Win+N")),
+            (HotkeyAction::PreviousValue, chord("Alt+Shift+M")),
+        ]);
+        for (wanted, holder) in [
+            ("Alt+Shift+R", HotkeyAction::RepeatLast),
+            ("Alt+Shift+M", HotkeyAction::PreviousValue),
+        ] {
+            assert_eq!(
+                kept.consider(
+                    DEFAULTS,
+                    &no_layout,
+                    HotkeyAction::NextValue,
+                    Some(chord(wanted))
+                ),
+                Considered::Refused(Refused {
+                    action: HotkeyAction::NextValue,
+                    chord: chord(wanted),
+                    why: Refusal::SameAs(holder),
+                }),
+                "{wanted}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_chord_that_is_no_global_shortcut_is_refused_for_its_own_reason() {
+        let kept = wishing(Vec::new());
+        let polish = |wanted: HotkeyChord| (wanted == chord("Ctrl+Alt+A")).then_some('\u{105}');
+        assert!(matches!(
+            kept.consider(
+                DEFAULTS,
+                &polish,
+                HotkeyAction::MarkOk,
+                Some(chord("Shift+Q"))
+            ),
+            Considered::Refused(Refused {
+                why: Refusal::Problem(_),
+                ..
+            })
+        ));
+        assert_eq!(
+            kept.consider(
+                DEFAULTS,
+                &polish,
+                HotkeyAction::MarkOk,
+                Some(chord("Ctrl+Alt+A"))
+            ),
+            Considered::Refused(Refused {
+                action: HotkeyAction::MarkOk,
+                chord: chord("Ctrl+Alt+A"),
+                why: Refusal::TypesCharacter('\u{105}'),
+            })
+        );
+    }
+
+    #[test]
+    fn a_default_another_action_now_holds_is_not_taken_back_without_a_word() {
+        // Next value moved away, so Previous value could take its default.
+        let kept = wishing(vec![
+            (HotkeyAction::NextValue, chord("Ctrl+Alt+Win+N")),
+            (HotkeyAction::PreviousValue, chord("Alt+Shift+N")),
+        ]);
+        assert_eq!(
+            kept.consider(DEFAULTS, &no_layout, HotkeyAction::NextValue, None),
+            Considered::Refused(Refused {
+                action: HotkeyAction::NextValue,
+                chord: chord("Alt+Shift+N"),
+                why: Refusal::SameAs(HotkeyAction::PreviousValue),
+            })
+        );
+    }
+
+    #[test]
+    fn a_wish_in_the_file_that_a_change_lets_come_true_is_named() {
+        // Previous value wants Next value's default - refused at start. Next
+        // value records another chord, and the file's wish comes true.
+        let kept = wishing(vec![(HotkeyAction::PreviousValue, chord("Alt+Shift+N"))]);
+        let Considered::Gives { bindings, also } = kept.consider(
+            DEFAULTS,
+            &no_layout,
+            HotkeyAction::NextValue,
+            Some(chord("Alt+Shift+M")),
+        ) else {
+            panic!("the change was not given");
+        };
+        assert_eq!(also, vec![HotkeyAction::PreviousValue]);
+        assert_eq!(
+            bindings.chord(HotkeyAction::PreviousValue),
+            chord("Alt+Shift+N")
+        );
+    }
+
+    #[test]
+    fn what_the_file_already_says_is_already_so_and_a_stale_wish_is_not() {
+        let kept = wishing(Vec::new());
+        assert_eq!(
+            kept.consider(DEFAULTS, &no_layout, HotkeyAction::RepeatLast, None),
+            Considered::AlreadySo
+        );
+        assert_eq!(
+            kept.consider(
+                DEFAULTS,
+                &no_layout,
+                HotkeyAction::RepeatLast,
+                Some(chord("Alt+Shift+R"))
+            ),
+            Considered::AlreadySo,
+            "recording the default the file does not name changes nothing"
+        );
+        // A refused wish stands in the file: recording the default replaces
+        // it, so the next start stops saying it cannot be used.
+        let stale = wishing(vec![(HotkeyAction::RepeatLast, chord("Alt+Shift+N"))]);
+        assert!(matches!(
+            stale.consider(
+                DEFAULTS,
+                &no_layout,
+                HotkeyAction::RepeatLast,
+                Some(chord("Alt+Shift+R"))
+            ),
+            Considered::Gives { .. }
+        ));
+    }
+
+    #[test]
+    fn whatever_the_file_wishes_a_change_shows_what_the_next_start_will_use() {
+        // Three actions, six chords - their three defaults, two free ones and
+        // one that is no global shortcut - over every file and every change.
+        // What the window shows must be what the file it saves gives the next
+        // start, and a change may move another action only onto its own wish.
+        let actions = [
+            HotkeyAction::NextValue,
+            HotkeyAction::PreviousValue,
+            HotkeyAction::RepeatLast,
+        ];
+        let pool = [
+            chord("Alt+Shift+N"),
+            chord("Alt+Shift+P"),
+            chord("Alt+Shift+R"),
+            chord("Ctrl+Alt+Win+X"),
+            chord("Ctrl+Alt+Win+Y"),
+            chord("Shift+Q"),
+        ];
+        let choices: Vec<Option<HotkeyChord>> = std::iter::once(None)
+            .chain(pool.iter().copied().map(Some))
+            .collect();
+        let mut cases = 0;
+        for a in &choices {
+            for b in &choices {
+                for c in &choices {
+                    let file: Vec<(HotkeyAction, HotkeyChord)> = actions
+                        .iter()
+                        .zip([a, b, c])
+                        .filter_map(|(action, wish)| wish.map(|wish| (*action, wish)))
+                        .collect();
+                    let kept = wishing(file.clone());
+                    let now = kept.bindings(DEFAULTS, &no_layout).0;
+                    for action in actions {
+                        for request in &choices {
+                            cases += 1;
+                            let considered = kept.consider(DEFAULTS, &no_layout, action, *request);
+                            let mut after = kept.clone();
+                            after.apply(SettingChange::Shortcut {
+                                action,
+                                chord: *request,
+                            });
+                            let next_start = after.bindings(DEFAULTS, &no_layout).0;
+                            let wish_of = |other: HotkeyAction| {
+                                file.iter()
+                                    .find_map(|(held, wish)| (*held == other).then_some(*wish))
+                            };
+                            match considered {
+                                Considered::AlreadySo => {
+                                    assert_eq!(next_start, now, "{file:?} {action:?} {request:?}")
+                                }
+                                Considered::Gives { bindings, also } => {
+                                    assert_eq!(
+                                        bindings, next_start,
+                                        "{file:?} {action:?} {request:?}"
+                                    );
+                                    let wanted = request.unwrap_or_else(|| DEFAULTS.chord(action));
+                                    assert_eq!(
+                                        bindings.chord(action),
+                                        wanted,
+                                        "{file:?} {action:?} {request:?}"
+                                    );
+                                    for other in HotkeyAction::ALL {
+                                        if other == action {
+                                            continue;
+                                        }
+                                        let moved = bindings.chord(other) != now.chord(other);
+                                        assert_eq!(also.contains(&other), moved);
+                                        assert!(
+                                            !moved || wish_of(other) == Some(bindings.chord(other)),
+                                            "{other:?} moved off its own wish: {file:?} \
+                                             {action:?} {request:?}"
+                                        );
+                                    }
+                                }
+                                Considered::Refused(refused) => {
+                                    assert_eq!(refused.action, action);
+                                    if let Refusal::SameAs(holder) = refused.why {
+                                        assert_ne!(holder, action);
+                                        assert_eq!(
+                                            now.chord(holder),
+                                            refused.chord,
+                                            "{file:?} {action:?} {request:?} {refused:?}"
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(cases, 7 * 7 * 7 * 3 * 7);
     }
 }
