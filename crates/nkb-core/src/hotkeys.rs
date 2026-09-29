@@ -88,25 +88,74 @@ impl HotkeyAction {
     ];
 }
 
-/// A logical key that a default shortcut uses.
-///
-/// Narrow on purpose, the way [`crate::keys::Key`] is: it holds exactly the keys
-/// the `ux-spec.md` 3 defaults need and no more. When configurable shortcuts
-/// arrive (they need `SettingsStore`, which does not exist yet) this widens, and
-/// widening it is a visible change to a type whose documentation says why it is
-/// narrow - not a quiet edit.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum HotkeyKey {
-    N,
-    P,
-    R,
-    B,
-    H,
-    Space,
-    Digit0,
-    Digit1,
-    Digit2,
-    Digit3,
+/// Declares [`HotkeyKey`] from ONE table: the variant and the name a tester
+/// writes for it. The enum, the list of every key and the name cannot disagree,
+/// because there is nothing to keep in step by hand.
+macro_rules! hotkey_keys {
+    ($(#[$meta:meta])* $($variant:ident => $name:literal),+ $(,)?) => {
+        $(#[$meta])*
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        pub enum HotkeyKey {
+            $($variant),+
+        }
+
+        impl HotkeyKey {
+            /// Every key a shortcut can end in, in the order of the table.
+            pub const ALL: &'static [HotkeyKey] = &[$(HotkeyKey::$variant),+];
+
+            /// The name a tester reads and writes: `N`, `0`, `F5`, `Space`.
+            #[must_use]
+            pub const fn name(self) -> &'static str {
+                match self {
+                    $(HotkeyKey::$variant => $name),+
+                }
+            }
+        }
+    };
+}
+
+hotkey_keys! {
+    /// A logical key a shortcut ends in.
+    ///
+    /// Widened for configurable shortcuts (`K4`, 2026-09-29) from the ten keys
+    /// the defaults use - and widened on purpose, not to "every key": letters,
+    /// digits, function keys and Space. What stays out, and why:
+    ///
+    /// - punctuation - which character a key types, and on Windows even which
+    ///   key code it sends, depends on the layout, so a name in the settings
+    ///   file would mean different keys on different machines.
+    /// - the number pad - its keys change meaning with Num Lock.
+    /// - the editing and moving keys (arrows, Home, End, Page Up and Down,
+    ///   Insert, Delete, Backspace, Tab, Enter) - taken globally they break the
+    ///   very field under test.
+    /// - Escape - `ux-spec.md` 3 keeps it the one key the tool never takes
+    ///   globally.
+    ///
+    /// Adding a key is one line here and one in the layer that maps keys to the
+    /// system, whose match is exhaustive, so the compiler names the second.
+    A => "A", B => "B", C => "C", D => "D", E => "E", F => "F", G => "G",
+    H => "H", I => "I", J => "J", K => "K", L => "L", M => "M", N => "N",
+    O => "O", P => "P", Q => "Q", R => "R", S => "S", T => "T", U => "U",
+    V => "V", W => "W", X => "X", Y => "Y", Z => "Z",
+    Digit0 => "0", Digit1 => "1", Digit2 => "2", Digit3 => "3", Digit4 => "4",
+    Digit5 => "5", Digit6 => "6", Digit7 => "7", Digit8 => "8", Digit9 => "9",
+    F1 => "F1", F2 => "F2", F3 => "F3", F4 => "F4", F5 => "F5", F6 => "F6",
+    F7 => "F7", F8 => "F8", F9 => "F9", F10 => "F10", F11 => "F11", F12 => "F12",
+    F13 => "F13", F14 => "F14", F15 => "F15", F16 => "F16", F17 => "F17",
+    F18 => "F18", F19 => "F19", F20 => "F20", F21 => "F21", F22 => "F22",
+    F23 => "F23", F24 => "F24",
+    Space => "Space",
+}
+
+impl HotkeyKey {
+    /// The key a name stands for, in any letter case - `n` and `space` too.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|key| key.name().eq_ignore_ascii_case(name))
+    }
 }
 
 /// A shortcut: its modifiers and its key.
@@ -146,6 +195,184 @@ impl HotkeyChord {
             key,
         }
     }
+
+    /// The shortcut as text: `Alt+Shift+N`.
+    ///
+    /// The one way a chord is written - in the settings file and, through the
+    /// translation layer, on the screen. Modifiers in a fixed order (`Ctrl`,
+    /// `Alt`, `Shift`, `Win`), then the key, joined by `+`, so the same chord is
+    /// always the same text and [`HotkeyChord::parse`] reads it back unchanged.
+    ///
+    /// ⚠️ These are the Windows and Linux words. On macOS the tester calls the
+    /// keys Option and Command (`OBS-115`), and the palette does not run there
+    /// yet (`OBS-70`). The parser already takes the macOS words, so a file
+    /// written with them stays readable when this learns to write them.
+    #[must_use]
+    pub fn text(&self) -> String {
+        let mut out = String::new();
+        for (held, name) in [
+            (self.ctrl, "Ctrl"),
+            (self.alt, "Alt"),
+            (self.shift, "Shift"),
+            (self.win, "Win"),
+        ] {
+            if held {
+                out.push_str(name);
+                out.push('+');
+            }
+        }
+        out.push_str(self.key.name());
+        out
+    }
+
+    /// Reads a shortcut written as text.
+    ///
+    /// Modifiers in any order and any letter case, the key last, `+` between
+    /// them, blanks around a name ignored: `alt + shift + n` is `Alt+Shift+N`.
+    /// A modifier may be named the way either system names it - `Ctrl` or
+    /// `Control`, `Alt` or `Option`, `Win`, `Cmd`, `Command` or `Super` - and
+    /// the key by its [`HotkeyKey::name`].
+    ///
+    /// Only the grammar: whether the chord is a good shortcut is
+    /// [`HotkeyChord::problem`]'s question.
+    ///
+    /// # Errors
+    ///
+    /// [`ChordError`], naming the part that could not be read.
+    pub fn parse(text: &str) -> Result<Self, ChordError> {
+        if text.trim().is_empty() {
+            return Err(ChordError::Empty);
+        }
+        let mut chord = Self {
+            ctrl: false,
+            alt: false,
+            shift: false,
+            win: false,
+            key: HotkeyKey::Space,
+        };
+        let mut key = None;
+        for part in text.split('+').map(str::trim) {
+            if part.is_empty() {
+                return Err(ChordError::EmptyPart);
+            }
+            if let Some(modifier) = Modifier::from_name(part) {
+                if key.is_some() {
+                    return Err(ChordError::KeyNotLast(part.to_owned()));
+                }
+                let held = modifier.flag(&mut chord);
+                if *held {
+                    return Err(ChordError::RepeatedModifier(part.to_owned()));
+                }
+                *held = true;
+            } else if let Some(found) = HotkeyKey::from_name(part) {
+                if key.is_some() {
+                    return Err(ChordError::TwoKeys(part.to_owned()));
+                }
+                key = Some(found);
+            } else {
+                return Err(ChordError::Unknown(part.to_owned()));
+            }
+        }
+        chord.key = key.ok_or(ChordError::NoKey)?;
+        Ok(chord)
+    }
+
+    /// What is wrong with this chord as a GLOBAL shortcut, if anything.
+    ///
+    /// A global shortcut takes its combination from every application for as
+    /// long as the palette runs. Without `Ctrl`, `Alt` or `Win` the combination
+    /// is a key the applications use on their own - a letter, `Shift+letter`,
+    /// Space, `F5` - so the tester would lose it everywhere, the field under
+    /// test included.
+    ///
+    /// Not asked here, because the answer lives in the system: whether a
+    /// `Ctrl+Alt` chord is `AltGr` for a character of the current layout
+    /// ([`HotkeyChord::could_be_altgr`]), and whether another application holds
+    /// the combination (registration reports that).
+    #[must_use]
+    pub const fn problem(&self) -> Option<ChordProblem> {
+        if !(self.ctrl || self.alt || self.win) {
+            return Some(ChordProblem::NoCommandModifier);
+        }
+        None
+    }
+
+    /// Whether `AltGr` can produce this chord: `Ctrl` and `Alt` without `Win`,
+    /// with or without `Shift`. On Windows `AltGr` IS `Ctrl+Alt` (`D82`), so such
+    /// a chord takes a character from every application exactly when the
+    /// layout types one on that key - which only the layer that knows the
+    /// layout can answer.
+    #[must_use]
+    pub const fn could_be_altgr(&self) -> bool {
+        self.ctrl && self.alt && !self.win
+    }
+}
+
+/// One of the four modifiers, as a name in text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Modifier {
+    Ctrl,
+    Alt,
+    Shift,
+    Win,
+}
+
+impl Modifier {
+    /// The names either system uses. Closed on purpose: a word outside it is
+    /// reported as unknown rather than guessed.
+    const NAMES: [(&'static str, Modifier); 9] = [
+        ("Ctrl", Modifier::Ctrl),
+        ("Control", Modifier::Ctrl),
+        ("Alt", Modifier::Alt),
+        ("Option", Modifier::Alt),
+        ("Shift", Modifier::Shift),
+        ("Win", Modifier::Win),
+        ("Cmd", Modifier::Win),
+        ("Command", Modifier::Win),
+        ("Super", Modifier::Win),
+    ];
+
+    fn from_name(name: &str) -> Option<Self> {
+        Self::NAMES.iter().find_map(|(candidate, modifier)| {
+            name.eq_ignore_ascii_case(candidate).then_some(*modifier)
+        })
+    }
+
+    fn flag(self, chord: &mut HotkeyChord) -> &mut bool {
+        match self {
+            Modifier::Ctrl => &mut chord.ctrl,
+            Modifier::Alt => &mut chord.alt,
+            Modifier::Shift => &mut chord.shift,
+            Modifier::Win => &mut chord.win,
+        }
+    }
+}
+
+/// Why a text is not a shortcut. Each carries the part that could not be
+/// read, as the tester wrote it, so the sentence can point at it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChordError {
+    /// Nothing written.
+    Empty,
+    /// Two `+` in a row, or one at an end: `Alt++N`, `Alt+Shift+`.
+    EmptyPart,
+    /// A word that names neither a modifier nor a key: `Alt+Shfit+N`, `Alt+;`.
+    Unknown(String),
+    /// Modifiers only: `Alt+Shift`.
+    NoKey,
+    /// A second key: `Alt+N+P`.
+    TwoKeys(String),
+    /// A modifier after the key: `N+Alt`.
+    KeyNotLast(String),
+    /// The same modifier twice, under any of its names: `Alt+Option+N`.
+    RepeatedModifier(String),
+}
+
+/// Why a chord that reads fine is still not a global shortcut.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChordProblem {
+    /// No `Ctrl`, `Alt` or `Win` - see [`HotkeyChord::problem`].
+    NoCommandModifier,
 }
 
 /// Which set of default shortcuts a system follows.
@@ -327,6 +554,161 @@ mod tests {
                     default_chord(convention, action).is_some(),
                     "{convention:?}: {action:?} has no default chord"
                 );
+            }
+        }
+    }
+
+    fn chord(ctrl: bool, alt: bool, shift: bool, win: bool, key: HotkeyKey) -> HotkeyChord {
+        HotkeyChord {
+            ctrl,
+            alt,
+            shift,
+            win,
+            key,
+        }
+    }
+
+    #[test]
+    fn the_keys_are_letters_digits_function_keys_and_space_each_named_once() {
+        assert_eq!(HotkeyKey::ALL.len(), 26 + 10 + 24 + 1);
+        for (i, a) in HotkeyKey::ALL.iter().enumerate() {
+            for b in &HotkeyKey::ALL[i + 1..] {
+                assert_ne!(a, b);
+                assert!(!a.name().eq_ignore_ascii_case(b.name()), "{a:?} {b:?}");
+            }
+            assert_eq!(HotkeyKey::from_name(a.name()), Some(*a));
+            assert_eq!(HotkeyKey::from_name(&a.name().to_lowercase()), Some(*a));
+        }
+    }
+
+    #[test]
+    fn every_chord_is_read_back_from_its_own_text() {
+        // All sixteen modifier sets on every key: what `text` writes into the
+        // settings file, `parse` must read back as the same chord.
+        for key in HotkeyKey::ALL {
+            for bits in 0..16u8 {
+                let written = chord(
+                    bits & 1 != 0,
+                    bits & 2 != 0,
+                    bits & 4 != 0,
+                    bits & 8 != 0,
+                    *key,
+                );
+                assert_eq!(
+                    HotkeyChord::parse(&written.text()),
+                    Ok(written),
+                    "{}",
+                    written.text()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_text_is_the_modifiers_in_a_fixed_order_then_the_key() {
+        let all = chord(true, true, true, true, HotkeyKey::F12);
+        assert_eq!(all.text(), "Ctrl+Alt+Shift+Win+F12");
+        assert_eq!(DEFAULT_BINDINGS[0].1.text(), "Alt+Shift+N");
+        assert_eq!(
+            chord(false, true, true, false, HotkeyKey::Space).text(),
+            "Alt+Shift+Space"
+        );
+        assert_eq!(
+            chord(false, true, false, true, HotkeyKey::Digit0).text(),
+            "Alt+Win+0"
+        );
+    }
+
+    #[test]
+    fn a_person_may_write_it_in_any_case_order_and_either_systems_words() {
+        let alt_shift_n = chord(false, true, true, false, HotkeyKey::N);
+        for text in [
+            "Alt+Shift+N",
+            "alt+shift+n",
+            "Shift+Alt+N",
+            " Alt + Shift + N ",
+            "Option+Shift+n",
+        ] {
+            assert_eq!(HotkeyChord::parse(text), Ok(alt_shift_n), "{text}");
+        }
+        let command = chord(false, true, false, true, HotkeyKey::Space);
+        for text in [
+            "Cmd+Alt+Space",
+            "Command+Option+space",
+            "Super+Alt+Space",
+            "Win+Alt+Space",
+        ] {
+            assert_eq!(HotkeyChord::parse(text), Ok(command), "{text}");
+        }
+        assert_eq!(
+            HotkeyChord::parse("Control+F1"),
+            Ok(chord(true, false, false, false, HotkeyKey::F1))
+        );
+    }
+
+    #[test]
+    fn a_text_that_is_not_a_shortcut_names_the_part_that_is_wrong() {
+        let cases: [(&str, ChordError); 11] = [
+            ("", ChordError::Empty),
+            ("   ", ChordError::Empty),
+            ("Alt++N", ChordError::EmptyPart),
+            ("Alt+Shift+", ChordError::EmptyPart),
+            ("Alt+Shfit+N", ChordError::Unknown(String::from("Shfit"))),
+            ("Alt+;", ChordError::Unknown(String::from(";"))),
+            ("Alt+Esc", ChordError::Unknown(String::from("Esc"))),
+            ("Alt+Shift", ChordError::NoKey),
+            ("Alt+N+P", ChordError::TwoKeys(String::from("P"))),
+            ("N+Alt", ChordError::KeyNotLast(String::from("Alt"))),
+            (
+                "Alt+Option+N",
+                ChordError::RepeatedModifier(String::from("Option")),
+            ),
+        ];
+        for (text, expected) in cases {
+            assert_eq!(HotkeyChord::parse(text), Err(expected), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn a_global_shortcut_needs_ctrl_alt_or_win() {
+        for text in ["N", "Shift+N", "F5", "Space", "Shift+Space"] {
+            let parsed = HotkeyChord::parse(text).expect("reads");
+            assert_eq!(
+                parsed.problem(),
+                Some(ChordProblem::NoCommandModifier),
+                "{text}"
+            );
+        }
+        for text in ["Alt+N", "Ctrl+N", "Win+N", "Ctrl+Shift+F5"] {
+            let parsed = HotkeyChord::parse(text).expect("reads");
+            assert_eq!(parsed.problem(), None, "{text}");
+        }
+        for convention in CONVENTIONS {
+            for (action, default) in default_bindings(convention) {
+                assert_eq!(default.problem(), None, "{convention:?} {action:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn only_ctrl_alt_without_win_can_be_altgr() {
+        let altgr_like = ["Ctrl+Alt+N", "Ctrl+Alt+Shift+N"];
+        let not = ["Alt+Shift+N", "Ctrl+N", "Ctrl+Alt+Win+N", "Alt+N"];
+        for text in altgr_like {
+            assert!(
+                HotkeyChord::parse(text).expect("reads").could_be_altgr(),
+                "{text}"
+            );
+        }
+        for text in not {
+            assert!(
+                !HotkeyChord::parse(text).expect("reads").could_be_altgr(),
+                "{text}"
+            );
+        }
+        for convention in CONVENTIONS {
+            for (action, default) in default_bindings(convention) {
+                assert!(!default.could_be_altgr(), "{convention:?} {action:?}");
             }
         }
     }

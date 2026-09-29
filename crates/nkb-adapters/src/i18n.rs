@@ -69,7 +69,7 @@ use nkb_app::ports::{
     CatalogueCoverage, CatalogueSource, SaveError, SettingsNote, SettingsUnusable,
     ShortcutRegistration, ShortcutsUnavailable, SourceSkipped,
 };
-use nkb_core::hotkeys::{HotkeyAction, HotkeyChord, HotkeyKey, default_chord};
+use nkb_core::hotkeys::{HotkeyAction, HotkeyChord, default_chord};
 use nkb_core::preview::ShapeFact;
 
 use crate::settings_file::SCHEMA;
@@ -146,26 +146,13 @@ pub fn action_name(action: HotkeyAction) -> &'static str {
     }
 }
 
-/// What one key of a shortcut is called.
-///
-/// `Space` is a word rather than a character on purpose - a blank between two
-/// plus signs is not readable as a key.
-fn key_name(key: HotkeyKey) -> &'static str {
-    match key {
-        HotkeyKey::N => "N",
-        HotkeyKey::P => "P",
-        HotkeyKey::R => "R",
-        HotkeyKey::B => "B",
-        HotkeyKey::H => "H",
-        HotkeyKey::Space => "Space",
-        HotkeyKey::Digit0 => "0",
-        HotkeyKey::Digit1 => "1",
-        HotkeyKey::Digit2 => "2",
-        HotkeyKey::Digit3 => "3",
-    }
-}
-
 /// A shortcut written the way a tester reads it: `Alt+Shift+N`.
+///
+/// The words are the core's ([`HotkeyChord::text`]), the same text the settings
+/// file holds, so a shortcut on the screen is exactly what the tester writes
+/// to change it. Keyboards print these words untranslated, which is why no
+/// language has its own entry here. `Space` is a word rather than a character
+/// on purpose - a blank between two plus signs is not readable as a key.
 ///
 /// ⚠️ This is the WINDOWS AND LINUX way of writing keys, and on macOS it is
 /// wrong in a way worth naming rather than discovering. `ux-spec.md` 3 writes the
@@ -175,21 +162,7 @@ fn key_name(key: HotkeyKey) -> &'static str {
 /// has no victim today. `OBS-115`.
 #[must_use]
 pub fn chord(chord: HotkeyChord) -> String {
-    let mut out = String::new();
-    if chord.ctrl {
-        out.push_str("Ctrl+");
-    }
-    if chord.alt {
-        out.push_str("Alt+");
-    }
-    if chord.shift {
-        out.push_str("Shift+");
-    }
-    if chord.win {
-        out.push_str("Win+");
-    }
-    out.push_str(key_name(chord.key));
-    out
+    chord.text()
 }
 
 /// The shortcut bound to an action, as text, or an empty string if it has none.
@@ -1322,7 +1295,7 @@ pub fn not_read(coverage: &CatalogueCoverage) -> Vec<String> {
 )]
 mod tests {
     use super::*;
-    use nkb_core::hotkeys::Convention;
+    use nkb_core::hotkeys::{Convention, HotkeyKey};
 
     /// One of every message, with arguments chosen so the test can check the
     /// substitution as well as the sentence.

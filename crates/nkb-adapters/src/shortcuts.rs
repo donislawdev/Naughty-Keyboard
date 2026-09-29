@@ -150,18 +150,74 @@ fn hotkey_for(index: usize, chord: &HotkeyChord) -> Hotkey {
 }
 
 /// The Windows virtual-key code for one key of the shortcut vocabulary.
+///
+/// Letters and digits are their ASCII codes, `VK_F1` to `VK_F24` run from
+/// `0x70` to `0x87`, and Space is `VK_SPACE` - Microsoft's virtual-key table.
+/// Written out rather than computed, so the match stays exhaustive and a key
+/// added to the core without a code here does not compile.
 const fn virtual_key(key: HotkeyKey) -> u16 {
     match key {
-        HotkeyKey::N => 0x4E,
-        HotkeyKey::P => 0x50,
-        HotkeyKey::R => 0x52,
+        HotkeyKey::A => 0x41,
         HotkeyKey::B => 0x42,
+        HotkeyKey::C => 0x43,
+        HotkeyKey::D => 0x44,
+        HotkeyKey::E => 0x45,
+        HotkeyKey::F => 0x46,
+        HotkeyKey::G => 0x47,
         HotkeyKey::H => 0x48,
-        HotkeyKey::Space => 0x20,
+        HotkeyKey::I => 0x49,
+        HotkeyKey::J => 0x4A,
+        HotkeyKey::K => 0x4B,
+        HotkeyKey::L => 0x4C,
+        HotkeyKey::M => 0x4D,
+        HotkeyKey::N => 0x4E,
+        HotkeyKey::O => 0x4F,
+        HotkeyKey::P => 0x50,
+        HotkeyKey::Q => 0x51,
+        HotkeyKey::R => 0x52,
+        HotkeyKey::S => 0x53,
+        HotkeyKey::T => 0x54,
+        HotkeyKey::U => 0x55,
+        HotkeyKey::V => 0x56,
+        HotkeyKey::W => 0x57,
+        HotkeyKey::X => 0x58,
+        HotkeyKey::Y => 0x59,
+        HotkeyKey::Z => 0x5A,
         HotkeyKey::Digit0 => 0x30,
         HotkeyKey::Digit1 => 0x31,
         HotkeyKey::Digit2 => 0x32,
         HotkeyKey::Digit3 => 0x33,
+        HotkeyKey::Digit4 => 0x34,
+        HotkeyKey::Digit5 => 0x35,
+        HotkeyKey::Digit6 => 0x36,
+        HotkeyKey::Digit7 => 0x37,
+        HotkeyKey::Digit8 => 0x38,
+        HotkeyKey::Digit9 => 0x39,
+        HotkeyKey::F1 => 0x70,
+        HotkeyKey::F2 => 0x71,
+        HotkeyKey::F3 => 0x72,
+        HotkeyKey::F4 => 0x73,
+        HotkeyKey::F5 => 0x74,
+        HotkeyKey::F6 => 0x75,
+        HotkeyKey::F7 => 0x76,
+        HotkeyKey::F8 => 0x77,
+        HotkeyKey::F9 => 0x78,
+        HotkeyKey::F10 => 0x79,
+        HotkeyKey::F11 => 0x7A,
+        HotkeyKey::F12 => 0x7B,
+        HotkeyKey::F13 => 0x7C,
+        HotkeyKey::F14 => 0x7D,
+        HotkeyKey::F15 => 0x7E,
+        HotkeyKey::F16 => 0x7F,
+        HotkeyKey::F17 => 0x80,
+        HotkeyKey::F18 => 0x81,
+        HotkeyKey::F19 => 0x82,
+        HotkeyKey::F20 => 0x83,
+        HotkeyKey::F21 => 0x84,
+        HotkeyKey::F22 => 0x85,
+        HotkeyKey::F23 => 0x86,
+        HotkeyKey::F24 => 0x87,
+        HotkeyKey::Space => 0x20,
     }
 }
 
@@ -194,28 +250,26 @@ mod tests {
 
     #[test]
     fn every_key_of_the_vocabulary_has_its_own_virtual_key() {
-        // Letters and digits are their ASCII codes, Space is VK_SPACE. A
-        // collision would make two shortcuts one, and the second would register
-        // as Taken against the first.
-        let keys = [
-            HotkeyKey::N,
-            HotkeyKey::P,
-            HotkeyKey::R,
-            HotkeyKey::B,
-            HotkeyKey::H,
-            HotkeyKey::Space,
-            HotkeyKey::Digit0,
-            HotkeyKey::Digit1,
-            HotkeyKey::Digit2,
-            HotkeyKey::Digit3,
-        ];
+        // A collision would make two shortcuts one, and the second would
+        // register as Taken against the first. The expected codes come from the
+        // key's NAME, not from the table under test: a letter or digit is its
+        // ASCII code, `Fn` is `0x6F + n`, Space is `VK_SPACE`.
         let mut seen = std::collections::HashSet::new();
-        for key in keys {
-            assert!(seen.insert(virtual_key(key)), "{key:?} shares a code");
+        for key in HotkeyKey::ALL {
+            let code = virtual_key(*key);
+            assert!(seen.insert(code), "{key:?} shares a code");
+            let name = key.name();
+            let expected = if name == "Space" {
+                0x20
+            } else if let Some(n) = name.strip_prefix('F').filter(|n| !n.is_empty()) {
+                0x6F + n.parse::<u16>().expect("a function key number")
+            } else {
+                assert_eq!(name.len(), 1, "{name}");
+                u16::from(name.as_bytes()[0])
+            };
+            assert_eq!(code, expected, "{name}");
         }
-        assert_eq!(virtual_key(HotkeyKey::N), u16::from(b'N'));
-        assert_eq!(virtual_key(HotkeyKey::Digit0), u16::from(b'0'));
-        assert_eq!(virtual_key(HotkeyKey::Space), 0x20);
+        assert_eq!(virtual_key(HotkeyKey::F24), 0x87);
     }
 
     #[test]
