@@ -54,7 +54,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use nkb_adapters::i18n::PaletteLabel;
-use nkb_adapters::{KeptFocus, SettingsFile, default_bindings, i18n, report_window_failure};
+use nkb_adapters::{
+    KeptFocus, SettingsFile, altgr_character, default_bindings, i18n, report_window_failure,
+};
 use nkb_app::{KeptSettings, RouteRequest};
 use nkb_core::hotkeys::{Bindings, HotkeyAction};
 use nkb_gui::packs::{Packs, SystemKeyboard};
@@ -170,8 +172,9 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     let (settings, mut said) = KeptSettings::open(&store);
     // The shortcuts of this run, once, here: the hint bar on this thread and
     // the registration on the worker must show and take the same ones. What
-    // the tester wrote and could not be used is said with the other settings.
-    let (bindings, refused) = settings.bindings(default_bindings());
+    // the tester wrote and could not be used is said with the other settings -
+    // a `Ctrl+Alt` chord a keyboard layout types a character on included (K4d).
+    let (bindings, refused) = settings.bindings(default_bindings(), &altgr_character);
     said.extend(refused);
     let compact = live::starts_compact(settings.settings());
     let palette = Palette::new()?;

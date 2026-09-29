@@ -39,6 +39,19 @@ pub const fn default_bindings() -> Bindings {
     Bindings::defaults(CONVENTION)
 }
 
+/// The character a keyboard layout of this system types for `chord` as
+/// `AltGr` - the answer `KeptSettings::bindings` hands to the core (`K4d`).
+///
+/// Asks `nkb-sys` about `Ctrl+Alt` on the chord's key, with `Shift` when the
+/// chord has it. It does not look at the chord's own `Ctrl` and `Alt`:
+/// whether a chord CAN be `AltGr` is the core's question
+/// (`HotkeyChord::could_be_altgr`), asked before this one - so the two
+/// vocabularies still meet only in [`virtual_key`].
+#[must_use]
+pub fn altgr_character(chord: HotkeyChord) -> Option<char> {
+    nkb_sys::layout::altgr_character(virtual_key(chord.key), chord.shift)
+}
+
 /// Registers shortcuts through `nkb_sys::hotkey::listen`.
 ///
 /// Stateless, like `DirectInjection`: the state is the handle it returns.

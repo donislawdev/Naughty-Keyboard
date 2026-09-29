@@ -31,6 +31,7 @@
 
 pub mod field;
 pub mod hotkey;
+pub mod layout;
 pub mod privilege;
 pub mod startup;
 pub mod window;

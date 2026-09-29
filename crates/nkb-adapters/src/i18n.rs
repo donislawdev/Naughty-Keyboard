@@ -810,6 +810,22 @@ fn shown_part(part: &str) -> String {
     shown
 }
 
+/// A character a keyboard layout types, fit for a sentence: as it is when it
+/// prints as itself, otherwise as its code point - `U+0301`, `U+0022`.
+///
+/// The character comes from the system, not from us. A combining mark drawn
+/// as it is lands on the quote before it, a quote would close the quotes
+/// around it, and a control character would not show at all. The code point
+/// is the one form that reads the same in every one of those cases - and it
+/// has no brace, which a finished sentence must not hold.
+fn shown_character(character: char) -> String {
+    if character.escape_debug().eq(core::iter::once(character)) {
+        character.to_string()
+    } else {
+        format!("U+{:04X}", u32::from(character))
+    }
+}
+
 /// How much of a wrongly written part a sentence repeats. Longer than any
 /// modifier or key name, so a typo is always shown whole.
 const PART_SHOWN: usize = 32;
@@ -851,6 +867,12 @@ fn pattern_settings_message(message: &SettingsMessage) -> Option<&'static str> {
             ..
         }) => Some(
             "The settings file {file} gives \"{action}\" the shortcut {wanted}, which holds no Ctrl, Alt or Win - taken globally it would stop that key working in every application, so the default {shortcut} is used. Add Ctrl, Alt or Win to it.",
+        ),
+        SettingsMessage::ShortcutNotUsed(Refused {
+            why: Refusal::TypesCharacter(_),
+            ..
+        }) => Some(
+            "The settings file {file} gives \"{action}\" the shortcut {wanted}, which types \"{character}\" as AltGr on a keyboard layout of this computer - taken globally it would stop that character working in every application, so the default {shortcut} is used. Choose a combination without Ctrl+Alt.",
         ),
         SettingsMessage::ShortcutNotUsed(Refused {
             why: Refusal::SameAs(_),
@@ -989,9 +1011,10 @@ pub fn settings_message(
             })
         }
         SettingsMessage::ShortcutNotUsed(refused) => {
-            let other = match refused.why {
-                Refusal::SameAs(other) => action_name(other),
-                Refusal::Problem(_) => "",
+            let (other, character) = match refused.why {
+                Refusal::SameAs(other) => (action_name(other), String::new()),
+                Refusal::TypesCharacter(character) => ("", shown_character(character)),
+                Refusal::Problem(_) => ("", String::new()),
             };
             pattern_settings_message(message).map(|pattern| {
                 fill(
@@ -1001,6 +1024,7 @@ pub fn settings_message(
                         ("action", action_name(refused.action)),
                         ("wanted", &chord(refused.chord)),
                         ("other", other),
+                        ("character", &character),
                         ("shortcut", &chord_text(bindings, refused.action)),
                     ],
                 )
@@ -2255,6 +2279,17 @@ mod tests {
                 Refusal::SameAs(HotkeyAction::PreviousValue),
                 "\"Previous value\"",
             ),
+            (
+                Refusal::TypesCharacter('\u{105}'),
+                "types \"\u{105}\" as AltGr",
+            ),
+            // A quote from a layout cannot close the quotes around it.
+            (Refusal::TypesCharacter('"'), "types \"U+0022\" as AltGr"),
+            // A combining mark is named, not drawn onto the quote before it.
+            (
+                Refusal::TypesCharacter('\u{301}'),
+                "types \"U+0301\" as AltGr",
+            ),
         ] {
             let out = settings_message(
                 &SettingsMessage::ShortcutNotUsed(Refused {
@@ -2278,10 +2313,13 @@ mod tests {
 
     #[test]
     fn a_shortcut_set_in_the_settings_file_is_the_one_every_sentence_names() {
-        let (mine, refused) = defaults().with(&[(
-            HotkeyAction::RestartPack,
-            HotkeyChord::parse("Ctrl+Alt+Win+9").expect("reads"),
-        )]);
+        let (mine, refused) = defaults().with(
+            &[(
+                HotkeyAction::RestartPack,
+                HotkeyChord::parse("Ctrl+Alt+Win+9").expect("reads"),
+            )],
+            &|_| None,
+        );
         assert!(refused.is_empty());
         let out = message(&Message::CounterKept { done: 1, total: 2 }, "p", &mine);
         assert!(out.contains("Ctrl+Alt+Win+9"), "{out}");

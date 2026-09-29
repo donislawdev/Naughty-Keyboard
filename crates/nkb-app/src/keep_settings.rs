@@ -27,7 +27,7 @@
 
 use std::mem::{Discriminant, discriminant};
 
-use nkb_core::hotkeys::{Bindings, Refused};
+use nkb_core::hotkeys::{Bindings, HotkeyChord, Refused};
 
 use crate::advance_sequence::ChooseError;
 use crate::ports::{
@@ -137,9 +137,15 @@ impl KeptSettings {
     ///
     /// Asked once, at start: the file is not read again while the palette
     /// runs (`settings-format.md` 8), so the answer holds for the whole run.
+    /// `types` is the system's answer to which character a `Ctrl+Alt` chord
+    /// types as `AltGr` - see [`Bindings::with`], which decides when to ask.
     #[must_use]
-    pub fn bindings(&self, defaults: Bindings) -> (Bindings, Vec<SettingsMessage>) {
-        let (bindings, refused) = defaults.with(&self.settings.shortcuts);
+    pub fn bindings(
+        &self,
+        defaults: Bindings,
+        types: &dyn Fn(HotkeyChord) -> Option<char>,
+    ) -> (Bindings, Vec<SettingsMessage>) {
+        let (bindings, refused) = defaults.with(&self.settings.shortcuts, types);
         (
             bindings,
             refused
@@ -647,6 +653,7 @@ mod tests {
                 shortcuts: vec![
                     (HotkeyAction::NextValue, chord("Alt+Shift+M")),
                     (HotkeyAction::PreviousValue, chord("Alt+Shift+R")),
+                    (HotkeyAction::RepeatLast, chord("Ctrl+Alt+A")),
                 ],
                 ..Settings::default()
             },
@@ -655,7 +662,9 @@ mod tests {
         let (kept, said) = KeptSettings::open(&store);
         assert!(said.is_empty(), "{said:?}");
         let defaults = Bindings::defaults(Convention::WindowsAndLinux);
-        let (bindings, messages) = kept.bindings(defaults);
+        // The system's answer goes through untouched: `AltGr+A` types `U+0105`.
+        let polish = |wanted: HotkeyChord| (wanted == chord("Ctrl+Alt+A")).then_some('\u{105}');
+        let (bindings, messages) = kept.bindings(defaults, &polish);
         assert_eq!(
             bindings.chord(HotkeyAction::NextValue),
             chord("Alt+Shift+M")
@@ -665,13 +674,21 @@ mod tests {
             defaults.chord(HotkeyAction::PreviousValue),
             "Alt+Shift+R is Repeat last value's"
         );
+        // Repeat last keeps Alt+Shift+R, so the clash names the true holder.
         assert_eq!(
             messages,
-            vec![SettingsMessage::ShortcutNotUsed(Refused {
-                action: HotkeyAction::PreviousValue,
-                chord: chord("Alt+Shift+R"),
-                why: Refusal::SameAs(HotkeyAction::RepeatLast),
-            })]
+            vec![
+                SettingsMessage::ShortcutNotUsed(Refused {
+                    action: HotkeyAction::RepeatLast,
+                    chord: chord("Ctrl+Alt+A"),
+                    why: Refusal::TypesCharacter('\u{105}'),
+                }),
+                SettingsMessage::ShortcutNotUsed(Refused {
+                    action: HotkeyAction::PreviousValue,
+                    chord: chord("Alt+Shift+R"),
+                    why: Refusal::SameAs(HotkeyAction::RepeatLast),
+                }),
+            ]
         );
         assert!(store.saves().is_empty(), "reading shortcuts writes nothing");
     }
