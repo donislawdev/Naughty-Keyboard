@@ -62,6 +62,10 @@ export component QueryField inherits Rectangle {
     // by code or by a click inside the window is not the tester leaving
     // (`OBS-147`). Rust cannot name the reason itself, the type is not public.
     callback window-left();
+    // The window holding the line became the active one - the system handed
+    // it the keyboard. Only that reason, like `window-left`: Rust forgets the
+    // modifiers the toolkit still believes held (`OBS-151`).
+    callback window-entered();
 
     // Moves the keyboard to the line. A function rather than a property,
     // because focusing is an act, not a state the view could hold.
@@ -100,6 +104,11 @@ export component QueryField inherits Rectangle {
         focus-lost(reason) => {
             if (reason == FocusReason.window-activation) {
                 root.window-left();
+            }
+        }
+        focus-gained(reason) => {
+            if (reason == FocusReason.window-activation) {
+                root.window-entered();
             }
         }
 

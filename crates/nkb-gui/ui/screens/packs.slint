@@ -72,6 +72,7 @@ export component PacksWindow inherits Window {
     callback cancel <=> keys.cancel;
     callback clicked <=> list.clicked;
     callback deactivated <=> field.window-left;
+    callback activated <=> field.window-entered;
 
     // The keyboard goes to the query line when the window opens, so the
     // first letter the tester types filters the list (PORADNIK-GUI: the focus

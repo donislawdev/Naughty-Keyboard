@@ -39,6 +39,21 @@
 //! shortcut, without a word either (`OBS-149`). Slint reports the change as the
 //! query line losing focus for `window-activation`, the only reason the view
 //! passes on.
+//!
+//! # Coming in while the shortcut is still held
+//!
+//! 🔴 The window can get the keyboard of its own thread before it gets the
+//! foreground: `show()` activates it there, and winit then reports every key
+//! held at that moment as pressed - the shortcut's Alt and Shift. The tester
+//! lets go while the application under test is still in front, so the
+//! releases go there, and Slint keeps believing the keys held. It forgets
+//! modifiers when a window goes inactive, never when one becomes active, and
+//! it keeps them for the whole process. Once the foreground arrives, every
+//! letter of the search came with Alt and the query line took it for a
+//! shortcut - the tester typed and nothing happened, without a word
+//! (`OBS-151`, `slint.md` 2.34, read in winit 0.30.13 and i-slint-core
+//! 1.18.1). So the window forgets them itself when it becomes active: see
+//! [`forget_held_modifiers`].
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -190,6 +205,12 @@ impl Packs {
         packs.window.on_deactivated(move || {
             if let Some(packs) = weak.upgrade() {
                 packs.left();
+            }
+        });
+        let weak = Rc::downgrade(&packs);
+        packs.window.on_activated(move || {
+            if let Some(packs) = weak.upgrade() {
+                forget_held_modifiers(packs.window.window());
             }
         });
         let weak = Rc::downgrade(&packs);
@@ -381,6 +402,40 @@ impl Packs {
     #[must_use]
     pub fn window(&self) -> &PacksWindow {
         &self.window
+    }
+}
+
+/// Every modifier key Slint keeps a pressed state for - `InternalKeyboardModifierState`
+/// in i-slint-core 1.18.1, read, not guessed. A key missing here would stay
+/// stuck, so the list is all of them rather than the shortcut's own.
+const MODIFIERS: [slint::platform::Key; 8] = [
+    slint::platform::Key::Alt,
+    slint::platform::Key::AltGr,
+    slint::platform::Key::Control,
+    slint::platform::Key::ControlR,
+    slint::platform::Key::Shift,
+    slint::platform::Key::ShiftR,
+    slint::platform::Key::Meta,
+    slint::platform::Key::MetaR,
+];
+
+/// Tells `window` that no modifier is held - on the moment the window becomes
+/// active, see the module header.
+///
+/// Releases, not a reset: Slint has no public way to clear its modifier state,
+/// and a release of each key is the one event that clears it. A key still
+/// physically held at that moment is forgotten too, and the cost is named: a
+/// letter typed while the tester keeps holding the shortcut's Alt goes into
+/// the query instead of being passed on as `Alt+letter`. The pack window has
+/// no such shortcut, and the tool's own shortcuts are taken by the system
+/// before any window sees them. The reverse error - every letter lost - is
+/// what `OBS-151` measured.
+///
+/// Public so the probe `tools/sonda-klawisze` (`akord naprawa`) runs this very
+/// code on a live window.
+pub fn forget_held_modifiers(window: &slint::Window) {
+    for key in MODIFIERS {
+        window.dispatch_event(slint::platform::WindowEvent::KeyReleased { text: key.into() });
     }
 }
 

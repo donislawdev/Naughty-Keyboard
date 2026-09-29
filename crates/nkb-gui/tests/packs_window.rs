@@ -295,6 +295,33 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     assert!(calls(&keyboard).is_empty());
     assert!(said.borrow().is_empty(), "{:?}", said.borrow());
 
+    // ---- a shortcut still held as the window comes in is not left held ------
+    // The window can get its thread's keyboard while the shortcut is down:
+    // winit reports Alt and Shift as pressed then, and the tester's release goes
+    // to the application under test (`OBS-151`). The window becoming active
+    // must forget them, or every letter of the search arrives with Alt and is
+    // taken for a shortcut - the tester types and nothing happens.
+    packs.open();
+    for key in [slint::platform::Key::Alt, slint::platform::Key::Shift] {
+        window
+            .window()
+            .dispatch_event(WindowEvent::KeyPressed { text: key.into() });
+    }
+    window
+        .window()
+        .dispatch_event(WindowEvent::WindowActiveChanged(true));
+    type_text(window, "uni");
+    assert_eq!(
+        window.get_query(),
+        "uni",
+        "letters after the window came in with the shortcut held (OBS-151)"
+    );
+    assert!(packs.is_open(), "coming in is not leaving");
+    tap(window, ESCAPE);
+    assert!(!packs.is_open());
+    let _ = calls(&keyboard);
+    assert!(said.borrow().is_empty(), "{:?}", said.borrow());
+
     // ---- a keyboard that stays elsewhere is said, in both directions --------
     *keyboard.take_fails.borrow_mut() = true;
     packs.open();
