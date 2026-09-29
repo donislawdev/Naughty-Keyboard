@@ -38,8 +38,14 @@ const HEIGHT: u32 = 460;
 /// coverage above a third.
 const BLUER_THAN_RED: u8 = 40;
 
-/// The box the name's ink occupies: the first and last column and row that
-/// differ from the ground, in the left half of the first band.
+/// The box the name's ink occupies: the first and last column and row
+/// BRIGHTER than the ground, in the left half of the first band.
+///
+/// Brighter, not merely different: outside the palette's rounded corner the
+/// buffer is black, and a box that took the corner in started at (0, 0) and
+/// put its "centre" beside the name. Windows happened to land on the name
+/// anyway, macOS 27.0 did not - the first run there hovered nothing.
+#[derive(Debug)]
 struct Ink {
     left: u32,
     right: u32,
@@ -47,11 +53,15 @@ struct Ink {
     bottom: u32,
 }
 
+fn brightness(p: offscreen::Pixel) -> u32 {
+    u32::from(p.r) + u32::from(p.g) + u32::from(p.b)
+}
+
 fn ink(buffer: &[offscreen::Pixel]) -> Ink {
-    let ground = buffer[(4 * WIDTH + WIDTH / 2) as usize];
+    let ground = brightness(buffer[(4 * WIDTH + WIDTH / 2) as usize]);
     let hits: Vec<(u32, u32)> = (0..40)
         .flat_map(|y| (0..WIDTH / 2).map(move |x| (x, y)))
-        .filter(|&(x, y)| buffer[(y * WIDTH + x) as usize] != ground)
+        .filter(|&(x, y)| brightness(buffer[(y * WIDTH + x) as usize]) > ground + 60)
         .collect();
     let xs = hits.iter().map(|&(x, _)| x);
     let ys = hits.iter().map(|&(_, y)| y);
@@ -107,7 +117,7 @@ fn the_pack_name_answers_the_pointer_and_opens_the_pack_window() {
     assert!(
         under > before + 20,
         "the pointer over the pack's name changes nothing: {before} accent pixels at rest, \
-         {under} under the pointer. Look at {}",
+         {under} under the pointer, pointer at {centre:?} over the ink {name:?}. Look at {}",
         path.display()
     );
 
