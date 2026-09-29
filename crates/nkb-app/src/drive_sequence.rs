@@ -51,7 +51,11 @@ use crate::ports::{LiveShortcuts, Wait};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Ended {
     /// `keep_going` said no. The presses still queued, if any, were left
-    /// unread on purpose: the caller is shutting down.
+    /// unread on purpose: the caller is shutting down, or has something to do
+    /// between presses - choosing another pack - and calls again, which reads
+    /// them as ordinary presses. `keep_going` is asked only between turns,
+    /// never between a send and the drain after it, so a stop never cuts the
+    /// drain short and a press pressed while busy is never replayed (`W1`).
     Stopped,
     /// The shortcuts reported [`Wait::Gone`] - the thread holding them has
     /// ended, so no press can ever arrive. The palette must say so rather than
@@ -384,6 +388,26 @@ mod tests {
             shortcuts.waits.borrow().is_empty(),
             "the shortcuts were never asked"
         );
+    }
+
+    /// The palette stops the loop to choose another pack and calls it again.
+    /// A press left unread by the stop is an ordinary press on the way back -
+    /// not dropped, and not answered as pressed while busy.
+    #[test]
+    fn a_loop_stopped_between_presses_reads_what_is_left_when_called_again() {
+        let shortcuts = Scripted::of(&[(Arrives::Later, NEXT), (Arrives::Later, NEXT)]);
+        let mut sequence = chosen(Risk::Normal);
+
+        let (ended, first) = run(&shortcuts, &mut sequence, turns(1));
+        assert_eq!(ended, Ended::Stopped);
+        assert_eq!(first.len(), 1);
+        assert_eq!(shortcuts.remaining(), 1, "the second press waits, unread");
+
+        let (ended, second) = run(&shortcuts, &mut sequence, turns(1));
+        assert_eq!(ended, Ended::Stopped);
+        assert_eq!(second.len(), 1);
+        assert!(second[0].sent.is_some(), "the press left over sent a value");
+        assert_eq!(sequence.counter(), Some((2, 3)));
     }
 
     #[test]

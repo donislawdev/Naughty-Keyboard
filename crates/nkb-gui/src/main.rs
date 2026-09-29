@@ -195,6 +195,13 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     focus::refuse_focus(&palette, kept, &standing);
 
     let stop = Arc::new(AtomicBool::new(false));
+    // What the window asks of the worker between presses - another pack. The
+    // closing goes through `stop`, never through this: a channel whose sender
+    // is gone answers "nothing waiting", which must not read as "stop".
+    //
+    // ⚠️ Held and not yet used: the pack window that sends on it is the next
+    // piece of step 7. Until then nothing sends and every wait finds it empty.
+    let (_choose, commands) = std::sync::mpsc::channel::<live::Command>();
     let worker = std::thread::spawn({
         let palette = palette.as_weak();
         let stop = Arc::clone(&stop);
@@ -210,7 +217,7 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         // Measured: work handed to the event loop before `run()` is delivered
         // once it starts (`slint.md` 1.9), so this thread may say something
         // before the window is running and nothing is lost.
-        move || live::drive(&palette, &stop, start, &standing)
+        move || live::drive(&palette, &stop, &commands, start, &standing)
     });
 
     let ran = palette.run();

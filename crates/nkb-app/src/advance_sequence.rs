@@ -317,6 +317,13 @@ impl AdvanceSequence {
         self.loaded.as_ref().map(|loaded| loaded.pack.name.as_str())
     }
 
+    /// The chosen pack's identifier, if a pack is chosen - the name a pack is
+    /// asked for by, where [`Self::pack_name`] is the one it is shown by.
+    #[must_use]
+    pub fn pack_id(&self) -> Option<&str> {
+        self.loaded.as_ref().map(|loaded| loaded.pack.id.as_str())
+    }
+
     /// The current sequence, for a caller that renders both of its axes.
     #[must_use]
     pub fn sequence(&self) -> Sequence {
@@ -347,10 +354,18 @@ impl AdvanceSequence {
 
     /// Reads, validates and chooses a pack, moving the sequence to `ready`.
     ///
-    /// Called once at startup, since the pack search that would call it again is
-    /// a later step. `check` runs first and the pack is refused on any error -
+    /// Called at startup and again whenever the tester picks another pack.
+    /// `check` runs first and the pack is refused on any error -
     /// `pack-format.md` 11 loads all of a pack or none of it - which is what
-    /// `load_pack::load` does.
+    /// `load_pack::load` does. A refused pack leaves everything as it was: the
+    /// pack in use, its place in it and the last value all stay.
+    ///
+    /// ⚠️ Called only between actions, never while a value is going in. The
+    /// machine would refuse `PackChosen` in `inserting`, but the loaded pack is
+    /// swapped before the machine is asked. Unreachable today, because a send
+    /// is one blocking call inside [`Self::on_action`] and the sequence is never
+    /// left `inserting` between calls. Delivery one character at a time (`W2`)
+    /// has to ask the machine first.
     ///
     /// # Errors
     ///
@@ -954,6 +969,34 @@ mod tests {
         let advance = chosen(Risk::Normal);
         assert_eq!(advance.counter(), Some((0, 3)));
         assert_eq!(advance.pack_name(), Some("Sample pack"));
+        assert_eq!(advance.pack_id(), Some("sample"));
+    }
+
+    /// The palette chooses packs while it runs. One that is refused must not
+    /// take the tester's place in the pack in use, nor the value the report
+    /// block is about.
+    #[test]
+    fn a_pack_refused_while_running_leaves_the_pack_in_use_its_place_and_its_last_value() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        let ports = kit.ports();
+        let _ = advance.on_action(HotkeyAction::NextValue, &ports);
+
+        let refused = advance.choose_pack(&FakeSource, &FakeFormat::with_errors(2), "broken");
+        assert_eq!(refused, Err(ChooseError::Refused { errors: 2 }));
+        let missing = advance.choose_pack(&MissingSource, &FakeFormat::with_errors(0), "absent");
+        assert_eq!(missing, Err(ChooseError::NotFound));
+
+        assert_eq!(advance.pack_id(), Some("sample"));
+        assert_eq!(advance.counter(), Some((1, 3)), "the place was kept");
+        let report = advance.on_action(HotkeyAction::CopyReport, &ports);
+        assert_eq!(
+            report.messages,
+            vec![Message::ReportCopied {
+                reference: String::from("sample/one")
+            }],
+            "the last value is still the one the report is about"
+        );
     }
 
     #[test]
