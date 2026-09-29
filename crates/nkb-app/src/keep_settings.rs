@@ -27,6 +27,8 @@
 
 use std::mem::{Discriminant, discriminant};
 
+use nkb_core::hotkeys::{Bindings, Refused};
+
 use crate::advance_sequence::ChooseError;
 use crate::ports::{
     SaveError, SettingChange, Settings, SettingsLoad, SettingsNote, SettingsStore, SettingsUnusable,
@@ -47,6 +49,9 @@ pub enum SettingsMessage {
     /// The remembered pack could not be opened, so the palette opened another
     /// one - and the remembered one stays remembered.
     RememberedPackUnavailable { remembered: String, opened: String },
+    /// A shortcut the tester wrote reads, and still cannot be used - the
+    /// action keeps its default. Why is in the refusal.
+    ShortcutNotUsed(Refused),
 }
 
 /// What opening a pack had to say, in the order it happened.
@@ -125,6 +130,23 @@ impl KeptSettings {
     #[must_use]
     pub fn settings(&self) -> &Settings {
         &self.settings
+    }
+
+    /// The shortcuts for this run: `defaults` with the tester's own on top,
+    /// and a message for each one that could not be used.
+    ///
+    /// Asked once, at start: the file is not read again while the palette
+    /// runs (`settings-format.md` 8), so the answer holds for the whole run.
+    #[must_use]
+    pub fn bindings(&self, defaults: Bindings) -> (Bindings, Vec<SettingsMessage>) {
+        let (bindings, refused) = defaults.with(&self.settings.shortcuts);
+        (
+            bindings,
+            refused
+                .into_iter()
+                .map(SettingsMessage::ShortcutNotUsed)
+                .collect(),
+        )
     }
 
     /// Remembers one change - in effect at once, saved when it can be.
@@ -319,6 +341,7 @@ mod tests {
             settings: Settings {
                 pack: pack.map(ToOwned::to_owned),
                 compact,
+                shortcuts: Vec::new(),
             },
             notes: Vec::new(),
         }
@@ -614,5 +637,42 @@ mod tests {
                 SaveError::Unwritable
             ))]
         );
+    }
+    #[test]
+    fn the_shortcuts_of_a_run_are_the_files_on_top_of_the_defaults_and_a_refusal_is_said() {
+        use nkb_core::hotkeys::{Convention, HotkeyAction, HotkeyChord, Refusal};
+        let chord = |text: &str| HotkeyChord::parse(text).unwrap_or_else(|e| panic!("{e:?}"));
+        let store = FakeStore::loading(SettingsLoad::Read {
+            settings: Settings {
+                shortcuts: vec![
+                    (HotkeyAction::NextValue, chord("Alt+Shift+M")),
+                    (HotkeyAction::PreviousValue, chord("Alt+Shift+R")),
+                ],
+                ..Settings::default()
+            },
+            notes: Vec::new(),
+        });
+        let (kept, said) = KeptSettings::open(&store);
+        assert!(said.is_empty(), "{said:?}");
+        let defaults = Bindings::defaults(Convention::WindowsAndLinux);
+        let (bindings, messages) = kept.bindings(defaults);
+        assert_eq!(
+            bindings.chord(HotkeyAction::NextValue),
+            chord("Alt+Shift+M")
+        );
+        assert_eq!(
+            bindings.chord(HotkeyAction::PreviousValue),
+            defaults.chord(HotkeyAction::PreviousValue),
+            "Alt+Shift+R is Repeat last value's"
+        );
+        assert_eq!(
+            messages,
+            vec![SettingsMessage::ShortcutNotUsed(Refused {
+                action: HotkeyAction::PreviousValue,
+                chord: chord("Alt+Shift+R"),
+                why: Refusal::SameAs(HotkeyAction::RepeatLast),
+            })]
+        );
+        assert!(store.saves().is_empty(), "reading shortcuts writes nothing");
     }
 }

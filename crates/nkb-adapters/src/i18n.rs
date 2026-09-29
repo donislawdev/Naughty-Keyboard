@@ -67,13 +67,14 @@ use nkb_app::drive_sequence::Ended;
 use nkb_app::keep_settings::SettingsMessage;
 use nkb_app::ports::{
     CatalogueCoverage, CatalogueSource, SaveError, SettingsNote, SettingsUnusable,
-    ShortcutRegistration, ShortcutsUnavailable, SourceSkipped,
+    ShortcutRegistration, ShortcutUnreadable, ShortcutsUnavailable, SourceSkipped,
 };
-use nkb_core::hotkeys::{HotkeyAction, HotkeyChord, default_chord};
+use nkb_core::hotkeys::{
+    Bindings, ChordError, ChordProblem, HotkeyAction, HotkeyChord, Refusal, Refused,
+};
 use nkb_core::preview::ShapeFact;
 
 use crate::settings_file::SCHEMA;
-use crate::shortcuts::CONVENTION;
 
 /// Substitutes `{name}` placeholders in one pass over the pattern.
 ///
@@ -165,15 +166,14 @@ pub fn chord(chord: HotkeyChord) -> String {
     chord.text()
 }
 
-/// The shortcut bound to an action, as text, or an empty string if it has none.
+/// The shortcut an action answers to in this run, as text.
 ///
-/// Reads the DEFAULTS, because configurable shortcuts need `SettingsStore` and
-/// that does not exist. When it does, this is the one function that gains a
-/// source - not every sentence that mentions a shortcut.
-fn chord_text(action: HotkeyAction) -> String {
-    default_chord(CONVENTION, action)
-        .map(chord)
-        .unwrap_or_default()
+/// Reads the bindings IN EFFECT - the defaults with the tester's own on top
+/// (`K4`) - which every caller passes in. This is the one function every
+/// sentence naming a shortcut goes through, so a shortcut changed in the
+/// settings file is changed in every sentence at once.
+fn chord_text(bindings: &Bindings, action: HotkeyAction) -> String {
+    chord(bindings.chord(action))
 }
 
 // ---------------------------------------------------------------------------
@@ -263,8 +263,10 @@ fn pattern_message(message: &Message) -> &'static str {
 /// `pack` names the pack in play, for the two sentences that mention one. A
 /// caller with no pack chosen passes an empty string, which only reaches a
 /// sentence that cannot occur without a pack.
+///
+/// `bindings` are the shortcuts in effect, for the sentences that name one.
 #[must_use]
-pub fn message(message: &Message, pack: &str) -> String {
+pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
     let pattern = pattern_message(message);
     match message {
         Message::ClipboardMode
@@ -305,7 +307,7 @@ pub fn message(message: &Message, pack: &str) -> String {
             &[
                 ("done", &done.to_string()),
                 ("total", &total.to_string()),
-                ("shortcut", &chord_text(HotkeyAction::RestartPack)),
+                ("shortcut", &chord_text(bindings, HotkeyAction::RestartPack)),
             ],
         ),
         Message::ModifierHeld { key } => fill(pattern, &[("key", key)]),
@@ -316,7 +318,7 @@ pub fn message(message: &Message, pack: &str) -> String {
         Message::ReportCopied { reference } => fill(pattern, &[("reference", reference)]),
         Message::ReportBusy => fill(
             pattern,
-            &[("shortcut", &chord_text(HotkeyAction::CopyReport))],
+            &[("shortcut", &chord_text(bindings, HotkeyAction::CopyReport))],
         ),
         Message::ReportFailed { detail } => fill(pattern, &[("detail", detail), ("pack", pack)]),
     }
@@ -372,14 +374,16 @@ pub fn choose_error(error: &ChooseError, pack: &str) -> String {
 ///
 /// 🔴 The `Taken` sentence changed on 2026-09-22 for the same reason as
 /// `Degraded`. It used to end "Pick a different shortcut in Settings." - and
-/// there is no settings screen, nor are shortcuts configurable: `nkb_core::
-/// hotkeys` says so at `HotkeyKey`. The sentence sent a tester to a place they
-/// could not find. It returns in that form with `SettingsStore`.
+/// there was no settings screen. It changed again on 2026-09-29 (`K4`): it said
+/// "This build cannot change it", and since the settings file holds shortcuts
+/// that was no longer true. It does not send the tester to the file either -
+/// a hand-edited file is not the place a sentence may point at for this. The
+/// shortcuts tab (`K5`) will be.
 fn pattern_registration(outcome: &ShortcutRegistration) -> Option<&'static str> {
     match outcome {
         ShortcutRegistration::Registered => None,
         ShortcutRegistration::Taken => Some(
-            "{shortcut} is already taken by another application, so \"{action}\" will not respond. This build cannot change it - close the other application to free the combination.",
+            "{shortcut} is already taken by another application, so \"{action}\" will not respond. Close the other application to free the combination.",
         ),
         ShortcutRegistration::Failed { .. } => Some(
             "{shortcut} could not be registered, so \"{action}\" will not respond. The system returned code {code}.",
@@ -388,11 +392,15 @@ fn pattern_registration(outcome: &ShortcutRegistration) -> Option<&'static str> 
 }
 
 /// What the palette says about one shortcut registration, or nothing when it
-/// simply worked.
+/// simply worked. `chord` is the one that was registered for `action`.
 #[must_use]
-pub fn registration(outcome: &ShortcutRegistration, action: HotkeyAction) -> Option<String> {
+pub fn registration(
+    outcome: &ShortcutRegistration,
+    action: HotkeyAction,
+    registered: HotkeyChord,
+) -> Option<String> {
     let pattern = pattern_registration(outcome)?;
-    let shortcut = chord_text(action);
+    let shortcut = chord(registered);
     // ⚠️ This match supplies ARGUMENTS and decides nothing about whether there is
     // a sentence at all - that decision belongs to `pattern_registration` and to
     // nowhere else. The first version repeated it here with an early `return
@@ -764,8 +772,47 @@ fn pattern_settings_note(note: &SettingsNote) -> &'static str {
         SettingsNote::NotATable { .. } => {
             "In the settings file {file}, {key} should be a table of settings, so every setting in it takes its default. Fix it, or remove the line."
         }
+        SettingsNote::NotAShortcut { .. } => {
+            "In the settings file {file}, {key} should be a shortcut such as Alt+Shift+N, but {reason}, so its default is used. Fix the value, or remove the line."
+        }
     }
 }
+
+/// Why a shortcut in the settings file did not read - the `{reason}` of
+/// `SettingsNote::NotAShortcut`, one per way the core's grammar refuses a text.
+fn pattern_shortcut_unreadable(why: &ShortcutUnreadable) -> &'static str {
+    match why {
+        ShortcutUnreadable::NotText => "it is not text in quotes",
+        ShortcutUnreadable::Grammar(error) => match error {
+            ChordError::Empty => "it is empty",
+            ChordError::EmptyPart => "a plus sign has nothing on one side of it",
+            ChordError::Unknown(_) => "\"{part}\" is not the name of a key or a modifier",
+            ChordError::NoKey => "it names no key after the modifiers",
+            ChordError::TwoKeys(_) => "\"{part}\" is a second key",
+            ChordError::KeyNotLast(_) => "\"{part}\" comes after the key",
+            ChordError::RepeatedModifier(_) => "\"{part}\" repeats a modifier",
+        },
+    }
+}
+
+/// The part of a shortcut the tester wrote, fit for a sentence: at most
+/// [`PART_SHOWN`] characters, control characters and quotes escaped.
+///
+/// The text comes from a file anybody can write. Escaped, a newline in it
+/// cannot start a second, made-up line in the palette's message band, and a
+/// line pasted by mistake cannot push the palette off the screen.
+fn shown_part(part: &str) -> String {
+    let mut shown: String = part.chars().take(PART_SHOWN).collect::<String>();
+    shown = shown.escape_debug().to_string();
+    if part.chars().count() > PART_SHOWN {
+        shown.push_str("...");
+    }
+    shown
+}
+
+/// How much of a wrongly written part a sentence repeats. Longer than any
+/// modifier or key name, so a typo is always shown whole.
+const PART_SHOWN: usize = 32;
 
 /// The pattern for a change that was not saved, or nothing.
 ///
@@ -799,6 +846,18 @@ fn pattern_settings_message(message: &SettingsMessage) -> Option<&'static str> {
         SettingsMessage::RememberedPackUnavailable { .. } => Some(
             "The remembered pack \"{remembered}\" could not be opened, so the palette opened \"{opened}\" for now. Press {shortcut} to choose another.",
         ),
+        SettingsMessage::ShortcutNotUsed(Refused {
+            why: Refusal::Problem(ChordProblem::NoCommandModifier),
+            ..
+        }) => Some(
+            "The settings file {file} gives \"{action}\" the shortcut {wanted}, which holds no Ctrl, Alt or Win - taken globally it would stop that key working in every application, so the default {shortcut} is used. Add Ctrl, Alt or Win to it.",
+        ),
+        SettingsMessage::ShortcutNotUsed(Refused {
+            why: Refusal::SameAs(_),
+            ..
+        }) => Some(
+            "The settings file {file} gives \"{action}\" the shortcut {wanted}, which is already the shortcut for \"{other}\", so the default {shortcut} is used. Choose another combination for one of them.",
+        ),
         SettingsMessage::Unusable(_) | SettingsMessage::Note(_) | SettingsMessage::NotSaved(_) => {
             None
         }
@@ -822,9 +881,14 @@ fn unknown_keys(keys: &[String]) -> (String, usize) {
 }
 
 /// What the palette says about its settings, or nothing when there is nothing
-/// to say. `file` is where the settings live, for the tester to find.
+/// to say. `file` is where the settings live, for the tester to find, and
+/// `bindings` the shortcuts in effect.
 #[must_use]
-pub fn settings_message(message: &SettingsMessage, file: &str) -> Option<String> {
+pub fn settings_message(
+    message: &SettingsMessage,
+    file: &str,
+    bindings: &Bindings,
+) -> Option<String> {
     match message {
         SettingsMessage::Unusable(why) => {
             let (limit, line, detail, found) = match why {
@@ -866,7 +930,34 @@ pub fn settings_message(message: &SettingsMessage, file: &str) -> Option<String>
                 }
                 SettingsNote::NotTrueOrFalse { key }
                 | SettingsNote::NotAPackName { key }
-                | SettingsNote::NotATable { key } => (key.as_str(), String::new(), String::new()),
+                | SettingsNote::NotATable { key }
+                | SettingsNote::NotAShortcut { key, .. } => {
+                    (key.as_str(), String::new(), String::new())
+                }
+            };
+            // The reason is a sentence part of its own, filled first: the
+            // tester's text goes into `{part}` and never into the sentence
+            // pattern, so a brace in it stays a brace.
+            let reason = match note {
+                SettingsNote::NotAShortcut { why, .. } => {
+                    let part = match why {
+                        ShortcutUnreadable::Grammar(
+                            ChordError::Unknown(part)
+                            | ChordError::TwoKeys(part)
+                            | ChordError::KeyNotLast(part)
+                            | ChordError::RepeatedModifier(part),
+                        ) => shown_part(part),
+                        ShortcutUnreadable::NotText
+                        | ShortcutUnreadable::Grammar(
+                            ChordError::Empty | ChordError::EmptyPart | ChordError::NoKey,
+                        ) => String::new(),
+                    };
+                    fill(pattern_shortcut_unreadable(why), &[("part", &part)])
+                }
+                SettingsNote::UnknownKeys { .. }
+                | SettingsNote::NotTrueOrFalse { .. }
+                | SettingsNote::NotAPackName { .. }
+                | SettingsNote::NotATable { .. } => String::new(),
             };
             Some(fill(
                 pattern_settings_note(note),
@@ -875,6 +966,7 @@ pub fn settings_message(message: &SettingsMessage, file: &str) -> Option<String>
                     ("key", key),
                     ("keys", &keys),
                     ("more", &more),
+                    ("reason", &reason),
                 ],
             ))
         }
@@ -891,7 +983,25 @@ pub fn settings_message(message: &SettingsMessage, file: &str) -> Option<String>
                     &[
                         ("remembered", remembered),
                         ("opened", opened),
-                        ("shortcut", &chord_text(HotkeyAction::OpenPacks)),
+                        ("shortcut", &chord_text(bindings, HotkeyAction::OpenPacks)),
+                    ],
+                )
+            })
+        }
+        SettingsMessage::ShortcutNotUsed(refused) => {
+            let other = match refused.why {
+                Refusal::SameAs(other) => action_name(other),
+                Refusal::Problem(_) => "",
+            };
+            pattern_settings_message(message).map(|pattern| {
+                fill(
+                    pattern,
+                    &[
+                        ("file", file),
+                        ("action", action_name(refused.action)),
+                        ("wanted", &chord(refused.chord)),
+                        ("other", other),
+                        ("shortcut", &chord_text(bindings, refused.action)),
                     ],
                 )
             })
@@ -1295,7 +1405,13 @@ pub fn not_read(coverage: &CatalogueCoverage) -> Vec<String> {
 )]
 mod tests {
     use super::*;
+    use crate::shortcuts::CONVENTION;
     use nkb_core::hotkeys::{Convention, HotkeyKey};
+
+    /// The shortcuts of a palette whose settings name none.
+    fn defaults() -> Bindings {
+        Bindings::defaults(CONVENTION)
+    }
 
     /// One of every message, with arguments chosen so the test can check the
     /// substitution as well as the sentence.
@@ -1359,7 +1475,7 @@ mod tests {
     fn every_sentence() -> Vec<String> {
         let mut out: Vec<String> = every_message()
             .iter()
-            .map(|key| message(key, "unicode-text"))
+            .map(|key| message(key, "unicode-text", &defaults()))
             .collect();
 
         for error in [
@@ -1375,8 +1491,12 @@ mod tests {
             ShortcutRegistration::Failed { code: 1409 },
         ] {
             out.push(
-                registration(&outcome, HotkeyAction::NextValue)
-                    .expect("both of these outcomes have a sentence"),
+                registration(
+                    &outcome,
+                    HotkeyAction::NextValue,
+                    defaults().chord(HotkeyAction::NextValue),
+                )
+                .expect("both of these outcomes have a sentence"),
             );
         }
         out.push(shortcuts_unavailable(&ShortcutsUnavailable::Unsupported {
@@ -1391,7 +1511,7 @@ mod tests {
         out.extend(
             every_settings_message()
                 .iter()
-                .filter_map(|message| settings_message(message, "the-settings-file")),
+                .filter_map(|message| settings_message(message, "the-settings-file", &defaults())),
         );
         out.push(no_match("zzz"));
         out.push(packs_label(PacksLabel::NoPacks).to_owned());
@@ -1475,6 +1595,7 @@ mod tests {
                     detail: String::from("unclosed table, expected `]`"),
                 }),
                 "C:\\Users\\t\\AppData\\Roaming\\Naughty Keyboard\\settings.toml",
+                &defaults(),
             )
             .as_deref(),
             Some(
@@ -1485,6 +1606,7 @@ mod tests {
             settings_message(
                 &SettingsMessage::Unusable(SettingsUnusable::SchemaTooNew { found: 2 }),
                 "f",
+                &defaults(),
             )
             .as_deref(),
             Some(
@@ -1500,7 +1622,8 @@ mod tests {
         assert_eq!(
             settings_message(
                 &SettingsMessage::Note(SettingsNote::UnknownKeys { keys: six }),
-                "f"
+                "f",
+                &defaults()
             )
             .as_deref(),
             Some(
@@ -1511,7 +1634,8 @@ mod tests {
         assert_eq!(
             settings_message(
                 &SettingsMessage::Note(SettingsNote::UnknownKeys { keys: seven }),
-                "f"
+                "f",
+                &defaults()
             )
             .as_deref(),
             Some(
@@ -1523,7 +1647,12 @@ mod tests {
     #[test]
     fn no_place_for_settings_is_said_at_the_start_and_not_again_at_each_save() {
         assert!(
-            settings_message(&SettingsMessage::NotSaved(SaveError::Nowhere), "f").is_none(),
+            settings_message(
+                &SettingsMessage::NotSaved(SaveError::Nowhere),
+                "f",
+                &defaults()
+            )
+            .is_none(),
             "the load already said there is no place"
         );
         assert!(
@@ -1531,7 +1660,8 @@ mod tests {
                 &SettingsMessage::Nowhere {
                     missing: String::from("HOME")
                 },
-                "f"
+                "f",
+                &defaults()
             )
             .is_some_and(|line| line.contains("HOME does not name a folder"))
         );
@@ -1656,7 +1786,12 @@ mod tests {
     #[test]
     fn the_two_silent_outcomes_stay_silent() {
         assert!(
-            registration(&ShortcutRegistration::Registered, HotkeyAction::NextValue).is_none(),
+            registration(
+                &ShortcutRegistration::Registered,
+                HotkeyAction::NextValue,
+                defaults().chord(HotkeyAction::NextValue)
+            )
+            .is_none(),
             "a registration that worked is not an event"
         );
         assert!(
@@ -1673,7 +1808,7 @@ mod tests {
             assert!(!name.is_empty(), "{action:?} has no name");
             names.push(name);
 
-            let text = chord_text(action);
+            let text = chord_text(&defaults(), action);
             assert!(!text.is_empty(), "{action:?} has no shortcut text");
             if CONVENTION == Convention::WindowsAndLinux {
                 assert!(
@@ -1695,9 +1830,18 @@ mod tests {
     #[test]
     fn a_shortcut_reads_the_way_a_tester_writes_it() {
         if CONVENTION == Convention::WindowsAndLinux {
-            assert_eq!(chord_text(HotkeyAction::NextValue), "Alt+Shift+N");
-            assert_eq!(chord_text(HotkeyAction::RestartPack), "Alt+Shift+0");
-            assert_eq!(chord_text(HotkeyAction::OpenPacks), "Alt+Shift+Space");
+            assert_eq!(
+                chord_text(&defaults(), HotkeyAction::NextValue),
+                "Alt+Shift+N"
+            );
+            assert_eq!(
+                chord_text(&defaults(), HotkeyAction::RestartPack),
+                "Alt+Shift+0"
+            );
+            assert_eq!(
+                chord_text(&defaults(), HotkeyAction::OpenPacks),
+                "Alt+Shift+Space"
+            );
         }
         assert_eq!(
             chord(HotkeyChord {
@@ -1716,17 +1860,21 @@ mod tests {
         // The one sentence that quotes a shortcut it did not receive as an
         // argument. It must name RestartPack, not whatever is first in the
         // table - the document says "press this to start the pack again".
-        let out = message(&Message::CounterKept { done: 7, total: 34 }, "unicode-text");
+        let out = message(
+            &Message::CounterKept { done: 7, total: 34 },
+            "unicode-text",
+            &defaults(),
+        );
         assert_eq!(
             out,
             format!(
                 "New field - the counter is still at 7/34. Press {} to start this pack from the beginning.",
-                chord_text(HotkeyAction::RestartPack)
+                chord_text(&defaults(), HotkeyAction::RestartPack)
             )
         );
         assert_ne!(
-            chord_text(HotkeyAction::RestartPack),
-            chord_text(HotkeyAction::NextValue),
+            chord_text(&defaults(), HotkeyAction::RestartPack),
+            chord_text(&defaults(), HotkeyAction::NextValue),
             "the check above would not tell RestartPack from the first entry"
         );
     }
@@ -1753,6 +1901,7 @@ mod tests {
                 character: '\0',
             },
             "p",
+            &defaults(),
         );
         assert_eq!(
             out,
@@ -1775,7 +1924,7 @@ mod tests {
             Message::ModifierHeld { key: String::new() },
             Message::ValueTooLarge { id: String::new() },
         ] {
-            let out = super::message(&message, "");
+            let out = super::message(&message, "", &defaults());
             assert!(!out.is_empty(), "{message:?} produced nothing");
             assert!(!out.contains('{'), "{message:?} left a placeholder: {out}");
         }
@@ -2033,6 +2182,122 @@ mod tests {
         assert!(
             !counted.contains('{'),
             "a placeholder was left standing: {counted}"
+        );
+    }
+    #[test]
+    fn every_sentence_about_a_shortcut_in_the_settings_file_is_whole_and_names_it() {
+        let bindings = defaults();
+        let chord = |text: &str| HotkeyChord::parse(text).expect("reads");
+        let part = String::from;
+        let reasons = [
+            ShortcutUnreadable::NotText,
+            ShortcutUnreadable::Grammar(ChordError::Empty),
+            ShortcutUnreadable::Grammar(ChordError::EmptyPart),
+            ShortcutUnreadable::Grammar(ChordError::Unknown(part("Shfit"))),
+            ShortcutUnreadable::Grammar(ChordError::NoKey),
+            ShortcutUnreadable::Grammar(ChordError::TwoKeys(part("P"))),
+            ShortcutUnreadable::Grammar(ChordError::KeyNotLast(part("Alt"))),
+            ShortcutUnreadable::Grammar(ChordError::RepeatedModifier(part("Option"))),
+        ];
+        for why in reasons {
+            let out = settings_message(
+                &SettingsMessage::Note(SettingsNote::NotAShortcut {
+                    key: String::from("shortcuts.next-value"),
+                    why: why.clone(),
+                }),
+                "f",
+                &bindings,
+            )
+            .expect("a note is always said");
+            assert!(!out.contains('{'), "{why:?} left a placeholder: {out}");
+            assert!(
+                out.contains("shortcuts.next-value") && out.contains(" f"),
+                "{out}"
+            );
+        }
+        let unknown = settings_message(
+            &SettingsMessage::Note(SettingsNote::NotAShortcut {
+                key: String::from("shortcuts.next-value"),
+                why: ShortcutUnreadable::Grammar(ChordError::Unknown(part("Shfit"))),
+            }),
+            "f",
+            &bindings,
+        )
+        .expect("said");
+        assert!(
+            unknown.contains("but \"Shfit\" is not the name"),
+            "{unknown}"
+        );
+
+        // The tester's text is escaped and cut short: no second line, no
+        // placeholder filled from inside it, no screen of text.
+        let hostile = format!("a\nb\"{{key}}{}", "x".repeat(100));
+        let out = settings_message(
+            &SettingsMessage::Note(SettingsNote::NotAShortcut {
+                key: String::from("shortcuts.next-value"),
+                why: ShortcutUnreadable::Grammar(ChordError::Unknown(hostile)),
+            }),
+            "f",
+            &bindings,
+        )
+        .expect("said");
+        assert!(!out.contains('\n'), "{out}");
+        assert!(out.contains("a\\nb\\\"{key}"), "{out}");
+        assert!(out.contains("...\" is not"), "{out}");
+        assert!(out.len() < 300, "{out}");
+
+        for (why, named) in [
+            (
+                Refusal::Problem(ChordProblem::NoCommandModifier),
+                "no Ctrl, Alt or Win",
+            ),
+            (
+                Refusal::SameAs(HotkeyAction::PreviousValue),
+                "\"Previous value\"",
+            ),
+        ] {
+            let out = settings_message(
+                &SettingsMessage::ShortcutNotUsed(Refused {
+                    action: HotkeyAction::NextValue,
+                    chord: chord("Shift+M"),
+                    why,
+                }),
+                "f",
+                &bindings,
+            )
+            .expect("said");
+            assert!(!out.contains('{'), "{out}");
+            assert!(out.contains("\"Next value\" the shortcut Shift+M"), "{out}");
+            assert!(out.contains(named), "{out}");
+            assert!(
+                out.contains(&chord_text(&bindings, HotkeyAction::NextValue)),
+                "the default in use is named: {out}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_shortcut_set_in_the_settings_file_is_the_one_every_sentence_names() {
+        let (mine, refused) = defaults().with(&[(
+            HotkeyAction::RestartPack,
+            HotkeyChord::parse("Ctrl+Alt+Win+9").expect("reads"),
+        )]);
+        assert!(refused.is_empty());
+        let out = message(&Message::CounterKept { done: 1, total: 2 }, "p", &mine);
+        assert!(out.contains("Ctrl+Alt+Win+9"), "{out}");
+        let taken = registration(
+            &ShortcutRegistration::Taken,
+            HotkeyAction::RestartPack,
+            mine.chord(HotkeyAction::RestartPack),
+        )
+        .expect("said");
+        assert!(
+            taken.starts_with("Ctrl+Alt+Win+9 is already taken"),
+            "{taken}"
+        );
+        assert!(
+            !taken.contains("cannot change"),
+            "the file can change it now: {taken}"
         );
     }
 }

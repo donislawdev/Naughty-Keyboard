@@ -10,7 +10,7 @@
 //! blind until the version that introduces the input oracle, and leaving the
 //! capability undeclared means it cannot be reached for by accident.
 
-use nkb_core::hotkeys::{HotkeyAction, HotkeyChord};
+use nkb_core::hotkeys::{ChordError, HotkeyAction, HotkeyChord};
 use nkb_core::keys::KeyChord;
 use nkb_core::lint::LintProblem;
 use nkb_core::pack::Pack;
@@ -674,6 +674,12 @@ pub struct Settings {
     pub pack: Option<String>,
     /// Whether the tester last left the palette collapsed (`D83`).
     pub compact: Option<bool>,
+    /// The shortcuts the tester wrote (`K4`), in the order the file holds them.
+    /// Only chords that READ arrive here - whether each can be used is
+    /// [`nkb_core::hotkeys::Bindings::with`]'s question, because the answer
+    /// depends on the other nine. Empty means "the file names none", and every
+    /// action keeps its default.
+    pub shortcuts: Vec<(HotkeyAction, HotkeyChord)>,
 }
 
 /// One setting the tester changed. A save carries exactly one, so a save can
@@ -721,6 +727,21 @@ pub enum SettingsNote {
     NotAPackName { key: String },
     /// A key that must hold a table of settings holds a single value.
     NotATable { key: String },
+    /// A key that must hold a shortcut holds something that does not read as
+    /// one. The action keeps its default.
+    NotAShortcut {
+        key: String,
+        why: ShortcutUnreadable,
+    },
+}
+
+/// Why a shortcut in the settings file did not read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ShortcutUnreadable {
+    /// Not text at all - a number, `true`, a table.
+    NotText,
+    /// Text that is not a shortcut, with the part that is wrong.
+    Grammar(ChordError),
 }
 
 /// Why a settings file that is there cannot be used.

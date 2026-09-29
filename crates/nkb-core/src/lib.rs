@@ -39,8 +39,8 @@ pub mod written_form;
 pub use description::{BreaksFault, MIN_BREAKS_CODE_POINTS, check_breaks, looks_english};
 pub use graphemes::UNICODE_VERSION;
 pub use hotkeys::{
-    ChordError, ChordProblem, Convention, DEFAULT_BINDINGS, HotkeyAction, HotkeyChord, HotkeyKey,
-    MACOS_DEFAULT_BINDINGS, default_bindings, default_chord,
+    Bindings, ChordError, ChordProblem, Convention, DEFAULT_BINDINGS, HotkeyAction, HotkeyChord,
+    HotkeyKey, MACOS_DEFAULT_BINDINGS, Refusal, Refused, default_bindings, default_chord,
 };
 pub use identity::{is_pack_id, is_value_id};
 pub use lint::{

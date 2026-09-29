@@ -56,7 +56,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use nkb_adapters::i18n::PaletteLabel;
 use nkb_adapters::{KeptFocus, SettingsFile, default_bindings, i18n, report_window_failure};
 use nkb_app::{KeptSettings, RouteRequest};
-use nkb_core::hotkeys::HotkeyAction;
+use nkb_core::hotkeys::{Bindings, HotkeyAction};
 use nkb_gui::packs::{Packs, SystemKeyboard};
 use nkb_gui::{Gallery, HintRow, PacksWindow, Palette, focus, live};
 use slint::{ComponentHandle, ModelRc, VecModel};
@@ -167,7 +167,12 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // before it is drawn (`D84`). A small file, read once - the saving happens
     // on the worker.
     let store = SettingsFile::for_this_user();
-    let (settings, said) = KeptSettings::open(&store);
+    let (settings, mut said) = KeptSettings::open(&store);
+    // The shortcuts of this run, once, here: the hint bar on this thread and
+    // the registration on the worker must show and take the same ones. What
+    // the tester wrote and could not be used is said with the other settings.
+    let (bindings, refused) = settings.bindings(default_bindings());
+    said.extend(refused);
     let compact = live::starts_compact(settings.settings());
     let palette = Palette::new()?;
     palette.set_window_title(i18n::label(PaletteLabel::Title).into());
@@ -176,7 +181,7 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     live::hold_height_on_change(&palette);
     // The clipboard bar's words come with each view, because two conditions
     // share the bar and say different things (`D72`) - see `live::View`.
-    palette.set_hints(ModelRc::new(VecModel::from(hints())));
+    palette.set_hints(ModelRc::new(VecModel::from(hints(&bindings))));
     // The pack's name opens the pack window when clicked, and UI Automation
     // names that click with the words the hint bar gives the shortcut.
     palette.set_open_packs_label(i18n::action_name(HotkeyAction::OpenPacks).into());
@@ -186,9 +191,7 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // knows them lives over there.
     palette.set_compact(compact);
     palette.set_has_value(false);
-    if let Some(chord) = chord_of(HotkeyAction::NextValue) {
-        palette.set_no_value(i18n::no_value_yet(chord).into());
-    }
+    palette.set_no_value(i18n::no_value_yet(bindings.chord(HotkeyAction::NextValue)).into());
 
     // The two threads meet here. `focus` runs on this one and may produce a
     // sentence saying the palette could not refuse the focus. The worker rebuilds
@@ -245,6 +248,7 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
             store,
             kept: settings,
             said,
+            bindings,
         };
         // Measured: work handed to the event loop before `run()` is delivered
         // once it starts (`slint.md` 1.9), so this thread may say something
@@ -262,9 +266,12 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     ran
 }
 
-/// The hint bar's rows, built from the bindings rather than written out.
-fn hints() -> Vec<HintRow> {
-    default_bindings()
+/// The hint bar's rows, built from the bindings in effect rather than written
+/// out - so a shortcut the tester set in the settings file is the one the bar
+/// shows.
+fn hints(bindings: &Bindings) -> Vec<HintRow> {
+    bindings
+        .as_slice()
         .iter()
         .filter(|(action, _)| HINTED.contains(action))
         .map(|(action, chord)| HintRow {
@@ -272,11 +279,4 @@ fn hints() -> Vec<HintRow> {
             action: i18n::action_name(*action).into(),
         })
         .collect()
-}
-
-/// The chord this palette registers for one action.
-fn chord_of(action: HotkeyAction) -> Option<nkb_core::hotkeys::HotkeyChord> {
-    default_bindings()
-        .iter()
-        .find_map(|(candidate, chord)| (*candidate == action).then_some(*chord))
 }

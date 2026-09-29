@@ -54,7 +54,9 @@ fn main() {
         std::process::exit(1);
     };
 
-    let live = match GlobalShortcuts.register(nkb_adapters::default_bindings()) {
+    // The defaults: this harness reads no settings file.
+    let bindings = nkb_adapters::default_bindings();
+    let live = match GlobalShortcuts.register(bindings.as_slice()) {
         Ok(live) => live,
         Err(error) => {
             eprintln!("{}", i18n::shortcuts_unavailable(&error));
@@ -65,7 +67,7 @@ fn main() {
     // `None` for it, so the silence is the dictionary's decision rather than
     // this harness's.
     for (action, outcome) in live.outcomes() {
-        if let Some(line) = i18n::registration(outcome, *action) {
+        if let Some(line) = i18n::registration(outcome, *action, bindings.chord(*action)) {
             println!("{line}");
         }
     }
@@ -128,7 +130,11 @@ fn describe(outcome: &Outcome) -> String {
     }
     for message in &outcome.messages {
         line.push(' ');
-        line.push_str(&i18n::message(message, PACK));
+        line.push_str(&i18n::message(
+            message,
+            PACK,
+            &nkb_adapters::default_bindings(),
+        ));
     }
     line
 }

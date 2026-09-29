@@ -50,8 +50,10 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use nkb_app::{
-    SaveError, SettingChange, Settings, SettingsLoad, SettingsNote, SettingsStore, SettingsUnusable,
+    SaveError, SettingChange, Settings, SettingsLoad, SettingsNote, SettingsStore,
+    SettingsUnusable, ShortcutUnreadable,
 };
+use nkb_core::hotkeys::{HotkeyAction, HotkeyChord};
 use nkb_core::identity::is_pack_id;
 use toml_edit::{DocumentMut, Item, Table, TableLike, Value};
 
@@ -220,7 +222,7 @@ fn settings_of(document: &DocumentMut) -> (Settings, Vec<SettingsNote>) {
     let mut unknown = Vec::new();
 
     for (key, _) in document.iter() {
-        if key != "schema" && key != "palette" {
+        if key != "schema" && key != "palette" && key != "shortcuts" {
             unknown.push(key.to_owned());
         }
     }
@@ -245,6 +247,31 @@ fn settings_of(document: &DocumentMut) -> (Settings, Vec<SettingsNote>) {
                         }),
                     },
                     other => unknown.push(format!("palette.{other}")),
+                }
+            }
+        }
+    }
+    match document.get("shortcuts").map(Item::as_table_like) {
+        None => {}
+        Some(None) => notes.push(SettingsNote::NotATable {
+            key: String::from("shortcuts"),
+        }),
+        Some(Some(shortcuts)) => {
+            for (key, item) in shortcuts.iter() {
+                let Some(action) = HotkeyAction::from_id(key) else {
+                    unknown.push(format!("shortcuts.{key}"));
+                    continue;
+                };
+                let read = item
+                    .as_str()
+                    .ok_or(ShortcutUnreadable::NotText)
+                    .and_then(|text| HotkeyChord::parse(text).map_err(ShortcutUnreadable::Grammar));
+                match read {
+                    Ok(chord) => settings.shortcuts.push((action, chord)),
+                    Err(why) => notes.push(SettingsNote::NotAShortcut {
+                        key: format!("shortcuts.{key}"),
+                        why,
+                    }),
                 }
             }
         }
@@ -647,7 +674,8 @@ mod tests {
             (
                 Settings {
                     pack: Some(String::from("unicode-text")),
-                    compact: Some(true)
+                    compact: Some(true),
+                    shortcuts: Vec::new(),
                 },
                 Vec::new()
             )
@@ -703,7 +731,8 @@ mod tests {
             read(&scratch.store()).0,
             Settings {
                 pack: Some(String::from("whitespace")),
-                compact: Some(true)
+                compact: Some(true),
+                shortcuts: Vec::new(),
             }
         );
         assert!(
@@ -768,6 +797,72 @@ mod tests {
             ]
         );
         assert_eq!(scratch.text(), written, "reading changed the file");
+    }
+
+    #[test]
+    fn the_shortcuts_table_gives_what_reads_and_names_what_does_not() {
+        use nkb_app::ShortcutUnreadable;
+        use nkb_core::hotkeys::ChordError;
+        let scratch = Scratch::new("shortcuts");
+        let written = concat!(
+            "schema = 1\n",
+            "[shortcuts]\n",
+            "next-value = \"alt+shift+m\"\n",
+            "previous-value = \"Alt+Shfit+P\"\n",
+            "repeat-last = 5\n",
+            "nxt-value = \"Alt+Shift+Q\"\n",
+            "open-packs = \"Shift+Space\"\n",
+        );
+        scratch.write(written);
+        let (settings, notes) = read(&scratch.store());
+        let chord = |text| HotkeyChord::parse(text).expect("reads");
+        // A chord that reads is given as it is, even one with a problem - that
+        // question needs the other nine and belongs to `Bindings::with`.
+        assert_eq!(
+            settings.shortcuts,
+            vec![
+                (HotkeyAction::NextValue, chord("Alt+Shift+M")),
+                (HotkeyAction::OpenPacks, chord("Shift+Space")),
+            ]
+        );
+        assert_eq!(
+            notes,
+            vec![
+                SettingsNote::NotAShortcut {
+                    key: String::from("shortcuts.previous-value"),
+                    why: ShortcutUnreadable::Grammar(ChordError::Unknown(String::from("Shfit"))),
+                },
+                SettingsNote::NotAShortcut {
+                    key: String::from("shortcuts.repeat-last"),
+                    why: ShortcutUnreadable::NotText,
+                },
+                SettingsNote::UnknownKeys {
+                    keys: vec![String::from("shortcuts.nxt-value")]
+                },
+            ]
+        );
+        assert_eq!(scratch.text(), written, "reading changed the file");
+
+        scratch.write("schema = 1\nshortcuts = \"Alt+Shift+N\"\n");
+        let (settings, notes) = read(&scratch.store());
+        assert!(settings.shortcuts.is_empty());
+        assert_eq!(
+            notes,
+            vec![SettingsNote::NotATable {
+                key: String::from("shortcuts")
+            }]
+        );
+    }
+
+    #[test]
+    fn a_saved_change_leaves_the_shortcuts_the_tester_wrote() {
+        let scratch = Scratch::new("shortcuts-kept");
+        let written = "schema = 1\n\n[shortcuts]\n# mine\nnext-value = \"Ctrl+Alt+Win+N\"\n";
+        scratch.write(written);
+        assert_eq!(scratch.store().save(&SettingChange::Compact(true)), Ok(()));
+        let text = scratch.text();
+        assert!(text.starts_with(written), "{text}");
+        assert!(text.contains("compact = true"), "{text}");
     }
 
     #[test]

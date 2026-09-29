@@ -61,7 +61,7 @@ use std::time::{Duration, Instant};
 use nkb_adapters::i18n::PaletteLabel;
 use nkb_adapters::{
     BuiltInCatalogue, ClipboardDelivery, DirectInjection, EnglishReport, GlobalShortcuts,
-    SettingsFile, TomlPackFormat, default_bindings, i18n,
+    SettingsFile, TomlPackFormat, i18n,
 };
 use nkb_app::advance_sequence::{Ports, RouteRequest, Sent};
 use nkb_app::ports::{
@@ -69,7 +69,7 @@ use nkb_app::ports::{
     Wait,
 };
 use nkb_app::{AdvanceSequence, KeptSettings, Opening, Outcome, SettingsMessage, drive_sequence};
-use nkb_core::hotkeys::HotkeyAction;
+use nkb_core::hotkeys::{Bindings, HotkeyAction};
 use nkb_core::preview::ValuePreview;
 use nkb_core::report::Arrival;
 use nkb_core::sequence::Delivery;
@@ -156,6 +156,10 @@ pub struct Start {
     pub kept: KeptSettings,
     /// What reading the settings had to say.
     pub said: Vec<SettingsMessage>,
+    /// The shortcuts of this run: the defaults with the tester's own on top
+    /// (`KeptSettings::bindings`). Read once, on the main thread, because the
+    /// hint bar there shows the same ones the worker registers.
+    pub bindings: Bindings,
 }
 
 /// What the main thread asks the worker to do between presses.
@@ -221,6 +225,7 @@ pub fn drive(
         store,
         kept,
         said,
+        bindings,
     } = start;
     // Where the settings live, for the sentences that send the tester there.
     let file = store
@@ -230,7 +235,7 @@ pub fn drive(
     let mut sequence = AdvanceSequence::new();
     let mut opening: Vec<String> = said
         .iter()
-        .filter_map(|message| i18n::settings_message(message, &file))
+        .filter_map(|message| i18n::settings_message(message, &file, &bindings))
         .collect();
     // Created here, on the thread that uses it, and dropped with it - which is
     // when a Linux clipboard stops serving what it holds (`clipboard` says why).
@@ -255,7 +260,9 @@ pub fn drive(
             Opening::CouldNotChoose { pack, error } => {
                 opening.push(i18n::choose_error(error, pack));
             }
-            Opening::Settings(message) => opening.extend(i18n::settings_message(message, &file)),
+            Opening::Settings(message) => {
+                opening.extend(i18n::settings_message(message, &file, &bindings));
+            }
         }
     }
     // The pack the messages are about - the one opened, or the last one tried.
@@ -263,7 +270,7 @@ pub fn drive(
     let mut pack = opened.pack;
     publish(in_use, &sequence);
 
-    let live = match GlobalShortcuts.register(default_bindings()) {
+    let live = match GlobalShortcuts.register(bindings.as_slice()) {
         Ok(live) => live,
         Err(error) => {
             // Nothing can drive the sequence, so the palette says why and stays
@@ -281,7 +288,7 @@ pub fn drive(
     // `None` for it, so the silence is the dictionary's decision and not this
     // module's.
     for (action, outcome) in live.outcomes() {
-        if let Some(line) = i18n::registration(outcome, *action) {
+        if let Some(line) = i18n::registration(outcome, *action, bindings.chord(*action)) {
             opening.push(line);
         }
     }
@@ -293,7 +300,7 @@ pub fn drive(
         sequence
             .choose_route(route, &ports)
             .iter()
-            .map(|message| i18n::message(message, &pack)),
+            .map(|message| i18n::message(message, &pack, &bindings)),
     );
     show(
         palette,
@@ -304,6 +311,7 @@ pub fn drive(
         kept: RefCell::new(kept),
         store: &store,
         file,
+        bindings,
     };
     let collapse = Collapse::new(&memory);
     let on_toggle = || {
@@ -326,8 +334,12 @@ pub fn drive(
         // cannot reach it - and the pack may have changed since the last one.
         let pack_shown = shown(&sequence, &pack);
         let mut keep_going = || between_presses(stop, commands, &pending);
-        let mut present =
-            |outcome: Outcome| show(palette, view_of(&outcome, &pack_shown, &pack, standing));
+        let mut present = |outcome: Outcome| {
+            show(
+                palette,
+                view_of(&outcome, &pack_shown, &pack, standing, &bindings),
+            )
+        };
         let ended = drive_sequence(
             &shortcuts,
             &mut sequence,
@@ -491,7 +503,13 @@ fn clipboard_bar(delivery: Delivery, for_window: bool) -> Option<&'static str> {
     }
 }
 
-fn view_of(outcome: &Outcome, pack_shown: &str, pack: &str, standing: &Standing) -> View {
+fn view_of(
+    outcome: &Outcome,
+    pack_shown: &str,
+    pack: &str,
+    standing: &Standing,
+    bindings: &Bindings,
+) -> View {
     View {
         pack: pack_shown.to_owned(),
         counter: outcome
@@ -506,7 +524,7 @@ fn view_of(outcome: &Outcome, pack_shown: &str, pack: &str, standing: &Standing)
             outcome
                 .messages
                 .iter()
-                .map(|message| i18n::message(message, pack))
+                .map(|message| i18n::message(message, pack, bindings))
                 .collect(),
             standing,
         ),
@@ -737,6 +755,8 @@ struct Memory<'a> {
     store: &'a dyn SettingsStore,
     /// Where the settings live, for a sentence saying they were not saved.
     file: String,
+    /// The shortcuts in effect, for the sentences that name one.
+    bindings: Bindings,
 }
 
 impl Memory<'_> {
@@ -746,7 +766,7 @@ impl Memory<'_> {
         self.kept
             .borrow_mut()
             .keep(self.store, change)
-            .and_then(|message| i18n::settings_message(&message, &self.file))
+            .and_then(|message| i18n::settings_message(&message, &self.file, &self.bindings))
     }
 }
 
@@ -948,6 +968,7 @@ mod tests {
                 "Unicode & text",
                 "u",
                 &quiet(),
+                &nkb_adapters::default_bindings(),
             ),
         );
         assert_eq!(palette.get_pack(), "Unicode & text");
@@ -1000,6 +1021,7 @@ mod tests {
                 "p",
                 "p",
                 &quiet(),
+                &nkb_adapters::default_bindings(),
             ),
         );
         assert!(palette.get_has_value(), "the previous value was blanked");
@@ -1020,6 +1042,7 @@ mod tests {
                 "p",
                 "p",
                 &quiet(),
+                &nkb_adapters::default_bindings(),
             ),
         );
         assert_eq!(
@@ -1041,6 +1064,7 @@ mod tests {
                 "p",
                 "p",
                 &quiet(),
+                &nkb_adapters::default_bindings(),
             ),
         );
         assert_eq!(palette.get_value_not_guaranteed(), "");
@@ -1057,7 +1081,13 @@ mod tests {
         });
         apply(
             &palette,
-            view_of(&an_outcome(Some(generated), Vec::new()), "p", "p", &quiet()),
+            view_of(
+                &an_outcome(Some(generated), Vec::new()),
+                "p",
+                "p",
+                &quiet(),
+                &nkb_adapters::default_bindings(),
+            ),
         );
         assert_eq!(palette.get_value_preview(), "64 \u{D7} \"\u{1F600}\"");
         assert_eq!(palette.get_value_elided(), "");
@@ -1070,7 +1100,16 @@ mod tests {
         // ---- the second axis reaches the standing bar ---------------------
         let mut by_clipboard = an_outcome(Some(a_sent()), Vec::new());
         by_clipboard.sequence.delivery = Delivery::ClipboardMode;
-        apply(&palette, view_of(&by_clipboard, "p", "p", &quiet()));
+        apply(
+            &palette,
+            view_of(
+                &by_clipboard,
+                "p",
+                "p",
+                &quiet(),
+                &nkb_adapters::default_bindings(),
+            ),
+        );
         assert!(palette.get_clipboard_mode());
         assert_eq!(palette.get_clipboard_mode_label(), "clipboard mode");
 
@@ -1079,7 +1118,16 @@ mod tests {
             clipboard_for_window: true,
             ..an_outcome(Some(a_sent()), Vec::new())
         };
-        apply(&palette, view_of(&for_window, "p", "p", &quiet()));
+        apply(
+            &palette,
+            view_of(
+                &for_window,
+                "p",
+                "p",
+                &quiet(),
+                &nkb_adapters::default_bindings(),
+            ),
+        );
         assert!(palette.get_clipboard_mode());
         assert_eq!(
             palette.get_clipboard_mode_label(),
@@ -1087,7 +1135,13 @@ mod tests {
         );
         apply(
             &palette,
-            view_of(&an_outcome(None, Vec::new()), "p", "p", &quiet()),
+            view_of(
+                &an_outcome(None, Vec::new()),
+                "p",
+                "p",
+                &quiet(),
+                &nkb_adapters::default_bindings(),
+            ),
         );
         assert!(
             !palette.get_clipboard_mode(),
@@ -1133,6 +1187,7 @@ mod tests {
                 "p",
                 "p",
                 &quiet(),
+                &nkb_adapters::default_bindings(),
             ),
         );
         assert!(
@@ -1198,6 +1253,7 @@ mod tests {
             kept: RefCell::new(kept),
             store,
             file: String::from("f"),
+            bindings: nkb_adapters::default_bindings(),
         }
     }
 

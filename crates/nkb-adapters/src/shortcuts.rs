@@ -20,7 +20,7 @@ use std::time::Duration;
 use nkb_app::ports::{
     HotkeyRegistrar, LiveShortcuts, ShortcutRegistration, ShortcutsUnavailable, Wait,
 };
-use nkb_core::hotkeys::{Convention, HotkeyAction, HotkeyChord, HotkeyKey};
+use nkb_core::hotkeys::{Bindings, Convention, HotkeyAction, HotkeyChord, HotkeyKey};
 use nkb_sys::hotkey::{self, Hotkey, HotkeyId, HotkeyListener, HotkeyRegistration};
 
 /// Which default table this build follows. The one place that knows the system,
@@ -31,10 +31,12 @@ pub const CONVENTION: Convention = if cfg!(target_os = "macos") {
     Convention::WindowsAndLinux
 };
 
-/// The default shortcuts on the system this build runs on.
+/// The default shortcuts on the system this build runs on - what a palette
+/// whose settings name no shortcut registers, and what the tester's own go on
+/// top of (`KeptSettings::bindings`).
 #[must_use]
-pub fn default_bindings() -> &'static [(HotkeyAction, HotkeyChord); 10] {
-    nkb_core::hotkeys::default_bindings(CONVENTION)
+pub const fn default_bindings() -> Bindings {
+    Bindings::defaults(CONVENTION)
 }
 
 /// Registers shortcuts through `nkb_sys::hotkey::listen`.
@@ -309,7 +311,7 @@ mod tests {
         } else {
             &DEFAULT_BINDINGS
         };
-        assert_eq!(default_bindings(), expected);
+        assert_eq!(default_bindings().as_slice(), expected);
     }
 
     #[test]

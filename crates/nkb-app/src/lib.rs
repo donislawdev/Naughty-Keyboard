@@ -36,9 +36,9 @@ pub use ports::{
     Availability, CatalogueCoverage, CatalogueSource, Clock, Date, Delivered, DeliveryError,
     HotkeyRegistrar, KeystrokeError, KeystrokeSender, LiveShortcuts, PackCatalogue, PackFormat,
     PackSink, PackSource, SaveError, SettingChange, Settings, SettingsLoad, SettingsNote,
-    SettingsStore, SettingsUnusable, ShortcutRegistration, ShortcutsUnavailable, SinkError,
-    SourceError, SourceSkipped, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery,
-    Wait,
+    SettingsStore, SettingsUnusable, ShortcutRegistration, ShortcutUnreadable,
+    ShortcutsUnavailable, SinkError, SourceError, SourceSkipped, TargetRef, TranslationCheck,
+    TranslationTarget, ValueDelivery, Wait,
 };
 pub use send_value::{
     Clearing, ClearingOutcome, SendOutcome, SendRequest, SkipReason, ValueFacts, deliver_value,
