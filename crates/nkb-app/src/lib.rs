@@ -28,7 +28,9 @@ pub use browse_packs::{Listing, PackEntry, ShowOutcome, list_packs, show_pack};
 pub use drive_sequence::{Ended, drive_sequence};
 pub use emit_values::{Emission, EmitOutcome, EmittedValue, emit_values};
 pub use format_pack::{FormatOutcome, format_pack};
-pub use keep_settings::{Considered, KeptSettings, Opened, Opening, SettingsMessage};
+pub use keep_settings::{
+    Considered, KeptSettings, Opened, Opening, SettingsMessage, ShortcutChange,
+};
 pub use lint_pack::{LintOutcome, lint_pack};
 pub use load_pack::{LoadedPack, Refused, load};
 pub use new_pack::{NewPackOutcome, new_pack};

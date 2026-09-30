@@ -1113,6 +1113,12 @@ pub enum PaletteLabel {
     /// from the start and never disappears (`D83`), so its empty state is a
     /// sentence that tells the tester the one thing to do next.
     NoValueYet,
+    /// The palette's shortcuts are given back to the system while the
+    /// shortcuts window is open (`ux-spec.md` 5.4), so a press reaches the
+    /// application in front and no value goes out. Said in the message band
+    /// for as long as it lasts - a palette that looks ready and answers
+    /// nothing is the silence untouchable rule 1 forbids.
+    ShortcutsPaused,
 }
 
 fn pattern_palette_label(label: PaletteLabel) -> &'static str {
@@ -1138,6 +1144,7 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::NoValueYet => {
             "Nothing sent yet. Put the cursor in any field and press {shortcut}."
         }
+        PaletteLabel::ShortcutsPaused => "Shortcuts are paused while the Shortcuts window is open.",
     }
 }
 
@@ -2100,6 +2107,7 @@ mod tests {
             PaletteLabel::NotGuaranteedMore,
             PaletteLabel::Recipe,
             PaletteLabel::NoValueYet,
+            PaletteLabel::ShortcutsPaused,
         ] {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
@@ -2118,7 +2126,8 @@ mod tests {
                 | PaletteLabel::OnClipboard
                 | PaletteLabel::Interrupted
                 | PaletteLabel::ClipboardMode
-                | PaletteLabel::ClipboardForWindow => false,
+                | PaletteLabel::ClipboardForWindow
+                | PaletteLabel::ShortcutsPaused => false,
             };
             let pattern = pattern_palette_label(label);
             assert_eq!(

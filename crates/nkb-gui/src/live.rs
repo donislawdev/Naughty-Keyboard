@@ -44,6 +44,33 @@
 //! answered with the pack it was pressed in, and the palette shows that value
 //! under that pack's name before it shows the new one - late, never false.
 //!
+//! # The shortcuts window: pause, change, resume (K5.3, `D90`)
+//!
+//! While the shortcuts window is open the palette's shortcuts are given back
+//! to the system (`ux-spec.md` 5.4): a registered shortcut reaches no window at
+//! all, that one included, and pressed there it would send a value into it.
+//! Three more commands carry that, on the same channel as a pack choice and
+//! for the same reason - between presses, never inside a send:
+//!
+//! - [`Command::Pause`] releases them and answers the window with the table it
+//!   edits ([`Told::Paused`]). The window gets the table in the answer rather
+//!   than from a shared slot, so a window closed and opened again at once can
+//!   never read the table from before its own last change.
+//! - [`Command::Shortcut`] is one whole change, carried out HERE because the
+//!   settings of the run live here (`D84`: one [`KeptSettings`] per run) and a
+//!   save may take seconds: consider, a trial registration, save
+//!   ([`KeptSettings::change_shortcut`]).
+//! - [`Command::Resume`] takes the shortcuts again, computing the table from the
+//!   settings with the same function the start uses - never from a table
+//!   carried in the command - so what is registered is what the next start
+//!   would register. The hint bar and the empty value band follow it.
+//!
+//! While nothing is held this thread waits on the channel instead of on the
+//! shortcuts. That is also where it goes when the shortcuts could not be
+//! registered or their thread ended: a pack can still be chosen, and the next
+//! `Resume` tries again. Until K5.3 the worker simply ended there, and a choice
+//! made in the pack window afterwards went nowhere, in silence.
+//!
 //! # What this module deliberately does not do
 //!
 //! It does not make the palette refuse the keyboard focus. That runs on the main
@@ -54,22 +81,25 @@
 
 use std::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use nkb_adapters::i18n::PaletteLabel;
 use nkb_adapters::{
     BuiltInCatalogue, ClipboardDelivery, DirectInjection, EnglishReport, GlobalShortcuts,
-    SettingsFile, TomlPackFormat, i18n,
+    SettingsFile, TomlPackFormat, altgr_character, default_bindings, i18n,
 };
 use nkb_app::advance_sequence::{Ports, RouteRequest, Sent};
 use nkb_app::ports::{
     HotkeyRegistrar, LiveShortcuts, SettingChange, Settings, SettingsStore, ShortcutRegistration,
     Wait,
 };
-use nkb_app::{AdvanceSequence, KeptSettings, Opening, Outcome, SettingsMessage, drive_sequence};
-use nkb_core::hotkeys::{Bindings, HotkeyAction};
+use nkb_app::{
+    AdvanceSequence, Ended, KeptSettings, Opening, Outcome, SettingsMessage, ShortcutChange,
+    drive_sequence,
+};
+use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord};
 use nkb_core::preview::ValuePreview;
 use nkb_core::report::Arrival;
 use nkb_core::sequence::Delivery;
@@ -79,7 +109,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 use crate::clipboard::SystemClipboard;
 use crate::focus::{Standing, standing_line};
 use crate::typeface::SHIPPED;
-use crate::{Marker, Palette};
+use crate::{HintRow, Marker, Palette};
 
 /// How long one wait for a press lasts before the stop flag is read again.
 ///
@@ -103,6 +133,9 @@ pub struct View {
     /// and the window in front taking no typing (`D72`). The words differ, so
     /// the view carries them rather than a flag.
     clipboard_bar: Option<&'static str>,
+    /// The words naming the shortcuts, when the table in effect changed with
+    /// this view - `None` leaves the ones on screen.
+    legend: Option<Legend>,
 }
 
 /// What the value band does with this view.
@@ -160,6 +193,10 @@ pub struct Start {
     /// (`KeptSettings::bindings`). Read once, on the main thread, because the
     /// hint bar there shows the same ones the worker registers.
     pub bindings: Bindings,
+    /// How the shortcuts window hears the answers to its commands. Called on
+    /// THIS thread, so the main thread hands the answer on through its event
+    /// loop - the worker never touches a window.
+    pub tell: Tell,
 }
 
 /// What the main thread asks the worker to do between presses.
@@ -167,6 +204,107 @@ pub struct Start {
 pub enum Command {
     /// Open this pack, by identifier, in place of the one in use.
     Choose(String),
+    /// Give the palette's shortcuts back to the system - the shortcuts window
+    /// is opening, and a press there must reach it rather than send a value.
+    /// Answered with [`Told::Paused`].
+    Pause,
+    /// Take the shortcuts again, as the settings now give them - the shortcuts
+    /// window closed. The table is computed here, never carried (`D90`).
+    Resume,
+    /// Give `action` this chord, or its default back for `None`. Answered with
+    /// [`Told::Shortcut`].
+    Shortcut {
+        action: HotkeyAction,
+        chord: Option<HotkeyChord>,
+    },
+}
+
+/// What the worker tells the shortcuts window.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Told {
+    /// The palette's shortcuts are given back, and this is the table the
+    /// window edits, as it stands now.
+    Paused(ShortcutsNow),
+    /// What came of one [`Command::Shortcut`], and a line when saving it
+    /// failed for a reason not said before.
+    Shortcut {
+        action: HotkeyAction,
+        change: ShortcutChange,
+        not_saved: Option<String>,
+    },
+}
+
+/// How the shortcuts window hears what the worker has to tell it.
+pub type Tell = Box<dyn Fn(Told) + Send>;
+
+/// The shortcuts in effect, and how each fared the last time the palette
+/// registered them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShortcutsNow {
+    /// The table in effect - what the palette registers when the window closes.
+    pub bindings: Bindings,
+    /// Each action with the chord registered for it last time and what the
+    /// system said. Empty when nothing could be registered. A chord here that
+    /// differs from `bindings` has not been registered since it changed, so
+    /// nothing is known about it yet.
+    pub registered: Vec<(HotkeyAction, HotkeyChord, ShortcutRegistration)>,
+}
+
+/// Which shortcuts the hint bar names, and in this order.
+///
+/// Four of the ten, because `ux-spec.md` 2 gives the hint bar four and because a
+/// list of ten stops being a hint. These four are the ones the first five
+/// minutes need: move through the pack, and get the report out.
+///
+/// `OpenPacks` opens the pack window (step 7, K3.2c): the worker takes the
+/// press before the sequence sees it and asks the main thread through the
+/// palette's `open-packs` callback.
+const HINTED: [HotkeyAction; 4] = [
+    HotkeyAction::NextValue,
+    HotkeyAction::PreviousValue,
+    HotkeyAction::CopyReport,
+    HotkeyAction::OpenPacks,
+];
+
+/// The words on the palette that name a shortcut: the hint bar, and the value
+/// band before anything is sent. Built from the table in effect rather than
+/// written out, so a shortcut the tester changed is the one they show - at
+/// start, and again whenever the table changes (K5.3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Legend {
+    /// The key and the action of each hinted shortcut, in the table's order.
+    hints: Vec<(String, String)>,
+    no_value: String,
+}
+
+/// The words naming the shortcuts of `bindings`. One function for the start
+/// and for every change, so the two cannot word it differently.
+#[must_use]
+pub fn legend(bindings: &Bindings) -> Legend {
+    Legend {
+        hints: bindings
+            .as_slice()
+            .iter()
+            .filter(|(action, _)| HINTED.contains(action))
+            .map(|(action, chord)| (i18n::chord(*chord), i18n::action_name(*action).to_owned()))
+            .collect(),
+        no_value: i18n::no_value_yet(bindings.chord(HotkeyAction::NextValue)),
+    }
+}
+
+/// Puts the words naming the shortcuts on the palette. On the MAIN thread.
+pub fn show_legend(palette: &Palette, legend: Legend) {
+    palette.set_hints(ModelRc::new(VecModel::from(
+        legend
+            .hints
+            .into_iter()
+            .map(|(key, action)| HintRow {
+                key: key.into(),
+                action: action.into(),
+            })
+            .collect::<Vec<_>>(),
+    )));
+    palette.set_no_value(legend.no_value.into());
 }
 
 /// The identifier of the pack in use, published by the worker for the pack
@@ -226,6 +364,7 @@ pub fn drive(
         kept,
         said,
         bindings,
+        tell,
     } = start;
     // Where the settings live, for the sentences that send the tester there.
     let file = store
@@ -265,54 +404,35 @@ pub fn drive(
             }
         }
     }
-    // The pack the messages are about - the one opened, or the last one tried.
-    // It changes when the tester chooses another one that opens.
-    let mut pack = opened.pack;
     publish(in_use, &sequence);
-
-    let live = match GlobalShortcuts.register(bindings.as_slice()) {
-        Ok(live) => live,
-        Err(error) => {
-            // Nothing can drive the sequence, so the palette says why and stays
-            // up. Untouchable rule 1: a run that did less than it promised says
-            // so, rather than looking alive.
-            opening.push(i18n::shortcuts_unavailable(&error));
-            show(
-                palette,
-                view_between(&sequence, &pack, opening, ValueBand::Keep, standing),
-            );
-            return;
-        }
-    };
-    // A registration that worked says nothing - `i18n::registration` answers
-    // `None` for it, so the silence is the dictionary's decision and not this
-    // module's.
-    for (action, outcome) in live.outcomes() {
-        if let Some(line) = i18n::registration(outcome, *action, bindings.chord(*action)) {
-            opening.push(line);
-        }
-    }
-    // Only now, with shortcuts that can drive the palette: a sentence telling
-    // the tester to paste each value would promise a flow that a palette with
-    // no shortcuts does not have (`D71`). A system with no direct route starts
-    // in clipboard mode here, rather than failing the first press.
-    opening.extend(
-        sequence
-            .choose_route(route, &ports)
-            .iter()
-            .map(|message| i18n::message(message, &pack, &bindings)),
-    );
-    show(
-        palette,
-        view_between(&sequence, &pack, opening, ValueBand::Keep, standing),
-    );
 
     let memory = Memory {
         kept: RefCell::new(kept),
         store: &store,
         file,
-        bindings,
+        bindings: Cell::new(bindings),
     };
+    let mut worker = Worker {
+        sequence,
+        // The pack the messages are about - the one opened, or the last one
+        // tried. It changes when the tester chooses another one that opens.
+        pack: opened.pack,
+        memory: &memory,
+        hold: Hold::new(&GlobalShortcuts),
+        ports: &ports,
+        standing,
+        defaults: default_bindings(),
+        types: &altgr_character,
+        route: Some(route),
+    };
+    // With nothing registered the palette says why and stays up, and the
+    // worker keeps serving the pack window. Untouchable rule 1: a run that did
+    // less than it promised says so, rather than looking alive.
+    opening.extend(worker.take(bindings));
+    // No legend: the main thread drew it from the same table before the
+    // window was shown.
+    show(palette, worker.view(opening, ValueBand::Keep, None));
+
     let collapse = Collapse::new(&memory);
     let on_toggle = || {
         let (compact, line) = collapse.toggle();
@@ -322,56 +442,343 @@ pub fn drive(
         }
     };
     let on_open = || open_packs_later(palette);
-    let shortcuts = PaletteShortcuts {
-        inner: live.as_ref(),
-        on_toggle: &on_toggle,
-        on_open: &on_open,
-    };
     let pending = Cell::new(None);
-    let ended = loop {
-        // Captured on every way in, because `drive_sequence` borrows the
-        // sequence for the whole loop and the closure that builds each view
-        // cannot reach it - and the pack may have changed since the last one.
-        let pack_shown = shown(&sequence, &pack);
-        let mut keep_going = || between_presses(stop, commands, &pending);
-        let mut present = |outcome: Outcome| {
-            show(
-                palette,
-                view_of(&outcome, &pack_shown, &pack, standing, &bindings),
-            )
+    loop {
+        let next = match worker.hold.live() {
+            Some(live) => {
+                let shortcuts = PaletteShortcuts {
+                    inner: live,
+                    on_toggle: &on_toggle,
+                    on_open: &on_open,
+                };
+                // Captured on every way in, because `drive_sequence` borrows
+                // the sequence for the whole loop and the closure that builds
+                // each view cannot reach it - and the pack or the table may
+                // have changed since the last one.
+                let pack_shown = shown(&worker.sequence, &worker.pack);
+                let pack = &worker.pack;
+                let bindings = memory.bindings.get();
+                let mut keep_going = || between_presses(stop, commands, &pending);
+                let mut present = |outcome: Outcome| {
+                    show(
+                        palette,
+                        view_of(&outcome, &pack_shown, pack, standing, &bindings),
+                    );
+                };
+                let ended = drive_sequence(
+                    &shortcuts,
+                    &mut worker.sequence,
+                    &ports,
+                    TICK,
+                    &mut keep_going,
+                    &mut present,
+                );
+                // A command waits only when `keep_going` took one, which ends
+                // the loop as `Stopped` - so the window is still up.
+                match (pending.take(), ended) {
+                    (Some(command), _) => Next::Command(command),
+                    (None, Ended::Stopped) => Next::Stop,
+                    (None, Ended::ShortcutsGone) => Next::Gone,
+                }
+            }
+            None => next_command(stop, commands),
         };
-        let ended = drive_sequence(
-            &shortcuts,
-            &mut sequence,
-            &ports,
-            TICK,
-            &mut keep_going,
-            &mut present,
-        );
-        // A command waits only when `keep_going` took one, which ends the loop
-        // as `Stopped` - so the shortcuts are alive and the window is up.
-        let Some(Command::Choose(asked)) = pending.take() else {
-            break ended;
-        };
-        if let Some(view) = choose(&mut sequence, &memory, &mut pack, &asked, standing) {
-            show(palette, view);
+        match next {
+            Next::Stop => break,
+            Next::Gone => {
+                worker.hold.lose();
+                // `ShortcutsGone` always has a sentence, and the window is up:
+                // the stop flag was not set, or this would be `Stop`.
+                let said = i18n::ended(Ended::ShortcutsGone).into_iter().collect();
+                show(palette, worker.view(said, ValueBand::Keep, None));
+            }
+            Next::Command(command) => {
+                let carried = worker.carry_out(command);
+                if let Some(view) = carried.view {
+                    show(palette, view);
+                }
+                if let Some(told) = carried.told {
+                    tell(told);
+                }
+                publish(in_use, &worker.sequence);
+            }
         }
-        publish(in_use, &sequence);
-    };
+    }
     // Before anything else: the shortcuts go back to the system. Holding them
-    // after the palette is gone would take `Ctrl+Alt+N` away from whoever wants
-    // it next.
-    drop(live);
+    // after the palette is gone would take `Alt+Shift+N` away from whoever
+    // wants it next.
+    drop(worker);
+}
 
-    if let Some(line) = i18n::ended(ended) {
-        // Reached only while the window is still up - `Ended::Stopped` has no
-        // sentence, and the stop flag is set by the window closing. If it is
-        // ever reached after the loop has quit, the measurement above says this
-        // vanishes silently, and there is nobody left to tell.
-        show(
-            palette,
-            view_between(&sequence, &pack, vec![line], ValueBand::Keep, standing),
-        );
+/// What the loop in [`drive`] does next.
+enum Next {
+    /// The window is closing.
+    Stop,
+    /// The thread behind the shortcuts ended, so no press can arrive.
+    Gone,
+    /// Something the main thread asked for.
+    Command(Command),
+}
+
+/// Waits for a command while no shortcuts are held - nothing else can happen
+/// then. The stop is read first, as in [`between_presses`].
+fn next_command(stop: &AtomicBool, commands: &Receiver<Command>) -> Next {
+    loop {
+        if stop.load(Ordering::Relaxed) {
+            return Next::Stop;
+        }
+        match commands.recv_timeout(TICK) {
+            Ok(command) => return Next::Command(command),
+            Err(RecvTimeoutError::Timeout) => {}
+            // Nobody left to send, but the window is still up: the stop flag,
+            // not this channel, says when it closes. Slept rather than asked
+            // again at once, because a closed channel answers at once and the
+            // wait would spin.
+            Err(RecvTimeoutError::Disconnected) => std::thread::sleep(TICK),
+        }
+    }
+}
+
+/// What carrying out one command came to: what the palette draws now and
+/// what the shortcuts window is told. Either may be nothing.
+struct Carried {
+    view: Option<View>,
+    told: Option<Told>,
+}
+
+/// Everything a command changes, owned by this thread.
+///
+/// The ports come in as references, so a test builds one with a registrar
+/// that answers what the test dictates and a store that keeps every save.
+struct Worker<'a> {
+    sequence: AdvanceSequence,
+    /// The pack the messages are about - see [`drive`].
+    pack: String,
+    memory: &'a Memory<'a>,
+    hold: Hold<'a>,
+    ports: &'a Ports<'a>,
+    standing: &'a Standing,
+    /// The default table of this system - what a restore gives back.
+    defaults: Bindings,
+    /// Which character a `Ctrl+Alt` chord types as `AltGr` (`D88`).
+    types: &'a dyn Fn(HotkeyChord) -> Option<char>,
+    /// How the palette was asked to deliver, until the first time the
+    /// shortcuts are held. Only then: a sentence telling the tester to paste
+    /// each value would promise a flow that a palette with no shortcuts does
+    /// not have (`D71`).
+    route: Option<RouteRequest>,
+}
+
+impl Worker<'_> {
+    fn carry_out(&mut self, command: Command) -> Carried {
+        match command {
+            Command::Choose(asked) => Carried {
+                view: choose(
+                    &mut self.sequence,
+                    self.memory,
+                    &mut self.pack,
+                    &asked,
+                    self.standing,
+                    self.hold.paused(),
+                ),
+                told: None,
+            },
+            Command::Pause => {
+                self.hold.pause();
+                Carried {
+                    view: Some(self.view(Vec::new(), ValueBand::Keep, None)),
+                    told: Some(Told::Paused(ShortcutsNow {
+                        bindings: self.in_effect().0,
+                        registered: self.hold.registered.clone(),
+                    })),
+                }
+            }
+            // Held already: the window did not pause, or a second close came.
+            // Taking them again would say every line about them twice.
+            Command::Resume if self.hold.live().is_some() => Carried {
+                view: None,
+                told: None,
+            },
+            Command::Resume => Carried {
+                view: Some(self.resume()),
+                told: None,
+            },
+            Command::Shortcut { action, chord } => {
+                let (change, said) = self.memory.kept.borrow_mut().change_shortcut(
+                    self.memory.store,
+                    self.hold.registrar,
+                    self.defaults,
+                    self.types,
+                    action,
+                    chord,
+                );
+                let not_saved = said.and_then(|message| {
+                    i18n::settings_message(&message, &self.memory.file, &self.memory.bindings.get())
+                });
+                // The window pauses before it changes anything, so this is
+                // never reached in the product. If it ever were, what is held
+                // would no longer be the table in effect - so it is taken
+                // again at once rather than left to disagree.
+                let view = (matches!(change, ShortcutChange::Changed { .. })
+                    && self.hold.live().is_some())
+                .then(|| self.resume());
+                Carried {
+                    view,
+                    told: Some(Told::Shortcut {
+                        action,
+                        change,
+                        not_saved,
+                    }),
+                }
+            }
+        }
+    }
+
+    /// The table the settings give now, and what cannot be used of them.
+    fn in_effect(&self) -> (Bindings, Vec<SettingsMessage>) {
+        self.memory
+            .kept
+            .borrow()
+            .bindings(self.defaults, self.types)
+    }
+
+    /// Takes the shortcuts the settings give now, and the palette's view of
+    /// it - with the words naming them, which may have changed.
+    ///
+    /// What the file wishes and cannot have is said again: it is still true,
+    /// and the tester may just have looked at it in the window.
+    fn resume(&mut self) -> View {
+        let (bindings, refused) = self.in_effect();
+        self.memory.bindings.set(bindings);
+        let mut lines: Vec<String> = refused
+            .iter()
+            .filter_map(|message| i18n::settings_message(message, &self.memory.file, &bindings))
+            .collect();
+        lines.extend(self.take(bindings));
+        self.view(lines, ValueBand::Keep, Some(legend(&bindings)))
+    }
+
+    /// Registers `bindings` in place of whatever is held, and what is worth
+    /// saying about it - with the route asked for at start, the first time
+    /// the shortcuts are held.
+    fn take(&mut self, bindings: Bindings) -> Vec<String> {
+        let mut lines = self.hold.take(&bindings);
+        if self.hold.live().is_some()
+            && let Some(route) = self.route.take()
+        {
+            // A system with no direct route starts in clipboard mode here,
+            // rather than failing the first press.
+            lines.extend(
+                self.sequence
+                    .choose_route(route, self.ports)
+                    .iter()
+                    .map(|message| i18n::message(message, &self.pack, &bindings)),
+            );
+        }
+        lines
+    }
+
+    /// A view made between presses, carrying the sentence about the pause
+    /// while it lasts.
+    fn view(&self, messages: Vec<String>, value: ValueBand, legend: Option<Legend>) -> View {
+        View {
+            legend,
+            ..view_between(
+                &self.sequence,
+                &self.pack,
+                messages,
+                value,
+                self.standing,
+                self.hold.paused(),
+            )
+        }
+    }
+}
+
+/// Whether the palette's shortcuts are held by this process now.
+enum Holding {
+    /// Registered, and driving the sequence.
+    Held(Box<dyn LiveShortcuts + Send>),
+    /// Given back to the system while the shortcuts window is open.
+    Paused,
+    /// Not held, and not because of the window: nothing could be registered,
+    /// or the thread behind them ended. Said when it happened. A
+    /// [`Command::Resume`] tries again.
+    Lost,
+}
+
+/// The palette's shortcuts as this thread holds them, and the registrar that
+/// takes them.
+struct Hold<'a> {
+    registrar: &'a dyn HotkeyRegistrar,
+    holding: Holding,
+    /// What the last registration said, chord by chord - see [`ShortcutsNow`].
+    registered: Vec<(HotkeyAction, HotkeyChord, ShortcutRegistration)>,
+}
+
+impl<'a> Hold<'a> {
+    const fn new(registrar: &'a dyn HotkeyRegistrar) -> Self {
+        Self {
+            registrar,
+            holding: Holding::Lost,
+            registered: Vec::new(),
+        }
+    }
+
+    fn live(&self) -> Option<&dyn LiveShortcuts> {
+        match &self.holding {
+            Holding::Held(live) => Some(live.as_ref()),
+            Holding::Paused | Holding::Lost => None,
+        }
+    }
+
+    const fn paused(&self) -> bool {
+        matches!(self.holding, Holding::Paused)
+    }
+
+    /// Gives the shortcuts back. Dropping the handle is the release, and it
+    /// returns only once the system has let them go.
+    fn pause(&mut self) {
+        self.holding = Holding::Paused;
+    }
+
+    /// The thread behind the shortcuts has ended.
+    fn lose(&mut self) {
+        self.holding = Holding::Lost;
+    }
+
+    /// Registers `bindings` in place of whatever is held, and the lines worth
+    /// saying about it.
+    ///
+    /// 🔴 What is held is released FIRST. The old set holds the very chords the
+    /// new one asks for, so the other order would come back `Taken`, against
+    /// ourselves, for every chord that did not move.
+    ///
+    /// A registration that worked says nothing - `i18n::registration` answers
+    /// `None` for it, so the silence is the dictionary's decision and not this
+    /// module's.
+    fn take(&mut self, bindings: &Bindings) -> Vec<String> {
+        self.holding = Holding::Lost;
+        match self.registrar.register(bindings.as_slice()) {
+            Ok(live) => {
+                self.registered = live
+                    .outcomes()
+                    .iter()
+                    .map(|(action, outcome)| (*action, bindings.chord(*action), *outcome))
+                    .collect();
+                self.holding = Holding::Held(live);
+                self.registered
+                    .iter()
+                    .filter_map(|(action, chord, outcome)| {
+                        i18n::registration(outcome, *action, *chord)
+                    })
+                    .collect()
+            }
+            Err(error) => {
+                self.registered.clear();
+                vec![i18n::shortcuts_unavailable(&error)]
+            }
+        }
     }
 }
 
@@ -416,6 +823,7 @@ fn choose(
     pack: &mut String,
     asked: &str,
     standing: &Standing,
+    paused: bool,
 ) -> Option<View> {
     if sequence.pack_id() == Some(asked) {
         return None;
@@ -430,6 +838,7 @@ fn choose(
                 said.into_iter().collect(),
                 ValueBand::Clear,
                 standing,
+                paused,
             )
         }
         Err(error) => view_between(
@@ -438,6 +847,7 @@ fn choose(
             vec![i18n::choose_error(&error, asked)],
             ValueBand::Keep,
             standing,
+            paused,
         ),
     };
     Some(view)
@@ -469,14 +879,23 @@ fn with_standing(mut messages: Vec<String>, standing: &Standing) -> Vec<String> 
 }
 
 /// A view made between presses, with no outcome behind it: the palette
-/// opening, a pack chosen, the shortcuts gone.
+/// opening, a pack chosen, the shortcuts paused, taken again or gone.
+///
+/// While the shortcuts are paused every such view says so, first among its
+/// own lines and behind the standing sentence: the band is rebuilt from
+/// scratch each time, so a line said once would last exactly one view - and a
+/// pack chosen in the pack window during the pause would take it away.
 fn view_between(
     sequence: &AdvanceSequence,
     pack: &str,
-    messages: Vec<String>,
+    mut messages: Vec<String>,
     value: ValueBand,
     standing: &Standing,
+    paused: bool,
 ) -> View {
+    if paused {
+        messages.insert(0, i18n::label(PaletteLabel::ShortcutsPaused).to_owned());
+    }
     View {
         pack: shown(sequence, pack),
         counter: counter_of(sequence),
@@ -486,6 +905,7 @@ fn view_between(
             sequence.sequence().delivery,
             sequence.clipboard_for_window(),
         ),
+        legend: None,
     }
 }
 
@@ -529,6 +949,8 @@ fn view_of(
             standing,
         ),
         clipboard_bar: clipboard_bar(outcome.sequence.delivery, outcome.clipboard_for_window),
+        // An outcome comes from a press, and a press never changes the table.
+        legend: None,
     }
 }
 
@@ -624,6 +1046,9 @@ fn apply(palette: &Palette, view: View) {
             .map(SharedString::from)
             .collect::<Vec<_>>(),
     )));
+    if let Some(legend) = view.legend {
+        show_legend(palette, legend);
+    }
 
     match view.value {
         ValueBand::Keep => {}
@@ -755,8 +1180,10 @@ struct Memory<'a> {
     store: &'a dyn SettingsStore,
     /// Where the settings live, for a sentence saying they were not saved.
     file: String,
-    /// The shortcuts in effect, for the sentences that name one.
-    bindings: Bindings,
+    /// The shortcuts registered last, for the sentences that name one. A
+    /// cell, because the shortcuts window changes them while the palette runs
+    /// (K5.3).
+    bindings: Cell<Bindings>,
 }
 
 impl Memory<'_> {
@@ -766,7 +1193,7 @@ impl Memory<'_> {
         self.kept
             .borrow_mut()
             .keep(self.store, change)
-            .and_then(|message| i18n::settings_message(&message, &self.file, &self.bindings))
+            .and_then(|message| i18n::settings_message(&message, &self.file, &self.bindings.get()))
     }
 }
 
@@ -1217,6 +1644,7 @@ mod tests {
                 Vec::new(),
                 ValueBand::Clear,
                 &quiet(),
+                false,
             ),
         );
         assert_eq!(palette.get_pack(), "Unicode and text");
@@ -1232,6 +1660,7 @@ mod tests {
                 Vec::new(),
                 ValueBand::Keep,
                 &quiet(),
+                false,
             ),
         );
         assert!(!palette.get_has_value(), "keeping nothing showed something");
@@ -1253,7 +1682,7 @@ mod tests {
             kept: RefCell::new(kept),
             store,
             file: String::from("f"),
-            bindings: nkb_adapters::default_bindings(),
+            bindings: Cell::new(nkb_adapters::default_bindings()),
         }
     }
 
@@ -1273,8 +1702,15 @@ mod tests {
         let mut sequence = on("whitespace");
         let mut pack = String::from("whitespace");
 
-        let view = choose(&mut sequence, &memory, &mut pack, "unicode-text", &quiet())
-            .expect("another pack is drawn");
+        let view = choose(
+            &mut sequence,
+            &memory,
+            &mut pack,
+            "unicode-text",
+            &quiet(),
+            false,
+        )
+        .expect("another pack is drawn");
 
         assert_eq!(pack, "unicode-text", "the messages are about the new pack");
         assert_eq!(sequence.pack_id(), Some("unicode-text"));
@@ -1299,8 +1735,15 @@ mod tests {
         let mut sequence = on("whitespace");
         let mut pack = String::from("whitespace");
 
-        let view = choose(&mut sequence, &memory, &mut pack, "no-such-pack", &quiet())
-            .expect("the refusal is drawn");
+        let view = choose(
+            &mut sequence,
+            &memory,
+            &mut pack,
+            "no-such-pack",
+            &quiet(),
+            false,
+        )
+        .expect("the refusal is drawn");
 
         assert_eq!(pack, "whitespace");
         assert_eq!(sequence.pack_id(), Some("whitespace"));
@@ -1328,7 +1771,17 @@ mod tests {
         let mut sequence = on("whitespace");
         let mut pack = String::from("whitespace");
 
-        assert!(choose(&mut sequence, &memory, &mut pack, "whitespace", &quiet()).is_none());
+        assert!(
+            choose(
+                &mut sequence,
+                &memory,
+                &mut pack,
+                "whitespace",
+                &quiet(),
+                false
+            )
+            .is_none()
+        );
         assert!(
             store.saved.borrow().is_empty(),
             "nothing changed, nothing is saved"
@@ -1344,8 +1797,15 @@ mod tests {
         let mut sequence = on("whitespace");
         let mut pack = String::from("whitespace");
 
-        let view = choose(&mut sequence, &memory, &mut pack, "unicode-text", &quiet())
-            .expect("another pack is drawn");
+        let view = choose(
+            &mut sequence,
+            &memory,
+            &mut pack,
+            "unicode-text",
+            &quiet(),
+            false,
+        )
+        .expect("another pack is drawn");
 
         assert_eq!(view.pack, "Unicode and text");
         assert!(
@@ -1610,5 +2070,477 @@ mod tests {
             markers_of(&pasted),
             vec![(String::from("on the clipboard"), false)]
         );
+    }
+
+    // ---- the shortcuts window: pause, change, resume (K5.3) -------------------
+
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
+
+    use nkb_adapters::i18n::PaletteLabel;
+    use nkb_adapters::{ClipboardDelivery, DirectInjection, EnglishReport};
+    use nkb_app::ShortcutChange;
+    use nkb_app::advance_sequence::Ports;
+    use nkb_app::ports::{HotkeyRegistrar, ShortcutsUnavailable};
+    use nkb_core::hotkeys::HotkeyChord;
+
+    use super::{Hold, Next, ShortcutsNow, Told, Worker, legend, next_command};
+    use crate::clipboard::SystemClipboard;
+
+    fn chord(text: &str) -> HotkeyChord {
+        HotkeyChord::parse(text).unwrap_or_else(|error| panic!("{text}: {error:?}"))
+    }
+
+    fn no_layout(_: HotkeyChord) -> Option<char> {
+        None
+    }
+
+    /// A registrar standing in for the system: a chord in `taken` is held by
+    /// another program, and `unavailable` answers that nothing can be
+    /// registered at all. It keeps every set it was asked for and counts the
+    /// handles alive - how many were alive when each set was asked for, too.
+    #[derive(Default)]
+    struct Registrar {
+        taken: RefCell<Vec<HotkeyChord>>,
+        unavailable: Cell<bool>,
+        asked: RefCell<Vec<Vec<(HotkeyAction, HotkeyChord)>>>,
+        alive_when_asked: RefCell<Vec<usize>>,
+        alive: Arc<AtomicUsize>,
+    }
+
+    impl Registrar {
+        fn alive(&self) -> usize {
+            self.alive.load(Ordering::SeqCst)
+        }
+        fn last_asked(&self) -> Vec<(HotkeyAction, HotkeyChord)> {
+            self.asked.borrow().last().cloned().unwrap_or_default()
+        }
+    }
+
+    struct Held {
+        outcomes: Vec<(HotkeyAction, ShortcutRegistration)>,
+        alive: Arc<AtomicUsize>,
+    }
+
+    impl Drop for Held {
+        fn drop(&mut self) {
+            self.alive.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+
+    impl LiveShortcuts for Held {
+        fn outcomes(&self) -> &[(HotkeyAction, ShortcutRegistration)] {
+            &self.outcomes
+        }
+        fn next(&self, _: Duration) -> Wait {
+            Wait::Nothing
+        }
+    }
+
+    impl HotkeyRegistrar for Registrar {
+        fn register(
+            &self,
+            bindings: &[(HotkeyAction, nkb_core::hotkeys::HotkeyChord)],
+        ) -> Result<Box<dyn LiveShortcuts + Send>, ShortcutsUnavailable> {
+            self.asked.borrow_mut().push(bindings.to_vec());
+            self.alive_when_asked.borrow_mut().push(self.alive());
+            if self.unavailable.get() {
+                return Err(ShortcutsUnavailable::CouldNotStart);
+            }
+            self.alive.fetch_add(1, Ordering::SeqCst);
+            let taken = self.taken.borrow();
+            Ok(Box::new(Held {
+                outcomes: bindings
+                    .iter()
+                    .map(|(action, chord)| {
+                        let outcome = if taken.contains(chord) {
+                            ShortcutRegistration::Taken
+                        } else {
+                            ShortcutRegistration::Registered
+                        };
+                        (*action, outcome)
+                    })
+                    .collect(),
+                alive: Arc::clone(&self.alive),
+            }))
+        }
+    }
+
+    /// A worker on `whitespace` over `store` and `registrar`, holding the
+    /// shortcuts of the defaults when `held`, handed to `test`.
+    fn with_worker<R>(
+        store: &Remembered,
+        registrar: &Registrar,
+        held: bool,
+        test: impl FnOnce(&mut Worker<'_>, &Memory<'_>) -> R,
+    ) -> R {
+        let memory = memory_over(store);
+        let clipboard = SystemClipboard::new();
+        let by_clipboard = ClipboardDelivery::new(&clipboard);
+        let ports = Ports {
+            direct: &DirectInjection,
+            by_clipboard: &by_clipboard,
+            keys: &DirectInjection,
+            clipboard: &clipboard,
+            report_text: &EnglishReport,
+        };
+        let standing = quiet();
+        let mut worker = Worker {
+            sequence: on("whitespace"),
+            pack: String::from("whitespace"),
+            memory: &memory,
+            hold: Hold::new(registrar),
+            ports: &ports,
+            standing: &standing,
+            defaults: nkb_adapters::default_bindings(),
+            types: &no_layout,
+            route: None,
+        };
+        if held {
+            let lines = worker.take(memory.bindings.get());
+            assert!(lines.is_empty(), "{lines:?}");
+        }
+        test(&mut worker, &memory)
+    }
+
+    fn paused_line() -> String {
+        i18n::label(PaletteLabel::ShortcutsPaused).to_owned()
+    }
+
+    /// 🔴 The window opens on a palette that has let its shortcuts go - a
+    /// press there must reach the window, not send a value into it - and
+    /// hears the table it edits in the answer.
+    #[test]
+    fn a_pause_gives_the_shortcuts_back_says_so_and_tells_the_window_the_table() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        with_worker(&store, &registrar, true, |worker, _| {
+            assert_eq!(registrar.alive(), 1);
+
+            let carried = worker.carry_out(Command::Pause);
+
+            assert_eq!(registrar.alive(), 0, "the shortcuts were not given back");
+            assert!(worker.hold.paused());
+            let view = carried.view.expect("the palette says it is paused");
+            assert_eq!(view.messages, vec![paused_line()]);
+            let defaults = nkb_adapters::default_bindings();
+            assert_eq!(
+                carried.told,
+                Some(Told::Paused(ShortcutsNow {
+                    bindings: defaults,
+                    registered: defaults
+                        .as_slice()
+                        .iter()
+                        .map(|(action, chord)| (*action, *chord, ShortcutRegistration::Registered))
+                        .collect(),
+                }))
+            );
+        });
+    }
+
+    /// The pause is said in every view while it lasts - a pack chosen in the
+    /// pack window meanwhile must not take the sentence away - and not after.
+    #[test]
+    fn while_paused_every_view_says_so_and_after_a_resume_none_does() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        with_worker(&store, &registrar, true, |worker, _| {
+            worker.carry_out(Command::Pause);
+
+            let chosen = worker
+                .carry_out(Command::Choose(String::from("unicode-text")))
+                .view
+                .expect("another pack is drawn");
+            assert_eq!(chosen.messages.first(), Some(&paused_line()));
+
+            let resumed = worker
+                .carry_out(Command::Resume)
+                .view
+                .expect("the palette says what came of taking them again");
+            assert!(
+                !resumed.messages.contains(&paused_line()),
+                "{:?}",
+                resumed.messages
+            );
+            assert!(!worker.hold.paused());
+            assert_eq!(registrar.alive(), 1);
+        });
+    }
+
+    /// 🔴 The whole change: tried alone and released, saved, told to the
+    /// window - and registered, with the words naming it, when the window
+    /// closes.
+    #[test]
+    fn a_change_while_paused_is_tried_saved_told_and_taken_on_resume() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        with_worker(&store, &registrar, true, |worker, memory| {
+            worker.carry_out(Command::Pause);
+            let wanted = chord("Alt+Shift+M");
+
+            let carried = worker.carry_out(Command::Shortcut {
+                action: HotkeyAction::NextValue,
+                chord: Some(wanted),
+            });
+
+            assert!(
+                carried.view.is_none(),
+                "the palette stays as it was until the resume"
+            );
+            let Some(Told::Shortcut {
+                action,
+                change: ShortcutChange::Changed { bindings, .. },
+                not_saved: None,
+            }) = carried.told
+            else {
+                panic!("the change was not told: {:?}", carried.told);
+            };
+            assert_eq!(action, HotkeyAction::NextValue);
+            assert_eq!(bindings.chord(HotkeyAction::NextValue), wanted);
+            assert_eq!(
+                registrar.last_asked(),
+                vec![(HotkeyAction::NextValue, wanted)],
+                "the chord was tried alone"
+            );
+            assert_eq!(registrar.alive(), 0, "the trial kept the chord");
+            assert_eq!(
+                *store.saved.borrow(),
+                vec![SettingChange::Shortcut {
+                    action: HotkeyAction::NextValue,
+                    chord: Some(wanted),
+                }]
+            );
+
+            let resumed = worker
+                .carry_out(Command::Resume)
+                .view
+                .expect("the palette is drawn again");
+            assert_eq!(registrar.last_asked(), bindings.as_slice());
+            assert_eq!(registrar.alive(), 1);
+            assert_eq!(
+                memory.bindings.get(),
+                bindings,
+                "sentences would name the old table"
+            );
+            assert_eq!(
+                resumed.legend,
+                Some(legend(&bindings)),
+                "the hint bar and the empty value band would name the old shortcut"
+            );
+            assert!(
+                resumed
+                    .legend
+                    .as_ref()
+                    .is_some_and(|words| words.no_value.contains(&i18n::chord(wanted))),
+                "{:?}",
+                resumed.legend
+            );
+        });
+    }
+
+    /// A chord another program holds is refused, nothing is saved, and the
+    /// palette takes back the table it had.
+    #[test]
+    fn a_chord_another_program_holds_is_refused_and_the_table_stays() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        registrar.taken.borrow_mut().push(chord("Alt+Shift+M"));
+        with_worker(&store, &registrar, true, |worker, _| {
+            worker.carry_out(Command::Pause);
+
+            let told = worker
+                .carry_out(Command::Shortcut {
+                    action: HotkeyAction::NextValue,
+                    chord: Some(chord("Alt+Shift+M")),
+                })
+                .told;
+
+            assert_eq!(
+                told,
+                Some(Told::Shortcut {
+                    action: HotkeyAction::NextValue,
+                    change: ShortcutChange::Taken {
+                        chord: chord("Alt+Shift+M")
+                    },
+                    not_saved: None,
+                })
+            );
+            assert!(store.saved.borrow().is_empty());
+            worker.carry_out(Command::Resume);
+            assert_eq!(
+                registrar.last_asked(),
+                nkb_adapters::default_bindings().as_slice()
+            );
+        });
+    }
+
+    /// A resume says what the system would not give, chord by chord - and
+    /// remembers it for the next time the window opens.
+    #[test]
+    fn a_resume_says_what_is_taken_and_the_next_pause_tells_the_window() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        let previous = nkb_adapters::default_bindings().chord(HotkeyAction::PreviousValue);
+        with_worker(&store, &registrar, true, |worker, _| {
+            worker.carry_out(Command::Pause);
+            registrar.taken.borrow_mut().push(previous);
+
+            let resumed = worker.carry_out(Command::Resume).view.expect("drawn");
+            assert_eq!(
+                resumed.messages,
+                vec![
+                    i18n::registration(
+                        &ShortcutRegistration::Taken,
+                        HotkeyAction::PreviousValue,
+                        previous
+                    )
+                    .expect("a taken shortcut is said")
+                ]
+            );
+
+            let Some(Told::Paused(now)) = worker.carry_out(Command::Pause).told else {
+                panic!("a pause tells the window the table");
+            };
+            assert!(now.registered.contains(&(
+                HotkeyAction::PreviousValue,
+                previous,
+                ShortcutRegistration::Taken
+            )));
+        });
+    }
+
+    /// Nothing is registered twice: a resume while held changes nothing and
+    /// says nothing.
+    #[test]
+    fn a_resume_while_the_shortcuts_are_held_does_nothing() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        with_worker(&store, &registrar, true, |worker, _| {
+            let asked = registrar.asked.borrow().len();
+            let carried = worker.carry_out(Command::Resume);
+            assert!(carried.view.is_none() && carried.told.is_none());
+            assert_eq!(registrar.asked.borrow().len(), asked);
+            assert_eq!(registrar.alive(), 1);
+        });
+    }
+
+    /// Not held because nothing could be registered is a state the worker
+    /// stays in, saying why - and the next resume tries again. Until K5.3 the
+    /// worker ended there.
+    #[test]
+    fn with_nothing_registrable_the_worker_says_why_and_a_resume_tries_again() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        registrar.unavailable.set(true);
+        with_worker(&store, &registrar, false, |worker, memory| {
+            let lines = worker.take(memory.bindings.get());
+            assert_eq!(
+                lines,
+                vec![i18n::shortcuts_unavailable(
+                    &ShortcutsUnavailable::CouldNotStart
+                )]
+            );
+            assert!(worker.hold.live().is_none());
+            assert!(
+                !worker.hold.paused(),
+                "lost is not paused, and must not say it is"
+            );
+
+            let chosen = worker
+                .carry_out(Command::Choose(String::from("unicode-text")))
+                .view
+                .expect("a pack is still chosen");
+            assert_eq!(chosen.pack, "Unicode and text");
+
+            registrar.unavailable.set(false);
+            worker.carry_out(Command::Resume);
+            assert!(worker.hold.live().is_some(), "the resume did not try again");
+        });
+    }
+
+    /// The window pauses before it changes anything. If a change ever came
+    /// while held, what is held would stop being the table in effect - so it
+    /// is taken again at once, the old set released first.
+    #[test]
+    fn a_change_while_held_is_taken_at_once_releasing_the_old_set_first() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        with_worker(&store, &registrar, true, |worker, _| {
+            let carried = worker.carry_out(Command::Shortcut {
+                action: HotkeyAction::NextValue,
+                chord: Some(chord("Alt+Shift+M")),
+            });
+            let view = carried.view.expect("the palette follows the new table");
+            assert!(view.legend.is_some());
+            assert_eq!(
+                registrar
+                    .last_asked()
+                    .iter()
+                    .find(|(action, _)| *action == HotkeyAction::NextValue)
+                    .map(|(_, chord)| *chord),
+                Some(chord("Alt+Shift+M"))
+            );
+            assert_eq!(
+                registrar.alive_when_asked.borrow().last(),
+                Some(&0),
+                "the old set still held its chords when the new one was asked for"
+            );
+            assert_eq!(registrar.alive(), 1);
+        });
+    }
+
+    /// The hint bar names four shortcuts in the table's order, and the empty
+    /// value band names the one that sends a value.
+    #[test]
+    fn the_legend_names_the_hinted_shortcuts_of_the_table_in_effect() {
+        let defaults = nkb_adapters::default_bindings();
+        let words = legend(&defaults);
+        // Worded through `i18n::chord`, because the table is this system's
+        // own and macOS names its modifiers differently.
+        let hint = |action| {
+            (
+                i18n::chord(defaults.chord(action)),
+                i18n::action_name(action).to_owned(),
+            )
+        };
+        assert_eq!(
+            words.hints,
+            vec![
+                hint(HotkeyAction::NextValue),
+                hint(HotkeyAction::PreviousValue),
+                hint(HotkeyAction::CopyReport),
+                hint(HotkeyAction::OpenPacks),
+            ]
+        );
+        assert_eq!(
+            words.no_value,
+            i18n::no_value_yet(defaults.chord(HotkeyAction::NextValue))
+        );
+    }
+
+    /// While nothing is held the worker waits on the channel: a command
+    /// wakes it, a closing window comes first, and a channel nobody sends on
+    /// is not a reason to stop.
+    #[test]
+    fn with_nothing_held_a_command_wakes_the_worker_and_the_stop_comes_first() {
+        let (send, commands) = mpsc::channel();
+        let stop = AtomicBool::new(false);
+        send.send(Command::Resume).expect("the receiver is alive");
+        assert!(matches!(
+            next_command(&stop, &commands),
+            Next::Command(Command::Resume)
+        ));
+
+        send.send(Command::Resume).expect("the receiver is alive");
+        stop.store(true, Ordering::Relaxed);
+        assert!(matches!(next_command(&stop, &commands), Next::Stop));
+        assert_eq!(
+            commands.try_recv(),
+            Ok(Command::Resume),
+            "a closing palette read a command"
+        );
+
+        drop(send);
+        assert!(matches!(next_command(&stop, &commands), Next::Stop));
     }
 }

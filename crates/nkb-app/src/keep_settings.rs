@@ -31,7 +31,8 @@ use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord, Refusal, Refused};
 
 use crate::advance_sequence::ChooseError;
 use crate::ports::{
-    SaveError, SettingChange, Settings, SettingsLoad, SettingsNote, SettingsStore, SettingsUnusable,
+    HotkeyRegistrar, SaveError, SettingChange, Settings, SettingsLoad, SettingsNote, SettingsStore,
+    SettingsUnusable, ShortcutRegistration, ShortcutsUnavailable,
 };
 
 /// Something about the settings worth telling the tester.
@@ -352,6 +353,81 @@ impl KeptSettings {
         }
     }
 
+    /// Gives `action` the shortcut `chord` - or its default back, for `None` -
+    /// when it can be had, and remembers it (K5).
+    ///
+    /// Three steps, in an order that is the point:
+    ///
+    /// 1. [`KeptSettings::consider`] - a chord refused there is refused here,
+    ///    and nothing is asked of the system.
+    /// 2. The system is asked whether the chord can be registered, by
+    ///    registering it alone and releasing it at once. A chord another
+    ///    program holds is refused BEFORE anything is saved, so the file never
+    ///    names a shortcut that will not respond. The palette's own shortcuts
+    ///    are given back while the shortcuts window is open, so the answer is
+    ///    about other programs - and a chord the action already answers to is
+    ///    not asked about at all, because our own registration would answer
+    ///    `Taken` for it.
+    /// 3. The change is kept: in effect at once, saved when it can be.
+    ///
+    /// 🔴 The trial registration is released before this returns. A handle
+    /// kept past it would hold the chord against the palette's own
+    /// registration when the window closes.
+    ///
+    /// A restore that changes nothing is still saved (`D89`): the key it is
+    /// meant to clear may be one that did not read as a shortcut, which the
+    /// settings cannot see and the store removes.
+    ///
+    /// The second value is a failure to save, of a kind not said before.
+    pub fn change_shortcut(
+        &mut self,
+        store: &dyn SettingsStore,
+        registrar: &dyn HotkeyRegistrar,
+        defaults: Bindings,
+        types: &dyn Fn(HotkeyChord) -> Option<char>,
+        action: HotkeyAction,
+        chord: Option<HotkeyChord>,
+    ) -> (ShortcutChange, Option<SettingsMessage>) {
+        let change = SettingChange::Shortcut { action, chord };
+        let (bindings, also) = match self.consider(defaults, types, action, chord) {
+            Considered::Refused(refused) => return (ShortcutChange::Refused(refused), None),
+            Considered::AlreadySo => {
+                let said = chord.is_none().then(|| self.keep(store, change)).flatten();
+                return (ShortcutChange::AlreadySo, said);
+            }
+            Considered::Gives { bindings, also } => (bindings, also),
+        };
+        let wanted = bindings.chord(action);
+        let (now, _) = defaults.with(&self.settings.shortcuts, types);
+        let unchecked = if wanted == now.chord(action) {
+            None
+        } else {
+            match trial(registrar, action, wanted) {
+                Trial::Free => None,
+                Trial::Taken => return (ShortcutChange::Taken { chord: wanted }, None),
+                Trial::Failed { code } => {
+                    return (
+                        ShortcutChange::NotRegistered {
+                            chord: wanted,
+                            code,
+                        },
+                        None,
+                    );
+                }
+                Trial::Unchecked(why) => Some(why),
+            }
+        };
+        let said = self.keep(store, change);
+        (
+            ShortcutChange::Changed {
+                bindings,
+                also,
+                unchecked,
+            },
+            said,
+        )
+    }
+
     /// Whether this change is already in effect, so saving it changes nothing.
     ///
     /// Compared with what is IN EFFECT, not with a default: a setting the file
@@ -397,6 +473,66 @@ fn wish(
         },
         None => shortcuts.retain(|(held, _)| *held != action),
     }
+}
+
+/// What the system said about one chord registered on trial.
+enum Trial {
+    Free,
+    Taken,
+    Failed {
+        code: u32,
+    },
+    /// Nothing could be registered at all, so nobody knows.
+    Unchecked(ShortcutsUnavailable),
+}
+
+/// Registers `chord` alone for `action` and releases it before answering.
+///
+/// A set with no outcome for its one binding is a registrar that broke its
+/// promise (one outcome per binding). It answers `Unchecked` rather than
+/// `Free`, so the change goes through saying it was not checked instead of
+/// claiming a check that never happened.
+fn trial(registrar: &dyn HotkeyRegistrar, action: HotkeyAction, chord: HotkeyChord) -> Trial {
+    let live = match registrar.register(&[(action, chord)]) {
+        Ok(live) => live,
+        Err(why) => return Trial::Unchecked(why),
+    };
+    let outcome = live.outcomes().first().map(|(_, outcome)| *outcome);
+    // Released HERE, before anything else happens - the doc comment of
+    // `change_shortcut` says why.
+    drop(live);
+    match outcome {
+        Some(ShortcutRegistration::Registered) => Trial::Free,
+        Some(ShortcutRegistration::Taken) => Trial::Taken,
+        Some(ShortcutRegistration::Failed { code }) => Trial::Failed { code },
+        None => Trial::Unchecked(ShortcutsUnavailable::CouldNotStart),
+    }
+}
+
+/// What came of changing one shortcut - [`KeptSettings::change_shortcut`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ShortcutChange {
+    /// Nothing to change. A restore was still handed to the store (`D89`).
+    AlreadySo,
+    /// Refused before the system was asked - the same refusals the palette
+    /// says about the settings file. Nothing saved.
+    Refused(Refused),
+    /// Another program holds the chord. Nothing saved.
+    Taken { chord: HotkeyChord },
+    /// The system refused the chord for another reason, with its raw code.
+    /// Nothing saved.
+    NotRegistered { chord: HotkeyChord, code: u32 },
+    /// In effect now, and saved unless the second value of
+    /// [`KeptSettings::change_shortcut`] says otherwise. `bindings` is the
+    /// table the palette registers when the shortcuts window closes, `also`
+    /// every other action whose chord moves with it. `unchecked` names why the
+    /// system could not be asked whether the chord is free - `None` when it
+    /// was asked, or when the action already answered to the chord.
+    Changed {
+        bindings: Bindings,
+        also: Vec<HotkeyAction>,
+        unchecked: Option<ShortcutsUnavailable>,
+    },
 }
 
 /// What changing one shortcut would come to - [`KeptSettings::consider`].
@@ -1087,5 +1223,321 @@ mod tests {
             }
         }
         assert_eq!(cases, 7 * 7 * 7 * 3 * 7);
+    }
+
+    // ---- changing one shortcut for real: the trial registration (K5.3) ------
+
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
+
+    use crate::ports::{LiveShortcuts, Wait};
+
+    /// A registrar that answers what a test dictates, keeps every set it was
+    /// asked to register and counts the handles still alive - the trial must
+    /// leave none behind.
+    struct FakeRegistrar {
+        answer: Result<ShortcutRegistration, ShortcutsUnavailable>,
+        asked: RefCell<Vec<Vec<(HotkeyAction, HotkeyChord)>>>,
+        alive: Arc<AtomicUsize>,
+    }
+
+    impl FakeRegistrar {
+        fn answering(answer: Result<ShortcutRegistration, ShortcutsUnavailable>) -> Self {
+            Self {
+                answer,
+                asked: RefCell::new(Vec::new()),
+                alive: Arc::new(AtomicUsize::new(0)),
+            }
+        }
+    }
+
+    struct FakeLive {
+        outcomes: Vec<(HotkeyAction, ShortcutRegistration)>,
+        alive: Arc<AtomicUsize>,
+    }
+
+    impl Drop for FakeLive {
+        fn drop(&mut self) {
+            self.alive.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+
+    impl LiveShortcuts for FakeLive {
+        fn outcomes(&self) -> &[(HotkeyAction, ShortcutRegistration)] {
+            &self.outcomes
+        }
+        fn next(&self, _: Duration) -> Wait {
+            Wait::Nothing
+        }
+    }
+
+    impl HotkeyRegistrar for FakeRegistrar {
+        fn register(
+            &self,
+            bindings: &[(HotkeyAction, HotkeyChord)],
+        ) -> Result<Box<dyn LiveShortcuts + Send>, ShortcutsUnavailable> {
+            self.asked.borrow_mut().push(bindings.to_vec());
+            let outcome = self.answer.clone()?;
+            self.alive.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::new(FakeLive {
+                outcomes: bindings
+                    .iter()
+                    .map(|(action, _)| (*action, outcome))
+                    .collect(),
+                alive: Arc::clone(&self.alive),
+            }))
+        }
+    }
+
+    /// A store that notes how many trial handles were alive at each save.
+    struct Watching<'a> {
+        inner: FakeStore,
+        alive: &'a AtomicUsize,
+        at_save: RefCell<Vec<usize>>,
+    }
+
+    impl SettingsStore for Watching<'_> {
+        fn load(&self) -> SettingsLoad {
+            self.inner.load()
+        }
+        fn save(&self, change: &SettingChange) -> Result<(), SaveError> {
+            self.at_save
+                .borrow_mut()
+                .push(self.alive.load(Ordering::SeqCst));
+            self.inner.save(change)
+        }
+    }
+
+    #[test]
+    fn a_free_chord_is_tried_alone_released_and_only_then_saved() {
+        let registrar = FakeRegistrar::answering(Ok(ShortcutRegistration::Registered));
+        let store = Watching {
+            inner: FakeStore::loading(SettingsLoad::Absent),
+            alive: &registrar.alive,
+            at_save: RefCell::new(Vec::new()),
+        };
+        let (mut kept, _) = KeptSettings::open(&store);
+        let wanted = chord("Alt+Shift+M");
+
+        let (change, said) = kept.change_shortcut(
+            &store,
+            &registrar,
+            DEFAULTS,
+            &no_layout,
+            HotkeyAction::NextValue,
+            Some(wanted),
+        );
+
+        let ShortcutChange::Changed {
+            bindings,
+            also,
+            unchecked,
+        } = change
+        else {
+            panic!("a free chord was not given: {change:?}");
+        };
+        assert_eq!(bindings.chord(HotkeyAction::NextValue), wanted);
+        assert!(also.is_empty());
+        assert_eq!(unchecked, None, "the system was asked");
+        assert_eq!(said, None);
+        assert_eq!(
+            *registrar.asked.borrow(),
+            vec![vec![(HotkeyAction::NextValue, wanted)]],
+            "the chord is tried alone, for its own action"
+        );
+        assert_eq!(
+            *store.at_save.borrow(),
+            vec![0],
+            "the trial still held the chord when the change was saved"
+        );
+        assert_eq!(registrar.alive.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            store.inner.saves(),
+            vec![SettingChange::Shortcut {
+                action: HotkeyAction::NextValue,
+                chord: Some(wanted),
+            }]
+        );
+        assert_eq!(kept.bindings(DEFAULTS, &no_layout).0, bindings);
+    }
+
+    #[test]
+    fn a_chord_the_system_will_not_give_is_refused_and_nothing_is_saved() {
+        for (answer, expected) in [
+            (
+                ShortcutRegistration::Taken,
+                ShortcutChange::Taken {
+                    chord: chord("Alt+Shift+M"),
+                },
+            ),
+            (
+                ShortcutRegistration::Failed { code: 1400 },
+                ShortcutChange::NotRegistered {
+                    chord: chord("Alt+Shift+M"),
+                    code: 1400,
+                },
+            ),
+        ] {
+            let registrar = FakeRegistrar::answering(Ok(answer));
+            let store = FakeStore::loading(SettingsLoad::Absent);
+            let (mut kept, _) = KeptSettings::open(&store);
+            let before = kept.bindings(DEFAULTS, &no_layout).0;
+
+            let (change, said) = kept.change_shortcut(
+                &store,
+                &registrar,
+                DEFAULTS,
+                &no_layout,
+                HotkeyAction::NextValue,
+                Some(chord("Alt+Shift+M")),
+            );
+
+            assert_eq!(change, expected);
+            assert_eq!(said, None);
+            assert!(store.saves().is_empty(), "{answer:?} was saved");
+            assert_eq!(
+                kept.bindings(DEFAULTS, &no_layout).0,
+                before,
+                "{answer:?} changed the table in effect"
+            );
+            assert_eq!(registrar.alive.load(Ordering::SeqCst), 0);
+        }
+    }
+
+    #[test]
+    fn a_refusal_never_reaches_the_system() {
+        let registrar = FakeRegistrar::answering(Ok(ShortcutRegistration::Registered));
+        let store = FakeStore::loading(SettingsLoad::Absent);
+        let (mut kept, _) = KeptSettings::open(&store);
+
+        let (change, _) = kept.change_shortcut(
+            &store,
+            &registrar,
+            DEFAULTS,
+            &no_layout,
+            HotkeyAction::NextValue,
+            Some(chord("Alt+Shift+R")),
+        );
+
+        assert_eq!(
+            change,
+            ShortcutChange::Refused(Refused {
+                action: HotkeyAction::NextValue,
+                chord: chord("Alt+Shift+R"),
+                why: Refusal::SameAs(HotkeyAction::RepeatLast),
+            })
+        );
+        assert!(registrar.asked.borrow().is_empty());
+        assert!(store.saves().is_empty());
+    }
+
+    #[test]
+    fn a_restore_that_changes_nothing_is_still_saved_and_a_recording_is_not() {
+        // `D89`: the key a restore is meant to clear may not have read as a
+        // shortcut, so the settings cannot see it - the store removes it.
+        let registrar = FakeRegistrar::answering(Ok(ShortcutRegistration::Registered));
+        let store = FakeStore::loading(SettingsLoad::Absent);
+        let (mut kept, _) = KeptSettings::open(&store);
+
+        let restored = kept.change_shortcut(
+            &store,
+            &registrar,
+            DEFAULTS,
+            &no_layout,
+            HotkeyAction::RepeatLast,
+            None,
+        );
+        assert_eq!(restored, (ShortcutChange::AlreadySo, None));
+        assert_eq!(
+            store.saves(),
+            vec![SettingChange::Shortcut {
+                action: HotkeyAction::RepeatLast,
+                chord: None,
+            }]
+        );
+
+        let recorded = kept.change_shortcut(
+            &store,
+            &registrar,
+            DEFAULTS,
+            &no_layout,
+            HotkeyAction::RepeatLast,
+            Some(chord("Alt+Shift+R")),
+        );
+        assert_eq!(recorded, (ShortcutChange::AlreadySo, None));
+        assert_eq!(store.saves().len(), 1, "recording what is so was saved");
+        assert!(
+            registrar.asked.borrow().is_empty(),
+            "nothing to change, nothing to ask"
+        );
+    }
+
+    #[test]
+    fn a_chord_the_action_already_answers_to_is_not_tried() {
+        // Repeat last wants Next value's default and is refused at start, so it
+        // answers to its own default. Recording that default replaces the stale
+        // wish - a change - but the chord is the one it answers to: while held,
+        // our own registration would call it Taken.
+        let registrar = FakeRegistrar::answering(Ok(ShortcutRegistration::Taken));
+        let store = FakeStore::loading(SettingsLoad::Absent);
+        let mut kept = wishing(vec![(HotkeyAction::RepeatLast, chord("Alt+Shift+N"))]);
+
+        let (change, _) = kept.change_shortcut(
+            &store,
+            &registrar,
+            DEFAULTS,
+            &no_layout,
+            HotkeyAction::RepeatLast,
+            Some(chord("Alt+Shift+R")),
+        );
+
+        assert!(
+            matches!(
+                change,
+                ShortcutChange::Changed {
+                    unchecked: None,
+                    ..
+                }
+            ),
+            "{change:?}"
+        );
+        assert!(registrar.asked.borrow().is_empty());
+        assert_eq!(store.saves().len(), 1);
+    }
+
+    #[test]
+    fn with_no_way_to_ask_the_change_goes_through_and_says_it_was_not_checked() {
+        let why = ShortcutsUnavailable::Unsupported {
+            system: String::from("macOS"),
+        };
+        let registrar = FakeRegistrar::answering(Err(why.clone()));
+        let store = FakeStore::loading(SettingsLoad::Absent).failing_with(SaveError::Unwritable);
+        let (mut kept, _) = KeptSettings::open(&store);
+
+        let (change, said) = kept.change_shortcut(
+            &store,
+            &registrar,
+            DEFAULTS,
+            &no_layout,
+            HotkeyAction::NextValue,
+            Some(chord("Alt+Shift+M")),
+        );
+
+        assert!(
+            matches!(&change, ShortcutChange::Changed { unchecked: Some(named), .. } if *named == why),
+            "{change:?}"
+        );
+        assert_eq!(
+            said,
+            Some(SettingsMessage::NotSaved(SaveError::Unwritable)),
+            "a save that failed is said, beside the change in effect"
+        );
+        assert_eq!(
+            kept.bindings(DEFAULTS, &no_layout)
+                .0
+                .chord(HotkeyAction::NextValue),
+            chord("Alt+Shift+M")
+        );
     }
 }

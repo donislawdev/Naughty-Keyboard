@@ -58,10 +58,10 @@ use nkb_adapters::{
     KeptFocus, SettingsFile, altgr_character, default_bindings, i18n, report_window_failure,
 };
 use nkb_app::{KeptSettings, RouteRequest};
-use nkb_core::hotkeys::{Bindings, HotkeyAction};
+use nkb_core::hotkeys::HotkeyAction;
 use nkb_gui::packs::{Packs, SystemKeyboard};
-use nkb_gui::{Gallery, HintRow, PacksWindow, Palette, focus, live};
-use slint::{ComponentHandle, ModelRc, VecModel};
+use nkb_gui::{Gallery, PacksWindow, Palette, focus, live};
+use slint::ComponentHandle;
 
 /// The pack the palette opens on when the command line names none and the
 /// settings remember none.
@@ -69,22 +69,6 @@ use slint::{ComponentHandle, ModelRc, VecModel};
 /// One of the three that ship inside the binary (D51), so the palette has
 /// something real to show on a machine with no catalogue on disk at all.
 const DEFAULT_PACK: &str = "whitespace";
-
-/// Which shortcuts the hint bar names, and in this order.
-///
-/// Four of the ten, because `ux-spec.md` 2 gives the hint bar four and because a
-/// list of ten stops being a hint. These four are the ones the first five
-/// minutes need: move through the pack, and get the report out.
-///
-/// `OpenPacks` opens the pack window (step 7, K3.2c): the worker takes the
-/// press before the sequence sees it and asks this thread through the
-/// palette's `open-packs` callback.
-const HINTED: [HotkeyAction; 4] = [
-    HotkeyAction::NextValue,
-    HotkeyAction::PreviousValue,
-    HotkeyAction::CopyReport,
-    HotkeyAction::OpenPacks,
-];
 
 fn main() -> ExitCode {
     match start(request()) {
@@ -183,8 +167,10 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // already sets the floor (`D83`).
     live::hold_height_on_change(&palette);
     // The clipboard bar's words come with each view, because two conditions
-    // share the bar and say different things (`D72`) - see `live::View`.
-    palette.set_hints(ModelRc::new(VecModel::from(hints(&bindings))));
+    // share the bar and say different things (`D72`) - see `live::View`. The
+    // words naming the shortcuts come from the table of this run, by the same
+    // function the worker uses when the table changes.
+    live::show_legend(&palette, live::legend(&bindings));
     // The pack's name opens the pack window when clicked, and UI Automation
     // names that click with the words the hint bar gives the shortcut.
     palette.set_open_packs_label(i18n::action_name(HotkeyAction::OpenPacks).into());
@@ -194,7 +180,6 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // knows them lives over there.
     palette.set_compact(compact);
     palette.set_has_value(false);
-    palette.set_no_value(i18n::no_value_yet(bindings.chord(HotkeyAction::NextValue)).into());
 
     // The two threads meet here. `focus` runs on this one and may produce a
     // sentence saying the palette could not refuse the focus. The worker rebuilds
@@ -252,6 +237,9 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
             kept: settings,
             said,
             bindings,
+            // Nothing asks yet: the shortcuts window arrives in K5.5, and with
+            // it the one sender of `Pause`, `Resume` and `Shortcut`.
+            tell: Box::new(|_| {}),
         };
         // Measured: work handed to the event loop before `run()` is delivered
         // once it starts (`slint.md` 1.9), so this thread may say something
@@ -267,19 +255,4 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // product code, so a panic here is a bug rather than a path.
     drop(worker.join());
     ran
-}
-
-/// The hint bar's rows, built from the bindings in effect rather than written
-/// out - so a shortcut the tester set in the settings file is the one the bar
-/// shows.
-fn hints(bindings: &Bindings) -> Vec<HintRow> {
-    bindings
-        .as_slice()
-        .iter()
-        .filter(|(action, _)| HINTED.contains(action))
-        .map(|(action, chord)| HintRow {
-            key: i18n::chord(*chord).into(),
-            action: i18n::action_name(*action).into(),
-        })
-        .collect()
 }
