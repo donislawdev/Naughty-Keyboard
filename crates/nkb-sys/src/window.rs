@@ -159,13 +159,116 @@ pub fn take_foreground(window: WindowRef) -> Result<(), FocusError> {
     platform::take_foreground(window)
 }
 
+/// Why a window's menu could not be kept from opening from the keyboard.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum KeyMenuError {
+    /// No route on this system yet, named - untouchable rule 1.
+    Unsupported { system: &'static str },
+    /// The system would not put our handler in front of the window's own -
+    /// for one, when asked from a thread that does not own the window.
+    Refused,
+    /// The window manager has not created the window yet, so there is nothing
+    /// to put the handler on - the same outcome as
+    /// [`FocusError::HandleUnavailable`].
+    HandleUnavailable,
+}
+
+impl core::fmt::Display for KeyMenuError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Unsupported { system } => write!(
+                f,
+                "the tool cannot keep a window menu from opening on {system} yet"
+            ),
+            Self::HandleUnavailable => write!(
+                f,
+                "the window manager did not hand out a window handle in time, so \
+                 Alt+Space may open the window menu"
+            ),
+            Self::Refused => write!(
+                f,
+                "the system refused the handler, so Alt+Space opens the window menu, \
+                 which takes the next key"
+            ),
+        }
+    }
+}
+
+/// Keeps `window`'s own menu from opening from the keyboard - `Alt+Space`,
+/// with or without `Shift` (K5.4).
+///
+/// # Why
+///
+/// The shortcuts window records chords, and `Alt+Shift+Space` is a default.
+/// Measured 2026-09-30 with `tools/sonda-klawisze` (`ktory`), synthetic and
+/// physical: the chord reaches the window's key handler, and then the window
+/// menu opens and takes the next key - the system's own `Alt+Space`
+/// (`slint.md` 2.37). Reading winit 0.30.13 predicted the opposite, which is
+/// why this stands on the measurement and not on the reading.
+///
+/// # How, and what is left
+///
+/// A subclass of the window that answers `WM_SYSCOMMAND` with `SC_KEYMENU` -
+/// the menu asked for by a key - itself, and passes every other message on.
+/// The menu from the mouse (`SC_MOUSEMENU`), the close button and `Alt+F4`
+/// are untouched. Only a window of ours is subclassed, on the thread that owns
+/// it: nothing of any other application is touched.
+///
+/// ⚠️ A Slint window hidden and shown again is a NEW system window
+/// (`OBS-80`), so this is called on every opening. Calling it twice on one
+/// window replaces the subclass with itself.
+///
+/// # Errors
+///
+/// [`KeyMenuError::Refused`] when the system would not install it,
+/// [`KeyMenuError::Unsupported`] where there is no route.
+pub fn no_keyboard_menu(window: WindowRef) -> Result<(), KeyMenuError> {
+    platform::no_keyboard_menu(window)
+}
+
 #[cfg(windows)]
 mod platform {
-    use super::{FocusError, WindowRef};
-    use windows_sys::Win32::Foundation::HWND;
+    use super::{FocusError, KeyMenuError, WindowRef};
+    use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+    use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GWL_EXSTYLE, GetWindowLongPtrW, SetForegroundWindow, SetWindowLongPtrW, WS_EX_NOACTIVATE,
+        GWL_EXSTYLE, GetWindowLongPtrW, SC_KEYMENU, SetForegroundWindow, SetWindowLongPtrW,
+        WM_SYSCOMMAND, WS_EX_NOACTIVATE,
     };
+
+    /// Which subclass this is, among any others on the window: "NKM1".
+    const KEY_MENU_SUBCLASS: usize = 0x4E4B_4D31;
+
+    /// The low four bits of a `WM_SYSCOMMAND` command are the system's own, so
+    /// the command is compared with them masked off - as documented.
+    const COMMAND_MASK: usize = 0xFFF0;
+
+    /// Answers the keyboard's menu request itself, and hands everything else
+    /// on. Runs on the window's thread, inside its message handling - it must
+    /// not panic, and does nothing that could.
+    unsafe extern "system" fn without_key_menu(
+        window: HWND,
+        message: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+        _subclass: usize,
+        _data: usize,
+    ) -> LRESULT {
+        if message == WM_SYSCOMMAND && wparam & COMMAND_MASK == SC_KEYMENU as usize {
+            return 0;
+        }
+        unsafe { DefSubclassProc(window, message, wparam, lparam) }
+    }
+
+    pub fn no_keyboard_menu(window: WindowRef) -> Result<(), KeyMenuError> {
+        let installed = unsafe {
+            SetWindowSubclass(handle(window), Some(without_key_menu), KEY_MENU_SUBCLASS, 0)
+        };
+        if installed == 0 {
+            return Err(KeyMenuError::Refused);
+        }
+        Ok(())
+    }
 
     /// The handle as the API wants it. The `WindowRef` was made from one of
     /// these on the way in, so the round trip is the identity.
@@ -226,7 +329,7 @@ mod platform {
 
 #[cfg(not(windows))]
 mod platform {
-    use super::{FocusError, WindowRef};
+    use super::{FocusError, KeyMenuError, WindowRef};
 
     /// Named rather than "this platform", so the message says something the
     /// reader can act on.
@@ -251,6 +354,10 @@ mod platform {
 
     pub fn take_foreground(_window: WindowRef) -> Result<(), FocusError> {
         Err(FocusError::Unsupported { system: SYSTEM })
+    }
+
+    pub fn no_keyboard_menu(_window: WindowRef) -> Result<(), KeyMenuError> {
+        Err(KeyMenuError::Unsupported { system: SYSTEM })
     }
 }
 
@@ -352,5 +459,23 @@ mod tests {
             return;
         }
         assert_eq!(hand_back_foreground(WindowRef(0), None), Ok(()));
+    }
+
+    #[test]
+    fn keeping_the_menu_off_no_window_is_refused_rather_than_claimed() {
+        // Zero is never a window, so the system cannot subclass it. A version
+        // that did not read the answer would report the menu kept off while
+        // `Alt+Space` still opened it.
+        let outcome = no_keyboard_menu(WindowRef(0));
+        if can_refuse_focus() {
+            assert_eq!(outcome, Err(KeyMenuError::Refused));
+        } else {
+            assert!(matches!(outcome, Err(KeyMenuError::Unsupported { .. })));
+        }
+        let text = KeyMenuError::Refused.to_string();
+        assert!(
+            text.contains("Alt+Space") && text.contains("next key"),
+            "the cost is named: {text}"
+        );
     }
 }

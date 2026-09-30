@@ -30,6 +30,7 @@
 //! is two events and there is no way to make it one.
 
 pub mod field;
+pub mod held;
 pub mod hotkey;
 pub mod layout;
 pub mod privilege;

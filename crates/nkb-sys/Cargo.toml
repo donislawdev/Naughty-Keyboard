@@ -64,6 +64,10 @@ panic = "deny"
 # crate, no new dependency - the `windows` crate, which wraps the same COM
 # interfaces, was weighed and refused: it would bring some six crates, procedural
 # macros among them, into the tree of the `nkb` command-line tool for two calls.
+# `Win32_UI_Shell` was added 2026-09-30 for `SetWindowSubclass` and
+# `DefSubclassProc` in `window.rs` (K5.4: the shortcuts window must not open
+# its menu on `Alt+Space`). Same crate, no new dependency - the functions live
+# in comctl32, which every Windows desktop carries.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
@@ -75,5 +79,6 @@ windows-sys = { workspace = true, features = [
     "Win32_System_Variant",
     "Win32_UI_Accessibility",
     "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }

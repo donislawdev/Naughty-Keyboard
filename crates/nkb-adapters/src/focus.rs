@@ -28,7 +28,8 @@
 
 use nkb_sys::WindowRef;
 use nkb_sys::window::{
-    FocusError, can_refuse_focus, hand_back_foreground, refuse_activation, take_foreground,
+    FocusError, KeyMenuError, can_refuse_focus, hand_back_foreground, refuse_activation,
+    take_foreground,
 };
 
 /// Which window held the keyboard focus before the palette opened.
@@ -143,6 +144,19 @@ impl LentFocus {
     }
 }
 
+/// Keeps the menu of `window` - the raw handle of our own window, `None`
+/// while the library has none to give - from opening from the keyboard, so
+/// `Alt+Space` recorded in the shortcuts window takes nothing after it
+/// (K5.4, `slint.md` 2.37). Called on every opening, because a window shown
+/// again is a new system window.
+///
+/// # Errors
+///
+/// The handle missing, the system refusing, or no route on this system.
+pub fn no_keyboard_menu(window: Option<u64>) -> Result<(), KeyMenuError> {
+    nkb_sys::window::no_keyboard_menu(WindowRef(window.ok_or(KeyMenuError::HandleUnavailable)?))
+}
+
 #[cfg(test)]
 #[allow(
     clippy::expect_used,
@@ -157,6 +171,11 @@ mod tests {
         let lent = LentFocus::remember();
         assert_eq!(lent.take_for(None), Err(FocusError::HandleUnavailable));
         assert_eq!(lent.give_back(None), Err(FocusError::HandleUnavailable));
+    }
+
+    #[test]
+    fn a_keyboard_menu_with_no_handle_says_the_handle_is_missing_on_every_system() {
+        assert_eq!(no_keyboard_menu(None), Err(KeyMenuError::HandleUnavailable));
     }
 
     #[test]

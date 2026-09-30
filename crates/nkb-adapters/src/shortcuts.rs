@@ -52,6 +52,57 @@ pub fn altgr_character(chord: HotkeyChord) -> Option<char> {
     nkb_sys::layout::altgr_character(virtual_key(chord.key), chord.shift)
 }
 
+/// What is held down as a window of ours handles a key press - the chord the
+/// shortcuts window records (K5.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChordHeld {
+    /// No key of the shortcut vocabulary is down - only modifiers, or a key
+    /// no shortcut can use. The chord is not finished.
+    NoKey,
+    /// Exactly one key of the vocabulary, with the modifiers held with it.
+    Chord(HotkeyChord),
+    /// More than one key of the vocabulary: which one was meant cannot be told,
+    /// so none is taken.
+    SeveralKeys,
+    /// This system cannot tell - no route yet (`nkb_sys::held`).
+    Unknown,
+}
+
+/// The chord held down right now, asked of the system - never read from the
+/// text or the modifier flags a key event carries (`slint.md` 2.37).
+///
+/// 🔴 Meaningful only while the thread that owns the window handles a key
+/// press: it reads that thread's own key state, which follows the keyboard
+/// messages the thread has read and nothing typed anywhere else.
+#[must_use]
+pub fn chord_held() -> ChordHeld {
+    let keys: Vec<u16> = HotkeyKey::ALL.iter().map(|key| virtual_key(*key)).collect();
+    chord_of(nkb_sys::held::held(&keys))
+}
+
+/// The chord in what the system said is held. The two vocabularies meet in
+/// [`virtual_key`], as everywhere in this file.
+fn chord_of(held: Option<nkb_sys::held::Held>) -> ChordHeld {
+    let Some(held) = held else {
+        return ChordHeld::Unknown;
+    };
+    let mut keys = HotkeyKey::ALL
+        .iter()
+        .copied()
+        .filter(|key| held.keys.contains(&virtual_key(*key)));
+    match (keys.next(), keys.next()) {
+        (None, _) => ChordHeld::NoKey,
+        (Some(key), None) => ChordHeld::Chord(HotkeyChord {
+            ctrl: held.ctrl,
+            alt: held.alt,
+            shift: held.shift,
+            win: held.win,
+            key,
+        }),
+        (Some(_), Some(_)) => ChordHeld::SeveralKeys,
+    }
+}
+
 /// Registers shortcuts through `nkb_sys::hotkey::listen`.
 ///
 /// Stateless, like `DirectInjection`: the state is the handle it returns.
@@ -285,6 +336,58 @@ mod tests {
             assert_eq!(code, expected, "{name}");
         }
         assert_eq!(virtual_key(HotkeyKey::F24), 0x87);
+    }
+
+    fn holding(ctrl: bool, alt: bool, shift: bool, win: bool, keys: &[u16]) -> ChordHeld {
+        chord_of(Some(nkb_sys::held::Held {
+            ctrl,
+            alt,
+            shift,
+            win,
+            keys: keys.to_vec(),
+        }))
+    }
+
+    #[test]
+    fn every_key_of_the_vocabulary_held_alone_is_read_back_as_itself() {
+        // The reverse of `virtual_key`, for all sixty-one keys and every
+        // combination of the four modifiers - the chord recorded is the chord
+        // the registration will ask the system for.
+        for key in HotkeyKey::ALL {
+            for bits in 0u8..16 {
+                let chord = HotkeyChord {
+                    ctrl: bits & 1 != 0,
+                    alt: bits & 2 != 0,
+                    shift: bits & 4 != 0,
+                    win: bits & 8 != 0,
+                    key: *key,
+                };
+                assert_eq!(
+                    holding(
+                        chord.ctrl,
+                        chord.alt,
+                        chord.shift,
+                        chord.win,
+                        &[virtual_key(*key)]
+                    ),
+                    ChordHeld::Chord(chord)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn modifiers_alone_two_keys_and_no_route_are_not_a_chord() {
+        // `Alt+Shift` pressed on the way to a chord: not finished yet.
+        assert_eq!(holding(false, true, true, false, &[]), ChordHeld::NoKey);
+        // A key outside the vocabulary (Tab) is no key of a shortcut.
+        assert_eq!(holding(true, true, false, false, &[0x09]), ChordHeld::NoKey);
+        // Two keys of the vocabulary: which one was meant cannot be told.
+        assert_eq!(
+            holding(false, true, true, false, &[0x4E, 0x50]),
+            ChordHeld::SeveralKeys
+        );
+        assert_eq!(chord_of(None), ChordHeld::Unknown);
     }
 
     #[test]
