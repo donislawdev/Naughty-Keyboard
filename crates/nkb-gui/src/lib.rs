@@ -55,6 +55,10 @@ pub mod query;
 // Choosing a pack: the list, the query and the selected row, tested without a
 // window. The pack window draws what this decides (step 7, K3.2).
 pub mod picker;
+// The shortcuts window's list: rows, recording and what a change came to,
+// tested without a window like `picker` (step 7, K5.5). What a change IS is
+// decided on the worker (`D90`).
+pub mod shortcut_list;
 // The pack window itself, on the main thread: what `picker` decides moved onto
 // the window, the keyboard taken on opening and handed back on closing. Beside
 // `focus` for the reason `focus` gives - it is main-thread code.

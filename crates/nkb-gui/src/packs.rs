@@ -408,7 +408,7 @@ impl Packs {
 /// Every modifier key Slint keeps a pressed state for - `InternalKeyboardModifierState`
 /// in i-slint-core 1.18.1, read, not guessed. A key missing here would stay
 /// stuck, so the list is all of them rather than the shortcut's own.
-const MODIFIERS: [slint::platform::Key; 8] = [
+pub(crate) const MODIFIERS: [slint::platform::Key; 8] = [
     slint::platform::Key::Alt,
     slint::platform::Key::AltGr,
     slint::platform::Key::Control,

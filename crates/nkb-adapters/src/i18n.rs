@@ -64,7 +64,7 @@
 
 use nkb_app::advance_sequence::{ChooseError, Message};
 use nkb_app::drive_sequence::Ended;
-use nkb_app::keep_settings::SettingsMessage;
+use nkb_app::keep_settings::{SettingsMessage, ShortcutChange};
 use nkb_app::ports::{
     CatalogueCoverage, CatalogueSource, SaveError, SettingsNote, SettingsUnusable,
     ShortcutRegistration, ShortcutUnreadable, ShortcutsUnavailable, SourceSkipped,
@@ -1428,6 +1428,254 @@ pub fn not_read(coverage: &CatalogueCoverage) -> Vec<String> {
         .collect()
 }
 
+// ---------------------------------------------------------------------------
+// The shortcuts window - its words, and what a change came to
+// ---------------------------------------------------------------------------
+
+/// The words of the shortcuts window (`ux-spec.md` 5.4 and 6 L).
+///
+/// A third window with its own words, for the reason `PacksLabel` gives. The
+/// sentences about a change are keys here too, rather than arms matched on
+/// `ShortcutChange` and `Refusal`: those two types already key the sentences
+/// the palette says about the settings file (`ux-spec.md` 6 J), and one key
+/// may name one sentence. The completeness the compiler guards is kept all
+/// the same - [`shortcut_answer`] matches `ShortcutChange` and `Refusal`
+/// exhaustively, so a new variant does not compile without a sentence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShortcutsLabel {
+    /// The window's title, which the system shows in the task switcher.
+    Title,
+    /// The heading above the list.
+    Heading,
+    /// How many shortcuts are the tester's own.
+    Summary,
+    /// What the window does, and that the palette does not answer meanwhile.
+    Intro,
+    /// The pill on the row being recorded.
+    Recording,
+    /// The pill on a shortcut that is not the default.
+    Changed,
+    /// The pill on a shortcut another application held at the last
+    /// registration.
+    Taken,
+    /// The pill on a shortcut the system refused for another reason.
+    NotRegistered,
+    /// The footer: each key, and what it does here.
+    KeyEnter,
+    Record,
+    KeyDelete,
+    Restore,
+    KeyArrows,
+    Move,
+    KeyEscape,
+    Close,
+    /// Recording has started: what to press.
+    Invite,
+    /// A recorded shortcut was kept.
+    Recorded,
+    /// The default was given back.
+    Restored,
+    /// The action answers the shortcut already.
+    AlreadySo,
+    /// Another action moved onto the shortcut the settings file wishes for it.
+    Also,
+    /// Kept, but whether another application holds it could not be asked.
+    Unchecked,
+    /// Refused: no `Ctrl`, `Alt` or `Win`.
+    NoModifier,
+    /// Refused: a keyboard layout types a character on it as `AltGr`.
+    TypesCharacter,
+    /// Refused: another action answers it.
+    HeldBy,
+    /// Refused: another application holds it.
+    TakenElsewhere,
+    /// Refused by the system for another reason.
+    NotRegisteredCode,
+    /// The key pressed cannot end a shortcut.
+    NotAKey,
+    /// Two keys of the vocabulary were held.
+    SeveralKeys,
+    /// This system cannot tell which key was pressed.
+    CannotTell,
+}
+
+fn pattern_shortcuts_label(label: ShortcutsLabel) -> &'static str {
+    match label {
+        ShortcutsLabel::Title => "Naughty Keyboard - shortcuts",
+        ShortcutsLabel::Heading => "Shortcuts",
+        ShortcutsLabel::Summary => "changed: {count} of {total}",
+        ShortcutsLabel::Intro => {
+            "The palette answers these in every application. They are paused while this window is open, and a change takes effect when it closes."
+        }
+        ShortcutsLabel::Recording => "recording",
+        ShortcutsLabel::Changed => "changed",
+        ShortcutsLabel::Taken => "taken",
+        ShortcutsLabel::NotRegistered => "not registered",
+        ShortcutsLabel::KeyEnter => "Enter",
+        ShortcutsLabel::Record => "Record a new shortcut",
+        ShortcutsLabel::KeyDelete => "Delete",
+        ShortcutsLabel::Restore => "Restore the default",
+        ShortcutsLabel::KeyArrows => "↑ ↓",
+        ShortcutsLabel::Move => "Move through the list",
+        ShortcutsLabel::KeyEscape => "Esc",
+        ShortcutsLabel::Close => "Close",
+        ShortcutsLabel::Invite => {
+            "Press the new shortcut for \"{action}\", or Esc to stop recording."
+        }
+        ShortcutsLabel::Recorded => "\"{action}\" answers {shortcut} from when this window closes.",
+        ShortcutsLabel::Restored => {
+            "\"{action}\" answers its default {shortcut} again from when this window closes."
+        }
+        ShortcutsLabel::AlreadySo => "\"{action}\" already answers {shortcut}.",
+        ShortcutsLabel::Also => "\"{action}\" moves to {shortcut}, as the settings file asks.",
+        ShortcutsLabel::Unchecked => {
+            "Whether another application holds {shortcut} could not be checked: {reason}."
+        }
+        ShortcutsLabel::NoModifier => {
+            "{shortcut} holds no Ctrl, Alt or Win - taken globally it would stop that key working in every application. Add Ctrl, Alt or Win to it."
+        }
+        ShortcutsLabel::TypesCharacter => {
+            "{shortcut} types \"{character}\" as AltGr on a keyboard layout of this computer - taken globally it would stop that character working in every application. Choose a combination without Ctrl+Alt."
+        }
+        ShortcutsLabel::HeldBy => {
+            "{shortcut} is already the shortcut for \"{other}\". Give \"{other}\" another combination first."
+        }
+        ShortcutsLabel::TakenElsewhere => {
+            "{shortcut} is taken by another application, so it was not kept. Close that application or choose another combination."
+        }
+        ShortcutsLabel::NotRegisteredCode => {
+            "{shortcut} could not be registered - the system returned code {code} - so it was not kept."
+        }
+        ShortcutsLabel::NotAKey => {
+            "That key cannot end a shortcut. End it with a letter, a digit, F1 to F24 or Space, or press Esc to stop recording."
+        }
+        ShortcutsLabel::SeveralKeys => {
+            "More than one key is held. Hold the modifiers and press a single key."
+        }
+        ShortcutsLabel::CannotTell => {
+            "This system cannot tell which key was pressed, so a shortcut cannot be recorded here yet."
+        }
+    }
+}
+
+/// A shortcuts window label that carries nothing, ready to show.
+///
+/// The same division as [`label`]: a pattern with a placeholder has a typed
+/// function below, and the test at the bottom refuses one reached from here.
+#[must_use]
+pub fn shortcuts_label(label: ShortcutsLabel) -> &'static str {
+    pattern_shortcuts_label(label)
+}
+
+/// How many shortcuts are the tester's own.
+#[must_use]
+pub fn shortcuts_summary(changed: usize, total: usize) -> String {
+    fill(
+        pattern_shortcuts_label(ShortcutsLabel::Summary),
+        &[
+            ("count", &changed.to_string()),
+            ("total", &total.to_string()),
+        ],
+    )
+}
+
+/// What to press, once recording has started for `action`.
+#[must_use]
+pub fn shortcut_invite(action: HotkeyAction) -> String {
+    fill(
+        pattern_shortcuts_label(ShortcutsLabel::Invite),
+        &[("action", action_name(action))],
+    )
+}
+
+/// What changing `action` came to, a line per fact.
+///
+/// `asked` is what was asked for - a chord recorded, or `None` for the
+/// default back - and `answers` the chord the action answers now, which the
+/// window knows and `AlreadySo` does not carry.
+///
+/// Matches `ShortcutChange` and `Refusal` exhaustively, so a new answer does
+/// not compile without its sentence (the reason keys are types, see the top
+/// of this file).
+#[must_use]
+pub fn shortcut_answer(
+    action: HotkeyAction,
+    asked: Option<HotkeyChord>,
+    change: &ShortcutChange,
+    answers: HotkeyChord,
+) -> Vec<String> {
+    let name = action_name(action);
+    let about = |label: ShortcutsLabel, held: HotkeyChord| {
+        fill(
+            pattern_shortcuts_label(label),
+            &[("action", name), ("shortcut", &chord(held))],
+        )
+    };
+    match change {
+        ShortcutChange::AlreadySo => vec![about(ShortcutsLabel::AlreadySo, answers)],
+        ShortcutChange::Changed {
+            bindings,
+            also,
+            unchecked,
+        } => {
+            let now = bindings.chord(action);
+            let kept = if asked.is_some() {
+                ShortcutsLabel::Recorded
+            } else {
+                ShortcutsLabel::Restored
+            };
+            let mut lines = vec![about(kept, now)];
+            lines.extend(also.iter().map(|other| {
+                fill(
+                    pattern_shortcuts_label(ShortcutsLabel::Also),
+                    &[
+                        ("action", action_name(*other)),
+                        ("shortcut", &chord(bindings.chord(*other))),
+                    ],
+                )
+            }));
+            if let Some(why) = unchecked {
+                lines.push(fill(
+                    pattern_shortcuts_label(ShortcutsLabel::Unchecked),
+                    &[("shortcut", &chord(now)), ("reason", &why.to_string())],
+                ));
+            }
+            lines
+        }
+        ShortcutChange::Refused(refused) => {
+            let (label, other, character) = match refused.why {
+                Refusal::Problem(ChordProblem::NoCommandModifier) => {
+                    (ShortcutsLabel::NoModifier, "", String::new())
+                }
+                Refusal::TypesCharacter(character) => (
+                    ShortcutsLabel::TypesCharacter,
+                    "",
+                    shown_character(character),
+                ),
+                Refusal::SameAs(other) => {
+                    (ShortcutsLabel::HeldBy, action_name(other), String::new())
+                }
+            };
+            vec![fill(
+                pattern_shortcuts_label(label),
+                &[
+                    ("shortcut", &chord(refused.chord)),
+                    ("other", other),
+                    ("character", &character),
+                ],
+            )]
+        }
+        ShortcutChange::Taken { chord: held } => vec![fill(
+            pattern_shortcuts_label(ShortcutsLabel::TakenElsewhere),
+            &[("shortcut", &chord(*held))],
+        )],
+        ShortcutChange::NotRegistered { chord: held, code } => vec![fill(
+            pattern_shortcuts_label(ShortcutsLabel::NotRegisteredCode),
+            &[("shortcut", &chord(*held)), ("code", &code.to_string())],
+        )],
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::expect_used,
@@ -2345,6 +2593,225 @@ mod tests {
         assert!(
             !taken.contains("cannot change"),
             "the file can change it now: {taken}"
+        );
+    }
+
+    // ---- the shortcuts window (K5.5) -----------------------------------------
+
+    fn parsed(text: &str) -> HotkeyChord {
+        HotkeyChord::parse(text).expect("a chord the test writes reads")
+    }
+
+    #[test]
+    fn a_shortcuts_label_carrying_a_value_has_a_typed_function_and_one_without_does_not() {
+        // The array below can drift from the enum, and the bridge to
+        // `ux-spec.md` 6 L is the second net, as for the other windows.
+        for label in [
+            ShortcutsLabel::Title,
+            ShortcutsLabel::Heading,
+            ShortcutsLabel::Summary,
+            ShortcutsLabel::Intro,
+            ShortcutsLabel::Recording,
+            ShortcutsLabel::Changed,
+            ShortcutsLabel::Taken,
+            ShortcutsLabel::NotRegistered,
+            ShortcutsLabel::KeyEnter,
+            ShortcutsLabel::Record,
+            ShortcutsLabel::KeyDelete,
+            ShortcutsLabel::Restore,
+            ShortcutsLabel::KeyArrows,
+            ShortcutsLabel::Move,
+            ShortcutsLabel::KeyEscape,
+            ShortcutsLabel::Close,
+            ShortcutsLabel::Invite,
+            ShortcutsLabel::Recorded,
+            ShortcutsLabel::Restored,
+            ShortcutsLabel::AlreadySo,
+            ShortcutsLabel::Also,
+            ShortcutsLabel::Unchecked,
+            ShortcutsLabel::NoModifier,
+            ShortcutsLabel::TypesCharacter,
+            ShortcutsLabel::HeldBy,
+            ShortcutsLabel::TakenElsewhere,
+            ShortcutsLabel::NotRegisteredCode,
+            ShortcutsLabel::NotAKey,
+            ShortcutsLabel::SeveralKeys,
+            ShortcutsLabel::CannotTell,
+        ] {
+            let takes_values = match label {
+                ShortcutsLabel::Summary
+                | ShortcutsLabel::Invite
+                | ShortcutsLabel::Recorded
+                | ShortcutsLabel::Restored
+                | ShortcutsLabel::AlreadySo
+                | ShortcutsLabel::Also
+                | ShortcutsLabel::Unchecked
+                | ShortcutsLabel::NoModifier
+                | ShortcutsLabel::TypesCharacter
+                | ShortcutsLabel::HeldBy
+                | ShortcutsLabel::TakenElsewhere
+                | ShortcutsLabel::NotRegisteredCode => true,
+                ShortcutsLabel::Title
+                | ShortcutsLabel::Heading
+                | ShortcutsLabel::Intro
+                | ShortcutsLabel::Recording
+                | ShortcutsLabel::Changed
+                | ShortcutsLabel::Taken
+                | ShortcutsLabel::NotRegistered
+                | ShortcutsLabel::KeyEnter
+                | ShortcutsLabel::Record
+                | ShortcutsLabel::KeyDelete
+                | ShortcutsLabel::Restore
+                | ShortcutsLabel::KeyArrows
+                | ShortcutsLabel::Move
+                | ShortcutsLabel::KeyEscape
+                | ShortcutsLabel::Close
+                | ShortcutsLabel::NotAKey
+                | ShortcutsLabel::SeveralKeys
+                | ShortcutsLabel::CannotTell => false,
+            };
+            let pattern = pattern_shortcuts_label(label);
+            assert_eq!(
+                pattern.contains('{'),
+                takes_values,
+                "{label:?}: pattern was {pattern:?}"
+            );
+            assert!(!pattern.is_empty(), "{label:?} produced nothing");
+        }
+    }
+
+    #[test]
+    fn a_change_is_told_with_the_action_the_shortcut_and_every_other_that_moved() {
+        let recorded = shortcut_answer(
+            HotkeyAction::NextValue,
+            Some(parsed("Alt+Shift+M")),
+            &ShortcutChange::Changed {
+                bindings: Bindings::defaults(CONVENTION)
+                    .with(
+                        &[
+                            (HotkeyAction::NextValue, parsed("Alt+Shift+M")),
+                            (HotkeyAction::PreviousValue, parsed("Alt+Shift+N")),
+                        ],
+                        &|_| None,
+                    )
+                    .0,
+                also: vec![HotkeyAction::PreviousValue],
+                unchecked: Some(ShortcutsUnavailable::CouldNotStart),
+            },
+            parsed("Alt+Shift+N"),
+        );
+        let next = action_name(HotkeyAction::NextValue);
+        let previous = action_name(HotkeyAction::PreviousValue);
+        let m = chord(parsed("Alt+Shift+M"));
+        let n = chord(parsed("Alt+Shift+N"));
+        assert_eq!(
+            recorded,
+            vec![
+                format!("\"{next}\" answers {m} from when this window closes."),
+                format!("\"{previous}\" moves to {n}, as the settings file asks."),
+                format!(
+                    "Whether another application holds {m} could not be checked: the shortcut \
+                     listener could not be started."
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_restore_already_so_and_every_refusal_have_their_own_words() {
+        let n = parsed("Alt+Shift+N");
+        let shown = chord(n);
+        let next = action_name(HotkeyAction::NextValue);
+        let repeat = action_name(HotkeyAction::RepeatLast);
+        let restored = shortcut_answer(
+            HotkeyAction::NextValue,
+            None,
+            &ShortcutChange::Changed {
+                bindings: Bindings::defaults(CONVENTION),
+                also: Vec::new(),
+                unchecked: None,
+            },
+            n,
+        );
+        assert_eq!(
+            restored,
+            vec![format!(
+                "\"{next}\" answers its default {} again from when this window closes.",
+                chord(Bindings::defaults(CONVENTION).chord(HotkeyAction::NextValue))
+            )]
+        );
+        assert_eq!(
+            shortcut_answer(
+                HotkeyAction::NextValue,
+                Some(n),
+                &ShortcutChange::AlreadySo,
+                n
+            ),
+            vec![format!("\"{next}\" already answers {shown}.")]
+        );
+        let refused = |why| {
+            shortcut_answer(
+                HotkeyAction::NextValue,
+                Some(n),
+                &ShortcutChange::Refused(Refused {
+                    action: HotkeyAction::NextValue,
+                    chord: n,
+                    why,
+                }),
+                n,
+            )
+            .join(" ")
+        };
+        assert!(
+            refused(Refusal::Problem(ChordProblem::NoCommandModifier))
+                .contains("no Ctrl, Alt or Win")
+        );
+        assert!(refused(Refusal::TypesCharacter('\u{105}')).contains("types \"\u{105}\" as AltGr"));
+        assert_eq!(
+            refused(Refusal::SameAs(HotkeyAction::RepeatLast)),
+            format!(
+                "{shown} is already the shortcut for \"{repeat}\". Give \"{repeat}\" another \
+                 combination first."
+            )
+        );
+        assert_eq!(
+            shortcut_answer(
+                HotkeyAction::NextValue,
+                Some(n),
+                &ShortcutChange::Taken { chord: n },
+                n
+            ),
+            vec![format!(
+                "{shown} is taken by another application, so it was not kept. Close that \
+                 application or choose another combination."
+            )]
+        );
+        assert_eq!(
+            shortcut_answer(
+                HotkeyAction::NextValue,
+                Some(n),
+                &ShortcutChange::NotRegistered {
+                    chord: n,
+                    code: 1409
+                },
+                n
+            ),
+            vec![format!(
+                "{shown} could not be registered - the system returned code 1409 - so it was \
+                 not kept."
+            )]
+        );
+    }
+
+    #[test]
+    fn the_shortcuts_window_counts_and_invites_in_its_own_words() {
+        assert_eq!(shortcuts_summary(1, 10), "changed: 1 of 10");
+        assert_eq!(
+            shortcut_invite(HotkeyAction::CopyReport),
+            format!(
+                "Press the new shortcut for \"{}\", or Esc to stop recording.",
+                action_name(HotkeyAction::CopyReport)
+            )
         );
     }
 }
