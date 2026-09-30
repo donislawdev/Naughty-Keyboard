@@ -8,8 +8,8 @@
 //! - the combinations end in ONE column at the right, whatever pills stand
 //!   before them and however long the combination is - the way a menu shows
 //!   its shortcuts.
-//! - at the height its ten rows ask for, nothing scrolls. At the minimum size
-//!   the list scrolls and says so with its thumb, and the footer keeps its keys.
+//! - at the height its ten rows ask for, nothing scrolls. The height the
+//!   window asks for itself is `shortcuts_size.rs`.
 //! - the row being recorded says so in a pill, beside the accent edge of the
 //!   selected row - a second sign on the same row, not a replacement.
 //!
@@ -326,45 +326,9 @@ fn the_shortcuts_window_keeps_its_promises() {
         "two renders of an unchanged window differ"
     );
 
-    // ---- at the minimum size the list scrolls and the footer stays -----------
-    // The same window made small - in this test rather than a second one,
-    // because the platform may be installed once per process. The minimum from
-    // the dictionary, copied for the reason the colours are.
-    let (narrow, short) = (400, 360);
-    surface.set_size(slint::PhysicalSize::new(narrow, short));
-    window.set_selected(-1);
-    window.set_rows(ModelRc::new(VecModel::from(specimen(true))));
-    let small = offscreen::draw(&surface, narrow, short);
-    let small_path = offscreen::save(&small, narrow, short, "shortcuts-minimum.png");
-    let small_area = content(&small, narrow, short);
-    assert!(
-        count(
-            &small,
-            narrow,
-            small_area.clone(),
-            (narrow - 24)..narrow,
-            THUMB
-        ) > 20,
-        "at its minimum size the list does not show that it scrolls. Look at {}",
-        small_path.display()
-    );
-    assert!(
-        ink_bands(&small, narrow, small_area).len() >= 3,
-        "at its minimum size fewer than three rows are drawn. Look at {}",
-        small_path.display()
-    );
-    // The footer: its ground from the content's end to the window's bottom,
-    // with the keys written on it.
-    let footer_ink = (short - 40..short)
-        .flat_map(|y| (2..narrow - 2).map(move |x| (x, y)))
-        .filter(|&(x, y)| {
-            let at = pixel(&small, narrow, x, y);
-            at != SURFACE && at != (0x1C, 0x1F, 0x26)
-        })
-        .count();
-    assert!(
-        footer_ink > 100,
-        "at its minimum size the footer shows no keys. Look at {}",
-        small_path.display()
-    );
+    // Until K5.7 a third section drew the window at its minimum size, where the
+    // list scrolled. The window has no minimum since then: its size is bound to
+    // its content, because the live window ignored a preferred size and opened
+    // at the minimum (`slint.md` 2.38). What size it asks for, and what it
+    // shows at that size, is `shortcuts_size.rs`.
 }

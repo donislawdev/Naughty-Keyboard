@@ -140,13 +140,21 @@ export global Tokens {
     out property <length> packs-min-height: 360px;
     // The shortcuts window (step 7, K5). Wider than the pack window because a
     // row carries an action, up to two pills and a combination as long as
-    // `Ctrl+Alt+Shift+Win+F24`. No default HEIGHT, on purpose: the window
-    // opens as tall as its ten rows ask, so the list does not scroll when it
-    // first appears - a number here would be fitted to one typeface on one
-    // machine (GUI rule 14). The minimum still keeps three rows and the keys.
+    // `Ctrl+Alt+Shift+Win+F24`. No HEIGHT here, on purpose: the window is as
+    // tall as its content asks - the ten rows and the room for what the last
+    // press came to - so the list does not scroll. A number here would be
+    // fitted to one typeface on one machine (GUI rule 14). No minimum either,
+    // since K5.7: the size is bound, because a preferred size and a minimum
+    // were ignored by the live window (`slint.md` 2.38), so the tester cannot
+    // make it smaller than its content.
     out property <length> shortcuts-width: 480px;
-    out property <length> shortcuts-min-width: 400px;
-    out property <length> shortcuts-min-height: 360px;
+    // Lines of body text kept free under the list for what the last press came
+    // to. Two hold the invitation to press a shortcut and the answer about
+    // one at the window's default width, so the list holds still through a
+    // recording (GUI rule 3). A longer refusal shortens the list by a line and
+    // its thumb says so. A count, not a length: the line is measured from the
+    // typeface in the window itself.
+    out property <int> shortcuts-message-lines: 2;
     // The thumb that says a list scrolls. Thin, because it is a sign rather
     // than a control - the list scrolls with the wheel and the arrow keys.
     out property <length> scroll-thumb: 4px;

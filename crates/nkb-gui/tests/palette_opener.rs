@@ -1,5 +1,7 @@
 //! The pack's name in the palette as a thing to click - its pointer states
 //! MEASURED on the rendered palette, and its click followed to the callback.
+//! The same for the link under the hint bar, which asks for the shortcuts
+//! window (K5.5).
 //!
 //! # What this proves that reading `list.slint` cannot
 //!
@@ -21,9 +23,9 @@ mod offscreen;
 use std::cell::Cell;
 use std::rc::Rc;
 
-use nkb_gui::Palette;
+use nkb_gui::{HintRow, Palette};
 use slint::platform::{PointerEventButton, WindowEvent};
-use slint::{ComponentHandle, LogicalPosition};
+use slint::{ComponentHandle, LogicalPosition, ModelRc, VecModel};
 
 const WIDTH: u32 = 420;
 const HEIGHT: u32 = 460;
@@ -89,7 +91,7 @@ fn pointer(palette: &Palette, event: WindowEvent) {
 }
 
 #[test]
-fn the_pack_name_answers_the_pointer_and_opens_the_pack_window() {
+fn the_palette_links_answer_the_pointer_and_open_their_windows() {
     let surface = offscreen::start(WIDTH, HEIGHT);
     let palette = Palette::new().expect("the palette must build");
     palette.set_pack("unicode-text".into());
@@ -170,4 +172,88 @@ fn the_pack_name_answers_the_pointer_and_opens_the_pack_window() {
         1,
         "a click beside the name opened the pack window"
     );
+
+    // ---- the link under the hint bar: the same states, its own callback ------
+    // In this test rather than a second one, because the platform may be
+    // installed once per process. The link is found as the ink its words add
+    // to the palette - the same render with the words and without them - so the
+    // pointer goes where the link IS.
+    let asked = Rc::new(Cell::new(0));
+    let count = Rc::clone(&asked);
+    palette.on_open_shortcuts(move || count.set(count.get() + 1));
+    palette.set_hints(ModelRc::new(VecModel::from(vec![
+        HintRow {
+            key: "Alt+Shift+N".into(),
+            action: "Next value".into(),
+        },
+        HintRow {
+            key: "Alt+Shift+Space".into(),
+            action: "Open pack search".into(),
+        },
+    ])));
+    let without = offscreen::draw(&surface, WIDTH, HEIGHT);
+    palette.set_shortcuts_link("Change shortcuts".into());
+    let with = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let path = offscreen::save(&with, WIDTH, HEIGHT, "palette-link.png");
+    let link = added(&without, &with);
+    assert!(
+        link.bottom - link.top < 30 && link.right - link.left < WIDTH / 2,
+        "the link's words changed more than one line of the palette: {link:?}. Look at {}",
+        path.display()
+    );
+    let centre = LogicalPosition::new(
+        ((link.left + link.right) / 2) as f32,
+        ((link.top + link.bottom) / 2) as f32,
+    );
+    let before = accent_in(&with, &link);
+    pointer(&palette, WindowEvent::PointerMoved { position: centre });
+    let hovered = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let hover_path = offscreen::save(&hovered, WIDTH, HEIGHT, "palette-link-hover.png");
+    let under = accent_in(&hovered, &link);
+    assert!(
+        under > before + 20,
+        "the pointer over the link changes nothing: {before} accent pixels at rest, {under} \
+         under the pointer, pointer at {centre:?} over the ink {link:?}. Look at {}",
+        hover_path.display()
+    );
+    press(&palette, centre);
+    assert_eq!(
+        (asked.get(), opened.get()),
+        (1, 1),
+        "a click on the link did not ask for the shortcuts window once, or opened the pack \
+         window. Look at {}",
+        path.display()
+    );
+    // A click on the hint bar above it asks for nothing.
+    press(
+        &palette,
+        LogicalPosition::new(centre.x, (link.top - 12) as f32),
+    );
+    assert_eq!(
+        (asked.get(), opened.get()),
+        (1, 1),
+        "a click on the hint bar above the link asked for a window"
+    );
+}
+
+/// The box of the pixels that differ between two renders of the same palette.
+fn added(before: &[offscreen::Pixel], after: &[offscreen::Pixel]) -> Ink {
+    let hits: Vec<(u32, u32)> = (0..HEIGHT)
+        .flat_map(|y| (0..WIDTH).map(move |x| (x, y)))
+        .filter(|&(x, y)| {
+            let (a, b) = (
+                before[(y * WIDTH + x) as usize],
+                after[(y * WIDTH + x) as usize],
+            );
+            (a.r, a.g, a.b) != (b.r, b.g, b.b)
+        })
+        .collect();
+    let xs = hits.iter().map(|&(x, _)| x);
+    let ys = hits.iter().map(|&(_, y)| y);
+    Ink {
+        left: xs.clone().min().expect("the link's words are drawn"),
+        right: xs.max().expect("the link's words are drawn"),
+        top: ys.clone().min().expect("the link's words are drawn"),
+        bottom: ys.max().expect("the link's words are drawn"),
+    }
 }

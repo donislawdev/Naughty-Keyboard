@@ -91,15 +91,23 @@ export component ShortcutsWindow inherits Window {
 
     title: root.window-title;
     background: Tokens.surface;
-    preferred-width: Tokens.shortcuts-width;
-    min-width: Tokens.shortcuts-min-width;
-    min-height: Tokens.shortcuts-min-height;
+    // 🔴 The size is BOUND, like the palette's, and the reason is measured (K5.7,
+    // `slint.md` 2.38): the winit backend creates every window, hidden, when
+    // the event loop starts - before this one has rows - and a later `show()`
+    // keeps whatever size it has. A preferred size and a minimum were ignored:
+    // the live window opened at its minimum, 400 x 360, four of the ten rows
+    // showing, and so did a `preferred-height` bound to the content. A bound
+    // `width` and `height` are what the backend follows, as the palette showed
+    // live. The cost: the tester cannot resize this window - it holds ten
+    // fixed rows, and it grows by itself when a longer sentence needs room.
+    width: Tokens.shortcuts-width;
+    height: body.preferred-height;
     // Above the palette, which is always on top itself - the same reason as
     // the pack window.
     always-on-top: true;
 
     keys := KeyScope {
-        VerticalLayout {
+        body := VerticalLayout {
             ChromeBand {
                 HorizontalLayout {
                     spacing: Tokens.space-2;
@@ -133,9 +141,17 @@ export component ShortcutsWindow inherits Window {
                     vertical-stretch: 1;
                 }
 
-                for message in root.messages: TextBody {
-                    text: message;
-                    wrap: word-wrap;
+                // Room kept from the start, so the list does not shrink - and
+                // its last rows go under the fold - the moment the first
+                // sentence appears (GUI rule 3). Measured on the live window
+                // before this band had a floor: the answer to a recording took
+                // a row away from the list, four showing before it, three after.
+                VerticalLayout {
+                    min-height: Tokens.shortcuts-message-lines * line.preferred-height;
+                    for message in root.messages: TextBody {
+                        text: message;
+                        wrap: word-wrap;
+                    }
                 }
             }
 
@@ -145,6 +161,15 @@ export component ShortcutsWindow inherits Window {
                     rows: root.hints;
                 }
             }
+        }
+
+        // One line of body text, never drawn and outside every layout: how tall
+        // a line of the sentences above is, in the typeface the window uses.
+        // The heading's words, because a line needs some text to be measured.
+        line := TextBody {
+            text: root.heading;
+            visible: false;
+            accessible-role: none;
         }
     }
 }
