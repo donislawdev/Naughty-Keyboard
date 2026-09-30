@@ -60,7 +60,8 @@ use nkb_adapters::{
 use nkb_app::{KeptSettings, RouteRequest};
 use nkb_core::hotkeys::HotkeyAction;
 use nkb_gui::packs::{Packs, SystemKeyboard};
-use nkb_gui::{Gallery, PacksWindow, Palette, focus, live};
+use nkb_gui::shortcuts::{Shortcuts, System};
+use nkb_gui::{Gallery, PacksWindow, Palette, ShortcutsWindow, focus, live};
 use slint::ComponentHandle;
 
 /// The pack the palette opens on when the command line names none and the
@@ -174,6 +175,8 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // The pack's name opens the pack window when clicked, and UI Automation
     // names that click with the words the hint bar gives the shortcut.
     palette.set_open_packs_label(i18n::action_name(HotkeyAction::OpenPacks).into());
+    // The link under the hint bar opens the shortcuts window (K5.5).
+    palette.set_shortcuts_link(i18n::label(PaletteLabel::ShortcutsLink).into());
     // Expanded at first run, with the hints up and nothing sent yet -
     // `ux-spec.md` 5.1 - and as the tester left it on every run after that.
     // The worker fills the pack and the counter, because the sequence that
@@ -200,17 +203,23 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     let packs = Packs::new(
         PacksWindow::new()?,
         Box::new(SystemKeyboard::default()),
-        choose,
+        choose.clone(),
         Arc::clone(&in_use),
-        {
-            let palette = palette.as_weak();
-            Box::new(move |line| {
-                if let Some(palette) = palette.upgrade() {
-                    live::say_now(&palette, line);
-                }
-            })
-        },
+        say_in(&palette),
     );
+    // The same way: created once, shown on request - and the one window the
+    // worker's answers about shortcuts are delivered to (`shortcuts::tell`).
+    let shortcuts = Shortcuts::new(
+        ShortcutsWindow::new()?,
+        Box::new(SystemKeyboard::default()),
+        Box::new(System),
+        choose,
+        say_in(&palette),
+    );
+    palette.on_open_shortcuts({
+        let shortcuts = std::rc::Rc::clone(&shortcuts);
+        move || shortcuts.open()
+    });
     palette.on_open_packs({
         let packs = std::rc::Rc::clone(&packs);
         move || packs.open()
@@ -219,8 +228,10 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // loop would wait for it, and the process would outlive the palette.
     palette.window().on_close_requested({
         let packs = std::rc::Rc::clone(&packs);
+        let shortcuts = std::rc::Rc::clone(&shortcuts);
         move || {
             packs.close();
+            shortcuts.close();
             slint::CloseRequestResponse::HideWindow
         }
     });
@@ -237,9 +248,8 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
             kept: settings,
             said,
             bindings,
-            // Nothing asks yet: the shortcuts window arrives in K5.5, and with
-            // it the one sender of `Pause`, `Resume` and `Shortcut`.
-            tell: Box::new(|_| {}),
+            // To the shortcuts window, through the main thread's event loop.
+            tell: nkb_gui::shortcuts::tell(),
         };
         // Measured: work handed to the event loop before `run()` is delivered
         // once it starts (`slint.md` 1.9), so this thread may say something
@@ -255,4 +265,15 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // product code, so a panic here is a bug rather than a path.
     drop(worker.join());
     ran
+}
+
+/// A line into the palette's message band, for a window that has something to
+/// say after it closed - the pack window and the shortcuts window alike.
+fn say_in(palette: &Palette) -> Box<dyn Fn(String)> {
+    let palette = palette.as_weak();
+    Box::new(move |line| {
+        if let Some(palette) = palette.upgrade() {
+            live::say_now(&palette, line);
+        }
+    })
 }

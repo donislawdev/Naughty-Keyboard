@@ -383,7 +383,7 @@ fn pattern_registration(outcome: &ShortcutRegistration) -> Option<&'static str> 
     match outcome {
         ShortcutRegistration::Registered => None,
         ShortcutRegistration::Taken => Some(
-            "{shortcut} is already taken by another application, so \"{action}\" will not respond. Close the other application to free the combination.",
+            "{shortcut} is already taken by another application, so \"{action}\" will not respond. Close the other application or choose another combination under \"{link}\".",
         ),
         ShortcutRegistration::Failed { .. } => Some(
             "{shortcut} could not be registered, so \"{action}\" will not respond. The system returned code {code}.",
@@ -418,6 +418,9 @@ pub fn registration(
             ("shortcut", &shortcut),
             ("action", action_name(action)),
             ("code", &code),
+            // The link's own words, so the sentence and the link it sends the
+            // tester to cannot drift apart.
+            ("link", pattern_palette_label(PaletteLabel::ShortcutsLink)),
         ],
     ))
 }
@@ -674,6 +677,13 @@ pub enum Environment {
     /// The pack window closed, and the keyboard could not be handed back to
     /// the window it was taken from (`ux-spec.md` 5.2).
     FocusNotReturned,
+    /// The shortcuts window opened, and the system kept the keyboard somewhere
+    /// else - a combination pressed to record it would go to the application
+    /// under test, whose keys the palette does not hold meanwhile (`D90`).
+    ShortcutsFocusNotTaken,
+    /// The shortcuts window could not keep its menu from opening on
+    /// `Alt+Space` (`D91`, `slint.md` 2.37).
+    ShortcutsMenuOpen,
 }
 
 /// The pattern for an environment limit. `ux-spec.md` 6, section B.
@@ -694,6 +704,12 @@ fn pattern_environment(limit: Environment) -> &'static str {
         }
         Environment::FocusNotReturned => {
             "The keyboard focus could not be returned to the window you were in: {reason}. Click into the field you are testing before pressing a shortcut."
+        }
+        Environment::ShortcutsFocusNotTaken => {
+            "The shortcuts window could not take the keyboard focus: {reason}. Click the shortcuts window before pressing a combination, or it goes to the application you are testing."
+        }
+        Environment::ShortcutsMenuOpen => {
+            "The shortcuts window could not keep its menu shut: {reason}. Press Esc if a menu opens."
         }
     }
 }
@@ -1119,6 +1135,9 @@ pub enum PaletteLabel {
     /// for as long as it lasts - a palette that looks ready and answers
     /// nothing is the silence untouchable rule 1 forbids.
     ShortcutsPaused,
+    /// The link under the hint bar that opens the shortcuts window - its words,
+    /// and what a click does (`ux-spec.md` 5.4).
+    ShortcutsLink,
 }
 
 fn pattern_palette_label(label: PaletteLabel) -> &'static str {
@@ -1145,6 +1164,7 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
             "Nothing sent yet. Put the cursor in any field and press {shortcut}."
         }
         PaletteLabel::ShortcutsPaused => "Shortcuts are paused while the Shortcuts window is open.",
+        PaletteLabel::ShortcutsLink => "Change shortcuts",
     }
 }
 
@@ -2356,6 +2376,7 @@ mod tests {
             PaletteLabel::Recipe,
             PaletteLabel::NoValueYet,
             PaletteLabel::ShortcutsPaused,
+            PaletteLabel::ShortcutsLink,
         ] {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
@@ -2375,7 +2396,8 @@ mod tests {
                 | PaletteLabel::Interrupted
                 | PaletteLabel::ClipboardMode
                 | PaletteLabel::ClipboardForWindow
-                | PaletteLabel::ShortcutsPaused => false,
+                | PaletteLabel::ShortcutsPaused
+                | PaletteLabel::ShortcutsLink => false,
             };
             let pattern = pattern_palette_label(label);
             assert_eq!(

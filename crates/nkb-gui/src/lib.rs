@@ -59,6 +59,10 @@ pub mod picker;
 // tested without a window like `picker` (step 7, K5.5). What a change IS is
 // decided on the worker (`D90`).
 pub mod shortcut_list;
+// The shortcuts window itself, on the main thread - what `shortcut_list`
+// decides moved onto the window, opened once the worker paused the palette's
+// shortcuts and closed with them taken again (K5.5).
+pub mod shortcuts;
 // The pack window itself, on the main thread: what `picker` decides moved onto
 // the window, the keyboard taken on opening and handed back on closing. Beside
 // `focus` for the reason `focus` gives - it is main-thread code.

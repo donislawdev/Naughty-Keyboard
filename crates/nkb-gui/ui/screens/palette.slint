@@ -167,6 +167,16 @@ export component Palette inherits Window {
     callback open-packs <=> opener.clicked;
     // What the click does, in the hint bar's words, for UI Automation.
     in property <string> open-packs-label;
+    // Asks for the shortcuts window (step 7, K5.5) - a click on the link under
+    // the hint bar. No eleventh global shortcut: each one is a collision in
+    // somebody's application (`ux-spec.md` 5.4).
+    //
+    // ⚠️ Declared, not an alias like `open-packs`: the link stands in a band
+    // behind `if`, and an element behind `if` cannot be named from here. The
+    // link's own click only hands on to this callback - one call, no logic.
+    callback open-shortcuts();
+    // The link's words, which are also what the click does.
+    in property <string> shortcuts-link;
 
     title: root.window-title;
     // The colour lives on the surface below, so that the palette can have
@@ -311,6 +321,16 @@ export component Palette inherits Window {
             if root.hints-visible && !root.compact: Zone {
                 HintBar {
                     rows: root.hints;
+                }
+                // Under the shortcuts it changes, and in the same component
+                // as the pack's name above: a link in the palette looks and
+                // answers the pointer one way (GUI rule 2).
+                PickerOpener {
+                    text: root.shortcuts-link;
+                    action: root.shortcuts-link;
+                    clicked => {
+                        root.open-shortcuts();
+                    }
                 }
             }
         }
