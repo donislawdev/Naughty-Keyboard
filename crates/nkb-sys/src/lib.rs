@@ -29,6 +29,10 @@
 //! `char`: the API takes one `u16` per event, so anything above the basic plane
 //! is two events and there is no way to make it one.
 
+// Windows feeds it, the tests run it everywhere. Elsewhere it would be dead code,
+// and `clippy -D warnings` refuses that on macOS and Linux (seen 2026-09-23).
+#[cfg(any(windows, test))]
+mod confirm;
 pub mod field;
 pub mod held;
 pub mod hotkey;
@@ -56,9 +60,12 @@ pub enum SendError {
     /// This system has no implementation yet. Never silence - untouchable
     /// rule 1 - so the caller is told which system it is standing on.
     Unsupported { system: &'static str },
-    /// The system accepted fewer events than it was handed. The field now holds
-    /// a partial value, and saying so is the whole point: a tool that reports
-    /// success here would leave a half-written value looking like a whole one.
+    /// The system took fewer units than it was handed - it refused one, or
+    /// accepted it and never showed it, which is what another thread's
+    /// `BlockInput` looks like (`OBS-156`, `D94`). `units_sent` counts the units
+    /// that arrived. The field now holds a partial value, and saying so is the
+    /// whole point: a tool that reports success here would leave a half-written
+    /// value looking like a whole one.
     Truncated {
         units_sent: usize,
         units_expected: usize,
@@ -71,8 +78,9 @@ pub enum SendError {
     /// global hotkey fires is exactly the moment its modifiers are still down,
     /// so this is the ordinary case, not a corner.
     ModifierHeld { key: &'static str },
-    /// The system accepted fewer chords than it was handed. The field is in an
-    /// unknown state between untouched and cleared.
+    /// The system took fewer chords than it was handed - refused or dropped, as
+    /// for [`SendError::Truncated`]. Nothing was pressed after the chord it did
+    /// not take. The field is in an unknown state between untouched and cleared.
     ChordsTruncated {
         chords_sent: usize,
         chords_expected: usize,
@@ -144,29 +152,16 @@ pub const MODIFIER_RELEASE_WAIT: core::time::Duration = core::time::Duration::fr
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WindowRef(pub u64);
 
-/// How many UTF-16 units go to the system in one call.
-///
-/// Not one big buffer: a value may legitimately be a million code points
-/// (`E026`), which would be four million `INPUT` structures held at once. Not
-/// one unit per call either, which would multiply the syscall count by the
-/// length of the value. This is also the seam where step 3 will check that the
-/// target has not changed mid-insert - architektura.md 6a, race `W2`.
-///
-/// Windows only, like the one route that reads it: elsewhere it was dead code,
-/// and `clippy -D warnings` refused the workspace on macOS and Linux - unseen
-/// until 2026-09-23, when clippy first ran there.
-#[cfg(windows)]
-const CHUNK_UNITS: usize = 512;
-
 #[cfg(windows)]
 mod windows_impl {
-    use super::{CHUNK_UNITS, SendError, SendOutcome, WindowRef};
+    use super::{SendError, SendOutcome, WindowRef};
 
+    use super::confirm::{Step, TAKEN_WAIT, chord_steps, press_confirmed, units_arrived};
     use super::{Chord, MODIFIER_RELEASE_WAIT, NavKey};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
         GetAsyncKeyState, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY,
         KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, SendInput, VIRTUAL_KEY, VK_CONTROL, VK_DELETE, VK_END,
-        VK_HOME, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
+        VK_HOME, VK_LWIN, VK_MENU, VK_PACKET, VK_RWIN, VK_SHIFT,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
 
@@ -228,20 +223,29 @@ mod windows_impl {
         }
     }
 
-    /// The events of one chord: `Shift` down if asked, the key down and up
-    /// (extended), `Shift` up if it went down.
-    fn events_for_chord(chord: Chord) -> Vec<INPUT> {
-        let key = virtual_key(chord.key);
-        let mut events = Vec::with_capacity(4);
-        if chord.shift {
-            events.push(key_event(VK_SHIFT, 0));
-        }
-        events.push(key_event(key, KEYEVENTF_EXTENDEDKEY));
-        events.push(key_event(key, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP));
-        if chord.shift {
-            events.push(key_event(VK_SHIFT, KEYEVENTF_KEYUP));
-        }
-        events
+    /// The event for `key`, down or up. Navigation keys carry
+    /// `KEYEVENTF_EXTENDEDKEY`, `Shift` does not.
+    fn chord_event(key: VIRTUAL_KEY, release: bool) -> INPUT {
+        let extended = if key == VK_SHIFT {
+            0
+        } else {
+            KEYEVENTF_EXTENDEDKEY
+        };
+        key_event(key, extended | if release { KEYEVENTF_KEYUP } else { 0 })
+    }
+
+    /// One event to the system. True when it accepted it - which is not yet
+    /// "it arrived" (`confirm`).
+    fn send_one(event: INPUT) -> bool {
+        let size = core::mem::size_of::<INPUT>() as i32;
+        unsafe { SendInput(1, &event, size) == 1 }
+    }
+
+    /// Whether the system shows `key` down right now. The high bit only, as in
+    /// `held_modifier`.
+    fn is_down(key: VIRTUAL_KEY) -> bool {
+        let state = unsafe { GetAsyncKeyState(i32::from(key)) };
+        (state as u16) & 0x8000 != 0
     }
 
     pub fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
@@ -249,15 +253,21 @@ mod windows_impl {
             return Ok(0);
         }
         wait_for_modifiers_released()?;
-        let size = core::mem::size_of::<INPUT>() as i32;
-        // One call per chord, so a short write is reported in chords - the unit
-        // the caller reasons in - and so `Shift` never stays down across a
-        // refused chord.
+        // Each event alone, the next only once the system shows the last one
+        // (`D94`): a chord the system dropped is reported in chords - the unit
+        // the caller reasons in - and nothing is pressed after it.
         for (index, chord) in chords.iter().enumerate() {
-            let batch = events_for_chord(*chord);
-            let count = u32::try_from(batch.len()).unwrap_or(u32::MAX);
-            let accepted = unsafe { SendInput(count, batch.as_ptr(), size) } as usize;
-            if accepted != batch.len() {
+            let key = virtual_key(chord.key);
+            let shift = chord.shift.then_some(VK_SHIFT);
+            let steps = chord_steps(key, shift, chord_event);
+            if press_confirmed(&steps, send_one, is_down, TAKEN_WAIT) < steps.len() {
+                // Unconfirmed on purpose: a key the system did not take is not
+                // down, so its release is harmless - and one it took must not
+                // stay down, least of all `Shift`.
+                let _ = send_one(chord_event(key, true));
+                if let Some(shift) = shift {
+                    let _ = send_one(chord_event(shift, true));
+                }
                 return Err(SendError::ChordsTruncated {
                     chords_sent: index,
                     chords_expected: chords.len(),
@@ -311,37 +321,47 @@ mod windows_impl {
             });
         }
         wait_for_modifiers_released()?;
-        let size = core::mem::size_of::<INPUT>() as i32;
 
-        let mut sent_units = 0usize;
-        let mut sent_events = 0usize;
-
-        for chunk in units.chunks(CHUNK_UNITS) {
-            let mut batch: Vec<INPUT> = Vec::with_capacity(chunk.len() * 2);
-            for unit in chunk {
-                batch.extend_from_slice(&events_for(*unit));
-            }
-            // Cast is checked rather than assumed: the chunk is bounded above by
-            // CHUNK_UNITS, so this cannot narrow.
-            let count = u32::try_from(batch.len()).unwrap_or(u32::MAX);
-            let accepted = unsafe { SendInput(count, batch.as_ptr(), size) } as usize;
-
-            sent_events += accepted;
-            sent_units += accepted / 2;
-
-            if accepted != batch.len() {
-                // Stop at the first short write. Carrying on would send the rest
-                // of the value into a field that just refused half of it.
+        // One unit at a time, each event confirmed before the next (`D94`). Not
+        // one buffer: a value may legitimately be a million code points (`E026`),
+        // four million `INPUT` structures at once. And not chunks either, as
+        // until 2026-10-05: a chunk confirmed by its last event hides a hole a
+        // shorter block left in its middle, and its count would be a guess. This
+        // is also the seam where step 3 will check that the target has not
+        // changed mid-insert - architektura.md 6a, race `W2`.
+        for (index, unit) in units.iter().enumerate() {
+            let [down, up] = events_for(*unit);
+            let steps = [
+                Step {
+                    event: down,
+                    key: VK_PACKET,
+                    down: true,
+                },
+                Step {
+                    event: up,
+                    key: VK_PACKET,
+                    down: false,
+                },
+            ];
+            let taken = press_confirmed(&steps, send_one, is_down, TAKEN_WAIT);
+            if taken < steps.len() {
+                if taken == 0 {
+                    // Its down was not shown, so its release is harmless - and a down
+                    // the system took late must not leave the key held.
+                    let _ = send_one(up);
+                }
+                // Stop at the first unit not taken. Carrying on would send the
+                // rest of the value into a field that just lost part of it.
                 return Err(SendError::Truncated {
-                    units_sent: sent_units,
+                    units_sent: units_arrived(index, taken),
                     units_expected: expected,
                 });
             }
         }
 
         Ok(SendOutcome {
-            units: sent_units,
-            events: sent_events,
+            units: expected,
+            events: expected * 2,
         })
     }
 }
@@ -393,7 +413,9 @@ pub fn foreground_window() -> Option<WindowRef> {
 /// The caller decides WHAT to send and WHERE the focus should be by then. This
 /// function only puts the characters on the wire. It waits up to
 /// [`MODIFIER_RELEASE_WAIT`] for a physically held modifier to come up and
-/// refuses with [`SendError::ModifierHeld`] if it does not.
+/// refuses with [`SendError::ModifierHeld`] if it does not. Every event goes
+/// alone and the next only once the system shows it taken (`D94`). One it does
+/// not show ends the send with [`SendError::Truncated`].
 pub fn send_text(text: &str) -> Result<SendOutcome, SendError> {
     platform::send_text(text)
 }
@@ -409,8 +431,9 @@ pub fn send_text(text: &str) -> Result<SendOutcome, SendError> {
 /// # Errors
 ///
 /// [`SendError::ModifierHeld`] when a modifier stays down past the wait,
-/// [`SendError::ChordsTruncated`] when the system accepted fewer presses than
-/// it was handed, [`SendError::Unsupported`] where there is no route.
+/// [`SendError::ChordsTruncated`] when the system did not take a press - every
+/// event is confirmed before the next, as in [`send_text`] - and
+/// [`SendError::Unsupported`] where there is no route.
 pub fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
     platform::send_chords(chords)
 }
