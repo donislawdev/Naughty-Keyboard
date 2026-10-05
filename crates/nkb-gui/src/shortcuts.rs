@@ -87,7 +87,6 @@ thread_local! {
 /// The result of the hand-over is dropped for the reason `live::show` gives:
 /// after the loop has quit it reports success for work nobody does, and there
 /// is no window left to tell.
-#[must_use]
 pub fn tell() -> Tell {
     Box::new(|told| {
         let _ = slint::invoke_from_event_loop(move || {
