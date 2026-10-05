@@ -67,7 +67,7 @@ use nkb_app::drive_sequence::Ended;
 use nkb_app::keep_settings::{SettingsMessage, ShortcutChange};
 use nkb_app::ports::{
     CatalogueCoverage, CatalogueSource, SaveError, SettingsNote, SettingsUnusable,
-    ShortcutRegistration, ShortcutUnreadable, ShortcutsUnavailable, SourceSkipped,
+    ShortcutRegistration, ShortcutUnreadable, ShortcutsUnavailable, SourceSkipped, StopReason,
 };
 use nkb_core::hotkeys::{
     Bindings, ChordError, ChordProblem, HotkeyAction, HotkeyChord, Refusal, Refused,
@@ -219,7 +219,16 @@ fn pattern_message(message: &Message) -> &'static str {
         }
         Message::NoTarget => "The target window is gone. Click into a field and try again.",
         Message::Interrupted { .. } => {
-            "Stopped after {sent} of {expected} UTF-16 units. The field holds a partial value - clear it before the next test."
+            "Stopped after {sent} of {expected} UTF-16 units: {reason}. The field holds a partial value - clear it before the next test."
+        }
+        Message::NothingArrived { .. } => {
+            "Nothing reached the field: {reason}. The counter did not move, so the same shortcut tries this value again."
+        }
+        Message::ClearedThenNothingArrived { .. } => {
+            "The field was cleared, but none of the value reached it: {reason}. The counter did not move, so the same shortcut tries this value again."
+        }
+        Message::NotPaced => {
+            "This application's pace could not be followed, so characters may be missing if it was busy. Check the field before testing."
         }
         Message::EndOfPack { .. } => "End of pack ({total}/{total}). Press again to start over.",
         Message::CounterKept { .. } => {
@@ -278,6 +287,7 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
         | Message::NoTarget
         | Message::NoPack
         | Message::ClearingFailed
+        | Message::NotPaced
         | Message::NothingToReport => pattern.to_owned(),
         Message::NoDirectRoute { system } => fill(pattern, &[("system", system)]),
         Message::ClipboardFailed { detail } => fill(pattern, &[("detail", detail)]),
@@ -294,13 +304,18 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
         Message::Interrupted {
             units_sent,
             units_expected,
+            reason,
         } => fill(
             pattern,
             &[
                 ("sent", &units_sent.to_string()),
                 ("expected", &units_expected.to_string()),
+                ("reason", stop_reason(*reason)),
             ],
         ),
+        Message::NothingArrived { reason } | Message::ClearedThenNothingArrived { reason } => {
+            fill(pattern, &[("reason", stop_reason(*reason))])
+        }
         Message::EndOfPack { total } => fill(pattern, &[("total", &total.to_string())]),
         Message::CounterKept { done, total } => fill(
             pattern,
@@ -322,6 +337,31 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
         ),
         Message::ReportFailed { detail } => fill(pattern, &[("detail", detail), ("pack", pack)]),
     }
+}
+
+// ---------------------------------------------------------------------------
+// StopReason - why a send stopped, inside the sentences above
+// ---------------------------------------------------------------------------
+
+/// The pattern for one reason a send stopped. `ux-spec.md` 6, section A, byte
+/// for byte. A clause, not a sentence: it stands after a colon in
+/// `Message::Interrupted`, `Message::NothingArrived` and
+/// `Message::ClearedThenNothingArrived` (`D95`), the way `{detail}` does in
+/// `Message::ClipboardFailed`.
+fn pattern_stop_reason(reason: StopReason) -> &'static str {
+    match reason {
+        StopReason::Dropped => {
+            "the system did not deliver the keys - another program may be blocking input"
+        }
+        StopReason::FocusMoved => "another window came to the front",
+        StopReason::NotTaking => "the application stopped taking keys",
+    }
+}
+
+/// Why a send stopped, ready to stand inside a sentence.
+#[must_use]
+pub fn stop_reason(reason: StopReason) -> &'static str {
+    pattern_stop_reason(reason)
 }
 
 // ---------------------------------------------------------------------------
@@ -1741,7 +1781,15 @@ mod tests {
             Message::Interrupted {
                 units_sent: 12480,
                 units_expected: 100_000,
+                reason: StopReason::NotTaking,
             },
+            Message::NothingArrived {
+                reason: StopReason::Dropped,
+            },
+            Message::ClearedThenNothingArrived {
+                reason: StopReason::FocusMoved,
+            },
+            Message::NotPaced,
             Message::EndOfPack { total: 34 },
             Message::CounterKept { done: 7, total: 34 },
             Message::NoPack,
@@ -2043,10 +2091,13 @@ mod tests {
             Message::NothingToReport => 12,
             Message::ReportBusy => 13,
             Message::ReportFailed { .. } => 14,
+            Message::NothingArrived { .. } => 23,
+            Message::ClearedThenNothingArrived { .. } => 24,
+            Message::NotPaced => 25,
         }
     }
 
-    const SLOTS: usize = 23;
+    const SLOTS: usize = 26;
 
     #[test]
     fn every_message_variant_is_listed_here() {
@@ -2218,6 +2269,7 @@ mod tests {
             Message::Interrupted {
                 units_sent: 0,
                 units_expected: 0,
+                reason: StopReason::Dropped,
             },
             Message::EndOfPack { total: 0 },
             Message::ModifierHeld { key: String::new() },

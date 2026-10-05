@@ -78,7 +78,8 @@ use nkb_core::sequence::{Delivery, Effect, Event, Sequence};
 use crate::load_pack;
 use crate::ports::{
     Availability, Clipboard, ClipboardError, DeliveryError, History, KeystrokeError,
-    KeystrokeSender, PackFormat, PackSource, ReportText, SourceError, TargetRef, ValueDelivery,
+    KeystrokeSender, PackFormat, PackSource, ReportText, SourceError, StopReason, TargetRef,
+    ValueDelivery,
 };
 use crate::send_value::{
     Clearing, ClearingOutcome, SendOutcome, SkipReason, ValueFacts, deliver_value,
@@ -230,11 +231,24 @@ pub enum Message {
     /// The field could not be cleared, so the value was not sent. The field is
     /// in an unknown state between its old content and empty.
     ClearingFailed,
-    /// The value was left half-written in the field: how far it got, of how much.
+    /// The value was left half-written in the field: how far it got, of how
+    /// much, and why it stopped (`D95`).
     Interrupted {
         units_sent: usize,
         units_expected: usize,
+        reason: StopReason,
     },
+    /// The keys stopped before any of them reached the field, so it is as the
+    /// tester left it and the counter stays (`OBS-157`): said with why.
+    NothingArrived { reason: StopReason },
+    /// The field was cleared, and then the value's keys stopped before any of
+    /// them reached it - the field is EMPTY, not as the tester left it, and the
+    /// counter stays (`OBS-157`).
+    ClearedThenNothingArrived { reason: StopReason },
+    /// The value went in, but the route could not follow the application's
+    /// queue, so characters may be missing if it was busy (`D95`, `OBS-158`).
+    /// Said on every such send - silence here is the loss `D95` closes.
+    NotPaced,
     /// This build has no direct route on `system`, so values go to the
     /// clipboard from now on, replacing what the tester had copied. Said when
     /// the palette starts on such a system, or when a send finds out.
@@ -677,6 +691,7 @@ fn arrival_of(outcome: &SendOutcome, on_clipboard: bool) -> Option<Arrival> {
                 DeliveryError::Partial {
                     units_sent,
                     units_expected,
+                    ..
                 },
             ..
         } => Some(Arrival::Interrupted {
@@ -754,6 +769,7 @@ fn classify(
             facts,
             utf16_units,
             clearing,
+            paced,
         } => (
             Event::InsertionFinished,
             Some(Sent {
@@ -763,9 +779,14 @@ fn classify(
                 cleared: clearing == ClearingOutcome::Done,
                 arrival: arrival.unwrap_or(Arrival::Whole),
             }),
-            // `D76`, `OBS-141`: the value landed, uncleared, and the tester is
-            // told why.
-            skipped_clearing(clearing).into_iter().collect(),
+            // `D95`: a value typed without following the application may be
+            // missing characters - the worse news, so first. Then `D76`,
+            // `OBS-141`: the value landed, uncleared, and the tester is told why.
+            (!paced)
+                .then_some(Message::NotPaced)
+                .into_iter()
+                .chain(skipped_clearing(clearing))
+                .collect(),
         ),
         // A fragment was left: interrupted, with how far it got - and WHICH
         // value, so the palette shows the value the report block describes
@@ -776,6 +797,7 @@ fn classify(
             units_sent,
             units_expected,
             clearing,
+            reason,
         } => (
             Event::Cancelled,
             Some(Sent {
@@ -791,6 +813,7 @@ fn classify(
             std::iter::once(Message::Interrupted {
                 units_sent,
                 units_expected,
+                reason,
             })
             .chain(skipped_clearing(clearing))
             .collect(),
@@ -813,6 +836,7 @@ fn classify(
                 DeliveryError::Partial {
                     units_sent,
                     units_expected,
+                    reason,
                 },
             ..
         } => (
@@ -821,6 +845,23 @@ fn classify(
             vec![Message::Interrupted {
                 units_sent,
                 units_expected,
+                reason,
+            }],
+        ),
+        // `OBS-157`: the keys stopped before any reached the field. Nothing of
+        // the value is in it, so this is a refusal - the counter stays and the
+        // same press tries the same value - and NOT a fragment. A field cleared
+        // first is empty now, and the tester has to know that.
+        SendOutcome::NotDelivered {
+            error: DeliveryError::NothingArrived { reason },
+            clearing,
+        } => (
+            Event::InsertionRefused,
+            None,
+            vec![if clearing == ClearingOutcome::Done {
+                Message::ClearedThenNothingArrived { reason }
+            } else {
+                Message::NothingArrived { reason }
             }],
         ),
         // Nothing was sent - the field is untouched. Refuse, do NOT degrade.
@@ -938,6 +979,11 @@ fn after_clearing(error: KeystrokeError) -> (Event, Message) {
         // A partial clear leaves the field in an unknown state: it cannot be
         // trusted to be clear, and nothing goes on top of it.
         KeystrokeError::Partial { .. } => (Event::InsertionRefused, Message::ClearingFailed),
+        // `OBS-157`: no clearing key acted, so the field is exactly as it was.
+        // "It may hold part of its old content" would be the wrong worry.
+        KeystrokeError::NothingArrived { reason } => {
+            (Event::InsertionRefused, Message::NothingArrived { reason })
+        }
         // Rerouted to the clipboard in `attempt` before it gets here. Reached
         // only if that ever stops. No key was pressed and the field is intact.
         KeystrokeError::HigherPrivileges => (Event::InsertionRefused, Message::HigherPrivileges),
@@ -1254,6 +1300,7 @@ mod tests {
             &Kit::with_delivery(FakeDelivery::failing(DeliveryError::Partial {
                 units_sent: 3,
                 units_expected: 5,
+                reason: StopReason::NotTaking,
             }))
             .ports(),
         );
@@ -1261,7 +1308,8 @@ mod tests {
             outcome.messages,
             vec![Message::Interrupted {
                 units_sent: 3,
-                units_expected: 5
+                units_expected: 5,
+                reason: StopReason::NotTaking,
             }]
         );
         assert_eq!(advance.sequence().delivery, Delivery::Direct);
@@ -1443,6 +1491,7 @@ mod tests {
             &Kit::with_delivery(FakeDelivery::failing(DeliveryError::Partial {
                 units_sent: 2,
                 units_expected: 4,
+                reason: StopReason::NotTaking,
             }))
             .ports(),
         );
@@ -1475,6 +1524,7 @@ mod tests {
             &Kit::with_delivery(FakeDelivery::failing(DeliveryError::Partial {
                 units_sent: 2,
                 units_expected: 4,
+                reason: StopReason::NotTaking,
             }))
             .ports(),
         );
@@ -1508,6 +1558,7 @@ mod tests {
             direct: FakeDelivery::failing(DeliveryError::Partial {
                 units_sent: 1,
                 units_expected: 5,
+                reason: StopReason::NotTaking,
             }),
             keys: FakeKeys::failing(KeystrokeError::FieldUnconfirmed),
             ..Kit::ready()
@@ -1518,7 +1569,8 @@ mod tests {
             vec![
                 Message::Interrupted {
                     units_sent: 1,
-                    units_expected: 5
+                    units_expected: 5,
+                    reason: StopReason::NotTaking,
                 },
                 Message::ClearingSkipped,
             ]
@@ -1813,6 +1865,90 @@ mod tests {
         let sent = outcome.sent.expect("the value went in");
         assert!(!sent.cleared);
         assert_eq!(advance.counter(), Some((1, 3)));
+    }
+
+    // ---- `OBS-157`, `D95`: nothing arrived, and a send that could not be paced ----
+
+    #[test]
+    fn a_cleared_field_whose_value_reached_nothing_is_said_empty_and_the_counter_stays() {
+        // Measured: a hook swallowing only characters let the clearing through
+        // and none of the value. The field is EMPTY - not as the tester left
+        // it, and not holding a fragment - and the same press tries again.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_delivery(FakeDelivery::failing(DeliveryError::NothingArrived {
+            reason: StopReason::Dropped,
+        }));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(
+            outcome.messages,
+            vec![Message::ClearedThenNothingArrived {
+                reason: StopReason::Dropped
+            }]
+        );
+        assert!(
+            outcome.sent.is_none(),
+            "nothing of the value is in the field"
+        );
+        assert_eq!(advance.counter(), Some((0, 3)), "the counter stays");
+        assert_eq!(advance.sequence().delivery, Delivery::Direct);
+    }
+
+    #[test]
+    fn an_uncleared_field_whose_value_reached_nothing_is_as_it_was() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit {
+            direct: FakeDelivery::failing(DeliveryError::NothingArrived {
+                reason: StopReason::FocusMoved,
+            }),
+            keys: FakeKeys::failing(KeystrokeError::FieldUnconfirmed),
+            ..Kit::ready()
+        };
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        // Not "Not cleared first ... the value went in on top": nothing went in.
+        assert_eq!(
+            outcome.messages,
+            vec![Message::NothingArrived {
+                reason: StopReason::FocusMoved
+            }]
+        );
+        assert_eq!(advance.counter(), Some((0, 3)));
+    }
+
+    #[test]
+    fn clearing_keys_that_reached_nothing_leave_the_field_as_it_was_and_send_nothing() {
+        // Measured under another program's `BlockInput`: the field kept its own
+        // content, and "it may hold part of its old content" was the wrong worry.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_keys(FakeKeys::failing(KeystrokeError::NothingArrived {
+            reason: StopReason::Dropped,
+        }));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert!(kit.direct.handed.borrow().is_empty(), "no value on top");
+        assert!(kit.by_clipboard.handed.borrow().is_empty());
+        assert_eq!(
+            outcome.messages,
+            vec![Message::NothingArrived {
+                reason: StopReason::Dropped
+            }]
+        );
+        assert_eq!(advance.counter(), Some((0, 3)));
+    }
+
+    #[test]
+    fn a_value_sent_without_following_the_application_says_characters_may_be_missing() {
+        // `D95` point 2: the route could not join the focused queue, so it
+        // typed as before `D95` - which is when characters vanish (`OBS-158`).
+        // The value counts as sent, and the tester is told to check it.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_delivery(FakeDelivery::unpaced());
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(outcome.messages, vec![Message::NotPaced]);
+        assert!(outcome.sent.is_some());
+        assert_eq!(advance.counter(), Some((1, 3)));
+
+        let mut paced = chosen(Risk::Normal);
+        let quiet = paced.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
+        assert!(quiet.messages.is_empty(), "a paced send says nothing extra");
     }
 
     #[test]

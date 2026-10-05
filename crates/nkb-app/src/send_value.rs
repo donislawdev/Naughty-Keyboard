@@ -37,7 +37,7 @@
 
 use crate::ports::{
     Availability, DeliveryError, KeystrokeError, KeystrokeSender, PackFormat, PackSource,
-    SourceError, ValueDelivery,
+    SourceError, StopReason, ValueDelivery,
 };
 use nkb_core::keys::line_clearing_recipe;
 use nkb_core::pack::{Pack, PackValue};
@@ -133,6 +133,10 @@ pub enum SendOutcome {
         utf16_units: usize,
         /// What became of the clearing before the value.
         clearing: ClearingOutcome,
+        /// Whether the application took every key, not only the system
+        /// (`D95`). False: characters may be missing if it was busy, and both
+        /// surfaces say so (`OBS-158`).
+        paced: bool,
     },
     /// Part of the value reached the field, and then delivery stopped. The
     /// field holds a fragment. The facts are those of the WHOLE value, because
@@ -150,6 +154,8 @@ pub enum SendOutcome {
         /// What became of the clearing before the value - the tester needs to
         /// know the field is empty-plus-fragment, not old-content-plus-fragment.
         clearing: ClearingOutcome,
+        /// Why delivery stopped (`D95`).
+        reason: StopReason,
     },
     /// No pack of that name.
     NotFound,
@@ -168,8 +174,9 @@ pub enum SendOutcome {
     /// [`KeystrokeError::InTerminal`]: those are skips, and the value goes on
     /// ([`ClearingOutcome::Skipped`]).
     NotCleared { error: KeystrokeError },
-    /// There is a route, and none of the value arrived. A value that arrived
-    /// in part is [`SendOutcome::Interrupted`].
+    /// There is a route, and none of the value arrived - refused before a key,
+    /// or [`DeliveryError::NothingArrived`] after the keys stopped. A value that
+    /// arrived in part is [`SendOutcome::Interrupted`].
     NotDelivered {
         error: DeliveryError,
         /// What became of the clearing when this happened - a cleared field
@@ -341,14 +348,18 @@ pub fn deliver_value(
             facts: facts(),
             utf16_units: delivered.utf16_units,
             clearing,
+            paced: delivered.paced,
         },
-        Err(DeliveryError::Partial { units_sent, .. }) => SendOutcome::Interrupted {
+        Err(DeliveryError::Partial {
+            units_sent, reason, ..
+        }) => SendOutcome::Interrupted {
             facts: facts(),
             units_sent,
             // The count this layer knows, so the two halves of the bad news
             // come from the same place and cannot disagree.
             units_expected: expected_units,
             clearing,
+            reason,
         },
         Err(error) => SendOutcome::NotDelivered { error, clearing },
     }
@@ -404,6 +415,7 @@ mod tests {
             match &self.fail_with {
                 None => Ok(Delivered {
                     utf16_units: text.encode_utf16().count(),
+                    paced: true,
                 }),
                 Some(error) => Err(error.clone()),
             }
@@ -910,6 +922,7 @@ mod tests {
             fail_with: Some(DeliveryError::Partial {
                 units_sent: 1,
                 units_expected: 0,
+                reason: StopReason::FocusMoved,
             }),
             log: Rc::clone(&log),
         };
@@ -929,11 +942,17 @@ mod tests {
             units_sent,
             units_expected,
             clearing,
+            reason,
         } = outcome
         else {
             panic!("a partial delivery must be an interruption, got {outcome:?}");
         };
         assert_eq!((units_sent, units_expected), (1, 3));
+        assert_eq!(
+            reason,
+            StopReason::FocusMoved,
+            "the route's reason travels up"
+        );
         assert_eq!(facts.reference, "sample/second");
         assert_eq!(facts.name, "Value second");
         assert_eq!(
@@ -946,5 +965,67 @@ mod tests {
             ClearingOutcome::Done,
             "the tester must learn the field is empty-plus-fragment, not old-plus-fragment"
         );
+    }
+
+    #[test]
+    fn nothing_arrived_is_not_a_fragment_and_keeps_what_the_clearing_did() {
+        // `OBS-157`: zero units is not an interruption - there is no fragment
+        // to name - and a field cleared first is empty, which the caller says.
+        let log: Log = Rc::new(RefCell::new(Vec::new()));
+        let spy = Spy {
+            available: Availability::Ready,
+            fail_with: Some(DeliveryError::NothingArrived {
+                reason: StopReason::Dropped,
+            }),
+            log: Rc::clone(&log),
+        };
+        let keys = KeySpy::working(&log);
+        let outcome = send_value(
+            &Shelf,
+            &Scripted::two(),
+            &spy,
+            &keys,
+            &request(2, Clearing::Line),
+        );
+        assert_eq!(
+            outcome,
+            SendOutcome::NotDelivered {
+                error: DeliveryError::NothingArrived {
+                    reason: StopReason::Dropped
+                },
+                clearing: ClearingOutcome::Done,
+            }
+        );
+    }
+
+    #[test]
+    fn a_delivery_that_could_not_follow_the_application_is_sent_and_says_so() {
+        struct Unpaced;
+        impl ValueDelivery for Unpaced {
+            fn availability(&self) -> Availability {
+                Availability::Ready
+            }
+            fn target(&self) -> Option<TargetRef> {
+                Some(TargetRef(1))
+            }
+            fn deliver(&self, text: &str) -> Result<Delivered, DeliveryError> {
+                Ok(Delivered {
+                    utf16_units: text.encode_utf16().count(),
+                    paced: false,
+                })
+            }
+        }
+        let log: Log = Rc::new(RefCell::new(Vec::new()));
+        let outcome = send_value(
+            &Shelf,
+            &Scripted::two(),
+            &Unpaced,
+            &KeySpy::working(&log),
+            &request(1, Clearing::Keep),
+        );
+        let SendOutcome::Sent { paced, .. } = outcome else {
+            panic!("an unpaced delivery still delivered, got {outcome:?}");
+        };
+        assert!(!paced, "the caller must learn it was not paced (`D95`)");
     }
 }

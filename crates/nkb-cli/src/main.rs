@@ -27,8 +27,8 @@ use nkb_adapters::{
 use nkb_app::{
     Availability, Clearing, ClearingOutcome, DeliveryError, EmitOutcome, FormatOutcome,
     KeystrokeError, LintOutcome, NewPackOutcome, SendOutcome, SendRequest, ShowOutcome, SkipReason,
-    ValueDelivery, ValueFacts, emit_values, format_pack, lint_pack, list_packs, new_pack,
-    send_value, show_pack,
+    StopReason, ValueDelivery, ValueFacts, emit_values, format_pack, lint_pack, list_packs,
+    new_pack, send_value, show_pack,
 };
 use std::io::Write;
 use std::path::Path;
@@ -681,6 +681,7 @@ fn send(args: &[String]) -> ExitCode {
                 },
             utf16_units,
             clearing,
+            paced,
         } => {
             match clearing {
                 ClearingOutcome::Done => {
@@ -701,12 +702,21 @@ fn send(args: &[String]) -> ExitCode {
                 sent_counts(graphemes, code_points, bytes, utf16_units)
             );
             // Said plainly, because the shorter sentence reads as a stronger
-            // claim than the tool can make: `SendInput` reports that the system
-            // ACCEPTED the events, not that they landed where you wanted.
-            let _ = writeln!(
-                err,
-                "  the system accepted the keystrokes - check the field to see them"
-            );
+            // claim than the tool can make. Paced (`D95`), the application's
+            // queue took every key - which is still not what the field KEPT.
+            // Unpaced, only the system took them, and a busy application may
+            // have lost some (`OBS-158`).
+            let _ = if paced {
+                writeln!(
+                    err,
+                    "  the application took every keystroke - check the field to see what it kept"
+                )
+            } else {
+                writeln!(
+                    err,
+                    "  this application's pace could not be followed, so characters may be missing if it was busy - check the field"
+                )
+            };
             if warnings > 0 {
                 let _ = writeln!(
                     err,
@@ -775,9 +785,18 @@ fn send(args: &[String]) -> ExitCode {
                 KeystrokeError::Partial {
                     chords_sent,
                     chords_expected,
+                    reason,
                 } => writeln!(
                     err,
-                    "nkb send: the system accepted {chords_sent} of {chords_expected} clearing key presses - the field may be half-cleared. Nothing else was sent."
+                    "nkb send: only {chords_sent} of {chords_expected} clearing key presses arrived - {}. The field may be half-cleared. Nothing else was sent.",
+                    stop_reason(*reason)
+                ),
+                // `OBS-157`: zero presses acted, so the field is as it was -
+                // "half-cleared" would send the tester looking for damage.
+                KeystrokeError::NothingArrived { reason } => writeln!(
+                    err,
+                    "nkb send: none of the clearing key presses reached the field - {}. The field is as it was, and nothing was sent.",
+                    stop_reason(*reason)
                 ),
                 KeystrokeError::HigherPrivileges => writeln!(err, "{HIGHER_PRIVILEGES}"),
                 KeystrokeError::NoTextField => writeln!(err, "{NO_TEXT_FIELD}"),
@@ -802,6 +821,7 @@ fn send(args: &[String]) -> ExitCode {
             units_sent,
             units_expected,
             clearing,
+            reason,
         } => {
             say_clearing_before_failure(&mut err, clearing);
             // The loudest message in this command on purpose: the field now
@@ -816,7 +836,8 @@ fn send(args: &[String]) -> ExitCode {
             );
             let _ = writeln!(
                 err,
-                "  only {units_sent} of {units_expected} UTF-16 units arrived."
+                "  only {units_sent} of {units_expected} UTF-16 units arrived - {}.",
+                stop_reason(reason)
             );
             let _ = writeln!(
                 err,
@@ -846,10 +867,12 @@ fn send(args: &[String]) -> ExitCode {
                 DeliveryError::Partial {
                     units_sent,
                     units_expected,
+                    reason,
                 } => {
                     let _ = writeln!(
                         err,
-                        "nkb send: only {units_sent} of {units_expected} UTF-16 units arrived."
+                        "nkb send: only {units_sent} of {units_expected} UTF-16 units arrived - {}.",
+                        stop_reason(*reason)
                     );
                     let _ = writeln!(
                         err,
@@ -883,9 +906,32 @@ fn send(args: &[String]) -> ExitCode {
                 DeliveryError::NoTextField => {
                     let _ = writeln!(err, "{NO_TEXT_FIELD}");
                 }
+                // `OBS-157`: the keys stopped before any reached the field. No
+                // fragment - "PARTIAL" here sent testers to clear a field that
+                // held only its own content. A clearing that went first was
+                // said just above.
+                DeliveryError::NothingArrived { reason } => {
+                    let _ = writeln!(
+                        err,
+                        "nkb send: nothing of the value reached the field - {}.",
+                        stop_reason(*reason)
+                    );
+                }
             }
             ExitCode::InsertFailed
         }
+    }
+}
+
+/// Why a send stopped, in the words `nkb send` uses after a dash. The same three
+/// reasons the palette names (`D95`), said in the command's own sentences.
+fn stop_reason(reason: StopReason) -> &'static str {
+    match reason {
+        StopReason::Dropped => {
+            "the system did not deliver the keys, another program may be blocking input"
+        }
+        StopReason::FocusMoved => "another window came to the front",
+        StopReason::NotTaking => "the application stopped taking keys",
     }
 }
 

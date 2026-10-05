@@ -52,6 +52,36 @@ pub struct SendOutcome {
     pub units: usize,
     /// Key events sent. Two per unit - one down, one up.
     pub events: usize,
+    /// Whether every event was also taken by the application holding the
+    /// keyboard focus, not only by the system (`D95`). False when its queue
+    /// could not be followed - then characters may be missing if it was busy
+    /// (`OBS-158`), and the caller has to say so.
+    pub paced: bool,
+}
+
+/// Why a send stopped before its end (`D95`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StopReason {
+    /// The system did not take an event - another program blocking input
+    /// (`BlockInput`), a keyboard hook swallowing it, or a window with higher
+    /// privileges (`D94`, all three measured to look the same).
+    Dropped,
+    /// Another window came to the front, so the next key would have landed
+    /// there (race `W2`, at the level of the window).
+    FocusMoved,
+    /// The application holding the focus did not take an event: the system
+    /// calls its window not responding, or it took nothing for as long.
+    NotTaking,
+}
+
+impl core::fmt::Display for StopReason {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            Self::Dropped => "the system did not take the keys",
+            Self::FocusMoved => "another window came to the front",
+            Self::NotTaking => "the application stopped taking keys",
+        })
+    }
 }
 
 /// Why a send did not happen, or did not finish.
@@ -60,15 +90,16 @@ pub enum SendError {
     /// This system has no implementation yet. Never silence - untouchable
     /// rule 1 - so the caller is told which system it is standing on.
     Unsupported { system: &'static str },
-    /// The system took fewer units than it was handed - it refused one, or
-    /// accepted it and never showed it, which is what another thread's
-    /// `BlockInput` looks like (`OBS-156`, `D94`). `units_sent` counts the units
-    /// that arrived. The field now holds a partial value, and saying so is the
-    /// whole point: a tool that reports success here would leave a half-written
-    /// value looking like a whole one.
+    /// Fewer units arrived than were handed over, and `reason` says why the
+    /// send stopped (`D94`, `D95`). `units_sent` counts the units that arrived -
+    /// possibly zero, which the caller must not call a partial value. Past zero
+    /// the field holds a fragment, and saying so is the whole point: a tool that
+    /// reports success here would leave a half-written value looking like a
+    /// whole one.
     Truncated {
         units_sent: usize,
         units_expected: usize,
+        reason: StopReason,
     },
     /// A modifier key is physically held and did not come up within the wait.
     /// Nothing was sent. Under a held `Ctrl`, `Home` is the start of the
@@ -78,12 +109,15 @@ pub enum SendError {
     /// global hotkey fires is exactly the moment its modifiers are still down,
     /// so this is the ordinary case, not a corner.
     ModifierHeld { key: &'static str },
-    /// The system took fewer chords than it was handed - refused or dropped, as
-    /// for [`SendError::Truncated`]. Nothing was pressed after the chord it did
-    /// not take. The field is in an unknown state between untouched and cleared.
+    /// Fewer chords acted than were handed over, as for [`SendError::Truncated`].
+    /// `chords_sent` counts the chords whose main key went down - zero means
+    /// nothing was pressed that could change the field (`D95` point 5). Nothing
+    /// was pressed after the chord that stopped. Past zero the field is in an
+    /// unknown state between untouched and cleared.
     ChordsTruncated {
         chords_sent: usize,
         chords_expected: usize,
+        reason: StopReason,
     },
 }
 
@@ -96,10 +130,11 @@ impl core::fmt::Display for SendError {
             Self::Truncated {
                 units_sent,
                 units_expected,
+                reason,
             } => write!(
                 f,
-                "the system accepted {units_sent} of {units_expected} UTF-16 units, \
-                 so the field holds a partial value"
+                "{units_sent} of {units_expected} UTF-16 units arrived before the send \
+                 stopped: {reason}"
             ),
             Self::ModifierHeld { key } => write!(
                 f,
@@ -108,9 +143,11 @@ impl core::fmt::Display for SendError {
             Self::ChordsTruncated {
                 chords_sent,
                 chords_expected,
+                reason,
             } => write!(
                 f,
-                "the system accepted {chords_sent} of {chords_expected} key presses"
+                "{chords_sent} of {chords_expected} key presses acted before the send \
+                 stopped: {reason}"
             ),
         }
     }
@@ -154,16 +191,24 @@ pub struct WindowRef(pub u64);
 
 #[cfg(windows)]
 mod windows_impl {
-    use super::{SendError, SendOutcome, WindowRef};
+    use super::{SendError, SendOutcome, StopReason, WindowRef};
 
-    use super::confirm::{Step, TAKEN_WAIT, chord_steps, press_confirmed, units_arrived};
-    use super::{Chord, MODIFIER_RELEASE_WAIT, NavKey};
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-        GetAsyncKeyState, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY,
-        KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, SendInput, VIRTUAL_KEY, VK_CONTROL, VK_DELETE, VK_END,
-        VK_HOME, VK_LWIN, VK_MENU, VK_PACKET, VK_RWIN, VK_SHIFT,
+    use super::confirm::{
+        Pressed, Step, TAKEN_WAIT, TARGET_WAIT, Waits, Watch, chord_steps, chords_acted,
+        press_confirmed, units_arrived,
     };
-    use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    use super::{Chord, MODIFIER_RELEASE_WAIT, NavKey};
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        GetAsyncKeyState, GetFocus, GetKeyState, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
+        KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, SendInput, VIRTUAL_KEY,
+        VK_CONTROL, VK_DELETE, VK_END, VK_HOME, VK_LWIN, VK_MENU, VK_PACKET, VK_RWIN, VK_SHIFT,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GUITHREADINFO, GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId,
+        IsHungAppWindow, MSG, PM_NOREMOVE, PeekMessageW,
+    };
 
     /// The modifiers whose being held changes what every other key means.
     const MODIFIERS: [(VIRTUAL_KEY, &str); 5] = [
@@ -241,11 +286,130 @@ mod windows_impl {
         unsafe { SendInput(1, &event, size) == 1 }
     }
 
-    /// Whether the system shows `key` down right now. The high bit only, as in
-    /// `held_modifier`.
-    fn is_down(key: VIRTUAL_KEY) -> bool {
-        let state = unsafe { GetAsyncKeyState(i32::from(key)) };
-        (state as u16) & 0x8000 != 0
+    /// Our thread joined to the input queue of the thread that holds the
+    /// keyboard focus, for as long as one send lasts (`D95`). Leaves on drop -
+    /// on every way out, a panic included - because a thread left joined would
+    /// share that application's keyboard state for the rest of our life.
+    struct Joined {
+        ours: u32,
+        theirs: u32,
+    }
+
+    impl Drop for Joined {
+        fn drop(&mut self) {
+            unsafe { AttachThreadInput(self.ours, self.theirs, 0) };
+        }
+    }
+
+    /// Joins the queue that the keys will go to, or says why it cannot.
+    ///
+    /// The queue is the one of the window HOLDING THE FOCUS, which need not be
+    /// the thread of the window in front. And joining is real only if, once
+    /// joined, `GetFocus` names a window: that is the system saying the keyboard
+    /// focus is in the queue we joined. Anything else - our own thread, a join
+    /// the system refuses, a focus held in another queue (applications framed by
+    /// another process) - is `None`, and the send goes on unpaced and says so.
+    fn join_focus(window: HWND) -> Option<Joined> {
+        let mut process = 0u32;
+        let front = unsafe { GetWindowThreadProcessId(window, &mut process) };
+        if front == 0 {
+            return None;
+        }
+        let mut info = GUITHREADINFO {
+            cbSize: core::mem::size_of::<GUITHREADINFO>() as u32,
+            ..GUITHREADINFO::default()
+        };
+        let theirs =
+            if unsafe { GetGUIThreadInfo(front, &mut info) } != 0 && !info.hwndFocus.is_null() {
+                unsafe { GetWindowThreadProcessId(info.hwndFocus, core::ptr::null_mut()) }
+            } else {
+                front
+            };
+        let ours = unsafe { GetCurrentThreadId() };
+        if theirs == 0 || theirs == ours {
+            // Our own queue would never show the keys taken - we do not take
+            // them - so following it would wait for nothing.
+            return None;
+        }
+        // A thread without a message queue cannot be joined, and asking for a
+        // message gives it one. `PM_NOREMOVE` takes nothing out, and the
+        // threads that send have no windows that a sent message could reach.
+        let mut message = MSG::default();
+        unsafe { PeekMessageW(&mut message, core::ptr::null_mut(), 0, 0, PM_NOREMOVE) };
+        if unsafe { AttachThreadInput(ours, theirs, 1) } == 0 {
+            return None;
+        }
+        let joined = Joined { ours, theirs };
+        if unsafe { GetFocus() }.is_null() {
+            return None;
+        }
+        Some(joined)
+    }
+
+    /// The system as `confirm` asks it, around the window that was in front
+    /// when the send began.
+    struct SystemWire {
+        window: HWND,
+    }
+
+    impl super::confirm::Wire<INPUT> for SystemWire {
+        fn send(&mut self, event: INPUT) -> bool {
+            send_one(event)
+        }
+        fn system_down(&mut self, key: u16) -> bool {
+            // The high bit only, as in `held_modifier`.
+            let state = unsafe { GetAsyncKeyState(i32::from(key)) };
+            (state as u16) & 0x8000 != 0
+        }
+        fn target_down(&mut self, key: u16) -> bool {
+            // Joined, our synchronous state IS the focused queue's (`D95`).
+            let state = unsafe { GetKeyState(i32::from(key)) };
+            (state as u16) & 0x8000 != 0
+        }
+        fn watch(&mut self) -> Watch {
+            if unsafe { GetForegroundWindow() } != self.window {
+                Watch::Moved
+            } else if unsafe { IsHungAppWindow(self.window) } != 0 {
+                Watch::Hung
+            } else {
+                Watch::Steady
+            }
+        }
+        fn pause(&mut self, how_long: core::time::Duration) {
+            std::thread::sleep(how_long);
+        }
+    }
+
+    /// The window in front, the queue joined to it if it could be, and the
+    /// waits that follow from that. One per send: the queue is left on drop.
+    struct Session {
+        wire: SystemWire,
+        joined: Option<Joined>,
+    }
+
+    impl Session {
+        fn begin() -> Option<Self> {
+            let window = unsafe { GetForegroundWindow() };
+            if window.is_null() {
+                return None;
+            }
+            Some(Self {
+                wire: SystemWire { window },
+                joined: join_focus(window),
+            })
+        }
+
+        fn waits(&self) -> Waits {
+            Waits {
+                system: TAKEN_WAIT,
+                target: self.joined.as_ref().map(|_| TARGET_WAIT),
+            }
+        }
+
+        fn press(&mut self, steps: &[Step<INPUT>]) -> Pressed {
+            let waits = self.waits();
+            press_confirmed(steps, &mut self.wire, waits)
+        }
     }
 
     pub fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
@@ -253,14 +417,23 @@ mod windows_impl {
             return Ok(0);
         }
         wait_for_modifiers_released()?;
-        // Each event alone, the next only once the system shows the last one
-        // (`D94`): a chord the system dropped is reported in chords - the unit
-        // the caller reasons in - and nothing is pressed after it.
+        let Some(mut session) = Session::begin() else {
+            // Nothing in front: nothing to press into, and nothing pressed.
+            return Err(SendError::ChordsTruncated {
+                chords_sent: 0,
+                chords_expected: chords.len(),
+                reason: StopReason::FocusMoved,
+            });
+        };
+        // Each event alone, the next only once it is shown (`D94`) and, when the
+        // focused queue could be joined, taken (`D95`). A chord that stopped is
+        // reported in chords that ACTED, and nothing is pressed after it.
         for (index, chord) in chords.iter().enumerate() {
             let key = virtual_key(chord.key);
             let shift = chord.shift.then_some(VK_SHIFT);
             let steps = chord_steps(key, shift, chord_event);
-            if press_confirmed(&steps, send_one, is_down, TAKEN_WAIT) < steps.len() {
+            let pressed = session.press(&steps);
+            if let Some(reason) = pressed.stop {
                 // Unconfirmed on purpose: a key the system did not take is not
                 // down, so its release is harmless - and one it took must not
                 // stay down, least of all `Shift`.
@@ -269,8 +442,9 @@ mod windows_impl {
                     let _ = send_one(chord_event(shift, true));
                 }
                 return Err(SendError::ChordsTruncated {
-                    chords_sent: index,
+                    chords_sent: chords_acted(index, pressed.taken, shift.is_some()),
                     chords_expected: chords.len(),
+                    reason,
                 });
             }
         }
@@ -314,21 +488,30 @@ mod windows_impl {
         let expected = units.len();
         if expected == 0 {
             // Nothing to send, so nothing to wait for: an empty value is a real
-            // catalogue entry (`len-0`) and must not fail on a held key.
+            // catalogue entry (`len-0`) and must not fail on a held key. Nothing
+            // needed following, so nothing was sent unpaced either.
             return Ok(SendOutcome {
                 units: 0,
                 events: 0,
+                paced: true,
             });
         }
         wait_for_modifiers_released()?;
+        let Some(mut session) = Session::begin() else {
+            return Err(SendError::Truncated {
+                units_sent: 0,
+                units_expected: expected,
+                reason: StopReason::FocusMoved,
+            });
+        };
 
-        // One unit at a time, each event confirmed before the next (`D94`). Not
-        // one buffer: a value may legitimately be a million code points (`E026`),
-        // four million `INPUT` structures at once. And not chunks either, as
-        // until 2026-10-05: a chunk confirmed by its last event hides a hole a
-        // shorter block left in its middle, and its count would be a guess. This
-        // is also the seam where step 3 will check that the target has not
-        // changed mid-insert - architektura.md 6a, race `W2`.
+        // One unit at a time, each event shown by the system (`D94`) and, when
+        // the focused queue could be joined, taken by the application before
+        // the next (`D95`) - so no two key-downs ever wait in its queue to be
+        // combined into one (`OBS-158`). Not one buffer: a value may legitimately
+        // be a million code points (`E026`). And not chunks: a chunk confirmed by
+        // its last event hides a hole in its middle. Each unit is also where the
+        // window in front is looked at (`W2`).
         for (index, unit) in units.iter().enumerate() {
             let [down, up] = events_for(*unit);
             let steps = [
@@ -343,18 +526,19 @@ mod windows_impl {
                     down: false,
                 },
             ];
-            let taken = press_confirmed(&steps, send_one, is_down, TAKEN_WAIT);
-            if taken < steps.len() {
-                if taken == 0 {
-                    // Its down was not shown, so its release is harmless - and a down
-                    // the system took late must not leave the key held.
+            let pressed = session.press(&steps);
+            if let Some(reason) = pressed.stop {
+                if pressed.taken == 0 {
+                    // Its down was not taken, so its release is harmless - and a
+                    // down taken late must not leave the key held.
                     let _ = send_one(up);
                 }
                 // Stop at the first unit not taken. Carrying on would send the
                 // rest of the value into a field that just lost part of it.
                 return Err(SendError::Truncated {
-                    units_sent: units_arrived(index, taken),
+                    units_sent: units_arrived(index, pressed.taken),
                     units_expected: expected,
+                    reason,
                 });
             }
         }
@@ -362,6 +546,7 @@ mod windows_impl {
         Ok(SendOutcome {
             units: expected,
             events: expected * 2,
+            paced: session.joined.is_some(),
         })
     }
 }
@@ -414,8 +599,11 @@ pub fn foreground_window() -> Option<WindowRef> {
 /// function only puts the characters on the wire. It waits up to
 /// [`MODIFIER_RELEASE_WAIT`] for a physically held modifier to come up and
 /// refuses with [`SendError::ModifierHeld`] if it does not. Every event goes
-/// alone and the next only once the system shows it taken (`D94`). One it does
-/// not show ends the send with [`SendError::Truncated`].
+/// alone and the next only once the system shows it taken (`D94`) and, where the
+/// queue holding the keyboard focus could be joined, once that application took
+/// it (`D95`) - [`SendOutcome::paced`] says which. The window in front is looked
+/// at before every event. A stop ends the send with [`SendError::Truncated`] and
+/// its [`StopReason`].
 pub fn send_text(text: &str) -> Result<SendOutcome, SendError> {
     platform::send_text(text)
 }
@@ -431,8 +619,9 @@ pub fn send_text(text: &str) -> Result<SendOutcome, SendError> {
 /// # Errors
 ///
 /// [`SendError::ModifierHeld`] when a modifier stays down past the wait,
-/// [`SendError::ChordsTruncated`] when the system did not take a press - every
-/// event is confirmed before the next, as in [`send_text`] - and
+/// [`SendError::ChordsTruncated`] when a press was not taken, another window came
+/// to the front or the application stopped taking keys - every event is
+/// confirmed before the next, as in [`send_text`] - and
 /// [`SendError::Unsupported`] where there is no route.
 pub fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
     platform::send_chords(chords)
@@ -465,7 +654,8 @@ mod tests {
                 outcome,
                 SendOutcome {
                     units: 0,
-                    events: 0
+                    events: 0,
+                    paced: true
                 },
                 "an empty text has no units and no events"
             ),
@@ -520,12 +710,33 @@ mod tests {
         let error = SendError::Truncated {
             units_sent: 7,
             units_expected: 100,
+            reason: StopReason::NotTaking,
         };
         let text = error.to_string();
         assert!(text.contains('7') && text.contains("100"), "got: {text}");
+        // `D95`: and WHY it stopped. Whether the field holds a fragment is the
+        // caller's sentence - at zero it holds none (`OBS-157`).
         assert!(
-            text.contains("partial"),
-            "the message must say the field is left partial, got: {text}"
+            text.contains("stopped taking"),
+            "the message must name why the send stopped, got: {text}"
         );
+    }
+
+    #[test]
+    fn every_reason_a_send_stops_has_its_own_words() {
+        let words: Vec<String> = [
+            StopReason::Dropped,
+            StopReason::FocusMoved,
+            StopReason::NotTaking,
+        ]
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+        for (i, a) in words.iter().enumerate() {
+            assert!(!a.is_empty());
+            for b in &words[i + 1..] {
+                assert_ne!(a, b, "two reasons must not read the same");
+            }
+        }
     }
 }

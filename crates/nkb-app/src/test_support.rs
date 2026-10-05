@@ -36,6 +36,9 @@ pub(crate) struct FakeDelivery {
     /// presses - or between two idle ticks - without rebuilding the ports.
     target: Cell<Option<TargetRef>>,
     fail: Option<DeliveryError>,
+    /// What a successful delivery says about following the application
+    /// (`D95`): true unless a test asks for the unpaced route.
+    paced: bool,
     pub(crate) handed: RefCell<Vec<String>>,
 }
 
@@ -45,7 +48,15 @@ impl FakeDelivery {
             availability: Availability::Ready,
             target: Cell::new(Some(TargetRef(1))),
             fail: None,
+            paced: true,
             handed: RefCell::new(Vec::new()),
+        }
+    }
+    /// A route that delivers but could not follow the application's queue.
+    pub(crate) fn unpaced() -> Self {
+        Self {
+            paced: false,
+            ..Self::ready()
         }
     }
     pub(crate) fn without_target() -> Self {
@@ -91,6 +102,7 @@ impl ValueDelivery for FakeDelivery {
         match &self.fail {
             None => Ok(Delivered {
                 utf16_units: text.encode_utf16().count(),
+                paced: self.paced,
             }),
             Some(error) => Err(error.clone()),
         }

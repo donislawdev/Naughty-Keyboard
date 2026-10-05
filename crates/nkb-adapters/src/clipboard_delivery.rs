@@ -84,6 +84,9 @@ impl ValueDelivery for ClipboardDelivery<'_> {
         match self.clipboard.put_text(text, History::Skip) {
             Ok(()) => Ok(Delivered {
                 utf16_units: text.encode_utf16().count(),
+                // No keys, so no application queue to fall behind: the value is
+                // on the clipboard whole, and the tester pastes it (`D95`).
+                paced: true,
             }),
             Err(ClipboardError::Busy) => Err(DeliveryError::Busy),
             Err(ClipboardError::Failed { detail }) => Err(DeliveryError::Refused { detail }),

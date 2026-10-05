@@ -47,6 +47,7 @@ impl ValueDelivery for TakesEverything {
     fn deliver(&self, text: &str) -> Result<Delivered, DeliveryError> {
         Ok(Delivered {
             utf16_units: text.encode_utf16().count(),
+            paced: true,
         })
     }
 }

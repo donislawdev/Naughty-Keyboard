@@ -6,7 +6,7 @@
 //! function, so nothing in this package needs it.
 
 use nkb_app::ports::{
-    Availability, Delivered, DeliveryError, KeystrokeError, KeystrokeSender, TargetRef,
+    Availability, Delivered, DeliveryError, KeystrokeError, KeystrokeSender, StopReason, TargetRef,
     ValueDelivery,
 };
 use nkb_core::keys::{Key, KeyChord};
@@ -59,6 +59,7 @@ impl ValueDelivery for DirectInjection {
         match nkb_sys::send_text(text) {
             Ok(outcome) => Ok(Delivered {
                 utf16_units: outcome.units,
+                paced: outcome.paced,
             }),
             Err(nkb_sys::SendError::Unsupported { system }) => Err(DeliveryError::Unsupported {
                 system: system.to_owned(),
@@ -66,19 +67,18 @@ impl ValueDelivery for DirectInjection {
             Err(nkb_sys::SendError::Truncated {
                 units_sent,
                 units_expected,
-            }) => Err(DeliveryError::Partial {
-                units_sent,
-                units_expected,
-            }),
+                reason,
+            }) => Err(value_stopped(units_sent, units_expected, reason)),
             Err(nkb_sys::SendError::ModifierHeld { key }) => Err(DeliveryError::ModifierHeld {
                 which: key.to_owned(),
             }),
             // `send_text` never reports in chords. If it ever did, the honest
             // translation is "nothing is known to have arrived".
-            Err(nkb_sys::SendError::ChordsTruncated { .. }) => Err(DeliveryError::Partial {
-                units_sent: 0,
-                units_expected: text.encode_utf16().count(),
-            }),
+            Err(nkb_sys::SendError::ChordsTruncated { reason, .. }) => {
+                Err(DeliveryError::NothingArrived {
+                    reason: stop_reason(reason),
+                })
+            }
         }
     }
 }
@@ -138,6 +138,54 @@ fn clearing_verdict(focus: nkb_sys::field::FocusedInput) -> Result<(), Keystroke
     }
 }
 
+/// Why the route stopped, in the words of `app`. Mirrors the enum of `nkb-sys`
+/// one to one - the two crates do not depend on each other (`D95`).
+fn stop_reason(reason: nkb_sys::StopReason) -> StopReason {
+    match reason {
+        nkb_sys::StopReason::Dropped => StopReason::Dropped,
+        nkb_sys::StopReason::FocusMoved => StopReason::FocusMoved,
+        nkb_sys::StopReason::NotTaking => StopReason::NotTaking,
+    }
+}
+
+/// A value that stopped part way. Zero units is NOT a fragment: the field holds
+/// none of the value, and saying "partial" there is what `OBS-157` caught.
+fn value_stopped(
+    units_sent: usize,
+    units_expected: usize,
+    reason: nkb_sys::StopReason,
+) -> DeliveryError {
+    let reason = stop_reason(reason);
+    if units_sent == 0 {
+        DeliveryError::NothingArrived { reason }
+    } else {
+        DeliveryError::Partial {
+            units_sent,
+            units_expected,
+            reason,
+        }
+    }
+}
+
+/// Clearing keys that stopped part way. Zero chords acted means the field is
+/// exactly as it was - no key that could change it went down (`D95` point 5).
+fn chords_stopped(
+    chords_sent: usize,
+    chords_expected: usize,
+    reason: nkb_sys::StopReason,
+) -> KeystrokeError {
+    let reason = stop_reason(reason);
+    if chords_sent == 0 {
+        KeystrokeError::NothingArrived { reason }
+    } else {
+        KeystrokeError::Partial {
+            chords_sent,
+            chords_expected,
+            reason,
+        }
+    }
+}
+
 /// The one-line mapping between the vocabulary `app` speaks and the one
 /// `nkb-sys` speaks. Two enums rather than one shared type, because `nkb-sys`
 /// depends on nothing of ours and `nkb-core` knows nothing about systems.
@@ -175,16 +223,15 @@ impl KeystrokeSender for DirectInjection {
             Err(nkb_sys::SendError::ChordsTruncated {
                 chords_sent,
                 chords_expected,
-            }) => Err(KeystrokeError::Partial {
-                chords_sent,
-                chords_expected,
-            }),
+                reason,
+            }) => Err(chords_stopped(chords_sent, chords_expected, reason)),
             // `send_chords` never reports in UTF-16 units. If it ever did, the
-            // honest translation is "some of it went out", not success.
-            Err(nkb_sys::SendError::Truncated { .. }) => Err(KeystrokeError::Partial {
-                chords_sent: 0,
-                chords_expected: chords.len(),
-            }),
+            // honest translation is "nothing is known to have acted", not success.
+            Err(nkb_sys::SendError::Truncated { reason, .. }) => {
+                Err(KeystrokeError::NothingArrived {
+                    reason: stop_reason(reason),
+                })
+            }
         }
     }
 }
@@ -222,6 +269,57 @@ mod tests {
                 key: nkb_sys::NavKey::Delete,
                 shift: false
             }
+        );
+    }
+
+    #[test]
+    fn zero_is_nothing_arrived_and_anything_more_is_a_fragment_with_its_reason() {
+        // `OBS-157`: under another program's `BlockInput` the field kept its own
+        // content while the tool said it held a partial value.
+        assert_eq!(
+            value_stopped(0, 255, nkb_sys::StopReason::Dropped),
+            DeliveryError::NothingArrived {
+                reason: StopReason::Dropped
+            }
+        );
+        assert_eq!(
+            value_stopped(3, 255, nkb_sys::StopReason::NotTaking),
+            DeliveryError::Partial {
+                units_sent: 3,
+                units_expected: 255,
+                reason: StopReason::NotTaking
+            }
+        );
+        assert_eq!(
+            chords_stopped(0, 3, nkb_sys::StopReason::FocusMoved),
+            KeystrokeError::NothingArrived {
+                reason: StopReason::FocusMoved
+            }
+        );
+        assert_eq!(
+            chords_stopped(1, 3, nkb_sys::StopReason::Dropped),
+            KeystrokeError::Partial {
+                chords_sent: 1,
+                chords_expected: 3,
+                reason: StopReason::Dropped
+            }
+        );
+    }
+
+    #[test]
+    fn every_reason_of_the_system_maps_to_its_own_reason() {
+        let mapped = [
+            stop_reason(nkb_sys::StopReason::Dropped),
+            stop_reason(nkb_sys::StopReason::FocusMoved),
+            stop_reason(nkb_sys::StopReason::NotTaking),
+        ];
+        assert_eq!(
+            mapped,
+            [
+                StopReason::Dropped,
+                StopReason::FocusMoved,
+                StopReason::NotTaking
+            ]
         );
     }
 

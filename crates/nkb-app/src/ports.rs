@@ -55,6 +55,36 @@ impl fmt::Display for SourceError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Delivered {
     pub utf16_units: usize,
+    /// Whether the application holding the focus took every key, not only the
+    /// system (`D95`). False when the route could not follow its queue - then
+    /// characters may be missing if it was busy (`OBS-158`), and that has to be
+    /// said. The clipboard route has no keys to follow and reports true.
+    pub paced: bool,
+}
+
+/// Why a send stopped before its end (`D95`). The same three answers for a value
+/// and for the clearing keys, because the route stops for the same reasons.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StopReason {
+    /// The system did not take a key: another program blocking input, a
+    /// keyboard hook swallowing it, or a window with higher privileges.
+    Dropped,
+    /// Another window came to the front, so the next key would have landed
+    /// there. Also how a tester stops a long send: by clicking elsewhere.
+    FocusMoved,
+    /// The application holding the focus stopped taking keys - the system
+    /// calls it not responding, or it took nothing for as long.
+    NotTaking,
+}
+
+impl fmt::Display for StopReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Dropped => "dropped",
+            Self::FocusMoved => "focus-moved",
+            Self::NotTaking => "not-taking",
+        })
+    }
 }
 
 /// Why a value did not reach the field, or did not reach all of it.
@@ -69,14 +99,20 @@ pub enum DeliveryError {
     /// was sent: under a held modifier the value's characters mean something
     /// else to many applications. The ordinary case right after a hotkey.
     ModifierHeld { which: String },
-    /// Part of the value arrived. The field now holds a fragment, and saying so
-    /// is the entire reason this variant is separate from the others: a tool
-    /// that reported plain failure here would leave a half-written value in
-    /// somebody else's form looking like that application's own doing.
+    /// Part of the value arrived - at least one unit, never zero (that is
+    /// [`DeliveryError::NothingArrived`]). The field now holds a fragment, and
+    /// saying so is the entire reason this variant is separate from the others:
+    /// a tool that reported plain failure here would leave a half-written value
+    /// in somebody else's form looking like that application's own doing.
     Partial {
         units_sent: usize,
         units_expected: usize,
+        reason: StopReason,
     },
+    /// The send stopped before a single unit arrived, so the field holds none
+    /// of the value (`OBS-157`): calling this "partial" sent testers to clear a
+    /// field that still held only its own content.
+    NothingArrived { reason: StopReason },
     /// The route is held by somebody else for longer than the implementation
     /// waits, and nothing went out. Passing - the same request may work in a
     /// moment. Today only the clipboard route reports it.
@@ -109,9 +145,11 @@ impl fmt::Display for DeliveryError {
             Self::Partial {
                 units_sent,
                 units_expected,
+                reason,
             } => {
-                write!(f, "partial-{units_sent}-of-{units_expected}")
+                write!(f, "partial-{units_sent}-of-{units_expected}-{reason}")
             }
+            Self::NothingArrived { reason } => write!(f, "nothing-arrived-{reason}"),
             Self::Busy => f.write_str("busy"),
             Self::Refused { detail } => write!(f, "refused: {detail}"),
             Self::CannotCarry { character } => {
@@ -205,13 +243,18 @@ pub enum KeystrokeError {
     /// This is the one race the recipe itself cannot see, and refusing is the
     /// only answer that keeps untouchable rule 17.
     ModifierHeld { which: String },
-    /// The system accepted fewer presses than it was handed. The field is in
-    /// an unknown state between "untouched" and "cleared", and saying so is
-    /// what lets the caller refuse to send a value on top of it.
+    /// Fewer presses acted than were handed over - at least one, never zero
+    /// (that is [`KeystrokeError::NothingArrived`]). The field is in an unknown
+    /// state between "untouched" and "cleared", and saying so is what lets the
+    /// caller refuse to send a value on top of it.
     Partial {
         chords_sent: usize,
         chords_expected: usize,
+        reason: StopReason,
     },
+    /// The keys stopped before a single press acted, so the field is exactly as
+    /// it was (`OBS-157`).
+    NothingArrived { reason: StopReason },
     /// The window in front runs with higher privileges than the tool, so no
     /// key was pressed: the system would have dropped them all and reported
     /// success (`OBS-128`, `D72`). The field is untouched.
@@ -244,7 +287,9 @@ impl fmt::Display for KeystrokeError {
             Self::Partial {
                 chords_sent,
                 chords_expected,
-            } => write!(f, "partial-{chords_sent}-of-{chords_expected}"),
+                reason,
+            } => write!(f, "partial-{chords_sent}-of-{chords_expected}-{reason}"),
+            Self::NothingArrived { reason } => write!(f, "nothing-arrived-{reason}"),
             Self::HigherPrivileges => f.write_str("higher-privileges"),
             Self::NoTextField => f.write_str("no-text-field"),
             Self::FieldUnconfirmed => f.write_str("field-unconfirmed"),
