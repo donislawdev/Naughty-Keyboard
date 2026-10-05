@@ -83,6 +83,11 @@ export component PacksWindow inherits Window {
 
     title: root.window-title;
     background: Tokens.surface;
+    // A preferred size, not a bound one: the tester may resize this window,
+    // and keeps that size between openings. It reaches the screen only because
+    // Rust builds the element tree before the event loop creates the window -
+    // without that the window opened 360 wide (`OBS-154`, see
+    // `build_before_the_loop` in `packs.rs`).
     preferred-width: Tokens.packs-width;
     preferred-height: Tokens.packs-height;
     min-width: Tokens.packs-min-width;

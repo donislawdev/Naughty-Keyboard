@@ -54,6 +54,15 @@
 //! (`OBS-151`, `slint.md` 2.34, read in winit 0.30.13 and i-slint-core
 //! 1.18.1). So the window forgets them itself when it becomes active: see
 //! [`forget_held_modifiers`].
+//!
+//! # Opening at the size it was designed for
+//!
+//! 🔴 The window is created long before it is first shown - by the backend, as
+//! the event loop starts - and at that moment it had not built its element tree
+//! yet. Its layout then answered with a maximum width no larger than its
+//! content's minimum, and the window opened 360 wide instead of 440 every time
+//! (`OBS-154`). So the constructor builds the tree before the loop starts: see
+//! [`build_before_the_loop`].
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -149,6 +158,8 @@ impl Packs {
         say: Box<dyn Fn(String)>,
     ) -> Rc<Self> {
         label(&window);
+        // After the words, which are part of what the layout measures.
+        build_before_the_loop(window.window());
         let packs = Rc::new(Self {
             window,
             picker: RefCell::new(None),
@@ -437,6 +448,27 @@ pub fn forget_held_modifiers(window: &slint::Window) {
     for key in MODIFIERS {
         window.dispatch_event(slint::platform::WindowEvent::KeyReleased { text: key.into() });
     }
+}
+
+/// Makes `window` build its whole element tree now, so that the size the
+/// backend creates it with is the size its layout asks for.
+///
+/// 🔴 Measured, not read (`OBS-154`, `slint.md` 2.40, Slint 1.18.1, winit
+/// backend). The backend creates every window, hidden, as the event loop
+/// starts, at the preferred size of its layout, and a later `show()` keeps that
+/// size. A window that was never shown, drawn or sent an event has not built
+/// its whole tree, and its layout then reports a maximum no larger than its
+/// content's minimum: the pack window was created 360 x 560 instead of
+/// 440 x 560. Once the tree is built the same window asks for 440 x 560, with
+/// no maximum, and is created at that size.
+///
+/// A pointer leaving the window is the lightest event Slint answers by building
+/// the tree first (`process_mouse_input`), and on a window nothing hovers over
+/// it does nothing else. Slint has no public call that only builds the tree.
+/// Should a later Slint build it before answering for the layout, this becomes
+/// a no-op, and `tests/packs_size.rs` says so.
+pub(crate) fn build_before_the_loop(window: &slint::Window) {
+    window.dispatch_event(slint::platform::WindowEvent::PointerExited);
 }
 
 /// Every word that does not change while the window is open.
