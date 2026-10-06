@@ -146,6 +146,14 @@ fn fill(palette: &Palette) {
         "End of pack (34/34). Press again to start over.",
     )])));
 
+    // The button in the pack band, both words (UX-GUI-004), and the link under
+    // the hint bar, so the picture shows the palette as the product fills it.
+    palette.set_collapse_label("Collapse".into());
+    palette.set_expand_label("Expand".into());
+    palette.set_shortcuts_link("Change shortcuts".into());
+
+    // Every action the build carries out (UX-GUI-007), as `live::legend`
+    // lists them for the default table.
     palette.set_hints(ModelRc::new(VecModel::from(vec![
         HintRow {
             key: "Alt+Shift+N".into(),
@@ -156,8 +164,20 @@ fn fill(palette: &Palette) {
             action: "Previous value".into(),
         },
         HintRow {
+            key: "Alt+Shift+0".into(),
+            action: "Restart pack".into(),
+        },
+        HintRow {
             key: "Alt+Shift+B".into(),
             action: "Copy report block".into(),
+        },
+        HintRow {
+            key: "Alt+Shift+Space".into(),
+            action: "Find a value".into(),
+        },
+        HintRow {
+            key: "Alt+Shift+H".into(),
+            action: "Collapse or expand the palette".into(),
         },
     ])));
 }

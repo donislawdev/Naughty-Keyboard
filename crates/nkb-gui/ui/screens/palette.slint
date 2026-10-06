@@ -7,8 +7,9 @@
 // as a property and everything leaves as a shortcut - with the pointer as the
 // one exception: the pack's name and the next band's heading open the value
 // window (K3.2d, UX2), the link under the hints opens the shortcuts window
-// (K5.5), two Copy buttons put a value on the clipboard (D98), and one button
-// at a time turns clipboard mode on or off (D99). A click
+// (K5.5), two Copy buttons put a value on the clipboard (D98), one button
+// at a time turns clipboard mode on or off (D99), and the button at the end of
+// the pack band collapses or expands the palette (D100). A click
 // reaches this window without activating it (`D62`), so it takes nothing from
 // the field under test.
 //
@@ -201,8 +202,15 @@ export component Palette inherits Window {
     in property <[HintRow]> hints;
 
     // ---- state -------------------------------------------------------------
-    // The tester's choice, made with a shortcut and never by a timer (D83).
+    // The tester's choice, made with a shortcut or the button in the pack band
+    // and never by a timer (D83).
     in property <bool> compact;
+    // The button's two words: what a click does in each state (`UX-GUI-004`).
+    in property <string> collapse-label;
+    in property <string> expand-label;
+    // A click on it. The worker owns the switch and remembers it (`D84`), so
+    // the click only asks - the same way as the shortcut.
+    callback toggle-compact();
     // Whether a value has gone out yet. Before the first one the value band
     // shows its empty state instead of three empty lines and a row of no
     // markers - `ux-spec.md` 5.1.
@@ -284,14 +292,41 @@ export component Palette inherits Window {
                     // length. Elided rather than wrapped: the counter beside
                     // it must keep its place, and a band that grows a line
                     // because of a long name moves everything below it. A click
-                    // on it opens the pack window.
-                    opener := PickerOpener {
-                        text: root.pack;
-                        action: root.open-packs-label;
+                    // on it opens the value window, and the mark after it says
+                    // so with the pointer elsewhere (`UX-GUI-015`).
+                    //
+                    // Centred on the button's row, like every heading beside a
+                    // button in this window (`slint.md` 2.43).
+                    VerticalLayout {
+                        alignment: center;
+                        opener := PickerOpener {
+                            text: root.pack;
+                            action: root.open-packs-label;
+                            chevron: true;
+                        }
                     }
                     Spacer { }
-                    TextCounter {
-                        text: root.counter;
+                    VerticalLayout {
+                        alignment: center;
+                        TextCounter {
+                            text: root.counter;
+                        }
+                    }
+                    // Collapse and expand, in BOTH states and in one place
+                    // (`UX-GUI-004`): until this button the compact palette
+                    // said nothing about how to get the rest back, and it
+                    // starts compact on the next run when the tester left it
+                    // so. The word says what a click does now. A click reaches
+                    // the palette without activating it (`D62`). Faded while a
+                    // value goes, like every button here: the worker answers a
+                    // click between presses, so it would land after the send.
+                    SmallButton {
+                        text: root.compact ? root.expand-label : root.collapse-label;
+                        action: root.compact ? root.expand-label : root.collapse-label;
+                        enabled: !root.sending;
+                        clicked => {
+                            root.toggle-compact();
+                        }
                     }
                 }
             }
@@ -394,6 +429,7 @@ export component Palette inherits Window {
                         PickerOpener {
                             text: root.next-heading;
                             action: root.open-packs-label;
+                            chevron: true;
                             clicked => {
                                 root.open-packs();
                             }

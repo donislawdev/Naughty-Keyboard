@@ -189,6 +189,9 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     palette.set_use_clipboard_label(i18n::label(PaletteLabel::UseClipboard).into());
     palette.set_turn_off_label(i18n::label(PaletteLabel::TurnOff).into());
     palette.set_turn_off_action(i18n::label(PaletteLabel::TurnOffClipboard).into());
+    // The button at the end of the pack band, in both states (`UX-GUI-004`).
+    palette.set_collapse_label(i18n::label(PaletteLabel::Collapse).into());
+    palette.set_expand_label(i18n::label(PaletteLabel::Expand).into());
     // Expanded at first run, with the hints up and nothing sent yet -
     // `ux-spec.md` 5.1 - and as the tester left it on every run after that.
     // The worker fills the pack and the counter, because the sequence that
@@ -225,6 +228,9 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // click only asks.
     palette.on_use_clipboard(ask_on_click(&choose, live::Command::UseClipboard));
     palette.on_turn_off_clipboard(ask_on_click(&choose, live::Command::TurnOffClipboard));
+    // Collapse and expand: the worker owns the switch and remembers it (`D84`),
+    // so the click asks, as the shortcut does.
+    palette.on_toggle_compact(ask_on_click(&choose, live::Command::ToggleCompact));
     // The same way: created once, shown on request - and the one window the
     // worker's answers about shortcuts are delivered to (`shortcuts::tell`).
     let shortcuts = Shortcuts::new(

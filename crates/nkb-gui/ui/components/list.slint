@@ -249,7 +249,8 @@ export component PickList inherits Rectangle {
 // The name of the thing in use, as the way to choose another - the pack's name
 // in the palette, which opens the pack window.
 //
-//     pointer here     the name in the accent, like a link
+//     pointer here     the name - and its mark, when it has one - in the accent,
+//                      like a link
 //     pressed          the same - the pack window opens at once, so there is no
 //                      moment to show a second step in
 //     keyboard here    NEVER, on purpose: the palette refuses the keyboard focus
@@ -269,12 +270,30 @@ export component PickList inherits Rectangle {
 // letters and read as a text selection, barely visible in the render. The
 // colour of the letters is what changes now: visible, and the accent holds its
 // contrast even in the dimmed state (`D53`).
+//
+// # The mark after the name (`UX-GUI-015`)
+//
+// With the pointer elsewhere, the name looked like every other line of the
+// palette, so the way to choose another pack by mouse was there and unseen. A
+// name that opens a list to choose from now carries a small downward triangle
+// after its words, at rest as well - the mark a drop-down list wears, in the
+// words' own colour, so it changes with them under the pointer. A shape drawn
+// here rather than a character: a character would be a quoted string, which a
+// view may not hold (`D58`), and its look would depend on the typeface.
+//
+// Only where a click opens a list. The link to the shortcuts window opens a
+// window of settings, not a choice, and carries no mark.
 export component PickerOpener inherits Rectangle {
     in property <string> text;
     // What a click does, as UI Automation reads it - the same words the hint
     // bar gives the shortcut, so a tester and a harness find it by one name.
     in property <string> action;
+    // The click opens a list to choose from - see the header.
+    in property <bool> chevron;
     callback clicked();
+
+    // The words and the mark wear one colour, so the pair reads as one thing.
+    property <color> ink: area.has-hover || area.pressed ? Tokens.accent : Tokens.text-secondary;
 
     min-width: content.min-width;
     preferred-width: content.preferred-width;
@@ -301,10 +320,37 @@ export component PickerOpener inherits Rectangle {
     // other band of the palette starts in (GUI rule 19). The first render with
     // `space-1` each side put it four pixels right of the value name below.
     content := HorizontalLayout {
+        spacing: Tokens.space-1;
         TextBody {
             text: root.text;
             overflow: elide;
-            color: area.has-hover || area.pressed ? Tokens.accent : Tokens.text-secondary;
+            color: root.ink;
+        }
+        // Centred on the line, and never squeezed: a long name gives way
+        // before the mark does, as it gives way before the counter.
+        if root.chevron: VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            Path {
+                width: Tokens.chevron-width;
+                height: Tokens.chevron-height;
+                viewbox-width: 2;
+                viewbox-height: 1;
+                fill: root.ink;
+                MoveTo {
+                    x: 0;
+                    y: 0;
+                }
+                LineTo {
+                    x: 2;
+                    y: 0;
+                }
+                LineTo {
+                    x: 1;
+                    y: 1;
+                }
+                Close { }
+            }
         }
     }
 }

@@ -167,6 +167,13 @@ export global Tokens {
     // and far thinner than a line of text, so it reads as a measure rather than
     // as a control - it takes no pointer.
     out property <length> progress-height: 4px;
+    // The mark after a name that opens a list to choose from - the pack's name
+    // and the next value's heading in the palette (`UX-GUI-015`). A small
+    // triangle pointing down, as wide as a lower-case letter of the body text
+    // and half as tall: big enough to read as a shape rather than a speck, and
+    // small enough to stay a mark beside the words rather than a second word.
+    out property <length> chevron-width: 8px;
+    out property <length> chevron-height: 4px;
 
     // ---- opacity -----------------------------------------------------------
     // Background alpha of the palette in its resting state (ux-spec.md 2,

@@ -30,6 +30,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc;
 
+use nkb_core::hotkeys::HotkeyChord;
 use nkb_gui::PacksWindow;
 use nkb_gui::live::{self, Command};
 use nkb_gui::packs::{Keyboard, Packs};
@@ -131,6 +132,7 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     *in_use.lock().expect("a fresh lock") = live::InUseNow {
         pack: Some(String::from("whitespace")),
         next: None,
+        restart: HotkeyChord::parse("Alt+Shift+F9").ok(),
     };
     let in_use_slot = std::sync::Arc::clone(&in_use);
     let said: Rc<RefCell<Vec<String>>> = Rc::default();
@@ -167,8 +169,9 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     );
     assert_eq!(
         titles(window).len(),
-        1 + 12 + 1 + 9,
-        "the values of the pack in use, then every shipped pack, each under a heading: {:?}",
+        1 + 1 + 12 + 1 + 9,
+        "the restart row and the values of the pack in use, then every shipped pack, each \
+         section under a heading: {:?}",
         titles(window)
     );
     assert_eq!(
@@ -176,6 +179,14 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
         2
     );
     assert_eq!(titles(window)[0], "Values in Whitespace");
+    // UX-GUI-007: the way back to the start, first in the section, as a row
+    // of the shortcuts window's shape - one line, the shortcut of the table in
+    // effect at its end, choosable.
+    let restart = window.get_rows().row_data(1).expect("a second row");
+    assert_eq!(restart.title, "Restart pack");
+    assert!(restart.enabled && !restart.heading && restart.single_line);
+    assert!(restart.has_key);
+    assert_eq!(restart.key, "Alt+Shift+F9");
     assert_eq!(
         selected_title(window),
         "Whitespace",

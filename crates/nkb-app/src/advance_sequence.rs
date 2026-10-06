@@ -603,6 +603,25 @@ impl AdvanceSequence {
         }
     }
 
+    /// Whether [`Self::on_action`] carries `action` out in this build, rather
+    /// than answering [`Message::Unhandled`].
+    ///
+    /// Asked by whoever shows the tester which shortcuts do something - the
+    /// palette's hint bar names every one of them and no other (`UX-GUI-007`).
+    /// A question here rather than a list there: the list would be a second
+    /// copy of the match below, free to drift from it, and a test holds this
+    /// answer to what `on_action` really does for all ten actions.
+    #[must_use]
+    pub const fn handles(action: HotkeyAction) -> bool {
+        matches!(
+            action,
+            HotkeyAction::NextValue
+                | HotkeyAction::PreviousValue
+                | HotkeyAction::RestartPack
+                | HotkeyAction::CopyReport
+        )
+    }
+
     /// Applies one shortcut and, if it means sending, does the send.
     ///
     /// The target is checked ONCE before a send: nothing focused means the value
@@ -1810,6 +1829,27 @@ mod tests {
             }]
         );
         assert_eq!(advance.counter(), Some((0, 3)));
+    }
+
+    /// 🔴 `handles` is what the palette shows the tester as working, so it is
+    /// held to what a press really does - for every action, both ways: an
+    /// action it claims is never answered `Unhandled`, and one it does not
+    /// claim always is. Through fakes, so a send here types into nothing.
+    #[test]
+    fn handles_says_exactly_which_actions_are_carried_out() {
+        let kit = Kit::ready();
+        for action in HotkeyAction::ALL {
+            let mut advance = chosen(Risk::Normal);
+            let outcome = advance.on_action(action, &kit.ports());
+            let unhandled = outcome.messages.contains(&Message::Unhandled { action });
+            assert_eq!(
+                AdvanceSequence::handles(action),
+                !unhandled,
+                "{action:?}: handles() says {}, the press answered {:?}",
+                AdvanceSequence::handles(action),
+                outcome.messages
+            );
+        }
     }
 
     #[test]

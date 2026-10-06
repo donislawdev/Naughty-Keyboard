@@ -1244,6 +1244,13 @@ pub enum PaletteLabel {
     /// What that button does, for UI Automation, where the bar's words do not
     /// stand beside it.
     TurnOffClipboard,
+    /// The button at the end of the pack band while the palette is expanded -
+    /// its words, which also say what a click does (`UX-GUI-004`).
+    Collapse,
+    /// The same button while the palette is compact. The one way back to the
+    /// rest of the palette that the compact state shows (`UX-GUI-004`): until
+    /// it, the compact palette said nothing about how to expand it again.
+    Expand,
 }
 
 fn pattern_palette_label(label: PaletteLabel) -> &'static str {
@@ -1283,6 +1290,8 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::UseClipboard => "Use clipboard mode",
         PaletteLabel::TurnOff => "Turn off",
         PaletteLabel::TurnOffClipboard => "Turn off clipboard mode",
+        PaletteLabel::Collapse => "Collapse",
+        PaletteLabel::Expand => "Expand",
     }
 }
 
@@ -2728,6 +2737,8 @@ mod tests {
             PaletteLabel::UseClipboard,
             PaletteLabel::TurnOff,
             PaletteLabel::TurnOffClipboard,
+            PaletteLabel::Collapse,
+            PaletteLabel::Expand,
         ] {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
@@ -2760,7 +2771,9 @@ mod tests {
                 | PaletteLabel::CopyLast
                 | PaletteLabel::UseClipboard
                 | PaletteLabel::TurnOff
-                | PaletteLabel::TurnOffClipboard => false,
+                | PaletteLabel::TurnOffClipboard
+                | PaletteLabel::Collapse
+                | PaletteLabel::Expand => false,
             };
             let pattern = pattern_palette_label(label);
             assert_eq!(

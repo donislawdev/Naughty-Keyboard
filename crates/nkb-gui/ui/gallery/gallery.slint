@@ -219,21 +219,28 @@ export component Gallery inherits Window {
             ];
         }
 
-        // The pack's name in the palette, which opens the pack window: at rest,
-        // and a name far too long for its row, elided before the counter. The
-        // pointer states need a pointer, so `palette_opener.rs` measures them
-        // on the real palette.
+        // The pack's name in the palette, which opens the value window: at
+        // rest with the mark that says it opens a list (UX-GUI-015), a name far
+        // too long for its row - elided before the mark, which stays - and the
+        // plain link, which opens a window rather than a list and wears no
+        // mark. The pointer states need a pointer, so `palette_opener.rs`
+        // measures them on the real palette, and `palette_collapse.rs` the mark.
         HorizontalLayout {
             spacing: Tokens.space-2;
-            PickerOpener { text: "PickerOpener"; action: "Find a value"; }
+            PickerOpener { text: "PickerOpener"; action: "Find a value"; chevron: true; }
             Spacer { }
             TextCounter { text: "7 / 34"; }
         }
         HorizontalLayout {
             spacing: Tokens.space-2;
-            PickerOpener { text: "A pack whose name is far too long for the palette's first band"; action: "Find a value"; }
+            PickerOpener { text: "A pack whose name is far too long for the palette's first band"; action: "Find a value"; chevron: true; }
             Spacer { }
             TextCounter { text: "100000 / 100000"; }
+        }
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            PickerOpener { text: "PickerOpener without the mark"; action: "Change shortcuts"; }
+            Spacer { }
         }
 
         // The button, as the palette's bands carry it: at the end of a heading's

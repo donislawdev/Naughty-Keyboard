@@ -256,7 +256,8 @@ impl Packs {
                 list_packs(&BuiltInCatalogue::new(), &TomlPackFormat),
                 now.pack.as_deref(),
                 now.next.as_deref(),
-            );
+            )
+            .with_restart_key(now.restart.map(i18n::chord));
             self.window.set_notes(strings(picker.notes()));
             *self.picker.borrow_mut() = Some(picker);
             self.show_list();
@@ -512,11 +513,16 @@ fn pick_row(row: &Row) -> PickRow {
         current: row.current,
         enabled: row.enabled,
         // A pack and a value are a name over a detail line, with no key
-        // combination. A heading is one line of its own look.
-        single_line: row.kind == RowKind::Heading,
+        // combination. A heading is one line of its own look. The restart row
+        // is one line with its shortcut at the end - the shape of a row in the
+        // shortcuts window, so it reads as an action and not as a value.
+        single_line: matches!(row.kind, RowKind::Heading | RowKind::Restart),
         heading: row.kind == RowKind::Heading,
-        key: SharedString::new(),
-        has_key: false,
+        key: row
+            .key
+            .as_deref()
+            .map_or_else(SharedString::new, SharedString::from),
+        has_key: row.key.is_some(),
     }
 }
 

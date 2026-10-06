@@ -162,11 +162,10 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
         "a click on the pack's name did not open the pack window"
     );
 
-    // ---- a click on the counter beside it does not ---------------------------
-    press(
-        &palette,
-        LogicalPosition::new((WIDTH - 30) as f32, centre.y),
-    );
+    // ---- a click beside it does not --------------------------------------------
+    // In the middle of the band, between the name and the counter: since UX4
+    // the right end holds the collapse button, which asks for something else.
+    press(&palette, LogicalPosition::new((WIDTH / 2) as f32, centre.y));
     assert_eq!(
         opened.get(),
         1,

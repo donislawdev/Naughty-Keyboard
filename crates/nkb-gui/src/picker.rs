@@ -20,6 +20,17 @@
 //! and the pack changed without typing a letter. With a query, the values that
 //! match come first, from every pack, then the packs that match.
 //!
+//! A fourth row opens the section of the pack in use: `Restart pack`, under
+//! the action's own name and with its shortcut at the end (`UX-GUI-007`).
+//! Until it, the way back to the start of a pack was a shortcut the hint bar
+//! did not name, or choosing value 1 here - which does the same, and which
+//! nothing said does the same. So the row does exactly that: it makes the
+//! first value the next one, as the shortcut does (`Sequence::restart` and
+//! `set_next(1)` reach one position). One line with a key combination, the
+//! shape of a row in the shortcuts window, because the first render drew it
+//! as a name over a detail line - the twin of a value called "Restart pack".
+//! Not with a query: it belongs to the pack in use, not to what a search found.
+//!
 //! Every entry `list_packs` returns is a pack row, including a pack that is
 //! present and refused, and one whose file would not open. Those two stay in
 //! the list, faded and not choosable: a pack that vanished from a list cannot
@@ -46,6 +57,7 @@
 use nkb_adapters::i18n::{self, PacksLabel};
 use nkb_app::browse_packs::{Listing, PackEntry};
 use nkb_app::ports::SourceError;
+use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::pack::{Pack, PackValue, Risk};
 
 use crate::query::{KeyPress, Pressed, Query};
@@ -79,7 +91,12 @@ struct ValueChoice {
 enum Item {
     Heading(Section),
     Pack(usize),
-    Value { pack: usize, value: usize },
+    Value {
+        pack: usize,
+        value: usize,
+    },
+    /// Start this pack - the one in use - from its first value.
+    Restart(usize),
 }
 
 /// Which section a heading opens.
@@ -110,6 +127,8 @@ pub enum RowKind {
     Heading,
     Pack,
     Value,
+    /// The row that starts the pack in use again.
+    Restart,
 }
 
 /// A row as the window draws it: finished strings and facts, no toolkit type.
@@ -122,6 +141,9 @@ pub struct Row {
     /// The pack the palette holds now.
     pub current: bool,
     pub enabled: bool,
+    /// The key combination at the end of the row - the restart row's own
+    /// shortcut. `None` for every other row.
+    pub key: Option<String>,
 }
 
 /// What Enter (or a click) comes to.
@@ -165,6 +187,8 @@ pub struct PackPicker {
     empty: Option<Empty>,
     /// One line per reason a catalogue source was not read.
     notes: Vec<String>,
+    /// The restart shortcut as the hint bar words it, for the restart row.
+    restart_key: Option<String>,
 }
 
 impl PackPicker {
@@ -193,6 +217,7 @@ impl PackPicker {
             selected: None,
             empty,
             notes,
+            restart_key: None,
         };
         picker.filter();
         picker.selected = picker
@@ -200,6 +225,14 @@ impl PackPicker {
             .or_else(|| picker.position_of_in_use())
             .or_else(|| picker.first_enabled());
         picker
+    }
+
+    /// The same picker, its restart row ending in `key` - the restart
+    /// shortcut of the table in effect, worded as the hint bar words it.
+    #[must_use]
+    pub fn with_restart_key(mut self, key: Option<String>) -> Self {
+        self.restart_key = key;
+        self
     }
 
     /// Applies one key press to the query and filters the list again when the
@@ -253,6 +286,17 @@ impl PackPicker {
                 pack: self.packs[pack].id.clone(),
                 value: self.packs[pack].values[value].id.clone(),
             },
+            // The first value as the next one: where the restart shortcut puts
+            // the sequence. The row stands only over a pack with values.
+            Some(Item::Restart(pack)) => {
+                self.packs[pack]
+                    .values
+                    .first()
+                    .map_or(Chosen::Nothing, |first| Chosen::Value {
+                        pack: self.packs[pack].id.clone(),
+                        value: first.id.clone(),
+                    })
+            }
             // A heading is never selected, so this is "nothing selected".
             Some(Item::Heading(_)) | None => Chosen::Nothing,
         }
@@ -337,6 +381,7 @@ impl PackPicker {
                 && !self.packs[at].values.is_empty()
             {
                 visible.push(Item::Heading(Section::InUse(at)));
+                visible.push(Item::Restart(at));
                 visible.extend(
                     (0..self.packs[at].values.len()).map(|value| Item::Value { pack: at, value }),
                 );
@@ -388,6 +433,7 @@ impl PackPicker {
                 badge: None,
                 current: false,
                 enabled: false,
+                key: None,
             },
             Item::Pack(at) => {
                 let choice = &self.packs[at];
@@ -398,6 +444,7 @@ impl PackPicker {
                     badge: choice.badge.clone(),
                     current: self.in_use.as_deref() == Some(choice.id.as_str()),
                     enabled: choice.enabled,
+                    key: None,
                 }
             }
             Item::Value { pack, value } => {
@@ -429,8 +476,20 @@ impl PackPicker {
                     badge,
                     current: false,
                     enabled: true,
+                    key: None,
                 }
             }
+            // The action's own name and its shortcut, the words the hint bar
+            // gives them, so the row and the bar teach one thing.
+            Item::Restart(_) => Row {
+                kind: RowKind::Restart,
+                title: i18n::action_name(HotkeyAction::RestartPack).to_owned(),
+                detail: String::new(),
+                badge: None,
+                current: false,
+                enabled: true,
+                key: self.restart_key.clone(),
+            },
         }
     }
 
@@ -438,7 +497,7 @@ impl PackPicker {
         match self.visible[position] {
             Item::Heading(_) => false,
             Item::Pack(at) => self.packs[at].enabled,
-            Item::Value { .. } => true,
+            Item::Value { .. } | Item::Restart(_) => true,
         }
     }
 
@@ -680,6 +739,60 @@ mod tests {
         assert_eq!(picker.empty_text(), "");
     }
 
+    /// `UX-GUI-007`: the way back to the start of the pack in use stands where
+    /// its values are listed, under the action's own name, and it does what
+    /// the restart shortcut does - the first value becomes the next one.
+    #[test]
+    fn the_pack_in_use_opens_with_a_restart_row_that_makes_value_one_next() {
+        let next = value_id("whitespace", 3);
+        let mut picker = PackPicker::new(Ok(listing()), Some("whitespace"), Some(&next))
+            .with_restart_key(Some(String::from("Alt+Shift+0")));
+        let rows = picker.rows();
+        assert_eq!(rows[0].kind, RowKind::Heading);
+        assert_eq!(
+            rows[1],
+            Row {
+                kind: RowKind::Restart,
+                title: String::from("Restart pack"),
+                detail: String::new(),
+                badge: None,
+                current: false,
+                enabled: true,
+                key: Some(String::from("Alt+Shift+0")),
+            },
+            "the restart row opens the section, above value one"
+        );
+        assert_eq!(rows[2].detail, "Whitespace - value 1 of 12");
+        assert_eq!(of_kind(&picker, RowKind::Restart).len(), 1);
+        assert_eq!(
+            picker.summary(),
+            "values: 12, packs: 9",
+            "the restart row is not a value"
+        );
+        assert_eq!(
+            picker.click(1),
+            Chosen::Value {
+                pack: String::from("whitespace"),
+                value: value_id("whitespace", 1)
+            }
+        );
+
+        // At the end of a pack the window opens on the pack in use, and the
+        // way back to the start is still there.
+        let ended = shipped(Some("unicode-text"));
+        assert_eq!(of_kind(&ended, RowKind::Restart).len(), 1);
+        assert_eq!(
+            ended.chosen(),
+            Chosen::InUse,
+            "Enter out of habit still only closes"
+        );
+
+        // It belongs to the pack in use: not without one, and not in a search.
+        assert!(of_kind(&shipped(None), RowKind::Restart).is_empty());
+        type_in(&mut picker, "space");
+        assert!(of_kind(&picker, RowKind::Restart).is_empty());
+    }
+
     #[test]
     fn without_a_next_value_it_opens_on_the_pack_in_use_never_on_value_one() {
         // Enter out of habit must not send the tester back to the start.
@@ -792,7 +905,13 @@ mod tests {
     fn a_heading_is_never_selected_nor_clicked() {
         let next = value_id("whitespace", 1);
         let mut picker = PackPicker::new(Ok(listing()), Some("whitespace"), Some(&next));
-        assert_eq!(picker.selected(), Some(1), "value one, under its heading");
+        assert_eq!(
+            picker.selected(),
+            Some(2),
+            "value one, under its heading and the restart row"
+        );
+        picker.previous();
+        assert_eq!(picker.selected(), Some(1), "up to the restart row");
         picker.previous();
         assert_eq!(
             picker.selected(),
@@ -806,7 +925,7 @@ mod tests {
             "a click on a heading moves nothing"
         );
         // Down from the last value of the pack: past the "Packs" heading.
-        for _ in 0..12 {
+        for _ in 0..13 {
             picker.next();
         }
         let rows = picker.rows();

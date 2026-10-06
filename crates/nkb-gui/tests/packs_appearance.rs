@@ -47,7 +47,9 @@ fn fill(window: &PacksWindow, rows: Vec<PickRow>) {
     window.set_current_label("in use".into());
     window.set_empty_text("Nothing matches \"zzz\". Press Backspace to widen the search.".into());
     window.set_rows(ModelRc::new(VecModel::from(rows)));
-    window.set_selected(1);
+    // The next value, under the heading and the restart row - where the
+    // window opens.
+    window.set_selected(2);
     window.set_hints(ModelRc::new(VecModel::from(vec![
         HintRow {
             key: "Enter".into(),
@@ -92,10 +94,17 @@ fn heading(title: &str) -> PickRow {
 }
 
 /// The window as UX2 opens it with nothing typed: the values of the pack in
-/// use, the next one marked and selected, then the packs with what each is for.
+/// use under the row that starts it again (UX4), the next one marked and
+/// selected, then the packs with what each is for.
 fn specimen() -> Vec<PickRow> {
     vec![
         heading("Values in Whitespace"),
+        PickRow {
+            single_line: true,
+            key: "Alt+Shift+0".into(),
+            has_key: true,
+            ..row("Restart pack", "", false)
+        },
         PickRow {
             badge: "next".into(),
             has_badge: true,
@@ -276,7 +285,7 @@ fn the_pack_window_shows_where_the_keyboard_is_and_which_row_it_reached() {
     // A difference of two renders, the pill marked and not: the colour is the
     // whole difference between "next" and any other pill.
     let mut unmarked = specimen();
-    unmarked[1].badge_current = false;
+    unmarked[2].badge_current = false;
     window.set_rows(ModelRc::new(VecModel::from(unmarked)));
     let plain = offscreen::draw(&surface, WIDTH, HEIGHT);
     window.set_rows(ModelRc::new(VecModel::from(specimen())));

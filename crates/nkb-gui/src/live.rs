@@ -261,6 +261,10 @@ pub enum Command {
     UseClipboard,
     /// Turn clipboard mode off - the button on the standing clipboard bar.
     TurnOffClipboard,
+    /// Collapse the palette, or expand it - the button at the end of the pack
+    /// band (`UX-GUI-004`). What `ToggleVisibility` does, through the same
+    /// switch, so a click and a press cannot disagree about the state.
+    ToggleCompact,
 }
 
 /// What the worker tells the shortcuts window.
@@ -294,21 +298,25 @@ pub struct ShortcutsNow {
     pub registered: Vec<(HotkeyAction, HotkeyChord, ShortcutRegistration)>,
 }
 
-/// Which shortcuts the hint bar names, and in this order.
+/// The palette's own actions: about windows rather than the pack in use, so
+/// [`PaletteShortcuts`] takes them before the sequence sees them.
 ///
-/// Four of the ten, because `ux-spec.md` 2 gives the hint bar four and because a
-/// list of ten stops being a hint. These four are the ones the first five
-/// minutes need: move through the pack, and get the report out.
+/// `OpenPacks` opens the value window (step 7, K3.2c) through the palette's
+/// `open-packs` callback, and `ToggleVisibility` collapses or expands the
+/// palette (`D83`).
+const PALETTE_OWN: [HotkeyAction; 2] = [HotkeyAction::OpenPacks, HotkeyAction::ToggleVisibility];
+
+/// Whether a press of `action` does something in this build: the sequence
+/// carries it out, or the palette does.
 ///
-/// `OpenPacks` opens the pack window (step 7, K3.2c): the worker takes the
-/// press before the sequence sees it and asks the main thread through the
-/// palette's `open-packs` callback.
-const HINTED: [HotkeyAction; 4] = [
-    HotkeyAction::NextValue,
-    HotkeyAction::PreviousValue,
-    HotkeyAction::CopyReport,
-    HotkeyAction::OpenPacks,
-];
+/// The hint bar names exactly these (`UX-GUI-007`). Until UX4 it named four
+/// chosen ones, and two that work - restarting the pack and collapsing the
+/// palette - were found only by reading the shortcuts window or by accident.
+/// The four that do nothing yet stay registered and stay off the bar.
+#[must_use]
+pub fn wired(action: HotkeyAction) -> bool {
+    AdvanceSequence::handles(action) || PALETTE_OWN.contains(&action)
+}
 
 /// The words on the palette that name a shortcut: the hint bar, and the value
 /// band before anything is sent. Built from the table in effect rather than
@@ -329,7 +337,7 @@ pub fn legend(bindings: &Bindings) -> Legend {
         hints: bindings
             .as_slice()
             .iter()
-            .filter(|(action, _)| HINTED.contains(action))
+            .filter(|(action, _)| wired(*action))
             .map(|(action, chord)| (i18n::chord(*chord), i18n::action_name(*action).to_owned()))
             .collect(),
         no_value: i18n::no_value_yet(bindings.chord(HotkeyAction::NextValue)),
@@ -367,6 +375,10 @@ pub struct InUseNow {
     pub pack: Option<String>,
     /// `None` when the next press sends no value: the end of a pack, or no pack.
     pub next: Option<String>,
+    /// The restart shortcut of the table in effect, which the window's restart
+    /// row names at its end (`UX-GUI-007`). Here because the table lives with
+    /// the worker and changes when the shortcuts window closes.
+    pub restart: Option<HotkeyChord>,
 }
 
 /// A fresh slot, empty until the worker opens a pack.
@@ -383,11 +395,12 @@ pub fn in_use_now(in_use: &InUse) -> InUseNow {
     in_use.lock().map(|held| held.clone()).unwrap_or_default()
 }
 
-fn publish(in_use: &InUse, sequence: &AdvanceSequence) {
+fn publish(in_use: &InUse, sequence: &AdvanceSequence, bindings: &Bindings) {
     if let Ok(mut held) = in_use.lock() {
         *held = InUseNow {
             pack: sequence.pack_id().map(str::to_owned),
             next: next_id(sequence.upcoming().as_ref()),
+            restart: Some(bindings.chord(HotkeyAction::RestartPack)),
         };
     }
 }
@@ -483,7 +496,7 @@ pub fn drive(
             }
         }
     }
-    publish(in_use, &sequence);
+    publish(in_use, &sequence, &bindings);
 
     let memory = Memory {
         kept: RefCell::new(kept),
@@ -503,6 +516,7 @@ pub fn drive(
         defaults: default_bindings(),
         types: &altgr_character,
         route: Some(route),
+        collapse: Collapse::new(&memory),
     };
     // With nothing registered the palette says why and stays up, and the
     // worker keeps serving the pack window. Untouchable rule 1: a run that did
@@ -512,19 +526,16 @@ pub fn drive(
     // window was shown.
     show(palette, worker.view(opening, ValueBand::Keep, None));
 
-    let collapse = Collapse::new(&memory);
-    let on_toggle = || {
-        let (compact, line) = collapse.toggle();
-        set_compact_later(palette, compact);
-        if let Some(line) = line {
-            say_later(palette, line);
-        }
-    };
     let on_open = || open_packs_later(palette);
     let pending = Cell::new(None);
     loop {
         let next = match worker.hold.live() {
             Some(live) => {
+                // The worker's own switch, the one a click reaches as a
+                // command between presses - built here because the loop below
+                // borrows the sequence beside it.
+                let collapse = &worker.collapse;
+                let on_toggle = || draw_toggle(palette, collapse.toggle());
                 let shortcuts = PaletteShortcuts {
                     inner: live,
                     on_toggle: &on_toggle,
@@ -579,10 +590,14 @@ pub fn drive(
                 if let Some(view) = carried.view {
                     show(palette, view);
                 }
+                if let Some(toggled) = carried.toggled {
+                    draw_toggle(palette, toggled);
+                }
                 if let Some(told) = carried.told {
                     tell(told);
                 }
-                publish(in_use, &worker.sequence);
+                // With the table in effect: a command may have changed it.
+                publish(in_use, &worker.sequence, &memory.bindings.get());
             }
         }
     }
@@ -626,6 +641,10 @@ fn next_command(stop: &AtomicBool, commands: &Receiver<Command>) -> Next {
 struct Carried {
     view: Option<View>,
     told: Option<Told>,
+    /// The compact state to draw after a click on the collapse button, and a
+    /// line when saving it failed for a reason not said before - what
+    /// [`Collapse::toggle`] answers, handed on as the shortcut hands it on.
+    toggled: Option<(bool, Option<String>)>,
 }
 
 /// Everything a command changes, owned by this thread.
@@ -649,6 +668,11 @@ struct Worker<'a> {
     /// each value would promise a flow that a palette with no shortcuts does
     /// not have (`D71`).
     route: Option<RouteRequest>,
+    /// Whether the palette is compact. Here, beside the commands, because two
+    /// ways reach it - the shortcut, taken in front of the sequence, and the
+    /// button in the pack band, which arrives as a command (`UX-GUI-004`) -
+    /// and one switch is what keeps them from disagreeing.
+    collapse: Collapse<'a>,
 }
 
 impl Worker<'_> {
@@ -664,6 +688,7 @@ impl Worker<'_> {
                     self.hold.paused(),
                 ),
                 told: None,
+                toggled: None,
             },
             Command::ChooseValue { pack, value } => Carried {
                 view: Some(choose_value(
@@ -676,6 +701,7 @@ impl Worker<'_> {
                     self.hold.paused(),
                 )),
                 told: None,
+                toggled: None,
             },
             Command::Pause => {
                 self.hold.pause();
@@ -685,6 +711,7 @@ impl Worker<'_> {
                         bindings: self.in_effect().0,
                         registered: self.hold.registered.clone(),
                     })),
+                    toggled: None,
                 }
             }
             // Held already: the window did not pause, or a second close came.
@@ -692,10 +719,12 @@ impl Worker<'_> {
             Command::Resume if self.hold.live().is_some() => Carried {
                 view: None,
                 told: None,
+                toggled: None,
             },
             Command::Resume => Carried {
                 view: Some(self.resume()),
                 told: None,
+                toggled: None,
             },
             // Here, on the thread that holds the pack and the clipboard: the
             // value is built from the pack in memory (`W5`), and on Linux the
@@ -706,6 +735,7 @@ impl Worker<'_> {
                 Carried {
                     view: Some(self.view(vec![line], ValueBand::Keep, None)),
                     told: None,
+                    toggled: None,
                 }
             }
             // The tester's clicks (`D99`), between presses like every command,
@@ -724,6 +754,7 @@ impl Worker<'_> {
                 Carried {
                     view: None,
                     told: None,
+                    toggled: None,
                 }
             }
             Command::UseClipboard => {
@@ -736,6 +767,14 @@ impl Worker<'_> {
                 let said = self.sequence.leave_clipboard(self.ports);
                 self.saying(&said)
             }
+            // The window's state, not the sequence's: nothing is redrawn but
+            // the bands the state shows, and the message band keeps what it
+            // says - as after the shortcut.
+            Command::ToggleCompact => Carried {
+                view: None,
+                told: None,
+                toggled: Some(self.collapse.toggle()),
+            },
             Command::Shortcut { action, chord } => {
                 let (change, said) = self.memory.kept.borrow_mut().change_shortcut(
                     self.memory.store,
@@ -762,6 +801,7 @@ impl Worker<'_> {
                         change,
                         not_saved,
                     }),
+                    toggled: None,
                 }
             }
         }
@@ -821,6 +861,7 @@ impl Worker<'_> {
         Carried {
             view: Some(self.view(lines, ValueBand::Keep, None)),
             told: None,
+            toggled: None,
         }
     }
 
@@ -1610,6 +1651,15 @@ impl LiveShortcuts for PaletteShortcuts<'_> {
                 other => return other,
             }
         }
+    }
+}
+
+/// Draws what a collapse came to - the press and the click alike - and says
+/// the line about saving it, when there is one.
+fn draw_toggle(palette: &Weak<Palette>, (compact, line): (bool, Option<String>)) {
+    set_compact_later(palette, compact);
+    if let Some(line) = line {
+        say_later(palette, line);
     }
 }
 
@@ -2450,6 +2500,59 @@ mod tests {
         }
     }
 
+    /// `wired` is the sequence's answer plus the palette's own two, and the
+    /// palette's own two are exactly what [`PaletteShortcuts`] takes in front
+    /// of the sequence - so the hint bar can neither name a press the palette
+    /// ignores nor miss one it answers.
+    #[test]
+    fn a_shortcut_is_wired_when_the_sequence_or_the_palette_answers_it() {
+        for action in HotkeyAction::ALL {
+            let queued = Queued(std::cell::RefCell::new([action].into()));
+            let taken = std::cell::Cell::new(false);
+            let on_own = || taken.set(true);
+            let shortcuts = PaletteShortcuts {
+                inner: &queued,
+                on_toggle: &on_own,
+                on_open: &on_own,
+            };
+            let passed_on = shortcuts.next(Duration::ZERO) == Wait::Pressed(action);
+            assert_eq!(
+                taken.get(),
+                super::PALETTE_OWN.contains(&action),
+                "{action:?}: the palette takes it in front of the sequence, or not"
+            );
+            assert_eq!(passed_on, !taken.get(), "{action:?}");
+            assert_eq!(
+                super::wired(action),
+                taken.get() || AdvanceSequence::handles(action),
+                "{action:?}"
+            );
+        }
+    }
+
+    /// The button in the pack band reaches the same switch as the shortcut
+    /// (`UX-GUI-004`): each click flips it, hands the state on to draw and
+    /// saves exactly that state - and changes nothing else on the palette.
+    #[test]
+    fn a_click_on_the_collapse_button_flips_the_one_switch_and_saves_it() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        with_worker(&store, &registrar, true, |worker, _| {
+            let first = worker.carry_out(Command::ToggleCompact);
+            assert_eq!(first.toggled, Some((true, None)));
+            assert!(
+                first.view.is_none() && first.told.is_none(),
+                "a collapse redrew the palette's bands or told the shortcuts window"
+            );
+            let second = worker.carry_out(Command::ToggleCompact);
+            assert_eq!(second.toggled, Some((false, None)));
+        });
+        assert_eq!(
+            *store.saved.borrow(),
+            vec![SettingChange::Compact(true), SettingChange::Compact(false)]
+        );
+    }
+
     /// The palette's own shortcut never reaches the sequence, and taking it out
     /// does not end the drain after a send (`W1`).
     #[test]
@@ -2783,6 +2886,7 @@ mod tests {
             defaults: nkb_adapters::default_bindings(),
             types: &no_layout,
             route: None,
+            collapse: super::Collapse::new(&memory),
         };
         if held {
             let lines = worker.take(memory.bindings.get());
@@ -2974,16 +3078,23 @@ mod tests {
 
     /// The value window opens on what this slot says (UX2): the pack in use and
     /// its next value once a pack opens, the next value moved by a press with
-    /// the pack kept, and no value named at the end of a pack.
+    /// the pack kept, and no value named at the end of a pack - and the restart
+    /// shortcut of the table it was given, which its restart row names (UX4).
     #[test]
     fn the_slot_says_the_pack_in_use_and_the_value_its_next_press_sends() {
         let slot = super::in_use();
-        super::publish(&slot, &on("whitespace"));
+        let (mine, refused) = nkb_adapters::default_bindings().with(
+            &[(HotkeyAction::RestartPack, chord("Alt+Shift+F9"))],
+            &no_layout,
+        );
+        assert!(refused.is_empty(), "{refused:?}");
+        super::publish(&slot, &on("whitespace"), &mine);
         assert_eq!(
             super::in_use_now(&slot),
             super::InUseNow {
                 pack: Some(String::from("whitespace")),
                 next: Some(String::from("trailing-space")),
+                restart: Some(chord("Alt+Shift+F9")),
             }
         );
         let mut later = on("whitespace");
@@ -3317,10 +3428,11 @@ mod tests {
         });
     }
 
-    /// The hint bar names four shortcuts in the table's order, and the empty
-    /// value band names the one that sends a value.
+    /// The hint bar names every shortcut that does something, in the table's
+    /// order, and none that does not (`UX-GUI-007`) - and the empty value band
+    /// names the one that sends a value.
     #[test]
-    fn the_legend_names_the_hinted_shortcuts_of_the_table_in_effect() {
+    fn the_legend_names_every_working_shortcut_of_the_table_in_effect() {
         let defaults = nkb_adapters::default_bindings();
         let words = legend(&defaults);
         // Worded through `i18n::chord`, because the table is this system's
@@ -3336,8 +3448,10 @@ mod tests {
             vec![
                 hint(HotkeyAction::NextValue),
                 hint(HotkeyAction::PreviousValue),
+                hint(HotkeyAction::RestartPack),
                 hint(HotkeyAction::CopyReport),
                 hint(HotkeyAction::OpenPacks),
+                hint(HotkeyAction::ToggleVisibility),
             ]
         );
         assert_eq!(
