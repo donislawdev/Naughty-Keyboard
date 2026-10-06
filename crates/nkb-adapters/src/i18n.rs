@@ -196,6 +196,9 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::ClipboardMode => {
             "Clipboard mode: each value goes to your clipboard, replacing what you had copied. Press your paste shortcut to insert each one."
         }
+        Message::ClipboardModeOff => {
+            "Clipboard mode is off: from the next press, each value is typed into the field."
+        }
         Message::HigherPrivileges => {
             "This window runs with higher privileges than Naughty Keyboard, so the system blocks typing into it - values for it now go to your clipboard, replacing what you had copied. Press your paste shortcut to insert each one, or start the tool with the same privileges."
         }
@@ -291,6 +294,7 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
     let pattern = pattern_message(message);
     match message {
         Message::ClipboardMode
+        | Message::ClipboardModeOff
         | Message::HigherPrivileges
         | Message::NoTextField
         | Message::ClearingSkipped
@@ -1230,6 +1234,16 @@ pub enum PaletteLabel {
     CopyNext,
     /// The same, for the Copy button beside the value that went out last.
     CopyLast,
+    /// The button that turns clipboard mode on (`UX-GUI-010`, `D99`) - its
+    /// words, which also say what it does. Under the hint bar, beside the link
+    /// to the shortcuts window, and only while values are typed.
+    UseClipboard,
+    /// The button on the standing clipboard bar that turns the mode off - its
+    /// words. Short, because the bar beside it already says which mode.
+    TurnOff,
+    /// What that button does, for UI Automation, where the bar's words do not
+    /// stand beside it.
+    TurnOffClipboard,
 }
 
 fn pattern_palette_label(label: PaletteLabel) -> &'static str {
@@ -1266,6 +1280,9 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::Copy => "Copy",
         PaletteLabel::CopyNext => "Copy the next value",
         PaletteLabel::CopyLast => "Copy the last sent value",
+        PaletteLabel::UseClipboard => "Use clipboard mode",
+        PaletteLabel::TurnOff => "Turn off",
+        PaletteLabel::TurnOffClipboard => "Turn off clipboard mode",
     }
 }
 
@@ -1929,6 +1946,7 @@ mod tests {
                 system: "macOS".to_owned(),
             },
             Message::ClipboardMode,
+            Message::ClipboardModeOff,
             Message::HigherPrivileges,
             Message::NoTextField,
             Message::ClearingSkipped,
@@ -2272,10 +2290,11 @@ mod tests {
             Message::CopyBusy => 27,
             Message::CopyFailed { .. } => 28,
             Message::CopyGone { .. } => 29,
+            Message::ClipboardModeOff => 30,
         }
     }
 
-    const SLOTS: usize = 30;
+    const SLOTS: usize = 31;
 
     #[test]
     fn every_message_variant_is_listed_here() {
@@ -2706,6 +2725,9 @@ mod tests {
             PaletteLabel::Copy,
             PaletteLabel::CopyNext,
             PaletteLabel::CopyLast,
+            PaletteLabel::UseClipboard,
+            PaletteLabel::TurnOff,
+            PaletteLabel::TurnOffClipboard,
         ] {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
@@ -2735,7 +2757,10 @@ mod tests {
                 | PaletteLabel::LastSent
                 | PaletteLabel::Copy
                 | PaletteLabel::CopyNext
-                | PaletteLabel::CopyLast => false,
+                | PaletteLabel::CopyLast
+                | PaletteLabel::UseClipboard
+                | PaletteLabel::TurnOff
+                | PaletteLabel::TurnOffClipboard => false,
             };
             let pattern = pattern_palette_label(label);
             assert_eq!(

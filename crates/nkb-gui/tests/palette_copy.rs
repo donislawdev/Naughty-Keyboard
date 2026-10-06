@@ -24,8 +24,8 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use nkb_gui::Palette;
+use offscreen::{Ink, added, click, point};
 use slint::platform::software_renderer::MinimalSoftwareWindow;
-use slint::platform::{PointerEventButton, WindowEvent};
 use slint::{ComponentHandle, LogicalPosition};
 
 const WIDTH: u32 = 420;
@@ -34,45 +34,6 @@ const HEIGHT: u32 = 460;
 /// How much bluer than red a pixel must be to count as the accent's ink - the
 /// threshold `palette_opener.rs` measured for the same two text roles.
 const BLUER_THAN_RED: u8 = 40;
-
-#[derive(Debug, Clone, Copy)]
-struct Ink {
-    left: u32,
-    right: u32,
-    top: u32,
-    bottom: u32,
-}
-
-impl Ink {
-    fn centre(self) -> LogicalPosition {
-        LogicalPosition::new(
-            ((self.left + self.right) / 2) as f32,
-            ((self.top + self.bottom) / 2) as f32,
-        )
-    }
-}
-
-/// The box of the pixels that differ between two renders of the same palette.
-fn added(before: &[offscreen::Pixel], after: &[offscreen::Pixel]) -> Ink {
-    let hits: Vec<(u32, u32)> = (0..HEIGHT)
-        .flat_map(|y| (0..WIDTH).map(move |x| (x, y)))
-        .filter(|&(x, y)| {
-            let (a, b) = (
-                before[(y * WIDTH + x) as usize],
-                after[(y * WIDTH + x) as usize],
-            );
-            (a.r, a.g, a.b) != (b.r, b.g, b.b)
-        })
-        .collect();
-    let xs = hits.iter().map(|&(x, _)| x);
-    let ys = hits.iter().map(|&(_, y)| y);
-    Ink {
-        left: xs.clone().min().expect("the button's word is drawn"),
-        right: xs.max().expect("the button's word is drawn"),
-        top: ys.clone().min().expect("the button's word is drawn"),
-        bottom: ys.max().expect("the button's word is drawn"),
-    }
-}
 
 /// Pixels of the accent's hue inside a box - the word's own ink.
 fn accent_in(buffer: &[offscreen::Pixel], at: Ink) -> usize {
@@ -85,34 +46,10 @@ fn accent_in(buffer: &[offscreen::Pixel], at: Ink) -> usize {
         .count()
 }
 
-fn pointer(palette: &Palette, event: WindowEvent) {
-    palette.window().dispatch_event(event);
-}
-
-fn press(palette: &Palette, at: LogicalPosition) {
-    pointer(palette, WindowEvent::PointerMoved { position: at });
-    pointer(
-        palette,
-        WindowEvent::PointerPressed {
-            position: at,
-            button: PointerEventButton::Left,
-        },
-    );
-    pointer(
-        palette,
-        WindowEvent::PointerReleased {
-            position: at,
-            button: PointerEventButton::Left,
-        },
-    );
-}
-
 fn away(palette: &Palette) {
-    pointer(
-        palette,
-        WindowEvent::PointerMoved {
-            position: LogicalPosition::new((WIDTH - 4) as f32, (HEIGHT - 4) as f32),
-        },
+    point(
+        palette.window(),
+        LogicalPosition::new((WIDTH - 4) as f32, (HEIGHT - 4) as f32),
     );
 }
 
@@ -125,7 +62,7 @@ fn find_button(palette: &Palette, surface: &Rc<MinimalSoftwareWindow>) -> Ink {
     let without = offscreen::draw(surface, WIDTH, HEIGHT);
     palette.set_copy_label("Copy".into());
     let with = offscreen::draw(surface, WIDTH, HEIGHT);
-    added(&without, &with)
+    added(&without, &with, WIDTH, HEIGHT).expect("the button's word is drawn")
 }
 
 #[test]
@@ -161,12 +98,7 @@ fn each_copy_button_answers_the_pointer_and_asks_for_its_own_band() {
     );
     let rest = offscreen::draw(&surface, WIDTH, HEIGHT);
     let before = accent_in(&rest, button);
-    pointer(
-        &palette,
-        WindowEvent::PointerMoved {
-            position: button.centre(),
-        },
-    );
+    point(palette.window(), button.centre());
     let hovered = offscreen::draw(&surface, WIDTH, HEIGHT);
     let path = offscreen::save(&hovered, WIDTH, HEIGHT, "palette-copy-hover.png");
     let under = accent_in(&hovered, button);
@@ -184,7 +116,7 @@ fn each_copy_button_answers_the_pointer_and_asks_for_its_own_band() {
     );
     assert_eq!(next.get(), 0, "moving the pointer copied");
 
-    press(&palette, button.centre());
+    click(palette.window(), button.centre());
     assert_eq!(
         (next.get(), last.get(), packs.get()),
         (1, 0, 0),
@@ -194,7 +126,7 @@ fn each_copy_button_answers_the_pointer_and_asks_for_its_own_band() {
     // ---- not at the end of a pack: nothing to copy -----------------------------
     palette.set_next_has_value(false);
     palette.set_next_heading("Next: end of pack (12/12)".into());
-    press(&palette, button.centre());
+    click(palette.window(), button.centre());
     assert_eq!(
         next.get(),
         1,
@@ -210,7 +142,7 @@ fn each_copy_button_answers_the_pointer_and_asks_for_its_own_band() {
         "the word of the value band's button is not one short word at the right end of \
          its row: {button:?}"
     );
-    press(&palette, button.centre());
+    click(palette.window(), button.centre());
     assert_eq!(
         (next.get(), last.get(), packs.get()),
         (1, 1, 0),
@@ -226,19 +158,14 @@ fn each_copy_button_answers_the_pointer_and_asks_for_its_own_band() {
     // The send band above pushes the value band down - the button is found again.
     palette.set_copy_label("".into());
     let without = offscreen::draw(&surface, WIDTH, HEIGHT);
-    let faded = added(&without, &sending);
+    let faded = added(&without, &sending, WIDTH, HEIGHT).expect("the faded word is drawn");
     // 🔴 The word back BEFORE the press: without it the button is only its
     // padding, narrower than the box measured with the word, and a press at
     // the box's centre lands beside it - the first run of mutation M435 passed
     // for exactly that reason.
     palette.set_copy_label("Copy".into());
-    press(&palette, faded.centre());
-    pointer(
-        &palette,
-        WindowEvent::PointerMoved {
-            position: faded.centre(),
-        },
-    );
+    click(palette.window(), faded.centre());
+    point(palette.window(), faded.centre());
     let hovered = offscreen::draw(&surface, WIDTH, HEIGHT);
     assert_eq!(
         last.get(),

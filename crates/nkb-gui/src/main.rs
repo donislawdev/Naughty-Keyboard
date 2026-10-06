@@ -99,7 +99,7 @@ fn main() -> ExitCode {
 /// ⚠️ The third shape, `--clipboard`, went in on purpose (`D71`) and it is
 /// still not a grammar: one word, in the first place only, before the optional
 /// pack - `nkb-gui --clipboard whitespace`. Switching the mode while the
-/// palette runs belongs to the settings (step 7), never to another global
+/// palette runs is a click on the palette (`D99`), never another global
 /// shortcut: each one is a new collision in somebody's application.
 enum Request {
     /// The palette, on this pack or on the one it remembers, delivering values
@@ -185,6 +185,10 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     palette.set_copy_label(i18n::label(PaletteLabel::Copy).into());
     palette.set_copy_next_action(i18n::label(PaletteLabel::CopyNext).into());
     palette.set_copy_last_action(i18n::label(PaletteLabel::CopyLast).into());
+    // Clipboard mode on, under the hint bar, and off, on the standing bar (`D99`).
+    palette.set_use_clipboard_label(i18n::label(PaletteLabel::UseClipboard).into());
+    palette.set_turn_off_label(i18n::label(PaletteLabel::TurnOff).into());
+    palette.set_turn_off_action(i18n::label(PaletteLabel::TurnOffClipboard).into());
     // Expanded at first run, with the hints up and nothing sent yet -
     // `ux-spec.md` 5.1 - and as the tester left it on every run after that.
     // The worker fills the pack and the counter, because the sequence that
@@ -217,6 +221,10 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     );
     palette.on_copy_next(copy_on_click(&palette, &choose, Palette::get_next_key));
     palette.on_copy_last(copy_on_click(&palette, &choose, Palette::get_last_key));
+    // Clipboard mode on and off (`D99`): the worker holds the sequence, so the
+    // click only asks.
+    palette.on_use_clipboard(ask_on_click(&choose, live::Command::UseClipboard));
+    palette.on_turn_off_clipboard(ask_on_click(&choose, live::Command::TurnOffClipboard));
     // The same way: created once, shown on request - and the one window the
     // worker's answers about shortcuts are delivered to (`shortcuts::tell`).
     let shortcuts = Shortcuts::new(
@@ -297,6 +305,17 @@ fn copy_on_click(
             let _ = asks.send(command);
         }
     }
+}
+
+/// What a click on a button that needs nothing from the palette does: asks the
+/// worker for `command`.
+fn ask_on_click(
+    asks: &std::sync::mpsc::Sender<live::Command>,
+    command: live::Command,
+) -> impl Fn() + 'static {
+    let asks = asks.clone();
+    // A send that fails is a palette already closing - nobody is left to tell.
+    move || drop(asks.send(command.clone()))
 }
 
 /// A line into the palette's message band, for a window that has something to

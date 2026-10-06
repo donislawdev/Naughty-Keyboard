@@ -149,3 +149,62 @@ pub fn count_exactly(buffer: &[Pixel], rgb: (u8, u8, u8)) -> usize {
     };
     buffer.iter().filter(|p| **p == wanted).count()
 }
+
+/// A box on a render, in pixels.
+#[derive(Debug, Clone, Copy)]
+pub struct Ink {
+    pub left: u32,
+    pub right: u32,
+    pub top: u32,
+    pub bottom: u32,
+}
+
+impl Ink {
+    /// Where a pointer aims at it.
+    pub fn centre(self) -> slint::LogicalPosition {
+        slint::LogicalPosition::new(
+            ((self.left + self.right) / 2) as f32,
+            ((self.top + self.bottom) / 2) as f32,
+        )
+    }
+}
+
+/// The box of the pixels that differ between two renders of one size, or
+/// `None` when they are the same picture.
+///
+/// This is how the pointer tests find a control: render without its words and
+/// with them, and the difference is where it IS - not where the source says it
+/// should be. `None` is how they say a control is NOT drawn.
+pub fn added(before: &[Pixel], after: &[Pixel], width: u32, height: u32) -> Option<Ink> {
+    let hits: Vec<(u32, u32)> = (0..height)
+        .flat_map(|y| (0..width).map(move |x| (x, y)))
+        .filter(|&(x, y)| before[(y * width + x) as usize] != after[(y * width + x) as usize])
+        .collect();
+    let xs = hits.iter().map(|&(x, _)| x);
+    let ys = hits.iter().map(|&(_, y)| y);
+    Some(Ink {
+        left: xs.clone().min()?,
+        right: xs.max()?,
+        top: ys.clone().min()?,
+        bottom: ys.max()?,
+    })
+}
+
+/// Moves the pointer to `at`.
+pub fn point(window: &slint::Window, at: slint::LogicalPosition) {
+    window.dispatch_event(slint::platform::WindowEvent::PointerMoved { position: at });
+}
+
+/// Moves the pointer to `at` and clicks there with the left button.
+pub fn click(window: &slint::Window, at: slint::LogicalPosition) {
+    point(window, at);
+    let button = slint::platform::PointerEventButton::Left;
+    window.dispatch_event(slint::platform::WindowEvent::PointerPressed {
+        position: at,
+        button,
+    });
+    window.dispatch_event(slint::platform::WindowEvent::PointerReleased {
+        position: at,
+        button,
+    });
+}

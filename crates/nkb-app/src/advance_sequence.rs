@@ -344,8 +344,12 @@ pub enum Message {
     /// field - saying it does not would be false.
     ClearingSkippedInTerminal,
     /// Clipboard mode is on because the tester asked for it: values go to the
-    /// clipboard, replacing what was there. Once, at the start.
+    /// clipboard, replacing what was there. Once, at the start, and again each
+    /// time the tester turns the mode on in the palette (`D99`).
     ClipboardMode,
+    /// The tester turned clipboard mode off: values are typed into the field
+    /// from the next press (`D99`).
+    ClipboardModeOff,
     /// Another application held the clipboard, and the value was not placed
     /// on it. Passing, so the tester is told to press again.
     ClipboardBusy,
@@ -570,6 +574,30 @@ impl AdvanceSequence {
         // request finds it on already, and the warning is owed once.
         if step.effects.contains(&Effect::AnnounceClipboardMode) {
             vec![announcement]
+        } else {
+            step.effects.iter().filter_map(announce).collect()
+        }
+    }
+
+    /// Turns clipboard mode off - the tester's click in the palette (`D99`).
+    ///
+    /// Only where the direct route is there to take the values: a system
+    /// without one keeps the mode and says why, in the sentence that put it
+    /// there. Turning on goes through [`Self::choose_route`] with
+    /// [`RouteRequest::Clipboard`], which already warns that the clipboard is
+    /// replaced.
+    #[must_use]
+    pub fn leave_clipboard(&mut self, ports: &Ports<'_>) -> Vec<Message> {
+        if self.sequence.delivery == Delivery::Direct {
+            return Vec::new();
+        }
+        if let Availability::Unavailable { reason } = ports.direct.availability() {
+            return vec![Message::NoDirectRoute { system: reason }];
+        }
+        let step = self.sequence.apply(Event::UseDirect);
+        self.sequence = step.sequence;
+        if step.effects.contains(&Effect::AnnounceDirect) {
+            vec![Message::ClipboardModeOff]
         } else {
             step.effects.iter().filter_map(announce).collect()
         }
@@ -952,10 +980,12 @@ fn announce(effect: &Effect) -> Option<Message> {
         // shown half-formed. Entering clipboard mode is said by the caller that
         // knows WHY it was entered - the tester's request or a missing route -
         // because the two sentences differ and the machine knows neither.
+        // Leaving it is said by `leave_clipboard`, the one caller that asks.
         Effect::SendValue { .. }
         | Effect::AnnounceStillInserting
         | Effect::AnnounceInterrupted { .. }
-        | Effect::AnnounceClipboardMode => None,
+        | Effect::AnnounceClipboardMode
+        | Effect::AnnounceDirect => None,
     }
 }
 
@@ -1456,6 +1486,71 @@ mod tests {
                 .choose_route(RouteRequest::Clipboard, &kit.ports())
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn turning_clipboard_mode_off_types_the_next_value_into_the_field() {
+        // D99: the tester's click. The value after it is typed, the one before
+        // it stays where it went, and the place in the pack carries on.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        let _ = advance.choose_route(RouteRequest::Clipboard, &kit.ports());
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+
+        assert_eq!(
+            advance.leave_clipboard(&kit.ports()),
+            vec![Message::ClipboardModeOff]
+        );
+        assert_eq!(advance.sequence().delivery, Delivery::Direct);
+        assert_eq!(advance.counter(), Some((1, 3)), "turning off sends nothing");
+
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(*kit.direct.handed.borrow(), vec!["beta"]);
+        assert_eq!(*kit.by_clipboard.handed.borrow(), vec!["alpha"]);
+        assert_eq!(advance.counter(), Some((2, 3)));
+        assert!(
+            outcome.messages.is_empty(),
+            "a typed value after the switch is an ordinary send"
+        );
+    }
+
+    #[test]
+    fn turning_off_clipboard_mode_that_is_not_on_says_nothing() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        assert!(advance.leave_clipboard(&kit.ports()).is_empty());
+        assert_eq!(advance.sequence().delivery, Delivery::Direct);
+
+        let _ = advance.choose_route(RouteRequest::Clipboard, &kit.ports());
+        let _ = advance.leave_clipboard(&kit.ports());
+        assert!(
+            advance.leave_clipboard(&kit.ports()).is_empty(),
+            "a second click on a mode already off said something"
+        );
+
+        // Not in the mode on a system without a route - before the start route
+        // is chosen. Asking about the route there would say values now go to
+        // the clipboard, which they do not.
+        let mut not_yet = chosen(Risk::Normal);
+        let without = Kit::with_delivery(FakeDelivery::unavailable("macOS"));
+        assert!(not_yet.leave_clipboard(&without.ports()).is_empty());
+        assert_eq!(not_yet.sequence().delivery, Delivery::Direct);
+    }
+
+    #[test]
+    fn a_system_without_a_route_keeps_clipboard_mode_and_says_why() {
+        // Leaving would promise typing this build cannot do: the mode stays and
+        // the sentence is the one that put it there.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_delivery(FakeDelivery::unavailable("macOS"));
+        let _ = advance.choose_route(RouteRequest::Direct, &kit.ports());
+        assert_eq!(
+            advance.leave_clipboard(&kit.ports()),
+            vec![Message::NoDirectRoute {
+                system: "macOS".to_owned()
+            }]
+        );
+        assert_eq!(advance.sequence().delivery, Delivery::ClipboardMode);
     }
 
     #[test]

@@ -22,6 +22,7 @@
 
 #![allow(clippy::panic, clippy::expect_used)]
 
+#[allow(dead_code)]
 mod offscreen;
 
 use nkb_gui::{HintRow, Marker, Palette};
@@ -105,6 +106,10 @@ fn fill(palette: &Palette) {
     // below, with a value that earns one.
     palette.set_has_not_guaranteed(false);
     palette.set_clipboard_mode_label("clipboard mode".into());
+    // Clipboard mode on and off (D99): the words of both buttons, whichever the
+    // state below shows.
+    palette.set_use_clipboard_label("Use clipboard mode".into());
+    palette.set_turn_off_label("Turn off".into());
     // There IS a value, so the value band is gated by `compact` alone - which is
     // what the compact rule below is about, and what mutation M52 flips.
     palette.set_has_value(true);
@@ -222,9 +227,11 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     // ---- resting: the state the rule is about ------------------------------
     // In clipboard mode as well, because that is the WORST resting case: the
     // standing bar is the only extra thing the dimmed palette ever shows, so if
-    // any role in it were muted this is where it would appear.
+    // any role in it were muted this is where it would appear - its Turn off
+    // button included (D99), which stands in both states.
     palette.set_compact(true);
     palette.set_clipboard_mode(true);
+    palette.set_clipboard_mode_on(true);
     let resting = render(&window);
     let resting_again = render(&window);
     assert!(
@@ -237,6 +244,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     // ---- showing: the positive control, and the rest of the window ---------
     palette.set_compact(false);
     palette.set_clipboard_mode(false);
+    palette.set_clipboard_mode_on(false);
     let showing = render(&window);
     let showing_path = offscreen::save_cropped(&showing, WIDTH, HEIGHT, "palette-showing.png");
 

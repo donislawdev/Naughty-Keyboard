@@ -96,8 +96,8 @@ use nkb_app::ports::{
     ShortcutRegistration, Wait,
 };
 use nkb_app::{
-    AdvanceSequence, Ended, KeptSettings, Opening, Outcome, SettingsMessage, ShortcutChange,
-    UpcomingValue, ValueFacts, ValueKey, drive_sequence,
+    AdvanceSequence, Ended, KeptSettings, Message, Opening, Outcome, SettingsMessage,
+    ShortcutChange, UpcomingValue, ValueFacts, ValueKey, drive_sequence,
 };
 use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord};
 use nkb_core::preview::ValuePreview;
@@ -138,6 +138,10 @@ pub struct View {
     /// and the window in front taking no typing (`D72`). The words differ, so
     /// the view carries them rather than a flag.
     clipboard_bar: Option<&'static str>,
+    /// Whether the sequence is in clipboard mode - the tester's mode, which a
+    /// click turns off, as against the window in front that only the next
+    /// window ends (`D99`). Decides which of the two buttons stands.
+    clipboard_mode_on: bool,
     /// The words naming the shortcuts, when the table in effect changed with
     /// this view - `None` leaves the ones on screen.
     legend: Option<Legend>,
@@ -252,6 +256,11 @@ pub enum Command {
     /// (`UX-GUI-003`, `D98`). By identifiers, looked up in the pack the worker
     /// holds, so the value copied is the one drawn where the tester clicked.
     Copy(ValueKey),
+    /// Turn clipboard mode on - the button under the hint bar (`UX-GUI-010`,
+    /// `D99`).
+    UseClipboard,
+    /// Turn clipboard mode off - the button on the standing clipboard bar.
+    TurnOffClipboard,
 }
 
 /// What the worker tells the shortcuts window.
@@ -699,6 +708,34 @@ impl Worker<'_> {
                     told: None,
                 }
             }
+            // The tester's clicks (`D99`), between presses like every command,
+            // so the route never changes under a value in flight. On is the
+            // request `--clipboard` makes at start, with the same warning that
+            // the clipboard is replaced.
+            //
+            // 🔴 And under the same rule as that request (`D71`): while nothing
+            // drives the palette, a sentence telling the tester to paste each
+            // value would promise a flow there is none of. So the click waits
+            // where `--clipboard` waits, and `take` keeps it the moment the
+            // shortcuts are held. Paused is not that: the window that paused
+            // them gives them back when it closes.
+            Command::UseClipboard if self.hold.live().is_none() && !self.hold.paused() => {
+                self.route = Some(RouteRequest::Clipboard);
+                Carried {
+                    view: None,
+                    told: None,
+                }
+            }
+            Command::UseClipboard => {
+                let said = self
+                    .sequence
+                    .choose_route(RouteRequest::Clipboard, self.ports);
+                self.saying(&said)
+            }
+            Command::TurnOffClipboard => {
+                let said = self.sequence.leave_clipboard(self.ports);
+                self.saying(&said)
+            }
             Command::Shortcut { action, chord } => {
                 let (change, said) = self.memory.kept.borrow_mut().change_shortcut(
                     self.memory.store,
@@ -772,6 +809,19 @@ impl Worker<'_> {
             );
         }
         lines
+    }
+
+    /// A view of the palette as it stands, saying what the sequence said.
+    fn saying(&self, said: &[Message]) -> Carried {
+        let bindings = self.memory.bindings.get();
+        let lines = said
+            .iter()
+            .map(|message| i18n::message(message, &self.pack, &bindings))
+            .collect();
+        Carried {
+            view: Some(self.view(lines, ValueBand::Keep, None)),
+            told: None,
+        }
     }
 
     /// A view made between presses, carrying the sentence about the pause
@@ -1056,6 +1106,7 @@ fn view_between(
             sequence.sequence().delivery,
             sequence.clipboard_for_window(),
         ),
+        clipboard_mode_on: sequence.sequence().delivery == Delivery::ClipboardMode,
         legend: None,
     }
 }
@@ -1100,6 +1151,7 @@ fn view_of(
             standing,
         ),
         clipboard_bar: clipboard_bar(outcome.sequence.delivery, outcome.clipboard_for_window),
+        clipboard_mode_on: outcome.sequence.delivery == Delivery::ClipboardMode,
         // An outcome comes from a press, and a press never changes the table.
         legend: None,
     }
@@ -1309,6 +1361,7 @@ fn apply(palette: &Palette, view: View) {
     if let Some(words) = view.clipboard_bar {
         palette.set_clipboard_mode_label(words.into());
     }
+    palette.set_clipboard_mode_on(view.clipboard_mode_on);
     palette.set_messages(ModelRc::new(VecModel::from(
         view.messages
             .into_iter()
@@ -1950,6 +2003,10 @@ mod tests {
         );
         assert!(palette.get_clipboard_mode());
         assert_eq!(palette.get_clipboard_mode_label(), "clipboard mode");
+        assert!(
+            palette.get_clipboard_mode_on(),
+            "the mode is the tester's, so the bar carries its way out (D99)"
+        );
 
         // ---- and so does the window in front (`D72`), in its own words ---
         let for_window = Outcome {
@@ -1970,6 +2027,10 @@ mod tests {
         assert_eq!(
             palette.get_clipboard_mode_label(),
             "clipboard mode for this window"
+        );
+        assert!(
+            !palette.get_clipboard_mode_on(),
+            "a window the tester is looking at is not a mode a click could end (D99)"
         );
         apply(
             &palette,
@@ -2792,6 +2853,122 @@ mod tests {
             assert!(matches!(view.value, ValueBand::Keep));
             assert!(carried.told.is_none());
             assert_eq!(worker.sequence.sequence(), before);
+        });
+    }
+
+    /// `D99`: the two clicks reach the sequence and come back as the bar, the
+    /// button that stands and the sentence - with the value band kept and the
+    /// place in the pack unmoved. Neither writes the clipboard: only a press in
+    /// the mode does, and nothing here presses.
+    #[test]
+    fn clipboard_mode_turns_on_and_off_from_the_palette_and_says_so() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        with_worker(&store, &registrar, true, |worker, _| {
+            let before = worker.sequence.sequence();
+            assert_eq!(before.delivery, Delivery::Direct);
+
+            let on = worker.carry_out(Command::UseClipboard);
+            let view = on.view.expect("turning on is answered");
+            assert_eq!(
+                view.messages,
+                vec![String::from(
+                    "Clipboard mode: each value goes to your clipboard, replacing what you had \
+                     copied. Press your paste shortcut to insert each one."
+                )]
+            );
+            assert_eq!(view.clipboard_bar, Some("clipboard mode"));
+            assert!(view.clipboard_mode_on);
+            assert!(matches!(view.value, ValueBand::Keep));
+            assert!(on.told.is_none());
+            assert_eq!(worker.sequence.sequence().position, before.position);
+
+            let off = worker
+                .carry_out(Command::TurnOffClipboard)
+                .view
+                .expect("turning off is answered");
+            assert_eq!(
+                off.messages,
+                vec![String::from(
+                    "Clipboard mode is off: from the next press, each value is typed into the field."
+                )]
+            );
+            assert_eq!(off.clipboard_bar, None);
+            assert!(!off.clipboard_mode_on);
+            assert_eq!(worker.sequence.sequence(), before);
+
+            let again = worker
+                .carry_out(Command::TurnOffClipboard)
+                .view
+                .expect("a second click is answered with the palette as it is");
+            assert!(
+                again.messages.is_empty(),
+                "a click on a mode already off said something: {:?}",
+                again.messages
+            );
+        });
+    }
+
+    /// `D99`: paused is not lost. The shortcuts window gives the shortcuts back
+    /// when it closes, so a click while it is open turns the mode on at once,
+    /// and the palette shows it at once.
+    #[test]
+    fn clipboard_mode_asked_for_while_the_shortcuts_are_paused_is_on_at_once() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        with_worker(&store, &registrar, true, |worker, _| {
+            worker.carry_out(Command::Pause);
+            let view = worker
+                .carry_out(Command::UseClipboard)
+                .view
+                .expect("a paused palette still answers the click");
+            assert_eq!(worker.sequence.sequence().delivery, Delivery::ClipboardMode);
+            assert!(view.clipboard_mode_on);
+            assert_eq!(
+                view.messages.first(),
+                Some(&paused_line()),
+                "the pause is still said, first"
+            );
+        });
+    }
+
+    /// `D99` under the rule of `D71`: with no shortcuts held, nothing drives
+    /// the palette, so turning clipboard mode on waits - like `--clipboard` at
+    /// start - and is kept, with its warning, the moment they are held.
+    #[test]
+    fn clipboard_mode_asked_for_with_no_shortcuts_waits_for_them() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        with_worker(&store, &registrar, false, |worker, _| {
+            assert!(
+                worker.hold.live().is_none(),
+                "the test needs no shortcuts held"
+            );
+            let asked = worker.carry_out(Command::UseClipboard);
+            assert!(
+                asked.view.is_none(),
+                "a palette nothing drives was told to paste each value"
+            );
+            assert_eq!(worker.sequence.sequence().delivery, Delivery::Direct);
+
+            let held = worker
+                .carry_out(Command::Resume)
+                .view
+                .expect("taking the shortcuts is drawn");
+            assert_eq!(registrar.alive(), 1);
+            assert_eq!(
+                worker.sequence.sequence().delivery,
+                Delivery::ClipboardMode,
+                "the click was forgotten when the shortcuts came"
+            );
+            assert!(
+                held.messages
+                    .iter()
+                    .any(|line| line.starts_with("Clipboard mode: each value goes")),
+                "the mode came without its warning: {:?}",
+                held.messages
+            );
+            assert!(held.clipboard_mode_on);
         });
     }
 

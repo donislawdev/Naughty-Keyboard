@@ -85,6 +85,8 @@ pub enum Delivery {
     /// `ux-spec.md` 2: the bar saying so is PERMANENT. Nothing in this module
     /// leaves this mode on its own, and entering it is always an event - the
     /// tester asking for it, or the tool finding no direct route (`D71`).
+    /// Leaving it is an event too, and only ever the tester's: [`Event::UseDirect`]
+    /// (`D99`).
     ClipboardMode,
 }
 
@@ -120,6 +122,12 @@ pub enum Event {
     /// direct route. Refused while a value is in flight, like a change of pack:
     /// the route must not change under a value that is still going out.
     UseClipboard,
+    /// Values are to be typed into the field again - the tester turned clipboard
+    /// mode off (`D99`). The mirror of [`Event::UseClipboard`]: refused while a
+    /// value is in flight, and it moves nothing in the pack. Whether this system
+    /// HAS a direct route is not the sequence's to know, so the caller asks
+    /// before it sends this.
+    UseDirect,
     /// A value finished arriving in the field.
     InsertionFinished,
     /// Direct delivery has no route at all, so the value did not arrive. This
@@ -188,6 +196,8 @@ pub enum Effect {
     /// copied. Once, on entering the mode - `ux-spec.md` 12 item 2 warns once
     /// and never restores.
     AnnounceClipboardMode,
+    /// Say values are typed into the field again. Once, on leaving the mode.
+    AnnounceDirect,
 }
 
 impl fmt::Display for Effect {
@@ -203,6 +213,7 @@ impl fmt::Display for Effect {
             Self::AnnounceNoPack => f.write_str("no-pack"),
             Self::AnnounceInterrupted { .. } => f.write_str("interrupted"),
             Self::AnnounceClipboardMode => f.write_str("clipboard-mode"),
+            Self::AnnounceDirect => f.write_str("direct"),
         }
     }
 }
@@ -316,6 +327,7 @@ impl Sequence {
             Event::TargetChanged => self.target_changed(),
             Event::TargetLost => self.nothing_but(Effect::AnnounceNoTarget),
             Event::UseClipboard => self.use_clipboard(),
+            Event::UseDirect => self.use_direct(),
             // Nothing is in flight, so none of these describes anything.
             // `W3`: `Escape` belongs to `inserting` and is not captured outside
             // it, so arriving here at all means somebody wired it globally. A
@@ -391,7 +403,10 @@ impl Sequence {
             },
             // Neither the pack, the route nor the place in the pack can be
             // swapped under a value that is still arriving.
-            Event::PackChosen { .. } | Event::UseClipboard | Event::SetNext { .. } => Step {
+            Event::PackChosen { .. }
+            | Event::UseClipboard
+            | Event::UseDirect
+            | Event::SetNext { .. } => Step {
                 sequence: self,
                 effects: vec![Effect::AnnounceStillInserting],
             },
@@ -568,6 +583,22 @@ impl Sequence {
                     ..self
                 },
                 effects: vec![Effect::AnnounceClipboardMode],
+            },
+        }
+    }
+
+    /// Leaves clipboard mode, and says so exactly once - the mirror of
+    /// [`Self::use_clipboard`]. The place in the pack stays where it is: the
+    /// route changes, not which value comes next.
+    fn use_direct(self) -> Step {
+        match self.delivery {
+            Delivery::Direct => self.nothing(),
+            Delivery::ClipboardMode => Step {
+                sequence: Self {
+                    delivery: Delivery::Direct,
+                    ..self
+                },
+                effects: vec![Effect::AnnounceDirect],
             },
         }
     }
@@ -1026,6 +1057,64 @@ mod tests {
     }
 
     #[test]
+    fn turning_clipboard_mode_off_changes_the_route_and_nothing_else() {
+        // D99, the tester's way out of the mode. From every position the pack
+        // stays exactly where it was - the next press sends the value it would
+        // have sent - and only the route changes. In flight it is refused aloud,
+        // and outside the mode there is nothing to leave and nothing to say.
+        for position in every_position() {
+            let on = Sequence {
+                position,
+                delivery: Delivery::ClipboardMode,
+            };
+            let step = on.apply(Event::UseDirect);
+            if let Position::Inserting { .. } = position {
+                assert_eq!(step.sequence, on, "{position:?} changed route in flight");
+                assert_eq!(step.effects, vec![Effect::AnnounceStillInserting]);
+                continue;
+            }
+            assert_eq!(step.effects, vec![Effect::AnnounceDirect], "{position:?}");
+            assert_eq!(
+                step.sequence,
+                Sequence {
+                    position,
+                    delivery: Delivery::Direct
+                },
+                "{position:?}"
+            );
+            assert_eq!(step.sequence.upcoming(), on.upcoming(), "{position:?}");
+
+            let off = Sequence {
+                position,
+                delivery: Delivery::Direct,
+            };
+            let again = off.apply(Event::UseDirect);
+            assert_eq!(again.sequence, off, "{position:?}");
+            assert!(
+                again.effects.is_empty(),
+                "{position:?} announced leaving a mode it was not in"
+            );
+        }
+    }
+
+    #[test]
+    fn the_mode_can_be_turned_on_and_off_again_and_each_turn_is_said() {
+        // Each switch is the tester's own click, so each one is answered - the
+        // warning that the clipboard is replaced included, because a tester who
+        // turned the mode off and on again is about to lose what they copied in
+        // between.
+        let ready = run(Sequence::new(), &[Event::PackChosen { total: 3 }]).sequence;
+        let on = ready.apply(Event::UseClipboard);
+        let off = on.sequence.apply(Event::UseDirect);
+        let again = off.sequence.apply(Event::UseClipboard);
+        assert_eq!(on.effects, vec![Effect::AnnounceClipboardMode]);
+        assert_eq!(off.effects, vec![Effect::AnnounceDirect]);
+        assert_eq!(off.sequence, ready);
+        assert_eq!(again.effects, vec![Effect::AnnounceClipboardMode]);
+        assert_eq!(again.sequence, on.sequence);
+    }
+
+    #[test]
     fn a_failure_outside_an_insertion_does_nothing() {
         // Entering the mode outside a send is `UseClipboard`, with its own name.
         let ready = run(Sequence::new(), &[Event::PackChosen { total: 3 }]).sequence;
@@ -1381,6 +1470,7 @@ mod tests {
             Effect::AnnounceNoPack,
             Effect::AnnounceInterrupted { index: 1 },
             Effect::AnnounceClipboardMode,
+            Effect::AnnounceDirect,
         ];
         let mut markers: Vec<String> = all.iter().map(ToString::to_string).collect();
         let before = markers.len();

@@ -7,7 +7,8 @@
 // as a property and everything leaves as a shortcut - with the pointer as the
 // one exception: the pack's name and the next band's heading open the value
 // window (K3.2d, UX2), the link under the hints opens the shortcuts window
-// (K5.5), and two Copy buttons put a value on the clipboard (D98). A click
+// (K5.5), two Copy buttons put a value on the clipboard (D98), and one button
+// at a time turns clipboard mode on or off (D99). A click
 // reaches this window without activating it (`D62`), so it takes nothing from
 // the field under test.
 //
@@ -169,6 +170,22 @@ export component Palette inherits Window {
     // ---- the standing bar --------------------------------------------------
     in property <string> clipboard-mode-label;
 
+    // ---- clipboard mode on and off (UX-GUI-010, D99) ------------------------
+    // Two clicks and no shortcut: each new global shortcut is a collision in
+    // somebody's application (`main.rs`, D71). On: a button under the hint
+    // bar. Off: a button on the standing bar, beside the words that say the
+    // mode is on. The tester's MODE, not the window's: false while only the
+    // window in front is on the clipboard (D72), which is not a mode the
+    // tester chose and not one a click could end.
+    in property <bool> clipboard-mode-on;
+    in property <string> use-clipboard-label;
+    in property <string> turn-off-label;
+    in property <string> turn-off-action;
+    // ⚠️ Declared, not aliases: both buttons stand in bands behind `if`. Each
+    // click only hands on to its callback - one call, no logic.
+    callback use-clipboard();
+    callback turn-off-clipboard();
+
     // ---- a send in progress (W3, D96, OBS-160) ------------------------------
     // Until this band a long send left the palette showing what it showed
     // before, for minutes, with nothing to say that Escape stops it. Every
@@ -293,12 +310,32 @@ export component Palette inherits Window {
             // mode is a full route rather than a failure - `ux-spec.md` 8 says so
             // in words, and a bar in the risk colour would say the opposite
             // without any. The gallery drew this pill in accent from the start.
+            //
+            // The way out stands on the bar itself (D99): the tester who reads
+            // that the mode is on finds how to end it in the same place. In
+            // both states of the window, like the bar - the button's words are
+            // a role the resting state may show (D53). Faded while a value goes:
+            // the route cannot change under a value in flight.
             if root.clipboard-mode: Zone {
                 HorizontalLayout {
-                    alignment: start;
-                    Pill {
-                        text: root.clipboard-mode-label;
-                        tint: Tokens.accent;
+                    spacing: Tokens.space-2;
+                    // Centred on the button's row, as the next band's heading
+                    // is beside its Copy (`slint.md` 2.43).
+                    VerticalLayout {
+                        alignment: center;
+                        Pill {
+                            text: root.clipboard-mode-label;
+                            tint: Tokens.accent;
+                        }
+                    }
+                    Spacer { }
+                    if root.clipboard-mode-on: SmallButton {
+                        text: root.turn-off-label;
+                        action: root.turn-off-action;
+                        enabled: !root.sending;
+                        clicked => {
+                            root.turn-off-clipboard();
+                        }
                     }
                 }
             }
@@ -497,11 +534,31 @@ export component Palette inherits Window {
                 // Under the shortcuts it changes, and in the same component
                 // as the pack's name above: a link in the palette looks and
                 // answers the pointer one way (GUI rule 2).
-                PickerOpener {
-                    text: root.shortcuts-link;
-                    action: root.shortcuts-link;
-                    clicked => {
-                        root.open-shortcuts();
+                //
+                // Clipboard mode is turned on at the other end of the same row
+                // (D99): a button, not a link, because it changes how values
+                // travel rather than opening a window. Only while values are
+                // typed - in the mode, its way out stands on the bar above.
+                HorizontalLayout {
+                    spacing: Tokens.space-2;
+                    VerticalLayout {
+                        alignment: center;
+                        PickerOpener {
+                            text: root.shortcuts-link;
+                            action: root.shortcuts-link;
+                            clicked => {
+                                root.open-shortcuts();
+                            }
+                        }
+                    }
+                    Spacer { }
+                    if !root.clipboard-mode-on: SmallButton {
+                        text: root.use-clipboard-label;
+                        action: root.use-clipboard-label;
+                        enabled: !root.sending;
+                        clicked => {
+                            root.use-clipboard();
+                        }
                     }
                 }
             }
