@@ -97,7 +97,7 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
     palette.set_pack("unicode-text".into());
     palette.set_counter("7 / 34".into());
     palette.set_no_value("Nothing sent yet.".into());
-    palette.set_open_packs_label("Open pack search".into());
+    palette.set_open_packs_label("Find a value".into());
     let opened = Rc::new(Cell::new(0));
     let count = Rc::clone(&opened);
     palette.on_open_packs(move || count.set(count.get() + 1));
@@ -173,6 +173,34 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
         "a click beside the name opened the pack window"
     );
 
+    // ---- the heading of the next band opens the value window too (UX2) ------
+    // Found as the ink its words add, like the link below: the band shows only
+    // its heading at the end of a pack, so the words are the only difference.
+    palette.set_next_has_value(false);
+    palette.set_has_next(true);
+    palette.set_next_heading("".into());
+    let no_words = offscreen::draw(&surface, WIDTH, HEIGHT);
+    palette.set_next_heading("Next: end of pack (34/34)".into());
+    let words = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let heading = added(&no_words, &words);
+    assert!(
+        heading.bottom - heading.top < 30,
+        "the heading's words changed more than one line of the palette: {heading:?}"
+    );
+    press(
+        &palette,
+        LogicalPosition::new(
+            ((heading.left + heading.right) / 2) as f32,
+            ((heading.top + heading.bottom) / 2) as f32,
+        ),
+    );
+    assert_eq!(
+        opened.get(),
+        2,
+        "a click on the next band's heading did not open the value window"
+    );
+    palette.set_has_next(false);
+
     // ---- the link under the hint bar: the same states, its own callback ------
     // In this test rather than a second one, because the platform may be
     // installed once per process. The link is found as the ink its words add
@@ -188,7 +216,7 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
         },
         HintRow {
             key: "Alt+Shift+Space".into(),
-            action: "Open pack search".into(),
+            action: "Find a value".into(),
         },
     ])));
     let without = offscreen::draw(&surface, WIDTH, HEIGHT);
@@ -217,9 +245,11 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
         hover_path.display()
     );
     press(&palette, centre);
+    // Two openings of the value window so far - the pack's name and the next
+    // band's heading - and the link must not add a third.
     assert_eq!(
         (asked.get(), opened.get()),
-        (1, 1),
+        (1, 2),
         "a click on the link did not ask for the shortcuts window once, or opened the pack \
          window. Look at {}",
         path.display()
@@ -231,7 +261,7 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
     );
     assert_eq!(
         (asked.get(), opened.get()),
-        (1, 1),
+        (1, 2),
         "a click on the hint bar above the link asked for a window"
     );
 }

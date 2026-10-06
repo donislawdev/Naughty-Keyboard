@@ -181,12 +181,17 @@ export component Gallery inherits Window {
             }
         }
 
-        // The pick list: selected, in use, a risk badge, a row that cannot be
-        // chosen, and a name far too long - then the same list with nothing in it.
+        // The pick list: a section heading, a value selected with the "next"
+        // pill in the accent (UX2), a second heading, a pack in use, a risk
+        // badge, a row that cannot be chosen, and a name far too long - then the
+        // same list with nothing in it.
         PickList {
-            selected: 0;
+            selected: 1;
             current-label: "in use";
             rows: [
+                { title: "Values in Whitespace", heading: true, single-line: true },
+                { title: "Trailing space", detail: "Whitespace - value 1 of 12", badge: "next", has-badge: true, badge-current: true, enabled: true },
+                { title: "Packs", heading: true, single-line: true },
                 { title: "Unicode & text", detail: "unicode-text . values: 34", current: true, enabled: true },
                 { title: "Injections", detail: "injections . values: 40", badge: "offensive", has-badge: true, badge-risky: true, enabled: true },
                 { title: "A pack whose name is far too long for one line of the list", detail: "long-name . values: 1", enabled: true },
@@ -208,7 +213,7 @@ export component Gallery inherits Window {
             rows: [
                 { title: "Next value", current: true, enabled: true, single-line: true, key: "Alt+Shift+...", has-key: true },
                 { title: "Previous value", badge: "changed", has-badge: true, enabled: true, single-line: true, key: "Ctrl+Alt+Shift+Win+F24", has-key: true },
-                { title: "Open pack search", badge: "taken", has-badge: true, badge-risky: true, enabled: true, single-line: true, key: "Alt+Shift+Space", has-key: true },
+                { title: "Find a value", badge: "taken", has-badge: true, badge-risky: true, enabled: true, single-line: true, key: "Alt+Shift+Space", has-key: true },
                 { title: "An action name long enough to be a translation into a longer language", enabled: true, single-line: true, key: "Alt+Shift+H", has-key: true },
             ];
         }
@@ -219,13 +224,13 @@ export component Gallery inherits Window {
         // on the real palette.
         HorizontalLayout {
             spacing: Tokens.space-2;
-            PickerOpener { text: "PickerOpener"; action: "Open pack search"; }
+            PickerOpener { text: "PickerOpener"; action: "Find a value"; }
             Spacer { }
             TextCounter { text: "7 / 34"; }
         }
         HorizontalLayout {
             spacing: Tokens.space-2;
-            PickerOpener { text: "A pack whose name is far too long for the palette's first band"; action: "Open pack search"; }
+            PickerOpener { text: "A pack whose name is far too long for the palette's first band"; action: "Find a value"; }
             Spacer { }
             TextCounter { text: "100000 / 100000"; }
         }

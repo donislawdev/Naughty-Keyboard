@@ -216,6 +216,8 @@ pub enum UpcomingValue {
     Value {
         index: usize,
         total: usize,
+        /// The value's identifier inside its pack - what the value window marks.
+        id: String,
         name: String,
         /// `pack-id/value-id`, as in a [`ValueFacts`].
         reference: String,
@@ -388,6 +390,35 @@ impl AdvanceSequence {
         self.sequence
     }
 
+    /// Makes value `id` of the pack in use the one the next press sends - the
+    /// value window (`UX-GUI-001`). Nothing is sent.
+    ///
+    /// By identifier rather than by number: the window lists the catalogue as
+    /// it read it, and the pack held here is the one every press sends from
+    /// (`W5`). A number from there could name another value here, an
+    /// identifier names this one or none. `false` when no value has that
+    /// identifier, when no pack is chosen, or when the sequence refused (a value
+    /// still in flight) - and then nothing moved.
+    pub fn choose_next(&mut self, id: &str) -> bool {
+        let Some(at) = self
+            .loaded
+            .as_ref()
+            .and_then(|loaded| loaded.pack.values.iter().position(|value| value.id == id))
+        else {
+            return false;
+        };
+        let index = at + 1;
+        let step = self.sequence.apply(Event::SetNext { index });
+        let chosen = matches!(
+            step.sequence.upcoming(),
+            Some(Upcoming::Value { index: next, .. }) if next == index
+        ) && step.effects.is_empty();
+        if chosen {
+            self.sequence = step.sequence;
+        }
+        chosen
+    }
+
     /// What the next press of "next value" will do, with what the palette
     /// shows of the value - see [`UpcomingValue`]. `None` where the core says
     /// nothing is upcoming, and where the pack does not hold the value the
@@ -402,6 +433,7 @@ impl AdvanceSequence {
                 Some(UpcomingValue::Value {
                     index,
                     total,
+                    id: value.id.clone(),
                     name: value.name.clone(),
                     reference: format!("{}/{}", loaded.pack.id, value.id),
                     preview: preview_of(&value.body),
@@ -1511,6 +1543,41 @@ mod tests {
             warned.upcoming,
             Some(UpcomingValue::Value { index: 1, .. })
         ));
+    }
+
+    #[test]
+    fn a_value_chosen_in_the_value_window_is_the_next_one_sent() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        assert!(advance.choose_next("three"));
+        assert!(matches!(
+            advance.upcoming(),
+            Some(UpcomingValue::Value { index: 3, id, .. }) if id == "three"
+        ));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(
+            outcome
+                .sent
+                .expect("the chosen value goes out")
+                .facts
+                .reference,
+            "sample/three"
+        );
+        // From the end of the pack, back to its first value.
+        assert!(advance.choose_next("one"));
+        assert!(matches!(
+            advance.upcoming(),
+            Some(UpcomingValue::Value { index: 1, .. })
+        ));
+    }
+
+    #[test]
+    fn an_unknown_value_or_no_pack_moves_nothing() {
+        let mut advance = chosen(Risk::Normal);
+        let before = advance.sequence();
+        assert!(!advance.choose_next("nope"));
+        assert_eq!(advance.sequence(), before);
+        assert!(!AdvanceSequence::new().choose_next("one"));
     }
 
     #[test]

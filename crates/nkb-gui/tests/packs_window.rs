@@ -127,7 +127,12 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     let keyboard = Rc::new(Recorded::default());
     let (choose, commands) = mpsc::channel();
     let in_use = live::in_use();
-    *in_use.lock().expect("a fresh lock") = Some(String::from("whitespace"));
+    // No next value yet - the window then opens on the pack in use (UX2).
+    *in_use.lock().expect("a fresh lock") = live::InUseNow {
+        pack: Some(String::from("whitespace")),
+        next: None,
+    };
+    let in_use_slot = std::sync::Arc::clone(&in_use);
     let said: Rc<RefCell<Vec<String>>> = Rc::default();
     let heard = Rc::clone(&said);
     let packs = Packs::new(
@@ -145,7 +150,7 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     }));
 
     // ---- labelled once, from the dictionary --------------------------------
-    assert_eq!(window.get_window_title(), "Naughty Keyboard - packs");
+    assert_eq!(window.get_window_title(), "Naughty Keyboard - find a value");
     assert_eq!(
         window.get_hints().row_count(),
         3,
@@ -162,14 +167,19 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     );
     assert_eq!(
         titles(window).len(),
-        9,
-        "every shipped pack is listed: {:?}",
+        1 + 12 + 1 + 9,
+        "the values of the pack in use, then every shipped pack, each under a heading: {:?}",
         titles(window)
     );
     assert_eq!(
+        window.get_rows().iter().filter(|row| row.heading).count(),
+        2
+    );
+    assert_eq!(titles(window)[0], "Values in Whitespace");
+    assert_eq!(
         selected_title(window),
         "Whitespace",
-        "it opens on the pack in use"
+        "with no next value known it opens on the pack in use"
     );
     assert!(
         window.get_notes().row_count() >= 1,
@@ -188,7 +198,11 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     // description is about Unicode spaces - the query searches descriptions.
     type_text(window, "unicode-text");
     assert_eq!(window.get_query(), "unicode-text");
-    assert_eq!(titles(window), vec![String::from("Unicode and text")]);
+    assert_eq!(
+        titles(window),
+        vec![String::from("Packs"), String::from("Unicode and text")],
+        "the pack, and none of its values - a value matches on its own fields"
+    );
     tap(window, RETURN);
     assert_eq!(
         commands.try_recv(),
@@ -197,6 +211,32 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     assert!(!packs.is_open(), "a choice closes the window");
     assert_eq!(calls(&keyboard), vec!["give back"]);
     assert!(said.borrow().is_empty(), "{:?}", said.borrow());
+
+    // ---- a value found in another pack: Enter makes it the next one ---------
+    // The owner's case (UX-GUI-002): PESEL is a value of `locale-pl`.
+    packs.open();
+    let _ = calls(&keyboard);
+    type_text(window, "pesel");
+    assert_eq!(titles(window)[0], "Values");
+    tap(window, RETURN);
+    assert_eq!(
+        commands.try_recv(),
+        Ok(Command::ChooseValue {
+            pack: String::from("locale-pl"),
+            value: String::from("pesel-valid"),
+        })
+    );
+    assert!(!packs.is_open());
+    assert_eq!(calls(&keyboard), vec!["give back"]);
+
+    // ---- with a next value known, the window opens on it --------------------
+    in_use_slot.lock().expect("the slot").next = Some(String::from("leading-space"));
+    packs.open();
+    let _ = calls(&keyboard);
+    assert_eq!(selected_title(window), "Leading space");
+    tap(window, ESCAPE);
+    in_use_slot.lock().expect("the slot").next = None;
+    let _ = calls(&keyboard);
 
     // ---- Escape closes and chooses nothing ---------------------------------
     packs.open();

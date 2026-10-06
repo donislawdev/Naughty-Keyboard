@@ -46,9 +46,11 @@ fn specimen(single_line: bool) -> Vec<PickRow> {
         badge: SharedString::new(),
         has_badge: false,
         badge_risky: false,
+        badge_current: false,
         current: false,
         enabled: true,
         single_line,
+        heading: false,
         key: key.into(),
         has_key: true,
     };
@@ -69,7 +71,7 @@ fn specimen(single_line: bool) -> Vec<PickRow> {
             badge: "taken".into(),
             has_badge: true,
             badge_risky: true,
-            ..row("Open pack search", "Alt+Shift+Space")
+            ..row("Find a value", "Alt+Shift+Space")
         },
         row("Collapse or expand the palette", "Alt+Shift+H"),
     ]

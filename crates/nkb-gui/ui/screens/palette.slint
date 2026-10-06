@@ -307,17 +307,28 @@ export component Palette inherits Window {
             // heading is muted (D53). Not while a send runs: which value comes
             // next depends on how the one in flight ends.
             if !root.compact && root.has-next && !root.sending: Zone {
-                TextSmallMuted {
+                // The heading opens the value window on this value (UX2): the
+                // way to choose another one starts where the tester reads which
+                // one is next. The pack's name and the shortcut open the same
+                // window through the same callback.
+                PickerOpener {
                     text: root.next-heading;
-                    overflow: elide;
+                    action: root.open-packs-label;
+                    clicked => {
+                        root.open-packs();
+                    }
                 }
                 // The risk beside the name rather than on a row of its own: the
                 // palette stays on top of the application under test, and a row
                 // spent on one pill is height taken from it (second look at the
                 // first render). The name gives way, the pill does not.
+                // The name in the value band's own role, so the two values on
+                // screen read alike and the heading above stays the smaller
+                // line (second look at the render: in the body role the name
+                // and the heading were one style).
                 if root.next-has-value: HorizontalLayout {
                     spacing: Tokens.space-2;
-                    TextBody {
+                    TextName {
                         text: root.next-name;
                         overflow: elide;
                         horizontal-stretch: 1;

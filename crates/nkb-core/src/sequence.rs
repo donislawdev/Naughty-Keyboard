@@ -145,6 +145,11 @@ pub enum Event {
     /// `Escape` during an insertion, or a partial send: either way a fragment
     /// was left in the field.
     Cancelled,
+    /// The tester chose which value the next press sends - the value window
+    /// (`UX-GUI-001`). Nothing is sent and nothing is said: the next band shows
+    /// the choice. Refused while a value is in flight, like a change of pack. A
+    /// number outside the pack changes nothing.
+    SetNext { index: usize },
     /// The focused window or field changed.
     TargetChanged,
     /// There is nothing focused at all any more.
@@ -307,6 +312,7 @@ impl Sequence {
             Event::Next => self.next(),
             Event::Previous => self.previous(),
             Event::Restart => self.restart(),
+            Event::SetNext { index } => self.set_next(index),
             Event::TargetChanged => self.target_changed(),
             Event::TargetLost => self.nothing_but(Effect::AnnounceNoTarget),
             Event::UseClipboard => self.use_clipboard(),
@@ -383,9 +389,9 @@ impl Sequence {
                 sequence: self,
                 effects: vec![Effect::AnnounceStillInserting],
             },
-            // Neither the pack nor the route can be swapped under a value that
-            // is still arriving.
-            Event::PackChosen { .. } | Event::UseClipboard => Step {
+            // Neither the pack, the route nor the place in the pack can be
+            // swapped under a value that is still arriving.
+            Event::PackChosen { .. } | Event::UseClipboard | Event::SetNext { .. } => Step {
                 sequence: self,
                 effects: vec![Effect::AnnounceStillInserting],
             },
@@ -499,6 +505,39 @@ impl Sequence {
                 effects: Vec::new(),
             },
             Position::Inserting { .. } => self.nothing_but(Effect::AnnounceStillInserting),
+        }
+    }
+
+    /// Puts the sequence where the next press sends value `index`.
+    ///
+    /// Through the same positions a walk would reach, never a new one: `Ready`
+    /// for the first value, `Running` on the value before for any other. So
+    /// [`Self::upcoming`] and [`Event::Next`] need no case of their own, and the
+    /// test that holds them together covers this too.
+    fn set_next(self, index: usize) -> Step {
+        let total = match self.position {
+            Position::NoPack => return self.nothing_but(Effect::AnnounceNoPack),
+            Position::Ready { total }
+            | Position::Running { total, .. }
+            | Position::Exhausted { total, .. } => total,
+            Position::Inserting { .. } => {
+                return self.nothing_but(Effect::AnnounceStillInserting);
+            }
+        };
+        if index == 0 || index > total {
+            return self.nothing();
+        }
+        let position = if index == 1 {
+            Position::Ready { total }
+        } else {
+            Position::Running {
+                done: index - 1,
+                total,
+            }
+        };
+        Step {
+            sequence: Self { position, ..self },
+            effects: Vec::new(),
         }
     }
 
@@ -676,6 +715,51 @@ mod tests {
                         );
                     }
                     None => assert!(sends.is_empty(), "{position:?} sends {sends:?} unannounced"),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_value_chosen_as_next_is_the_one_the_next_press_sends() {
+        // The value window (UX-GUI-001) sets the next value. From every position,
+        // for every number: in range it becomes the next value - promised and
+        // sent - and nothing else moves. In flight, without a pack, or out of
+        // range, nothing changes at all.
+        for position in every_position() {
+            for delivery in [Delivery::Direct, Delivery::ClipboardMode] {
+                let sequence = Sequence { position, delivery };
+                for index in 0..=5 {
+                    let step = sequence.apply(Event::SetNext { index });
+                    let total = sequence.counter().map(|(_, all)| all);
+                    match position {
+                        Position::Inserting { .. } => {
+                            assert_eq!(step.sequence, sequence, "{position:?} moved in flight");
+                            assert_eq!(step.effects, vec![Effect::AnnounceStillInserting]);
+                        }
+                        Position::NoPack => {
+                            assert_eq!(step.sequence, sequence);
+                            assert_eq!(step.effects, vec![Effect::AnnounceNoPack]);
+                        }
+                        _ if index == 0 || Some(index) > total => {
+                            assert_eq!(step.sequence, sequence, "{position:?} took {index}");
+                            assert!(step.effects.is_empty());
+                        }
+                        _ => {
+                            assert!(step.effects.is_empty(), "choosing says nothing");
+                            assert_eq!(step.sequence.delivery, delivery);
+                            let all = total.expect("a pack is chosen");
+                            assert_eq!(
+                                step.sequence.upcoming(),
+                                Some(Upcoming::Value { index, total: all }),
+                                "{position:?} -> {index}"
+                            );
+                            assert_eq!(
+                                step.sequence.apply(Event::Next).effects,
+                                vec![Effect::SendValue { index }]
+                            );
+                        }
+                    }
                 }
             }
         }

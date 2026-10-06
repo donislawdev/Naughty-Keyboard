@@ -9,7 +9,7 @@
 // markup (GUI rule 8).
 
 import { Tokens } from "../tokens.slint";
-import { TextName, TextBody } from "typography.slint";
+import { TextName, TextBody, TextSmallMuted } from "typography.slint";
 import { Pill } from "chrome.slint";
 
 
@@ -46,6 +46,14 @@ export struct PickRow {
     // writes keys in: `Alt+Shift+N`.
     key: string,
     has-key: bool,
+    // The badge names where the tester stands - the value the next press
+    // sends (UX2) - so it wears the accent, as `current` does. A fact, like
+    // `badge-risky`, and the look is chosen here.
+    badge-current: bool,
+    // A section heading, not a thing to pick (UX2: the values of the pack in
+    // use, then the packs). Drawn as a small muted label, never selected,
+    // never pressed - the list skips it as it skips a faded row.
+    heading: bool,
 }
 
 // One row, in every state.
@@ -76,7 +84,9 @@ component PickRowView inherits Rectangle {
         : area.pressed ? Tokens.surface-sample
         : area.has-hover ? Tokens.surface-raised
         : transparent;
-    opacity: root.item.enabled ? 1 : Tokens.alpha-disabled;
+    // A heading cannot be chosen either, but it is not faded: it is a label,
+    // not an unavailable thing.
+    opacity: root.item.enabled || root.item.heading ? 1 : Tokens.alpha-disabled;
     height: content.preferred-height;
 
     // A row that becomes the selected one brings itself into view - the arrow
@@ -111,11 +121,15 @@ component PickRowView inherits Rectangle {
 
                 // Elided, not wrapped: a row that grows a line because of a long
                 // name moves every row below it, and a list must hold still.
-                TextName {
+                if root.item.heading: TextSmallMuted {
                     text: root.item.title;
                     overflow: elide;
                 }
-                if !root.item.single-line: TextBody {
+                if !root.item.heading: TextName {
+                    text: root.item.title;
+                    overflow: elide;
+                }
+                if !root.item.single-line && !root.item.heading: TextBody {
                     text: root.item.detail;
                     overflow: elide;
                 }
@@ -133,7 +147,7 @@ component PickRowView inherits Rectangle {
                 // pill is never drawn and takes no width - it only lends the row
                 // its height, so the floor follows the pill's own typeface and
                 // padding instead of a number fitted to one machine (GUI rule 14).
-                if root.item.single-line: Pill {
+                if root.item.single-line && !root.item.heading: Pill {
                     text: root.current-label;
                     width: 0px;
                     visible: false;
@@ -149,7 +163,9 @@ component PickRowView inherits Rectangle {
                     alignment: center;
                     Pill {
                         text: root.item.badge;
-                        tint: root.item.badge-risky ? Tokens.risk : Tokens.text-muted;
+                        tint: root.item.badge-risky ? Tokens.risk
+                            : root.item.badge-current ? Tokens.accent
+                            : Tokens.text-muted;
                     }
                 }
                 // Last, at the row's right edge, so the combinations of every

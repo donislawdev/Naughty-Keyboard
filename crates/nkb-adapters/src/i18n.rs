@@ -142,7 +142,7 @@ pub fn action_name(action: HotkeyAction) -> &'static str {
         HotkeyAction::MarkOk => "Mark as working",
         HotkeyAction::MarkProblem => "Mark as a problem",
         HotkeyAction::MarkSuspect => "Mark as suspect",
-        HotkeyAction::OpenPacks => "Open pack search",
+        HotkeyAction::OpenPacks => "Find a value",
         HotkeyAction::ToggleVisibility => "Collapse or expand the palette",
     }
 }
@@ -1350,17 +1350,33 @@ pub enum PacksLabel {
     Title,
     /// The heading above the list.
     Heading,
-    /// How many packs the list holds.
+    /// How many values and packs the list shows, with nothing typed.
     Summary,
-    /// The same, while the query hides some of them - so a short list is never
+    /// The same, while a query hides some of them - so a short list is never
     /// mistaken for a small catalogue.
     SummaryFiltered,
     /// The label above the query line, saying what it searches.
     Search,
     /// The pill on the pack the palette holds now.
     InUse,
-    /// The second line of a pack that loads: its id and how many values.
+    /// The pill on the value the next press sends (`UX-GUI-001`).
+    Next,
+    /// The second line of a pack that loads: its id, how many values, and what
+    /// it is for (`UX-GUI-008` - the query searches the description, so the row
+    /// shows it).
     Detail,
+    /// The second line of a value: the pack it is in and where.
+    ValueDetail,
+    /// The section heading over the values of the pack in use, with nothing
+    /// typed.
+    ValuesIn,
+    /// The section heading over the values a query found, in every pack.
+    FoundValues,
+    /// The section heading over the packs.
+    PacksSection,
+    /// Said in the palette when the value chosen in the window is not in the
+    /// pack the palette holds - the window read the catalogue on its own.
+    ValueGone,
     /// The pill on a pack with any offensive value (`product-spec.md` 10.2).
     Offensive,
     /// The second line of a pack that is present and refused.
@@ -1390,7 +1406,7 @@ pub enum PacksLabel {
     ReasonUnreadable,
     /// The footer: each key, and what it does here.
     KeyEnter,
-    UsePack,
+    UseSelected,
     KeyEscape,
     Close,
     KeyArrows,
@@ -1399,18 +1415,28 @@ pub enum PacksLabel {
 
 fn pattern_packs_label(label: PacksLabel) -> &'static str {
     match label {
-        PacksLabel::Title => "Naughty Keyboard - packs",
-        PacksLabel::Heading => "Packs",
-        PacksLabel::Summary => "packs: {count}",
-        PacksLabel::SummaryFiltered => "packs: {shown} of {total}",
-        PacksLabel::Search => "Search by name, tag, description or id",
+        PacksLabel::Title => "Naughty Keyboard - find a value",
+        PacksLabel::Heading => "Find a value",
+        PacksLabel::Summary => "values: {values}, packs: {packs}",
+        PacksLabel::SummaryFiltered => {
+            "values: {values} of {all_values}, packs: {packs} of {all_packs}"
+        }
+        PacksLabel::Search => "Search values and packs by name, tag or id",
         PacksLabel::InUse => "in use",
-        PacksLabel::Detail => "{id}, values: {count}",
+        PacksLabel::Next => "next",
+        PacksLabel::Detail => "{id}, values: {count} - {description}",
+        PacksLabel::ValueDetail => "{pack} - value {index} of {total}",
+        PacksLabel::ValuesIn => "Values in {pack}",
+        PacksLabel::FoundValues => "Values",
+        PacksLabel::PacksSection => "Packs",
+        PacksLabel::ValueGone => {
+            "Value \"{value}\" is not in {pack} any more, so the next value did not change."
+        }
         PacksLabel::Offensive => "offensive",
         PacksLabel::Refused => "{id}, does not load",
         PacksLabel::Problems => "problems: {count}",
         PacksLabel::Unreadable => "{id}, cannot be read",
-        PacksLabel::NoMatch => "No pack matches \"{query}\". Press Backspace to widen the search.",
+        PacksLabel::NoMatch => "Nothing matches \"{query}\". Press Backspace to widen the search.",
         PacksLabel::NoPacks => {
             "No pack was found, so there is nothing to choose from. The note below says which sources were read."
         }
@@ -1426,7 +1452,7 @@ fn pattern_packs_label(label: PacksLabel) -> &'static str {
         PacksLabel::ReasonNotSet => "no folder is set",
         PacksLabel::ReasonUnreadable => "the folder could not be read",
         PacksLabel::KeyEnter => "Enter",
-        PacksLabel::UsePack => "Use the pack",
+        PacksLabel::UseSelected => "Use the selected value or pack",
         PacksLabel::KeyEscape => "Esc",
         PacksLabel::Close => "Close",
         PacksLabel::KeyArrows => "↑ ↓",
@@ -1443,28 +1469,75 @@ pub fn packs_label(label: PacksLabel) -> &'static str {
     pattern_packs_label(label)
 }
 
-/// How many packs the list shows - and of how many, while a query hides some.
+/// How many values and packs the list shows.
 #[must_use]
-pub fn packs_summary(shown: usize, total: usize) -> String {
-    if shown == total {
-        fill(
-            pattern_packs_label(PacksLabel::Summary),
-            &[("count", &total.to_string())],
-        )
-    } else {
-        fill(
-            pattern_packs_label(PacksLabel::SummaryFiltered),
-            &[("shown", &shown.to_string()), ("total", &total.to_string())],
-        )
-    }
+pub fn packs_summary(values: usize, packs: usize) -> String {
+    fill(
+        pattern_packs_label(PacksLabel::Summary),
+        &[
+            ("values", &values.to_string()),
+            ("packs", &packs.to_string()),
+        ],
+    )
 }
 
-/// The second line of a pack that loads.
+/// The same while a query hides some: of how many in the whole catalogue.
 #[must_use]
-pub fn pack_detail(id: &str, values: usize) -> String {
+pub fn packs_summary_filtered(
+    values: usize,
+    all_values: usize,
+    packs: usize,
+    all_packs: usize,
+) -> String {
+    fill(
+        pattern_packs_label(PacksLabel::SummaryFiltered),
+        &[
+            ("values", &values.to_string()),
+            ("all_values", &all_values.to_string()),
+            ("packs", &packs.to_string()),
+            ("all_packs", &all_packs.to_string()),
+        ],
+    )
+}
+
+/// The second line of a pack that loads: `whitespace, values: 12 - Spaces...`.
+#[must_use]
+pub fn pack_detail(id: &str, values: usize, description: &str) -> String {
     fill(
         pattern_packs_label(PacksLabel::Detail),
-        &[("id", id), ("count", &values.to_string())],
+        &[
+            ("id", id),
+            ("count", &values.to_string()),
+            ("description", description),
+        ],
+    )
+}
+
+/// The second line of a value: `Polish locale - value 3 of 12`.
+#[must_use]
+pub fn value_detail(pack: &str, index: usize, total: usize) -> String {
+    fill(
+        pattern_packs_label(PacksLabel::ValueDetail),
+        &[
+            ("pack", pack),
+            ("index", &index.to_string()),
+            ("total", &total.to_string()),
+        ],
+    )
+}
+
+/// The heading over the values of the pack in use.
+#[must_use]
+pub fn values_in(pack: &str) -> String {
+    fill(pattern_packs_label(PacksLabel::ValuesIn), &[("pack", pack)])
+}
+
+/// Said when the value chosen in the window is not in the pack in use.
+#[must_use]
+pub fn value_gone(value: &str, pack: &str) -> String {
+    fill(
+        pattern_packs_label(PacksLabel::ValueGone),
+        &[("value", value), ("pack", pack)],
     )
 }
 
@@ -2383,7 +2456,13 @@ mod tests {
             PacksLabel::SummaryFiltered,
             PacksLabel::Search,
             PacksLabel::InUse,
+            PacksLabel::Next,
             PacksLabel::Detail,
+            PacksLabel::ValueDetail,
+            PacksLabel::ValuesIn,
+            PacksLabel::FoundValues,
+            PacksLabel::PacksSection,
+            PacksLabel::ValueGone,
             PacksLabel::Offensive,
             PacksLabel::Refused,
             PacksLabel::Problems,
@@ -2400,7 +2479,7 @@ mod tests {
             PacksLabel::ReasonNotSet,
             PacksLabel::ReasonUnreadable,
             PacksLabel::KeyEnter,
-            PacksLabel::UsePack,
+            PacksLabel::UseSelected,
             PacksLabel::KeyEscape,
             PacksLabel::Close,
             PacksLabel::KeyArrows,
@@ -2410,6 +2489,9 @@ mod tests {
                 PacksLabel::Summary
                 | PacksLabel::SummaryFiltered
                 | PacksLabel::Detail
+                | PacksLabel::ValueDetail
+                | PacksLabel::ValuesIn
+                | PacksLabel::ValueGone
                 | PacksLabel::Refused
                 | PacksLabel::Problems
                 | PacksLabel::Unreadable
@@ -2419,6 +2501,9 @@ mod tests {
                 | PacksLabel::Heading
                 | PacksLabel::Search
                 | PacksLabel::InUse
+                | PacksLabel::Next
+                | PacksLabel::FoundValues
+                | PacksLabel::PacksSection
                 | PacksLabel::Offensive
                 | PacksLabel::NoPacks
                 | PacksLabel::ListUnavailable
@@ -2430,7 +2515,7 @@ mod tests {
                 | PacksLabel::ReasonNotSet
                 | PacksLabel::ReasonUnreadable
                 | PacksLabel::KeyEnter
-                | PacksLabel::UsePack
+                | PacksLabel::UseSelected
                 | PacksLabel::KeyEscape
                 | PacksLabel::Close
                 | PacksLabel::KeyArrows
@@ -2448,9 +2533,25 @@ mod tests {
 
     #[test]
     fn the_pack_window_says_how_many_and_of_how_many_while_filtered() {
-        assert_eq!(packs_summary(9, 9), "packs: 9");
-        assert_eq!(packs_summary(2, 9), "packs: 2 of 9");
-        assert_eq!(pack_detail("unicode-text", 34), "unicode-text, values: 34");
+        assert_eq!(packs_summary(34, 9), "values: 34, packs: 9");
+        assert_eq!(
+            packs_summary_filtered(2, 102, 0, 9),
+            "values: 2 of 102, packs: 0 of 9"
+        );
+        assert_eq!(
+            pack_detail("unicode-text", 34, "Text that breaks"),
+            "unicode-text, values: 34 - Text that breaks"
+        );
+        assert_eq!(
+            value_detail("Polish locale", 3, 12),
+            "Polish locale - value 3 of 12"
+        );
+        assert_eq!(values_in("Whitespace"), "Values in Whitespace");
+        // A value id with braces is text, like a query (`fill` does not substitute twice).
+        assert_eq!(
+            value_gone("{pack}", "Whitespace"),
+            "Value \"{pack}\" is not in Whitespace any more, so the next value did not change."
+        );
         assert_eq!(pack_problems(3), "problems: 3");
         assert_eq!(pack_refused("broken"), "broken, does not load");
         assert_eq!(pack_unreadable("gone"), "gone, cannot be read");
@@ -2460,7 +2561,7 @@ mod tests {
     fn a_query_with_braces_is_copied_not_substituted() {
         assert_eq!(
             no_match("{id}"),
-            "No pack matches \"{id}\". Press Backspace to widen the search."
+            "Nothing matches \"{id}\". Press Backspace to widen the search."
         );
     }
 

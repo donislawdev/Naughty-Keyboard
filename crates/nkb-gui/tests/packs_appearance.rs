@@ -39,19 +39,19 @@ const ACCENT: (u8, u8, u8) = (0x7A, 0xA2, 0xF7);
 /// Specimen data - the test's own, like the gallery's labels. The product fills
 /// these from `nkb-adapters::i18n` and the catalogue.
 fn fill(window: &PacksWindow, rows: Vec<PickRow>) {
-    window.set_window_title("Naughty Keyboard - packs".into());
-    window.set_heading("Packs".into());
-    window.set_summary("packs: 9".into());
-    window.set_search_label("Search by name, tag or description".into());
+    window.set_window_title("Naughty Keyboard - find a value".into());
+    window.set_heading("Find a value".into());
+    window.set_summary("values: 12, packs: 9".into());
+    window.set_search_label("Search values and packs by name, tag or id".into());
     window.set_query("unicode".into());
     window.set_current_label("in use".into());
-    window.set_empty_text("No pack matches \"zzz\". Clear the search to see every pack.".into());
+    window.set_empty_text("Nothing matches \"zzz\". Press Backspace to widen the search.".into());
     window.set_rows(ModelRc::new(VecModel::from(rows)));
     window.set_selected(1);
     window.set_hints(ModelRc::new(VecModel::from(vec![
         HintRow {
             key: "Enter".into(),
-            action: "Open the pack".into(),
+            action: "Use the selected value or pack".into(),
         },
         HintRow {
             key: "Esc".into(),
@@ -71,27 +71,57 @@ fn row(title: &str, detail: &str, current: bool) -> PickRow {
         badge: "".into(),
         has_badge: false,
         badge_risky: false,
+        badge_current: false,
         current,
         enabled: true,
         single_line: false,
+        heading: false,
         key: "".into(),
         has_key: false,
     }
 }
 
+/// A section heading (UX2): one line, muted, never chosen.
+fn heading(title: &str) -> PickRow {
+    PickRow {
+        heading: true,
+        single_line: true,
+        enabled: false,
+        ..row(title, "", false)
+    }
+}
+
+/// The window as UX2 opens it with nothing typed: the values of the pack in
+/// use, the next one marked and selected, then the packs with what each is for.
 fn specimen() -> Vec<PickRow> {
     vec![
-        row("Whitespace", "whitespace . values: 12", false),
-        row("Unicode & text", "unicode-text . values: 34", true),
+        heading("Values in Whitespace"),
+        PickRow {
+            badge: "next".into(),
+            has_badge: true,
+            badge_current: true,
+            ..row("Trailing space", "Whitespace - value 1 of 12", false)
+        },
+        row("Leading space", "Whitespace - value 2 of 12", false),
+        heading("Packs"),
+        row(
+            "Whitespace",
+            "whitespace, values: 12 - Spaces at the edges, inside and instead of ordinary ones",
+            true,
+        ),
         PickRow {
             badge: "offensive".into(),
             has_badge: true,
             badge_risky: true,
-            ..row("Injections", "injections . values: 40", false)
+            ..row(
+                "Injections",
+                "injections, values: 40 - Strings that a careless backend executes",
+                false,
+            )
         },
         row(
             "Numbers at the extremes",
-            "numbers-extreme . values: 12",
+            "numbers-extreme, values: 12 - Limits of integer and float types",
             false,
         ),
     ]
@@ -240,6 +270,23 @@ fn the_pack_window_shows_where_the_keyboard_is_and_which_row_it_reached() {
         "the selected row carries {selected} accent pixels - the row the arrow keys reached \
          is not visible. Look at {}",
         path.display()
+    );
+
+    // ---- the next value's pill wears the accent (UX2) -----------------------
+    // A difference of two renders, the pill marked and not: the colour is the
+    // whole difference between "next" and any other pill.
+    let mut unmarked = specimen();
+    unmarked[1].badge_current = false;
+    window.set_rows(ModelRc::new(VecModel::from(unmarked)));
+    let plain = offscreen::draw(&surface, WIDTH, HEIGHT);
+    window.set_rows(ModelRc::new(VecModel::from(specimen())));
+    let marked = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let marked_path = offscreen::save(&marked, WIDTH, HEIGHT, "packs-next.png");
+    assert!(
+        accent_in(&marked, list_band.clone()) > accent_in(&plain, list_band.clone()) + 20,
+        "the next value's pill does not wear the accent, so it looks like any other pill. \
+         Look at {}",
+        marked_path.display()
     );
 
     // The negative control: no rows, no selected row, and the empty sentence

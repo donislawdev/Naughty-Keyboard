@@ -259,11 +259,13 @@ impl ShortcutList {
             return Some(Badge {
                 text: i18n::shortcuts_label(label).to_owned(),
                 risky: true,
+                current: false,
             });
         }
         (chord != self.defaults.chord(action)).then(|| Badge {
             text: i18n::shortcuts_label(ShortcutsLabel::Changed).to_owned(),
             risky: false,
+            current: false,
         })
     }
 
@@ -513,6 +515,7 @@ mod tests {
             Some(Badge {
                 text: String::from("taken"),
                 risky: true,
+                current: false,
             })
         );
         assert_eq!(list.summary(), "changed: 0 of 10");
@@ -543,6 +546,7 @@ mod tests {
             Some(Badge {
                 text: String::from("changed"),
                 risky: false,
+                current: false,
             })
         );
         assert_eq!(list.summary(), "changed: 1 of 10");

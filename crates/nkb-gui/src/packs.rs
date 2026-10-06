@@ -76,7 +76,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::focus::{HANDLE_WAIT, POLL, window_handle};
 use crate::live::{Command, InUse, in_use_now};
-use crate::picker::{Chosen, PackPicker, Row};
+use crate::picker::{Chosen, PackPicker, Row, RowKind};
 use crate::query::{KeyPress, Pressed};
 use crate::{HintRow, PacksWindow, PickRow};
 
@@ -251,9 +251,11 @@ impl Packs {
     pub fn open(self: &Rc<Self>) {
         if !self.is_open() {
             self.keyboard.remember();
+            let now = in_use_now(&self.in_use);
             let picker = PackPicker::new(
                 list_packs(&BuiltInCatalogue::new(), &TomlPackFormat),
-                in_use_now(&self.in_use).as_deref(),
+                now.pack.as_deref(),
+                now.next.as_deref(),
             );
             self.window.set_notes(strings(picker.notes()));
             *self.picker.borrow_mut() = Some(picker);
@@ -368,18 +370,21 @@ impl Packs {
             // window stays, because closing it would look like a choice.
             Chosen::Nothing => {}
             Chosen::InUse => self.close(),
-            Chosen::Pack(pack) => {
-                // The worker is gone only when the shortcuts died, and the
-                // palette said so then. Said again, so the choice is not lost
-                // without a word.
-                if self.commands.send(Command::Choose(pack)).is_err()
-                    && let Some(line) = i18n::ended(Ended::ShortcutsGone)
-                {
-                    (self.say)(line);
-                }
-                self.close();
-            }
+            Chosen::Pack(pack) => self.hand_over(Command::Choose(pack)),
+            Chosen::Value { pack, value } => self.hand_over(Command::ChooseValue { pack, value }),
         }
+    }
+
+    /// Hands a choice to the worker and closes.
+    fn hand_over(&self, command: Command) {
+        // The worker is gone only when the shortcuts died, and the palette said
+        // so then. Said again, so the choice is not lost without a word.
+        if self.commands.send(command).is_err()
+            && let Some(line) = i18n::ended(Ended::ShortcutsGone)
+        {
+            (self.say)(line);
+        }
+        self.close();
     }
 
     fn with_picker<T>(&self, act: impl FnOnce(&mut PackPicker) -> T) -> Option<T> {
@@ -478,7 +483,7 @@ fn label(window: &PacksWindow) {
     window.set_search_label(i18n::packs_label(PacksLabel::Search).into());
     window.set_current_label(i18n::packs_label(PacksLabel::InUse).into());
     let hints: Vec<HintRow> = [
-        (PacksLabel::KeyEnter, PacksLabel::UsePack),
+        (PacksLabel::KeyEnter, PacksLabel::UseSelected),
         (PacksLabel::KeyEscape, PacksLabel::Close),
         (PacksLabel::KeyArrows, PacksLabel::Move),
     ]
@@ -503,10 +508,13 @@ fn pick_row(row: &Row) -> PickRow {
             .map_or_else(SharedString::new, |badge| badge.text.as_str().into()),
         has_badge: row.badge.is_some(),
         badge_risky: row.badge.as_ref().is_some_and(|badge| badge.risky),
+        badge_current: row.badge.as_ref().is_some_and(|badge| badge.current),
         current: row.current,
         enabled: row.enabled,
-        // A pack is a name over a detail line, with no key combination.
-        single_line: false,
+        // A pack and a value are a name over a detail line, with no key
+        // combination. A heading is one line of its own look.
+        single_line: row.kind == RowKind::Heading,
+        heading: row.kind == RowKind::Heading,
         key: SharedString::new(),
         has_key: false,
     }

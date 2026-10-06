@@ -222,6 +222,10 @@ pub struct Start {
 pub enum Command {
     /// Open this pack, by identifier, in place of the one in use.
     Choose(String),
+    /// Make this value the one the next press sends, opening its pack first
+    /// when that is another one - the value window (UX2). By identifiers: the
+    /// value is looked up in the pack the worker holds.
+    ChooseValue { pack: String, value: String },
     /// Give the palette's shortcuts back to the system - the shortcuts window
     /// is opening, and a press there must reach it rather than send a value.
     /// Answered with [`Told::Paused`].
@@ -325,31 +329,58 @@ pub fn show_legend(palette: &Palette, legend: Legend) {
     palette.set_no_value(legend.no_value.into());
 }
 
-/// The identifier of the pack in use, published by the worker for the pack
-/// window, which marks it and opens on it.
+/// The pack in use and the value its next press sends, by identifier,
+/// published by the worker for the value window, which marks both and opens on
+/// the second (UX2).
 ///
 /// A shared slot rather than a message, for the reason [`Standing`] gives: the
 /// window reads it whenever it opens, which may be long after the last change.
 /// The worker is the one writer, because the sequence that knows the answer
 /// lives there.
-pub type InUse = Arc<Mutex<Option<String>>>;
+pub type InUse = Arc<Mutex<InUseNow>>;
+
+/// What the slot holds.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct InUseNow {
+    pub pack: Option<String>,
+    /// `None` when the next press sends no value: the end of a pack, or no pack.
+    pub next: Option<String>,
+}
 
 /// A fresh slot, empty until the worker opens a pack.
 #[must_use]
 pub fn in_use() -> InUse {
-    Arc::new(Mutex::new(None))
+    Arc::new(Mutex::new(InUseNow::default()))
 }
 
-/// The pack in use, as last published. A poisoned lock answers `None` - the
-/// window then marks no row, which is a smaller failure than a crash.
+/// The pack in use and the next value, as last published. A poisoned lock
+/// answers nothing - the window then marks no row, which is a smaller failure
+/// than a crash.
 #[must_use]
-pub fn in_use_now(in_use: &InUse) -> Option<String> {
-    in_use.lock().ok().and_then(|held| held.clone())
+pub fn in_use_now(in_use: &InUse) -> InUseNow {
+    in_use.lock().map(|held| held.clone()).unwrap_or_default()
 }
 
 fn publish(in_use: &InUse, sequence: &AdvanceSequence) {
     if let Ok(mut held) = in_use.lock() {
-        *held = sequence.pack_id().map(str::to_owned);
+        *held = InUseNow {
+            pack: sequence.pack_id().map(str::to_owned),
+            next: next_id(sequence.upcoming().as_ref()),
+        };
+    }
+}
+
+/// After a press: the pack is the same, the next value may have moved.
+fn publish_next(in_use: &InUse, upcoming: Option<&UpcomingValue>) {
+    if let Ok(mut held) = in_use.lock() {
+        held.next = next_id(upcoming);
+    }
+}
+
+fn next_id(upcoming: Option<&UpcomingValue>) -> Option<String> {
+    match upcoming {
+        Some(UpcomingValue::Value { id, .. }) => Some(id.clone()),
+        Some(UpcomingValue::EndOfPack { .. }) | None => None,
     }
 }
 
@@ -486,6 +517,9 @@ pub fn drive(
                 let bindings = memory.bindings.get();
                 let mut keep_going = || between_presses(stop, commands, &pending);
                 let mut present = |outcome: Outcome| {
+                    // The value window opens on the next value (UX2), and a
+                    // press moves it.
+                    publish_next(in_use, outcome.upcoming.as_ref());
                     show(
                         palette,
                         view_of(&outcome, &pack_shown, pack, standing, &bindings),
@@ -607,6 +641,18 @@ impl Worker<'_> {
                     self.standing,
                     self.hold.paused(),
                 ),
+                told: None,
+            },
+            Command::ChooseValue { pack, value } => Carried {
+                view: Some(choose_value(
+                    &mut self.sequence,
+                    self.memory,
+                    &mut self.pack,
+                    &pack,
+                    &value,
+                    self.standing,
+                    self.hold.paused(),
+                )),
                 told: None,
             },
             Command::Pause => {
@@ -851,32 +897,86 @@ fn choose(
     standing: &Standing,
     paused: bool,
 ) -> Option<View> {
-    if sequence.pack_id() == Some(asked) {
-        return None;
-    }
-    let view = match sequence.choose_pack(&BuiltInCatalogue::new(), &TomlPackFormat, asked) {
-        Ok(()) => {
-            asked.clone_into(pack);
-            let said = memory.keep(SettingChange::Pack(asked.to_owned()));
-            view_between(
+    let (said, value) = match open_pack(sequence, memory, pack, asked) {
+        PackOpening::Same => return None,
+        PackOpening::New(said) => (said, ValueBand::Clear),
+        PackOpening::Failed(line) => (vec![line], ValueBand::Keep),
+    };
+    Some(view_between(sequence, pack, said, value, standing, paused))
+}
+
+/// Opens `asked` when it is another pack, then makes `value` the one the next
+/// press sends - the value window (UX2). The view says what came of it.
+///
+/// A pack that cannot be opened stops here, and says why, exactly as a pack
+/// row does. A value the pack in use does not hold changes nothing and is said:
+/// the window offered it from its own reading of the catalogue, and the palette
+/// sends from the pack it holds (`W5`).
+fn choose_value(
+    sequence: &mut AdvanceSequence,
+    memory: &Memory,
+    pack: &mut String,
+    asked: &str,
+    value: &str,
+    standing: &Standing,
+    paused: bool,
+) -> View {
+    let (mut said, band) = match open_pack(sequence, memory, pack, asked) {
+        PackOpening::Same => (Vec::new(), ValueBand::Keep),
+        PackOpening::New(said) => (said, ValueBand::Clear),
+        PackOpening::Failed(line) => {
+            return view_between(
                 sequence,
                 pack,
-                said.into_iter().collect(),
-                ValueBand::Clear,
+                vec![line],
+                ValueBand::Keep,
                 standing,
                 paused,
+            );
+        }
+    };
+    if !sequence.choose_next(value) {
+        said.push(i18n::value_gone(value, &shown(sequence, pack)));
+    }
+    view_between(sequence, pack, said, band, standing, paused)
+}
+
+/// What opening a pack came to.
+enum PackOpening {
+    /// It is the pack in use - the window works from a snapshot, and choosing
+    /// it again must not send `7 / 34` back to the start.
+    Same,
+    /// Opened, with what saving it as the remembered pack had to say.
+    New(Vec<String>),
+    /// It could not be opened, and nothing changed - `choose_pack` leaves the
+    /// pack in use, its place and the last value as they were. The line says
+    /// why, naming the pack that was asked for.
+    Failed(String),
+}
+
+/// Opens `asked` in place of the pack in use. One path for a pack row and a
+/// value row of the window. `pack` follows the pack that opened.
+fn open_pack(
+    sequence: &mut AdvanceSequence,
+    memory: &Memory,
+    pack: &mut String,
+    asked: &str,
+) -> PackOpening {
+    if sequence.pack_id() == Some(asked) {
+        return PackOpening::Same;
+    }
+    match sequence.choose_pack(&BuiltInCatalogue::new(), &TomlPackFormat, asked) {
+        Ok(()) => {
+            asked.clone_into(pack);
+            PackOpening::New(
+                memory
+                    .keep(SettingChange::Pack(asked.to_owned()))
+                    .into_iter()
+                    .collect(),
             )
         }
-        Err(error) => view_between(
-            sequence,
-            pack,
-            vec![i18n::choose_error(&error, asked)],
-            ValueBand::Keep,
-            standing,
-            paused,
-        ),
-    };
-    Some(view)
+        Err(error) => PackOpening::Failed(i18n::choose_error(&error, asked)),
+    }
 }
 
 /// The name the palette shows for the pack: its own name when it opened, the
@@ -1543,6 +1643,7 @@ mod tests {
         UpcomingValue::Value {
             index: 8,
             total: 34,
+            id: "trailing-nbsp".to_owned(),
             name: "Trailing no-break space".to_owned(),
             reference: "unicode-text/trailing-nbsp".to_owned(),
             preview: ValuePreview::Text(nkb_core::preview::preview("Kowalski\u{A0}")),
@@ -2541,6 +2642,100 @@ mod tests {
                         .collect(),
                 }))
             );
+        });
+    }
+
+    /// The value window opens on what this slot says (UX2): the pack in use and
+    /// its next value once a pack opens, the next value moved by a press with
+    /// the pack kept, and no value named at the end of a pack.
+    #[test]
+    fn the_slot_says_the_pack_in_use_and_the_value_its_next_press_sends() {
+        let slot = super::in_use();
+        super::publish(&slot, &on("whitespace"));
+        assert_eq!(
+            super::in_use_now(&slot),
+            super::InUseNow {
+                pack: Some(String::from("whitespace")),
+                next: Some(String::from("trailing-space")),
+            }
+        );
+        let mut later = on("whitespace");
+        assert!(later.choose_next("leading-space"));
+        super::publish_next(&slot, later.upcoming().as_ref());
+        let now = super::in_use_now(&slot);
+        assert_eq!(now.next.as_deref(), Some("leading-space"));
+        assert_eq!(
+            now.pack.as_deref(),
+            Some("whitespace"),
+            "a press keeps the pack"
+        );
+        super::publish_next(
+            &slot,
+            Some(&nkb_app::UpcomingValue::EndOfPack { total: 12 }),
+        );
+        assert_eq!(super::in_use_now(&slot).next, None);
+    }
+
+    /// UX2: a value chosen in the value window becomes the next one - in the
+    /// pack in use as it is, in another pack after that pack opens and is
+    /// remembered - and an identifier the pack does not hold changes nothing
+    /// and is said rather than dropped.
+    #[test]
+    fn a_value_chosen_in_the_window_becomes_the_next_and_its_pack_opens_first() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        with_worker(&store, &registrar, false, |worker, _| {
+            let heading = |view: &super::View| view.next.as_ref().map(|next| next.heading.clone());
+
+            let same = worker
+                .carry_out(Command::ChooseValue {
+                    pack: String::from("whitespace"),
+                    value: String::from("leading-space"),
+                })
+                .view
+                .expect("the palette shows the new next value");
+            assert_eq!(heading(&same).as_deref(), Some("Next: value 2 of 12"));
+            assert!(same.messages.is_empty(), "{:?}", same.messages);
+            assert!(matches!(same.value, super::ValueBand::Keep));
+            assert!(
+                store.saved.borrow().is_empty(),
+                "the same pack is not saved again"
+            );
+
+            let other = worker
+                .carry_out(Command::ChooseValue {
+                    pack: String::from("locale-pl"),
+                    value: String::from("pesel-bad-checksum"),
+                })
+                .view
+                .expect("the palette shows the other pack");
+            assert_eq!(worker.sequence.pack_id(), Some("locale-pl"));
+            assert!(
+                heading(&other).is_some_and(|line| line.starts_with("Next: value 2 of ")),
+                "{:?}",
+                heading(&other)
+            );
+            assert!(
+                matches!(other.value, super::ValueBand::Clear),
+                "the value of the old pack leaves the screen"
+            );
+            assert_eq!(
+                *store.saved.borrow(),
+                vec![SettingChange::Pack(String::from("locale-pl"))]
+            );
+
+            let gone = worker
+                .carry_out(Command::ChooseValue {
+                    pack: String::from("locale-pl"),
+                    value: String::from("no-such-value"),
+                })
+                .view
+                .expect("the palette says why nothing changed");
+            assert_eq!(
+                gone.messages,
+                vec![i18n::value_gone("no-such-value", "Polish locale")]
+            );
+            assert_eq!(heading(&gone), heading(&other), "the next value stayed");
         });
     }
 

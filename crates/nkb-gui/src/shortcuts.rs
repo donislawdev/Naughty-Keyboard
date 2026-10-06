@@ -450,11 +450,13 @@ fn pick_row(row: &ShortcutRow) -> PickRow {
             .map_or_else(SharedString::new, |badge| badge.text.as_str().into()),
         has_badge: row.badge.is_some(),
         badge_risky: row.badge.as_ref().is_some_and(|badge| badge.risky),
+        badge_current: row.badge.as_ref().is_some_and(|badge| badge.current),
         current: row.current,
         // Every action can be recorded.
         enabled: true,
         // A shortcut is a name and a key combination, on one line.
         single_line: true,
+        heading: false,
         key: row.key.as_str().into(),
         has_key: true,
     }
