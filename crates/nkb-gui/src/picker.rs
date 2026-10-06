@@ -1081,7 +1081,9 @@ mod tests {
         let picker = shipped(None);
         assert_eq!(
             picker.notes(),
-            ["Not read: team folder, own folder - cannot be set in this version."]
+            [
+                "This version lists the built-in packs only - team and own pack folders are not in it yet."
+            ]
         );
     }
 }

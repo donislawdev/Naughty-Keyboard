@@ -238,7 +238,7 @@ fn pattern_message(message: &Message) -> &'static str {
             "New field - the counter is still at {done}/{total}. Press {shortcut} to start this pack from the beginning."
         }
         Message::NoPack => {
-            "No pack is chosen, so there is nothing to send. Restart the palette with a pack name."
+            "No pack is chosen, so there is nothing to send. Press {shortcut} to choose one."
         }
         Message::ModifierHeld { .. } => {
             "{key} is still held down, so nothing was sent. Release it and press the shortcut again."
@@ -301,7 +301,6 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
         | Message::ClearingSkippedInTerminal
         | Message::ClipboardBusy
         | Message::NoTarget
-        | Message::NoPack
         | Message::ClearingFailed
         | Message::NotPaced
         | Message::NothingToReport => pattern.to_owned(),
@@ -340,6 +339,13 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
                 ("total", &total.to_string()),
                 ("shortcut", &chord_text(bindings, HotkeyAction::RestartPack)),
             ],
+        ),
+        // `UX-GUI-014`: the value window, by its shortcut in effect, where a
+        // pack is chosen since K3 - not a restart with a name the tester at
+        // the desktop has no command line to type.
+        Message::NoPack => fill(
+            pattern,
+            &[("shortcut", &chord_text(bindings, HotkeyAction::OpenPacks))],
         ),
         Message::ModifierHeld { key } => fill(pattern, &[("key", key)]),
         Message::ValueTooLarge { id } => fill(pattern, &[("id", id), ("pack", pack)]),
@@ -1475,6 +1481,9 @@ pub enum PacksLabel {
     /// while a source is unread: a list from one source of three looks exactly
     /// like a complete one (untouchable rule 1, the same rule `nkb packs` keeps).
     NotRead,
+    /// Said instead of `NotRead` when the version simply has no team and own
+    /// folders and the built-in packs were read (`UX-GUI-009`).
+    BuiltInOnly,
     /// The words for the sources, inside `NotRead`.
     SourceBuiltIn,
     SourceTeam,
@@ -1524,6 +1533,9 @@ fn pattern_packs_label(label: PacksLabel) -> &'static str {
             "The pack list could not be read, so there is nothing to choose from. Close this window and start the palette with a pack name."
         }
         PacksLabel::NotRead => "Not read: {sources} - {reason}.",
+        PacksLabel::BuiltInOnly => {
+            "This version lists the built-in packs only - team and own pack folders are not in it yet."
+        }
         PacksLabel::SourceBuiltIn => "built-in packs",
         PacksLabel::SourceTeam => "team folder",
         PacksLabel::SourceOwn => "own folder",
@@ -1659,6 +1671,14 @@ pub fn no_match(query: &str) -> String {
 /// Empty when every source was read. Grouped by reason, so the build today says
 /// one line for the team and own folders rather than two lines that differ in
 /// one word.
+///
+/// `UX-GUI-009`: when the only thing missing is that this version HAS no team
+/// and own folders, while the built-in packs were read, the line says so in
+/// the tester's words (`PacksLabel::BuiltInOnly`). "Not read: team folder, own
+/// folder" stood under the list on every opening and read like a failure - and
+/// a note that cries wolf teaches the tester to skip the one that will one day
+/// name a folder that really could not be read. Every other case keeps "Not
+/// read" (untouchable rule 1 asks for the truth, not for alarm).
 #[must_use]
 pub fn not_read(coverage: &CatalogueCoverage) -> Vec<String> {
     let mut groups: Vec<(PacksLabel, Vec<&'static str>)> = Vec::new();
@@ -1683,9 +1703,15 @@ pub fn not_read(coverage: &CatalogueCoverage) -> Vec<String> {
             None => groups.push((reason, vec![name])),
         }
     }
+    // Both folders, and only for the reason that they do not exist yet - the
+    // group holds nothing else - with the built-in packs read.
+    let built_in_read = coverage.consulted.contains(&CatalogueSource::BuiltIn);
     groups
         .into_iter()
         .map(|(reason, names)| {
+            if reason == PacksLabel::ReasonCannotBeSet && names.len() == 2 && built_in_read {
+                return pattern_packs_label(PacksLabel::BuiltInOnly).to_owned();
+            }
             fill(
                 pattern_packs_label(PacksLabel::NotRead),
                 &[
@@ -1729,6 +1755,9 @@ pub enum ShortcutsLabel {
     Taken,
     /// The pill on a shortcut the system refused for another reason.
     NotRegistered,
+    /// The pill on an action this version does not carry out yet - its
+    /// shortcut stays registered, so nobody else takes it (`UX-GUI-006`).
+    NotAvailable,
     /// The footer: each key, and what it does here.
     KeyEnter,
     Record,
@@ -1780,6 +1809,7 @@ fn pattern_shortcuts_label(label: ShortcutsLabel) -> &'static str {
         ShortcutsLabel::Changed => "changed",
         ShortcutsLabel::Taken => "taken",
         ShortcutsLabel::NotRegistered => "not registered",
+        ShortcutsLabel::NotAvailable => "not available yet",
         ShortcutsLabel::KeyEnter => "Enter",
         ShortcutsLabel::Record => "Record a new shortcut",
         ShortcutsLabel::KeyDelete => "Delete",
@@ -2600,6 +2630,7 @@ mod tests {
             PacksLabel::NoPacks,
             PacksLabel::ListUnavailable,
             PacksLabel::NotRead,
+            PacksLabel::BuiltInOnly,
             PacksLabel::SourceBuiltIn,
             PacksLabel::SourceTeam,
             PacksLabel::SourceOwn,
@@ -2636,6 +2667,7 @@ mod tests {
                 | PacksLabel::Offensive
                 | PacksLabel::NoPacks
                 | PacksLabel::ListUnavailable
+                | PacksLabel::BuiltInOnly
                 | PacksLabel::SourceBuiltIn
                 | PacksLabel::SourceTeam
                 | PacksLabel::SourceOwn
@@ -2704,8 +2736,30 @@ mod tests {
                 (CatalogueSource::Own, SourceSkipped::NotImplementedYet),
             ],
         };
+        // `UX-GUI-009`: the folders this version does not have, in the
+        // tester's words - not as a failure to read.
         assert_eq!(
             not_read(&today),
+            vec![
+                "This version lists the built-in packs only - team and own pack folders are not in it yet."
+            ]
+        );
+        // One folder missing while the other is read is not "built-in only",
+        // and neither is a version whose built-in packs went unread.
+        let team_only = CatalogueCoverage {
+            consulted: vec![CatalogueSource::BuiltIn, CatalogueSource::Own],
+            skipped: vec![(CatalogueSource::Team, SourceSkipped::NotImplementedYet)],
+        };
+        assert_eq!(
+            not_read(&team_only),
+            vec!["Not read: team folder - cannot be set in this version."]
+        );
+        let nothing_built_in = CatalogueCoverage {
+            consulted: Vec::new(),
+            ..today.clone()
+        };
+        assert_eq!(
+            not_read(&nothing_built_in),
             vec!["Not read: team folder, own folder - cannot be set in this version."]
         );
         let complete = CatalogueCoverage {
@@ -2999,15 +3053,26 @@ mod tests {
     #[test]
     fn a_shortcut_set_in_the_settings_file_is_the_one_every_sentence_names() {
         let (mine, refused) = defaults().with(
-            &[(
-                HotkeyAction::RestartPack,
-                HotkeyChord::parse("Ctrl+Alt+Win+9").expect("reads"),
-            )],
+            &[
+                (
+                    HotkeyAction::RestartPack,
+                    HotkeyChord::parse("Ctrl+Alt+Win+9").expect("reads"),
+                ),
+                (
+                    HotkeyAction::OpenPacks,
+                    HotkeyChord::parse("Ctrl+Alt+Win+F7").expect("reads"),
+                ),
+            ],
             &|_| None,
         );
         assert!(refused.is_empty());
         let out = message(&Message::CounterKept { done: 1, total: 2 }, "p", &mine);
         assert!(out.contains("Ctrl+Alt+Win+9"), "{out}");
+        // `UX-GUI-014`: no pack sends the tester to the value window's shortcut.
+        assert_eq!(
+            message(&Message::NoPack, "", &mine),
+            "No pack is chosen, so there is nothing to send. Press Ctrl+Alt+Win+F7 to choose one."
+        );
         let taken = registration(
             &ShortcutRegistration::Taken,
             HotkeyAction::RestartPack,
@@ -3043,6 +3108,7 @@ mod tests {
             ShortcutsLabel::Changed,
             ShortcutsLabel::Taken,
             ShortcutsLabel::NotRegistered,
+            ShortcutsLabel::NotAvailable,
             ShortcutsLabel::KeyEnter,
             ShortcutsLabel::Record,
             ShortcutsLabel::KeyDelete,
@@ -3086,6 +3152,7 @@ mod tests {
                 | ShortcutsLabel::Changed
                 | ShortcutsLabel::Taken
                 | ShortcutsLabel::NotRegistered
+                | ShortcutsLabel::NotAvailable
                 | ShortcutsLabel::KeyEnter
                 | ShortcutsLabel::Record
                 | ShortcutsLabel::KeyDelete

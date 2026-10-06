@@ -241,8 +241,12 @@ impl ShortcutList {
     }
 
     /// What the system said about `chord` at the last registration, when it
-    /// is still the chord registered - and otherwise whether it is the
-    /// tester's own. A risk outranks a change.
+    /// is still the chord registered - then whether the action does anything
+    /// in this version, then whether the chord is the tester's own. A risk
+    /// outranks the rest, and an action that does nothing outranks a change:
+    /// a row that looks like a working shortcut while it is not was
+    /// `UX-GUI-006`. Still recordable - the chord stays registered so nobody
+    /// else takes it, and the tester may want it elsewhere.
     fn badge(&self, action: HotkeyAction, chord: HotkeyChord) -> Option<Badge> {
         let registered = self
             .now
@@ -259,6 +263,13 @@ impl ShortcutList {
             return Some(Badge {
                 text: i18n::shortcuts_label(label).to_owned(),
                 risky: true,
+                current: false,
+            });
+        }
+        if !crate::live::wired(action) {
+            return Some(Badge {
+                text: i18n::shortcuts_label(ShortcutsLabel::NotAvailable).to_owned(),
+                risky: false,
                 current: false,
             });
         }
@@ -490,6 +501,46 @@ mod tests {
             clicked.selected(),
             4,
             "a click past the rows moved the selection"
+        );
+    }
+
+    /// `UX-GUI-006`: exactly the actions that do nothing in this version wear
+    /// "not available yet" - neutral, not a risk - and a risk still outranks
+    /// it, because a shortcut another application holds is worse news.
+    #[test]
+    fn an_action_this_version_does_not_carry_out_says_so_in_its_row() {
+        let not_available = Badge {
+            text: String::from("not available yet"),
+            risky: false,
+            current: false,
+        };
+        let list = a_list();
+        for (action, row) in HotkeyAction::ALL.iter().zip(list.rows()) {
+            assert_eq!(
+                row.badge.as_ref() == Some(&not_available),
+                !crate::live::wired(*action),
+                "{action:?}: {:?}",
+                row.badge
+            );
+        }
+        let repeat = defaults().chord(HotkeyAction::RepeatLast);
+        let taken = ShortcutList::new(
+            defaults(),
+            ShortcutsNow {
+                bindings: defaults(),
+                registered: vec![(
+                    HotkeyAction::RepeatLast,
+                    repeat,
+                    ShortcutRegistration::Taken,
+                )],
+            },
+        );
+        assert_eq!(
+            taken.rows()[2]
+                .badge
+                .as_ref()
+                .map(|badge| badge.text.as_str()),
+            Some("taken")
         );
     }
 
