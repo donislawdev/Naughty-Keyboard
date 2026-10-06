@@ -442,6 +442,7 @@ impl KeptSettings {
         match change {
             SettingChange::Pack(pack) => self.settings.pack.as_deref() == Some(pack.as_str()),
             SettingChange::Compact(compact) => self.settings.compact == Some(*compact),
+            SettingChange::Clearing(clearing) => self.settings.clearing == Some(*clearing),
             SettingChange::Shortcut { .. } => false,
         }
     }
@@ -450,6 +451,7 @@ impl KeptSettings {
         match change {
             SettingChange::Pack(pack) => self.settings.pack = Some(pack),
             SettingChange::Compact(compact) => self.settings.compact = Some(compact),
+            SettingChange::Clearing(clearing) => self.settings.clearing = Some(clearing),
             SettingChange::Shortcut { action, chord } => {
                 wish(&mut self.settings.shortcuts, action, chord);
             }
@@ -606,6 +608,7 @@ mod tests {
             settings: Settings {
                 pack: pack.map(ToOwned::to_owned),
                 compact,
+                clearing: None,
                 shortcuts: Vec::new(),
             },
             notes: Vec::new(),
@@ -638,6 +641,37 @@ mod tests {
         assert_eq!(kept.keep(&store, SettingChange::Compact(true)), None);
         assert_eq!(store.saves(), vec![SettingChange::Compact(true)]);
         assert_eq!(kept.settings().compact, Some(true));
+    }
+
+    /// `D101`: the way of clearing is kept like any other choice - in effect at
+    /// once, saved once, and a second click on the same choice writes nothing.
+    #[test]
+    fn the_way_of_clearing_is_kept_and_saved_once_per_change() {
+        use crate::ports::Clearing;
+        let store = FakeStore::loading(SettingsLoad::Absent);
+        let (mut kept, _) = KeptSettings::open(&store);
+        assert_eq!(kept.settings().clearing, None, "the file says nothing yet");
+        assert_eq!(
+            kept.keep(&store, SettingChange::Clearing(Clearing::Keep)),
+            None
+        );
+        assert_eq!(kept.settings().clearing, Some(Clearing::Keep));
+        assert_eq!(
+            kept.keep(&store, SettingChange::Clearing(Clearing::Keep)),
+            None
+        );
+        assert_eq!(
+            kept.keep(&store, SettingChange::Clearing(Clearing::Line)),
+            None
+        );
+        assert_eq!(
+            store.saves(),
+            vec![
+                SettingChange::Clearing(Clearing::Keep),
+                SettingChange::Clearing(Clearing::Line)
+            ],
+            "the same choice twice went to disk twice"
+        );
     }
 
     #[test]

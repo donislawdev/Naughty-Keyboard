@@ -92,7 +92,7 @@ use nkb_adapters::{
 };
 use nkb_app::advance_sequence::{InFlight, Ports, RouteRequest, Sent};
 use nkb_app::ports::{
-    HotkeyRegistrar, LiveShortcuts, Progress, SettingChange, Settings, SettingsStore,
+    Clearing, HotkeyRegistrar, LiveShortcuts, Progress, SettingChange, Settings, SettingsStore,
     ShortcutRegistration, Wait,
 };
 use nkb_app::{
@@ -142,9 +142,44 @@ pub struct View {
     /// click turns off, as against the window in front that only the next
     /// window ends (`D99`). Decides which of the two buttons stands.
     clipboard_mode_on: bool,
+    /// How a typed value meets the field (`D101`), for the line under the hint
+    /// bar - `None` leaves the words on screen, as a press does: only a choice
+    /// between presses changes it.
+    clearing: Option<Clearing>,
     /// The words naming the shortcuts, when the table in effect changed with
     /// this view - `None` leaves the ones on screen.
     legend: Option<Legend>,
+}
+
+/// The two lines that say how a typed value meets the field: what happens
+/// now, and the button's words for the other way (`UX-GUI-005`, `D101`).
+fn clearing_words(clearing: Clearing) -> (&'static str, &'static str) {
+    match clearing {
+        Clearing::Line => (
+            i18n::label(PaletteLabel::ClearsLine),
+            i18n::label(PaletteLabel::InsertAtCursor),
+        ),
+        Clearing::Keep => (
+            i18n::label(PaletteLabel::AtCursor),
+            i18n::label(PaletteLabel::ClearLineFirst),
+        ),
+    }
+}
+
+/// Puts the two lines about clearing on the palette. On the MAIN thread - at
+/// start, before the worker's first view, and from every view that carries
+/// them, so the words cannot be chosen two ways.
+pub fn show_clearing(palette: &Palette, clearing: Clearing) {
+    let (state, switch) = clearing_words(clearing);
+    palette.set_clearing_state(state.into());
+    palette.set_clearing_switch(switch.into());
+}
+
+/// The way of clearing the palette starts with: what the tester last chose,
+/// or the line. One function for both threads, so they start from one answer.
+#[must_use]
+pub fn starts_clearing(settings: &Settings) -> Clearing {
+    settings.clearing.unwrap_or(Clearing::Line)
 }
 
 /// What the value band does with this view.
@@ -265,6 +300,11 @@ pub enum Command {
     /// band (`UX-GUI-004`). What `ToggleVisibility` does, through the same
     /// switch, so a click and a press cannot disagree about the state.
     ToggleCompact,
+    /// Type values the other way: at the cursor after clearing the line, or
+    /// the reverse - the button under the hint bar (`UX-GUI-005`, `D101`). A
+    /// switch rather than a named way, like the collapse: the button's words
+    /// come from the worker's state, so a click always means "the other one".
+    SwitchClearing,
 }
 
 /// What the worker tells the shortcuts window.
@@ -496,6 +536,8 @@ pub fn drive(
             }
         }
     }
+    // Before the first view, which says how values meet the field (`D101`).
+    sequence.set_clearing(starts_clearing(kept.settings()));
     publish(in_use, &sequence, &bindings);
 
     let memory = Memory {
@@ -775,6 +817,28 @@ impl Worker<'_> {
                 told: None,
                 toggled: Some(self.collapse.toggle()),
             },
+            // `D101`: the other way, in effect from the next press and kept for
+            // the next run. Between presses like every command, so a value in
+            // flight keeps the way it started with. The band is rebuilt as the
+            // clipboard buttons rebuild it, with the line about saving when the
+            // save failed for a reason not said before.
+            Command::SwitchClearing => {
+                let clearing = match self.sequence.clearing() {
+                    Clearing::Line => Clearing::Keep,
+                    Clearing::Keep => Clearing::Line,
+                };
+                self.sequence.set_clearing(clearing);
+                let lines = self
+                    .memory
+                    .keep(SettingChange::Clearing(clearing))
+                    .into_iter()
+                    .collect();
+                Carried {
+                    view: Some(self.view(lines, ValueBand::Keep, None)),
+                    told: None,
+                    toggled: None,
+                }
+            }
             Command::Shortcut { action, chord } => {
                 let (change, said) = self.memory.kept.borrow_mut().change_shortcut(
                     self.memory.store,
@@ -1148,6 +1212,7 @@ fn view_between(
             sequence.clipboard_for_window(),
         ),
         clipboard_mode_on: sequence.sequence().delivery == Delivery::ClipboardMode,
+        clearing: Some(sequence.clearing()),
         legend: None,
     }
 }
@@ -1193,7 +1258,8 @@ fn view_of(
         ),
         clipboard_bar: clipboard_bar(outcome.sequence.delivery, outcome.clipboard_for_window),
         clipboard_mode_on: outcome.sequence.delivery == Delivery::ClipboardMode,
-        // An outcome comes from a press, and a press never changes the table.
+        // A press never changes how values meet the field, nor the table.
+        clearing: None,
         legend: None,
     }
 }
@@ -1403,6 +1469,9 @@ fn apply(palette: &Palette, view: View) {
         palette.set_clipboard_mode_label(words.into());
     }
     palette.set_clipboard_mode_on(view.clipboard_mode_on);
+    if let Some(clearing) = view.clearing {
+        show_clearing(palette, clearing);
+    }
     palette.set_messages(ModelRc::new(VecModel::from(
         view.messages
             .into_iter()
@@ -2097,6 +2166,50 @@ mod tests {
             "the window left the front, so the bar goes"
         );
 
+        // ---- how a typed value meets the field (`D101`) ----------------------
+        // A view between presses carries the way, a press never changes it.
+        let mut at_cursor = on("whitespace");
+        at_cursor.set_clearing(super::Clearing::Keep);
+        apply(
+            &palette,
+            view_between(
+                &at_cursor,
+                "whitespace",
+                Vec::new(),
+                ValueBand::Keep,
+                &quiet(),
+                false,
+            ),
+        );
+        assert_eq!(
+            palette.get_clearing_state(),
+            "Each value goes in at the cursor"
+        );
+        assert_eq!(palette.get_clearing_switch(), "Clear line first");
+        apply(
+            &palette,
+            view_of(
+                &an_outcome(None, Vec::new()),
+                "p",
+                "p",
+                &quiet(),
+                &nkb_adapters::default_bindings(),
+            ),
+        );
+        assert_eq!(
+            palette.get_clearing_switch(),
+            "Clear line first",
+            "a press changed the words about clearing"
+        );
+        super::show_clearing(&palette, super::Clearing::Line);
+        assert_eq!(
+            (
+                palette.get_clearing_state().as_str(),
+                palette.get_clearing_switch().as_str()
+            ),
+            ("The line is cleared before each value", "Insert at cursor")
+        );
+
         // ---- the window never gets shorter by itself (`D83`) ---------------
         // The heights are given, as the `changed` handler gives them: a read
         // of the content height here would be stale (`slint.md` 2.27). The
@@ -2550,6 +2663,56 @@ mod tests {
         assert_eq!(
             *store.saved.borrow(),
             vec![SettingChange::Compact(true), SettingChange::Compact(false)]
+        );
+    }
+
+    /// `D101`: the button under the hint bar switches how typed values meet the
+    /// field - the sequence's own choice, so the next press uses it - draws the
+    /// words of the new way and saves exactly that way, and moves nothing in
+    /// the pack. A second click is the other way back.
+    #[test]
+    fn a_click_on_the_clearing_button_switches_the_way_and_saves_it() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        with_worker(&store, &registrar, true, |worker, _| {
+            let before = worker.sequence.upcoming();
+            assert_eq!(worker.sequence.clearing(), super::Clearing::Line);
+            let carried = worker.carry_out(Command::SwitchClearing);
+            assert_eq!(worker.sequence.clearing(), super::Clearing::Keep);
+            let view = carried.view.expect("the palette says the new way");
+            assert_eq!(view.clearing, Some(super::Clearing::Keep));
+            assert!(view.messages.is_empty(), "{:?}", view.messages);
+            assert_eq!(worker.sequence.upcoming(), before, "the pack moved");
+            let back = worker.carry_out(Command::SwitchClearing);
+            assert_eq!(worker.sequence.clearing(), super::Clearing::Line);
+            assert_eq!(
+                back.view.expect("drawn").clearing,
+                Some(super::Clearing::Line)
+            );
+        });
+        assert_eq!(
+            *store.saved.borrow(),
+            vec![
+                SettingChange::Clearing(super::Clearing::Keep),
+                SettingChange::Clearing(super::Clearing::Line)
+            ]
+        );
+    }
+
+    /// The palette starts with the way the tester last chose, and with the
+    /// line when the file says nothing.
+    #[test]
+    fn the_palette_starts_with_the_remembered_way_of_clearing_or_the_line() {
+        assert_eq!(
+            super::starts_clearing(&super::Settings::default()),
+            super::Clearing::Line
+        );
+        assert_eq!(
+            super::starts_clearing(&super::Settings {
+                clearing: Some(super::Clearing::Keep),
+                ..super::Settings::default()
+            }),
+            super::Clearing::Keep
         );
     }
 

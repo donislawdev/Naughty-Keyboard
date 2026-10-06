@@ -44,18 +44,10 @@ use nkb_core::pack::{Pack, PackValue};
 use nkb_core::preview::{ShapeFact, ValuePreview, preview_of, shape};
 use nkb_core::value::ValueProblem;
 
-/// Whether the field is cleared before the value goes in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Clearing {
-    /// Send the value on top of whatever the field holds. No key other than
-    /// the value's own characters is pressed.
-    Keep,
-    /// `Home`, `Shift+End`, `Delete`, then the value. Clears the current line
-    /// of the field and never reaches beyond it - so it clears only a focus
-    /// confirmed as a text field, and sends the value uncleared elsewhere
-    /// ([`ClearingOutcome::Skipped`], `D76`).
-    Line,
-}
+/// Whether the field is cleared before the value goes in. Defined beside the
+/// ports since it became a setting the tester keeps (`D101`), and named here
+/// too, where every caller of [`deliver_value`] has always found it.
+pub use crate::ports::Clearing;
 
 /// What became of the clearing that goes before a value.
 ///

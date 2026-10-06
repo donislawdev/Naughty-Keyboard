@@ -151,6 +151,9 @@ fn fill(palette: &Palette) {
     palette.set_collapse_label("Collapse".into());
     palette.set_expand_label("Expand".into());
     palette.set_shortcuts_link("Change shortcuts".into());
+    // How a typed value meets the field (UX-GUI-005), as the line is cleared.
+    palette.set_clearing_state("The line is cleared before each value".into());
+    palette.set_clearing_switch("Insert at cursor".into());
 
     // Every action the build carries out (UX-GUI-007), as `live::legend`
     // lists them for the default table.

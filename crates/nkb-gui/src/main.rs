@@ -198,6 +198,9 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // knows them lives over there.
     palette.set_compact(compact);
     palette.set_has_value(false);
+    // How a typed value meets the field, from the first frame (`D101`): the
+    // worker starts from the same answer and says it again with its first view.
+    live::show_clearing(&palette, live::starts_clearing(settings.settings()));
 
     // The two threads meet here. `focus` runs on this one and may produce a
     // sentence saying the palette could not refuse the focus. The worker rebuilds
@@ -231,6 +234,9 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // Collapse and expand: the worker owns the switch and remembers it (`D84`),
     // so the click asks, as the shortcut does.
     palette.on_toggle_compact(ask_on_click(&choose, live::Command::ToggleCompact));
+    // The other way of meeting the field (`D101`) - the worker holds the
+    // choice, and its view brings the words for both lines.
+    palette.on_switch_clearing(ask_on_click(&choose, live::Command::SwitchClearing));
     // The same way: created once, shown on request - and the one window the
     // worker's answers about shortcuts are delivered to (`shortcuts::tell`).
     let shortcuts = Shortcuts::new(

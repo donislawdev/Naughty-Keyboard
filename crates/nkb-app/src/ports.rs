@@ -726,6 +726,23 @@ pub trait PackSink {
     fn replace(&self, id: &str, text: &str) -> Result<(), SinkError>;
 }
 
+/// Whether the field is cleared before the value goes in.
+///
+/// Here rather than beside `send_value::deliver_value`, which takes it, because
+/// it is also a setting the palette keeps (`Settings::clearing`, `D101`) - and a
+/// port that named a use case's type would point the wrong way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Clearing {
+    /// Send the value on top of whatever the field holds, at the cursor. No
+    /// key other than the value's own characters is pressed.
+    Keep,
+    /// `Home`, `Shift+End`, `Delete`, then the value. Clears the current line
+    /// of the field and never reaches beyond it - so it clears only a focus
+    /// confirmed as a text field, and sends the value uncleared elsewhere
+    /// (`ClearingOutcome::Skipped`, `D76`).
+    Line,
+}
+
 /// What the tool remembers between two runs of the palette.
 ///
 /// Every field is an `Option`, and `None` means "the file does not say" - never
@@ -740,6 +757,9 @@ pub struct Settings {
     pub pack: Option<String>,
     /// Whether the tester last left the palette collapsed (`D83`).
     pub compact: Option<bool>,
+    /// Whether the palette clears the line before each typed value or sends it
+    /// at the cursor, as the tester last chose (`UX-GUI-005`, `D101`).
+    pub clearing: Option<Clearing>,
     /// The shortcuts the tester wrote (`K4`), in the order the file holds them.
     /// Only chords that READ arrive here - whether each can be used is
     /// [`nkb_core::hotkeys::Bindings::with`]'s question, because the answer
@@ -754,6 +774,8 @@ pub struct Settings {
 pub enum SettingChange {
     Pack(String),
     Compact(bool),
+    /// How typed values meet what the field holds (`D101`).
+    Clearing(Clearing),
     /// One action's shortcut (K5): `Some` is the chord the tester recorded,
     /// `None` gives the action its default back - by REMOVING the key, so the
     /// action follows the default table of whatever version reads the file
@@ -799,6 +821,9 @@ pub enum SettingsNote {
     NotTrueOrFalse { key: String },
     /// A key that must name a pack holds something that cannot be one.
     NotAPackName { key: String },
+    /// A key that must name a way of clearing - `line` or `none` - holds
+    /// something else. The line is cleared, as with no key at all.
+    NotAClearing { key: String },
     /// A key that must hold a table of settings holds a single value.
     NotATable { key: String },
     /// A key that must hold a shortcut holds something that does not read as

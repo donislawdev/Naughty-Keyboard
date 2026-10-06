@@ -50,7 +50,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use nkb_app::{
-    SaveError, SettingChange, Settings, SettingsLoad, SettingsNote, SettingsStore,
+    Clearing, SaveError, SettingChange, Settings, SettingsLoad, SettingsNote, SettingsStore,
     SettingsUnusable, ShortcutUnreadable,
 };
 use nkb_core::hotkeys::{HotkeyAction, HotkeyChord};
@@ -246,6 +246,12 @@ fn settings_of(document: &DocumentMut) -> (Settings, Vec<SettingsNote>) {
                             key: String::from("palette.compact"),
                         }),
                     },
+                    "clearing" => match item.as_str().and_then(clearing_named) {
+                        Some(clearing) => settings.clearing = Some(clearing),
+                        None => notes.push(SettingsNote::NotAClearing {
+                            key: String::from("palette.clearing"),
+                        }),
+                    },
                     other => unknown.push(format!("palette.{other}")),
                 }
             }
@@ -298,6 +304,10 @@ fn set(document: &mut DocumentMut, change: &SettingChange) -> bool {
         SettingChange::Compact(compact) => (
             current.and_then(Item::as_bool) == Some(*compact),
             Some(Value::from(*compact)),
+        ),
+        SettingChange::Clearing(clearing) => (
+            current.and_then(Item::as_str).and_then(clearing_named) == Some(*clearing),
+            Some(Value::from(clearing_word(*clearing))),
         ),
         // Read back through the grammar, so `alt + shift + n` the tester
         // wrote is the same shortcut as `Alt+Shift+N` and stays as written.
@@ -357,8 +367,36 @@ fn place_of(change: &SettingChange) -> (&'static str, &'static str) {
     match change {
         SettingChange::Pack(_) => ("palette", "pack"),
         SettingChange::Compact(_) => ("palette", "compact"),
+        SettingChange::Clearing(_) => ("palette", "clearing"),
         SettingChange::Shortcut { action, .. } => ("shortcuts", action.id()),
     }
+}
+
+/// The words `palette.clearing` takes, each beside the way it names - one
+/// table for reading and for writing, so the two cannot drift apart.
+///
+/// Public names (untouchable rule 3, `settings-format.md` 2): a word here is
+/// read by every later version, so one is never renamed, only added. Text
+/// rather than `true`/`false`, so that a third way - a multi-line field
+/// cleared after the tester agreed (`ux-spec.md` 4) - is a new word, not a new
+/// schema (`D101`).
+const CLEARING_WORDS: [(Clearing, &str); 2] = [(Clearing::Line, "line"), (Clearing::Keep, "none")];
+
+/// The way of clearing a word names, or `None` for a word that names none.
+/// Exact: `Line` is not `line`, and the note says which words there are.
+fn clearing_named(word: &str) -> Option<Clearing> {
+    CLEARING_WORDS
+        .iter()
+        .find(|(_, named)| *named == word)
+        .map(|(clearing, _)| *clearing)
+}
+
+/// The word for a way of clearing.
+fn clearing_word(clearing: Clearing) -> &'static str {
+    CLEARING_WORDS
+        .iter()
+        .find(|(way, _)| *way == clearing)
+        .map_or("line", |(_, word)| word)
 }
 
 /// Removes one key, and hands the lines written above it - comments, blank
@@ -770,6 +808,7 @@ mod tests {
                 Settings {
                     pack: Some(String::from("unicode-text")),
                     compact: Some(true),
+                    clearing: None,
                     shortcuts: Vec::new(),
                 },
                 Vec::new()
@@ -827,6 +866,7 @@ mod tests {
             Settings {
                 pack: Some(String::from("whitespace")),
                 compact: Some(true),
+                clearing: None,
                 shortcuts: Vec::new(),
             }
         );
@@ -834,6 +874,54 @@ mod tests {
             scratch.text().contains("palette = {"),
             "the tester's inline table became something else: {}",
             scratch.text()
+        );
+    }
+
+    /// `D101`: the way of clearing is a word, read and written through one
+    /// table - `line` and `none` both ways, a word in another case or another
+    /// type named and replaced by the default, and the word already there not
+    /// written again.
+    #[test]
+    fn the_way_of_clearing_is_a_word_both_ways_and_a_wrong_one_is_named() {
+        let scratch = Scratch::new("clearing");
+        let store = scratch.store();
+        assert_eq!(store.save(&SettingChange::Clearing(Clearing::Keep)), Ok(()));
+        assert_eq!(
+            scratch.text(),
+            "schema = 1\n\n[palette]\nclearing = \"none\"\n"
+        );
+        assert_eq!(read(&store).0.clearing, Some(Clearing::Keep));
+        assert_eq!(store.save(&SettingChange::Clearing(Clearing::Line)), Ok(()));
+        assert_eq!(
+            scratch.text(),
+            "schema = 1\n\n[palette]\nclearing = \"line\"\n"
+        );
+        assert_eq!(read(&store).0.clearing, Some(Clearing::Line));
+
+        for wrong in ["\"Line\"", "\"cursor\"", "true", "1"] {
+            scratch.write(&format!("schema = 1\n[palette]\nclearing = {wrong}\n"));
+            let (settings, notes) = read(&store);
+            assert_eq!(settings.clearing, None, "{wrong}");
+            assert_eq!(
+                notes,
+                vec![SettingsNote::NotAClearing {
+                    key: String::from("palette.clearing")
+                }],
+                "{wrong}"
+            );
+        }
+
+        // Already so: a read-only file takes the "save" of the word it holds.
+        scratch.write("schema = 1\n[palette]\nclearing = \"none\"\n");
+        let mut permissions = std::fs::metadata(scratch.file())
+            .expect("the file is there")
+            .permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(scratch.file(), permissions).expect("read-only");
+        assert_eq!(store.save(&SettingChange::Clearing(Clearing::Keep)), Ok(()));
+        assert_eq!(
+            store.save(&SettingChange::Clearing(Clearing::Line)),
+            Err(SaveError::Unwritable)
         );
     }
 

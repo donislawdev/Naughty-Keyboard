@@ -135,7 +135,7 @@ pub enum RouteRequest {
 }
 
 /// The core loop and its one piece of state.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct AdvanceSequence {
     sequence: Sequence,
     loaded: Option<Loaded>,
@@ -148,6 +148,23 @@ pub struct AdvanceSequence {
     /// next press that the direct route takes and by [`Self::on_idle`] when
     /// another window comes to the front. A number, never a name.
     window_on_clipboard: Option<TargetRef>,
+    /// How a TYPED value meets what the field holds - the tester's choice
+    /// (`UX-GUI-005`, `D101`). The line by default, which is what the sequence
+    /// needs to put one value in a field at a time. The clipboard route clears
+    /// nothing whatever this says: it presses nothing (`D71`).
+    clearing: Clearing,
+}
+
+impl Default for AdvanceSequence {
+    fn default() -> Self {
+        Self {
+            sequence: Sequence::default(),
+            loaded: None,
+            last: None,
+            window_on_clipboard: None,
+            clearing: Clearing::Line,
+        }
+    }
 }
 
 /// Which value a report block would describe, and how much of it arrived.
@@ -424,6 +441,24 @@ impl AdvanceSequence {
     #[must_use]
     pub fn sequence(&self) -> Sequence {
         self.sequence
+    }
+
+    /// How a typed value meets what the field holds (`D101`).
+    #[must_use]
+    pub const fn clearing(&self) -> Clearing {
+        self.clearing
+    }
+
+    /// Chooses how the next typed values meet what the field holds: the line
+    /// cleared first, or the value at the cursor (`UX-GUI-005`, `D101`).
+    ///
+    /// Nothing is sent and nothing is said - the palette shows the choice.
+    /// Called between presses, like every choice of the tester's, so a value
+    /// in flight keeps the way it started with. `Keep` presses fewer keys than
+    /// `Line`, never more: the promise that clearing never reaches beyond the
+    /// field (untouchable rule 17) holds either way.
+    pub fn set_clearing(&mut self, clearing: Clearing) {
+        self.clearing = clearing;
     }
 
     /// Makes value `id` of the pack in use the one the next press sends - the
@@ -783,7 +818,7 @@ impl AdvanceSequence {
         // (`D71`, `ports.rs` on `ValueDelivery`). The clipboard route clears
         // nothing, because it presses nothing: the tester selects and pastes.
         let (route, clearing) = match self.sequence.delivery {
-            Delivery::Direct => (ports.direct, Clearing::Line),
+            Delivery::Direct => (ports.direct, self.clearing),
             Delivery::ClipboardMode => (ports.by_clipboard, Clearing::Keep),
         };
         let on_clipboard = self.sequence.delivery == Delivery::ClipboardMode;
@@ -1354,6 +1389,34 @@ mod tests {
         assert!(sent.cleared, "the palette clears by default");
         assert_eq!(advance.counter(), Some((1, 3)));
         assert!(outcome.messages.is_empty());
+    }
+
+    /// `D101`: at the cursor, a press types the value and presses NO other key -
+    /// the clearing recipe never reaches the keyboard port - and the value is
+    /// not marked cleared. Back to the line, the next press clears again. The
+    /// sequence moves the same either way.
+    #[test]
+    fn at_the_cursor_a_value_goes_in_with_no_clearing_and_the_line_comes_back() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        assert_eq!(advance.clearing(), Clearing::Line, "the line by default");
+        advance.set_clearing(Clearing::Keep);
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        let sent = outcome.sent.expect("value one went in at the cursor");
+        assert!(!sent.cleared, "nothing was cleared, and the value says so");
+        assert_eq!(
+            *kit.keys.requests.borrow(),
+            0,
+            "a key other than the value's"
+        );
+        assert!(outcome.messages.is_empty(), "{:?}", outcome.messages);
+        assert_eq!(advance.counter(), Some((1, 3)));
+
+        advance.set_clearing(Clearing::Line);
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert!(outcome.sent.expect("value two").cleared);
+        assert_eq!(*kit.keys.requests.borrow(), 1, "the line is cleared again");
+        assert_eq!(advance.counter(), Some((2, 3)));
     }
 
     #[test]

@@ -187,6 +187,16 @@ export component Palette inherits Window {
     callback use-clipboard();
     callback turn-off-clipboard();
 
+    // ---- how a typed value meets the field (UX-GUI-005, D101) ---------------
+    // What happens now - the line cleared first, or the value at the cursor -
+    // and the button's words, which name the other way. Both finished text
+    // from `i18n`, chosen in Rust from the worker's state: the view does not
+    // decide which sentence is true.
+    in property <string> clearing-state;
+    in property <string> clearing-switch;
+    // A click on the button. The worker holds the choice and remembers it.
+    callback switch-clearing();
+
     // ---- a send in progress (W3, D96, OBS-160) ------------------------------
     // Until this band a long send left the palette showing what it showed
     // before, for minutes, with nothing to say that Escape stops it. Every
@@ -566,6 +576,31 @@ export component Palette inherits Window {
             if root.hints-visible && !root.compact: Zone {
                 HintBar {
                     rows: root.hints;
+                }
+                // How a typed value meets the field (UX-GUI-005, D101): what
+                // happens now on the left, the other way as a button on the
+                // right - the shape of the clipboard row below it. Said before
+                // the first value, so the tester learns that the line is
+                // cleared before it happens, not from the marker after. Only
+                // while values are typed: the clipboard route clears nothing.
+                if !root.clipboard-mode-on: HorizontalLayout {
+                    spacing: Tokens.space-2;
+                    VerticalLayout {
+                        alignment: center;
+                        TextBody {
+                            text: root.clearing-state;
+                            overflow: elide;
+                        }
+                    }
+                    Spacer { }
+                    SmallButton {
+                        text: root.clearing-switch;
+                        action: root.clearing-switch;
+                        enabled: !root.sending;
+                        clicked => {
+                            root.switch-clearing();
+                        }
+                    }
                 }
                 // Under the shortcuts it changes, and in the same component
                 // as the pack's name above: a link in the palette looks and

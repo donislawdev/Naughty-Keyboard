@@ -853,6 +853,9 @@ fn pattern_settings_note(note: &SettingsNote) -> &'static str {
         SettingsNote::NotAPackName { .. } => {
             "In the settings file {file}, {key} should name a pack such as whitespace, so the default pack is used. Fix the value, or remove the line."
         }
+        SettingsNote::NotAClearing { .. } => {
+            "In the settings file {file}, {key} should be \"line\" or \"none\", so the line is cleared before each value. Fix the value, or remove the line."
+        }
         SettingsNote::NotATable { .. } => {
             "In the settings file {file}, {key} should be a table of settings, so every setting in it takes its default. Fix it, or remove the line."
         }
@@ -1036,6 +1039,7 @@ pub fn settings_message(
                 }
                 SettingsNote::NotTrueOrFalse { key }
                 | SettingsNote::NotAPackName { key }
+                | SettingsNote::NotAClearing { key }
                 | SettingsNote::NotATable { key }
                 | SettingsNote::NotAShortcut { key, .. } => {
                     (key.as_str(), String::new(), String::new())
@@ -1063,6 +1067,7 @@ pub fn settings_message(
                 SettingsNote::UnknownKeys { .. }
                 | SettingsNote::NotTrueOrFalse { .. }
                 | SettingsNote::NotAPackName { .. }
+                | SettingsNote::NotAClearing { .. }
                 | SettingsNote::NotATable { .. } => String::new(),
             };
             Some(fill(
@@ -1251,6 +1256,16 @@ pub enum PaletteLabel {
     /// rest of the palette that the compact state shows (`UX-GUI-004`): until
     /// it, the compact palette said nothing about how to expand it again.
     Expand,
+    /// The line under the hint bar that says how a typed value meets the
+    /// field, while the line is cleared first (`UX-GUI-005`, `D101`). Said
+    /// before the first value, so the tester knows before it happens.
+    ClearsLine,
+    /// The same line while values go in at the cursor.
+    AtCursor,
+    /// The button beside the first line: what a click changes to.
+    InsertAtCursor,
+    /// The button beside the second line.
+    ClearLineFirst,
 }
 
 fn pattern_palette_label(label: PaletteLabel) -> &'static str {
@@ -1292,6 +1307,10 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::TurnOffClipboard => "Turn off clipboard mode",
         PaletteLabel::Collapse => "Collapse",
         PaletteLabel::Expand => "Expand",
+        PaletteLabel::ClearsLine => "The line is cleared before each value",
+        PaletteLabel::AtCursor => "Each value goes in at the cursor",
+        PaletteLabel::InsertAtCursor => "Insert at cursor",
+        PaletteLabel::ClearLineFirst => "Clear line first",
     }
 }
 
@@ -2125,6 +2144,9 @@ mod tests {
             SettingsNote::NotAPackName {
                 key: String::from("pack"),
             },
+            SettingsNote::NotAClearing {
+                key: String::from("clearing"),
+            },
             SettingsNote::NotATable {
                 key: String::from("palette"),
             },
@@ -2739,6 +2761,10 @@ mod tests {
             PaletteLabel::TurnOffClipboard,
             PaletteLabel::Collapse,
             PaletteLabel::Expand,
+            PaletteLabel::ClearsLine,
+            PaletteLabel::AtCursor,
+            PaletteLabel::InsertAtCursor,
+            PaletteLabel::ClearLineFirst,
         ] {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
@@ -2773,7 +2799,11 @@ mod tests {
                 | PaletteLabel::TurnOff
                 | PaletteLabel::TurnOffClipboard
                 | PaletteLabel::Collapse
-                | PaletteLabel::Expand => false,
+                | PaletteLabel::Expand
+                | PaletteLabel::ClearsLine
+                | PaletteLabel::AtCursor
+                | PaletteLabel::InsertAtCursor
+                | PaletteLabel::ClearLineFirst => false,
             };
             let pattern = pattern_palette_label(label);
             assert_eq!(
