@@ -25,6 +25,7 @@ pub(crate) mod test_support;
 
 pub use advance_sequence::{
     AdvanceSequence, ChooseError, InFlight, Message, Outcome, RouteRequest, Sent, UpcomingValue,
+    ValueKey,
 };
 pub use browse_packs::{Listing, PackEntry, ShowOutcome, list_packs, show_pack};
 pub use drive_sequence::{Ended, drive_sequence};

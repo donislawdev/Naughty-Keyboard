@@ -59,9 +59,11 @@
 //!
 //! # What this deliberately does not do yet
 //!
-//! - only `Next`, `Previous`, `Restart` and the report copy are wired. Repeat,
-//!   the result marks, the pack search and show/hide belong to later steps. An
-//!   action that is not wired says so rather than doing nothing in silence.
+//! - only `Next`, `Previous`, `Restart` and the report copy are wired as
+//!   shortcuts, and the palette's Copy buttons ([`AdvanceSequence::copy_value`])
+//!   as a click. Repeat and the result marks belong to later steps, and the
+//!   pack window and show/hide never reach this module. An action that is not
+//!   wired says so rather than doing nothing in silence.
 //! - the send is atomic - one blocking [`deliver_value`] - so `Inserting` is
 //!   passed straight through. The progress bar, `Escape` mid-send and the
 //!   char-by-char mode (`W2`/`W3`) are the char-by-char delivery, still to come.
@@ -216,8 +218,9 @@ pub enum UpcomingValue {
     Value {
         index: usize,
         total: usize,
-        /// The value's identifier inside its pack - what the value window marks.
-        id: String,
+        /// The value by identifiers - its own is what the value window marks,
+        /// and both are what the Copy button beside it copies (`D98`).
+        key: ValueKey,
         name: String,
         /// `pack-id/value-id`, as in a [`ValueFacts`].
         reference: String,
@@ -231,10 +234,25 @@ pub enum UpcomingValue {
     EndOfPack { total: usize },
 }
 
+/// A value named by identifiers: its pack's and its own (`D98`).
+///
+/// What a Copy button holds rather than a position, because the sequence may
+/// move between a click and its turn - an identifier still names the value
+/// the tester saw, or none. [`AdvanceSequence::copy_value`] takes the two.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ValueKey {
+    pub pack: String,
+    pub value: String,
+}
+
 /// What the palette shows about the value that just went out - whole, or cut
 /// short part-way.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sent {
+    /// The value by identifiers - what the Copy button beside it copies
+    /// (`D98`), so a click copies this value and not the one the sequence
+    /// moved to since.
+    pub key: ValueKey,
     /// Which value, what it looks like and how large it is - the same facts
     /// `nkb send` reports. Its preview is a fragment when `elided_total` is
     /// `Some`, and 🔴 the palette must then say the total: a preview that
@@ -357,6 +375,20 @@ pub enum Message {
     /// own words travel with it, because they are what a ticket about the tool
     /// needs.
     ReportFailed { detail: String },
+    /// The value the tester copied with a Copy button is on the clipboard
+    /// (`UX-GUI-003`, `D98`). Nothing reached a field, so the counter did not
+    /// move.
+    ValueCopied { reference: String },
+    /// Another application held the clipboard, and the value was not copied.
+    /// Passing, so the tester is told to click again.
+    CopyBusy,
+    /// The clipboard refused the value outright, in the library's own words.
+    CopyFailed { detail: String },
+    /// The value a Copy button named is not in the pack in use any more:
+    /// another pack was opened between the click and its turn. Nothing was
+    /// copied, because copying another value than the one on screen would be
+    /// worse than copying none.
+    CopyGone { reference: String },
 }
 
 impl AdvanceSequence {
@@ -433,7 +465,10 @@ impl AdvanceSequence {
                 Some(UpcomingValue::Value {
                     index,
                     total,
-                    id: value.id.clone(),
+                    key: ValueKey {
+                        pack: loaded.pack.id.clone(),
+                        value: value.id.clone(),
+                    },
                     name: value.name.clone(),
                     reference: format!("{}/{}", loaded.pack.id, value.id),
                     preview: preview_of(&value.body),
@@ -579,11 +614,12 @@ impl AdvanceSequence {
     /// Answers at once and moves nothing: the sequence has no event for a
     /// report, and a press queued behind this one was not pressed while busy.
     ///
-    /// 🔴 One of the TWO doors to the clipboard - untouchable rule 17 and
-    /// `tests/clipboard_has_named_doors.rs`. Nothing is written unless the
-    /// tester asked, and nothing is reported as copied that the clipboard did
-    /// not take. The block stays in the system's clipboard history on purpose
-    /// (`D68`). The values of clipboard mode do not (`D71`).
+    /// 🔴 One of the THREE places the tool uses the clipboard - untouchable rule
+    /// 17 and `tests/clipboard_has_named_doors.rs` - and the only one with a
+    /// door of its own: clipboard mode and the Copy buttons take the clipboard
+    /// route. Nothing is written unless the tester asked, and nothing is
+    /// reported as copied that the clipboard did not take. The block stays in
+    /// the system's clipboard history on purpose (`D68`). Values do not (`D71`).
     fn copy_report(&self, ports: &Ports<'_>) -> Outcome {
         let message = match self.last_block() {
             None => Message::NothingToReport,
@@ -600,6 +636,60 @@ impl AdvanceSequence {
             }
         };
         self.settled(None, vec![message], false)
+    }
+
+    /// Puts value `value` of pack `pack` on the clipboard, for the tester to
+    /// paste by hand - the Copy buttons beside the next value and the last one
+    /// sent (`UX-GUI-003`, `D98`). What the palette says about it comes back.
+    ///
+    /// Moves nothing: the counter, the next value and the value a report block
+    /// describes stay as they were, because nothing reached a field.
+    ///
+    /// By identifiers, as [`Self::choose_next`] takes them, and for a sharper
+    /// reason here: the button copies what the tester SAW, and a press handled
+    /// between the click and this call may have moved the sequence since. An
+    /// identifier names that value or none. A pack that is not the one in use
+    /// any more names none, and nothing is copied rather than another value.
+    ///
+    /// 🔴 Through the clipboard ROUTE, never a door of its own (untouchable rule
+    /// 17, `tests/clipboard_has_named_doors.rs`): the value stays out of the
+    /// system's clipboard history and off the cloud like every value of
+    /// clipboard mode (`D71`), and a value the clipboard cannot carry whole is
+    /// refused by name before the clipboard is touched.
+    #[must_use]
+    pub fn copy_value(&self, pack: &str, value: &str, ports: &Ports<'_>) -> Message {
+        let reference = format!("{pack}/{value}");
+        let Some(held) = self
+            .loaded
+            .as_ref()
+            .filter(|loaded| loaded.pack.id == pack)
+            .and_then(|loaded| loaded.pack.values.iter().find(|held| held.id == value))
+        else {
+            return Message::CopyGone { reference };
+        };
+        // Measured from the recipe before anything is built, as a send measures
+        // it. Unreachable for a pack that loaded, and the send's own sentence if
+        // it ever is: the same recipe could not be sent either.
+        let built = held.body.metrics().map(|_| held.body.materialise());
+        let Some(Ok(text)) = built else {
+            return Message::ValueTooLarge {
+                id: held.id.clone(),
+            };
+        };
+        match ports.by_clipboard.deliver(&text, &mut |_| {}) {
+            Ok(_) => Message::ValueCopied { reference },
+            Err(DeliveryError::Busy) => Message::CopyBusy,
+            Err(DeliveryError::CannotCarry { character }) => Message::NotForClipboard {
+                id: held.id.clone(),
+                character,
+            },
+            Err(DeliveryError::Refused { detail }) => Message::CopyFailed { detail },
+            // The clipboard route answers none of the others. Said in its own
+            // words rather than swallowed, if it ever does.
+            Err(other) => Message::CopyFailed {
+                detail: other.to_string(),
+            },
+        }
     }
 
     /// The block for the last value that went out, if one did.
@@ -671,7 +761,10 @@ impl AdvanceSequence {
             return refuse(&mut self.sequence, Vec::new());
         };
         let offensive = offensive(&loaded.pack, value);
-        let id = value.id.clone();
+        let key = ValueKey {
+            pack: loaded.pack.id.clone(),
+            value: value.id.clone(),
+        };
         let window = route.target();
         let mut on_clipboard = on_clipboard;
         let mut tell = |sending: Sending<'_>| {
@@ -720,7 +813,7 @@ impl AdvanceSequence {
         if let Some(arrival) = arrival_of(&outcome, on_clipboard) {
             self.last = Some(LastSent { index, arrival });
         }
-        let (event, sent, classified) = classify(outcome, offensive, on_clipboard, &id);
+        let (event, sent, classified) = classify(outcome, offensive, on_clipboard, &key);
         messages.extend(classified);
         let step = self.sequence.apply(event);
         self.sequence = step.sequence;
@@ -868,12 +961,13 @@ fn announce(effect: &Effect) -> Option<Message> {
 
 /// Sorts a delivery outcome onto a sequence event and the message that goes with
 /// it. `offensive` rides along so a landed value can be marked, `on_clipboard`
-/// so it can say which route it took, and `id` so a refusal can name it.
+/// so it can say which route it took, and `key` so a refusal can name it and
+/// a value that went out carries the identifiers a Copy button needs (`D98`).
 fn classify(
     outcome: SendOutcome,
     offensive: bool,
     on_clipboard: bool,
-    id: &str,
+    key: &ValueKey,
 ) -> (Event, Option<Sent>, Vec<Message>) {
     // The one answer to "how did it get there", shared with the report block.
     // `Some` for both outcomes that carry a value, so the fallbacks below name
@@ -888,6 +982,7 @@ fn classify(
         } => (
             Event::InsertionFinished,
             Some(Sent {
+                key: key.clone(),
                 facts,
                 utf16_units,
                 offensive,
@@ -916,6 +1011,7 @@ fn classify(
         } => (
             Event::Cancelled,
             Some(Sent {
+                key: key.clone(),
                 facts,
                 utf16_units: units_expected,
                 offensive,
@@ -1034,7 +1130,7 @@ fn classify(
             Event::InsertionRefused,
             None,
             vec![Message::NotForClipboard {
-                id: id.to_owned(),
+                id: key.value.clone(),
                 character,
             }],
         ),
@@ -1518,7 +1614,10 @@ mod tests {
         let mut promised = advance.upcoming();
         for _ in 0..3 {
             let Some(UpcomingValue::Value {
-                reference, name, ..
+                reference,
+                name,
+                key,
+                ..
             }) = promised.clone()
             else {
                 panic!(
@@ -1529,6 +1628,10 @@ mod tests {
             let sent = outcome.sent.as_ref().expect("a value goes out");
             assert_eq!(sent.facts.reference, reference);
             assert_eq!(sent.facts.name, name);
+            // `D98`: the Copy button beside the next value copies the value the
+            // press sends, and the one beside the value sent copies that value.
+            assert_eq!(sent.key, key);
+            assert_eq!(format!("{}/{}", key.pack, key.value), reference);
             // What the outcome carries is what the sequence says AFTER the press.
             assert_eq!(outcome.upcoming, advance.upcoming());
             promised = outcome.upcoming;
@@ -1552,7 +1655,7 @@ mod tests {
         assert!(advance.choose_next("three"));
         assert!(matches!(
             advance.upcoming(),
-            Some(UpcomingValue::Value { index: 3, id, .. }) if id == "three"
+            Some(UpcomingValue::Value { index: 3, key, .. }) if key.value == "three"
         ));
         let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
         assert_eq!(
@@ -1881,6 +1984,134 @@ mod tests {
             kit.by_clipboard.handed.borrow().is_empty(),
             "in direct mode the clipboard route is never taken for a window that takes typing (D71, D72)"
         );
+    }
+
+    // ---- `D98`: the Copy buttons, the third place the clipboard is used -------
+
+    #[test]
+    fn a_copy_takes_the_clipboard_route_with_the_value_named_and_moves_nothing() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        let before = advance.sequence();
+        let upcoming = advance.upcoming();
+
+        // Value three, while value two is the next one: a copy names its value
+        // and does not follow the sequence.
+        let said = advance.copy_value("sample", "three", &kit.ports());
+
+        assert_eq!(
+            said,
+            Message::ValueCopied {
+                reference: "sample/three".to_owned()
+            }
+        );
+        assert_eq!(
+            *kit.by_clipboard.handed.borrow(),
+            vec!["gamma"],
+            "the clipboard ROUTE took it - out of the history, like clipboard mode (D71)"
+        );
+        assert!(
+            kit.clipboard.puts.borrow().is_empty(),
+            "no door of its own to the clipboard"
+        );
+        assert_eq!(
+            *kit.direct.handed.borrow(),
+            vec!["alpha"],
+            "nothing typed but the press before"
+        );
+        assert_eq!(
+            *kit.keys.requests.borrow(),
+            1,
+            "only the clearing of the press before"
+        );
+        assert_eq!(advance.sequence(), before, "the counter did not move");
+        assert_eq!(advance.upcoming(), upcoming, "nor did the next value");
+        let report = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+        assert_eq!(
+            report.messages,
+            vec![Message::ReportCopied {
+                reference: "sample/one".to_owned()
+            }],
+            "the report block is still about the value that went out"
+        );
+    }
+
+    #[test]
+    fn a_copy_is_not_a_send_so_there_is_still_nothing_to_report() {
+        // The next value is on screen before the first press (UX1), so it can
+        // be copied then - and that does not make it a value that went out.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        assert_eq!(
+            advance.copy_value("sample", "one", &kit.ports()),
+            Message::ValueCopied {
+                reference: "sample/one".to_owned()
+            }
+        );
+        let outcome = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+        assert_eq!(outcome.messages, vec![Message::NothingToReport]);
+        assert_eq!(advance.counter(), Some((0, 3)));
+    }
+
+    #[test]
+    fn a_value_not_in_the_pack_in_use_is_not_copied_and_no_other_is() {
+        let advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        assert_eq!(
+            advance.copy_value("another", "one", &kit.ports()),
+            Message::CopyGone {
+                reference: "another/one".to_owned()
+            },
+            "a value of the same name in the pack in use is not the value on screen"
+        );
+        assert_eq!(
+            advance.copy_value("sample", "four", &kit.ports()),
+            Message::CopyGone {
+                reference: "sample/four".to_owned()
+            }
+        );
+        assert_eq!(
+            AdvanceSequence::new().copy_value("sample", "one", &kit.ports()),
+            Message::CopyGone {
+                reference: "sample/one".to_owned()
+            },
+            "no pack at all"
+        );
+        assert!(kit.by_clipboard.handed.borrow().is_empty());
+        assert!(kit.clipboard.puts.borrow().is_empty());
+    }
+
+    #[test]
+    fn a_copy_the_clipboard_refuses_is_said_in_the_words_of_a_copy() {
+        let advance = chosen(Risk::Normal);
+        for (error, said) in [
+            (DeliveryError::Busy, Message::CopyBusy),
+            (
+                DeliveryError::Refused {
+                    detail: "no display".to_owned(),
+                },
+                Message::CopyFailed {
+                    detail: "no display".to_owned(),
+                },
+            ),
+            (
+                DeliveryError::CannotCarry { character: '\0' },
+                Message::NotForClipboard {
+                    id: "two".to_owned(),
+                    character: '\0',
+                },
+            ),
+            (
+                DeliveryError::NoTarget,
+                Message::CopyFailed {
+                    detail: "no-target".to_owned(),
+                },
+            ),
+        ] {
+            let kit = Kit::with_by_clipboard(FakeDelivery::failing(error));
+            assert_eq!(advance.copy_value("sample", "two", &kit.ports()), said);
+        }
     }
 
     // ---- `D72`: a window running with higher privileges ------------------------

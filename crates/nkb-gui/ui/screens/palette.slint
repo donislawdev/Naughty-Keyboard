@@ -4,10 +4,12 @@
 // is that this window NEVER TAKES KEYBOARD FOCUS: if it did, the cursor would
 // leave the field under test at every insertion, which is the product. So there
 // is no text field here and nothing that wants the keyboard. Everything arrives
-// as a property and everything leaves as a shortcut - with one exception for
-// the pointer: the pack's name opens the pack window when clicked (K3.2d). A
-// click reaches this window without activating it (`D62`), so it takes nothing
-// from the field under test.
+// as a property and everything leaves as a shortcut - with the pointer as the
+// one exception: the pack's name and the next band's heading open the value
+// window (K3.2d, UX2), the link under the hints opens the shortcuts window
+// (K5.5), and two Copy buttons put a value on the clipboard (D98). A click
+// reaches this window without activating it (`D62`), so it takes nothing from
+// the field under test.
 //
 // # Two axes and a bar, not five states
 //
@@ -70,7 +72,18 @@ import {
     WindowSurface,
     PickerOpener,
     ProgressBar,
+    SmallButton,
 } from "../components.slint";
+
+// Which value a Copy button copies: the pack's identifier and the value's.
+// Identifiers rather than a position, because the worker may have moved the
+// sequence between the click and its turn, and an identifier still names the
+// value the tester saw - or none (`D98`). Opaque to the view: it holds them
+// and never reads them.
+export struct ValueKey {
+    pack: string,
+    value: string,
+}
 
 export component Palette inherits Window {
     // ---- what the window is ------------------------------------------------
@@ -131,6 +144,24 @@ export component Palette inherits Window {
     in property <bool> has-not-guaranteed;
     in property <bool> has-shape;
     in property <[Marker]> markers;
+
+    // ---- the Copy buttons (UX-GUI-003, D98) ---------------------------------
+    // One beside the next value and one beside the last value sent: each
+    // copies the value drawn in its band, for the tester to paste by hand. The
+    // word on both, and what each does in UI Automation's words.
+    in property <string> copy-label;
+    in property <string> copy-next-action;
+    in property <string> copy-last-action;
+    // Which value each copies - set with the band it stands in, from the same
+    // view, so a click copies the value on screen. Rust reads them back on the
+    // click: the view holds no logic.
+    in property <ValueKey> next-key;
+    in property <ValueKey> last-key;
+    // ⚠️ Declared, not aliases like `open-packs`: both buttons stand in bands
+    // behind `if`, and an element behind `if` cannot be named from here. Each
+    // click only hands on to its callback - one call, no logic.
+    callback copy-next();
+    callback copy-last();
 
     // ---- what the tool has to say ------------------------------------------
     in property <[string]> messages;
@@ -311,11 +342,33 @@ export component Palette inherits Window {
                 // way to choose another one starts where the tester reads which
                 // one is next. The pack's name and the shortcut open the same
                 // window through the same callback.
-                PickerOpener {
-                    text: root.next-heading;
-                    action: root.open-packs-label;
-                    clicked => {
-                        root.open-packs();
+                //
+                // Copy at the other end of the heading's row, where the value
+                // band below has its own: the two buttons stand in one column,
+                // each at the top of the value it copies (D98). Not at the end
+                // of a pack - there is no value to copy then.
+                HorizontalLayout {
+                    spacing: Tokens.space-2;
+                    // Centred on the button's row: the heading's height is its
+                    // own text, and a layout puts such an element at the top -
+                    // four pixels above the word beside it, in the first render.
+                    VerticalLayout {
+                        alignment: center;
+                        PickerOpener {
+                            text: root.next-heading;
+                            action: root.open-packs-label;
+                            clicked => {
+                                root.open-packs();
+                            }
+                        }
+                    }
+                    Spacer { }
+                    if root.next-has-value: SmallButton {
+                        text: root.copy-label;
+                        action: root.copy-next-action;
+                        clicked => {
+                            root.copy-next();
+                        }
                     }
                 }
                 // The risk beside the name rather than on a row of its own: the
@@ -353,8 +406,25 @@ export component Palette inherits Window {
 
             // The value that went out last. It stays until the next one.
             if !root.compact && root.has-value: Zone {
-                TextSmallMuted {
-                    text: root.last-sent-label;
+                // While a value goes, this band shows THAT value, not the last
+                // one sent, and the button's key still names the last one. So it
+                // cannot be used then - faded in place rather than taken away,
+                // because a control that vanishes under the pointer moves the
+                // row it stood in (GUI rule 3).
+                HorizontalLayout {
+                    spacing: Tokens.space-2;
+                    TextSmallMuted {
+                        text: root.last-sent-label;
+                    }
+                    Spacer { }
+                    SmallButton {
+                        text: root.copy-label;
+                        action: root.copy-last-action;
+                        enabled: !root.sending;
+                        clicked => {
+                            root.copy-last();
+                        }
+                    }
                 }
                 TextName {
                     text: root.value-name;

@@ -264,6 +264,18 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::ReportFailed { .. } => {
             "The report block was not copied: {detail}. The same facts are printed by: nkb show {pack}"
         }
+        Message::ValueCopied { .. } => {
+            "Value {reference} is on the clipboard. Paste it where you need it - the counter did not move."
+        }
+        Message::CopyBusy => {
+            "Another application is holding the clipboard, so the value was not copied. Click {button} again in a moment."
+        }
+        Message::CopyFailed { .. } => {
+            "The value was not copied: {detail}. The same value is printed by: nkb emit {pack}"
+        }
+        Message::CopyGone { .. } => {
+            "{reference} is not in the pack in use any more, so nothing was copied. Click {button} beside the value on screen now."
+        }
     }
 }
 
@@ -336,6 +348,17 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
             &[("shortcut", &chord_text(bindings, HotkeyAction::CopyReport))],
         ),
         Message::ReportFailed { detail } => fill(pattern, &[("detail", detail), ("pack", pack)]),
+        Message::ValueCopied { reference } => fill(pattern, &[("reference", reference)]),
+        // The button's own words, so the sentence and the button cannot drift.
+        Message::CopyBusy => fill(pattern, &[("button", label(PaletteLabel::Copy))]),
+        Message::CopyFailed { detail } => fill(pattern, &[("detail", detail), ("pack", pack)]),
+        Message::CopyGone { reference } => fill(
+            pattern,
+            &[
+                ("reference", reference),
+                ("button", label(PaletteLabel::Copy)),
+            ],
+        ),
     }
 }
 
@@ -1198,6 +1221,15 @@ pub enum PaletteLabel {
     /// The heading of the value band, which shows the value that went out last.
     /// Named, because the band above it shows another value - the next one.
     LastSent,
+    /// The button that puts a value on the clipboard for the tester to paste
+    /// by hand (`UX-GUI-003`, `D98`) - its words. The same word stands in the
+    /// sentences that send the tester back to it.
+    Copy,
+    /// What the Copy button beside the next value does, for UI Automation: two
+    /// buttons share one word, and this tells them apart.
+    CopyNext,
+    /// The same, for the Copy button beside the value that went out last.
+    CopyLast,
 }
 
 fn pattern_palette_label(label: PaletteLabel) -> &'static str {
@@ -1231,6 +1263,9 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::NextValue => "Next: value {index} of {total}",
         PaletteLabel::NextEndOfPack => "Next: end of pack ({total}/{total})",
         PaletteLabel::LastSent => "Last sent",
+        PaletteLabel::Copy => "Copy",
+        PaletteLabel::CopyNext => "Copy the next value",
+        PaletteLabel::CopyLast => "Copy the last sent value",
     }
 }
 
@@ -1943,6 +1978,16 @@ mod tests {
             Message::ReportFailed {
                 detail: "the clipboard is not available".to_owned(),
             },
+            Message::ValueCopied {
+                reference: "whitespace/nbsp".to_owned(),
+            },
+            Message::CopyBusy,
+            Message::CopyFailed {
+                detail: "the clipboard is not available".to_owned(),
+            },
+            Message::CopyGone {
+                reference: "whitespace/nbsp".to_owned(),
+            },
         ]
     }
 
@@ -2223,10 +2268,14 @@ mod tests {
             Message::NothingArrived { .. } => 23,
             Message::ClearedThenNothingArrived { .. } => 24,
             Message::NotPaced => 25,
+            Message::ValueCopied { .. } => 26,
+            Message::CopyBusy => 27,
+            Message::CopyFailed { .. } => 28,
+            Message::CopyGone { .. } => 29,
         }
     }
 
-    const SLOTS: usize = 26;
+    const SLOTS: usize = 30;
 
     #[test]
     fn every_message_variant_is_listed_here() {
@@ -2243,6 +2292,36 @@ mod tests {
                 "the Message variant in slot {slot} is missing from every_message()"
             );
         }
+    }
+
+    #[test]
+    fn the_copy_sentences_name_the_value_the_button_and_the_way_round_it() {
+        // `D98`: the button's word is fetched, never written into a sentence, so
+        // a translated button and the sentence sending the tester to it agree.
+        let said = |what: Message| message(&what, "whitespace", &defaults());
+        assert_eq!(
+            said(Message::ValueCopied {
+                reference: "whitespace/nbsp".to_owned()
+            }),
+            "Value whitespace/nbsp is on the clipboard. Paste it where you need it - the counter did not move."
+        );
+        assert!(
+            said(Message::CopyBusy).ends_with("Click Copy again in a moment."),
+            "{}",
+            said(Message::CopyBusy)
+        );
+        assert!(
+            said(Message::CopyGone {
+                reference: "locale-pl/pesel-valid".to_owned()
+            })
+            .starts_with("locale-pl/pesel-valid is not in the pack in use any more")
+        );
+        assert!(
+            said(Message::CopyFailed {
+                detail: "the display went away".to_owned()
+            })
+            .ends_with("printed by: nkb emit whitespace")
+        );
     }
 
     #[test]
@@ -2624,6 +2703,9 @@ mod tests {
             PaletteLabel::NextValue,
             PaletteLabel::NextEndOfPack,
             PaletteLabel::LastSent,
+            PaletteLabel::Copy,
+            PaletteLabel::CopyNext,
+            PaletteLabel::CopyLast,
         ] {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
@@ -2650,7 +2732,10 @@ mod tests {
                 | PaletteLabel::ShortcutsLink
                 | PaletteLabel::Typing
                 | PaletteLabel::StopTyping
-                | PaletteLabel::LastSent => false,
+                | PaletteLabel::LastSent
+                | PaletteLabel::Copy
+                | PaletteLabel::CopyNext
+                | PaletteLabel::CopyLast => false,
             };
             let pattern = pattern_palette_label(label);
             assert_eq!(

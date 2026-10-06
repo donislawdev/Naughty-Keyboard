@@ -109,6 +109,7 @@ fn fill(palette: &Palette) {
     // what the compact rule below is about, and what mutation M52 flips.
     palette.set_has_value(true);
     palette.set_last_sent_label("Last sent".into());
+    palette.set_copy_label("Copy".into());
     // The next value (UX-GUI-001): a different value from the one above, so the
     // picture shows both bands telling two values apart.
     palette.set_has_next(true);

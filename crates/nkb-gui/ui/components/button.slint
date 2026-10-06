@@ -1,0 +1,92 @@
+// The button: a word in a hairline frame, for an action that happens where it
+// stands.
+//
+// The palette's Copy buttons are the first (`UX-GUI-003`, `D98`). The palette's
+// other click targets - the pack's name, the next band's heading, the link to
+// the shortcuts window - are `PickerOpener`, a NAME that opens a window. A
+// button differs from it in what it promises: it does its thing at once, where
+// it stands, and the frame says so before the pointer arrives. A word in the
+// palette's text colour cannot say that - `UX-GUI-015` is that complaint about
+// the pack's name.
+//
+//     at rest          the word in the secondary text colour on a RAISED ground
+//                      (`surface-raised`), the frame in `border`
+//     pointer here     the frame in `border-strong`, the word in the accent
+//     pressed          the ground sunk to `surface-sample`, the frame in the
+//                      accent - the click is answered by the message band at
+//                      once, so this lasts as long as the press
+//
+// ⚠️ The raised ground is a correction from the first render: with a frame and
+// no ground, the button at rest was the twin of the `cleared first` marker a
+// few lines below it - a status and an action told apart by nothing. A marker
+// is drawn as an outline, so a button is not.
+//     keyboard here    NEVER in the palette, on purpose: it refuses the keyboard
+//                      focus (`D62`), and a focus ring that can never show is a
+//                      state the gallery would have to fake. UI Automation
+//                      reaches the button through its default action instead
+//     cannot be used   faded as a whole (`alpha-disabled`), no pointer and no
+//                      click - "no invitation" is the message (PORADNIK-GUI 10.9)
+//
+// A click reaches the palette without activating it (measured, `D62`), so the
+// field under test keeps the keyboard.
+//
+// Sized by its content, like `Pill`, whose frame and padding it shares: the
+// width comes from a layout, never from arithmetic on the word - `Pill` says
+// what the arithmetic did to the word "offensive".
+import { Tokens } from "../tokens.slint";
+import { TextSmall } from "typography.slint";
+
+export component SmallButton inherits Rectangle {
+    in property <string> text;
+    // What a click does, as UI Automation reads it. Two buttons may share one
+    // word - the palette has two Copy buttons - and this tells them apart.
+    in property <string> action;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    min-width: content.min-width;
+    preferred-width: content.preferred-width;
+    height: content.preferred-height;
+
+    border-width: Tokens.hairline;
+    border-radius: Tokens.radius-small;
+    border-color: !root.enabled ? Tokens.border
+        : area.pressed ? Tokens.accent
+        : area.has-hover ? Tokens.border-strong
+        : Tokens.border;
+    background: root.enabled && area.pressed ? Tokens.surface-sample : Tokens.surface-raised;
+    opacity: root.enabled ? 1 : Tokens.alpha-disabled;
+
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-description: root.action;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if root.enabled {
+            root.clicked();
+        }
+    }
+
+    area := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    content := HorizontalLayout {
+        padding-left: Tokens.space-2;
+        padding-right: Tokens.space-2;
+        padding-top: Tokens.space-1;
+        padding-bottom: Tokens.space-1;
+        alignment: center;
+
+        TextSmall {
+            text: root.text;
+            color: root.enabled && (area.has-hover || area.pressed) ? Tokens.accent : Tokens.text-secondary;
+        }
+    }
+}

@@ -180,6 +180,11 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // The value band's heading: since UX-GUI-001 the band of the next value
     // stands above it, and two values on screen need telling apart.
     palette.set_last_sent_label(i18n::label(PaletteLabel::LastSent).into());
+    // The Copy buttons beside the next value and the last one sent (`D98`):
+    // one word on both, and what each does in UI Automation's words.
+    palette.set_copy_label(i18n::label(PaletteLabel::Copy).into());
+    palette.set_copy_next_action(i18n::label(PaletteLabel::CopyNext).into());
+    palette.set_copy_last_action(i18n::label(PaletteLabel::CopyLast).into());
     // Expanded at first run, with the hints up and nothing sent yet -
     // `ux-spec.md` 5.1 - and as the tester left it on every run after that.
     // The worker fills the pack and the counter, because the sequence that
@@ -210,6 +215,8 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         Arc::clone(&in_use),
         say_in(&palette),
     );
+    palette.on_copy_next(copy_on_click(&palette, &choose, Palette::get_next_key));
+    palette.on_copy_last(copy_on_click(&palette, &choose, Palette::get_last_key));
     // The same way: created once, shown on request - and the one window the
     // worker's answers about shortcuts are delivered to (`shortcuts::tell`).
     let shortcuts = Shortcuts::new(
@@ -268,6 +275,28 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // product code, so a panic here is a bug rather than a path.
     drop(worker.join());
     ran
+}
+
+/// What a click on a Copy button does: reads the key the palette holds beside
+/// that button's band and asks the worker, which holds the pack and the
+/// clipboard (`D98`).
+fn copy_on_click(
+    palette: &Palette,
+    asks: &std::sync::mpsc::Sender<live::Command>,
+    key: fn(&Palette) -> nkb_gui::ValueKey,
+) -> impl Fn() + 'static {
+    let palette = palette.as_weak();
+    let asks = asks.clone();
+    move || {
+        if let Some(command) = palette
+            .upgrade()
+            .and_then(|palette| live::copy_command(&key(&palette)))
+        {
+            // A send that fails is a palette already closing - nobody is left
+            // to tell.
+            let _ = asks.send(command);
+        }
+    }
 }
 
 /// A line into the palette's message band, for a window that has something to

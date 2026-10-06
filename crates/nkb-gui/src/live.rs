@@ -97,7 +97,7 @@ use nkb_app::ports::{
 };
 use nkb_app::{
     AdvanceSequence, Ended, KeptSettings, Opening, Outcome, SettingsMessage, ShortcutChange,
-    UpcomingValue, ValueFacts, drive_sequence,
+    UpcomingValue, ValueFacts, ValueKey, drive_sequence,
 };
 use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord};
 use nkb_core::preview::ValuePreview;
@@ -109,7 +109,8 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 use crate::clipboard::SystemClipboard;
 use crate::focus::{Standing, standing_line};
 use crate::typeface::SHIPPED;
-use crate::{HintRow, Marker, Palette};
+// The view's own copy of a key: the same two identifiers, as Slint holds them.
+use crate::{HintRow, Marker, Palette, ValueKey as ShownKey};
 
 /// How long one wait for a press lasts before the stop flag is read again.
 ///
@@ -152,7 +153,9 @@ enum ValueBand {
     /// before, and under the new pack's name it would be a false statement.
     Clear,
     /// A value went out.
-    Show(ValueView),
+    /// Boxed, because the view of a value is a dozen strings and the other two
+    /// variants carry nothing - a band kept would otherwise move them all.
+    Show(Box<ValueView>),
 }
 
 /// The band over the value band: what the next press sends.
@@ -163,6 +166,8 @@ struct NextView {
 }
 
 struct NextValueView {
+    /// What the Copy button beside it copies (`D98`).
+    key: ValueKey,
     name: String,
     /// One line: the same preview the value band draws, which the band elides.
     preview: String,
@@ -170,6 +175,10 @@ struct NextValueView {
 }
 
 struct ValueView {
+    /// What the Copy button beside it copies (`D98`) - `None` for a value
+    /// still on its way, which leaves the key of the last value sent in place
+    /// while the button cannot be used.
+    key: Option<ValueKey>,
     name: String,
     reference: String,
     counts: String,
@@ -239,6 +248,10 @@ pub enum Command {
         action: HotkeyAction,
         chord: Option<HotkeyChord>,
     },
+    /// Put this value on the clipboard for the tester to paste - a Copy button
+    /// (`UX-GUI-003`, `D98`). By identifiers, looked up in the pack the worker
+    /// holds, so the value copied is the one drawn where the tester clicked.
+    Copy(ValueKey),
 }
 
 /// What the worker tells the shortcuts window.
@@ -379,7 +392,7 @@ fn publish_next(in_use: &InUse, upcoming: Option<&UpcomingValue>) {
 
 fn next_id(upcoming: Option<&UpcomingValue>) -> Option<String> {
     match upcoming {
-        Some(UpcomingValue::Value { id, .. }) => Some(id.clone()),
+        Some(UpcomingValue::Value { key, .. }) => Some(key.value.clone()),
         Some(UpcomingValue::EndOfPack { .. }) | None => None,
     }
 }
@@ -675,6 +688,17 @@ impl Worker<'_> {
                 view: Some(self.resume()),
                 told: None,
             },
+            // Here, on the thread that holds the pack and the clipboard: the
+            // value is built from the pack in memory (`W5`), and on Linux the
+            // process that set the clipboard is the one serving it.
+            Command::Copy(key) => {
+                let said = self.sequence.copy_value(&key.pack, &key.value, self.ports);
+                let line = i18n::message(&said, &key.pack, &self.memory.bindings.get());
+                Carried {
+                    view: Some(self.view(vec![line], ValueBand::Keep, None)),
+                    told: None,
+                }
+            }
             Command::Shortcut { action, chord } => {
                 let (change, said) = self.memory.kept.borrow_mut().change_shortcut(
                     self.memory.store,
@@ -1064,10 +1088,9 @@ fn view_of(
             .counter()
             .map_or_else(String::new, |(done, total)| i18n::counter(done, total)),
         next: next_view(outcome.upcoming.as_ref()),
-        value: outcome
-            .sent
-            .as_ref()
-            .map_or(ValueBand::Keep, |sent| ValueBand::Show(value_view(sent))),
+        value: outcome.sent.as_ref().map_or(ValueBand::Keep, |sent| {
+            ValueBand::Show(Box::new(value_view(sent)))
+        }),
         messages: with_standing(
             outcome
                 .messages
@@ -1092,6 +1115,7 @@ fn next_view(upcoming: Option<&UpcomingValue>) -> Option<NextView> {
         UpcomingValue::Value {
             index,
             total,
+            key,
             name,
             preview,
             offensive,
@@ -1099,6 +1123,7 @@ fn next_view(upcoming: Option<&UpcomingValue>) -> Option<NextView> {
         } => Some(NextView {
             heading: i18n::next_value(*index, *total),
             value: Some(NextValueView {
+                key: key.clone(),
                 name: name.clone(),
                 preview: preview_line(preview).0,
                 // The one risk known before a send. Warnings, `cleared first`
@@ -1135,7 +1160,10 @@ fn preview_line(preview: &ValuePreview) -> (String, String) {
 
 /// The value band, every line finished.
 fn value_view(sent: &Sent) -> ValueView {
-    facts_view(&sent.facts, sent.utf16_units, markers_of(sent))
+    ValueView {
+        key: Some(sent.key.clone()),
+        ..facts_view(&sent.facts, sent.utf16_units, markers_of(sent))
+    }
 }
 
 /// The value band of any value - one that went out, or one on its way - from
@@ -1148,6 +1176,7 @@ fn facts_view(facts: &ValueFacts, utf16_units: usize, markers: Vec<(String, bool
     let not_guaranteed =
         i18n::not_guaranteed(&outside_guarantee(&preview, &SHIPPED)).unwrap_or_default();
     ValueView {
+        key: None,
         name: facts.name.clone(),
         reference: facts.reference.clone(),
         counts: i18n::counts(facts.graphemes, facts.code_points, facts.bytes, utf16_units),
@@ -1295,7 +1324,7 @@ fn apply(palette: &Palette, view: View) {
         // The band goes back to what it said before anything was sent, which
         // is true again: nothing has gone out of this pack yet.
         ValueBand::Clear => palette.set_has_value(false),
-        ValueBand::Show(value) => show_value(palette, value),
+        ValueBand::Show(value) => show_value(palette, *value),
     }
 
     // 🔴 No timer and no state change here, and that is `D83`: until then every
@@ -1306,6 +1335,11 @@ fn apply(palette: &Palette, view: View) {
 
 /// The value band, on the main thread.
 fn show_value(palette: &Palette, value: ValueView) {
+    // With the band it names, in the same turn of the event loop: a click
+    // reads the key of the value drawn, never one a view later.
+    if let Some(key) = &value.key {
+        palette.set_last_key(shown_key(key));
+    }
     palette.set_value_name(value.name.into());
     palette.set_value_reference(value.reference.into());
     palette.set_value_counts(value.counts.into());
@@ -1330,6 +1364,7 @@ fn show_next(palette: &Palette, next: Option<NextView>) {
     palette.set_next_heading(next.heading.into());
     match next.value {
         Some(value) => {
+            palette.set_next_key(shown_key(&value.key));
             palette.set_next_name(value.name.into());
             palette.set_next_preview(value.preview.into());
             palette.set_next_markers(markers_model(value.markers));
@@ -1338,6 +1373,31 @@ fn show_next(palette: &Palette, next: Option<NextView>) {
         None => palette.set_next_has_value(false),
     }
     palette.set_has_next(true);
+}
+
+/// A key as the palette holds it.
+fn shown_key(key: &ValueKey) -> ShownKey {
+    ShownKey {
+        pack: key.pack.as_str().into(),
+        value: key.value.as_str().into(),
+    }
+}
+
+/// What a click on a Copy button asks the worker for, from the key the
+/// palette holds beside the band it stands in (`D98`). On the MAIN thread.
+///
+/// `None` for a key never set - the button stands only beside a value, so it
+/// cannot be reached then, and an empty identifier is said as nothing rather
+/// than sent to be refused.
+#[must_use]
+pub fn copy_command(shown: &ShownKey) -> Option<Command> {
+    if shown.pack.is_empty() || shown.value.is_empty() {
+        return None;
+    }
+    Some(Command::Copy(ValueKey {
+        pack: shown.pack.to_string(),
+        value: shown.value.to_string(),
+    }))
 }
 
 /// Markers as the palette's model - text, and whether it is a risk.
@@ -1562,10 +1622,10 @@ mod tests {
 
     use super::{
         Command, Delivery, Duration, HotkeyAction, InFlight, LiveShortcuts, Memory, Outcome,
-        Palette, PaletteShortcuts, Progress, ShortcutRegistration, Standing, ValueBand,
-        ValuePreview, Wait, apply, apply_in_flight, between_presses, choose, clipboard_bar,
-        hold_height, in_flight_view, markers_in_flight, markers_of, set_compact, share,
-        view_between, view_of, with_standing,
+        Palette, PaletteShortcuts, Progress, ShortcutRegistration, ShownKey, Standing, ValueBand,
+        ValueKey, ValuePreview, Wait, apply, apply_in_flight, between_presses, choose,
+        clipboard_bar, copy_command, hold_height, in_flight_view, markers_in_flight, markers_of,
+        set_compact, share, view_between, view_of, with_standing,
     };
 
     /// No standing sentence: the ordinary case, and the one the field-by-field
@@ -1598,6 +1658,10 @@ mod tests {
 
     fn a_sent() -> Sent {
         Sent {
+            key: ValueKey {
+                pack: String::from("unicode-text"),
+                value: String::from("zero-width"),
+            },
             facts: ValueFacts {
                 reference: String::from("unicode-text/zero-width"),
                 name: String::from("Three zero-width spaces"),
@@ -1643,7 +1707,10 @@ mod tests {
         UpcomingValue::Value {
             index: 8,
             total: 34,
-            id: "trailing-nbsp".to_owned(),
+            key: ValueKey {
+                pack: "unicode-text".to_owned(),
+                value: "trailing-nbsp".to_owned(),
+            },
             name: "Trailing no-break space".to_owned(),
             reference: "unicode-text/trailing-nbsp".to_owned(),
             preview: ValuePreview::Text(nkb_core::preview::preview("Kowalski\u{A0}")),
@@ -1727,6 +1794,23 @@ mod tests {
             slint::Model::row_count(&palette.get_next_markers()),
             1,
             "the one risk known before a send - offensive - and nothing about a delivery"
+        );
+        // `D98`: each Copy button's key arrives with its band, and a click
+        // asks for the value drawn there - the next one beside the next band,
+        // the one sent beside the value band, never the other way round.
+        assert_eq!(
+            copy_command(&palette.get_next_key()),
+            Some(Command::Copy(ValueKey {
+                pack: String::from("unicode-text"),
+                value: String::from("trailing-nbsp"),
+            }))
+        );
+        assert_eq!(
+            copy_command(&palette.get_last_key()),
+            Some(Command::Copy(ValueKey {
+                pack: String::from("unicode-text"),
+                value: String::from("zero-width"),
+            }))
         );
 
         // ---- the next press only says the pack is finished ----------------
@@ -2007,8 +2091,17 @@ mod tests {
                 units_total: 12,
             },
         };
+        let sent_before = ShownKey {
+            pack: "unicode-text".into(),
+            value: "nbsp".into(),
+        };
+        palette.set_last_key(sent_before.clone());
         apply_in_flight(&palette, in_flight_view(&in_flight, &quiet()));
         assert!(palette.get_sending(), "the send band is up");
+        // `D98`: the value on its way has not been sent, so the Copy button of
+        // the value band keeps naming the last one that was - and the band
+        // fades it while the send runs.
+        assert_eq!(palette.get_last_key(), sent_before);
         assert_eq!(palette.get_sending_counter(), "3 / 12 units");
         assert_eq!(palette.get_sending_label(), "Typing");
         assert_eq!(palette.get_sending_hint(), "Press Esc to stop.");
@@ -2039,6 +2132,33 @@ mod tests {
         assert!(
             !palette.get_sending(),
             "the outcome took the send band away"
+        );
+        assert_eq!(
+            palette.get_last_key().value,
+            "zero-width",
+            "and the value that went out is the one its Copy button names now"
+        );
+    }
+
+    #[test]
+    fn a_click_on_a_copy_button_asks_for_the_key_it_holds_and_an_empty_one_asks_nothing() {
+        assert_eq!(copy_command(&ShownKey::default()), None);
+        assert_eq!(
+            copy_command(&ShownKey {
+                pack: "whitespace".into(),
+                value: "".into(),
+            }),
+            None
+        );
+        assert_eq!(
+            copy_command(&ShownKey {
+                pack: "whitespace".into(),
+                value: "nbsp".into(),
+            }),
+            Some(Command::Copy(ValueKey {
+                pack: String::from("whitespace"),
+                value: String::from("nbsp"),
+            }))
         );
     }
 
@@ -2642,6 +2762,36 @@ mod tests {
                         .collect(),
                 }))
             );
+        });
+    }
+
+    /// `D98`: a Copy reaches the sequence, and its answer reaches the message
+    /// band with the value band kept and nothing moved. Through a value this
+    /// pack does not hold, and that is the point of the choice: the ports here
+    /// carry the REAL clipboard, which no test may write while the owner works
+    /// on this machine. The copy that writes is tested with fakes in `nkb-app`
+    /// and on the live palette by `tools/petla-palety.ps1`.
+    #[test]
+    fn a_copy_is_answered_in_the_message_band_and_moves_nothing() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        with_worker(&store, &registrar, false, |worker, _| {
+            let before = worker.sequence.sequence();
+            let carried = worker.carry_out(Command::Copy(ValueKey {
+                pack: String::from("unicode-text"),
+                value: String::from("nbsp"),
+            }));
+            let view = carried.view.expect("a copy is answered");
+            assert_eq!(
+                view.messages,
+                vec![String::from(
+                    "unicode-text/nbsp is not in the pack in use any more, so nothing was copied. \
+                     Click Copy beside the value on screen now."
+                )]
+            );
+            assert!(matches!(view.value, ValueBand::Keep));
+            assert!(carried.told.is_none());
+            assert_eq!(worker.sequence.sequence(), before);
         });
     }
 

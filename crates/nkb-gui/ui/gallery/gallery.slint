@@ -38,6 +38,7 @@ import {
     QueryField,
     PickList,
     PickerOpener,
+    SmallButton,
 } from "../components.slint";
 
 export component Gallery inherits Window {
@@ -233,6 +234,24 @@ export component Gallery inherits Window {
             PickerOpener { text: "A pack whose name is far too long for the palette's first band"; action: "Find a value"; }
             Spacer { }
             TextCounter { text: "100000 / 100000"; }
+        }
+
+        // The button, as the palette's bands carry it: at the end of a heading's
+        // row, at rest and unable to be used (while a value goes, D98) - and a
+        // word as long as a translation may make it. The pointer states need a
+        // pointer, so `palette_copy.rs` measures them on the real palette.
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            TextSmallMuted { text: "SmallButton"; }
+            Spacer { }
+            SmallButton { text: "Copy"; action: "Copy the last sent value"; }
+            SmallButton { text: "Copy"; action: "Copy the last sent value"; enabled: false; }
+        }
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            TextSmallMuted { text: "a longer word"; }
+            Spacer { }
+            SmallButton { text: "Copy to the clipboard"; action: "Copy the next value"; }
         }
 
         Hairline {}
