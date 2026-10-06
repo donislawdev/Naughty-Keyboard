@@ -62,8 +62,8 @@ pub struct Delivered {
     pub paced: bool,
 }
 
-/// Why a send stopped before its end (`D95`). The same three answers for a value
-/// and for the clearing keys, because the route stops for the same reasons.
+/// Why a send stopped before its end (`D95`). The same answers for a value and
+/// for the clearing keys, because the route stops for the same reasons.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StopReason {
     /// The system did not take a key: another program blocking input, a
@@ -75,6 +75,9 @@ pub enum StopReason {
     /// The application holding the focus stopped taking keys - the system
     /// calls it not responding, or it took nothing for as long.
     NotTaking,
+    /// The tester pressed `Escape`, which the route holds for as long as a send
+    /// lasts and no longer (race `W3`, `D96`).
+    Escape,
 }
 
 impl fmt::Display for StopReason {
@@ -83,6 +86,7 @@ impl fmt::Display for StopReason {
             Self::Dropped => "dropped",
             Self::FocusMoved => "focus-moved",
             Self::NotTaking => "not-taking",
+            Self::Escape => "escape",
         })
     }
 }

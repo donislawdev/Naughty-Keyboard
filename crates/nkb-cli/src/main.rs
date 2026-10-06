@@ -923,8 +923,8 @@ fn send(args: &[String]) -> ExitCode {
     }
 }
 
-/// Why a send stopped, in the words `nkb send` uses after a dash. The same three
-/// reasons the palette names (`D95`), said in the command's own sentences.
+/// Why a send stopped, in the words `nkb send` uses after a dash. The same
+/// reasons the palette names (`D95`, `D96`), said in the command's own sentences.
 fn stop_reason(reason: StopReason) -> &'static str {
     match reason {
         StopReason::Dropped => {
@@ -932,6 +932,7 @@ fn stop_reason(reason: StopReason) -> &'static str {
         }
         StopReason::FocusMoved => "another window came to the front",
         StopReason::NotTaking => "the application stopped taking keys",
+        StopReason::Escape => "Escape was pressed",
     }
 }
 
@@ -1055,6 +1056,9 @@ fn print_send_help() {
     println!("Nothing is sent when the keyboard focus is on a button, a link, a list item");
     println!("or a page that is not editable: keys there act on that control, so the");
     println!("command refuses and exits with 4. Where it cannot tell, it sends.");
+    println!("Press Escape to stop a send in progress: nothing more is typed, the command");
+    println!("says how much arrived and exits with 4. Escape belongs to the command only");
+    println!("while it types - before and after, the key is the application's.");
 }
 
 /// `nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]`

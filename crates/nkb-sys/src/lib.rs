@@ -33,6 +33,8 @@
 // and `clippy -D warnings` refuses that on macOS and Linux (seen 2026-09-23).
 #[cfg(any(windows, test))]
 mod confirm;
+#[cfg(any(windows, test))]
+mod escape;
 pub mod field;
 pub mod held;
 pub mod hotkey;
@@ -72,6 +74,9 @@ pub enum StopReason {
     /// The application holding the focus did not take an event: the system
     /// calls its window not responding, or it took nothing for as long.
     NotTaking,
+    /// The person pressed `Escape`, which the send holds for as long as it
+    /// lasts and no longer (race `W3`, `D96`).
+    Escape,
 }
 
 impl core::fmt::Display for StopReason {
@@ -80,6 +85,7 @@ impl core::fmt::Display for StopReason {
             Self::Dropped => "the system did not take the keys",
             Self::FocusMoved => "another window came to the front",
             Self::NotTaking => "the application stopped taking keys",
+            Self::Escape => "Escape was pressed",
         })
     }
 }
@@ -197,6 +203,7 @@ mod windows_impl {
         Pressed, Step, TAKEN_WAIT, TARGET_WAIT, Waits, Watch, chord_steps, chords_acted,
         press_confirmed, units_arrived,
     };
+    use super::escape::{ReservedEscape, SystemEscape};
     use super::{Chord, MODIFIER_RELEASE_WAIT, NavKey};
     use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
@@ -347,9 +354,10 @@ mod windows_impl {
     }
 
     /// The system as `confirm` asks it, around the window that was in front
-    /// when the send began.
+    /// when the send began, with `Escape` held for as long as the send lasts.
     struct SystemWire {
         window: HWND,
+        escape: ReservedEscape,
     }
 
     impl super::confirm::Wire<INPUT> for SystemWire {
@@ -367,7 +375,11 @@ mod windows_impl {
             (state as u16) & 0x8000 != 0
         }
         fn watch(&mut self) -> Watch {
-            if unsafe { GetForegroundWindow() } != self.window {
+            // First: a person who pressed Escape asked for exactly this stop,
+            // whatever else is true of the window by now.
+            if self.escape.pressed() {
+                Watch::Escape
+            } else if unsafe { GetForegroundWindow() } != self.window {
                 Watch::Moved
             } else if unsafe { IsHungAppWindow(self.window) } != 0 {
                 Watch::Hung
@@ -381,7 +393,8 @@ mod windows_impl {
     }
 
     /// The window in front, the queue joined to it if it could be, and the
-    /// waits that follow from that. One per send: the queue is left on drop.
+    /// waits that follow from that. One per send: `Escape` is given back and the
+    /// queue is left on drop - in that order, the fields' own.
     struct Session {
         wire: SystemWire,
         joined: Option<Joined>,
@@ -393,8 +406,13 @@ mod windows_impl {
             if window.is_null() {
                 return None;
             }
+            // Reserved on THIS thread, the one that asks it between events:
+            // `WM_HOTKEY` goes to the thread that registered (`D96`).
             Some(Self {
-                wire: SystemWire { window },
+                wire: SystemWire {
+                    window,
+                    escape: SystemEscape::reserve(),
+                },
                 joined: join_focus(window),
             })
         }
@@ -602,8 +620,9 @@ pub fn foreground_window() -> Option<WindowRef> {
 /// alone and the next only once the system shows it taken (`D94`) and, where the
 /// queue holding the keyboard focus could be joined, once that application took
 /// it (`D95`) - [`SendOutcome::paced`] says which. The window in front is looked
-/// at before every event. A stop ends the send with [`SendError::Truncated`] and
-/// its [`StopReason`].
+/// at before every event, and so is `Escape`, which the send holds for as long as
+/// it lasts and gives back once the key is up (`D96`). A stop ends the send with
+/// [`SendError::Truncated`] and its [`StopReason`].
 pub fn send_text(text: &str) -> Result<SendOutcome, SendError> {
     platform::send_text(text)
 }
@@ -620,8 +639,8 @@ pub fn send_text(text: &str) -> Result<SendOutcome, SendError> {
 ///
 /// [`SendError::ModifierHeld`] when a modifier stays down past the wait,
 /// [`SendError::ChordsTruncated`] when a press was not taken, another window came
-/// to the front or the application stopped taking keys - every event is
-/// confirmed before the next, as in [`send_text`] - and
+/// to the front, the application stopped taking keys or `Escape` was pressed -
+/// every event is confirmed before the next, as in [`send_text`] - and
 /// [`SendError::Unsupported`] where there is no route.
 pub fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
     platform::send_chords(chords)
@@ -728,6 +747,7 @@ mod tests {
             StopReason::Dropped,
             StopReason::FocusMoved,
             StopReason::NotTaking,
+            StopReason::Escape,
         ]
         .iter()
         .map(ToString::to_string)

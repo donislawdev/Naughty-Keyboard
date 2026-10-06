@@ -145,6 +145,7 @@ fn stop_reason(reason: nkb_sys::StopReason) -> StopReason {
         nkb_sys::StopReason::Dropped => StopReason::Dropped,
         nkb_sys::StopReason::FocusMoved => StopReason::FocusMoved,
         nkb_sys::StopReason::NotTaking => StopReason::NotTaking,
+        nkb_sys::StopReason::Escape => StopReason::Escape,
     }
 }
 
@@ -312,13 +313,15 @@ mod tests {
             stop_reason(nkb_sys::StopReason::Dropped),
             stop_reason(nkb_sys::StopReason::FocusMoved),
             stop_reason(nkb_sys::StopReason::NotTaking),
+            stop_reason(nkb_sys::StopReason::Escape),
         ];
         assert_eq!(
             mapped,
             [
                 StopReason::Dropped,
                 StopReason::FocusMoved,
-                StopReason::NotTaking
+                StopReason::NotTaking,
+                StopReason::Escape
             ]
         );
     }

@@ -355,6 +355,7 @@ fn pattern_stop_reason(reason: StopReason) -> &'static str {
         }
         StopReason::FocusMoved => "another window came to the front",
         StopReason::NotTaking => "the application stopped taking keys",
+        StopReason::Escape => "Escape was pressed",
     }
 }
 
@@ -2279,6 +2280,38 @@ mod tests {
             assert!(!out.is_empty(), "{message:?} produced nothing");
             assert!(!out.contains('{'), "{message:?} left a placeholder: {out}");
         }
+    }
+
+    #[test]
+    fn every_reason_a_send_stopped_reads_as_its_own_clause() {
+        // `D95`, `D96`: the clause stands between a colon and the full stop its
+        // sentence brings, so it carries no full stop of its own, and two
+        // reasons that read the same would tell the tester nothing.
+        let clauses: Vec<&str> = [
+            StopReason::Dropped,
+            StopReason::FocusMoved,
+            StopReason::NotTaking,
+            StopReason::Escape,
+        ]
+        .into_iter()
+        .map(stop_reason)
+        .collect();
+        for (i, clause) in clauses.iter().enumerate() {
+            assert!(!clause.is_empty() && !clause.ends_with('.'), "{clause}");
+            assert!(!clauses[i + 1..].contains(clause), "\"{clause}\" twice");
+        }
+        assert_eq!(
+            super::message(
+                &Message::Interrupted {
+                    units_sent: 12480,
+                    units_expected: 100_000,
+                    reason: StopReason::Escape,
+                },
+                "",
+                &defaults(),
+            ),
+            "Stopped after 12480 of 100000 UTF-16 units: Escape was pressed. The field holds a partial value - clear it before the next test."
+        );
     }
 
     /// The pack window's labels divide the same way as the palette's.

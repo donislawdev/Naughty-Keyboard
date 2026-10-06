@@ -61,9 +61,11 @@ pub(crate) enum Watch {
     Moved,
     /// The system considers the window not responding (`IsHungAppWindow`).
     Hung,
+    /// The person pressed `Escape` to stop the send (race `W3`, `D96`).
+    Escape,
 }
 
-/// The system, as the four questions a send asks it. A trait rather than four
+/// The system, as the five questions a send asks it. A trait rather than four
 /// closures so a test writes one fake system and every question sees its state.
 pub(crate) trait Wire<E> {
     /// Hands one event to the system. True when it accepted it - which is not
@@ -75,7 +77,7 @@ pub(crate) trait Wire<E> {
     /// its synchronous state, which moves as its thread takes key messages.
     /// Asked only when the send is paced.
     fn target_down(&mut self, key: u16) -> bool;
-    /// What the window in front looks like.
+    /// What the window in front looks like, and whether `Escape` was pressed.
     fn watch(&mut self) -> Watch;
     /// Lets time pass between two looks. A test does nothing here.
     fn pause(&mut self, how_long: Duration);
@@ -130,7 +132,9 @@ pub(crate) struct Pressed {
 /// Before each event the window in front is looked at: another window means the
 /// next key would land there, so nothing more goes out (`FocusMoved`, race `W2`
 /// at the level of the window), and a window the system calls hung would only
-/// pile keys up (`NotTaking`). After each event the system must show it within
+/// pile keys up (`NotTaking`). `Escape` pressed stops it the same way, the token
+/// of race `W3` asked in the same look rather than in a second loop (`D96`).
+/// After each event the system must show it within
 /// [`Waits::system`] (`Dropped` otherwise), and, when paced, the application
 /// must take it within [`Waits::target`], the window being watched meanwhile.
 pub(crate) fn press_confirmed<E: Copy>(
@@ -147,6 +151,7 @@ pub(crate) fn press_confirmed<E: Copy>(
             Watch::Steady => {}
             Watch::Moved => return stopped(StopReason::FocusMoved),
             Watch::Hung => return stopped(StopReason::NotTaking),
+            Watch::Escape => return stopped(StopReason::Escape),
         }
         if !wire.send(step.event) {
             return stopped(StopReason::Dropped);
@@ -211,6 +216,7 @@ fn target_takes<E>(
                 Watch::Steady => {}
                 Watch::Moved => return Err(StopReason::FocusMoved),
                 Watch::Hung => return Err(StopReason::NotTaking),
+                Watch::Escape => return Err(StopReason::Escape),
             }
             wire.pause(SPIN);
         }
@@ -496,6 +502,48 @@ mod tests {
             }
         );
         assert!(system.sent.is_empty(), "nothing sent to a hung window");
+    }
+
+    #[test]
+    fn escape_stops_the_send_before_the_next_key() {
+        // Race `W3` (`D96`): the press is asked in the same look as the window,
+        // so the event after it is NOT sent.
+        let mut system = System::new();
+        system.watch_from = Some((3, Watch::Escape));
+        assert_eq!(
+            press_confirmed(&shifted_home(), &mut system, PACED),
+            Pressed {
+                taken: 3,
+                stop: Some(StopReason::Escape)
+            }
+        );
+        assert_eq!(system.sent.len(), 3, "the fourth event never went out");
+    }
+
+    #[test]
+    fn escape_pressed_while_the_application_is_late_stops_the_wait() {
+        // A send to an application that takes keys slowly spends its time in
+        // this wait - Escape must end it there, not only between events.
+        let mut system = System::new();
+        system.app_stops_from = Some(1);
+        // Look 0 and 1 are before events 0 and 1, look 2 the first while waiting.
+        system.watch_from = Some((2, Watch::Escape));
+        let waits = Waits {
+            system: Duration::ZERO,
+            target: Some(Duration::from_secs(5)),
+        };
+        let start = std::time::Instant::now();
+        assert_eq!(
+            press_confirmed(&shifted_home(), &mut system, waits),
+            Pressed {
+                taken: 1,
+                stop: Some(StopReason::Escape)
+            }
+        );
+        assert!(
+            start.elapsed() < Duration::from_secs(2),
+            "stopped at the press, not at the bound"
+        );
     }
 
     #[test]
