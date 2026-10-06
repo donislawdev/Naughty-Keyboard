@@ -34,6 +34,7 @@ import {
     Zone,
     WindowSurface,
     ChromeBand,
+    ProgressBar,
     QueryField,
     PickList,
     PickerOpener,
@@ -131,6 +132,22 @@ export component Gallery inherits Window {
             divided: false;
             TextSmallMuted { text: "Zone { divided: false } - the first band"; }
         }
+
+        // How far a send got: empty, part-way and full - the three a still
+        // picture can hold. The band around the middle one is how the palette
+        // draws a send in progress (`OBS-160`).
+        ProgressBar { fraction: 0; }
+        Zone {
+            HorizontalLayout {
+                spacing: Tokens.space-2;
+                TextBody { text: "Typing"; overflow: elide; }
+                Spacer { }
+                TextCounter { text: "1784 / 65535"; }
+            }
+            ProgressBar { fraction: 0.37; }
+            TextBody { text: "Press Esc to stop."; wrap: word-wrap; }
+        }
+        ProgressBar { fraction: 1; }
 
         // The palette's own ground, at both opacities. Over the gallery's
         // background the dimmed one barely differs, and that is honest: the

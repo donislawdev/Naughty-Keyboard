@@ -36,7 +36,7 @@
 //! parts are missing is untouchable rule 1 applied to a use case.
 
 use crate::ports::{
-    Availability, DeliveryError, KeystrokeError, KeystrokeSender, PackFormat, PackSource,
+    Availability, DeliveryError, KeystrokeError, KeystrokeSender, PackFormat, PackSource, Progress,
     SourceError, StopReason, ValueDelivery,
 };
 use nkb_core::keys::line_clearing_recipe;
@@ -207,6 +207,7 @@ pub fn send_value(
     delivery: &dyn ValueDelivery,
     keys: &dyn KeystrokeSender,
     request: &SendRequest<'_>,
+    progress: &mut dyn FnMut(Sending<'_>),
 ) -> SendOutcome {
     // Asked FIRST, before reading anything. A machine with no route should say
     // so rather than spend the work and fail at the last step - and on macOS
@@ -225,7 +226,14 @@ pub fn send_value(
     // check first, refuse on any error, parse after - pack-format.md 11 and the
     // binding order in architektura.md 3, both of which live in `load_pack`.
     match crate::load_pack::load(format, request.pack_id, &text) {
-        Ok(loaded) => deliver_one(&loaded.pack, delivery, keys, request, loaded.warnings),
+        Ok(loaded) => deliver_one(
+            &loaded.pack,
+            delivery,
+            keys,
+            request,
+            loaded.warnings,
+            progress,
+        ),
         Err(refused) => SendOutcome::Refused {
             errors: refused.errors,
         },
@@ -238,6 +246,7 @@ fn deliver_one(
     keys: &dyn KeystrokeSender,
     request: &SendRequest<'_>,
     warnings: usize,
+    progress: &mut dyn FnMut(Sending<'_>),
 ) -> SendOutcome {
     let available = pack.values.len();
     let position = request.position;
@@ -255,7 +264,25 @@ fn deliver_one(
         };
     };
 
-    deliver_value(pack, value, delivery, keys, request.clearing, warnings)
+    deliver_value(
+        pack,
+        value,
+        delivery,
+        keys,
+        request.clearing,
+        warnings,
+        progress,
+    )
+}
+
+/// A value on its way into the field, said while it goes (`OBS-160`): which
+/// value, and how far it got. The facts are borrowed because they are counted
+/// ONCE, at the first report, and the outcome at the end carries the same ones -
+/// a million-character value is not walked twice.
+#[derive(Debug, Clone, Copy)]
+pub struct Sending<'a> {
+    pub facts: &'a ValueFacts,
+    pub progress: Progress,
 }
 
 /// Delivers one value that is ALREADY in memory, and reports what happened.
@@ -283,6 +310,7 @@ pub fn deliver_value(
     keys: &dyn KeystrokeSender,
     clearing: Clearing,
     warnings: usize,
+    progress: &mut dyn FnMut(Sending<'_>),
 ) -> SendOutcome {
     // Measured from the RECIPE, before anything is built - architektura.md 6.1.
     // A value declaring two billion characters is refused here without a single
@@ -343,7 +371,17 @@ pub fn deliver_value(
         shape: shape(&literal),
     };
 
-    match delivery.deliver(&literal) {
+    // Counted at the first report, if there is one, and kept for the outcome.
+    let mut counted: Option<ValueFacts> = None;
+    let delivered = delivery.deliver(&literal, &mut |step| {
+        progress(Sending {
+            facts: counted.get_or_insert_with(&facts),
+            progress: step,
+        });
+    });
+    let mut facts = || counted.take().unwrap_or_else(&facts);
+
+    match delivered {
         Ok(delivered) => SendOutcome::Sent {
             facts: facts(),
             utf16_units: delivered.utf16_units,
@@ -410,7 +448,11 @@ mod tests {
         fn target(&self) -> Option<TargetRef> {
             Some(TargetRef(1))
         }
-        fn deliver(&self, text: &str) -> Result<Delivered, DeliveryError> {
+        fn deliver(
+            &self,
+            text: &str,
+            _progress: &mut dyn FnMut(Progress),
+        ) -> Result<Delivered, DeliveryError> {
             self.log.borrow_mut().push(format!("text:{text}"));
             match &self.fail_with {
                 None => Ok(Delivered {
@@ -565,6 +607,7 @@ mod tests {
             &spy,
             &keys,
             &request(1, Clearing::Keep),
+            &mut |_| {},
         );
         assert!(
             matches!(outcome, SendOutcome::Sent { .. }),
@@ -586,6 +629,7 @@ mod tests {
             &spy,
             &keys,
             &request(1, Clearing::Keep),
+            &mut |_| {},
         );
         let SendOutcome::Sent { clearing, .. } = outcome else {
             panic!("expected a send, got {outcome:?}");
@@ -609,6 +653,7 @@ mod tests {
             &spy,
             &keys,
             &request(1, Clearing::Line),
+            &mut |_| {},
         );
         let SendOutcome::Sent { clearing, .. } = outcome else {
             panic!("expected a send, got {outcome:?}");
@@ -638,6 +683,7 @@ mod tests {
             &spy,
             &keys,
             &request(1, Clearing::Line),
+            &mut |_| {},
         );
         let SendOutcome::Sent { clearing, .. } = outcome else {
             panic!("an unconfirmed field is a skip, not a refusal, got {outcome:?}");
@@ -669,6 +715,7 @@ mod tests {
             &spy,
             &keys,
             &request(1, Clearing::Line),
+            &mut |_| {},
         );
         let SendOutcome::Sent { clearing, .. } = outcome else {
             panic!("a terminal is a skip, not a refusal, got {outcome:?}");
@@ -698,6 +745,7 @@ mod tests {
             &spy,
             &keys,
             &request(1, Clearing::Line),
+            &mut |_| {},
         );
         assert_eq!(
             outcome,
@@ -731,7 +779,14 @@ mod tests {
                 ..value("bomb", "")
             }])),
         };
-        let outcome = send_value(&Shelf, &bomb, &spy, &keys, &request(1, Clearing::Line));
+        let outcome = send_value(
+            &Shelf,
+            &bomb,
+            &spy,
+            &keys,
+            &request(1, Clearing::Line),
+            &mut |_| {},
+        );
         assert!(
             matches!(outcome, SendOutcome::ValueTooLarge { .. }),
             "expected a refusal, got {outcome:?}"
@@ -754,6 +809,7 @@ mod tests {
             &spy,
             &keys,
             &request(0, Clearing::Line),
+            &mut |_| {},
         );
         assert_eq!(
             outcome,
@@ -779,6 +835,7 @@ mod tests {
             &spy,
             &keys,
             &request(9, Clearing::Keep),
+            &mut |_| {},
         );
         assert_eq!(
             outcome,
@@ -801,6 +858,7 @@ mod tests {
             &spy,
             &keys,
             &request(2, Clearing::Keep),
+            &mut |_| {},
         );
         let SendOutcome::Sent {
             facts: ValueFacts { code_points, .. },
@@ -831,7 +889,14 @@ mod tests {
                 ..value("len-255", "")
             }])),
         };
-        let outcome = send_value(&Shelf, &generated, &spy, &keys, &request(1, Clearing::Keep));
+        let outcome = send_value(
+            &Shelf,
+            &generated,
+            &spy,
+            &keys,
+            &request(1, Clearing::Keep),
+            &mut |_| {},
+        );
         let SendOutcome::Sent {
             facts:
                 ValueFacts {
@@ -885,6 +950,7 @@ mod tests {
             &spy,
             &keys,
             &request(1, Clearing::Line),
+            &mut |_| {},
         );
         assert_eq!(
             outcome,
@@ -904,7 +970,14 @@ mod tests {
             errors: 2,
             pack: Some(a_pack(vec![value("first", "ab")])),
         };
-        let outcome = send_value(&Shelf, &broken, &spy, &keys, &request(1, Clearing::Line));
+        let outcome = send_value(
+            &Shelf,
+            &broken,
+            &spy,
+            &keys,
+            &request(1, Clearing::Line),
+            &mut |_| {},
+        );
         assert_eq!(outcome, SendOutcome::Refused { errors: 2 });
         assert!(
             log.borrow().is_empty(),
@@ -933,6 +1006,7 @@ mod tests {
             &spy,
             &keys,
             &request(2, Clearing::Line),
+            &mut |_| {},
         );
         // Never `Sent` - a fragment must not look like a value that arrived -
         // and never a bare `NotDelivered`, which could not say WHICH value was
@@ -986,6 +1060,7 @@ mod tests {
             &spy,
             &keys,
             &request(2, Clearing::Line),
+            &mut |_| {},
         );
         assert_eq!(
             outcome,
@@ -1008,7 +1083,11 @@ mod tests {
             fn target(&self) -> Option<TargetRef> {
                 Some(TargetRef(1))
             }
-            fn deliver(&self, text: &str) -> Result<Delivered, DeliveryError> {
+            fn deliver(
+                &self,
+                text: &str,
+                _progress: &mut dyn FnMut(Progress),
+            ) -> Result<Delivered, DeliveryError> {
                 Ok(Delivered {
                     utf16_units: text.encode_utf16().count(),
                     paced: false,
@@ -1022,10 +1101,92 @@ mod tests {
             &Unpaced,
             &KeySpy::working(&log),
             &request(1, Clearing::Keep),
+            &mut |_| {},
         );
         let SendOutcome::Sent { paced, .. } = outcome else {
             panic!("an unpaced delivery still delivered, got {outcome:?}");
         };
         assert!(!paced, "the caller must learn it was not paced (`D95`)");
+    }
+
+    #[test]
+    fn a_value_on_its_way_is_told_with_the_facts_the_outcome_carries() {
+        // `OBS-160`: what the palette draws while a value goes is the value that
+        // goes - the same facts the outcome reports at the end, counted once.
+        struct Reporting;
+        impl ValueDelivery for Reporting {
+            fn availability(&self) -> Availability {
+                Availability::Ready
+            }
+            fn target(&self) -> Option<TargetRef> {
+                Some(TargetRef(1))
+            }
+            fn deliver(
+                &self,
+                text: &str,
+                progress: &mut dyn FnMut(Progress),
+            ) -> Result<Delivered, DeliveryError> {
+                let total = text.encode_utf16().count();
+                progress(Progress {
+                    units_arrived: 1,
+                    units_total: total,
+                });
+                progress(Progress {
+                    units_arrived: total,
+                    units_total: total,
+                });
+                Ok(Delivered {
+                    utf16_units: total,
+                    paced: true,
+                })
+            }
+        }
+        let log = log();
+        let keys = KeySpy::working(&log);
+        let mut heard = Vec::new();
+        let outcome = send_value(
+            &Shelf,
+            &Scripted::two(),
+            &Reporting,
+            &keys,
+            &request(2, Clearing::Keep),
+            &mut |sending| heard.push((sending.facts.clone(), sending.progress)),
+        );
+        let SendOutcome::Sent { facts, .. } = outcome else {
+            panic!("expected a send, got {outcome:?}");
+        };
+        assert_eq!(
+            heard
+                .iter()
+                .map(|(_, step)| step.units_arrived)
+                .collect::<Vec<_>>(),
+            vec![1, 3],
+            "every report reaches the caller, in order - `a` and an emoji are three units"
+        );
+        assert!(
+            heard.iter().all(|(told, _)| *told == facts),
+            "the value told on the way must be the value reported at the end"
+        );
+        assert_eq!(facts.reference, "sample/second");
+    }
+
+    #[test]
+    fn a_route_with_nothing_to_say_on_the_way_tells_nothing() {
+        // A short send and the clipboard report nothing, and nothing is made up
+        // for them.
+        let log = log();
+        let spy = Spy::ready(&log);
+        let keys = KeySpy::working(&log);
+        let mut told = 0;
+        let outcome = send_value(
+            &Shelf,
+            &Scripted::two(),
+            &spy,
+            &keys,
+            &request(1, Clearing::Keep),
+            &mut |_| told += 1,
+        );
+        assert!(matches!(outcome, SendOutcome::Sent { .. }), "{outcome:?}");
+        assert_eq!(told, 0);
     }
 }

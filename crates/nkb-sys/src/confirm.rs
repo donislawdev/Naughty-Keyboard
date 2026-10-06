@@ -133,7 +133,8 @@ pub(crate) struct Pressed {
 /// next key would land there, so nothing more goes out (`FocusMoved`, race `W2`
 /// at the level of the window), and a window the system calls hung would only
 /// pile keys up (`NotTaking`). `Escape` pressed stops it the same way, the token
-/// of race `W3` asked in the same look rather than in a second loop (`D96`).
+/// of race `W3` asked in the same look rather than in a second loop (`D96`) -
+/// but only BEFORE an event, never while one is on its way: see [`target_takes`].
 /// After each event the system must show it within
 /// [`Waits::system`] (`Dropped` otherwise), and, when paced, the application
 /// must take it within [`Waits::target`], the window being watched meanwhile.
@@ -192,6 +193,15 @@ fn system_shows<E>(wire: &mut impl Wire<E>, key: u16, down: bool, wait: Duration
 
 /// Whether the application takes the event within `wait`, watching the window
 /// in front while it does not.
+///
+/// 🔴 `Escape` does NOT end this wait, and that is measured. The system has
+/// already taken the event, so it is on its way into the application whatever
+/// happens here - a slow application takes it a little later. Ended here, the
+/// send reported one unit fewer than the field received: 2024 against 2025
+/// (2026-10-06, `tools/sondy/escape-w3.ps1` scene P3). So the key in flight
+/// lands, and the press stops the send before the NEXT event, where the count
+/// is exact. An application that does not take it at all is what the bound and
+/// a hung window answer for.
 fn target_takes<E>(
     wire: &mut impl Wire<E>,
     key: u16,
@@ -213,10 +223,10 @@ fn target_takes<E>(
             // Watched only once the answer is late: two system calls per look
             // would cost more than the answer itself takes to come.
             match wire.watch() {
-                Watch::Steady => {}
+                // Asked again before the next event, which is where it stops.
+                Watch::Steady | Watch::Escape => {}
                 Watch::Moved => return Err(StopReason::FocusMoved),
                 Watch::Hung => return Err(StopReason::NotTaking),
-                Watch::Escape => return Err(StopReason::Escape),
             }
             wire.pause(SPIN);
         }
@@ -268,6 +278,43 @@ pub(crate) const fn chords_acted(before: usize, taken: usize, shifted: bool) -> 
     before + if taken > main_down { 1 } else { 0 }
 }
 
+/// How often a send says how far it got (`OBS-160`).
+///
+/// A tenth of a second is about the shortest change a person reads as movement
+/// rather than flicker, and it is the delay before the FIRST report too: a send
+/// that ends sooner says nothing on the way, so the many short values do not
+/// make a progress band blink into view and out again.
+pub(crate) const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
+
+/// When the next report of a send is due. Pure, so it is tested with instants
+/// of its own rather than with a clock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Cadence {
+    next: std::time::Instant,
+    every: Duration,
+}
+
+impl Cadence {
+    /// The first report is due `every` after `start`.
+    pub(crate) fn starting(start: std::time::Instant, every: Duration) -> Self {
+        Self {
+            next: start + every,
+            every,
+        }
+    }
+
+    /// Whether a report is due at `now`. When it is, the next one is due a full
+    /// interval after `now` - a send that stalled does not owe a burst of
+    /// reports for the time it stood still.
+    pub(crate) fn due(&mut self, now: std::time::Instant) -> bool {
+        if now < self.next {
+            return false;
+        }
+        self.next = now + self.every;
+        true
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::expect_used,
@@ -276,6 +323,33 @@ pub(crate) const fn chords_acted(before: usize, taken: usize, shifted: bool) -> 
 )]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nothing_is_reported_before_the_first_interval() {
+        // A short send says nothing on the way, so a band never blinks.
+        let start = std::time::Instant::now();
+        let mut cadence = Cadence::starting(start, PROGRESS_INTERVAL);
+        assert!(!cadence.due(start));
+        assert!(!cadence.due(start + Duration::from_millis(99)));
+        assert!(cadence.due(start + Duration::from_millis(100)));
+    }
+
+    #[test]
+    fn a_report_is_due_once_per_interval_and_a_stall_owes_no_burst() {
+        let start = std::time::Instant::now();
+        let mut cadence = Cadence::starting(start, PROGRESS_INTERVAL);
+        let at = |ms| start + Duration::from_millis(ms);
+        assert!(cadence.due(at(100)));
+        assert!(!cadence.due(at(150)), "half an interval later is not due");
+        assert!(cadence.due(at(200)));
+        // The send stood still for a second: one report, then a full interval.
+        assert!(cadence.due(at(1200)));
+        assert!(
+            !cadence.due(at(1250)),
+            "no burst for the time it stood still"
+        );
+        assert!(cadence.due(at(1300)));
+    }
 
     const SHIFT: u16 = 0x10;
     const HOME: u16 = 0x24;
@@ -521,28 +595,80 @@ mod tests {
     }
 
     #[test]
-    fn escape_pressed_while_the_application_is_late_stops_the_wait() {
-        // A send to an application that takes keys slowly spends its time in
-        // this wait - Escape must end it there, not only between events.
-        let mut system = System::new();
-        system.app_stops_from = Some(1);
-        // Look 0 and 1 are before events 0 and 1, look 2 the first while waiting.
-        system.watch_from = Some((2, Watch::Escape));
+    fn escape_pressed_while_the_application_is_late_lets_the_key_in_flight_land() {
+        // The system has taken the event, so it reaches the application anyway.
+        // Ending the wait at the press reported one unit fewer than the field
+        // held (P3 of the probe, 2025 against 2024). So the key in flight lands,
+        // counted, and the send stops before the next event.
+        struct Late {
+            down: bool,
+            pauses: usize,
+            sent: usize,
+        }
+        impl Wire<bool> for Late {
+            fn send(&mut self, down: bool) -> bool {
+                self.down = down;
+                self.pauses = 0;
+                self.sent += 1;
+                true
+            }
+            fn system_down(&mut self, _key: u16) -> bool {
+                self.down
+            }
+            fn target_down(&mut self, _key: u16) -> bool {
+                // Taken only after the wait has looked at the window twice,
+                // so the press below is seen DURING the wait.
+                if self.pauses >= 2 {
+                    self.down
+                } else {
+                    !self.down
+                }
+            }
+            fn watch(&mut self) -> Watch {
+                if self.sent >= 1 {
+                    Watch::Escape
+                } else {
+                    Watch::Steady
+                }
+            }
+            fn pause(&mut self, _how_long: Duration) {
+                self.pauses += 1;
+            }
+        }
+        let steps = [
+            Step {
+                event: true,
+                key: HOME,
+                down: true,
+            },
+            Step {
+                event: false,
+                key: HOME,
+                down: false,
+            },
+        ];
         let waits = Waits {
-            system: Duration::ZERO,
+            system: Duration::from_secs(1),
             target: Some(Duration::from_secs(5)),
+        };
+        let mut late = Late {
+            down: false,
+            pauses: 0,
+            sent: 0,
         };
         let start = std::time::Instant::now();
         assert_eq!(
-            press_confirmed(&shifted_home(), &mut system, waits),
+            press_confirmed(&steps, &mut late, waits),
             Pressed {
                 taken: 1,
                 stop: Some(StopReason::Escape)
-            }
+            },
+            "the key in flight is counted, and nothing goes after it"
         );
+        assert_eq!(late.sent, 1, "the next event never went out");
         assert!(
             start.elapsed() < Duration::from_secs(2),
-            "stopped at the press, not at the bound"
+            "stopped once the key landed, not at the bound"
         );
     }
 

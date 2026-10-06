@@ -90,14 +90,14 @@ use nkb_adapters::{
     BuiltInCatalogue, ClipboardDelivery, DirectInjection, EnglishReport, GlobalShortcuts,
     SettingsFile, TomlPackFormat, altgr_character, default_bindings, i18n,
 };
-use nkb_app::advance_sequence::{Ports, RouteRequest, Sent};
+use nkb_app::advance_sequence::{InFlight, Ports, RouteRequest, Sent};
 use nkb_app::ports::{
-    HotkeyRegistrar, LiveShortcuts, SettingChange, Settings, SettingsStore, ShortcutRegistration,
-    Wait,
+    HotkeyRegistrar, LiveShortcuts, Progress, SettingChange, Settings, SettingsStore,
+    ShortcutRegistration, Wait,
 };
 use nkb_app::{
     AdvanceSequence, Ended, KeptSettings, Opening, Outcome, SettingsMessage, ShortcutChange,
-    drive_sequence,
+    ValueFacts, drive_sequence,
 };
 use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord};
 use nkb_core::preview::ValuePreview;
@@ -382,12 +382,20 @@ pub fn drive(
     // never touches the clipboard at all.
     let clipboard = SystemClipboard::new();
     let by_clipboard = ClipboardDelivery::new(&clipboard);
+    // `OBS-160`: a send that runs past the route's first report is drawn while
+    // it goes. Called on THIS thread between two keys, so it only hands a
+    // finished view to the main thread and returns.
+    let on_the_way = |in_flight: InFlight| {
+        let view = in_flight_view(&in_flight, standing);
+        let _ = palette.upgrade_in_event_loop(move |palette| apply_in_flight(&palette, view));
+    };
     let ports = Ports {
         direct: &DirectInjection,
         by_clipboard: &by_clipboard,
         keys: &DirectInjection,
         clipboard: &clipboard,
         report_text: &EnglishReport,
+        progress: &on_the_way,
     };
 
     let mut kept = kept;
@@ -956,7 +964,13 @@ fn view_of(
 
 /// The value band, every line finished.
 fn value_view(sent: &Sent) -> ValueView {
-    let (preview, elided) = match &sent.facts.preview {
+    facts_view(&sent.facts, sent.utf16_units, markers_of(sent))
+}
+
+/// The value band of any value - one that went out, or one on its way - from
+/// its facts, its size in UTF-16 units and the markers it earns.
+fn facts_view(facts: &ValueFacts, utf16_units: usize, markers: Vec<(String, bool)>) -> ValueView {
+    let (preview, elided) = match &facts.preview {
         ValuePreview::Text(text) => (
             text.shown.clone(),
             // An empty string rather than an Option, because the view's switch
@@ -976,20 +990,83 @@ fn value_view(sent: &Sent) -> ValueView {
     let not_guaranteed =
         i18n::not_guaranteed(&outside_guarantee(&preview, &SHIPPED)).unwrap_or_default();
     ValueView {
-        name: sent.facts.name.clone(),
-        reference: sent.facts.reference.clone(),
-        counts: i18n::counts(
-            sent.facts.graphemes,
-            sent.facts.code_points,
-            sent.facts.bytes,
-            sent.utf16_units,
-        ),
+        name: facts.name.clone(),
+        reference: facts.reference.clone(),
+        counts: i18n::counts(facts.graphemes, facts.code_points, facts.bytes, utf16_units),
         preview,
         elided,
         not_guaranteed,
-        shape: i18n::shape_line(&sent.facts.shape),
-        markers: markers_of(sent),
+        shape: i18n::shape_line(&facts.shape),
+        markers,
     }
+}
+
+/// What the palette draws while a value goes (`OBS-160`): the value itself in
+/// the value band - the same one the band will show when it is in - and how
+/// far it got in the send band.
+struct InFlightView {
+    value: ValueView,
+    counter: String,
+    fraction: f32,
+    messages: Vec<String>,
+}
+
+fn in_flight_view(in_flight: &InFlight, standing: &Standing) -> InFlightView {
+    let Progress {
+        units_arrived,
+        units_total,
+    } = in_flight.progress;
+    InFlightView {
+        value: facts_view(&in_flight.facts, units_total, markers_in_flight(in_flight)),
+        counter: i18n::typing_counter(units_arrived, units_total),
+        fraction: share(units_arrived, units_total),
+        // What the band said was about the value before, and is stale now. The
+        // standing sentence is not about any value, so it stays first.
+        messages: with_standing(Vec::new(), standing),
+    }
+}
+
+/// The markers a value earns before it is in: the two that are facts about
+/// the value. `cleared first`, `interrupted` and `on the clipboard` are facts
+/// about the delivery, and the delivery is not over.
+fn markers_in_flight(in_flight: &InFlight) -> Vec<(String, bool)> {
+    let mut markers = Vec::new();
+    if in_flight.offensive {
+        markers.push((i18n::label(PaletteLabel::Offensive).to_owned(), true));
+    }
+    if in_flight.facts.warnings > 0 {
+        markers.push((i18n::warnings(in_flight.facts.warnings), true));
+    }
+    markers
+}
+
+/// The share of a send that arrived, from 0 to 1 - clamped here, so the view
+/// only multiplies. A total of zero never reports, and is nothing if it does.
+#[allow(
+    clippy::cast_precision_loss,
+    reason = "a share drawn on a bar a few hundred pixels wide needs no more than f32 holds"
+)]
+fn share(arrived: usize, total: usize) -> f32 {
+    if total == 0 {
+        return 0.0;
+    }
+    (arrived as f32 / total as f32).clamp(0.0, 1.0)
+}
+
+/// Runs on the MAIN thread: the value on its way and the send band.
+fn apply_in_flight(palette: &Palette, view: InFlightView) {
+    show_value(palette, view.value);
+    palette.set_messages(ModelRc::new(VecModel::from(
+        view.messages
+            .into_iter()
+            .map(SharedString::from)
+            .collect::<Vec<_>>(),
+    )));
+    palette.set_sending_label(i18n::label(PaletteLabel::Typing).into());
+    palette.set_sending_hint(i18n::label(PaletteLabel::StopTyping).into());
+    palette.set_sending_counter(view.counter.into());
+    palette.set_sending_fraction(view.fraction);
+    palette.set_sending(true);
 }
 
 /// What is worth knowing about the value beyond its name and its size.
@@ -1034,6 +1111,10 @@ fn show(palette: &Weak<Palette>, view: View) {
 
 /// Runs on the MAIN thread. Everything Slint touches happens here.
 fn apply(palette: &Palette, view: View) {
+    // Any view of the worker's comes after a send or between two, so no send
+    // is on its way any more (`OBS-160`). The reports of a send are all handed
+    // over before its outcome, and the main thread takes them in order.
+    palette.set_sending(false);
     palette.set_pack(view.pack.into());
     palette.set_counter(view.counter.into());
     palette.set_clipboard_mode(view.clipboard_bar.is_some());
@@ -1286,6 +1367,7 @@ mod tests {
     use nkb_core::sequence::{Position, Sequence};
     use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
     use slint::platform::{Platform, PlatformError, WindowAdapter};
+    use slint::{Model, ModelRc, SharedString, VecModel};
 
     use std::cell::{Cell, RefCell};
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -1297,10 +1379,11 @@ mod tests {
     use nkb_app::{AdvanceSequence, KeptSettings};
 
     use super::{
-        Command, Delivery, Duration, HotkeyAction, LiveShortcuts, Memory, Outcome, Palette,
-        PaletteShortcuts, ShortcutRegistration, Standing, ValueBand, ValuePreview, Wait, apply,
-        between_presses, choose, clipboard_bar, hold_height, markers_of, set_compact, view_between,
-        view_of, with_standing,
+        Command, Delivery, Duration, HotkeyAction, InFlight, LiveShortcuts, Memory, Outcome,
+        Palette, PaletteShortcuts, Progress, ShortcutRegistration, Standing, ValueBand,
+        ValuePreview, Wait, apply, apply_in_flight, between_presses, choose, clipboard_bar,
+        hold_height, in_flight_view, markers_in_flight, markers_of, set_compact, share,
+        view_between, view_of, with_standing,
     };
 
     /// No standing sentence: the ordinary case, and the one the field-by-field
@@ -1664,6 +1747,85 @@ mod tests {
             ),
         );
         assert!(!palette.get_has_value(), "keeping nothing showed something");
+
+        // ---- a value on its way, then its outcome (`OBS-160`) ---------------
+        // The send band and the value band from one report, every field where
+        // it belongs. Then any view of the worker's takes the band away.
+        // Any sentence of the product's will do: what matters is that it goes.
+        palette.set_messages(ModelRc::new(VecModel::from(vec![SharedString::from(
+            i18n::label(nkb_adapters::i18n::PaletteLabel::ShortcutsPaused),
+        )])));
+        let in_flight = InFlight {
+            facts: a_sent().facts,
+            offensive: true,
+            progress: Progress {
+                units_arrived: 3,
+                units_total: 12,
+            },
+        };
+        apply_in_flight(&palette, in_flight_view(&in_flight, &quiet()));
+        assert!(palette.get_sending(), "the send band is up");
+        assert_eq!(palette.get_sending_counter(), "3 / 12 units");
+        assert_eq!(palette.get_sending_label(), "Typing");
+        assert_eq!(palette.get_sending_hint(), "Press Esc to stop.");
+        assert!((palette.get_sending_fraction() - 0.25).abs() < f32::EPSILON);
+        assert!(palette.get_has_value());
+        assert_eq!(palette.get_value_name(), "Three zero-width spaces");
+        assert_eq!(palette.get_value_reference(), "unicode-text/zero-width");
+        assert!(
+            palette.get_value_counts().contains("UTF-16 units: 12"),
+            "the counts name the whole value's size: {}",
+            palette.get_value_counts()
+        );
+        assert_eq!(
+            palette.get_messages().row_count(),
+            0,
+            "the sentence about the value before is stale once another goes"
+        );
+        apply(
+            &palette,
+            view_of(
+                &an_outcome(Some(a_sent()), Vec::new()),
+                "Unicode & text",
+                "u",
+                &quiet(),
+                &nkb_adapters::default_bindings(),
+            ),
+        );
+        assert!(
+            !palette.get_sending(),
+            "the outcome took the send band away"
+        );
+    }
+
+    #[test]
+    fn the_share_of_a_send_is_clamped_and_a_value_on_its_way_earns_only_its_own_markers() {
+        assert!((share(1, 4) - 0.25).abs() < f32::EPSILON);
+        assert!(share(0, 0).abs() < f32::EPSILON, "no total, no share");
+        assert!(
+            (share(9, 4) - 1.0).abs() < f32::EPSILON,
+            "never past the end"
+        );
+        let mut in_flight = InFlight {
+            facts: a_sent().facts,
+            offensive: true,
+            progress: Progress {
+                units_arrived: 1,
+                units_total: 7,
+            },
+        };
+        // Offensive and warnings are facts about the value. `cleared first`,
+        // `interrupted` and `on the clipboard` are about a delivery not over.
+        assert_eq!(
+            markers_in_flight(&in_flight),
+            vec![
+                ("offensive".to_owned(), true),
+                ("pack warnings: 2".to_owned(), true)
+            ]
+        );
+        in_flight.offensive = false;
+        in_flight.facts.warnings = 0;
+        assert!(markers_in_flight(&in_flight).is_empty());
     }
 
     /// A sequence on a pack that ships, the way the palette opens one.
@@ -2183,6 +2345,7 @@ mod tests {
             keys: &DirectInjection,
             clipboard: &clipboard,
             report_text: &EnglishReport,
+            progress: &|_| {},
         };
         let standing = quiet();
         let mut worker = Worker {

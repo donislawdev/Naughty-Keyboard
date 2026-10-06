@@ -62,6 +62,17 @@ pub struct Delivered {
     pub paced: bool,
 }
 
+/// How far a value got on its way into the field, said while it goes
+/// (`OBS-160`). A route that has nothing to say on the way - the clipboard, a
+/// send shorter than the route's first report - says nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Progress {
+    /// UTF-16 units the application has taken so far.
+    pub units_arrived: usize,
+    /// UTF-16 units in the whole value.
+    pub units_total: usize,
+}
+
 /// Why a send stopped before its end (`D95`). The same answers for a value and
 /// for the clearing keys, because the route stops for the same reasons.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -224,13 +235,19 @@ pub trait ValueDelivery {
     /// launched from.
     fn target(&self) -> Option<TargetRef>;
 
-    /// Sends `text` to the focused field.
+    /// Sends `text` to the focused field, telling `progress` how far it got on
+    /// the way. `progress` runs on the sending thread between two keys and must
+    /// return quickly - the next key waits for it.
     ///
     /// # Errors
     ///
     /// Returns [`DeliveryError`] when there is no route, no target, or when only
     /// part of the value arrived.
-    fn deliver(&self, text: &str) -> Result<Delivered, DeliveryError>;
+    fn deliver(
+        &self,
+        text: &str,
+        progress: &mut dyn FnMut(Progress),
+    ) -> Result<Delivered, DeliveryError>;
 }
 
 /// Why a keystroke sequence was not sent, or not all of it.

@@ -61,6 +61,17 @@ pub struct SendOutcome {
     pub paced: bool,
 }
 
+/// How far a send got, said on the way (`OBS-160`) - at most once per
+/// `PROGRESS_INTERVAL`, and not at all for a send that ends sooner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SendProgress {
+    /// UTF-16 units the application has taken so far - counted the way a
+    /// stopped send counts them, so the last report and the end agree.
+    pub units_arrived: usize,
+    /// UTF-16 units in the whole text.
+    pub units_total: usize,
+}
+
 /// Why a send stopped before its end (`D95`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StopReason {
@@ -197,11 +208,11 @@ pub struct WindowRef(pub u64);
 
 #[cfg(windows)]
 mod windows_impl {
-    use super::{SendError, SendOutcome, StopReason, WindowRef};
+    use super::{SendError, SendOutcome, SendProgress, StopReason, WindowRef};
 
     use super::confirm::{
-        Pressed, Step, TAKEN_WAIT, TARGET_WAIT, Waits, Watch, chord_steps, chords_acted,
-        press_confirmed, units_arrived,
+        Cadence, PROGRESS_INTERVAL, Pressed, Step, TAKEN_WAIT, TARGET_WAIT, Waits, Watch,
+        chord_steps, chords_acted, press_confirmed, units_arrived,
     };
     use super::escape::{ReservedEscape, SystemEscape};
     use super::{Chord, MODIFIER_RELEASE_WAIT, NavKey};
@@ -501,7 +512,10 @@ mod windows_impl {
         }
     }
 
-    pub fn send_text(text: &str) -> Result<SendOutcome, SendError> {
+    pub fn send_text(
+        text: &str,
+        progress: &mut dyn FnMut(SendProgress),
+    ) -> Result<SendOutcome, SendError> {
         let units: Vec<u16> = text.encode_utf16().collect();
         let expected = units.len();
         if expected == 0 {
@@ -530,6 +544,7 @@ mod windows_impl {
         // be a million code points (`E026`). And not chunks: a chunk confirmed by
         // its last event hides a hole in its middle. Each unit is also where the
         // window in front is looked at (`W2`).
+        let mut cadence = Cadence::starting(std::time::Instant::now(), PROGRESS_INTERVAL);
         for (index, unit) in units.iter().enumerate() {
             let [down, up] = events_for(*unit);
             let steps = [
@@ -546,17 +561,26 @@ mod windows_impl {
             ];
             let pressed = session.press(&steps);
             if let Some(reason) = pressed.stop {
-                if pressed.taken == 0 {
-                    // Its down was not taken, so its release is harmless - and a
-                    // down taken late must not leave the key held.
-                    let _ = send_one(up);
-                }
+                // Always, unconfirmed: a down that was not taken makes the
+                // release harmless, and a down that WAS taken - a stop between
+                // the two halves of a unit, which `Escape` makes common - must
+                // not leave the key held for the system and the next send
+                // (`D96` ⊕). In another window it is a release without a press.
+                let _ = send_one(up);
                 // Stop at the first unit not taken. Carrying on would send the
                 // rest of the value into a field that just lost part of it.
                 return Err(SendError::Truncated {
                     units_sent: units_arrived(index, pressed.taken),
                     units_expected: expected,
                     reason,
+                });
+            }
+            // Between units, after this one was taken: the count is what the
+            // application holds, never what is merely on its way.
+            if cadence.due(std::time::Instant::now()) {
+                progress(SendProgress {
+                    units_arrived: index + 1,
+                    units_total: expected,
                 });
             }
         }
@@ -571,7 +595,7 @@ mod windows_impl {
 
 #[cfg(not(windows))]
 mod other_impl {
-    use super::{SendError, SendOutcome, WindowRef};
+    use super::{SendError, SendOutcome, SendProgress, WindowRef};
 
     /// Named rather than "this platform", so the message says something the
     /// reader can act on.
@@ -587,7 +611,10 @@ mod other_impl {
         None
     }
 
-    pub fn send_text(_text: &str) -> Result<SendOutcome, SendError> {
+    pub fn send_text(
+        _text: &str,
+        _progress: &mut dyn FnMut(SendProgress),
+    ) -> Result<SendOutcome, SendError> {
         // macOS is not merely unwritten: OBS-70 measured that `CGEventPost` is
         // refused outright without the accessibility permission, which cannot be
         // granted by a script. Linux depends on the session protocol - X11 has a
@@ -623,8 +650,16 @@ pub fn foreground_window() -> Option<WindowRef> {
 /// at before every event, and so is `Escape`, which the send holds for as long as
 /// it lasts and gives back once the key is up (`D96`). A stop ends the send with
 /// [`SendError::Truncated`] and its [`StopReason`].
-pub fn send_text(text: &str) -> Result<SendOutcome, SendError> {
-    platform::send_text(text)
+///
+/// `progress` hears how far the send got, on the sending thread, between two
+/// units: at most once a tenth of a second and never during the first tenth, so
+/// a short send says nothing on the way (`OBS-160`). It must return quickly -
+/// the next key waits for it.
+pub fn send_text(
+    text: &str,
+    progress: &mut dyn FnMut(SendProgress),
+) -> Result<SendOutcome, SendError> {
+    platform::send_text(text, progress)
 }
 
 /// Press `chords` in order, each as a complete press-and-release, on whatever
@@ -668,7 +703,7 @@ mod tests {
     fn an_empty_text_sends_nothing_and_says_so() {
         // Whatever the platform, sending nothing must not be reported as having
         // sent something.
-        match send_text("") {
+        match send_text("", &mut |_| panic!("nothing to send, nothing to report")) {
             Ok(outcome) => assert_eq!(
                 outcome,
                 SendOutcome {
@@ -691,7 +726,7 @@ mod tests {
         if can_send() {
             return;
         }
-        let Err(error) = send_text("x") else {
+        let Err(error) = send_text("x", &mut |_| {}) else {
             panic!("a build that cannot send must not report success");
         };
         let text = error.to_string();

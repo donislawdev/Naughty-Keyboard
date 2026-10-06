@@ -89,6 +89,9 @@ fn main() {
         keys: &DirectInjection,
         clipboard: &NoClipboard,
         report_text: &EnglishReport,
+        // A console has no band to draw it in, and a line per tenth of a
+        // second would bury the outcomes this example exists to print.
+        progress: &|_| {},
     };
     let ended = drive_sequence(
         live.as_ref(),

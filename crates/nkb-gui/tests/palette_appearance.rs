@@ -396,6 +396,71 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
         clipboard_path.display()
     );
 
+    // ---- a send in progress: the band draws, in both states (OBS-160) -------
+    // Measured as a difference of two renders: switching the band on must ADD
+    // accent ink - the counter and the filled part of the bar - and a bar that
+    // grows with the share must add more at a larger share. Compact, the band
+    // stays, and the resting rule (D53) holds for it as for everything else.
+    palette.set_clipboard_mode(false);
+    palette.set_sending_label("Typing".into());
+    palette.set_sending_counter("1784 / 65535".into());
+    palette.set_sending_hint("Press Esc to stop.".into());
+    palette.set_sending_fraction(0.25);
+    palette.set_sending(false);
+    let accent_idle = offscreen::count_exactly(&render(&window), ACCENT);
+    palette.set_sending(true);
+    let sending = render(&window);
+    let sending_path = offscreen::save_cropped(&sending, WIDTH, HEIGHT, "palette-sending.png");
+    assert_nothing_escapes_the_surface(
+        &sending,
+        "while a value is being typed",
+        &sending_path.display().to_string(),
+    );
+    let accent_quarter = offscreen::count_exactly(&sending, ACCENT);
+    assert!(
+        accent_quarter > accent_idle,
+        "switching the send band on added no accent ink ({accent_idle} vs {accent_quarter}), \
+         so the palette does not draw it. Look at {}",
+        sending_path.display()
+    );
+    palette.set_sending_fraction(0.75);
+    let accent_three_quarters = offscreen::count_exactly(&render(&window), ACCENT);
+    assert!(
+        accent_three_quarters > accent_quarter,
+        "three quarters of the bar drew no more accent than one quarter ({accent_quarter} vs \
+         {accent_three_quarters}), so the bar does not follow the share. Look at {}",
+        sending_path.display()
+    );
+    palette.set_compact(true);
+    // A difference of two renders again, and for a measured reason: the pack
+    // band's counter wears the accent too, so "some accent in the compact
+    // palette" held with the band hidden - mutation M392 passed against it.
+    palette.set_sending(false);
+    let accent_compact_idle = offscreen::count_exactly(&render(&window), ACCENT);
+    palette.set_sending(true);
+    let sending_compact = render(&window);
+    let sending_compact_path = offscreen::save_cropped(
+        &sending_compact,
+        WIDTH,
+        HEIGHT,
+        "palette-sending-compact.png",
+    );
+    assert!(
+        offscreen::count_exactly(&sending_compact, ACCENT) > accent_compact_idle,
+        "the compact palette hides the send band, so a tester who made it small is not told \
+         that a send runs or how to stop it. Look at {}",
+        sending_compact_path.display()
+    );
+    assert_eq!(
+        offscreen::count_exactly(&sending_compact, TEXT_MUTED),
+        0,
+        "the compact palette with a send in progress shows `text-muted` - D53 keeps that \
+         role out of the resting state. Look at {}",
+        sending_compact_path.display()
+    );
+    palette.set_compact(false);
+    palette.set_sending(false);
+
     // ---- before the first value: the empty state draws (D83) ---------------
     // GUI rule 3: the value band has an empty state and it is on screen from
     // the first frame. Measured as a difference of two renders, like everything

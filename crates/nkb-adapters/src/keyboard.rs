@@ -6,8 +6,8 @@
 //! function, so nothing in this package needs it.
 
 use nkb_app::ports::{
-    Availability, Delivered, DeliveryError, KeystrokeError, KeystrokeSender, StopReason, TargetRef,
-    ValueDelivery,
+    Availability, Delivered, DeliveryError, KeystrokeError, KeystrokeSender, Progress, StopReason,
+    TargetRef, ValueDelivery,
 };
 use nkb_core::keys::{Key, KeyChord};
 
@@ -27,7 +27,7 @@ impl ValueDelivery for DirectInjection {
         if !nkb_sys::can_send() {
             // Asked from nkb-sys rather than decided here, so the answer to
             // "which systems can do this" lives in one place.
-            return match nkb_sys::send_text("") {
+            return match nkb_sys::send_text("", &mut |_| {}) {
                 Err(nkb_sys::SendError::Unsupported { system }) => Availability::Unavailable {
                     reason: system.to_owned(),
                 },
@@ -46,7 +46,11 @@ impl ValueDelivery for DirectInjection {
         nkb_sys::foreground_window().map(|window| TargetRef(window.0))
     }
 
-    fn deliver(&self, text: &str) -> Result<Delivered, DeliveryError> {
+    fn deliver(
+        &self,
+        text: &str,
+        progress: &mut dyn FnMut(Progress),
+    ) -> Result<Delivered, DeliveryError> {
         if nkb_sys::foreground_window().is_none() {
             return Err(DeliveryError::NoTarget);
         }
@@ -56,7 +60,15 @@ impl ValueDelivery for DirectInjection {
         if !text.is_empty() && focus_outside_a_text_field() {
             return Err(DeliveryError::NoTextField);
         }
-        match nkb_sys::send_text(text) {
+        // The route's own words for how far it got, mirrored one to one - the
+        // two crates do not depend on each other (`OBS-160`).
+        let mut told = |step: nkb_sys::SendProgress| {
+            progress(Progress {
+                units_arrived: step.units_arrived,
+                units_total: step.units_total,
+            });
+        };
+        match nkb_sys::send_text(text, &mut told) {
             Ok(outcome) => Ok(Delivered {
                 utf16_units: outcome.units,
                 paced: outcome.paced,
@@ -382,7 +394,7 @@ mod tests {
         }
         // No assertion on the target here - on a machine with no focused window
         // this is `NoTarget`, which is correct and not a failure of this code.
-        match DirectInjection.deliver("") {
+        match DirectInjection.deliver("", &mut |_| {}) {
             Ok(delivered) => assert_eq!(delivered.utf16_units, 0),
             Err(DeliveryError::NoTarget) => {}
             Err(other) => panic!("an empty value must not fail this way: {other}"),

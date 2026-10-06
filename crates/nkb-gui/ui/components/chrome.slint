@@ -212,6 +212,36 @@ export component ChromeBand inherits Rectangle {
     }
 }
 
+// How far a send got: the share of the value the application has taken (W3,
+// `D96`, `OBS-160`).
+//
+// A measure, not a control - it takes no pointer and no keyboard. The share is
+// computed and clamped in Rust and arrives as a number from 0 to 1, so the view
+// only draws it: the filled part is that share of the track's width. The track
+// wears the edge colour and the fill the accent, and the bar never stands alone -
+// the band it sits in says in words and digits what it measures (document 13
+// section 9).
+//
+// The fill stands in a layout packed to the start rather than at an `x` of its
+// own: an element with a width and no position is centred in Slint, and a bar
+// that grew from the middle would read as something else.
+export component ProgressBar inherits Rectangle {
+    in property <float> fraction;
+
+    height: Tokens.progress-height;
+    background: Tokens.border;
+    border-radius: Tokens.radius-small;
+
+    HorizontalLayout {
+        alignment: start;
+        Rectangle {
+            width: root.width * root.fraction;
+            background: Tokens.accent;
+            border-radius: Tokens.radius-small;
+        }
+    }
+}
+
 // One thing worth knowing about the value that just went out.
 //
 // 🔴 `risky` is a fact, not a colour. The layer that fills this model must not

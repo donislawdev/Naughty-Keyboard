@@ -23,7 +23,9 @@ pub mod send_value;
 #[cfg(test)]
 pub(crate) mod test_support;
 
-pub use advance_sequence::{AdvanceSequence, ChooseError, Message, Outcome, RouteRequest, Sent};
+pub use advance_sequence::{
+    AdvanceSequence, ChooseError, InFlight, Message, Outcome, RouteRequest, Sent,
+};
 pub use browse_packs::{Listing, PackEntry, ShowOutcome, list_packs, show_pack};
 pub use drive_sequence::{Ended, drive_sequence};
 pub use emit_values::{Emission, EmitOutcome, EmittedValue, emit_values};
@@ -37,12 +39,12 @@ pub use new_pack::{NewPackOutcome, new_pack};
 pub use ports::{
     Availability, CatalogueCoverage, CatalogueSource, Clock, Date, Delivered, DeliveryError,
     HotkeyRegistrar, KeystrokeError, KeystrokeSender, LiveShortcuts, PackCatalogue, PackFormat,
-    PackSink, PackSource, SaveError, SettingChange, Settings, SettingsLoad, SettingsNote,
+    PackSink, PackSource, Progress, SaveError, SettingChange, Settings, SettingsLoad, SettingsNote,
     SettingsStore, SettingsUnusable, ShortcutRegistration, ShortcutUnreadable,
     ShortcutsUnavailable, SinkError, SourceError, SourceSkipped, StopReason, TargetRef,
     TranslationCheck, TranslationTarget, ValueDelivery, Wait,
 };
 pub use send_value::{
-    Clearing, ClearingOutcome, SendOutcome, SendRequest, SkipReason, ValueFacts, deliver_value,
-    send_value,
+    Clearing, ClearingOutcome, SendOutcome, SendRequest, Sending, SkipReason, ValueFacts,
+    deliver_value, send_value,
 };

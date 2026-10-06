@@ -162,6 +162,11 @@ export global Tokens {
     // pixels rather than a hairline: it is the only sign of the keyboard INSIDE
     // the line, and one pixel of accent beside text reads as a stray stroke.
     out property <length> caret-width: 2px;
+    // The bar that says how far a send got (W3, `D96`, `OBS-160`). Thicker
+    // than a hairline, so the filled part reads at a glance across the band,
+    // and far thinner than a line of text, so it reads as a measure rather than
+    // as a control - it takes no pointer.
+    out property <length> progress-height: 4px;
 
     // ---- opacity -----------------------------------------------------------
     // Background alpha of the palette in its resting state (ux-spec.md 2,

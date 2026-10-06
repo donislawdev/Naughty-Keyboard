@@ -78,11 +78,11 @@ use nkb_core::sequence::{Delivery, Effect, Event, Sequence};
 use crate::load_pack;
 use crate::ports::{
     Availability, Clipboard, ClipboardError, DeliveryError, History, KeystrokeError,
-    KeystrokeSender, PackFormat, PackSource, ReportText, SourceError, StopReason, TargetRef,
-    ValueDelivery,
+    KeystrokeSender, PackFormat, PackSource, Progress, ReportText, SourceError, StopReason,
+    TargetRef, ValueDelivery,
 };
 use crate::send_value::{
-    Clearing, ClearingOutcome, SendOutcome, SkipReason, ValueFacts, deliver_value,
+    Clearing, ClearingOutcome, SendOutcome, Sending, SkipReason, ValueFacts, deliver_value,
 };
 
 /// Everything an action may reach outside the sequence, one port each.
@@ -103,6 +103,23 @@ pub struct Ports<'a> {
     pub keys: &'a dyn KeystrokeSender,
     pub clipboard: &'a dyn Clipboard,
     pub report_text: &'a dyn ReportText,
+    /// Hears a value on its way into the field, between two keys of a send
+    /// that runs longer than the route's first report (`OBS-160`) - the
+    /// palette draws it. Called on the thread that sends, so it must return
+    /// quickly: the next key waits for it.
+    pub progress: &'a dyn Fn(InFlight),
+}
+
+/// A value on its way into the field, as the palette shows it while it goes
+/// (`OBS-160`): which value, whether it is offensive, and how far it got. Owned,
+/// because the palette draws it on another thread.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InFlight {
+    pub facts: ValueFacts,
+    /// The risk the value band marks first (`product-spec.md` 10.2) - the same
+    /// fact a [`Sent`] carries once the value is in.
+    pub offensive: bool,
+    pub progress: Progress,
 }
 
 /// How the palette was asked to deliver values, before the first press.
@@ -575,6 +592,13 @@ impl AdvanceSequence {
         let id = value.id.clone();
         let window = route.target();
         let mut on_clipboard = on_clipboard;
+        let mut tell = |sending: Sending<'_>| {
+            (ports.progress)(InFlight {
+                facts: sending.facts.clone(),
+                offensive,
+                progress: sending.progress,
+            });
+        };
         let mut outcome = deliver_value(
             &loaded.pack,
             value,
@@ -582,6 +606,7 @@ impl AdvanceSequence {
             ports.keys,
             clearing,
             loaded.warnings,
+            &mut tell,
         );
 
         // `D72`: the direct route refused a window with higher privileges before
@@ -602,6 +627,7 @@ impl AdvanceSequence {
                 ports.keys,
                 Clearing::Keep,
                 loaded.warnings,
+                &mut tell,
             );
         } else {
             // The direct route took this window, or the sequence is in clipboard
@@ -1043,6 +1069,45 @@ mod tests {
             }],
             "the last value is still the one the report is about"
         );
+    }
+
+    #[test]
+    fn a_value_on_its_way_is_heard_with_its_risk_in_the_order_the_route_said() {
+        // `OBS-160`: the palette draws the value while it goes. It hears the
+        // value the machine asked for, whether it is offensive, and how far it
+        // got - every report, in order - and it is the value that went out.
+        let mut advance = chosen(Risk::Offensive);
+        let steps = [
+            Progress {
+                units_arrived: 2,
+                units_total: 5,
+            },
+            Progress {
+                units_arrived: 4,
+                units_total: 5,
+            },
+        ];
+        let kit = Kit::with_delivery(FakeDelivery::ready().reporting(&steps));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        let sent = outcome.sent.expect("the value went out");
+        let heard = kit.heard.borrow();
+        assert_eq!(
+            heard.iter().map(|h| h.progress).collect::<Vec<_>>(),
+            steps.to_vec()
+        );
+        assert!(heard.iter().all(|h| h.offensive), "the risk travels too");
+        assert!(
+            heard.iter().all(|h| h.facts == sent.facts),
+            "the value heard on the way is the value sent"
+        );
+    }
+
+    #[test]
+    fn a_send_too_short_to_report_is_heard_not_at_all() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert!(kit.heard.borrow().is_empty());
     }
 
     #[test]

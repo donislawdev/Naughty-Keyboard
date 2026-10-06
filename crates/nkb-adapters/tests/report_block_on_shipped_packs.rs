@@ -27,7 +27,7 @@ use nkb_adapters::report_text::report_text;
 use nkb_adapters::{BuiltInCatalogue, TomlPackFormat};
 use nkb_app::ports::{
     Availability, Delivered, DeliveryError, KeystrokeError, KeystrokeSender, PackCatalogue,
-    PackFormat, PackSource, TargetRef, ValueDelivery,
+    PackFormat, PackSource, Progress, TargetRef, ValueDelivery,
 };
 use nkb_app::{Clearing, SendOutcome, ValueFacts, deliver_value};
 use nkb_core::keys::KeyChord;
@@ -44,7 +44,11 @@ impl ValueDelivery for TakesEverything {
     fn target(&self) -> Option<TargetRef> {
         Some(TargetRef(1))
     }
-    fn deliver(&self, text: &str) -> Result<Delivered, DeliveryError> {
+    fn deliver(
+        &self,
+        text: &str,
+        _progress: &mut dyn FnMut(Progress),
+    ) -> Result<Delivered, DeliveryError> {
         Ok(Delivered {
             utf16_units: text.encode_utf16().count(),
             paced: true,
@@ -117,7 +121,15 @@ fn every_shipped_value_has_a_block_that_agrees_with_the_palette() {
                         ..
                     },
                 ..
-            } = deliver_value(&pack, value, &TakesEverything, &NoKeys, Clearing::Keep, 0)
+            } = deliver_value(
+                &pack,
+                value,
+                &TakesEverything,
+                &NoKeys,
+                Clearing::Keep,
+                0,
+                &mut |_| {},
+            )
             else {
                 panic!(
                     "{}/{}: a field that takes everything took it",

@@ -26,9 +26,9 @@ use nkb_adapters::{
 };
 use nkb_app::{
     Availability, Clearing, ClearingOutcome, DeliveryError, EmitOutcome, FormatOutcome,
-    KeystrokeError, LintOutcome, NewPackOutcome, SendOutcome, SendRequest, ShowOutcome, SkipReason,
-    StopReason, ValueDelivery, ValueFacts, emit_values, format_pack, lint_pack, list_packs,
-    new_pack, send_value, show_pack,
+    KeystrokeError, LintOutcome, NewPackOutcome, Progress, SendOutcome, SendRequest, Sending,
+    ShowOutcome, SkipReason, StopReason, ValueDelivery, ValueFacts, emit_values, format_pack,
+    lint_pack, list_packs, new_pack, send_value, show_pack,
 };
 use std::io::Write;
 use std::path::Path;
@@ -661,7 +661,23 @@ fn send(args: &[String]) -> ExitCode {
     let mut err = std::io::stderr();
     // `DirectInjection` is both the delivery and the keystroke route: one
     // adapter, two ports, so the two cannot disagree about the target.
-    match send_value(&catalogue, &TomlPackFormat, &delivery, &delivery, &request) {
+    // `OBS-160`: a send still running after a second says so once, on the way,
+    // with how to stop it - the palette's send band, in this command's words.
+    let started = std::time::Instant::now();
+    let mut said = false;
+    let mut on_the_way = |sending: Sending<'_>| {
+        if let Some(line) = still_typing(started.elapsed(), &mut said, sending.progress) {
+            let _ = writeln!(std::io::stderr(), "{line}");
+        }
+    };
+    match send_value(
+        &catalogue,
+        &TomlPackFormat,
+        &delivery,
+        &delivery,
+        &request,
+        &mut on_the_way,
+    ) {
         SendOutcome::Sent {
             facts:
                 ValueFacts {
@@ -921,6 +937,30 @@ fn send(args: &[String]) -> ExitCode {
             ExitCode::InsertFailed
         }
     }
+}
+
+/// How long a send runs before `nkb send` says, once, that it is still typing.
+///
+/// A second, and not the palette's tenth: the palette redraws a band in place,
+/// while a line printed here stays in the terminal and in a CI log for good, so
+/// it is kept for the sends a person would wonder about.
+const STILL_TYPING_AFTER: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// The one line a long send says on its way, or nothing - before the first
+/// second, and after the line was said once.
+fn still_typing(
+    elapsed: std::time::Duration,
+    said: &mut bool,
+    progress: Progress,
+) -> Option<String> {
+    if *said || elapsed < STILL_TYPING_AFTER {
+        return None;
+    }
+    *said = true;
+    Some(format!(
+        "nkb send: still typing - {} of {} UTF-16 units so far. Press Escape to stop.",
+        progress.units_arrived, progress.units_total
+    ))
 }
 
 /// Why a send stopped, in the words `nkb send` uses after a dash. The same
@@ -1717,6 +1757,33 @@ mod tests {
         assert!(
             checked >= 19,
             "the suite should not shrink without somebody noticing: {checked}"
+        );
+    }
+
+    #[test]
+    fn a_long_send_says_once_that_it_is_still_typing_and_how_to_stop_it() {
+        // `OBS-160`: nothing before a second, one line after it, never two - a
+        // line printed here stays in a CI log for good.
+        let step = Progress {
+            units_arrived: 1784,
+            units_total: 65535,
+        };
+        let mut said = false;
+        assert_eq!(
+            still_typing(std::time::Duration::from_millis(900), &mut said, step),
+            None
+        );
+        let Some(line) = still_typing(STILL_TYPING_AFTER, &mut said, step) else {
+            panic!("a send past a second says so");
+        };
+        assert!(
+            line.contains("1784 of 65535") && line.contains("Escape"),
+            "the line says how far and how to stop: {line}"
+        );
+        assert_eq!(
+            still_typing(std::time::Duration::from_secs(9), &mut said, step),
+            None,
+            "said once, not once a report"
         );
     }
 }

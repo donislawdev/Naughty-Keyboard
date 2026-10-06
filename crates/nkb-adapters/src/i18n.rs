@@ -1179,6 +1179,16 @@ pub enum PaletteLabel {
     /// The link under the hint bar that opens the shortcuts window - its words,
     /// and what a click does (`ux-spec.md` 5.4).
     ShortcutsLink,
+    /// The band of a send in progress, its first word (`OBS-160`). Until that
+    /// band a send of minutes left the palette showing the value before.
+    Typing,
+    /// How far the send in progress got, in the units the route counts - the
+    /// same UTF-16 units the counts line of the value band names in full.
+    TypingCounter,
+    /// How to stop the send in progress (`D96`). In words, because `Escape` is
+    /// not a shortcut a tester can look up in the hint bar: it is the palette's
+    /// only key that works for the length of a send and no longer.
+    StopTyping,
 }
 
 fn pattern_palette_label(label: PaletteLabel) -> &'static str {
@@ -1206,6 +1216,9 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         }
         PaletteLabel::ShortcutsPaused => "Shortcuts are paused while the Shortcuts window is open.",
         PaletteLabel::ShortcutsLink => "Change shortcuts",
+        PaletteLabel::Typing => "Typing",
+        PaletteLabel::TypingCounter => "{arrived} / {total} units",
+        PaletteLabel::StopTyping => "Press Esc to stop.",
     }
 }
 
@@ -1218,6 +1231,18 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
 #[must_use]
 pub fn label(label: PaletteLabel) -> &'static str {
     pattern_palette_label(label)
+}
+
+/// How far a send in progress got: `1784 / 65535 units` (`OBS-160`).
+#[must_use]
+pub fn typing_counter(arrived: usize, total: usize) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::TypingCounter),
+        &[
+            ("arrived", &arrived.to_string()),
+            ("total", &total.to_string()),
+        ],
+    )
 }
 
 /// Where the sequence stands: `7 / 34`.
@@ -2462,6 +2487,9 @@ mod tests {
             PaletteLabel::NoValueYet,
             PaletteLabel::ShortcutsPaused,
             PaletteLabel::ShortcutsLink,
+            PaletteLabel::Typing,
+            PaletteLabel::TypingCounter,
+            PaletteLabel::StopTyping,
         ] {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
@@ -2473,7 +2501,8 @@ mod tests {
                 | PaletteLabel::NotGuaranteed
                 | PaletteLabel::NotGuaranteedMore
                 | PaletteLabel::Recipe
-                | PaletteLabel::NoValueYet => true,
+                | PaletteLabel::NoValueYet
+                | PaletteLabel::TypingCounter => true,
                 PaletteLabel::Title
                 | PaletteLabel::Offensive
                 | PaletteLabel::Cleared
@@ -2482,7 +2511,9 @@ mod tests {
                 | PaletteLabel::ClipboardMode
                 | PaletteLabel::ClipboardForWindow
                 | PaletteLabel::ShortcutsPaused
-                | PaletteLabel::ShortcutsLink => false,
+                | PaletteLabel::ShortcutsLink
+                | PaletteLabel::Typing
+                | PaletteLabel::StopTyping => false,
             };
             let pattern = pattern_palette_label(label);
             assert_eq!(

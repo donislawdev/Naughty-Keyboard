@@ -13,12 +13,13 @@
 )]
 
 use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
-use crate::advance_sequence::{AdvanceSequence, Ports};
+use crate::advance_sequence::{AdvanceSequence, InFlight, Ports};
 use crate::ports::{
     Availability, Clipboard, ClipboardError, Date, Delivered, DeliveryError, History,
-    KeystrokeError, KeystrokeSender, PackFormat, PackSource, ReportText, SourceError, TargetRef,
-    TranslationCheck, TranslationTarget, ValueDelivery,
+    KeystrokeError, KeystrokeSender, PackFormat, PackSource, Progress, ReportText, SourceError,
+    TargetRef, TranslationCheck, TranslationTarget, ValueDelivery,
 };
 use nkb_core::keys::KeyChord;
 use nkb_core::lint::{LintProblem, RuleCode};
@@ -39,6 +40,10 @@ pub(crate) struct FakeDelivery {
     /// What a successful delivery says about following the application
     /// (`D95`): true unless a test asks for the unpaced route.
     paced: bool,
+    /// What the route says on the way, in order, before it answers - a long
+    /// send as the real route reports it (`OBS-160`). Empty: a send too short
+    /// to report.
+    reports: Vec<Progress>,
     pub(crate) handed: RefCell<Vec<String>>,
 }
 
@@ -49,7 +54,15 @@ impl FakeDelivery {
             target: Cell::new(Some(TargetRef(1))),
             fail: None,
             paced: true,
+            reports: Vec::new(),
             handed: RefCell::new(Vec::new()),
+        }
+    }
+    /// A route that says how far it got, `reports` times, before answering.
+    pub(crate) fn reporting(self, reports: &[Progress]) -> Self {
+        Self {
+            reports: reports.to_vec(),
+            ..self
         }
     }
     /// A route that delivers but could not follow the application's queue.
@@ -97,8 +110,15 @@ impl ValueDelivery for FakeDelivery {
     fn target(&self) -> Option<TargetRef> {
         self.target.get()
     }
-    fn deliver(&self, text: &str) -> Result<Delivered, DeliveryError> {
+    fn deliver(
+        &self,
+        text: &str,
+        progress: &mut dyn FnMut(Progress),
+    ) -> Result<Delivered, DeliveryError> {
         self.handed.borrow_mut().push(text.to_owned());
+        for report in &self.reports {
+            progress(*report);
+        }
         match &self.fail {
             None => Ok(Delivered {
                 utf16_units: text.encode_utf16().count(),
@@ -203,10 +223,17 @@ pub(crate) struct Kit {
     pub(crate) keys: FakeKeys,
     pub(crate) clipboard: FakeClipboard,
     pub(crate) text: FakeReportText,
+    /// Every value heard on its way into the field, in order (`OBS-160`).
+    pub(crate) heard: Rc<RefCell<Vec<InFlight>>>,
+    /// What the ports lend as `progress`: it writes into `heard`. Boxed and
+    /// sharing `heard` through an `Rc`, so the kit does not borrow itself.
+    pub(crate) ear: Box<dyn Fn(InFlight)>,
 }
 
 impl Kit {
     pub(crate) fn ready() -> Self {
+        let heard = Rc::new(RefCell::new(Vec::new()));
+        let into = Rc::clone(&heard);
         Self {
             direct: FakeDelivery::ready(),
             by_clipboard: FakeDelivery::ready(),
@@ -215,6 +242,8 @@ impl Kit {
             text: FakeReportText {
                 blocks: RefCell::new(Vec::new()),
             },
+            heard,
+            ear: Box::new(move |in_flight| into.borrow_mut().push(in_flight)),
         }
     }
     pub(crate) fn with_delivery(direct: FakeDelivery) -> Self {
@@ -248,6 +277,7 @@ impl Kit {
             keys: &self.keys,
             clipboard: &self.clipboard,
             report_text: &self.text,
+            progress: &*self.ear,
         }
     }
 }

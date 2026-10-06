@@ -69,6 +69,7 @@ import {
     MarkerRow,
     WindowSurface,
     PickerOpener,
+    ProgressBar,
 } from "../components.slint";
 
 export component Palette inherits Window {
@@ -120,6 +121,17 @@ export component Palette inherits Window {
 
     // ---- the standing bar --------------------------------------------------
     in property <string> clipboard-mode-label;
+
+    // ---- a send in progress (W3, D96, OBS-160) ------------------------------
+    // Until this band a long send left the palette showing what it showed
+    // before, for minutes, with nothing to say that Escape stops it. Every
+    // string is finished text from `i18n`, and the share of the bar is computed
+    // and clamped in the worker - the view draws, it does not count.
+    in property <bool> sending;
+    in property <string> sending-label;
+    in property <string> sending-counter;
+    in property <float> sending-fraction;
+    in property <string> sending-hint;
 
     // ---- the hint bar ------------------------------------------------------
     in property <[HintRow]> hints;
@@ -241,6 +253,33 @@ export component Palette inherits Window {
                         text: root.clipboard-mode-label;
                         tint: Tokens.accent;
                     }
+                }
+            }
+
+            // A send in progress. In BOTH states, like the standing bar above it:
+            // a tester who made the palette small must still be told that a send
+            // is running and how to stop it, so every role here is one the
+            // resting state may show (D53) - no muted text, the hint bar's own
+            // look included. Right under the pack band and the bar, so it holds
+            // one place whatever the bands below are doing.
+            if root.sending: Zone {
+                HorizontalLayout {
+                    spacing: Tokens.space-2;
+                    TextBody {
+                        text: root.sending-label;
+                        overflow: elide;
+                    }
+                    Spacer { }
+                    TextCounter {
+                        text: root.sending-counter;
+                    }
+                }
+                ProgressBar {
+                    fraction: root.sending-fraction;
+                }
+                TextBody {
+                    text: root.sending-hint;
+                    wrap: word-wrap;
                 }
             }
 

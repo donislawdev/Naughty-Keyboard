@@ -31,8 +31,8 @@
 //! The report block takes the other door and stays in the history on purpose.
 
 use nkb_app::ports::{
-    Availability, Clipboard, ClipboardError, Delivered, DeliveryError, History, TargetRef,
-    ValueDelivery,
+    Availability, Clipboard, ClipboardError, Delivered, DeliveryError, History, Progress,
+    TargetRef, ValueDelivery,
 };
 
 /// What [`ClipboardDelivery::target`] answers: the clipboard, which is always
@@ -75,7 +75,13 @@ impl ValueDelivery for ClipboardDelivery<'_> {
         Some(THE_CLIPBOARD)
     }
 
-    fn deliver(&self, text: &str) -> Result<Delivered, DeliveryError> {
+    /// Nothing to say on the way: the value is on the clipboard at once, whole
+    /// or not at all, so `progress` is never called.
+    fn deliver(
+        &self,
+        text: &str,
+        _progress: &mut dyn FnMut(Progress),
+    ) -> Result<Delivered, DeliveryError> {
         // Checked BEFORE the clipboard is touched: a refused value must leave
         // the tester's clipboard exactly as it was.
         if let Some(character) = first_uncarried(text) {
@@ -145,7 +151,7 @@ mod tests {
     fn a_value_goes_on_the_clipboard_whole_and_out_of_the_history() {
         let clipboard = Recording::working();
         let delivered = ClipboardDelivery::new(&clipboard)
-            .deliver("ab\u{200B}cd \u{1F600}")
+            .deliver("ab\u{200B}cd \u{1F600}", &mut |_| {})
             .expect("the clipboard took it");
         assert_eq!(
             *clipboard.puts.borrow(),
@@ -161,7 +167,7 @@ mod tests {
     fn a_nul_is_refused_by_name_and_the_clipboard_is_left_alone() {
         let clipboard = Recording::working();
         assert_eq!(
-            ClipboardDelivery::new(&clipboard).deliver("before\0after"),
+            ClipboardDelivery::new(&clipboard).deliver("before\0after", &mut |_| {}),
             Err(DeliveryError::CannotCarry { character: '\0' })
         );
         assert!(
@@ -176,7 +182,7 @@ mod tests {
         // empty clipboard text is unmeasured (`D71`). This route does not guess.
         let clipboard = Recording::working();
         let delivered = ClipboardDelivery::new(&clipboard)
-            .deliver("")
+            .deliver("", &mut |_| {})
             .expect("an empty value is not refused");
         assert_eq!(delivered.utf16_units, 0);
         assert_eq!(clipboard.puts.borrow().len(), 1);
@@ -186,14 +192,14 @@ mod tests {
     fn a_held_clipboard_is_passing_and_a_refusal_keeps_its_words() {
         let busy = Recording::refusing(ClipboardError::Busy);
         assert_eq!(
-            ClipboardDelivery::new(&busy).deliver("x"),
+            ClipboardDelivery::new(&busy).deliver("x", &mut |_| {}),
             Err(DeliveryError::Busy)
         );
         let failed = Recording::refusing(ClipboardError::Failed {
             detail: "no display".to_owned(),
         });
         assert_eq!(
-            ClipboardDelivery::new(&failed).deliver("x"),
+            ClipboardDelivery::new(&failed).deliver("x", &mut |_| {}),
             Err(DeliveryError::Refused {
                 detail: "no display".to_owned()
             })
