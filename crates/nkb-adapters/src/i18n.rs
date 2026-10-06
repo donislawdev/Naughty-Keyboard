@@ -1189,6 +1189,15 @@ pub enum PaletteLabel {
     /// not a shortcut a tester can look up in the hint bar: it is the palette's
     /// only key that works for the length of a send and no longer.
     StopTyping,
+    /// The heading of the band that shows the value the next press sends,
+    /// before it goes (`UX-GUI-001`) - which one, of how many.
+    NextValue,
+    /// The same heading when the next press only says the pack is finished.
+    /// The numbers repeat the ones the end-of-pack message quotes.
+    NextEndOfPack,
+    /// The heading of the value band, which shows the value that went out last.
+    /// Named, because the band above it shows another value - the next one.
+    LastSent,
 }
 
 fn pattern_palette_label(label: PaletteLabel) -> &'static str {
@@ -1219,7 +1228,28 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::Typing => "Typing",
         PaletteLabel::TypingCounter => "{arrived} / {total} units",
         PaletteLabel::StopTyping => "Press Esc to stop.",
+        PaletteLabel::NextValue => "Next: value {index} of {total}",
+        PaletteLabel::NextEndOfPack => "Next: end of pack ({total}/{total})",
+        PaletteLabel::LastSent => "Last sent",
     }
+}
+
+/// The heading over the value the next press sends: `Next: value 4 of 12`.
+#[must_use]
+pub fn next_value(index: usize, total: usize) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::NextValue),
+        &[("index", &index.to_string()), ("total", &total.to_string())],
+    )
+}
+
+/// The same heading when the next press only says the pack is finished.
+#[must_use]
+pub fn next_end_of_pack(total: usize) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::NextEndOfPack),
+        &[("total", &total.to_string())],
+    )
 }
 
 /// A label that carries no number, ready to show.
@@ -2490,6 +2520,9 @@ mod tests {
             PaletteLabel::Typing,
             PaletteLabel::TypingCounter,
             PaletteLabel::StopTyping,
+            PaletteLabel::NextValue,
+            PaletteLabel::NextEndOfPack,
+            PaletteLabel::LastSent,
         ] {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
@@ -2502,7 +2535,9 @@ mod tests {
                 | PaletteLabel::NotGuaranteedMore
                 | PaletteLabel::Recipe
                 | PaletteLabel::NoValueYet
-                | PaletteLabel::TypingCounter => true,
+                | PaletteLabel::TypingCounter
+                | PaletteLabel::NextValue
+                | PaletteLabel::NextEndOfPack => true,
                 PaletteLabel::Title
                 | PaletteLabel::Offensive
                 | PaletteLabel::Cleared
@@ -2513,7 +2548,8 @@ mod tests {
                 | PaletteLabel::ShortcutsPaused
                 | PaletteLabel::ShortcutsLink
                 | PaletteLabel::Typing
-                | PaletteLabel::StopTyping => false,
+                | PaletteLabel::StopTyping
+                | PaletteLabel::LastSent => false,
             };
             let pattern = pattern_palette_label(label);
             assert_eq!(

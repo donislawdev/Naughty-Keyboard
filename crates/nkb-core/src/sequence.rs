@@ -202,6 +202,21 @@ impl fmt::Display for Effect {
     }
 }
 
+/// What the next press of "next value" will do - asked BEFORE it is pressed.
+///
+/// The palette shows it so the tester does not type blind (`UX-GUI-001`). It is
+/// a promise about [`Event::Next`], so it must never disagree with what
+/// [`Sequence::apply`] does on that event. A test walks every kind of position
+/// and holds the two together.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Upcoming {
+    /// The press sends value number `index` (counting from 1) of `total`.
+    Value { index: usize, total: usize },
+    /// The press sends nothing: it says the pack is finished, and the press
+    /// after it starts over - `ux-spec.md` 4 refuses to wrap silently.
+    EndOfPack { total: usize },
+}
+
 /// What one event did: where the sequence now stands, and what must follow.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Step {
@@ -236,6 +251,32 @@ impl Sequence {
             // field never received.
             Position::Inserting { sending, total } => Some((sending.saturating_sub(1), total)),
             Position::Exhausted { total, .. } => Some((total, total)),
+        }
+    }
+
+    /// What the next press of "next value" will do, or `None` when it sends
+    /// nothing worth announcing: no pack, a pack with no values, or a value
+    /// still in flight - the press then only says it is busy (`W1`), and which
+    /// value comes after depends on how the one in flight ends.
+    #[must_use]
+    pub const fn upcoming(&self) -> Option<Upcoming> {
+        match self.position {
+            Position::NoPack | Position::Inserting { .. } => None,
+            Position::Ready { total } => Some(Upcoming::Value { index: 1, total }),
+            Position::Running { done, total } => Some(Upcoming::Value {
+                index: done + 1,
+                total,
+            }),
+            Position::Exhausted { total: 0, .. } => None,
+            Position::Exhausted {
+                total,
+                warned: false,
+            } => Some(Upcoming::EndOfPack { total }),
+            // Warned already, so this press starts over.
+            Position::Exhausted {
+                total,
+                warned: true,
+            } => Some(Upcoming::Value { index: 1, total }),
         }
     }
 
@@ -577,6 +618,84 @@ mod tests {
                 warned: false
             }
         );
+    }
+
+    /// Every position a sequence can reach, for packs of up to four values -
+    /// `Running { done: 0 }` included, because an interrupted first value
+    /// leaves exactly that.
+    fn every_position() -> Vec<Position> {
+        let mut positions = vec![Position::NoPack];
+        for total in 0..=4 {
+            positions.push(Position::Exhausted {
+                total,
+                warned: false,
+            });
+            positions.push(Position::Exhausted {
+                total,
+                warned: true,
+            });
+            if total == 0 {
+                continue;
+            }
+            positions.push(Position::Ready { total });
+            for done in 0..total {
+                positions.push(Position::Running { done, total });
+            }
+            for sending in 1..=total {
+                positions.push(Position::Inserting { sending, total });
+            }
+        }
+        positions
+    }
+
+    #[test]
+    fn what_next_will_do_is_exactly_what_next_does() {
+        // The palette shows `upcoming` before the press (UX-GUI-001). A promise
+        // that disagreed with the press would name one value and type another.
+        for position in every_position() {
+            for delivery in [Delivery::Direct, Delivery::ClipboardMode] {
+                let sequence = Sequence { position, delivery };
+                let effects = sequence.apply(Event::Next).effects;
+                let sends: Vec<usize> = effects
+                    .iter()
+                    .filter_map(|effect| match effect {
+                        Effect::SendValue { index } => Some(*index),
+                        _ => None,
+                    })
+                    .collect();
+                match sequence.upcoming() {
+                    Some(Upcoming::Value { index, total }) => {
+                        assert_eq!(effects, vec![Effect::SendValue { index }], "{position:?}");
+                        assert_eq!(sequence.counter().map(|(_, all)| all), Some(total));
+                    }
+                    Some(Upcoming::EndOfPack { total }) => {
+                        assert_eq!(
+                            effects,
+                            vec![Effect::AnnounceEndOfPack { total }],
+                            "{position:?}"
+                        );
+                    }
+                    None => assert!(sends.is_empty(), "{position:?} sends {sends:?} unannounced"),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn nothing_is_upcoming_without_a_pack_or_while_a_value_is_in_flight() {
+        assert_eq!(Sequence::new().upcoming(), None);
+        let flying = Sequence {
+            position: Position::Inserting {
+                sending: 2,
+                total: 3,
+            },
+            delivery: Delivery::Direct,
+        };
+        assert_eq!(flying.upcoming(), None);
+        let empty = Sequence::new()
+            .apply(Event::PackChosen { total: 0 })
+            .sequence;
+        assert_eq!(empty.upcoming(), None);
     }
 
     #[test]

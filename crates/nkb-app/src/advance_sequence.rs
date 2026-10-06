@@ -71,9 +71,10 @@
 //!   going into the window the palette was launched from.
 
 use nkb_core::hotkeys::HotkeyAction;
-use nkb_core::pack::{Pack, Risk};
+use nkb_core::pack::{Pack, PackValue, Risk};
+use nkb_core::preview::{ValuePreview, preview_of};
 use nkb_core::report::{Arrival, ReportBlock};
-use nkb_core::sequence::{Delivery, Effect, Event, Sequence};
+use nkb_core::sequence::{Delivery, Effect, Event, Sequence, Upcoming};
 
 use crate::load_pack;
 use crate::ports::{
@@ -200,6 +201,32 @@ pub struct Outcome {
     /// it: the bar says so for as long as that window stays in front, and the
     /// sequence is not in clipboard mode (`ux-spec.md` 8).
     pub clipboard_for_window: bool,
+    /// What the next press of "next value" will do, AFTER this action - the
+    /// palette shows it before the tester presses (`UX-GUI-001`).
+    pub upcoming: Option<UpcomingValue>,
+}
+
+/// What the next press of "next value" will send, as the palette shows it
+/// before it goes (`UX-GUI-001`). Read from the pack held in memory, so it is
+/// the very value the press sends (`W5`), and built from the core's
+/// [`Sequence::upcoming`], so it cannot name another one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UpcomingValue {
+    /// Value `index` of `total`.
+    Value {
+        index: usize,
+        total: usize,
+        name: String,
+        /// `pack-id/value-id`, as in a [`ValueFacts`].
+        reference: String,
+        /// The same preview the value band shows once the value is in - from
+        /// the recipe, so a million-character value is not built to show it.
+        preview: ValuePreview,
+        /// The effective risk, as a [`Sent`] carries it.
+        offensive: bool,
+    },
+    /// The press only says the pack is finished.
+    EndOfPack { total: usize },
 }
 
 /// What the palette shows about the value that just went out - whole, or cut
@@ -359,6 +386,29 @@ impl AdvanceSequence {
     #[must_use]
     pub fn sequence(&self) -> Sequence {
         self.sequence
+    }
+
+    /// What the next press of "next value" will do, with what the palette
+    /// shows of the value - see [`UpcomingValue`]. `None` where the core says
+    /// nothing is upcoming, and where the pack does not hold the value the
+    /// core names (a disagreement the send itself refuses too).
+    #[must_use]
+    pub fn upcoming(&self) -> Option<UpcomingValue> {
+        match self.sequence.upcoming()? {
+            Upcoming::EndOfPack { total } => Some(UpcomingValue::EndOfPack { total }),
+            Upcoming::Value { index, total } => {
+                let loaded = self.loaded.as_ref()?;
+                let value = loaded.pack.values.get(index.checked_sub(1)?)?;
+                Some(UpcomingValue::Value {
+                    index,
+                    total,
+                    name: value.name.clone(),
+                    reference: format!("{}/{}", loaded.pack.id, value.id),
+                    preview: preview_of(&value.body),
+                    offensive: offensive(&loaded.pack, value),
+                })
+            }
+        }
     }
 
     /// Whether values for the window in front go to the clipboard because it
@@ -588,7 +638,7 @@ impl AdvanceSequence {
             // be a machine/pack disagreement rather than a delivery problem.
             return refuse(&mut self.sequence, Vec::new());
         };
-        let offensive = value.risk.unwrap_or(loaded.pack.risk) == Risk::Offensive;
+        let offensive = offensive(&loaded.pack, value);
         let id = value.id.clone();
         let window = route.target();
         let mut on_clipboard = on_clipboard;
@@ -663,8 +713,15 @@ impl AdvanceSequence {
             messages,
             attempted_send: attempted,
             clipboard_for_window: self.clipboard_for_window(),
+            upcoming: self.upcoming(),
         }
     }
+}
+
+/// Whether a value is offensive: its own risk when it declares one, the pack's
+/// otherwise. One rule for the value about to go and the value that went.
+fn offensive(pack: &Pack, value: &PackValue) -> bool {
+    value.risk.unwrap_or(pack.risk) == Risk::Offensive
 }
 
 /// What one attempt at a value produced, before the sequence is settled.
@@ -1418,6 +1475,63 @@ mod tests {
         );
         assert!(outcome.sent.is_none());
         assert_eq!(advance.sequence().delivery, Delivery::Direct);
+    }
+
+    #[test]
+    fn the_value_shown_as_next_is_the_value_the_next_press_sends() {
+        // UX-GUI-001: the palette names the next value before the press, and W5
+        // asks the value shown to be the value sent - before the press as well.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        let mut promised = advance.upcoming();
+        for _ in 0..3 {
+            let Some(UpcomingValue::Value {
+                reference, name, ..
+            }) = promised.clone()
+            else {
+                panic!(
+                    "a three-value pack has a value upcoming before each of three presses: {promised:?}"
+                );
+            };
+            let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+            let sent = outcome.sent.as_ref().expect("a value goes out");
+            assert_eq!(sent.facts.reference, reference);
+            assert_eq!(sent.facts.name, name);
+            // What the outcome carries is what the sequence says AFTER the press.
+            assert_eq!(outcome.upcoming, advance.upcoming());
+            promised = outcome.upcoming;
+        }
+        assert_eq!(promised, Some(UpcomingValue::EndOfPack { total: 3 }));
+        let warned = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert!(
+            warned.sent.is_none(),
+            "the end of the pack is said, not sent"
+        );
+        assert!(matches!(
+            warned.upcoming,
+            Some(UpcomingValue::Value { index: 1, .. })
+        ));
+    }
+
+    #[test]
+    fn an_offensive_value_is_marked_before_it_goes_and_nothing_is_upcoming_without_a_pack() {
+        assert!(matches!(
+            chosen(Risk::Offensive).upcoming(),
+            Some(UpcomingValue::Value {
+                index: 1,
+                total: 3,
+                offensive: true,
+                ..
+            })
+        ));
+        assert!(matches!(
+            chosen(Risk::Normal).upcoming(),
+            Some(UpcomingValue::Value {
+                offensive: false,
+                ..
+            })
+        ));
+        assert_eq!(AdvanceSequence::new().upcoming(), None);
     }
 
     #[test]

@@ -28,7 +28,12 @@ use nkb_gui::{HintRow, Marker, Palette};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 const WIDTH: u32 = 420;
-const HEIGHT: u32 = 460;
+/// Taller than any state below draws. 460 until the next band (UX-GUI-001): the
+/// palette with both value bands and the longest counters outgrew it, every edge
+/// measured the buffer's floor instead of the palette's, and "the counters wrap"
+/// failed on a palette that wrapped them fine. A buffer that clips is a check
+/// that cannot see.
+const HEIGHT: u32 = 720;
 
 /// `text-muted`, the one role the resting state may not show. Written here
 /// rather than read from the dictionary on purpose: two independent copies of a
@@ -103,6 +108,18 @@ fn fill(palette: &Palette) {
     // There IS a value, so the value band is gated by `compact` alone - which is
     // what the compact rule below is about, and what mutation M52 flips.
     palette.set_has_value(true);
+    palette.set_last_sent_label("Last sent".into());
+    // The next value (UX-GUI-001): a different value from the one above, so the
+    // picture shows both bands telling two values apart.
+    palette.set_has_next(true);
+    palette.set_next_has_value(true);
+    palette.set_next_heading("Next: value 8 of 34".into());
+    palette.set_next_name("Trailing no-break space".into());
+    palette.set_next_preview("Kowalski\u{2423}".into());
+    palette.set_next_markers(ModelRc::new(VecModel::from(vec![Marker {
+        text: "offensive".into(),
+        risky: true,
+    }])));
 
     palette.set_markers(ModelRc::new(VecModel::from(vec![
         Marker {
@@ -307,6 +324,63 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
          {edge_reference}), so it is cut off rather than wrapped. Look at {}",
         long_path.display()
     );
+
+    // ---- the next value: drawn, one line per field, gone while a send runs --
+    // UX-GUI-001. Before the floor of the section below exists, because a held
+    // height would hide the first measurement. Each a difference of two renders
+    // or of two edges, never the presence of a colour (GUI rule 10).
+    fill(&palette);
+    palette.set_compact(false);
+    palette.set_has_next(false);
+    let edge_without_next = bottom_edge(&render(&window));
+    palette.set_has_next(true);
+    let with_next = render(&window);
+    let edge_with_next = bottom_edge(&with_next);
+    let next_path = offscreen::save_cropped(&with_next, WIDTH, HEIGHT, "palette-next.png");
+    assert_nothing_escapes_the_surface(
+        &with_next,
+        "with the next value",
+        &next_path.display().to_string(),
+    );
+    assert!(
+        edge_with_next > edge_without_next,
+        "switching the next band on added no height ({edge_without_next} -> {edge_with_next}), \
+         so the palette does not draw it. Look at {}",
+        next_path.display()
+    );
+    // ELIDED, not wrapped: the band changes with every press, and a band that
+    // grew with the value would move everything below it (D83).
+    palette.set_next_preview("\u{2423}x".repeat(150).into());
+    palette.set_next_name(
+        "A name long enough to need two lines in a palette this wide, \
+                           and then some more words after that"
+            .into(),
+    );
+    let long_next = render(&window);
+    let long_next_path =
+        offscreen::save_cropped(&long_next, WIDTH, HEIGHT, "palette-next-long.png");
+    assert_eq!(
+        bottom_edge(&long_next),
+        edge_with_next,
+        "a long next value moved the palette's bottom edge, so the band wraps rather than \
+         elides and the window grows and shrinks with every press. Look at {}",
+        long_next_path.display()
+    );
+    // While a send runs the band is not drawn: which value comes next depends on
+    // how the one in flight ends.
+    palette.set_sending_label("Typing".into());
+    palette.set_sending_counter("1784 / 65535".into());
+    palette.set_sending_hint("Press Esc to stop.".into());
+    palette.set_sending(true);
+    let sending_with_next = render(&window);
+    palette.set_has_next(false);
+    assert!(
+        render(&window) == sending_with_next,
+        "the next band changed the picture while a send was running, so it promises a value \
+         the press in flight has not settled yet"
+    );
+    palette.set_sending(false);
+    fill(&palette);
 
     // ---- the expanded palette never gets shorter by itself (D83) ----------
     // Through the product's own wiring: the `changed` handler in the view and

@@ -112,6 +112,7 @@ pub fn drive_sequence(
                     messages: vec![Message::PressedWhileBusy { action: late }],
                     attempted_send: false,
                     clipboard_for_window: sequence.clipboard_for_window(),
+                    upcoming: sequence.upcoming(),
                 });
             }
         }
@@ -289,6 +290,10 @@ mod tests {
                     action: HotkeyAction::NextValue
                 }]
             );
+            // The next band (UX-GUI-001) stays what it is: a dropped press
+            // changes nothing about which value comes next.
+            assert_eq!(late.upcoming, sequence.upcoming());
+            assert!(late.upcoming.is_some(), "value 2 of 3 is still upcoming");
         }
         assert_eq!(
             sequence.counter(),

@@ -97,7 +97,7 @@ use nkb_app::ports::{
 };
 use nkb_app::{
     AdvanceSequence, Ended, KeptSettings, Opening, Outcome, SettingsMessage, ShortcutChange,
-    ValueFacts, drive_sequence,
+    UpcomingValue, ValueFacts, drive_sequence,
 };
 use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord};
 use nkb_core::preview::ValuePreview;
@@ -126,6 +126,10 @@ const TICK: Duration = Duration::from_millis(100);
 pub struct View {
     pack: String,
     counter: String,
+    /// What the next press sends, or `None` when it sends nothing to announce
+    /// (`UX-GUI-001`). Always computed, never kept: a stale "next" would name a
+    /// value the press does not send.
+    next: Option<NextView>,
     value: ValueBand,
     messages: Vec<String>,
     /// The standing clipboard bar and its words, or `None` when values are
@@ -149,6 +153,20 @@ enum ValueBand {
     Clear,
     /// A value went out.
     Show(ValueView),
+}
+
+/// The band over the value band: what the next press sends.
+struct NextView {
+    heading: String,
+    /// `None` at the end of a pack, where the press only says so.
+    value: Option<NextValueView>,
+}
+
+struct NextValueView {
+    name: String,
+    /// One line: the same preview the value band draws, which the band elides.
+    preview: String,
+    markers: Vec<(String, bool)>,
 }
 
 struct ValueView {
@@ -907,6 +925,7 @@ fn view_between(
     View {
         pack: shown(sequence, pack),
         counter: counter_of(sequence),
+        next: next_view(sequence.upcoming().as_ref()),
         value,
         messages: with_standing(messages, standing),
         clipboard_bar: clipboard_bar(
@@ -944,6 +963,7 @@ fn view_of(
             .sequence
             .counter()
             .map_or_else(String::new, |(done, total)| i18n::counter(done, total)),
+        next: next_view(outcome.upcoming.as_ref()),
         value: outcome
             .sent
             .as_ref()
@@ -962,15 +982,42 @@ fn view_of(
     }
 }
 
-/// The value band, every line finished.
-fn value_view(sent: &Sent) -> ValueView {
-    facts_view(&sent.facts, sent.utf16_units, markers_of(sent))
+/// The band of the next value, every line finished (`UX-GUI-001`).
+fn next_view(upcoming: Option<&UpcomingValue>) -> Option<NextView> {
+    match upcoming? {
+        UpcomingValue::EndOfPack { total } => Some(NextView {
+            heading: i18n::next_end_of_pack(*total),
+            value: None,
+        }),
+        UpcomingValue::Value {
+            index,
+            total,
+            name,
+            preview,
+            offensive,
+            ..
+        } => Some(NextView {
+            heading: i18n::next_value(*index, *total),
+            value: Some(NextValueView {
+                name: name.clone(),
+                preview: preview_line(preview).0,
+                // The one risk known before a send. Warnings, `cleared first`
+                // and the rest are about a delivery that has not happened.
+                markers: if *offensive {
+                    vec![(i18n::label(PaletteLabel::Offensive).to_owned(), true)]
+                } else {
+                    Vec::new()
+                },
+            }),
+        }),
+    }
 }
 
-/// The value band of any value - one that went out, or one on its way - from
-/// its facts, its size in UTF-16 units and the markers it earns.
-fn facts_view(facts: &ValueFacts, utf16_units: usize, markers: Vec<(String, bool)>) -> ValueView {
-    let (preview, elided) = match &facts.preview {
+/// The line a preview draws, and - when it is a fragment - the sentence that
+/// says how much of the value it is. One function for the band of the value
+/// that went out and the band of the one about to go.
+fn preview_line(preview: &ValuePreview) -> (String, String) {
+    match preview {
         ValuePreview::Text(text) => (
             text.shown.clone(),
             // An empty string rather than an Option, because the view's switch
@@ -983,7 +1030,18 @@ fn facts_view(facts: &ValueFacts, utf16_units: usize, markers: Vec<(String, bool
         // A recipe is the whole value, exactly, so nothing is elided and there
         // is nothing to confess.
         ValuePreview::Recipe(recipe) => (i18n::recipe(recipe.count, &recipe.unit), String::new()),
-    };
+    }
+}
+
+/// The value band, every line finished.
+fn value_view(sent: &Sent) -> ValueView {
+    facts_view(&sent.facts, sent.utf16_units, markers_of(sent))
+}
+
+/// The value band of any value - one that went out, or one on its way - from
+/// its facts, its size in UTF-16 units and the markers it earns.
+fn facts_view(facts: &ValueFacts, utf16_units: usize, markers: Vec<(String, bool)>) -> ValueView {
+    let (preview, elided) = preview_line(&facts.preview);
     // Measured on the line the preview DRAWS, not on the whole value: a
     // character in the elided middle never reaches the screen, and for a
     // recipe the line is the unit plus digits and a sign the typeface carries.
@@ -1117,6 +1175,7 @@ fn apply(palette: &Palette, view: View) {
     palette.set_sending(false);
     palette.set_pack(view.pack.into());
     palette.set_counter(view.counter.into());
+    show_next(palette, view.next);
     palette.set_clipboard_mode(view.clipboard_bar.is_some());
     if let Some(words) = view.clipboard_bar {
         palette.set_clipboard_mode_label(words.into());
@@ -1158,17 +1217,40 @@ fn show_value(palette: &Palette, value: ValueView) {
     palette.set_value_elided(value.elided.into());
     palette.set_value_not_guaranteed(value.not_guaranteed.into());
     palette.set_value_shape(value.shape.into());
-    palette.set_markers(ModelRc::new(VecModel::from(
-        value
-            .markers
+    palette.set_markers(markers_model(value.markers));
+    palette.set_has_value(true);
+}
+
+/// The band of the next value, on the main thread (`UX-GUI-001`).
+fn show_next(palette: &Palette, next: Option<NextView>) {
+    let Some(next) = next else {
+        palette.set_has_next(false);
+        return;
+    };
+    palette.set_next_heading(next.heading.into());
+    match next.value {
+        Some(value) => {
+            palette.set_next_name(value.name.into());
+            palette.set_next_preview(value.preview.into());
+            palette.set_next_markers(markers_model(value.markers));
+            palette.set_next_has_value(true);
+        }
+        None => palette.set_next_has_value(false),
+    }
+    palette.set_has_next(true);
+}
+
+/// Markers as the palette's model - text, and whether it is a risk.
+fn markers_model(markers: Vec<(String, bool)>) -> ModelRc<Marker> {
+    ModelRc::new(VecModel::from(
+        markers
             .into_iter()
             .map(|(text, risky)| Marker {
                 text: text.into(),
                 risky,
             })
             .collect::<Vec<_>>(),
-    )));
-    palette.set_has_value(true);
+    ))
 }
 
 /// Keeps the expanded palette from getting shorter by itself (`D83`).
@@ -1361,8 +1443,8 @@ fn open_packs_later(palette: &Weak<Palette>) {
 mod tests {
     use std::rc::Rc;
 
-    use nkb_app::ValueFacts;
     use nkb_app::advance_sequence::{Message, Sent};
+    use nkb_app::{UpcomingValue, ValueFacts};
     use nkb_core::report::Arrival;
     use nkb_core::sequence::{Position, Sequence};
     use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
@@ -1450,6 +1532,21 @@ mod tests {
             messages,
             attempted_send: true,
             clipboard_for_window: false,
+            upcoming: Some(an_upcoming()),
+        }
+    }
+
+    /// The value after the one that went out, with its own name, reference and
+    /// preview, so the next band cannot borrow a line from the value band and
+    /// still pass.
+    fn an_upcoming() -> UpcomingValue {
+        UpcomingValue::Value {
+            index: 8,
+            total: 34,
+            name: "Trailing no-break space".to_owned(),
+            reference: "unicode-text/trailing-nbsp".to_owned(),
+            preview: ValuePreview::Text(nkb_core::preview::preview("Kowalski\u{A0}")),
+            offensive: true,
         }
     }
 
@@ -1519,6 +1616,52 @@ mod tests {
             !palette.get_clipboard_mode(),
             "direct delivery is not clipboard mode"
         );
+        // The next value (UX-GUI-001) - its own lines, not the value band's.
+        assert!(palette.get_has_next());
+        assert!(palette.get_next_has_value());
+        assert_eq!(palette.get_next_heading(), "Next: value 8 of 34");
+        assert_eq!(palette.get_next_name(), "Trailing no-break space");
+        assert_eq!(palette.get_next_preview(), "Kowalski\u{2423}");
+        assert_eq!(
+            slint::Model::row_count(&palette.get_next_markers()),
+            1,
+            "the one risk known before a send - offensive - and nothing about a delivery"
+        );
+
+        // ---- the next press only says the pack is finished ----------------
+        let mut ending = an_outcome(None, Vec::new());
+        ending.upcoming = Some(UpcomingValue::EndOfPack { total: 34 });
+        apply(
+            &palette,
+            view_of(
+                &ending,
+                "p",
+                "p",
+                &quiet(),
+                &nkb_adapters::default_bindings(),
+            ),
+        );
+        assert!(palette.get_has_next());
+        assert!(
+            !palette.get_next_has_value(),
+            "no value goes out at the end"
+        );
+        assert_eq!(palette.get_next_heading(), "Next: end of pack (34/34)");
+
+        // ---- nothing upcoming: the band goes ------------------------------
+        let mut nothing = an_outcome(None, Vec::new());
+        nothing.upcoming = None;
+        apply(
+            &palette,
+            view_of(
+                &nothing,
+                "p",
+                "p",
+                &quiet(),
+                &nkb_adapters::default_bindings(),
+            ),
+        );
+        assert!(!palette.get_has_next());
 
         // ---- a turn that produced no value --------------------------------
         // The previous value STAYS. Blanking it would take away the value the

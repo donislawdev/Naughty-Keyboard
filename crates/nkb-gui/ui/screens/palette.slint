@@ -88,7 +88,23 @@ export component Palette inherits Window {
     // data has an empty state, and this band is there from the first frame.
     in property <string> no-value;
 
+    // ---- the next value (UX-GUI-001) ---------------------------------------
+    // What the next press sends, shown BEFORE it goes, so the tester does not
+    // type blind - a length bomb or an offensive value included. Every string is
+    // finished text from `i18n`. Which value it is comes from the core's
+    // `Sequence::upcoming`, which a test holds to what the press really does.
+    in property <bool> has-next;
+    in property <string> next-heading;
+    // False at the end of a pack, where the next press only says so and the
+    // band is its heading alone.
+    in property <bool> next-has-value;
+    in property <string> next-name;
+    in property <string> next-preview;
+    in property <[Marker]> next-markers;
+
     // ---- the value band ----------------------------------------------------
+    // Its heading, now that a second value stands above it.
+    in property <string> last-sent-label;
     in property <string> value-name;
     in property <string> value-reference;
     in property <string> value-counts;
@@ -283,6 +299,39 @@ export component Palette inherits Window {
                 }
             }
 
+            // What the next press sends (UX-GUI-001), above the value that went
+            // out last. One line each, ELIDED rather than wrapped: the band
+            // changes with every press, and a band that grew and shrank with
+            // the value would move everything below it (D83). The whole value
+            // is drawn in the band below once it is sent. Expanded only - the
+            // heading is muted (D53). Not while a send runs: which value comes
+            // next depends on how the one in flight ends.
+            if !root.compact && root.has-next && !root.sending: Zone {
+                TextSmallMuted {
+                    text: root.next-heading;
+                    overflow: elide;
+                }
+                // The risk beside the name rather than on a row of its own: the
+                // palette stays on top of the application under test, and a row
+                // spent on one pill is height taken from it (second look at the
+                // first render). The name gives way, the pill does not.
+                if root.next-has-value: HorizontalLayout {
+                    spacing: Tokens.space-2;
+                    TextBody {
+                        text: root.next-name;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                    MarkerRow {
+                        markers: root.next-markers;
+                    }
+                }
+                if root.next-has-value: TextPreview {
+                    text: root.next-preview;
+                    overflow: elide;
+                }
+            }
+
             // Before the first value: what to do to send one.
             if !root.compact && !root.has-value: Zone {
                 TextBody {
@@ -293,6 +342,9 @@ export component Palette inherits Window {
 
             // The value that went out last. It stays until the next one.
             if !root.compact && root.has-value: Zone {
+                TextSmallMuted {
+                    text: root.last-sent-label;
+                }
                 TextName {
                     text: root.value-name;
                     wrap: word-wrap;
