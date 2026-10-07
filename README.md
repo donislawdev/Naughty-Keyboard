@@ -382,8 +382,13 @@ nkb fmt my-pack.toml
 ```
 
 The format is still moving and your own packs cannot be loaded yet, so for now **open an issue** with
-the value, what it breaks and where you saw it, rather than a pull request. Bug reports are welcome the
-same way. The example files in `tests/packs/` show what a pack may and may not look like.
+the [Suggest a value](https://github.com/donislawdev/Naughty-Keyboard/issues/new?template=suggest_value.yml)
+form, which asks for the value, what it breaks and where you saw it, rather than a pull request. Bug
+reports are welcome the same way. The example files in `tests/packs/` show what a pack may and may not
+look like.
+
+Behaviour here follows the [Code of Conduct](CODE_OF_CONDUCT.md), and security problems go through
+[SECURITY.md](SECURITY.md) rather than the issue tracker.
 
 ---
 
