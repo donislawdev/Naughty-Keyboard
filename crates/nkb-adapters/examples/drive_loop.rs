@@ -87,6 +87,7 @@ fn main() {
         direct: &DirectInjection,
         by_clipboard: &by_clipboard,
         keys: &DirectInjection,
+        inspector: &DirectInjection,
         clipboard: &NoClipboard,
         report_text: &EnglishReport,
         // A console has no band to draw it in, and a line per tenth of a

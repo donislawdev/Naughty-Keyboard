@@ -89,6 +89,9 @@ fn fill(palette: &Palette) {
     palette.set_pack("unicode-text".into());
     palette.set_counter("7 / 34".into());
     palette.set_value_name("Three zero-width spaces".into());
+    // Where it was typed, read at the press (UX8, D104).
+    palette.set_value_sent_to("to chrome.exe, a text field".into());
+    palette.set_has_sent_to(true);
     palette.set_value_reference("unicode-text/zero-width-spaces".into());
     palette.set_value_counts("graphemes: 7, code points: 7, bytes: 13, UTF-16 units: 7".into());
     // The preview and the shape, exactly as the sketch in `ux-spec.md` 2 draws

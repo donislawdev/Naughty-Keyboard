@@ -38,7 +38,7 @@
 
 use nkb_app::ports::ReportText;
 use nkb_core::preview::{ShapeFact, is_invisible};
-use nkb_core::report::{Arrival, ReportBlock, SpelledOut, Typed};
+use nkb_core::report::{Arrival, ControlKind, ReportBlock, SpelledOut, Target, Typed};
 use nkb_core::text::{escaped_char, needs_escaping};
 
 use crate::i18n::{fill, shape_line};
@@ -107,8 +107,22 @@ pub enum ReportPhrase {
     NoShape,
     /// `breaks` or `expect` absent from the pack.
     NotGiven,
-    /// `TargetInspector` does not exist - `OBS-91`.
-    TargetNotRecorded,
+    /// Where a typed value went (`D104`): the program's file name and the kind
+    /// of control, as read at the press.
+    Target,
+    /// The same, when the system would not give the program's name.
+    TargetUnnamed,
+    /// The value went to the clipboard - it is wherever the tester pasted it.
+    TargetPasted,
+    /// A typed value whose target was not read. Not reached by the palette,
+    /// which reads it at every press - said rather than left blank, because
+    /// `D68` keeps every line.
+    TargetNotRead,
+    /// The kind of control in [`ReportPhrase::Target`] - `D73`, `D77`.
+    ControlTextField,
+    ControlTerminal,
+    ControlUnconfirmed,
+    ControlNotTextField,
     /// Sessions are not saved yet - `W4`, `session-format.md`.
     SessionNotRecorded,
     /// The value arrived in part.
@@ -131,9 +145,14 @@ fn pattern_report_phrase(phrase: ReportPhrase) -> &'static str {
         ReportPhrase::EmptyValue => "empty - the value has no characters",
         ReportPhrase::NoShape => "no invisible characters, no controls, no edge spaces",
         ReportPhrase::NotGiven => "not given in the pack",
-        ReportPhrase::TargetNotRecorded => {
-            "not recorded - this version does not read the target window"
-        }
+        ReportPhrase::Target => "{program} · {control}",
+        ReportPhrase::TargetUnnamed => "a program that did not give its name · {control}",
+        ReportPhrase::TargetPasted => "not recorded - the tester pasted the value",
+        ReportPhrase::TargetNotRead => "not recorded - the target was not read",
+        ReportPhrase::ControlTextField => "text field",
+        ReportPhrase::ControlTerminal => "terminal",
+        ReportPhrase::ControlUnconfirmed => "control not confirmed as a field",
+        ReportPhrase::ControlNotTextField => "not a text field",
         ReportPhrase::SessionNotRecorded => "not recorded - this version does not save sessions",
         ReportPhrase::Interrupted => {
             "interrupted after {sent} of {expected} UTF-16 units - the field holds a fragment"
@@ -234,10 +253,7 @@ pub fn report_text(block: &ReportBlock) -> String {
     lines.extend([
         (ReportLabel::Breaks, given(block.breaks.as_deref())),
         (ReportLabel::Expected, given(block.expected.as_deref())),
-        (
-            ReportLabel::Target,
-            pattern_report_phrase(ReportPhrase::TargetNotRecorded).to_owned(),
-        ),
+        (ReportLabel::Target, target(block)),
         (
             ReportLabel::Session,
             pattern_report_phrase(ReportPhrase::SessionNotRecorded).to_owned(),
@@ -342,6 +358,36 @@ fn count(unit: ReportCount, n: usize) -> String {
     fill(pattern_report_count(unit, n == 1), &[("n", &n.to_string())])
 }
 
+/// The `Target:` line (`D104`). The program's name comes from the system and is
+/// written as prose - a file name cannot hold a line break on Windows, and
+/// escaping it anyway costs nothing on the one system where it could.
+fn target(block: &ReportBlock) -> String {
+    match &block.target {
+        Some(Target { program, field }) => {
+            let control = pattern_report_phrase(match field {
+                ControlKind::TextField => ReportPhrase::ControlTextField,
+                ControlKind::Terminal => ReportPhrase::ControlTerminal,
+                ControlKind::Unconfirmed => ReportPhrase::ControlUnconfirmed,
+                ControlKind::NotTextField => ReportPhrase::ControlNotTextField,
+            });
+            match program {
+                Some(program) => fill(
+                    pattern_report_phrase(ReportPhrase::Target),
+                    &[("program", &prose(program)), ("control", control)],
+                ),
+                None => fill(
+                    pattern_report_phrase(ReportPhrase::TargetUnnamed),
+                    &[("control", control)],
+                ),
+            }
+        }
+        None if block.arrival == Arrival::OnClipboard => {
+            pattern_report_phrase(ReportPhrase::TargetPasted).to_owned()
+        }
+        None => pattern_report_phrase(ReportPhrase::TargetNotRead).to_owned(),
+    }
+}
+
 fn given(text: Option<&str>) -> String {
     text.map_or_else(
         || pattern_report_phrase(ReportPhrase::NotGiven).to_owned(),
@@ -400,6 +446,10 @@ mod tests {
             breaks: Some("Counters disagree.".to_owned()),
             expected: None,
             arrival: Arrival::Whole,
+            target: Some(Target {
+                program: Some("notepad.exe".to_owned()),
+                field: ControlKind::TextField,
+            }),
         }
     }
 
@@ -418,7 +468,7 @@ mod tests {
             "Size:     7 graphemes · 7 code points · 13 bytes",
             "Breaks:   Counters disagree.",
             "Expected: not given in the pack",
-            "Target:   not recorded - this version does not read the target window",
+            "Target:   notepad.exe · text field",
             "Session:  not recorded - this version does not save sessions",
         ];
         let got = lines(&text);
@@ -610,5 +660,73 @@ mod tests {
         assert!(text.contains("Expected: abc\\u2067fed"));
         assert!(!text.contains('\u{202E}'));
         assert!(!text.contains('\u{2067}'));
+    }
+
+    fn target_line(block: &ReportBlock) -> String {
+        let text = report_text(block);
+        lines(&text)
+            .into_iter()
+            .find(|line| line.starts_with("Target:"))
+            .expect("the line is always there")
+            .to_owned()
+    }
+
+    #[test]
+    fn the_target_line_names_the_program_and_the_kind_of_control_or_says_why_not() {
+        let with = |program: Option<&str>, field| ReportBlock {
+            target: Some(Target {
+                program: program.map(ToOwned::to_owned),
+                field,
+            }),
+            ..block()
+        };
+        assert_eq!(
+            target_line(&with(Some("WindowsTerminal.exe"), ControlKind::Terminal)),
+            "Target:   WindowsTerminal.exe · terminal"
+        );
+        assert_eq!(
+            target_line(&with(Some("scalc.exe"), ControlKind::Unconfirmed)),
+            "Target:   scalc.exe · control not confirmed as a field"
+        );
+        assert_eq!(
+            target_line(&with(None, ControlKind::NotTextField)),
+            "Target:   a program that did not give its name · not a text field"
+        );
+        let pasted = ReportBlock {
+            target: None,
+            arrival: Arrival::OnClipboard,
+            ..block()
+        };
+        assert_eq!(
+            target_line(&pasted),
+            "Target:   not recorded - the tester pasted the value"
+        );
+        let unread = ReportBlock {
+            target: None,
+            ..block()
+        };
+        assert_eq!(
+            target_line(&unread),
+            "Target:   not recorded - the target was not read"
+        );
+    }
+
+    #[test]
+    fn a_program_name_cannot_forge_a_line_of_the_block() {
+        // Not a Windows file name - the rule holds wherever the name comes from.
+        let hostile = ReportBlock {
+            target: Some(Target {
+                program: Some("evil\nSession:  forged {control}".to_owned()),
+                field: ControlKind::TextField,
+            }),
+            ..block()
+        };
+        let text = report_text(&hostile);
+        assert_eq!(lines(&text).len(), 10, "still ten lines");
+        assert_eq!(
+            target_line(&hostile),
+            "Target:   evil\\u000ASession:  forged {control} · text field",
+            "escaped, and a placeholder in the name stays a placeholder"
+        );
     }
 }

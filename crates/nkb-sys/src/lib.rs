@@ -40,6 +40,7 @@ pub mod held;
 pub mod hotkey;
 pub mod layout;
 pub mod privilege;
+pub mod program;
 pub mod screens;
 pub mod startup;
 pub mod window;

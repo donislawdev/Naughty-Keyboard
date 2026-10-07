@@ -19,12 +19,12 @@ use crate::advance_sequence::{AdvanceSequence, InFlight, Ports};
 use crate::ports::{
     Availability, Clipboard, ClipboardError, Date, Delivered, DeliveryError, History,
     KeystrokeError, KeystrokeSender, PackFormat, PackSource, Progress, ReportText, SourceError,
-    TargetRef, TranslationCheck, TranslationTarget, ValueDelivery,
+    TargetInspector, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery,
 };
 use nkb_core::keys::KeyChord;
 use nkb_core::lint::{LintProblem, RuleCode};
 use nkb_core::pack::{Pack, PackValue, Risk};
-use nkb_core::report::ReportBlock;
+use nkb_core::report::{ControlKind, ReportBlock, Target};
 use nkb_core::text::LiteralText;
 use nkb_core::value::ValueBody;
 
@@ -161,6 +161,29 @@ impl KeystrokeSender for FakeKeys {
     }
 }
 
+/// An inspector that answers what a test dictates and counts the questions -
+/// so a test can prove the clipboard route asked nothing (`D104`).
+pub(crate) struct FakeInspector {
+    pub(crate) answer: Target,
+    pub(crate) asked: RefCell<Vec<TargetRef>>,
+}
+
+impl FakeInspector {
+    pub(crate) fn answering(answer: Target) -> Self {
+        Self {
+            answer,
+            asked: RefCell::new(Vec::new()),
+        }
+    }
+}
+
+impl TargetInspector for FakeInspector {
+    fn inspect(&self, target: TargetRef) -> Target {
+        self.asked.borrow_mut().push(target);
+        self.answer.clone()
+    }
+}
+
 /// A clipboard that records what it was handed and under which history rule,
 /// or refuses as a test says.
 pub(crate) struct FakeClipboard {
@@ -221,6 +244,7 @@ pub(crate) struct Kit {
     pub(crate) direct: FakeDelivery,
     pub(crate) by_clipboard: FakeDelivery,
     pub(crate) keys: FakeKeys,
+    pub(crate) inspector: FakeInspector,
     pub(crate) clipboard: FakeClipboard,
     pub(crate) text: FakeReportText,
     /// Every value heard on its way into the field, in order (`OBS-160`).
@@ -238,6 +262,10 @@ impl Kit {
             direct: FakeDelivery::ready(),
             by_clipboard: FakeDelivery::ready(),
             keys: FakeKeys::working(),
+            inspector: FakeInspector::answering(Target {
+                program: Some(String::from("notepad.exe")),
+                field: ControlKind::TextField,
+            }),
             clipboard: FakeClipboard::working(),
             text: FakeReportText {
                 blocks: RefCell::new(Vec::new()),
@@ -270,11 +298,18 @@ impl Kit {
             ..Self::ready()
         }
     }
+    pub(crate) fn with_inspector(answer: Target) -> Self {
+        Self {
+            inspector: FakeInspector::answering(answer),
+            ..Self::ready()
+        }
+    }
     pub(crate) fn ports(&self) -> Ports<'_> {
         Ports {
             direct: &self.direct,
             by_clipboard: &self.by_clipboard,
             keys: &self.keys,
+            inspector: &self.inspector,
             clipboard: &self.clipboard,
             report_text: &self.text,
             progress: &*self.ear,

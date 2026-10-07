@@ -62,6 +62,43 @@ pub struct ReportBlock {
     pub breaks: Option<String>,
     pub expected: Option<String>,
     pub arrival: Arrival,
+    /// Where a typed value went, as read at the press (UX8, `D104`). `None`
+    /// for a value put on the clipboard - it went wherever the tester pasted
+    /// it - and for a block built from the pack alone. [`ReportBlock::describe`]
+    /// leaves it `None`: the pack knows nothing about the press.
+    pub target: Option<Target>,
+}
+
+/// Where a typed value went, read at the press (UX8, `D104`): the program
+/// whose window was in front and the kind of control that held the keyboard
+/// focus.
+///
+/// 🔴 Never the window's title and never the name or the text of the control:
+/// a ticket is pasted where other people read it, and a title carries what
+/// the tester was looking at - a customer's name, a document. The program's
+/// file name and a kind of control carry neither.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Target {
+    /// The program's file name, `chrome.exe`, without the folder it lives in -
+    /// `None` when the system would not give it.
+    pub program: Option<String>,
+    pub field: ControlKind,
+}
+
+/// The kind of control that held the keyboard focus at the press, as the
+/// direct route's classifier answers it (`D73`, `D77`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ControlKind {
+    /// A text field, confirmed.
+    TextField,
+    /// A terminal - typed into, never cleared (`D77`).
+    Terminal,
+    /// The system did not say what it is - a value is sent there, the line is
+    /// not cleared (`D76`).
+    Unconfirmed,
+    /// Not a text field. The direct route refuses to type there, so a value
+    /// that reached it means the focus moved between the look and the send.
+    NotTextField,
 }
 
 /// The value as a person can type it back.
@@ -147,6 +184,7 @@ impl ReportBlock {
             breaks: value.breaks.clone(),
             expected: value.expect.clone(),
             arrival,
+            target: None,
         })
     }
 }

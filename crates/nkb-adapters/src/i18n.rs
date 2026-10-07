@@ -73,6 +73,7 @@ use nkb_core::hotkeys::{
     Bindings, ChordError, ChordProblem, HotkeyAction, HotkeyChord, Refusal, Refused,
 };
 use nkb_core::preview::ShapeFact;
+use nkb_core::report::{ControlKind, Target};
 
 use crate::settings_file::SCHEMA;
 
@@ -1288,6 +1289,17 @@ pub enum PaletteLabel {
     InsertAtCursor,
     /// The button beside the second line.
     ClearLineFirst,
+    /// Where the value that went out last was typed, under its heading (UX8,
+    /// `UX-GUI-013`, `D104`): the program's file name and the kind of control,
+    /// read at the press. Never for a value put on the clipboard.
+    SentTo,
+    /// The same, when the system would not give the program's name.
+    SentToUnnamed,
+    /// The kind of control in [`PaletteLabel::SentTo`] - `D73`, `D77`.
+    ControlTextField,
+    ControlTerminal,
+    ControlUnconfirmed,
+    ControlNotTextField,
 }
 
 fn pattern_palette_label(label: PaletteLabel) -> &'static str {
@@ -1333,6 +1345,55 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::AtCursor => "Each value goes in at the cursor",
         PaletteLabel::InsertAtCursor => "Insert at cursor",
         PaletteLabel::ClearLineFirst => "Clear line first",
+        PaletteLabel::SentTo => "to {program}, {control}",
+        PaletteLabel::SentToUnnamed => "to a program that did not give its name, {control}",
+        PaletteLabel::ControlTextField => "a text field",
+        PaletteLabel::ControlTerminal => "a terminal",
+        PaletteLabel::ControlUnconfirmed => "a control not confirmed as a field",
+        PaletteLabel::ControlNotTextField => "not a text field",
+    }
+}
+
+/// How much of a program's name the palette repeats. Longer than any program
+/// name met so far, so a real one is shown whole - and short enough that a
+/// name made up to push the palette off the screen cannot.
+const PROGRAM_SHOWN: usize = 64;
+
+/// Where the value that went out last was typed: `to chrome.exe, a text field`
+/// (UX8, `D104`).
+///
+/// The program's name comes from the system. Escaped and cut like a part of a
+/// shortcut the tester wrote (`shown_part`), because a name is text the tool
+/// did not write: a control character in it must not start a second line in
+/// the value band.
+#[must_use]
+pub fn sent_to(target: &Target) -> String {
+    let control = pattern_palette_label(match target.field {
+        ControlKind::TextField => PaletteLabel::ControlTextField,
+        ControlKind::Terminal => PaletteLabel::ControlTerminal,
+        ControlKind::Unconfirmed => PaletteLabel::ControlUnconfirmed,
+        ControlKind::NotTextField => PaletteLabel::ControlNotTextField,
+    });
+    match &target.program {
+        Some(program) => {
+            let mut shown: String = program
+                .chars()
+                .take(PROGRAM_SHOWN)
+                .collect::<String>()
+                .escape_debug()
+                .to_string();
+            if program.chars().count() > PROGRAM_SHOWN {
+                shown.push_str("...");
+            }
+            fill(
+                pattern_palette_label(PaletteLabel::SentTo),
+                &[("program", &shown), ("control", control)],
+            )
+        }
+        None => fill(
+            pattern_palette_label(PaletteLabel::SentToUnnamed),
+            &[("control", control)],
+        ),
     }
 }
 
@@ -2835,6 +2896,12 @@ mod tests {
             PaletteLabel::AtCursor,
             PaletteLabel::InsertAtCursor,
             PaletteLabel::ClearLineFirst,
+            PaletteLabel::SentTo,
+            PaletteLabel::SentToUnnamed,
+            PaletteLabel::ControlTextField,
+            PaletteLabel::ControlTerminal,
+            PaletteLabel::ControlUnconfirmed,
+            PaletteLabel::ControlNotTextField,
         ] {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
@@ -2849,7 +2916,9 @@ mod tests {
                 | PaletteLabel::NoValueYet
                 | PaletteLabel::TypingCounter
                 | PaletteLabel::NextValue
-                | PaletteLabel::NextEndOfPack => true,
+                | PaletteLabel::NextEndOfPack
+                | PaletteLabel::SentTo
+                | PaletteLabel::SentToUnnamed => true,
                 PaletteLabel::Title
                 | PaletteLabel::Offensive
                 | PaletteLabel::Cleared
@@ -2873,7 +2942,11 @@ mod tests {
                 | PaletteLabel::ClearsLine
                 | PaletteLabel::AtCursor
                 | PaletteLabel::InsertAtCursor
-                | PaletteLabel::ClearLineFirst => false,
+                | PaletteLabel::ClearLineFirst
+                | PaletteLabel::ControlTextField
+                | PaletteLabel::ControlTerminal
+                | PaletteLabel::ControlUnconfirmed
+                | PaletteLabel::ControlNotTextField => false,
             };
             let pattern = pattern_palette_label(label);
             assert_eq!(
@@ -3323,6 +3396,47 @@ mod tests {
                 "Press the new shortcut for \"{}\", or Esc to stop recording.",
                 action_name(HotkeyAction::CopyReport)
             )
+        );
+    }
+
+    #[test]
+    fn the_line_under_the_last_value_names_the_program_and_the_kind_of_control() {
+        let at = |program: Option<&str>, field| Target {
+            program: program.map(ToOwned::to_owned),
+            field,
+        };
+        assert_eq!(
+            sent_to(&at(Some("chrome.exe"), ControlKind::TextField)),
+            "to chrome.exe, a text field"
+        );
+        assert_eq!(
+            sent_to(&at(Some("WindowsTerminal.exe"), ControlKind::Terminal)),
+            "to WindowsTerminal.exe, a terminal"
+        );
+        assert_eq!(
+            sent_to(&at(None, ControlKind::Unconfirmed)),
+            "to a program that did not give its name, a control not confirmed as a field"
+        );
+        assert_eq!(
+            sent_to(&at(Some("x.exe"), ControlKind::NotTextField)),
+            "to x.exe, not a text field"
+        );
+    }
+
+    #[test]
+    fn a_program_name_from_the_system_cannot_break_the_line_or_push_the_palette_off_the_screen() {
+        let line = sent_to(&Target {
+            program: Some("a\nb {control}".to_owned()),
+            field: ControlKind::TextField,
+        });
+        assert_eq!(line, "to a\\nb {control}, a text field");
+        let long = sent_to(&Target {
+            program: Some("x".repeat(PROGRAM_SHOWN + 1)),
+            field: ControlKind::TextField,
+        });
+        assert_eq!(
+            long,
+            format!("to {}..., a text field", "x".repeat(PROGRAM_SHOWN))
         );
     }
 }

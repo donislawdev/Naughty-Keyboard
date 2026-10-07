@@ -27,9 +27,10 @@ use nkb_adapters::{
 use nkb_app::{
     Availability, Clearing, ClearingOutcome, DeliveryError, EmitOutcome, FormatOutcome,
     KeystrokeError, LintOutcome, NewPackOutcome, Progress, SendOutcome, SendRequest, Sending,
-    ShowOutcome, SkipReason, StopReason, ValueDelivery, ValueFacts, emit_values, format_pack,
-    lint_pack, list_packs, new_pack, send_value, show_pack,
+    ShowOutcome, SkipReason, StopReason, TargetInspector, ValueDelivery, ValueFacts, emit_values,
+    format_pack, lint_pack, list_packs, new_pack, send_value, show_pack,
 };
+use nkb_core::report::{ControlKind, Target};
 use std::io::Write;
 use std::path::Path;
 
@@ -628,13 +629,20 @@ fn send(args: &[String]) -> ExitCode {
     // Measured the same day, `GetConsoleWindow` was tried as a sharper test and
     // returns 0 for a process launched without a console of its own - so there is
     // no cheap way here to tell "the terminal I came from" from "the field you
-    // meant". Telling the truth about that is `TargetInspector`, and it is a
-    // separate piece of work.
+    // meant". Since `D104` the line names the program and the kind of control,
+    // read once here - "WindowsTerminal.exe, a terminal" is the sentence a tester
+    // can act on, and the palette says the same after each value (parity,
+    // untouchable rule 12).
     {
         let mut err = std::io::stderr();
         match after {
             Some(target) => {
-                let _ = writeln!(err, "nkb send: target is window {:#x}", target.0);
+                let _ = writeln!(
+                    err,
+                    "nkb send: target is window {:#x} - {}",
+                    target.0,
+                    where_it_goes(&delivery.inspect(target))
+                );
                 if delay_seconds > 0 && before == after {
                     let _ = writeln!(
                         err,
@@ -1048,6 +1056,23 @@ fn sent_counts(graphemes: usize, code_points: usize, bytes: usize, utf16_units: 
         english::plural(bytes, "byte"),
         english::plural(utf16_units, "UTF-16 unit")
     )
+}
+
+/// The program and the kind of control a value goes to, in the CLI's words -
+/// `chrome.exe, a text field` (`D104`). The program's name comes from the
+/// system and is escaped, so a control character in it cannot reach the
+/// terminal as a command.
+fn where_it_goes(target: &Target) -> String {
+    let control = match target.field {
+        ControlKind::TextField => "a text field",
+        ControlKind::Terminal => "a terminal",
+        ControlKind::Unconfirmed => "a control not confirmed as a field",
+        ControlKind::NotTextField => "not a text field",
+    };
+    match &target.program {
+        Some(program) => format!("{}, {control}", program.escape_debug()),
+        None => format!("a program that did not give its name, {control}"),
+    }
 }
 
 fn count_down(seconds: u64) {
@@ -1784,6 +1809,31 @@ mod tests {
             still_typing(std::time::Duration::from_secs(9), &mut said, step),
             None,
             "said once, not once a report"
+        );
+    }
+
+    #[test]
+    fn the_target_line_names_the_program_and_the_kind_of_control_as_the_palette_does() {
+        let at = |program: Option<&str>, field| Target {
+            program: program.map(ToOwned::to_owned),
+            field,
+        };
+        assert_eq!(
+            where_it_goes(&at(Some("WindowsTerminal.exe"), ControlKind::Terminal)),
+            "WindowsTerminal.exe, a terminal"
+        );
+        assert_eq!(
+            where_it_goes(&at(None, ControlKind::TextField)),
+            "a program that did not give its name, a text field"
+        );
+        // A control character from the system reaches the terminal escaped.
+        assert_eq!(
+            where_it_goes(&at(Some("a\u{1b}[2Jb"), ControlKind::Unconfirmed)),
+            "a\\u{1b}[2Jb, a control not confirmed as a field"
+        );
+        assert_eq!(
+            where_it_goes(&at(Some("x.exe"), ControlKind::NotTextField)),
+            "x.exe, not a text field"
         );
     }
 }

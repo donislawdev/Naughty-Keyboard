@@ -42,8 +42,8 @@ pub use ports::{
     HotkeyRegistrar, KeystrokeError, KeystrokeSender, LiveShortcuts, POSITIONS_KEPT, PackCatalogue,
     PackFormat, PackSink, PackSource, Progress, SaveError, SettingChange, Settings, SettingsLoad,
     SettingsNote, SettingsStore, SettingsUnusable, ShortcutRegistration, ShortcutUnreadable,
-    ShortcutsUnavailable, SinkError, SourceError, SourceSkipped, StopReason, TargetRef,
-    TranslationCheck, TranslationTarget, ValueDelivery, Wait,
+    ShortcutsUnavailable, SinkError, SourceError, SourceSkipped, StopReason, TargetInspector,
+    TargetRef, TranslationCheck, TranslationTarget, ValueDelivery, Wait,
 };
 pub use send_value::{
     Clearing, ClearingOutcome, SendOutcome, SendRequest, Sending, SkipReason, ValueFacts,

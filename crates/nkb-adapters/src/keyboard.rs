@@ -7,9 +7,10 @@
 
 use nkb_app::ports::{
     Availability, Delivered, DeliveryError, KeystrokeError, KeystrokeSender, Progress, StopReason,
-    TargetRef, ValueDelivery,
+    TargetInspector, TargetRef, ValueDelivery,
 };
 use nkb_core::keys::{Key, KeyChord};
+use nkb_core::report::{ControlKind, Target};
 
 /// Sends the value as synthetic keystrokes, straight to the focused field.
 ///
@@ -92,6 +93,35 @@ impl ValueDelivery for DirectInjection {
                 })
             }
         }
+    }
+}
+
+/// The program and the kind of control a typed value goes to (UX8, `D104`) -
+/// the same adapter as the route, so it names the window the route types into.
+///
+/// Two reads, both from `nkb-sys`: the program's file name
+/// (`nkb_sys::program`, folder cut off there) and the kind of the focused
+/// control (`nkb_sys::field`, the classifier of `D73`). The second runs again
+/// in `deliver` for its own refusal - two looks a few milliseconds apart rather
+/// than an answer carried between two ports.
+impl TargetInspector for DirectInjection {
+    fn inspect(&self, target: TargetRef) -> Target {
+        let window = nkb_sys::WindowRef(target.0);
+        Target {
+            program: nkb_sys::program::program_name(window),
+            field: control_kind(nkb_sys::field::focused_input(window)),
+        }
+    }
+}
+
+/// The classifier's answer in the words of the core - one to one, the two
+/// crates do not depend on each other.
+fn control_kind(focus: nkb_sys::field::FocusedInput) -> ControlKind {
+    match focus {
+        nkb_sys::field::FocusedInput::TextField => ControlKind::TextField,
+        nkb_sys::field::FocusedInput::Terminal => ControlKind::Terminal,
+        nkb_sys::field::FocusedInput::Unknown => ControlKind::Unconfirmed,
+        nkb_sys::field::FocusedInput::NotTextField => ControlKind::NotTextField,
     }
 }
 
@@ -355,6 +385,26 @@ mod tests {
         assert_eq!(
             clearing_verdict(FocusedInput::Terminal),
             Err(KeystrokeError::InTerminal)
+        );
+    }
+
+    #[test]
+    fn the_classifier_answers_reach_the_core_one_to_one() {
+        // `D104`: what the palette and the block call the control is what the
+        // classifier answered - a guess named "a text field" would be a lie.
+        use nkb_sys::field::FocusedInput;
+        assert_eq!(
+            control_kind(FocusedInput::TextField),
+            ControlKind::TextField
+        );
+        assert_eq!(control_kind(FocusedInput::Terminal), ControlKind::Terminal);
+        assert_eq!(
+            control_kind(FocusedInput::Unknown),
+            ControlKind::Unconfirmed
+        );
+        assert_eq!(
+            control_kind(FocusedInput::NotTextField),
+            ControlKind::NotTextField
         );
     }
 

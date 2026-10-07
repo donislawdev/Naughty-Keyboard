@@ -219,6 +219,9 @@ struct ValueView {
     /// while the button cannot be used.
     key: Option<ValueKey>,
     name: String,
+    /// Where it was typed (UX8, `D104`) - empty for a value on its way and for
+    /// one put on the clipboard.
+    sent_to: String,
     reference: String,
     counts: String,
     /// The value with invisible characters substituted, or the recipe of a
@@ -517,6 +520,7 @@ pub fn drive(
         direct: &DirectInjection,
         by_clipboard: &by_clipboard,
         keys: &DirectInjection,
+        inspector: &DirectInjection,
         clipboard: &clipboard,
         report_text: &EnglishReport,
         progress: &on_the_way,
@@ -1321,6 +1325,7 @@ fn preview_line(preview: &ValuePreview) -> (String, String) {
 fn value_view(sent: &Sent) -> ValueView {
     ValueView {
         key: Some(sent.key.clone()),
+        sent_to: sent.target.as_ref().map(i18n::sent_to).unwrap_or_default(),
         ..facts_view(&sent.facts, sent.utf16_units, markers_of(sent))
     }
 }
@@ -1337,6 +1342,7 @@ fn facts_view(facts: &ValueFacts, utf16_units: usize, markers: Vec<(String, bool
     ValueView {
         key: None,
         name: facts.name.clone(),
+        sent_to: String::new(),
         reference: facts.reference.clone(),
         counts: i18n::counts(facts.graphemes, facts.code_points, facts.bytes, utf16_units),
         preview,
@@ -1504,6 +1510,9 @@ fn show_value(palette: &Palette, value: ValueView) {
         palette.set_last_key(shown_key(key));
     }
     palette.set_value_name(value.name.into());
+    // The switch is read BEFORE the string moves into its property.
+    palette.set_has_sent_to(!value.sent_to.is_empty());
+    palette.set_value_sent_to(value.sent_to.into());
     palette.set_value_reference(value.reference.into());
     palette.set_value_counts(value.counts.into());
     palette.set_value_preview(value.preview.into());
@@ -1777,7 +1786,7 @@ mod tests {
 
     use nkb_app::advance_sequence::{Message, Sent};
     use nkb_app::{UpcomingValue, ValueFacts};
-    use nkb_core::report::Arrival;
+    use nkb_core::report::{Arrival, ControlKind, Target};
     use nkb_core::sequence::{Position, Sequence};
     use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
     use slint::platform::{Platform, PlatformError, WindowAdapter};
@@ -1855,6 +1864,10 @@ mod tests {
             offensive: true,
             cleared: true,
             arrival: Arrival::Whole,
+            target: Some(Target {
+                program: Some(String::from("notepad.exe")),
+                field: ControlKind::TextField,
+            }),
         }
     }
 
@@ -1921,6 +1934,9 @@ mod tests {
         assert_eq!(palette.get_pack(), "Unicode & text");
         assert_eq!(palette.get_counter(), "7 / 34");
         assert_eq!(palette.get_value_name(), "Three zero-width spaces");
+        // Where it was typed, read at the press (UX8, `D104`).
+        assert!(palette.get_has_sent_to());
+        assert_eq!(palette.get_value_sent_to(), "to notepad.exe, a text field");
         assert_eq!(palette.get_value_reference(), "unicode-text/zero-width");
         assert_eq!(
             palette.get_value_counts(),
@@ -3034,6 +3050,7 @@ mod tests {
             direct: &DirectInjection,
             by_clipboard: &by_clipboard,
             keys: &DirectInjection,
+            inspector: &DirectInjection,
             clipboard: &clipboard,
             report_text: &EnglishReport,
             progress: &|_| {},

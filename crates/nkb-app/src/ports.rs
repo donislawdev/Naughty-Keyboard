@@ -14,7 +14,7 @@ use nkb_core::hotkeys::{ChordError, HotkeyAction, HotkeyChord};
 use nkb_core::keys::KeyChord;
 use nkb_core::lint::LintProblem;
 use nkb_core::pack::Pack;
-use nkb_core::report::ReportBlock;
+use nkb_core::report::{ReportBlock, Target};
 use nkb_core::screens::{Layout, Point};
 use std::fmt;
 use std::time::Duration;
@@ -179,10 +179,10 @@ impl fmt::Display for DeliveryError {
 
 /// An opaque handle to whatever will receive the value.
 ///
-/// A number, never a name. `TargetInspector` and the `WindowTitle` type are what
-/// will one day carry an application name and a window title, precisely because
-/// those need a type that hides them by default - architektura.md section 5.
-/// This carries neither: two of these can be compared, and nothing else.
+/// A number, never a name. [`TargetInspector`] reads the program's name from it
+/// at the press (`D104`), and a window title would need the `WindowTitle` type
+/// that hides it by default - architektura.md section 5. This carries neither:
+/// two of these can be compared, and nothing else.
 ///
 /// # Why the port needs it at all
 ///
@@ -249,6 +249,24 @@ pub trait ValueDelivery {
         text: &str,
         progress: &mut dyn FnMut(Progress),
     ) -> Result<Delivered, DeliveryError>;
+}
+
+/// What the target of a typed value is, read at the press (UX8, `D104`): the
+/// file name of its program and the kind of control with the keyboard focus.
+///
+/// # Half of the port the architecture drew, on purpose
+///
+/// `architektura.md` 3 drew this port to return an application name AND a
+/// window title. The title is still not read: it is what the tester was
+/// looking at, and it would need the `WindowTitle` type that hides it by
+/// default before anything could hold it. The owner chose the program and the
+/// kind of control (`UX-GUI-013`), so that is all this returns.
+///
+/// 🔴 Asked once per press, on the target of that press - never in between,
+/// never to learn which windows the tester moves between.
+pub trait TargetInspector {
+    /// The program and the kind of control behind `target`.
+    fn inspect(&self, target: TargetRef) -> Target;
 }
 
 /// Why a keystroke sequence was not sent, or not all of it.

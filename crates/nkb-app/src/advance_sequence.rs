@@ -75,14 +75,14 @@
 use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::pack::{Pack, PackValue, Risk};
 use nkb_core::preview::{ValuePreview, preview_of};
-use nkb_core::report::{Arrival, ReportBlock};
+use nkb_core::report::{Arrival, ReportBlock, Target};
 use nkb_core::sequence::{Delivery, Effect, Event, Sequence, Upcoming};
 
 use crate::load_pack;
 use crate::ports::{
     Availability, Clipboard, ClipboardError, DeliveryError, History, KeystrokeError,
     KeystrokeSender, PackFormat, PackSource, Progress, ReportText, SourceError, StopReason,
-    TargetRef, ValueDelivery,
+    TargetInspector, TargetRef, ValueDelivery,
 };
 use crate::send_value::{
     Clearing, ClearingOutcome, SendOutcome, Sending, SkipReason, ValueFacts, deliver_value,
@@ -104,6 +104,10 @@ pub struct Ports<'a> {
     /// by the delivery axis and nowhere else (`D71`).
     pub by_clipboard: &'a dyn ValueDelivery,
     pub keys: &'a dyn KeystrokeSender,
+    /// The program and the kind of control a typed value goes to, read at
+    /// the press (UX8, `D104`) - `DirectInjection` again, so it reads the
+    /// window the direct route types into.
+    pub inspector: &'a dyn TargetInspector,
     pub clipboard: &'a dyn Clipboard,
     pub report_text: &'a dyn ReportText,
     /// Hears a value on its way into the field, between two keys of a send
@@ -173,11 +177,14 @@ impl Default for AdvanceSequence {
 /// loaded once and never re-read under the sequence (`W5`), so the block built
 /// from it on `Ctrl+Alt+B` is the value that went out - and the send itself pays
 /// nothing for a report that is usually never asked for.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct LastSent {
     /// One-based, like the machine's positions.
     index: usize,
     arrival: Arrival,
+    /// Where it was typed, read at the press (`D104`) - `None` when it went to
+    /// the clipboard.
+    target: Option<Target>,
 }
 
 /// A pack held in memory for the length of the sequence.
@@ -292,6 +299,11 @@ pub struct Sent {
     /// for the clipboard and nothing for a fragment, so it showed the value
     /// before beside a sentence about the one cut short.
     pub arrival: Arrival,
+    /// The program and the kind of control it was typed into, read at the
+    /// press (UX8, `UX-GUI-013`, `D104`) - the same answer the report block
+    /// gives. `None` when it went to the clipboard: it is wherever the tester
+    /// pastes it.
+    pub target: Option<Target>,
 }
 
 /// A thing the palette must say. A key with its numbers - untouchable rule 9
@@ -780,10 +792,17 @@ impl AdvanceSequence {
     /// unreachable for a value that was just sent, and said rather than
     /// swallowed if it ever is.
     fn last_block(&self) -> Option<Result<ReportBlock, String>> {
-        let last = self.last?;
+        let last = self.last.as_ref()?;
         let loaded = self.loaded.as_ref()?;
         let value = loaded.pack.values.get(last.index.checked_sub(1)?)?;
-        Some(ReportBlock::describe(&loaded.pack, value, last.arrival).map_err(|_| value.id.clone()))
+        Some(
+            ReportBlock::describe(&loaded.pack, value, last.arrival)
+                .map(|block| ReportBlock {
+                    target: last.target.clone(),
+                    ..block
+                })
+                .map_err(|_| value.id.clone()),
+        )
     }
 
     /// Delivers value `index` from the held pack and settles the sequence.
@@ -848,6 +867,14 @@ impl AdvanceSequence {
             value: value.id.clone(),
         };
         let window = route.target();
+        // Where a typed value goes, read at the press and before any key
+        // (UX8, `D104`): the program and the kind of control. Never for the
+        // clipboard route - its value goes wherever the tester pastes it.
+        let inspected = if on_clipboard {
+            None
+        } else {
+            window.map(|window| ports.inspector.inspect(window))
+        };
         let mut on_clipboard = on_clipboard;
         let mut tell = |sending: Sending<'_>| {
             (ports.progress)(InFlight {
@@ -892,10 +919,18 @@ impl AdvanceSequence {
             self.window_on_clipboard = None;
         }
 
+        // The `D72` detour above went to the clipboard: the window that was read
+        // received nothing.
+        let target = if on_clipboard { None } else { inspected };
         if let Some(arrival) = arrival_of(&outcome, on_clipboard) {
-            self.last = Some(LastSent { index, arrival });
+            self.last = Some(LastSent {
+                index,
+                arrival,
+                target: target.clone(),
+            });
         }
         let (event, sent, classified) = classify(outcome, offensive, on_clipboard, &key);
+        let sent = sent.map(|sent| Sent { target, ..sent });
         messages.extend(classified);
         let step = self.sequence.apply(event);
         self.sequence = step.sequence;
@@ -1072,6 +1107,8 @@ fn classify(
                 offensive,
                 cleared: clearing == ClearingOutcome::Done,
                 arrival: arrival.unwrap_or(Arrival::Whole),
+                // Filled by `attempt`, which read it at the press.
+                target: None,
             }),
             // `D95`: a value typed without following the application may be
             // missing characters - the worse news, so first. Then `D76`,
@@ -1104,6 +1141,7 @@ fn classify(
                     units_sent,
                     units_expected,
                 }),
+                target: None,
             }),
             std::iter::once(Message::Interrupted {
                 units_sent,
@@ -1303,6 +1341,7 @@ fn after_clearing(error: KeystrokeError) -> (Event, Message) {
 mod tests {
     use super::*;
     use crate::test_support::*;
+    use nkb_core::report::ControlKind;
     use nkb_core::sequence::{Delivery, Position};
 
     #[test]
@@ -2642,5 +2681,70 @@ mod tests {
         assert_eq!(*ordinary.direct.handed.borrow(), vec!["alpha"]);
         assert!(second.messages.is_empty());
         assert_eq!(advance.counter(), Some((1, 3)));
+    }
+
+    fn in_a_terminal() -> Target {
+        Target {
+            program: Some(String::from("WindowsTerminal.exe")),
+            field: ControlKind::Terminal,
+        }
+    }
+
+    #[test]
+    fn a_typed_value_says_where_it_went_as_read_once_at_the_press() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_inspector(in_a_terminal());
+        kit.direct.set_target(Some(TargetRef(42)));
+
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        let _ = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+
+        assert_eq!(
+            outcome.sent.and_then(|sent| sent.target),
+            Some(in_a_terminal())
+        );
+        assert_eq!(
+            *kit.inspector.asked.borrow(),
+            vec![TargetRef(42)],
+            "asked once, about the window of the press"
+        );
+        let blocks = kit.text.blocks.borrow();
+        assert_eq!(
+            blocks.first().and_then(|block| block.target.clone()),
+            Some(in_a_terminal()),
+            "the block says what the palette said"
+        );
+    }
+
+    #[test]
+    fn a_value_put_on_the_clipboard_names_no_target_and_asks_nothing() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_inspector(in_a_terminal());
+        let _ = advance.choose_route(RouteRequest::Clipboard, &kit.ports());
+
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        let _ = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+
+        assert_eq!(outcome.sent.and_then(|sent| sent.target), None);
+        assert!(kit.inspector.asked.borrow().is_empty());
+        let blocks = kit.text.blocks.borrow();
+        assert_eq!(blocks.first().and_then(|block| block.target.clone()), None);
+    }
+
+    #[test]
+    fn a_value_sent_to_the_clipboard_for_a_window_with_higher_privileges_names_no_target() {
+        // `D72`: the window was read at the press, and then received nothing -
+        // the value went to the clipboard for the tester to paste.
+        let mut advance = chosen(Risk::Normal);
+        let kit = a_higher_window();
+
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        let _ = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+
+        let sent = outcome.sent.expect("the value went to the clipboard");
+        assert_eq!(sent.arrival, Arrival::OnClipboard);
+        assert_eq!(sent.target, None);
+        let blocks = kit.text.blocks.borrow();
+        assert_eq!(blocks.first().and_then(|block| block.target.clone()), None);
     }
 }

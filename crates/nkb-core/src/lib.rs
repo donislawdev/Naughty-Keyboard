@@ -50,7 +50,7 @@ pub use lint::{
 };
 pub use metrics::TextMetrics;
 pub use pack::{Pack, PackPair, PackValue, Risk};
-pub use report::{Arrival, ReportBlock, SpelledOut, Typed};
+pub use report::{Arrival, ControlKind, ReportBlock, SpelledOut, Target, Typed};
 pub use schema::{FieldKind, kind_of};
 pub use sequence::{Delivery, Effect, Event, Position, Sequence, Step};
 pub use source_text::SourceText;

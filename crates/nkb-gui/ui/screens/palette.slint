@@ -121,6 +121,10 @@ export component Palette inherits Window {
     // Its heading, now that a second value stands above it.
     in property <string> last-sent-label;
     in property <string> value-name;
+    // Where the value was typed, read at the press (UX8, `D104`): the program
+    // and the kind of control. Never for a value put on the clipboard.
+    in property <string> value-sent-to;
+    in property <bool> has-sent-to;
     in property <string> value-reference;
     in property <string> value-counts;
     // The value as a person can see it: invisible characters stand in as
@@ -511,6 +515,14 @@ export component Palette inherits Window {
                 }
                 TextName {
                     text: root.value-name;
+                    wrap: word-wrap;
+                }
+                // Under the name, because "which value went where" is the
+                // question this band answers - and a tester who switched
+                // windows a moment before the press sees it here, not in a
+                // ticket a day later (`UX-GUI-013`).
+                if root.has-sent-to: TextBody {
+                    text: root.value-sent-to;
                     wrap: word-wrap;
                 }
                 // The preview, in the order the sketch draws: name, preview,
