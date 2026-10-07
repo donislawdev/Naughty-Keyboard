@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 640" width="1280" height="640" font-family="Inter, sans-serif">
+  <title>Naughty Keyboard</title>
+  <desc>Social preview: "Your form works. Until someone types this." beside a card of values that break a form.</desc>
+  <!--
+    The social preview of the repository, 1280 by 640 pixels, the size GitHub
+    shows best. This is the drawing. social-preview.png is rendered from it,
+    and README.md in this directory says how.
+
+    Colours are the product's own tokens from crates/nkb-gui/ui/tokens.slint,
+    so the picture reads as the same program as the palette does:
+      surface #14161A, raised #1C1F26, sample #0E1014, border #2A2F3A,
+      strong border #454C5C, primary text #E6E9EF, secondary #9AA4B4,
+      muted #7E8797, accent #7AA2F7, risk #E0AF68, invisible #BB9AF7.
+
+    The card on the right is a drawing and not a screenshot, and every word in it
+    comes from this repository. See README.md for where each one is from.
+
+    Type: Inter for the words, DejaVu Sans Mono for the values. The second is
+    the typeface the product itself ships, and it is the one that has the glyph
+    for the open box that stands in for an invisible character.
+  -->
+  <defs>
+    <radialGradient id="glow" cx="1110" cy="40" r="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7AA2F7" stop-opacity="0.13"/>
+      <stop offset="1" stop-color="#7AA2F7" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow-low" cx="60" cy="660" r="520" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9ECE6A" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#9ECE6A" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- ground -->
+  <rect width="1280" height="640" fill="#14161A"/>
+  <rect width="1280" height="640" fill="url(#glow)"/>
+  <rect width="1280" height="640" fill="url(#glow-low)"/>
+
+  <!-- left column: who, the line, what, where -->
+  <image href="../../crates/nkb-gui/assets/edamame.svg" x="58" y="58" width="56" height="56"/>
+  <text x="126" y="97" font-size="30" font-weight="600" fill="#E6E9EF">Naughty Keyboard</text>
+  <rect x="418" y="68" width="112" height="36" rx="18" fill="#7AA2F7" fill-opacity="0.12" stroke="#7AA2F7" stroke-opacity="0.7" stroke-width="1.5"/>
+  <text x="474" y="92.5" font-size="17" font-weight="700" fill="#7AA2F7" text-anchor="middle">GUI + CLI</text>
+
+  <g font-size="66" font-weight="800" letter-spacing="-1.6">
+    <text x="58" y="206" fill="#E6E9EF">Your form works.</text>
+    <text x="58" y="278" fill="#7AA2F7">Until someone</text>
+    <text x="58" y="350" fill="#7AA2F7">types this.</text>
+  </g>
+
+  <text x="60" y="418" font-size="28" fill="#9AA4B4"><tspan font-weight="600" fill="#E6E9EF">Malicious test data</tspan>, one shortcut away.</text>
+  <g font-size="22" fill="#7E8797">
+    <text x="60" y="458">Unicode traps, invisible characters,</text>
+    <text x="60" y="488">impossible dates, length bombs.</text>
+  </g>
+  <text x="60" y="592" font-size="22" fill="#7E8797">Windows  ·  free, GPL-3.0  ·  works offline</text>
+
+  <!-- right column: the card. Mono values, what each one does to a form -->
+  <g>
+    <rect x="690" y="96" width="530" height="470" rx="16" fill="#1C1F26" stroke="#2A2F3A" stroke-width="1.5"/>
+
+    <!-- header: the shortcut that types the next value -->
+    <g font-family="'DejaVu Sans Mono', monospace" font-size="20" fill="#E6E9EF" text-anchor="middle">
+      <rect x="716" y="118" width="60" height="38" rx="8" fill="#0E1014" stroke="#454C5C" stroke-width="1.5"/>
+      <text x="746" y="143.5">Alt</text>
+      <rect x="788" y="118" width="80" height="38" rx="8" fill="#0E1014" stroke="#454C5C" stroke-width="1.5"/>
+      <text x="828" y="143.5">Shift</text>
+      <rect x="880" y="118" width="44" height="38" rx="8" fill="#0E1014" stroke="#454C5C" stroke-width="1.5"/>
+      <text x="902" y="143.5">N</text>
+    </g>
+    <text x="1196" y="143" font-size="19" fill="#7AA2F7" text-anchor="end">types the next value</text>
+    <line x1="690" y1="180" x2="1220" y2="180" stroke="#2A2F3A" stroke-width="1.5"/>
+
+    <!-- rows: a value, and what a form that never met it does -->
+    <g font-family="'DejaVu Sans Mono', monospace" font-size="31" fill="#E6E9EF">
+      <text x="716" y="236">null</text>
+      <text x="716" y="318">=1+1</text>
+      <text x="716" y="400">30.02.2026</text>
+      <text x="716" y="482">Kowalski<tspan fill="#BB9AF7">␣</tspan></text>
+    </g>
+    <g font-size="21" font-weight="600" fill="#E0AF68" text-anchor="end">
+      <text x="1186" y="235">comes back empty</text>
+      <text x="1186" y="317">exports as a formula</text>
+      <text x="1186" y="399">rolls over to 2 March</text>
+      <text x="1186" y="481">account not found</text>
+    </g>
+    <g stroke="#2A2F3A" stroke-width="1.5">
+      <line x1="690" y1="262" x2="1220" y2="262"/>
+      <line x1="690" y1="344" x2="1220" y2="344"/>
+      <line x1="690" y1="426" x2="1220" y2="426"/>
+      <line x1="690" y1="508" x2="1220" y2="508"/>
+    </g>
+    <text x="716" y="544" font-family="'DejaVu Sans Mono', monospace" font-size="20" fill="#7E8797">+ 98 more values in 9 packs</text>
+  </g>
+</svg>

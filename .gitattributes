@@ -47,6 +47,14 @@
 # files beside it are text and stay normalised to LF like the rest.
 /crates/nkb-gui/assets/*.ico binary
 
+# THE SOCIAL PREVIEW - the bytes the browser wrote, unaltered.
+#
+# A .png is binary. `text=auto` would leave it alone only because it happens to
+# contain a NUL byte, and a picture with one rewritten byte does not fail at the
+# commit - it fails as a broken preview on someone else's screen. The drawing
+# beside it is text and stays normalised to LF like the rest.
+/.github/social-preview/*.png binary
+
 # THE VENDORED UNICODE DATA - the upstream bytes, unaltered.
 #
 # These files are already LF-only, so `text=auto eol=lf` above would convert
