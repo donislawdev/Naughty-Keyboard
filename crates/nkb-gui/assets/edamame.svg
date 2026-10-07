@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!--
+    The application icon: an edamame pod opened to show its three beans.
+
+    This is the master. The window icon is this file, rendered by Slint at the
+    size the system asks for, and every size of edamame.ico from 40 px up is
+    this file rasterised. 32 px and below use edamame-small.svg, the same drawing
+    with a heavier outline and no shading, because the fine lines here do not
+    survive a 16 px grid. See README.md in this directory.
+
+    The pod is drawn lying flat and the group at the bottom turns it 40 degrees
+    and fits it to the canvas, so the shapes read in their own coordinates.
+  -->
+  <defs>
+    <linearGradient id="shell" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#76B03F"/>
+      <stop offset="1" stop-color="#3F7A28"/>
+    </linearGradient>
+    <linearGradient id="lining" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#E0EDB3"/>
+      <stop offset="1" stop-color="#C6DC90"/>
+    </linearGradient>
+    <radialGradient id="bean" cx="0.38" cy="0.32" r="0.9">
+      <stop offset="0" stop-color="#E2F6A0"/>
+      <stop offset="0.55" stop-color="#BDE46E"/>
+      <stop offset="1" stop-color="#8CC445"/>
+    </radialGradient>
+  </defs>
+  <g transform="translate(21.09 2.06) scale(1.053) rotate(-40 128 128)" stroke-linejoin="round" stroke-linecap="round">
+    <!-- stem: an outline stroke with a lighter stroke on top -->
+    <path d="M10 112 C-2 110 -12 102 -16 90" fill="none" stroke="#2B5A20" stroke-width="7.6"/>
+    <path d="M10 112 C-2 110 -12 102 -16 90" fill="none" stroke="#5E9A33" stroke-width="3.7"/>
+    <!-- far wall of the pod, seen from the inside -->
+    <path d="M8 112 C44 98 82 92 128 92 C174 92 212 98 248 112 C206 140 172 150 128 150 C84 150 50 140 8 112 Z" fill="url(#lining)" stroke="#2B5A20" stroke-width="4.75"/>
+    <!-- the beans, the middle one on top and a little larger -->
+    <g stroke="#69A433" stroke-width="2.3" fill="url(#bean)">
+      <ellipse cx="62" cy="122" rx="33" ry="36"/>
+      <ellipse cx="194" cy="122" rx="33" ry="36"/>
+      <ellipse cx="128" cy="116" rx="39" ry="42"/>
+    </g>
+    <g fill="#FFFFFF" opacity="0.38">
+      <ellipse cx="50" cy="108" rx="7" ry="4.2" transform="rotate(-35 50 108)"/>
+      <ellipse cx="182" cy="108" rx="7" ry="4.2" transform="rotate(-35 182 108)"/>
+      <ellipse cx="113" cy="98" rx="9" ry="5" transform="rotate(-35 113 98)"/>
+    </g>
+    <!-- near wall of the pod, in front of the beans -->
+    <path d="M248 112 C206 140 172 150 128 150 C84 150 50 140 8 112 C46 160 84 186 128 186 C172 186 210 160 248 112 Z" fill="url(#shell)" stroke="#2B5A20" stroke-width="4.75"/>
+  </g>
+</svg>

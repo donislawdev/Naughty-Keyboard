@@ -302,6 +302,42 @@ fn string_literals(line: &str) -> Vec<&str> {
     found
 }
 
+/// The line with the path taken out of every `@image-url("...")`.
+///
+/// A path to a file is not a sentence - it is the other thing besides an import
+/// that a `.slint` file names in quotes, and it is let through for the same
+/// reason. Only the path goes: the rest of the line stays, so a sentence written
+/// beside an asset is still a sentence, and a call whose argument is not a
+/// plain literal is left whole for the rule to read.
+fn without_asset_paths(line: &str) -> String {
+    const CALL: &str = "@image-url(";
+    let mut kept = String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some(at) = rest.find(CALL) {
+        let after_call = at + CALL.len();
+        kept.push_str(&rest[..after_call]);
+        rest = &rest[after_call..];
+        let spaces = rest.len() - rest.trim_start().len();
+        kept.push_str(&rest[..spaces]);
+        rest = &rest[spaces..];
+        let Some(inside) = rest.strip_prefix('"') else {
+            continue;
+        };
+        let bytes = inside.as_bytes();
+        let mut end = 0;
+        while end < bytes.len() && bytes[end] != b'"' {
+            end += if bytes[end] == b'\\' { 2 } else { 1 };
+        }
+        if end >= bytes.len() {
+            // An unterminated quote is the Slint compiler's to report.
+            break;
+        }
+        rest = &inside[end + 1..];
+    }
+    kept.push_str(rest);
+    kept
+}
+
 /// The name a line binds a value to, whether it declares a property or assigns
 /// one: `out property <string> font-mono: "x"` binds `font-mono`, `text: "x"`
 /// binds `text`.
@@ -361,7 +397,8 @@ fn sentences_written_into(body: &str, allow_font_names: bool) -> Vec<(usize, Str
         if allow_font_names && bound_name(line).is_some_and(|name| name.starts_with("font-")) {
             continue;
         }
-        for literal in string_literals(line) {
+        let line = without_asset_paths(line);
+        for literal in string_literals(&line) {
             found.push((n + 1, literal.to_owned()));
         }
     }
@@ -770,6 +807,37 @@ fn the_sentence_rules_can_actually_fail() {
     assert!(
         sentences_written_into(door, false).is_empty(),
         "an import is a statement, not a line - the path may sit under the names it brings in"
+    );
+    // A path to an asset is a name of a file, like an import. The icon is the
+    // first one, and the rule had to learn the difference without going blind:
+    // the sentence beside a path, and a path that is not the whole argument,
+    // are still read.
+    let icon = "    out property <image> app-icon: @image-url(\"../assets/edamame.svg\");";
+    assert!(
+        sentences_written_into(icon, true).is_empty()
+            && sentences_written_into(icon, false).is_empty(),
+        "an asset path is not a sentence, in the dictionary or anywhere else"
+    );
+    assert_eq!(
+        sentences_written_into(
+            "    Row { text: \"Next\";\n    icon: @image-url( \"../a.svg\" ); }",
+            false
+        ),
+        vec![(1, "Next".to_owned())],
+        "a sentence written beside an asset path is still a sentence"
+    );
+    assert_eq!(
+        sentences_written_into(
+            "    Row { icon: @image-url(\"a.svg\", nine-slice(1 2));\n    text: \"Next\"; }",
+            false
+        ),
+        vec![(2, "Next".to_owned())],
+        "only the path goes: what else the call carries is read as before"
+    );
+    assert_eq!(
+        sentences_written_into("    text: \"see @image-url(\\\"x\\\")\";", false).len(),
+        1,
+        "a sentence that only talks about the call is still a sentence"
     );
     assert!(
         sentences_pushed_from("fn wire(p: &Palette) { p.set_message(sentence); }").is_empty(),

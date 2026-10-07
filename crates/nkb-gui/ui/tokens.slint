@@ -223,6 +223,24 @@ export global Tokens {
     out property <length> radius: 6px;
     out property <length> hairline: 1px;
 
+    // ---- the mark ----------------------------------------------------------
+    // The program's icon, which the system shows in a window's title bar and on
+    // the taskbar. One drawing, in `assets/`, and every window names it here
+    // rather than a path of its own: a path is a literal, and literals live in
+    // this file. `ui_guard.rs` lets an `@image-url` path through because it is
+    // not a sentence, and nothing else.
+    //
+    // An SVG and not a PNG on purpose. Slint draws an SVG at the size the system
+    // asks for - 64 px at the system's scale for the window icon - where a PNG
+    // is handed over at the one size it was drawn, and the system then shrinks
+    // it to 16 px by itself and not well.
+    //
+    // This is NOT the icon a file manager shows for `nkb-gui.exe`. That one is
+    // stored inside the executable, in `assets/edamame.ico`, which `build.rs`
+    // embeds. See `assets/README.md` for both and for why the .ico has a second
+    // drawing for its small sizes.
+    out property <image> app-icon: @image-url("../assets/edamame.svg");
+
     // ---- the monospaced typeface -------------------------------------------
     //
     // DejaVu Sans Mono 2.37, shipped in ui/fonts/ and imported at the top of

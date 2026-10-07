@@ -38,6 +38,15 @@
 # `binary` is `-text -diff`: no conversion, and no attempt to diff it either.
 /crates/nkb-gui/ui/fonts/** binary
 
+# THE APPLICATION ICON - the bytes the generator wrote, unaltered.
+#
+# An .ico is binary through and through: nine pictures behind a directory of
+# offsets. `text=auto` would leave it alone only because it happens to contain a
+# NUL byte, and an icon with a mangled offset does not fail at the build - it
+# fails as a program with a blank icon on someone else's desktop. The two SVG
+# files beside it are text and stay normalised to LF like the rest.
+/crates/nkb-gui/assets/*.ico binary
+
 # THE VENDORED UNICODE DATA - the upstream bytes, unaltered.
 #
 # These files are already LF-only, so `text=auto eol=lf` above would convert
