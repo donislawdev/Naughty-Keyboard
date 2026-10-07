@@ -18,8 +18,8 @@
 //!
 //! - Every comment: `//`, `///`, `//!` and `/* */` in Rust, `//` and `/* */` in
 //!   Slint and in the Windows resource script, `<!-- -->` in the SVG drawings,
-//!   `#` in TOML and in the two git files at the root. Code quoted in a
-//!   comment is syntax, not prose, and is recognised the way rustdoc does it:
+//!   `#` in TOML, in the two git files at the root and in `.github/CODEOWNERS`.
+//!   Code quoted in a comment is syntax, not prose, and is recognised the way rustdoc does it:
 //!   between backticks, or between fence lines of three backticks or tildes. A
 //!   block indented by four spaces is NOT recognised as code. Fence it.
 //! - Every Markdown file, with the same two ways out for code.
@@ -816,6 +816,12 @@ fn walk(root: &Path, dir: &Path, tree: &mut Tree) {
             }
             continue;
         }
+        // The file GitHub reads to ask the owner for a review. It has no extension
+        // and its comments are `#` lines, so it is read the way the git files are.
+        if here == ".github" && name == "CODEOWNERS" {
+            tree.files.push((path, Syntax::Git));
+            continue;
+        }
         let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
         match syntax_of(&path) {
             Some(syntax) => tree.files.push((path, syntax)),
@@ -887,8 +893,8 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
         "read {toml} TOML files, expected the seven manifests at least"
     );
     assert!(
-        git == 2,
-        "read {git} git files, expected .gitignore and .gitattributes"
+        git == 3,
+        "read {git} git files, expected .gitignore, .gitattributes and .github/CODEOWNERS"
     );
     assert!(
         markdown >= 1,

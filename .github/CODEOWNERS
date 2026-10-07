@@ -1,0 +1,38 @@
+# Who owns this repository, and who GitHub asks to review a change to it.
+#
+# One owner, one line. Finer-grained rules would be fiction here: every path
+# below has the same owner, and a list that pretends otherwise ages into a claim
+# nobody checks.
+#
+# What this file DOES do
+# ----------------------
+# A pull request opened by anyone else automatically requests a review from the
+# owner. That is the whole reason it exists: an outside contribution should not
+# sit unnoticed because nobody was asked. This project takes new values for the
+# packs, and for now they arrive as issues rather than pull requests - see the
+# Contributing section of the README.
+#
+# What it does NOT do
+# -------------------
+# GitHub never requests a review from the person who opened the pull request, and
+# nobody can approve their own. So on a change written by the owner this file is
+# silent by design - and a branch rule that demands a code-owner approval would,
+# on such a change, demand one from somebody who does not exist. That combination
+# freezes the repository: no pull request can ever be merged. If a protection rule
+# is ever added here, the setting that requires a review from code owners is the
+# one to leave off.
+#
+# What actually guards the code today
+# -----------------------------------
+# Checked on 2026-10-07: GitHub reports the default branch as not protected, so
+# nothing mechanically blocks a merge. There is no CI workflow in this repository
+# yet either, so no gate runs on a pull request. What exists is the test suite in
+# the workspace, which includes tests that hold the project's promises, such as
+# what the tool may read about a window and which keys it may send. It runs when
+# somebody runs it, and nothing runs it for you yet. That is a weaker guarantee
+# than an enforced rule and it is stated plainly rather than dressed up.
+#
+# Syntax note: gitignore-style patterns, with three exceptions - a pattern may not
+# start with `#`, `!` does not negate, and `[ ]` character ranges do not work.
+
+*       @donislawdev
