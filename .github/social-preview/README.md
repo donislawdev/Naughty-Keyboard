@@ -35,6 +35,21 @@ result before committing it.
 The icon is read from `crates/nkb-gui/assets/edamame.svg` and not copied, so a
 new icon shows up here the next time the picture is rendered.
 
+## The platform line
+
+This is the line that has to follow the program as it grows. The drawing holds it
+twice, as the groups `platforms-today` and `platforms-everywhere`, and shows
+exactly one of them:
+
+| Group | Says | Use it |
+|---|---|---|
+| `platforms-today` | Types on Windows, CLI and clipboard on macOS and Linux | while typing into other windows works only on Windows |
+| `platforms-everywhere` | Windows, macOS, Linux | once typing works on all three |
+
+To switch, move `display="none"` from the group that is shown to the group that is
+hidden, render the picture again, and upload it again. Edit the wording in the
+same place if a third state is needed.
+
 ## Where each word comes from
 
 The card is a drawing in the product's own colours (`crates/nkb-gui/ui/tokens.slint`),
@@ -47,8 +62,9 @@ checked again when its source changes.
 | what each of them does | the `breaks` field of that value |
 | the open box after `Kowalski` | the marker the palette prints for an invisible character, from `crates/nkb-core/src/preview.rs` |
 | Alt, Shift, N, "types the next value" | the default shortcut for the next value |
-| 98 more values in 9 packs | the 102 values in the 9 packs in `packs/`, counted on 2026-10-07, less the four shown |
-| Windows | typing into another window exists only there, and `send_text` in `nkb-sys` answers `Unsupported` elsewhere |
+| 9 packs, 102 values, and the nine chips | `nkb packs`, which lists the nine packs in that order and ends with "9 of 9 packs loaded, 102 values". Counted on 2026-10-07 |
+| Types on Windows | typing into another window exists only there, and `send_text` in `nkb-sys` answers `Unsupported` elsewhere |
+| CLI and clipboard on macOS and Linux | the commands other than `send` do not touch the system, and were run on Linux on 2026-10-07 (`packs`, `emit`). Where there is no direct route the palette starts in clipboard mode, which is read from `crates/nkb-gui/src/live.rs` and was not run on macOS or Linux |
 | works offline | nothing in the workspace opens a network connection |
 | GUI + CLI | the two programs, `nkb-gui` and `nkb` |
 | Malicious test data, one shortcut away | the first line of `nkb --help` |

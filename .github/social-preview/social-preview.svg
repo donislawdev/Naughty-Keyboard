@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 640" width="1280" height="640" font-family="Inter, sans-serif">
   <title>Naughty Keyboard</title>
-  <desc>Social preview: "Your form works. Until someone types this." beside a card of values that break a form.</desc>
+  <desc>Social preview: "Your form works. Until someone types this." beside the nine packs and a card of values that break a form.</desc>
   <!--
     The social preview of the repository, 1280 by 640 pixels, the size GitHub
     shows best. This is the drawing. social-preview.png is rendered from it,
@@ -12,12 +12,20 @@
       strong border #454C5C, primary text #E6E9EF, secondary #9AA4B4,
       muted #7E8797, accent #7AA2F7, risk #E0AF68, invisible #BB9AF7.
 
-    The card on the right is a drawing and not a screenshot, and every word in it
-    comes from this repository. See README.md for where each one is from.
+    The two cards on the right are a drawing and not a screenshot, and every
+    word in them comes from this repository. See README.md for where each one
+    is from.
 
     Type: Inter for the words, DejaVu Sans Mono for the values. The second is
     the typeface the product itself ships, and it is the one that has the glyph
     for the open box that stands in for an invisible character.
+
+    THE PLATFORM LINE is the one thing here that follows the program as it
+    grows. It exists twice, as the groups platforms-today and
+    platforms-everywhere, and exactly one of them is shown. To switch, move
+    display="none" from one group to the other, then render again. The first is
+    what is true now, the second is for the day typing works on all three
+    systems.
   -->
   <defs>
     <radialGradient id="glow" cx="1110" cy="40" r="720" gradientUnits="userSpaceOnUse">
@@ -52,43 +60,69 @@
     <text x="60" y="458">Unicode traps, invisible characters,</text>
     <text x="60" y="488">impossible dates, length bombs.</text>
   </g>
-  <text x="60" y="592" font-size="22" fill="#7E8797">Windows  ·  free, GPL-3.0  ·  works offline</text>
 
-  <!-- right column: the card. Mono values, what each one does to a form -->
-  <g>
-    <rect x="690" y="96" width="530" height="470" rx="16" fill="#1C1F26" stroke="#2A2F3A" stroke-width="1.5"/>
+  <text x="60" y="556" font-size="22" fill="#7E8797">Free, GPL-3.0 · works offline</text>
+  <g id="platforms-today" font-size="20" fill="#9AA4B4">
+    <text x="60" y="590">Types on Windows · CLI and clipboard on macOS and Linux</text>
+  </g>
+  <g id="platforms-everywhere" display="none" font-size="22" fill="#9AA4B4">
+    <text x="60" y="590">Windows · macOS · Linux</text>
+  </g>
 
-    <!-- header: the shortcut that types the next value -->
-    <g font-family="'DejaVu Sans Mono', monospace" font-size="20" fill="#E6E9EF" text-anchor="middle">
-      <rect x="716" y="118" width="60" height="38" rx="8" fill="#0E1014" stroke="#454C5C" stroke-width="1.5"/>
-      <text x="746" y="143.5">Alt</text>
-      <rect x="788" y="118" width="80" height="38" rx="8" fill="#0E1014" stroke="#454C5C" stroke-width="1.5"/>
-      <text x="828" y="143.5">Shift</text>
-      <rect x="880" y="118" width="44" height="38" rx="8" fill="#0E1014" stroke="#454C5C" stroke-width="1.5"/>
-      <text x="902" y="143.5">N</text>
-    </g>
-    <text x="1196" y="143" font-size="19" fill="#7AA2F7" text-anchor="end">types the next value</text>
-    <line x1="690" y1="180" x2="1220" y2="180" stroke="#2A2F3A" stroke-width="1.5"/>
+  <!-- right column, top card: the packs, in the order nkb packs lists them -->
+  <rect x="690" y="64" width="530" height="172" rx="16" fill="#1C1F26" stroke="#2A2F3A" stroke-width="1.5"/>
+  <text x="712" y="94" font-family="'DejaVu Sans Mono', monospace" font-size="15" fill="#7E8797">9 packs · 102 values</text>
+  <g stroke="#2A2F3A" stroke-width="1.5" fill="#14161A">
+    <rect x="712" y="108" width="112.3" height="32" rx="9"/>
+    <rect x="832.3" y="108" width="130.4" height="32" rx="9"/>
+    <rect x="970.7" y="108" width="130.4" height="32" rx="9"/>
+    <rect x="712" y="148" width="130.4" height="32" rx="9"/>
+    <rect x="850.4" y="148" width="157.5" height="32" rx="9"/>
+    <rect x="1015.8" y="148" width="166.5" height="32" rx="9"/>
+    <rect x="712" y="188" width="157.5" height="32" rx="9"/>
+    <rect x="877.5" y="188" width="103.3" height="32" rx="9"/>
+    <rect x="988.7" y="188" width="157.5" height="32" rx="9"/>
+  </g>
+  <g font-family="'DejaVu Sans Mono', monospace" font-size="15" fill="#9AA4B4" text-anchor="middle">
+    <text x="768.2" y="129">whitespace</text>
+    <text x="897.5" y="129">unicode-text</text>
+    <text x="1035.9" y="129">length-bombs</text>
+    <text x="777.2" y="169">magic-values</text>
+    <text x="929.1" y="169">numbers-extreme</text>
+    <text x="1099.1" y="169">dates-impossible</text>
+    <text x="790.7" y="209">export-breakers</text>
+    <text x="929.1" y="209">locale-pl</text>
+    <text x="1067.5" y="209">filenames-paths</text>
+  </g>
 
-    <!-- rows: a value, and what a form that never met it does -->
-    <g font-family="'DejaVu Sans Mono', monospace" font-size="31" fill="#E6E9EF">
-      <text x="716" y="236">null</text>
-      <text x="716" y="318">=1+1</text>
-      <text x="716" y="400">30.02.2026</text>
-      <text x="716" y="482">Kowalski<tspan fill="#BB9AF7">␣</tspan></text>
-    </g>
-    <g font-size="21" font-weight="600" fill="#E0AF68" text-anchor="end">
-      <text x="1186" y="235">comes back empty</text>
-      <text x="1186" y="317">exports as a formula</text>
-      <text x="1186" y="399">rolls over to 2 March</text>
-      <text x="1186" y="481">account not found</text>
-    </g>
-    <g stroke="#2A2F3A" stroke-width="1.5">
-      <line x1="690" y1="262" x2="1220" y2="262"/>
-      <line x1="690" y1="344" x2="1220" y2="344"/>
-      <line x1="690" y1="426" x2="1220" y2="426"/>
-      <line x1="690" y1="508" x2="1220" y2="508"/>
-    </g>
-    <text x="716" y="544" font-family="'DejaVu Sans Mono', monospace" font-size="20" fill="#7E8797">+ 98 more values in 9 packs</text>
+  <!-- right column, lower card: the shortcut, then a value and what a form that never met it does -->
+  <rect x="690" y="250" width="530" height="328" rx="16" fill="#1C1F26" stroke="#2A2F3A" stroke-width="1.5"/>
+  <g font-family="'DejaVu Sans Mono', monospace" font-size="20" fill="#E6E9EF" text-anchor="middle">
+    <rect x="716" y="264" width="60" height="36" rx="8" fill="#0E1014" stroke="#454C5C" stroke-width="1.5"/>
+    <text x="746" y="289">Alt</text>
+    <rect x="788" y="264" width="80" height="36" rx="8" fill="#0E1014" stroke="#454C5C" stroke-width="1.5"/>
+    <text x="828" y="289">Shift</text>
+    <rect x="880" y="264" width="44" height="36" rx="8" fill="#0E1014" stroke="#454C5C" stroke-width="1.5"/>
+    <text x="902" y="289">N</text>
+  </g>
+  <text x="1196" y="288" font-size="19" fill="#7AA2F7" text-anchor="end">types the next value</text>
+  <line x1="690" y1="314" x2="1220" y2="314" stroke="#2A2F3A" stroke-width="1.5"/>
+
+  <g font-family="'DejaVu Sans Mono', monospace" font-size="30" fill="#E6E9EF">
+    <text x="716" y="361">null</text>
+    <text x="716" y="427">=1+1</text>
+    <text x="716" y="493">30.02.2026</text>
+    <text x="716" y="559">Kowalski<tspan fill="#BB9AF7">␣</tspan></text>
+  </g>
+  <g font-size="21" font-weight="600" fill="#E0AF68" text-anchor="end">
+    <text x="1186" y="360">comes back empty</text>
+    <text x="1186" y="426">exports as a formula</text>
+    <text x="1186" y="492">rolls over to 2 March</text>
+    <text x="1186" y="558">account not found</text>
+  </g>
+  <g stroke="#2A2F3A" stroke-width="1.5">
+    <line x1="690" y1="380" x2="1220" y2="380"/>
+    <line x1="690" y1="446" x2="1220" y2="446"/>
+    <line x1="690" y1="512" x2="1220" y2="512"/>
   </g>
 </svg>
