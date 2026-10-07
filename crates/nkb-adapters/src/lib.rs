@@ -16,6 +16,7 @@ pub mod i18n;
 pub mod keyboard;
 pub(crate) mod read_pack;
 pub mod report_text;
+pub mod screens;
 pub mod settings_file;
 pub mod shortcuts;
 pub mod skeleton;

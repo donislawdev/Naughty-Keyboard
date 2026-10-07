@@ -28,11 +28,12 @@
 use std::mem::{Discriminant, discriminant};
 
 use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord, Refusal, Refused};
+use nkb_core::screens::{Layout, Point};
 
 use crate::advance_sequence::ChooseError;
 use crate::ports::{
-    HotkeyRegistrar, SaveError, SettingChange, Settings, SettingsLoad, SettingsNote, SettingsStore,
-    SettingsUnusable, ShortcutRegistration, ShortcutsUnavailable,
+    HotkeyRegistrar, POSITIONS_KEPT, SaveError, SettingChange, Settings, SettingsLoad,
+    SettingsNote, SettingsStore, SettingsUnusable, ShortcutRegistration, ShortcutsUnavailable,
 };
 
 /// Something about the settings worth telling the tester.
@@ -53,6 +54,9 @@ pub enum SettingsMessage {
     /// A shortcut the tester wrote reads, and still cannot be used - the
     /// action keeps its default. Why is in the refusal.
     ShortcutNotUsed(Refused),
+    /// The place remembered for this layout of screens is off every one of
+    /// them, so the system placed the palette (UX7).
+    PositionOffScreen { at: Point },
 }
 
 /// What opening a pack had to say, in the order it happened.
@@ -131,6 +135,16 @@ impl KeptSettings {
     #[must_use]
     pub fn settings(&self) -> &Settings {
         &self.settings
+    }
+
+    /// Whether the welcome window opens (`ux-spec.md` 5.1): the tester has not
+    /// closed it before, AND closing it can be remembered. A file that cannot
+    /// be used, or no place for one, belongs to a tester who already has a
+    /// settings file or to a machine that keeps nothing - and there the
+    /// welcome would open on every run.
+    #[must_use]
+    pub fn welcome_due(&self) -> bool {
+        self.keeping == Keeping::Saving && self.settings.welcome_done != Some(true)
     }
 
     /// The shortcuts for this run: `defaults` with the tester's own on top,
@@ -444,6 +458,13 @@ impl KeptSettings {
             SettingChange::Compact(compact) => self.settings.compact == Some(*compact),
             SettingChange::Clearing(clearing) => self.settings.clearing == Some(*clearing),
             SettingChange::Shortcut { .. } => false,
+            // The same place, and already the most recent - the store moves a
+            // layout to the end when it is used again, so the oldest one is
+            // the first to go.
+            SettingChange::Position { layout, at } => {
+                self.settings.positions.last() == Some(&(layout.clone(), *at))
+            }
+            SettingChange::WelcomeDone => self.settings.welcome_done == Some(true),
         }
     }
 
@@ -455,7 +476,63 @@ impl KeptSettings {
             SettingChange::Shortcut { action, chord } => {
                 wish(&mut self.settings.shortcuts, action, chord);
             }
+            SettingChange::Position { layout, at } => {
+                let positions = &mut self.settings.positions;
+                positions.retain(|(held, _)| *held != layout);
+                positions.push((layout, at));
+                let over = positions.len().saturating_sub(POSITIONS_KEPT);
+                positions.drain(..over);
+            }
+            SettingChange::WelcomeDone => self.settings.welcome_done = Some(true),
         }
+    }
+
+    /// Where the palette opens on `layout` (UX7, `UX-GUI-012`): the place
+    /// remembered for it, when a window there stands on one of its screens.
+    ///
+    /// `(None, None)` - nothing remembered for this layout, or no layout to ask
+    /// about: the system places the window, as for any new one. `(None, Some)`
+    /// - remembered, and off every screen of this layout, so the window would
+    ///   open where nobody can see it. The system places it instead, and the
+    ///   tester hears why rather than wondering where the palette went.
+    #[must_use]
+    pub fn position_on(&self, layout: Option<&Layout>) -> (Option<Point>, Option<SettingsMessage>) {
+        let Some(layout) = layout else {
+            return (None, None);
+        };
+        match self
+            .settings
+            .positions
+            .iter()
+            .find(|(held, _)| held == layout)
+        {
+            None => (None, None),
+            Some((_, at)) if layout.shows(*at) => (Some(*at), None),
+            Some((_, at)) => (None, Some(SettingsMessage::PositionOffScreen { at: *at })),
+        }
+    }
+
+    /// Remembers where the palette stood when it closed, on the layout of that
+    /// moment - unless the place is off every screen of it. A minimised window
+    /// reports a place far outside the desktop, and remembering that would
+    /// open the next palette where nobody can see it, so it is not remembered
+    /// and the place kept before stays.
+    pub fn keep_position(
+        &mut self,
+        store: &dyn SettingsStore,
+        layout: &Layout,
+        at: Point,
+    ) -> Option<SettingsMessage> {
+        if !layout.shows(at) {
+            return None;
+        }
+        self.keep(
+            store,
+            SettingChange::Position {
+                layout: layout.clone(),
+                at,
+            },
+        )
     }
 }
 
@@ -610,6 +687,7 @@ mod tests {
                 compact,
                 clearing: None,
                 shortcuts: Vec::new(),
+                ..Settings::default()
             },
             notes: Vec::new(),
         }
@@ -1573,5 +1651,151 @@ mod tests {
                 .chord(HotkeyAction::NextValue),
             chord("Alt+Shift+M")
         );
+    }
+
+    fn layout(text: &str) -> Layout {
+        Layout::parse(text).expect("a layout")
+    }
+
+    fn remembering(positions: Vec<(Layout, Point)>) -> KeptSettings {
+        KeptSettings::open(&FakeStore::loading(SettingsLoad::Read {
+            settings: Settings {
+                positions,
+                ..Settings::default()
+            },
+            notes: Vec::new(),
+        }))
+        .0
+    }
+
+    #[test]
+    fn a_place_is_given_only_on_the_layout_it_was_remembered_on() {
+        let dock = layout("2560x1440@0,0 1920x1080@2560,0");
+        let alone = layout("1920x1080@0,0");
+        let at = Point { x: 3000, y: 100 };
+        let kept = remembering(vec![(dock.clone(), at)]);
+
+        assert_eq!(kept.position_on(Some(&dock)), (Some(at), None));
+        assert_eq!(kept.position_on(Some(&alone)), (None, None));
+        assert_eq!(kept.position_on(None), (None, None));
+    }
+
+    #[test]
+    fn a_remembered_place_off_every_screen_is_not_used_and_is_said() {
+        let alone = layout("1920x1080@0,0");
+        let at = Point { x: 5000, y: 100 };
+        let kept = remembering(vec![(alone.clone(), at)]);
+
+        assert_eq!(
+            kept.position_on(Some(&alone)),
+            (None, Some(SettingsMessage::PositionOffScreen { at }))
+        );
+    }
+
+    #[test]
+    fn a_place_off_every_screen_is_not_kept_on_closing() {
+        // Where Windows reports a minimised window.
+        let store = FakeStore::loading(SettingsLoad::Absent);
+        let (mut kept, _) = KeptSettings::open(&store);
+        let alone = layout("1920x1080@0,0");
+
+        let said = kept.keep_position(
+            &store,
+            &alone,
+            Point {
+                x: -32000,
+                y: -32000,
+            },
+        );
+
+        assert_eq!(said, None);
+        assert_eq!(store.saves(), Vec::new());
+        assert_eq!(kept.settings().positions, Vec::new());
+    }
+
+    #[test]
+    fn a_place_is_saved_once_and_moves_to_the_end_when_its_layout_is_used_again() {
+        let store = FakeStore::loading(SettingsLoad::Absent);
+        let (mut kept, _) = KeptSettings::open(&store);
+        let dock = layout("2560x1440@0,0 1920x1080@2560,0");
+        let alone = layout("1920x1080@0,0");
+        let on_dock = Point { x: 3000, y: 100 };
+        let on_its_own = Point { x: 40, y: 40 };
+
+        assert_eq!(kept.keep_position(&store, &dock, on_dock), None);
+        assert_eq!(kept.keep_position(&store, &dock, on_dock), None);
+        assert_eq!(
+            store.saves().len(),
+            1,
+            "the same place again writes nothing"
+        );
+
+        let _ = kept.keep_position(&store, &alone, on_its_own);
+        let _ = kept.keep_position(&store, &dock, on_dock);
+        assert_eq!(
+            store.saves().len(),
+            3,
+            "the same place, no longer the most recent, is written to move it to the end"
+        );
+        assert_eq!(
+            kept.settings().positions,
+            vec![(alone, on_its_own), (dock, on_dock)]
+        );
+    }
+
+    #[test]
+    fn the_places_of_the_sixteen_layouts_used_last_are_kept_and_the_oldest_goes() {
+        let store = FakeStore::loading(SettingsLoad::Absent);
+        let (mut kept, _) = KeptSettings::open(&store);
+        let nth = |n: i32| {
+            (
+                layout(&format!("1000x1000@{},0", n * 1000)),
+                Point {
+                    x: n * 1000 + 10,
+                    y: 10,
+                },
+            )
+        };
+        for n in 0..=16 {
+            let (layout, at) = nth(n);
+            let _ = kept.keep_position(&store, &layout, at);
+        }
+
+        let positions = &kept.settings().positions;
+        assert_eq!(positions.len(), POSITIONS_KEPT);
+        assert_eq!(positions.first(), Some(&nth(1)), "the first one went");
+        assert_eq!(positions.last(), Some(&nth(16)));
+    }
+
+    #[test]
+    fn the_welcome_is_due_until_it_was_closed_and_only_where_closing_it_is_remembered() {
+        let due = |load: SettingsLoad| {
+            KeptSettings::open(&FakeStore::loading(load))
+                .0
+                .welcome_due()
+        };
+        let read = |done| SettingsLoad::Read {
+            settings: Settings {
+                welcome_done: done,
+                ..Settings::default()
+            },
+            notes: Vec::new(),
+        };
+
+        assert!(due(SettingsLoad::Absent));
+        assert!(due(read(None)));
+        assert!(due(read(Some(false))));
+        assert!(!due(read(Some(true))));
+        assert!(!due(SettingsLoad::Unusable(SettingsUnusable::NotUtf8)));
+        assert!(!due(SettingsLoad::Nowhere {
+            missing: String::from("APPDATA")
+        }));
+
+        let store = FakeStore::loading(SettingsLoad::Absent);
+        let (mut kept, _) = KeptSettings::open(&store);
+        assert_eq!(kept.keep(&store, SettingChange::WelcomeDone), None);
+        assert!(!kept.welcome_due());
+        assert_eq!(kept.keep(&store, SettingChange::WelcomeDone), None);
+        assert_eq!(store.saves(), vec![SettingChange::WelcomeDone]);
     }
 }

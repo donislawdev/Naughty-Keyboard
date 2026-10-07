@@ -39,9 +39,9 @@ pub use load_pack::{LoadedPack, Refused, load};
 pub use new_pack::{NewPackOutcome, new_pack};
 pub use ports::{
     Availability, CatalogueCoverage, CatalogueSource, Clock, Date, Delivered, DeliveryError,
-    HotkeyRegistrar, KeystrokeError, KeystrokeSender, LiveShortcuts, PackCatalogue, PackFormat,
-    PackSink, PackSource, Progress, SaveError, SettingChange, Settings, SettingsLoad, SettingsNote,
-    SettingsStore, SettingsUnusable, ShortcutRegistration, ShortcutUnreadable,
+    HotkeyRegistrar, KeystrokeError, KeystrokeSender, LiveShortcuts, POSITIONS_KEPT, PackCatalogue,
+    PackFormat, PackSink, PackSource, Progress, SaveError, SettingChange, Settings, SettingsLoad,
+    SettingsNote, SettingsStore, SettingsUnusable, ShortcutRegistration, ShortcutUnreadable,
     ShortcutsUnavailable, SinkError, SourceError, SourceSkipped, StopReason, TargetRef,
     TranslationCheck, TranslationTarget, ValueDelivery, Wait,
 };

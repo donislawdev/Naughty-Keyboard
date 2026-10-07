@@ -868,6 +868,9 @@ fn pattern_settings_note(note: &SettingsNote) -> &'static str {
         SettingsNote::NotAShortcut { .. } => {
             "In the settings file {file}, {key} should be a shortcut such as Alt+Shift+N, but {reason}, so its default is used. Fix the value, or remove the line."
         }
+        SettingsNote::NotAPosition { .. } => {
+            "In the settings file {file}, {key} should name a layout of screens and give the palette's place on it as whole numbers x and y, so it is not used. Fix the line, or remove it."
+        }
     }
 }
 
@@ -973,6 +976,9 @@ fn pattern_settings_message(message: &SettingsMessage) -> Option<&'static str> {
         }) => Some(
             "The settings file {file} gives \"{action}\" the shortcut {wanted}, which is already the shortcut for \"{other}\", so the default {shortcut} is used. Choose another combination for one of them.",
         ),
+        SettingsMessage::PositionOffScreen { .. } => Some(
+            "The place remembered for the palette on these screens, {x} and {y}, is off all of them, so the system placed it. Move it where you want it - the place is remembered when the palette closes.",
+        ),
         SettingsMessage::Unusable(_) | SettingsMessage::Note(_) | SettingsMessage::NotSaved(_) => {
             None
         }
@@ -1047,7 +1053,8 @@ pub fn settings_message(
                 | SettingsNote::NotAPackName { key }
                 | SettingsNote::NotAClearing { key }
                 | SettingsNote::NotATable { key }
-                | SettingsNote::NotAShortcut { key, .. } => {
+                | SettingsNote::NotAShortcut { key, .. }
+                | SettingsNote::NotAPosition { key } => {
                     (key.as_str(), String::new(), String::new())
                 }
             };
@@ -1074,7 +1081,8 @@ pub fn settings_message(
                 | SettingsNote::NotTrueOrFalse { .. }
                 | SettingsNote::NotAPackName { .. }
                 | SettingsNote::NotAClearing { .. }
-                | SettingsNote::NotATable { .. } => String::new(),
+                | SettingsNote::NotATable { .. }
+                | SettingsNote::NotAPosition { .. } => String::new(),
             };
             Some(fill(
                 pattern_settings_note(note),
@@ -1122,6 +1130,14 @@ pub fn settings_message(
                         ("character", &character),
                         ("shortcut", &chord_text(bindings, refused.action)),
                     ],
+                )
+            })
+        }
+        SettingsMessage::PositionOffScreen { at } => {
+            pattern_settings_message(message).map(|pattern| {
+                fill(
+                    pattern,
+                    &[("x", &at.x.to_string()), ("y", &at.y.to_string())],
                 )
             })
         }

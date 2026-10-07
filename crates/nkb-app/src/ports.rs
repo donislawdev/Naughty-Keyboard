@@ -15,6 +15,7 @@ use nkb_core::keys::KeyChord;
 use nkb_core::lint::LintProblem;
 use nkb_core::pack::Pack;
 use nkb_core::report::ReportBlock;
+use nkb_core::screens::{Layout, Point};
 use std::fmt;
 use std::time::Duration;
 
@@ -766,6 +767,12 @@ pub struct Settings {
     /// depends on the other nine. Empty means "the file names none", and every
     /// action keeps its default.
     pub shortcuts: Vec<(HotkeyAction, HotkeyChord)>,
+    /// Where the tester left the palette, one place per layout of screens
+    /// (UX7, `UX-GUI-012`), the most recently changed last. Only a layout that
+    /// reads (`Layout::parse`) and a place of two whole numbers arrive here.
+    pub positions: Vec<(Layout, Point)>,
+    /// Whether the tester closed the welcome window (`ux-spec.md` 5.1).
+    pub welcome_done: Option<bool>,
 }
 
 /// One setting the tester changed. A save carries exactly one, so a save can
@@ -784,7 +791,25 @@ pub enum SettingChange {
         action: HotkeyAction,
         chord: Option<HotkeyChord>,
     },
+    /// Where the palette stands on this layout of screens (UX7). The store
+    /// keeps the places of the [`POSITIONS_KEPT`] layouts changed most
+    /// recently, so a change may also drop the oldest one
+    /// (`settings-format.md` 4).
+    Position {
+        layout: Layout,
+        at: Point,
+    },
+    /// The tester closed the welcome window, so it does not open again.
+    WelcomeDone,
 }
+
+/// How many layouts of screens the settings remember a place for.
+///
+/// Every projector a laptop meets is a layout of its own, and without a limit
+/// each would stay in the file for good - which has a size limit of its own
+/// (`settings-format.md` 3). Sixteen covers a desk, a dock, home and the
+/// meeting rooms of one office.
+pub const POSITIONS_KEPT: usize = 16;
 
 /// What reading the settings produced.
 ///
@@ -832,6 +857,10 @@ pub enum SettingsNote {
         key: String,
         why: ShortcutUnreadable,
     },
+    /// A remembered place of the palette that does not read: a key that is
+    /// not a layout of screens, or a value that is not `x` and `y` as whole
+    /// numbers. The palette opens where the system puts it on that layout.
+    NotAPosition { key: String },
 }
 
 /// Why a shortcut in the settings file did not read.

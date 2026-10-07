@@ -56,9 +56,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use nkb_adapters::i18n::PaletteLabel;
 use nkb_adapters::{
     KeptFocus, SettingsFile, altgr_character, default_bindings, i18n, report_window_failure,
+    screens,
 };
 use nkb_app::{KeptSettings, RouteRequest};
 use nkb_core::hotkeys::HotkeyAction;
+use nkb_core::screens::Point;
 use nkb_gui::packs::{Packs, SystemKeyboard};
 use nkb_gui::shortcuts::{Shortcuts, System};
 use nkb_gui::{Gallery, PacksWindow, Palette, ShortcutsWindow, focus, live};
@@ -67,7 +69,7 @@ use slint::ComponentHandle;
 /// The pack the palette opens on when the command line names none and the
 /// settings remember none.
 ///
-/// One of the three that ship inside the binary (D51), so the palette has
+/// One of the packs that ship inside the binary (D51), so the palette has
 /// something real to show on a machine with no catalogue on disk at all.
 const DEFAULT_PACK: &str = "whitespace";
 
@@ -163,6 +165,18 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     said.extend(refused);
     let compact = live::starts_compact(settings.settings());
     let palette = Palette::new()?;
+    // Where the tester left it on this layout of screens (UX7). Asked after the
+    // window is built, because from then on the process sees physical pixels
+    // (`nkb_adapters::screens`), and before it is shown, because the backend
+    // keeps a place given to a window not yet created and creates it there
+    // (i-slint-backend-winit 1.18.1, `set_position`).
+    let (place, off_screen) = settings.position_on(screens::layout().as_ref());
+    said.extend(off_screen);
+    if let Some(at) = place {
+        palette
+            .window()
+            .set_position(slint::PhysicalPosition::new(at.x, at.y));
+    }
     palette.set_window_title(i18n::label(PaletteLabel::Title).into());
     // Before anything is shown, so the first height the content asks for
     // already sets the floor (`D83`).
@@ -256,15 +270,24 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     });
     // Closing the palette closes the pack window too - otherwise the event
     // loop would wait for it, and the process would outlive the palette.
+    // Where it stood is read here, while the window is still up (UX7).
+    let closed_at = std::rc::Rc::new(std::cell::Cell::new(None));
     palette.window().on_close_requested({
         let packs = std::rc::Rc::clone(&packs);
         let shortcuts = std::rc::Rc::clone(&shortcuts);
+        let closed_at = std::rc::Rc::clone(&closed_at);
+        let palette = palette.as_weak();
         move || {
+            if let Some(palette) = palette.upgrade() {
+                let at = palette.window().position();
+                closed_at.set(Some(Point { x: at.x, y: at.y }));
+            }
             packs.close();
             shortcuts.close();
             slint::CloseRequestResponse::HideWindow
         }
     });
+    let remembers = store.clone();
     let worker = std::thread::spawn({
         let palette = palette.as_weak();
         let stop = Arc::clone(&stop);
@@ -294,6 +317,17 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // could act on: the workspace denies `unwrap`, `expect` and `panic` in
     // product code, so a panic here is a bug rather than a path.
     drop(worker.join());
+    // The place is remembered here, with the worker joined: the worker reads
+    // the stop flag before any command, so one sent on closing would be lost,
+    // and two writers at once is the race `W4` names. On the layout of THIS
+    // moment - a screen unplugged while the palette ran changed it. Read again,
+    // so a change the worker saved in this run is not written back over, and
+    // a file that cannot be used is still left alone (`D84`). A failure has
+    // nobody left to hear it: the window is gone.
+    if let (Some(at), Some(layout)) = (closed_at.take(), screens::layout()) {
+        let (mut kept, _) = KeptSettings::open(&remembers);
+        let _ = kept.keep_position(&remembers, &layout, at);
+    }
     ran
 }
 

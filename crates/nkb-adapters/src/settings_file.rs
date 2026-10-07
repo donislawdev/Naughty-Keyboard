@@ -50,11 +50,12 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use nkb_app::{
-    Clearing, SaveError, SettingChange, Settings, SettingsLoad, SettingsNote, SettingsStore,
-    SettingsUnusable, ShortcutUnreadable,
+    Clearing, POSITIONS_KEPT, SaveError, SettingChange, Settings, SettingsLoad, SettingsNote,
+    SettingsStore, SettingsUnusable, ShortcutUnreadable,
 };
 use nkb_core::hotkeys::{HotkeyAction, HotkeyChord};
 use nkb_core::identity::is_pack_id;
+use nkb_core::screens::{Layout, Point};
 use toml_edit::{DocumentMut, Item, Table, TableLike, Value};
 
 /// The one schema this version reads and writes.
@@ -222,8 +223,27 @@ fn settings_of(document: &DocumentMut) -> (Settings, Vec<SettingsNote>) {
     let mut unknown = Vec::new();
 
     for (key, _) in document.iter() {
-        if key != "schema" && key != "palette" && key != "shortcuts" {
+        if key != "schema" && key != "palette" && key != "shortcuts" && key != "welcome" {
             unknown.push(key.to_owned());
+        }
+    }
+    match document.get("welcome").map(Item::as_table_like) {
+        None => {}
+        Some(None) => notes.push(SettingsNote::NotATable {
+            key: String::from("welcome"),
+        }),
+        Some(Some(welcome)) => {
+            for (key, item) in welcome.iter() {
+                match key {
+                    "done" => match item.as_bool() {
+                        Some(done) => settings.welcome_done = Some(done),
+                        None => notes.push(SettingsNote::NotTrueOrFalse {
+                            key: String::from("welcome.done"),
+                        }),
+                    },
+                    other => unknown.push(format!("welcome.{other}")),
+                }
+            }
         }
     }
     match document.get("palette").map(Item::as_table_like) {
@@ -250,6 +270,24 @@ fn settings_of(document: &DocumentMut) -> (Settings, Vec<SettingsNote>) {
                         Some(clearing) => settings.clearing = Some(clearing),
                         None => notes.push(SettingsNote::NotAClearing {
                             key: String::from("palette.clearing"),
+                        }),
+                    },
+                    "position" => match item.as_table_like() {
+                        Some(positions) => {
+                            for (layout, place) in positions.iter() {
+                                match position_of(layout, place) {
+                                    Some(read) => settings.positions.push(read),
+                                    None => notes.push(SettingsNote::NotAPosition {
+                                        key: format!(
+                                            "palette.position.\"{}\"",
+                                            layout.escape_debug()
+                                        ),
+                                    }),
+                                }
+                            }
+                        }
+                        None => notes.push(SettingsNote::NotATable {
+                            key: String::from("palette.position"),
                         }),
                     },
                     other => unknown.push(format!("palette.{other}")),
@@ -288,10 +326,107 @@ fn settings_of(document: &DocumentMut) -> (Settings, Vec<SettingsNote>) {
     (settings, notes)
 }
 
+/// One remembered place: a key that reads as a layout of screens, and a table
+/// holding `x` and `y` as whole numbers that fit a screen coordinate, and
+/// nothing else. A third key would be dropped by the next save of the place,
+/// so it is named on reading rather than lost quietly.
+fn position_of(layout: &str, place: &Item) -> Option<(Layout, Point)> {
+    let layout = Layout::parse(layout)?;
+    let place = place.as_table_like()?;
+    if place.len() != 2 {
+        return None;
+    }
+    let coordinate = |name| {
+        place
+            .get(name)
+            .and_then(Item::as_integer)
+            .and_then(|value| i32::try_from(value).ok())
+    };
+    Some((
+        layout,
+        Point {
+            x: coordinate("x")?,
+            y: coordinate("y")?,
+        },
+    ))
+}
+
 /// Puts one change into the document. `false` when it was already there, so
 /// the file does not need writing at all.
 fn set(document: &mut DocumentMut, change: &SettingChange) -> bool {
-    let (table_key, key) = place_of(change);
+    match change {
+        SettingChange::Position { layout, at } => set_position(document, &layout.text(), *at),
+        _ => set_key(document, change),
+    }
+}
+
+/// Puts one remembered place into `[palette.position]` as the most recent:
+/// the layout's key moves to the end, and the oldest beyond `POSITIONS_KEPT`
+/// go (`settings-format.md` 4). `false` when this place is already the most
+/// recent one, so nothing is written - the palette closes the same way most
+/// days, and a file rewritten on every close would be a file the tester's own
+/// edits race against.
+fn set_position(document: &mut DocumentMut, layout: &str, at: Point) -> bool {
+    let already = document
+        .get("palette")
+        .and_then(Item::as_table_like)
+        .and_then(|palette| palette.get("position"))
+        .and_then(Item::as_table_like)
+        .and_then(|positions| positions.iter().last())
+        .is_some_and(|(key, item)| {
+            key == layout && position_of(key, item).map(|(_, place)| place) == Some(at)
+        });
+    if already {
+        return false;
+    }
+    // A table of its own when missing, or when a single value stands where a
+    // table belongs - named when the file was read, as for any other change.
+    if !document
+        .get("palette")
+        .is_some_and(|item| item.as_table_like().is_some())
+    {
+        document.insert("palette", Item::Table(Table::new()));
+    }
+    let Some(palette) = document
+        .get_mut("palette")
+        .and_then(Item::as_table_like_mut)
+    else {
+        return false;
+    };
+    if !palette
+        .get("position")
+        .is_some_and(|item| item.as_table_like().is_some())
+    {
+        // In a palette written in one line this becomes a table in that line
+        // too - `toml_edit` turns it into one on the way in.
+        palette.insert("position", Item::Table(Table::new()));
+    }
+    let Some(positions) = palette
+        .get_mut("position")
+        .and_then(Item::as_table_like_mut)
+    else {
+        return false;
+    };
+    let mut place = toml_edit::InlineTable::new();
+    place.insert("x", Value::from(i64::from(at.x)));
+    place.insert("y", Value::from(i64::from(at.y)));
+    positions.remove(layout);
+    positions.insert(layout, Item::Value(Value::InlineTable(place)));
+    while positions.len() > POSITIONS_KEPT {
+        let Some(oldest) = positions.iter().next().map(|(key, _)| key.to_owned()) else {
+            break;
+        };
+        positions.remove(&oldest);
+    }
+    true
+}
+
+/// Puts one change of a single key into the document - every change but a
+/// place, which has a table of its own.
+fn set_key(document: &mut DocumentMut, change: &SettingChange) -> bool {
+    let Some((table_key, key)) = place_of(change) else {
+        return false;
+    };
     let current = document
         .get(table_key)
         .and_then(Item::as_table_like)
@@ -323,6 +458,13 @@ fn set(document: &mut DocumentMut, change: &SettingChange) -> bool {
         // - including when the table itself is a single value (named when the
         // file was read) and so holds no key at all.
         SettingChange::Shortcut { chord: None, .. } => (current.is_none(), None),
+        SettingChange::WelcomeDone => (
+            current.and_then(Item::as_bool) == Some(true),
+            Some(Value::from(true)),
+        ),
+        // Not one key - `set` hands it to `set_position`, and `place_of` has
+        // already answered `None` for it.
+        SettingChange::Position { .. } => return false,
     };
     if same {
         return false;
@@ -362,13 +504,16 @@ fn set(document: &mut DocumentMut, change: &SettingChange) -> bool {
     true
 }
 
-/// The table and the key a change is written to.
-fn place_of(change: &SettingChange) -> (&'static str, &'static str) {
+/// The table and the key a change is written to - `None` for a place, which
+/// is a key in a table inside `[palette]` (`set_position`).
+fn place_of(change: &SettingChange) -> Option<(&'static str, &'static str)> {
     match change {
-        SettingChange::Pack(_) => ("palette", "pack"),
-        SettingChange::Compact(_) => ("palette", "compact"),
-        SettingChange::Clearing(_) => ("palette", "clearing"),
-        SettingChange::Shortcut { action, .. } => ("shortcuts", action.id()),
+        SettingChange::Pack(_) => Some(("palette", "pack")),
+        SettingChange::Compact(_) => Some(("palette", "compact")),
+        SettingChange::Clearing(_) => Some(("palette", "clearing")),
+        SettingChange::Shortcut { action, .. } => Some(("shortcuts", action.id())),
+        SettingChange::WelcomeDone => Some(("welcome", "done")),
+        SettingChange::Position { .. } => None,
     }
 }
 
@@ -810,6 +955,7 @@ mod tests {
                     compact: Some(true),
                     clearing: None,
                     shortcuts: Vec::new(),
+                    ..Settings::default()
                 },
                 Vec::new()
             )
@@ -868,6 +1014,7 @@ mod tests {
                 compact: Some(true),
                 clearing: None,
                 shortcuts: Vec::new(),
+                ..Settings::default()
             }
         );
         assert!(
@@ -1419,6 +1566,183 @@ mod tests {
             std::fs::read_to_string(&real)
                 .expect("the real file")
                 .contains("compact = true")
+        );
+    }
+
+    fn layout(text: &str) -> Layout {
+        Layout::parse(text).expect("a layout")
+    }
+
+    fn placed(text: &str, x: i32, y: i32) -> SettingChange {
+        SettingChange::Position {
+            layout: layout(text),
+            at: Point { x, y },
+        }
+    }
+
+    #[test]
+    fn a_place_is_written_under_its_layout_in_a_table_of_its_own_and_reads_back() {
+        let scratch = Scratch::new("position");
+        let store = scratch.store();
+        assert_eq!(store.save(&SettingChange::Compact(true)), Ok(()));
+        assert_eq!(
+            store.save(&placed("1920x1080@-1920,0 2560x1440@0,0", -1500, 40)),
+            Ok(())
+        );
+        assert_eq!(
+            scratch.text(),
+            "schema = 1\n\n[palette]\ncompact = true\n\n[palette.position]\n\"1920x1080@-1920,0 2560x1440@0,0\" = { x = -1500, y = 40 }\n"
+        );
+        let (settings, notes) = read(&store);
+        assert_eq!(notes, Vec::new());
+        assert_eq!(
+            settings.positions,
+            vec![(
+                layout("1920x1080@-1920,0 2560x1440@0,0"),
+                Point { x: -1500, y: 40 }
+            )]
+        );
+        assert!(scratch.leftovers().is_empty(), "{:?}", scratch.leftovers());
+    }
+
+    #[test]
+    fn the_same_place_already_the_most_recent_does_not_write() {
+        // Proven with a read-only file, as for any other change.
+        let scratch = Scratch::new("position-unchanged");
+        assert_eq!(
+            scratch.store().save(&placed("1920x1080@0,0", 10, 20)),
+            Ok(())
+        );
+        make_read_only(&scratch);
+        assert_eq!(
+            scratch.store().save(&placed("1920x1080@0,0", 10, 20)),
+            Ok(())
+        );
+        assert_eq!(
+            scratch.store().save(&placed("1920x1080@0,0", 11, 20)),
+            Err(SaveError::Unwritable)
+        );
+    }
+
+    #[test]
+    fn a_layout_used_again_moves_to_the_end_and_the_oldest_beyond_the_limit_goes() {
+        let scratch = Scratch::new("position-limit");
+        let store = scratch.store();
+        let nth = |n: usize| format!("1000x1000@{},0", n * 1000);
+        for n in 0..=POSITIONS_KEPT {
+            let x = i32::try_from(n * 1000 + 10).expect("small");
+            assert_eq!(store.save(&placed(&nth(n), x, 10)), Ok(()));
+        }
+        let kept = |store: &SettingsFile| {
+            read(store)
+                .0
+                .positions
+                .into_iter()
+                .map(|(layout, _)| layout.text())
+                .collect::<Vec<_>>()
+        };
+        let after = kept(&store);
+        assert_eq!(after.len(), POSITIONS_KEPT);
+        assert_eq!(after.first(), Some(&nth(1)), "the oldest went");
+
+        // The same place on a layout that is not the most recent moves it.
+        assert_eq!(store.save(&placed(&nth(5), 5010, 10)), Ok(()));
+        let after = kept(&store);
+        assert_eq!(after.last(), Some(&nth(5)));
+        assert_eq!(after.len(), POSITIONS_KEPT);
+        assert_eq!(after.iter().filter(|text| **text == nth(5)).count(), 1);
+    }
+
+    #[test]
+    fn a_place_that_does_not_read_is_named_and_the_others_are_used() {
+        let scratch = Scratch::new("position-bad");
+        scratch.write(concat!(
+            "schema = 1\n",
+            "[palette.position]\n",
+            "\"1920x1080@0,0\" = { x = 10, y = 20 }\n",
+            "\"1920 x 1080\" = { x = 10, y = 20 }\n",
+            "\"1280x720@0,0\" = { x = \"10\", y = 20 }\n",
+            "\"1024x768@0,0\" = { x = 10, y = 20, z = 1 }\n",
+            "\"800x600@0,0\" = { x = 99999999999, y = 20 }\n",
+            "\"640x480@0,0\" = 5\n",
+        ));
+        let (settings, notes) = read(&scratch.store());
+        assert_eq!(
+            settings.positions,
+            vec![(layout("1920x1080@0,0"), Point { x: 10, y: 20 })]
+        );
+        let named: Vec<String> = notes
+            .into_iter()
+            .map(|note| match note {
+                SettingsNote::NotAPosition { key } => key,
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(
+            named,
+            vec![
+                "palette.position.\"1920 x 1080\"",
+                "palette.position.\"1280x720@0,0\"",
+                "palette.position.\"1024x768@0,0\"",
+                "palette.position.\"800x600@0,0\"",
+                "palette.position.\"640x480@0,0\"",
+            ]
+        );
+
+        scratch.write("schema = 1\n[palette]\nposition = 5\n");
+        assert_eq!(
+            read(&scratch.store()).1,
+            vec![SettingsNote::NotATable {
+                key: String::from("palette.position")
+            }]
+        );
+    }
+
+    #[test]
+    fn a_place_in_a_palette_written_in_one_line_stays_in_that_line() {
+        let scratch = Scratch::new("position-inline");
+        scratch.write("schema = 1\npalette = { pack = \"whitespace\" }\n");
+        assert_eq!(
+            scratch.store().save(&placed("1920x1080@0,0", 10, 20)),
+            Ok(())
+        );
+        let text = scratch.text();
+        // Still one line - `toml_edit` leaves the blank the pack had before the
+        // brace in front of the new comma, which is valid and the tester's own.
+        assert!(text.contains("palette = { pack = \"whitespace\""), "{text}");
+        assert!(
+            text.contains("position = { \"1920x1080@0,0\" = { x = 10, y = 20 } }"),
+            "{text}"
+        );
+        assert!(!text.contains("[palette"), "{text}");
+        let (settings, notes) = read(&scratch.store());
+        assert_eq!(notes, Vec::new());
+        assert_eq!(settings.pack.as_deref(), Some("whitespace"));
+        assert_eq!(settings.positions.len(), 1);
+    }
+
+    #[test]
+    fn the_welcome_closed_is_remembered_in_a_table_of_its_own() {
+        let scratch = Scratch::new("welcome");
+        let store = scratch.store();
+        assert_eq!(store.load(), SettingsLoad::Absent);
+        assert_eq!(store.save(&SettingChange::WelcomeDone), Ok(()));
+        assert_eq!(scratch.text(), "schema = 1\n\n[welcome]\ndone = true\n");
+        assert_eq!(read(&store).0.welcome_done, Some(true));
+
+        scratch.write("schema = 1\n[welcome]\ndone = \"yes\"\nshown = 3\n");
+        let (settings, notes) = read(&store);
+        assert_eq!(settings.welcome_done, None);
+        assert_eq!(
+            notes,
+            vec![
+                SettingsNote::NotTrueOrFalse {
+                    key: String::from("welcome.done")
+                },
+                SettingsNote::UnknownKeys {
+                    keys: vec![String::from("welcome.shown")]
+                },
+            ]
         );
     }
 }

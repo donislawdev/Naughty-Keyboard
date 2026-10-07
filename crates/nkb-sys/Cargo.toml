@@ -68,9 +68,14 @@ panic = "deny"
 # `DefSubclassProc` in `window.rs` (K5.4: the shortcuts window must not open
 # its menu on `Alt+Space`). Same crate, no new dependency - the functions live
 # in comctl32, which every Windows desktop carries.
+# `Win32_Graphics_Gdi` and `Win32_UI_HiDpi` were added 2026-10-06 for
+# `screens.rs` (UX7: the palette remembers its place per layout of screens):
+# `EnumDisplayMonitors`, and the question whether this thread sees physical
+# pixels. Same crate, no new dependency.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
+    "Win32_Graphics_Gdi",
     "Win32_Security",
     "Win32_System_Com",
     "Win32_System_Console",
@@ -78,6 +83,7 @@ windows-sys = { workspace = true, features = [
     "Win32_System_Threading",
     "Win32_System_Variant",
     "Win32_UI_Accessibility",
+    "Win32_UI_HiDpi",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",

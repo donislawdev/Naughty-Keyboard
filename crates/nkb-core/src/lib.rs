@@ -29,6 +29,7 @@ pub mod pack;
 pub mod preview;
 pub mod report;
 pub mod schema;
+pub mod screens;
 pub mod sequence;
 pub mod source_text;
 pub mod text;
