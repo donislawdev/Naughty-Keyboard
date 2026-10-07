@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!--
+    The same drawing as edamame.svg, drawn for 32 px and below: an outline about
+    twice as heavy, a line between the beans so they do not merge into one blob,
+    and flat fills with no highlights. Only edamame.ico uses it - for its 16, 20,
+    24 and 32 px entries. The shapes and the transform are identical to the
+    master's, so the two cannot drift apart without a diff showing it.
+  -->
+  <defs>
+    <linearGradient id="shell" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6FA83B"/>
+      <stop offset="1" stop-color="#4A8029"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(21.09 2.06) scale(1.053) rotate(-40 128 128)" stroke-linejoin="round" stroke-linecap="round">
+    <!-- stem -->
+    <path d="M10 112 C-2 110 -12 102 -16 90" fill="none" stroke="#2B5A20" stroke-width="8.2"/>
+    <path d="M10 112 C-2 110 -12 102 -16 90" fill="none" stroke="#5E9A33" stroke-width="4"/>
+    <!-- far wall of the pod, seen from the inside -->
+    <path d="M8 112 C44 98 82 92 128 92 C174 92 212 98 248 112 C206 140 172 150 128 150 C84 150 50 140 8 112 Z" fill="#DDEBB0" stroke="#2B5A20" stroke-width="8.5"/>
+    <!-- the beans -->
+    <g stroke="#6FAE37" stroke-width="4" fill="#C3E873">
+      <ellipse cx="62" cy="122" rx="33" ry="36"/>
+      <ellipse cx="194" cy="122" rx="33" ry="36"/>
+      <ellipse cx="128" cy="116" rx="39" ry="42"/>
+    </g>
+    <!-- near wall of the pod, in front of the beans -->
+    <path d="M248 112 C206 140 172 150 128 150 C84 150 50 140 8 112 C46 160 84 186 128 186 C172 186 210 160 248 112 Z" fill="url(#shell)" stroke="#2B5A20" stroke-width="8.5"/>
+  </g>
+</svg>

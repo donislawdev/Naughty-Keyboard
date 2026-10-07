@@ -45,6 +45,10 @@ arboard.workspace = true
 [build-dependencies]
 slint-build.workspace = true
 
+# Puts `assets/edamame.ico` into the executable on Windows. Why this crate, and
+# why that version: the workspace manifest, beside the version.
+embed-resource.workspace = true
+
 # Test-only, never linked into a released artefact. Document 09 section 10 puts
 # that in the lighter tier: pin the version, read the licence, no registry entry.
 # Checked against the registry 2026-09-07: 0.25.10, MIT OR Apache-2.0.

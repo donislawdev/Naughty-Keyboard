@@ -17,7 +17,8 @@
 //! # What is prose
 //!
 //! - Every comment: `//`, `///`, `//!` and `/* */` in Rust, `//` and `/* */` in
-//!   Slint, `#` in TOML and in the two git files at the root. Code quoted in a
+//!   Slint and in the Windows resource script, `<!-- -->` in the SVG drawings,
+//!   `#` in TOML and in the two git files at the root. Code quoted in a
 //!   comment is syntax, not prose, and is recognised the way rustdoc does it:
 //!   between backticks, or between fence lines of three backticks or tildes. A
 //!   block indented by four spaces is NOT recognised as code. Fence it.
@@ -40,6 +41,8 @@
 //! - `tests/packs/`: their content is the subject of the tests.
 //! - `LICENSE`, and the third-party files kept byte for byte beside the Unicode
 //!   tables and the typeface. `Cargo.lock`, which a tool writes.
+//! - The `.ico` of the application icon: nine pictures behind a directory of
+//!   offsets, with no prose in it. The drawings it is made from are read.
 //! - The project memory that the root `.gitignore` keeps out of this repository.
 //!   Its names are listed here AND checked against that file, so the list cannot
 //!   hide a file this repository does carry.
@@ -86,6 +89,9 @@ const VERBATIM_DIRS: [&str; 2] = ["crates/nkb-core/unicode", "crates/nkb-gui/ui/
 /// file this test cannot read.
 const LEFTOVER_EXTENSIONS: [&str; 4] = ["bk", "log", "pdb", "pyc"];
 
+/// Where the application icon lives. Its `.ico` is binary and is not read.
+const ICON_DIR: &str = "crates/nkb-gui/assets";
+
 fn is_leftover(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
@@ -99,6 +105,8 @@ enum Syntax {
     Toml,
     Git,
     Markdown,
+    Svg,
+    Resource,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -510,6 +518,38 @@ fn lex_markdown(source: &str) -> Lexed {
     }
 }
 
+/// An SVG drawing: a comment is what stands between `<!--` and `-->`, and
+/// nothing else in it is prose. An attribute value is markup, so a semicolon in
+/// a style is not a finding.
+fn lex_svg(source: &str) -> Lexed {
+    let s: Vec<char> = source.chars().collect();
+    let mut out = Lexed::default();
+    let mut line = 1;
+    let mut i = 0;
+    while i < s.len() {
+        if at(&s, i, "<!--") {
+            let open = i + 4;
+            let close = (open..s.len())
+                .find(|&j| at(&s, j, "-->"))
+                .unwrap_or(s.len());
+            let body: String = s[open..close].iter().collect();
+            out.comments.push(Comment {
+                first_line: line,
+                kind: CommentKind::Block,
+                lines: body.split('\n').map(str::to_string).collect(),
+            });
+            line += count_newlines(&s[i..close]);
+            i = (close + 3).min(s.len());
+        } else {
+            if s[i] == '\n' {
+                line += 1;
+            }
+            i += 1;
+        }
+    }
+    out
+}
+
 // ---- prose -----------------------------------------------------------------
 
 /// Line comments of one kind on consecutive lines, run together.
@@ -619,10 +659,11 @@ fn literal_breaches(literal: &Literal) -> Vec<(usize, Breach)> {
 fn scan(syntax: Syntax, source: &str) -> Scan {
     let lexed = match syntax {
         Syntax::Rust => lex_c_like(source, true),
-        Syntax::Slint => lex_c_like(source, false),
+        Syntax::Slint | Syntax::Resource => lex_c_like(source, false),
         Syntax::Toml => lex_toml(source),
         Syntax::Git => lex_git(source),
         Syntax::Markdown => lex_markdown(source),
+        Syntax::Svg => lex_svg(source),
     };
     let mut breaches = Vec::new();
     for block in blocks(&lexed.comments) {
@@ -696,6 +737,8 @@ fn syntax_of(path: &Path) -> Option<Syntax> {
         "slint" => Some(Syntax::Slint),
         "toml" => Some(Syntax::Toml),
         "md" => Some(Syntax::Markdown),
+        "svg" => Some(Syntax::Svg),
+        "rc" => Some(Syntax::Resource),
         _ => None,
     }
 }
@@ -767,6 +810,10 @@ fn walk(root: &Path, dir: &Path, tree: &mut Tree) {
             None if is_leftover(&path) || name.starts_with('.') => {}
             None if VERBATIM_DIRS.contains(&here.as_str())
                 && matches!(extension, "txt" | "ttf") => {}
+            // Pictures behind a directory of offsets: nothing in it is prose.
+            // The drawings beside it are read, and `tests/app_icon.rs` holds the
+            // file to them.
+            None if here == ICON_DIR && extension == "ico" => {}
             None => tree.unreadable.push(format!(
                 "{} is a file this test cannot read",
                 relative(root, &path)
@@ -791,7 +838,7 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
     );
 
     let mut findings = Vec::new();
-    let mut seen = [0usize; 5];
+    let mut seen = [0usize; 7];
     let mut comment_lines = 0;
     let mut literals = 0;
     for (path, syntax) in &tree.files {
@@ -814,7 +861,7 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
 
     // Without these, a clean result would also be what a wrong path or a blind
     // lexer produces.
-    let [rust, slint, toml, git, markdown] = seen;
+    let [rust, slint, toml, git, markdown, svg, resource] = seen;
     assert!(
         rust >= 50,
         "read {rust} Rust files, expected at least 50 - the walk looked in the wrong place"
@@ -831,6 +878,11 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
     assert!(
         markdown >= 1,
         "read {markdown} Markdown files, expected at least 1"
+    );
+    assert!(svg >= 2, "read {svg} SVG drawings, expected the icon's two");
+    assert!(
+        resource >= 1,
+        "read {resource} resource scripts, expected the icon's one"
     );
     assert!(
         comment_lines >= 5_000,
@@ -1073,5 +1125,26 @@ fn control_an_exemption_needs_a_reason_and_a_use() {
     assert_eq!(
         found(Syntax::Rust, far),
         [(2, ExemptionUnused), (4, LiteralSemicolon)]
+    );
+}
+
+#[test]
+fn control_the_icon_files_are_read() {
+    use Breach::{Dash, Semicolon};
+    // A drawing's comments are prose, its markup is not.
+    assert_eq!(
+        found(
+            Syntax::Svg,
+            "<svg style=\"a:bSEMI c:d\">\n<!-- aSEMI b -->\n<!--\n  cSEMI d\n-->\n</svg>\n"
+        ),
+        [(2, Semicolon), (4, Semicolon)]
+    );
+    assert_eq!(found(Syntax::Svg, "<!-- one EMDASH two -->\n"), [(1, Dash)]);
+    // A comment that never closes is read to the end and stops there.
+    assert_eq!(found(Syntax::Svg, "<g/>\n<!-- aSEMI b"), [(2, Semicolon)]);
+    // The resource script has the comments of C.
+    assert_eq!(
+        found(Syntax::Resource, "// aSEMI b\n1 ICON \"edamame.ico\"\n"),
+        [(1, Semicolon)]
     );
 }

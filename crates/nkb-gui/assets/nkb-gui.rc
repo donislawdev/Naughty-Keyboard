@@ -1,0 +1,7 @@
+// The program's icon, as a resource script for `build.rs` to compile into
+// nkb-gui.exe. Nothing else goes in: no version block, no manifest - the point of
+// the crate that compiles this is that it adds exactly what this file says.
+//
+// The path is relative to this file. Resource 1 is the first icon group, and
+// the first one is the icon Windows shows for the file.
+1 ICON "edamame.ico"

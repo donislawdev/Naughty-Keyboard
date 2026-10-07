@@ -111,6 +111,32 @@ raw-window-handle = "0.6.2"
 # client into the CLI on any workspace-wide build.
 arboard = { version = "3.6.1", default-features = false }
 
+# The program's icon, put into `nkb-gui.exe` on Windows. The icon lives in the
+# executable and nowhere beside it - the file manager, a desktop shortcut and the
+# taskbar all read it from there - so something has to compile a resource script
+# into the binary. Nothing happens on any other target.
+#
+# Version checked against the registry on 2026-10-07 - not recalled. 3.0.11 and
+# not 3.0.12, which was the newest that day: it had been out for one day, and
+# nothing here needs a release that has had no time to be noticed if it is wrong.
+# An exact version rather than a caret, so that the next `cargo update` does not
+# quietly move to the release this one was chosen not to be.
+#
+# Chosen over `winresource`, the other crate that does this, because that one
+# always writes a version block of its own as well, filled in from the package
+# manifest - and the manifest's description would then be the name the task
+# manager shows for the program. This one compiles exactly the resource script
+# it is given, which is an icon and nothing else.
+#
+# Licence sieve, both questions:
+#   (a) MIT - compatible with GPL-3.0, and nothing of it is linked into the
+#       product: it runs in the build script and leaves only the resource.
+#   (b) not applicable - a build tool, not a reference dataset.
+#
+# 🔴 Only nkb-gui's build script depends on this, and the reason is the layer:
+# `nkb` has no window, so nothing in it asks for an icon - D25.
+embed-resource = "=3.0.11"
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 
