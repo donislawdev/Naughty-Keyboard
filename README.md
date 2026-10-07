@@ -22,11 +22,16 @@
 
 **Naughty Keyboard** is a tool for testers and developers. One shortcut types the next awkward value
 into the field in front of you: `null`, a trailing space, a zero-width space, `30.02.2026`, `=1+1`,
-a name of 65 535 characters. These are the values real users and real data produce, and a form you
-only ever tried with "John Smith" has never met them. Every value comes with what it usually breaks
-and what a correct application does instead. When one of them breaks something, one more shortcut
-copies a report block you can paste straight into a ticket. A window and a command line, over one
-engine.
+a name of 65 535 characters. They are the values real users and real data produce, and a form you
+only ever tried with "John Smith" has never met them.
+
+Every value comes with what it usually breaks and what a correct application does instead. When one of
+them breaks something, one more shortcut copies a report block you can paste straight into a ticket.
+A window and a command line, over one engine.
+
+> **Where it works today.** Typing into other windows works on Windows. On macOS and Linux the command
+> line and the pack tools work, and a value reaches a field through the clipboard.
+> [Honest limits](#honest-limits) has the details.
 
 ⭐ **If it found the bug your users would have found, leave a star.** That is how the next tester who
 needs it finds out it exists.
@@ -107,8 +112,14 @@ value does not land in somebody else's application. Closing it opens the palette
   Take it on a plain background so the window reads on its own.
 -->
 
-Click the field you want to test, then press a chord. The palette never takes the focus, so the
-chord goes to the field and the cursor stays where it was.
+1. Build the palette and start `nkb-gui`. The welcome window has a box to try the first value in.
+2. Click the field you want to test, in any application.
+3. Press `Alt+Shift+N`. The next value of the pack is typed into the field.
+4. Look at what the application did with it. Press `Alt+Shift+1`, `2` or `3` to mark the result, then
+   `Alt+Shift+N` for the next value.
+
+The palette never takes the focus, so the cursor stays in the field the whole time. These are all of
+the chords:
 
 | Chord | What it does |
 |---|---|
@@ -116,7 +127,9 @@ chord goes to the field and the cursor stays where it was.
 | `Alt+Shift+P` | Type the previous value |
 | `Alt+Shift+R` | Type the current value again |
 | `Alt+Shift+0` | Go back to the first value of the pack |
-| `Alt+Shift+1` `2` `3` | Mark the last result as works, problem or suspect |
+| `Alt+Shift+1` | Mark the last result as works |
+| `Alt+Shift+2` | Mark the last result as a problem |
+| `Alt+Shift+3` | Mark the last result as suspect |
 | `Alt+Shift+B` | Copy the report block for the last value |
 | `Alt+Shift+Space` | Open the pack search |
 | `Alt+Shift+H` | Collapse the palette to its header, or expand it again |
@@ -138,24 +151,16 @@ beside it under `[palette]`, for example `clearing = "none"` to stop it clearing
 
 ### From the command line
 
-List what there is:
+List what there is, with the full list under [What is in the packs](#what-is-in-the-packs):
 
 ```console
 $ nkb packs
 whitespace                12 values  Whitespace
 unicode-text              12 values  Unicode and text
 length-bombs              12 values  Length bombs
-magic-values              12 values  Magic values
-numbers-extreme           12 values  Extreme numbers
-dates-impossible          12 values  Impossible dates
-export-breakers           12 values  Export breakers
-locale-pl                  6 values  Polish locale
-filenames-paths           12 values  File names and paths
+...
 
 9 of 9 packs loaded, 102 values.
-Read these pack sources: built-in.
-Not read: team - the settings file has no key for this folder yet, so it cannot be named.
-Not read: own - the settings file has no key for this folder yet, so it cannot be named.
 ```
 
 Read one in full. Values are printed escaped, because a value made of characters nobody can see has
@@ -169,7 +174,7 @@ version 1.0, updated 2026-09-07, CC-BY-4.0, fields: any
 
   trailing-space
     Trailing space
-    value    Kowalski 
+    value    Kowalski\u0020
     size     9 code points, 9 bytes
     breaks   Login and e-mail comparisons differ between browser and server; the account is created but cannot be found.
     expect   Trimmed everywhere or preserved everywhere - never one on sign-up and the other on sign-in.
@@ -292,7 +297,7 @@ says so.
   everywhere.
 - **You can write your own packs, but not load them yet.** `nkb new-pack`, `nkb fmt` and `nkb lint` all
   work on a file of your own. Reading a folder of your own packs into the palette and the command line
-  is not wired up: `nkb packs` says so in its last two lines.
+  is not wired up: `nkb packs` reports the folders for your own and your team's packs as not read.
 - **The pack format is not frozen.** It freezes with the first public release that ships packs. `nkb lint`
   checks 39 of its 45 rules today, and `nkb lint --explain` lists every one and why a few wait.
 - **It does not look at the result.** It types the value and does not read what the window shows, only
@@ -317,25 +322,30 @@ not a way to attack someone else's.
 
 ## Questions
 
-**How is this different from the Big List of Naughty Strings?**
+### How is this different from the Big List of Naughty Strings?
+
 That list is a plain file of strings under headings, and a good one. Naughty Keyboard is the rest of the
 job. It types the value into the field for you, one press at a time and in a fixed order. It says what
 each value usually breaks and what a correct application does. It shows an invisible character as a
 marker and counts the value four ways. It turns a finding into a report block for a ticket.
 
-**Does it need the internet?**
+### Does it need the internet?
+
 No. It opens no network connection, has no account and sends nothing anywhere.
 
-**Is it free?**
+### Is it free?
+
 The program is GPL-3.0-only. The built-in packs are CC-BY-4.0, which each pack states in its `license`
 field.
 
-**Where is the pack format written down?**
+### Where is the pack format written down?
+
 In the rules `nkb lint --explain` lists, and in `tests/packs/`: files a validator must accept and files
 it must refuse, each refused one naming the rule it breaks. A separate written specification is not in
 this repository yet.
 
-**Can I change the shortcuts?**
+### Can I change the shortcuts?
+
 Yes. Every one of the ten, in the shortcuts window or in `settings.toml`. A chord that would take a key
 from every application is refused with the reason.
 
