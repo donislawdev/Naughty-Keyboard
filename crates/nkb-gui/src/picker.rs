@@ -43,9 +43,18 @@
 //! Words, all of which must appear, case not minded. A pack matches in its
 //! name, description, tags or id. A value matches in its OWN name, id, tags and
 //! fields, and not in the name of its pack: "unicode-text" finds the pack, not
-//! its thirty-four values (document 15 section 1, start narrower). No folding of
+//! every one of its values (document 15 section 1, start narrower). No folding of
 //! diacritics: the catalogue's prose is English (`D23`, untouchable rule 8), and
 //! a wider match is easier to add than a narrower one is to take back.
+//!
+//! A row found by a part it does not show says which (`UX-GUI-008`): a value's
+//! id, tags or fields, a pack's tags - "Whitespace - value 5 of 12 - in its id".
+//! Without it a row found there looked found at random: the audit's example
+//! was the pack Whitespace, listed for "unicode" by a tag. A word a shown part
+//! holds is explained by the row and named nowhere. The pack's description
+//! counts as shown, though the view elides a long one, so a word only in its
+//! cut-off end is not named - the place goes before the description, and a
+//! place for a part the row prints is a second answer to one question.
 //!
 //! # Opening without a known next value
 //!
@@ -54,7 +63,7 @@
 //! on the first value: Enter pressed out of habit would then move the tester
 //! back to the start of the pack, where Enter on the pack in use only closes.
 
-use nkb_adapters::i18n::{self, PacksLabel};
+use nkb_adapters::i18n::{self, MatchPlace, PacksLabel};
 use nkb_app::browse_packs::{Listing, PackEntry};
 use nkb_app::ports::SourceError;
 use nkb_core::hotkeys::HotkeyAction;
@@ -67,13 +76,23 @@ use crate::query::{KeyPress, Pressed, Query};
 struct PackChoice {
     id: String,
     title: String,
-    detail: String,
+    detail: PackDetail,
     badge: Option<Badge>,
     enabled: bool,
-    /// Lower-cased name, description, tags and id - what a query is matched in.
-    haystack: String,
+    /// Name, description and id shown, tags not.
+    haystack: Haystack,
     /// Empty for a pack that does not load.
     values: Vec<ValueChoice>,
+}
+
+/// The second line of a pack row, as far as it is known before a query.
+#[derive(Debug, Clone)]
+enum PackDetail {
+    /// A pack that loads. The line is built when drawn, because a query adds
+    /// the parts of the pack it was found in that the row does not show.
+    Loaded { description: String },
+    /// A pack that does not load: the line is the same whatever is typed.
+    Fixed(String),
 }
 
 /// One value as the window offers it.
@@ -82,8 +101,74 @@ struct ValueChoice {
     id: String,
     name: String,
     offensive: bool,
-    /// Lower-cased name, id, tags and fields of the value itself.
-    haystack: String,
+    /// Its own name shown, its id, tags and fields not.
+    haystack: Haystack,
+}
+
+/// What a query is matched in, lower-cased once: the parts a row shows, and
+/// the parts it does not, each under its place (`UX-GUI-008`).
+///
+/// One structure answers both questions - does the row match, and where - so
+/// the two cannot drift: a row is listed exactly when every word is in some
+/// part, and it names a place exactly for a word no shown part holds.
+#[derive(Debug, Clone, Default)]
+struct Haystack {
+    /// The shown parts, one per line - a word never spans two, because a word
+    /// holds no line break.
+    shown: String,
+    /// The parts the row does not show, in the order of [`MatchPlace`], so the
+    /// first that holds a word is the place the row names.
+    hidden: Vec<(MatchPlace, String)>,
+}
+
+impl Haystack {
+    fn new<'a>(shown: &[&str], hidden: impl IntoIterator<Item = (MatchPlace, &'a str)>) -> Self {
+        let mut hidden: Vec<(MatchPlace, String)> = hidden
+            .into_iter()
+            .map(|(place, part)| (place, part.to_lowercase()))
+            .collect();
+        // Stable, so the parts of one place keep their order.
+        hidden.sort_by_key(|(place, _)| *place);
+        Self {
+            shown: shown.join("\n").to_lowercase(),
+            hidden,
+        }
+    }
+
+    fn holds(&self, word: &str) -> bool {
+        self.shown.contains(word) || self.hidden.iter().any(|(_, part)| part.contains(word))
+    }
+
+    /// Whether every word is somewhere in it.
+    fn matches(&self, words: &[String]) -> bool {
+        words.iter().all(|word| self.holds(word))
+    }
+
+    /// The places a row names: for every word no shown part holds, the first
+    /// hidden part that does. Empty when the row shows every word. One per
+    /// such word, in the query's order - the words of `i18n` name each place
+    /// once and in one order, so that is done in one place.
+    fn places(&self, words: &[String]) -> Vec<MatchPlace> {
+        words
+            .iter()
+            .filter(|word| !self.shown.contains(word.as_str()))
+            .filter_map(|word| {
+                self.hidden
+                    .iter()
+                    .find(|(_, part)| part.contains(word.as_str()))
+                    .map(|(place, _)| *place)
+            })
+            .collect()
+    }
+}
+
+/// The query as words, lower-cased - all of which must match.
+fn words_of(query: &str) -> Vec<String> {
+    query
+        .to_lowercase()
+        .split_whitespace()
+        .map(str::to_owned)
+        .collect()
 }
 
 /// What a row of the list is, by index into the packs.
@@ -317,7 +402,11 @@ impl PackPicker {
     /// The rows the query lets through.
     #[must_use]
     pub fn rows(&self) -> Vec<Row> {
-        self.visible.iter().map(|&item| self.row_of(item)).collect()
+        let words = words_of(self.query.as_str());
+        self.visible
+            .iter()
+            .map(|&item| self.row_of(item, &words))
+            .collect()
     }
 
     /// The selected row's position in [`Self::rows`].
@@ -372,9 +461,8 @@ impl PackPicker {
     }
 
     fn filter(&mut self) {
-        let lowered = self.query.as_str().to_lowercase();
-        let words: Vec<&str> = lowered.split_whitespace().collect();
-        let matches = |haystack: &str| words.iter().all(|word| haystack.contains(word));
+        let words = words_of(self.query.as_str());
+        let matches = |haystack: &Haystack| haystack.matches(&words);
         let mut visible = Vec::new();
         if words.is_empty() {
             if let Some(at) = self.in_use_index()
@@ -420,7 +508,8 @@ impl PackPicker {
         self.visible = visible;
     }
 
-    fn row_of(&self, item: Item) -> Row {
+    /// Row `item` as drawn, `words` being the query's.
+    fn row_of(&self, item: Item, words: &[String]) -> Row {
         match item {
             Item::Heading(section) => Row {
                 kind: RowKind::Heading,
@@ -437,10 +526,19 @@ impl PackPicker {
             },
             Item::Pack(at) => {
                 let choice = &self.packs[at];
+                let detail = match &choice.detail {
+                    PackDetail::Loaded { description } => i18n::pack_detail(
+                        &choice.id,
+                        choice.values.len(),
+                        description,
+                        &choice.haystack.places(words),
+                    ),
+                    PackDetail::Fixed(detail) => detail.clone(),
+                };
                 Row {
                     kind: RowKind::Pack,
                     title: choice.title.clone(),
-                    detail: choice.detail.clone(),
+                    detail,
                     badge: choice.badge.clone(),
                     current: self.in_use.as_deref() == Some(choice.id.as_str()),
                     enabled: choice.enabled,
@@ -472,7 +570,12 @@ impl PackPicker {
                 Row {
                     kind: RowKind::Value,
                     title: choice.name.clone(),
-                    detail: i18n::value_detail(&owner.title, value + 1, owner.values.len()),
+                    detail: i18n::value_detail(
+                        &owner.title,
+                        value + 1,
+                        owner.values.len(),
+                        &choice.haystack.places(words),
+                    ),
                     badge,
                     current: false,
                     enabled: true,
@@ -539,7 +642,9 @@ fn choice_of(entry: &PackEntry) -> PackChoice {
         PackEntry::Loaded { pack, .. } => PackChoice {
             id: pack.id.clone(),
             title: pack.name.clone(),
-            detail: i18n::pack_detail(&pack.id, pack.values.len(), &pack.description),
+            detail: PackDetail::Loaded {
+                description: pack.description.clone(),
+            },
             badge: is_offensive(pack).then(|| Badge {
                 text: i18n::packs_label(PacksLabel::Offensive).to_owned(),
                 risky: true,
@@ -561,23 +666,24 @@ fn choice_of(entry: &PackEntry) -> PackChoice {
         PackEntry::Refused { id, errors } => PackChoice {
             id: id.clone(),
             title: id.clone(),
-            detail: i18n::pack_refused(id),
+            detail: PackDetail::Fixed(i18n::pack_refused(id)),
             badge: Some(Badge {
                 text: i18n::pack_problems(*errors),
                 risky: true,
                 current: false,
             }),
             enabled: false,
-            haystack: id.to_lowercase(),
+            // The id is all the window knows of it, and the row shows it.
+            haystack: Haystack::new(&[id], []),
             values: Vec::new(),
         },
         PackEntry::Unreadable { id, .. } => PackChoice {
             id: id.clone(),
             title: id.clone(),
-            detail: i18n::pack_unreadable(id),
+            detail: PackDetail::Fixed(i18n::pack_unreadable(id)),
             badge: None,
             enabled: false,
-            haystack: id.to_lowercase(),
+            haystack: Haystack::new(&[id], []),
             values: Vec::new(),
         },
     }
@@ -592,24 +698,38 @@ fn is_offensive(pack: &Pack) -> bool {
             .any(|value| pack.risk_of(value) == Risk::Offensive)
 }
 
-/// Name, description, tags and id, lower-cased once, one per line - a word
-/// never spans two fields, because a word holds no line break.
-fn haystack_of(pack: &Pack) -> String {
-    let mut fields = vec![
-        pack.name.as_str(),
-        pack.description.as_str(),
-        pack.id.as_str(),
-    ];
-    fields.extend(pack.tags.iter().map(String::as_str));
-    fields.join("\n").to_lowercase()
+/// Name, description and id, which the pack's row shows, and its tags, which
+/// it does not.
+fn haystack_of(pack: &Pack) -> Haystack {
+    Haystack::new(
+        &[
+            pack.name.as_str(),
+            pack.description.as_str(),
+            pack.id.as_str(),
+        ],
+        pack.tags.iter().map(|tag| (MatchPlace::Tags, tag.as_str())),
+    )
 }
 
-/// The value's own name, id, tags and fields, the same way.
-fn value_haystack_of(value: &PackValue) -> String {
-    let mut fields = vec![value.name.as_str(), value.id.as_str()];
-    fields.extend(value.tags.iter().map(String::as_str));
-    fields.extend(value.fields.iter().map(String::as_str));
-    fields.join("\n").to_lowercase()
+/// The value's own name, which its row shows, and its id, tags and fields,
+/// which it does not.
+fn value_haystack_of(value: &PackValue) -> Haystack {
+    Haystack::new(
+        &[value.name.as_str()],
+        std::iter::once((MatchPlace::Id, value.id.as_str()))
+            .chain(
+                value
+                    .tags
+                    .iter()
+                    .map(|tag| (MatchPlace::Tags, tag.as_str())),
+            )
+            .chain(
+                value
+                    .fields
+                    .iter()
+                    .map(|field| (MatchPlace::Fields, field.as_str())),
+            ),
+    )
 }
 
 #[cfg(test)]
@@ -882,6 +1002,120 @@ mod tests {
             picker.press(key("\u{8}"));
         }
         assert_eq!(picker.rows().len(), narrowed, "Backspace widens again");
+    }
+
+    /// Whitespace alone, its first value given tags and fields of its own -
+    /// the shipped values have none, and a team pack's may.
+    fn tagged() -> PackPicker {
+        let entries = listing()
+            .entries
+            .into_iter()
+            .filter_map(|entry| match entry {
+                PackEntry::Loaded { mut pack, warnings } if pack.id == "whitespace" => {
+                    pack.values[0].tags = vec![String::from("needle-tag")];
+                    pack.values[0].fields = vec![String::from("needle-field")];
+                    Some(PackEntry::Loaded { pack, warnings })
+                }
+                _ => None,
+            })
+            .collect();
+        PackPicker::new(
+            Ok(Listing {
+                entries,
+                coverage: CatalogueCoverage {
+                    consulted: vec![CatalogueSource::BuiltIn],
+                    skipped: Vec::new(),
+                },
+            }),
+            None,
+            None,
+        )
+    }
+
+    /// `UX-GUI-008`: a value found by its id says so, and one found by what
+    /// its row shows says nothing more.
+    #[test]
+    fn a_value_found_by_its_id_says_so() {
+        for (query, detail) in [
+            ("nbsp", "Whitespace - value 5 of 12 - in its id"),
+            ("words nbsp", "Whitespace - value 5 of 12 - in its id"),
+            ("between words", "Whitespace - value 5 of 12"),
+        ] {
+            let mut picker = shipped(Some("whitespace"));
+            type_in(&mut picker, query);
+            let values = of_kind(&picker, RowKind::Value);
+            let row = values
+                .iter()
+                .find(|row| row.title == "Non-breaking space between words")
+                .unwrap_or_else(|| panic!("{query:?} finds the value: {values:?}"));
+            assert_eq!(row.detail, detail, "{query:?}");
+        }
+    }
+
+    /// A word a shown part holds is named nowhere, and every other word gets
+    /// the FIRST hidden part that holds it - each place once, in one order.
+    #[test]
+    fn the_row_names_each_hidden_place_a_word_needed_once_and_in_order() {
+        for (query, detail) in [
+            ("needle", "Whitespace - value 1 of 12 - in its tags"),
+            (
+                "needle-tag needle",
+                "Whitespace - value 1 of 12 - in its tags",
+            ),
+            ("needle-field", "Whitespace - value 1 of 12 - in its fields"),
+            (
+                "needle-field needle-tag",
+                "Whitespace - value 1 of 12 - in its tags and fields",
+            ),
+            (
+                "trailing needle-field",
+                "Whitespace - value 1 of 12 - in its fields",
+            ),
+            (
+                "trailing-space needle-field needle-tag",
+                "Whitespace - value 1 of 12 - in its id, tags and fields",
+            ),
+            // "space" is in the id too, and the name shows it first.
+            ("trailing space", "Whitespace - value 1 of 12"),
+        ] {
+            let mut picker = tagged();
+            type_in(&mut picker, query);
+            let values = of_kind(&picker, RowKind::Value);
+            let row = values
+                .iter()
+                .find(|row| row.title == "Trailing space")
+                .unwrap_or_else(|| panic!("{query:?} finds the value: {values:?}"));
+            assert_eq!(row.detail, detail, "{query:?}");
+        }
+    }
+
+    /// The audit's case: Whitespace listed for "unicode" with no reason in
+    /// sight - a tag. The place stands before the description, which the view
+    /// elides at its end.
+    #[test]
+    fn a_pack_found_by_a_tag_says_so_before_its_description() {
+        let mut picker = shipped(None);
+        type_in(&mut picker, "unicode");
+        let packs = of_kind(&picker, RowKind::Pack);
+        let row = |title: &str| {
+            packs
+                .iter()
+                .find(|row| row.title == title)
+                .unwrap_or_else(|| panic!("{title} is listed: {packs:?}"))
+                .detail
+                .clone()
+        };
+        assert_eq!(
+            row("Whitespace"),
+            "whitespace, values: 12 - in its tags - Characters that take up space, or claim to, \
+             and are impossible to see in a form."
+        );
+        assert_eq!(
+            row("Unicode and text"),
+            "unicode-text, values: 12 - Characters that look innocent and break counting, \
+             comparison and display.",
+            "found by its name and id, which the row shows"
+        );
     }
 
     #[test]

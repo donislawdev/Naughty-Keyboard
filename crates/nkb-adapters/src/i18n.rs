@@ -1537,6 +1537,23 @@ pub enum PacksLabel {
     Detail,
     /// The second line of a value: the pack it is in and where.
     ValueDetail,
+    /// The same, for a value a query found in a part of it the row does not
+    /// show - its id, tags or fields (`UX-GUI-008`). Without it a value found
+    /// by its id looked found at random, as a pack found by its description
+    /// did before the row showed the description.
+    ValueDetailFound,
+    /// The second line of a pack a query found in its tags, which the row does
+    /// not show. The place stands BEFORE the description, because the view
+    /// elides the line at its end and a long description would take it along.
+    DetailFound,
+    /// The parts the two above name, one word each.
+    PlaceId,
+    PlaceTags,
+    PlaceFields,
+    /// Two places and three, as one phrase - whole shapes, so a translation
+    /// is never built from an English joining rule.
+    PlacesTwo,
+    PlacesThree,
     /// The section heading over the values of the pack in use, with nothing
     /// typed.
     ValuesIn,
@@ -1599,6 +1616,13 @@ fn pattern_packs_label(label: PacksLabel) -> &'static str {
         PacksLabel::Next => "next",
         PacksLabel::Detail => "{id}, values: {count} - {description}",
         PacksLabel::ValueDetail => "{pack} - value {index} of {total}",
+        PacksLabel::ValueDetailFound => "{pack} - value {index} of {total} - in its {places}",
+        PacksLabel::DetailFound => "{id}, values: {count} - in its {places} - {description}",
+        PacksLabel::PlaceId => "id",
+        PacksLabel::PlaceTags => "tags",
+        PacksLabel::PlaceFields => "fields",
+        PacksLabel::PlacesTwo => "{first} and {second}",
+        PacksLabel::PlacesThree => "{first}, {second} and {third}",
         PacksLabel::ValuesIn => "Values in {pack}",
         PacksLabel::FoundValues => "Values",
         PacksLabel::PacksSection => "Packs",
@@ -1676,28 +1700,96 @@ pub fn packs_summary_filtered(
     )
 }
 
+/// Where a query word was found, among the parts of a pack or a value that its
+/// row does not show (`UX-GUI-008`), in the order a row names them.
+///
+/// Here and not in the window's code, for the reason `PacksLabel` gives: only
+/// a window needs to know which parts of a row are on screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MatchPlace {
+    /// A value's id - a pack's stands in its row.
+    Id,
+    Tags,
+    /// The field kinds a value narrows its pack's list to.
+    Fields,
+}
+
+/// The places as one phrase: `id`, `id and tags`, `id, tags and fields`. In
+/// the order of [`MatchPlace`] and each once, however the caller listed them.
+fn places(found: &[MatchPlace]) -> String {
+    let mut found = found.to_vec();
+    found.sort_unstable();
+    found.dedup();
+    let word = |place: &MatchPlace| {
+        pattern_packs_label(match place {
+            MatchPlace::Id => PacksLabel::PlaceId,
+            MatchPlace::Tags => PacksLabel::PlaceTags,
+            MatchPlace::Fields => PacksLabel::PlaceFields,
+        })
+    };
+    match found.as_slice() {
+        [] => String::new(),
+        [one] => word(one).to_owned(),
+        [first, second] => fill(
+            pattern_packs_label(PacksLabel::PlacesTwo),
+            &[("first", word(first)), ("second", word(second))],
+        ),
+        // Three at most: `MatchPlace` has three, each kept once.
+        [first, second, third, ..] => fill(
+            pattern_packs_label(PacksLabel::PlacesThree),
+            &[
+                ("first", word(first)),
+                ("second", word(second)),
+                ("third", word(third)),
+            ],
+        ),
+    }
+}
+
 /// The second line of a pack that loads: `whitespace, values: 12 - Spaces...`.
+/// With `found`, the parts of the pack a query was found in that the row does
+/// not show, named before the description: `locale-pl, values: 12 - in its
+/// tags - Polish...`.
 #[must_use]
-pub fn pack_detail(id: &str, values: usize, description: &str) -> String {
+pub fn pack_detail(id: &str, values: usize, description: &str, found: &[MatchPlace]) -> String {
+    let count = values.to_string();
+    if found.is_empty() {
+        return fill(
+            pattern_packs_label(PacksLabel::Detail),
+            &[("id", id), ("count", &count), ("description", description)],
+        );
+    }
     fill(
-        pattern_packs_label(PacksLabel::Detail),
+        pattern_packs_label(PacksLabel::DetailFound),
         &[
             ("id", id),
-            ("count", &values.to_string()),
+            ("count", &count),
+            ("places", &places(found)),
             ("description", description),
         ],
     )
 }
 
-/// The second line of a value: `Polish locale - value 3 of 12`.
+/// The second line of a value: `Polish locale - value 3 of 12`. With `found`,
+/// the parts of the value a query was found in that the row does not show:
+/// `Whitespace - value 5 of 12 - in its id`.
 #[must_use]
-pub fn value_detail(pack: &str, index: usize, total: usize) -> String {
+pub fn value_detail(pack: &str, index: usize, total: usize, found: &[MatchPlace]) -> String {
+    let index = index.to_string();
+    let total = total.to_string();
+    if found.is_empty() {
+        return fill(
+            pattern_packs_label(PacksLabel::ValueDetail),
+            &[("pack", pack), ("index", &index), ("total", &total)],
+        );
+    }
     fill(
-        pattern_packs_label(PacksLabel::ValueDetail),
+        pattern_packs_label(PacksLabel::ValueDetailFound),
         &[
             ("pack", pack),
-            ("index", &index.to_string()),
-            ("total", &total.to_string()),
+            ("index", &index),
+            ("total", &total),
+            ("places", &places(found)),
         ],
     )
 }
@@ -2795,6 +2887,13 @@ mod tests {
             PacksLabel::Next,
             PacksLabel::Detail,
             PacksLabel::ValueDetail,
+            PacksLabel::ValueDetailFound,
+            PacksLabel::DetailFound,
+            PacksLabel::PlaceId,
+            PacksLabel::PlaceTags,
+            PacksLabel::PlaceFields,
+            PacksLabel::PlacesTwo,
+            PacksLabel::PlacesThree,
             PacksLabel::ValuesIn,
             PacksLabel::FoundValues,
             PacksLabel::PacksSection,
@@ -2827,6 +2926,10 @@ mod tests {
                 | PacksLabel::SummaryFiltered
                 | PacksLabel::Detail
                 | PacksLabel::ValueDetail
+                | PacksLabel::ValueDetailFound
+                | PacksLabel::DetailFound
+                | PacksLabel::PlacesTwo
+                | PacksLabel::PlacesThree
                 | PacksLabel::ValuesIn
                 | PacksLabel::ValueGone
                 | PacksLabel::Refused
@@ -2840,6 +2943,9 @@ mod tests {
                 | PacksLabel::InUse
                 | PacksLabel::Next
                 | PacksLabel::FoundValues
+                | PacksLabel::PlaceId
+                | PacksLabel::PlaceTags
+                | PacksLabel::PlaceFields
                 | PacksLabel::PacksSection
                 | PacksLabel::Offensive
                 | PacksLabel::NoPacks
@@ -2877,11 +2983,11 @@ mod tests {
             "values: 2 of 102, packs: 0 of 9"
         );
         assert_eq!(
-            pack_detail("unicode-text", 34, "Text that breaks"),
+            pack_detail("unicode-text", 34, "Text that breaks", &[]),
             "unicode-text, values: 34 - Text that breaks"
         );
         assert_eq!(
-            value_detail("Polish locale", 3, 12),
+            value_detail("Polish locale", 3, 12, &[]),
             "Polish locale - value 3 of 12"
         );
         assert_eq!(values_in("Whitespace"), "Values in Whitespace");
@@ -2893,6 +2999,51 @@ mod tests {
         assert_eq!(pack_problems(3), "problems: 3");
         assert_eq!(pack_refused("broken"), "broken, does not load");
         assert_eq!(pack_unreadable("gone"), "gone, cannot be read");
+    }
+
+    /// `UX-GUI-008`: a row names the parts a query was found in that it does
+    /// not show - each once, in one order, and for a pack before the
+    /// description the view elides.
+    #[test]
+    fn a_row_says_where_a_query_was_found_when_it_does_not_show_it() {
+        assert_eq!(
+            value_detail("Whitespace", 5, 12, &[MatchPlace::Id]),
+            "Whitespace - value 5 of 12 - in its id"
+        );
+        assert_eq!(
+            value_detail("Whitespace", 5, 12, &[MatchPlace::Tags, MatchPlace::Id]),
+            "Whitespace - value 5 of 12 - in its id and tags",
+            "in the order of the places, not of the caller"
+        );
+        assert_eq!(
+            value_detail(
+                "Whitespace",
+                5,
+                12,
+                &[
+                    MatchPlace::Fields,
+                    MatchPlace::Tags,
+                    MatchPlace::Fields,
+                    MatchPlace::Id
+                ]
+            ),
+            "Whitespace - value 5 of 12 - in its id, tags and fields",
+            "each place once"
+        );
+        assert_eq!(
+            value_detail("Whitespace", 5, 12, &[MatchPlace::Tags, MatchPlace::Tags]),
+            "Whitespace - value 5 of 12 - in its tags",
+            "two words in tags are one place"
+        );
+        assert_eq!(
+            pack_detail("locale-pl", 12, "Polish data", &[MatchPlace::Tags]),
+            "locale-pl, values: 12 - in its tags - Polish data"
+        );
+        // A description with braces stays text after the places went in.
+        assert_eq!(
+            pack_detail("x", 1, "{places}", &[MatchPlace::Tags]),
+            "x, values: 1 - in its tags - {places}"
+        );
     }
 
     #[test]
