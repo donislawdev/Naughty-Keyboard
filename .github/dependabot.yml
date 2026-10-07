@@ -1,0 +1,93 @@
+version: 2
+
+# Keeps dependencies current. This asks one question, whether a newer version of
+# something we declare exists. Alerts about a published vulnerability are a
+# separate switch in the repository's security settings (Dependabot alerts and
+# Dependabot security updates), and this file does not control them.
+#
+# There is no CI in this repository yet, so a pull request from the bot arrives
+# with no checks. Run `cargo test --workspace` on it before merging. A bump of
+# `windows-sys` needs more than that: it is compiled only on Windows, so only a
+# Windows build can tell whether it broke anything.
+#
+# Updates are grouped on purpose. This project has one maintainer, and a separate
+# pull request per crate is how a dependency bot gets muted, which costs more than
+# the noise it was meant to save.
+
+updates:
+  # ---- Rust: the workspace at the repository root ------------------------------------
+  # One manifest tree, resolved from the root Cargo.toml, with a tracked Cargo.lock.
+  # Only the dependencies declared in a Cargo.toml are looked at. The several hundred
+  # crates in the lock file that nobody declared are mostly decided by Slint, and
+  # the lock file is what the tests that guard a single copy of a crate read.
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # A week between a version being published and this bot proposing it. This project
+    # already refuses a version that is only a day old when it chooses one by hand: the
+    # exact pin on `embed-resource` in the root Cargo.toml is there for that reason. The
+    # cooldown makes the bot follow the same rule.
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    # Three crates move when Slint moves, and not before. Each has a test that goes red
+    # when the lock file holds two copies of it, so a bump on its own is a pull request
+    # that cannot pass. They are left out of the weekly version updates, and they follow
+    # whenever a Slint release brings them.
+    #
+    # - `arboard`: the clipboard Slint already links. Why it is not a second copy is
+    #   written beside it in the root Cargo.toml, and `clipboard_moves_with_slint` in
+    #   nkb-gui holds it.
+    # - `skrifa`: the font reader Slint's renderer uses, kept at the version Slint locks
+    #   so the typeface test asks the same reader. `typeface_guarantee` in nkb-gui
+    #   holds it.
+    # - `raw-window-handle`: the window-handle types behind Slint's
+    #   `raw-window-handle-06` feature. A newer major than the one that feature names
+    #   is a type Slint does not hand out.
+    ignore:
+      - dependency-name: "arboard"
+      - dependency-name: "skrifa"
+      - dependency-name: "raw-window-handle"
+    groups:
+      # The toolkit and the crate that compiles its interface files are published
+      # together and have to stay on one version, so they arrive in one pull request,
+      # whatever kind of update it is. A change of Slint is also a change to review
+      # against the licence argument written beside it in the root Cargo.toml, so it
+      # is not mixed with anything else.
+      slint:
+        patterns:
+          - "slint"
+          - "slint-build"
+      # Patch releases only. Most of the crates declared here are 0.x, where a minor
+      # release may break, so those arrive one at a time and one that fails does not
+      # hold the rest back.
+      cargo-patch:
+        update-types:
+          - "patch"
+
+  # ---- The workflows themselves ------------------------------------------------------
+  # There is no workflow in this repository yet, so until the first one is added this
+  # entry has nothing to look at, and the Dependabot tab may say that it found no files.
+  # That is expected. From the first workflow on it keeps the actions that workflow
+  # uses current, and where they are pinned to a full commit it moves the pin and the
+  # version comment beside it together.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # The same week again, and here it matters more than anywhere: a pinned commit is
+    # exactly what an attacker wants moved, and this entry's whole job is to move them.
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns:
+          - "*"
