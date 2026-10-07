@@ -232,15 +232,41 @@ fn surface_edge(buffer: &[offscreen::Pixel]) -> usize {
         .unwrap_or(0)
 }
 
-/// How far in from the right edge the surface is read: inside the band padding,
-/// so no text reaches it, and far enough from the edge that the rounded corner
-/// takes only a row or two.
+/// How far in from the right edge the surface is read: inside the gutter, so
+/// no text and no control reaches it.
 const SURFACE_PROBE_INSET: u32 = 6;
 
-/// Rows the rounded corner may take off the surface at the probe column. The
-/// corner is `radius-window`. At six pixels in from the edge its curve rises by
-/// less than two rows, so three is a margin and not a hiding place.
-const CORNER_ROWS: usize = 3;
+/// `surface` and `surface-raised`: the content's ground, and the ground of the
+/// header, the footer and the status line - copied, for the reason the colours
+/// above are copies.
+const SURFACE: (u8, u8, u8) = (0x14, 0x16, 0x1A);
+const RAISED: (u8, u8, u8) = (0x1C, 0x1F, 0x26);
+
+/// The first row of the footer: the first raised row down the probe column
+/// AFTER the content's own ground has been reached - the header above the
+/// content is raised too.
+///
+/// The landmark for "nothing above the footer moved" (`D110`): every band the
+/// tester clicks in stands above it, so if any of them changed height, or a
+/// band appeared above them, this row moves. The status line is below it and
+/// may come and go freely.
+fn footer_top(buffer: &[offscreen::Pixel]) -> Option<usize> {
+    let pixel = |rgb: (u8, u8, u8)| offscreen::Pixel {
+        r: rgb.0,
+        g: rgb.1,
+        b: rgb.2,
+    };
+    let column = (WIDTH - SURFACE_PROBE_INSET) as usize;
+    let mut in_content = false;
+    for (y, row) in buffer.chunks(WIDTH as usize).enumerate() {
+        if row[column] == pixel(SURFACE) {
+            in_content = true;
+        } else if in_content && row[column] == pixel(RAISED) {
+            return Some(y);
+        }
+    }
+    None
+}
 
 /// Fails when anything is drawn below the palette's own surface.
 ///
@@ -253,7 +279,7 @@ fn assert_nothing_escapes_the_surface(buffer: &[offscreen::Pixel], state: &str, 
     let drawn = bottom_edge(buffer);
     let surface = surface_edge(buffer);
     assert!(
-        drawn <= surface + CORNER_ROWS,
+        drawn <= surface,
         "{state}: the palette draws down to row {drawn} but its surface ends at row \
          {surface}, so the bottom of the palette spills out of it. Look at {picture}"
     );
@@ -351,6 +377,10 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     // line that is cut leaves it where it was - so the edge is the measurement.
     fill(&palette);
     palette.set_compact(false);
+    // One line, so the longest counters have a line to add: at the scale's
+    // smallest step (12 px since 2026-10-07) the specimen's own counters
+    // already take two.
+    palette.set_value_counts("graphemes: 7".into());
     let edge_short = bottom_edge(&render(&window));
     palette.set_value_counts(longest_counts().into());
     let edge_counts = bottom_edge(&render(&window));
@@ -417,69 +447,147 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
          elides and the window grows and shrinks with every press. Look at {}",
         long_next_path.display()
     );
-    // While a send runs the band is not drawn: which value comes next depends on
-    // how the one in flight ends.
+    // While a send runs, which value comes next depends on how the one in
+    // flight ends - so the band FADES in place (`D110`) rather than going away
+    // and moving every band below it. Faded, its name and preview are no
+    // longer exactly `text-primary`.
+    fill(&palette);
+    palette.set_compact(false);
+    let primary_idle = offscreen::count_exactly(&render(&window), TEXT_PRIMARY);
     palette.set_sending_label("Typing".into());
     palette.set_sending_counter("1784 / 65535".into());
     palette.set_sending_hint("Press Esc to stop.".into());
     palette.set_sending(true);
-    let sending_with_next = render(&window);
-    palette.set_has_next(false);
+    let primary_sending = offscreen::count_exactly(&render(&window), TEXT_PRIMARY);
     assert!(
-        render(&window) == sending_with_next,
-        "the next band changed the picture while a send was running, so it promises a value \
-         the press in flight has not settled yet"
+        primary_sending < primary_idle,
+        "the next band kept its full ink while a send was running ({primary_idle} vs \
+         {primary_sending}), so it promises a value the press in flight has not settled yet"
     );
     palette.set_sending(false);
     fill(&palette);
 
-    // ---- the expanded palette never gets shorter by itself (D83) ----------
-    // Through the product's own wiring: the `changed` handler in the view and
-    // `hold_height` in the worker module. Measured on the SURFACE, because the
-    // surface is what the window's height draws - a floor that only moved a
-    // property would leave the bottom edge where the content ends.
-    nkb_gui::live::hold_height_on_change(&palette);
+    // ---- nothing above the footer moves, and the window follows (D110) ----
+    // The owner's points 1 and 2 (2026-10-07). A click on "Clipboard" put the
+    // standing bar and a three-line sentence ABOVE the switch, a click on
+    // "Change shortcuts" a sentence above the link, and both jumped away from
+    // under the pointer. The room a sentence left stayed empty at the bottom,
+    // and grew with every sentence. Each change below is one that used to move
+    // a band: the footer's first row must stay where it is, and once the
+    // sentence goes the window must be exactly as tall as before.
     fill(&palette);
     palette.set_compact(false);
-    palette.set_value_preview("\u{2423}".repeat(100).into());
-    render(&window);
-    let tall = render(&window);
-    let edge_tall = surface_edge(&tall);
-    palette.set_value_preview("a".into());
-    render(&window);
+    // Folded, as every run starts (point 7): opened, the band is the tester's
+    // own to grow and shrink with each value.
+    palette.set_last_sent_open(false);
+    palette.set_messages(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    let quiet = render(&window);
+    let footer_quiet = footer_top(&quiet).expect("the expanded palette must draw a footer");
+    let edge_quiet = surface_edge(&quiet);
+    let stays = |what: &str, buffer: &[offscreen::Pixel], picture: &str| {
+        assert_eq!(
+            footer_top(buffer),
+            Some(footer_quiet),
+            "{what} moved the bands above the footer - the switches, the link and the values \
+             jump under the tester's eyes. Look at {picture}"
+        );
+    };
+    // "Clipboard": the mode on, and the sentence it says.
+    palette.set_clipboard_mode(true);
+    palette.set_clipboard_mode_on(true);
+    palette.set_route_selected(1);
+    palette.set_messages(ModelRc::new(VecModel::from(vec![SharedString::from(
+        "Clipboard mode: each value goes to your clipboard, replacing what you had copied. \
+         Press your paste shortcut to insert each one.",
+    )])));
+    let clicked = render(&window);
+    let clicked_path =
+        offscreen::save_cropped(&clicked, WIDTH, HEIGHT, "palette-clipboard-clicked.png");
+    stays(
+        "a click on Clipboard",
+        &clicked,
+        &clicked_path.display().to_string(),
+    );
+    assert!(
+        surface_edge(&clicked) > edge_quiet,
+        "the sentence a click on Clipboard says moved no edge, so it is not drawn. Look at {}",
+        clicked_path.display()
+    );
+    // The switch says the mode, so the standing bar is not said again below:
+    // the same sentence with the mode off draws the same height.
+    let edge_clicked = surface_edge(&clicked);
+    palette.set_clipboard_mode(false);
+    palette.set_clipboard_mode_on(false);
+    assert_eq!(
+        surface_edge(&render(&window)),
+        edge_clicked,
+        "the expanded palette in the tester's own clipboard mode draws a standing bar \
+         under the switch that already says it. Look at {}",
+        clicked_path.display()
+    );
+    // "Keyboard", and the sentence goes: the window is as tall as before.
+    palette.set_route_selected(0);
+    palette.set_messages(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     let after = render(&window);
-    let after_path = offscreen::save_cropped(&after, WIDTH, HEIGHT, "palette-height-held.png");
+    let after_path = offscreen::save_cropped(&after, WIDTH, HEIGHT, "palette-height-follows.png");
     assert_eq!(
         surface_edge(&after),
-        edge_tall,
-        "a one-letter value after a hundred-character one moved the palette's bottom edge \
-         ({edge_tall} -> {}), so the window shrinks under the tester's eyes. Look at {}",
-        surface_edge(&after),
+        edge_quiet,
+        "the room the sentence left stayed under the content - the floor D110 removed. Look \
+         at {}",
         after_path.display()
     );
-    // The positive control: collapsing and expanding starts the floor over, so
-    // the same short value now gets a SHORTER palette. Without this, a floor
-    // stuck at the buffer's height would pass the check above.
-    nkb_gui::live::set_compact(&palette, true);
-    render(&window);
-    nkb_gui::live::set_compact(&palette, false);
-    render(&window);
-    let refit = render(&window);
-    assert!(
-        surface_edge(&refit) < edge_tall,
-        "expanding again did not fit the palette to the short value ({} vs {edge_tall}), so \
-         the check above cannot tell a held height from one that never moves",
-        surface_edge(&refit)
+    // "Change shortcuts": the sentence about the pause, then none.
+    palette.set_messages(ModelRc::new(VecModel::from(vec![SharedString::from(
+        "Shortcuts are paused while the Shortcuts window is open.",
+    )])));
+    let paused = render(&window);
+    let paused_path = offscreen::save_cropped(&paused, WIDTH, HEIGHT, "palette-paused.png");
+    stays(
+        "the sentence about the pause",
+        &paused,
+        &paused_path.display().to_string(),
     );
+    palette.set_messages(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    assert_eq!(
+        surface_edge(&render(&window)),
+        edge_quiet,
+        "closing the shortcuts window left the room of its sentence behind. Look at {}",
+        paused_path.display()
+    );
+    // Before the first value: the folded row stands, faded, and the first
+    // press fills it rather than putting a band in.
+    palette.set_has_value(false);
+    let before_first = render(&window);
+    let before_path =
+        offscreen::save_cropped(&before_first, WIDTH, HEIGHT, "palette-before-first.png");
+    stays(
+        "the first value",
+        &before_first,
+        &before_path.display().to_string(),
+    );
+    palette.set_has_value(true);
+    // The end of a pack: the next band keeps its lines.
+    palette.set_next_has_value(false);
+    let end = render(&window);
+    let end_path = offscreen::save_cropped(&end, WIDTH, HEIGHT, "palette-next-end.png");
+    stays("the end of the pack", &end, &end_path.display().to_string());
+    palette.set_next_has_value(true);
+    // A send in progress: its band is in the status line, below the footer.
+    palette.set_sending_label("Typing".into());
+    palette.set_sending_counter("1784 / 65535".into());
+    palette.set_sending_hint("Press Esc to stop.".into());
+    palette.set_sending(true);
+    let in_flight = render(&window);
+    stays("a send in progress", &in_flight, "palette-sending.png");
+    palette.set_sending(false);
+    fill(&palette);
 
     // ---- the last value sent, folded: how the palette starts (point 7) ----
     // A difference of two renders, like everything above. Folded, the band is
     // its heading row and nothing more: the bottom edge moves up, and the
     // preview's ink - `text-primary` at preview size, which the folded row
-    // never draws - is gone. Through the product's own switch, which also
-    // starts the height floor over: folding is the tester's click, so the
-    // window gets shorter at once rather than keeping the open height (D83 is
-    // about the palette shrinking by itself).
+    // never draws - is gone. Through the product's own switch.
     fill(&palette);
     palette.set_compact(false);
     let open = render(&window);
@@ -497,8 +605,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     assert!(
         surface_edge(&folded) + 60 < edge_open,
         "folding the last value did not make the palette shorter by the band's lines ({} vs \
-         {edge_open}), so the fold draws the whole value anyway or the floor held the height. \
-         Look at {}",
+         {edge_open}), so the fold draws the whole value anyway. Look at {}",
         surface_edge(&folded),
         folded_path.display()
     );
@@ -578,22 +685,15 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
         "while a value is being typed",
         &sending_path.display().to_string(),
     );
-    // The accent is counted with the hint band hidden: the switches in it wear
-    // the accent on the way in effect and fade while a value goes, so with
-    // them in the picture the send band ADDS accent while the switches TAKE
-    // it away - measured, 2444 at rest against 407 sending, the first run
-    // after the switches came in (2026-10-07).
-    palette.set_hints_visible(false);
-    palette.set_sending(false);
-    let accent_idle = offscreen::count_exactly(&render(&window), ACCENT);
-    palette.set_sending(true);
+    // The bar follows the share. Counted in the compact palette, where the
+    // status line is the only band besides the header: expanded, the
+    // switches wear the accent on the way in effect and fade while a value
+    // goes, so a count over the whole window would add the bar's accent and
+    // take the switches' away at once - measured, 2444 at rest against 407
+    // sending, the first run after the switches came in (2026-10-07).
+    palette.set_compact(true);
+    palette.set_sending_fraction(0.25);
     let accent_quarter = offscreen::count_exactly(&render(&window), ACCENT);
-    assert!(
-        accent_quarter > accent_idle,
-        "switching the send band on added no accent ink ({accent_idle} vs {accent_quarter}), \
-         so the palette does not draw it. Look at {}",
-        sending_path.display()
-    );
     palette.set_sending_fraction(0.75);
     let accent_three_quarters = offscreen::count_exactly(&render(&window), ACCENT);
     assert!(
@@ -602,6 +702,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
          {accent_three_quarters}), so the bar does not follow the share. Look at {}",
         sending_path.display()
     );
+    palette.set_sending_fraction(0.25);
     palette.set_compact(true);
     // A difference of two renders again, and for a measured reason: the pack
     // band's counter wears the accent too, so "some accent in the compact
@@ -631,7 +732,6 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     );
     palette.set_compact(false);
     palette.set_sending(false);
-    palette.set_hints_visible(true);
 
     // ---- before the first value: the empty state draws (D83) ---------------
     // GUI rule 3: the value band has an empty state and it is on screen from

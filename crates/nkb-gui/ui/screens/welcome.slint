@@ -22,6 +22,8 @@
 //               3  the pack the palette starts on and three shortcuts
 //     footer    the one main action, "Start testing", in the accent
 //
+// The frame every window stands in (`components/frame.slint`, `D110`).
+//
 // # The box is the query line
 //
 // `QueryField`, the pack search's line: no text field (`D85`), a focus scope
@@ -37,14 +39,15 @@
 
 import {
     Tokens,
-    TextName,
     TextBody,
     TextSmallMuted,
     Spacer,
-    Hairline,
     HintRow,
     HintBar,
-    ChromeBand,
+    Zone,
+    WindowFrame,
+    WindowHeader,
+    WindowFooter,
     QueryField,
     SmallButton,
 } from "../components.slint";
@@ -91,73 +94,63 @@ export component WelcomeWindow inherits Window {
     height: body.preferred-height;
     always-on-top: true;
 
-    body := VerticalLayout {
-        ChromeBand {
-            TextName {
-                text: root.heading;
+    body := WindowFrame {
+        packed: true;
+
+        WindowHeader {
+            title: root.heading;
+        }
+
+        // Each step a section with its heading in the role every section
+        // heading of the product wears - the palette's "Next" included.
+        Zone {
+            divided: false;
+            TextSmallMuted {
+                text: root.try-heading;
+            }
+            TextBody {
+                text: root.try-it;
+                wrap: word-wrap;
+            }
+            box := QueryField {
+                query: root.box-before;
+                query-after: root.box-after;
+                accessible-name: root.box-name;
+            }
+            TextSmallMuted {
+                text: root.box-facts;
+                wrap: word-wrap;
             }
         }
 
-        VerticalLayout {
-            padding: Tokens.space-4;
-            spacing: Tokens.space-4;
-
-            VerticalLayout {
-                spacing: Tokens.space-2;
-                TextSmallMuted {
-                    text: root.try-heading;
-                }
-                TextBody {
-                    text: root.try-it;
-                    wrap: word-wrap;
-                }
-                box := QueryField {
-                    query: root.box-before;
-                    query-after: root.box-after;
-                    accessible-name: root.box-name;
-                }
-                TextSmallMuted {
-                    text: root.box-facts;
-                    wrap: word-wrap;
-                }
+        Zone {
+            TextSmallMuted {
+                text: root.does-heading;
             }
-
-            Hairline { }
-
-            VerticalLayout {
-                spacing: Tokens.space-2;
-                TextSmallMuted {
-                    text: root.does-heading;
-                }
-                TextBody {
-                    text: root.does;
-                    wrap: word-wrap;
-                }
-                TextBody {
-                    text: root.allowed;
-                    wrap: word-wrap;
-                }
+            TextBody {
+                text: root.does;
+                wrap: word-wrap;
             }
-
-            Hairline { }
-
-            VerticalLayout {
-                spacing: Tokens.space-2;
-                TextSmallMuted {
-                    text: root.ready-heading;
-                }
-                TextBody {
-                    text: root.ready;
-                    wrap: word-wrap;
-                }
-                HintBar {
-                    rows: root.hints;
-                }
+            TextBody {
+                text: root.allowed;
+                wrap: word-wrap;
             }
         }
 
-        ChromeBand {
-            at-bottom: true;
+        Zone {
+            TextSmallMuted {
+                text: root.ready-heading;
+            }
+            TextBody {
+                text: root.ready;
+                wrap: word-wrap;
+            }
+            HintBar {
+                rows: root.hints;
+            }
+        }
+
+        WindowFooter {
             HorizontalLayout {
                 Spacer { }
                 SmallButton {

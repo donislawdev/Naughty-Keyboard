@@ -784,3 +784,123 @@ fn the_sentence_rules_can_actually_fail() {
         "an ordinary literal is none of this rule's business"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The frame every window stands in
+// ---------------------------------------------------------------------------
+
+const FRAME_RULE: &str = "A window of the product stands in the frame: `WindowFrame` with a\n\
+     `WindowHeader`, its sections, and the footer and status line from\n\
+     ui/components/frame.slint - D110, the owner's point 4 of 2026-10-07. The\n\
+     door does not hand out `ChromeBand`, so a window cannot build chrome of its own.\n";
+
+/// What a screen file lacks to stand in the frame, one complaint per missing
+/// piece: as many `WindowFrame`s and `WindowHeader`s as it declares windows.
+///
+/// Counted rather than matched window by window: a screen file holds one
+/// window today, and a count that comes out short for a second one is the
+/// loud direction.
+fn frame_problems(name: &str, body: &str) -> Vec<String> {
+    let (mut windows, mut frames, mut headers) = (0, 0, 0);
+    for raw in body.lines() {
+        let line = strip_line_comment(raw);
+        let elements = instantiated_elements(line);
+        if line.contains("inherits") && elements.contains(&"Window") {
+            windows += 1;
+        }
+        frames += elements.iter().filter(|e| **e == "WindowFrame").count();
+        headers += elements.iter().filter(|e| **e == "WindowHeader").count();
+    }
+    let mut problems = Vec::new();
+    if frames < windows {
+        problems.push(format!(
+            "{name}  declares {windows} window(s) and stands {frames} of them in a WindowFrame"
+        ));
+    }
+    if headers < windows {
+        problems.push(format!(
+            "{name}  declares {windows} window(s) and gives {headers} of them a WindowHeader"
+        ));
+    }
+    problems
+}
+
+/// Whether the door hands out the band chrome is built from. Comments may name
+/// it - the door says why it does not.
+fn door_hands_out_chrome(door: &str) -> bool {
+    door.lines()
+        .map(strip_line_comment)
+        .any(|line| line.contains("ChromeBand"))
+}
+
+/// The owner's point 4 of 2026-10-07: four windows, built one at a time, each
+/// copying the last one remembered, looked like four programs - and more
+/// windows are coming. So every window of the product is assembled from the
+/// frame's pieces, and this refuses one that is not (`D110`).
+///
+/// Carries its own controls, for the reason `the_sentence_rules_can_actually_fail`
+/// gives: a rule never seen firing cannot be told from a broken one.
+#[test]
+fn every_window_stands_in_the_frame() {
+    // --- the controls: it fires, and it stays quiet --------------------------
+    let bare = "export component Spare inherits Window {\n    VerticalLayout { }\n}\n";
+    assert_eq!(
+        frame_problems("bare", bare).len(),
+        2,
+        "a window with no frame and no header must be reported twice"
+    );
+    let framed = "export component Spare inherits Window {\n\
+                  \x20   WindowFrame {\n\
+                  \x20       WindowHeader { title: root.heading; }\n\
+                  \x20   }\n\
+                  }\n";
+    assert!(
+        frame_problems("framed", framed).is_empty(),
+        "a window in the frame was reported"
+    );
+    let named = "export component Spare inherits Window {\n\
+                 \x20   body := WindowFrame {\n\
+                 \x20       header := WindowHeader { }\n\
+                 \x20   }\n\
+                 }\n";
+    assert!(
+        frame_problems("named", named).is_empty(),
+        "a frame and a header given names were not recognised"
+    );
+    assert!(
+        door_hands_out_chrome("import { ChromeBand } from \"components/chrome.slint\";"),
+        "a door importing ChromeBand was not noticed"
+    );
+    assert!(
+        !door_hands_out_chrome("// `ChromeBand` is deliberately NOT re-exported"),
+        "a comment naming ChromeBand was taken for an export"
+    );
+
+    // --- the product -----------------------------------------------------------
+    let screens = files_in(&ui_dir().join("screens"), "slint");
+    let mut windows = 0;
+    let mut problems = Vec::new();
+    for path in &screens {
+        let body = read(path);
+        windows += body
+            .lines()
+            .map(strip_line_comment)
+            .filter(|line| {
+                line.contains("inherits") && instantiated_elements(line).contains(&"Window")
+            })
+            .count();
+        problems.extend(frame_problems(&shown(path), &body));
+    }
+    assert!(
+        windows >= 4,
+        "ui/screens declares {windows} window(s) - the palette, the welcome, the shortcuts and \
+         the value window make four, so the rule is reading the wrong files"
+    );
+    if door_hands_out_chrome(&read(&ui_dir().join("components.slint"))) {
+        problems.push(
+            "components.slint  hands out ChromeBand - a screen could build a header of its own"
+                .to_owned(),
+        );
+    }
+    report(problems, FRAME_RULE);
+}

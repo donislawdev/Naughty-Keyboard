@@ -13,11 +13,11 @@
 
 import {
     Tokens,
+    TextTitle,
     TextName,
     TextBody,
     TextSmall,
     TextSmallMuted,
-    TextHint,
     TextMono,
     TextCounter,
     TextPreview,
@@ -32,8 +32,11 @@ import {
     Marker,
     MarkerRow,
     Zone,
-    WindowSurface,
-    ChromeBand,
+    ZoneFill,
+    WindowFrame,
+    WindowHeader,
+    WindowFooter,
+    WindowStatus,
     ProgressBar,
     QueryField,
     PickList,
@@ -53,11 +56,13 @@ export component Gallery inherits Window {
         padding: Tokens.space-3;
         spacing: Tokens.space-2;
 
-        TextName { text: "TextName - the value's own name"; }
-        TextBody { text: "TextBody - pack name, the shape line"; }
-        TextSmall { text: "TextSmall - target application"; }
-        TextSmallMuted { text: "TextSmallMuted - window title, context"; }
-        TextHint { text: "TextHint - the hint bar, smallest role there is"; }
+        // The four sizes and no fifth (the owner's rule, 2026-10-07): title,
+        // body - names in the strong weight - small, and the preview.
+        TextTitle { text: "TextTitle - a window's title"; }
+        TextName { text: "TextName - a name a list or a band holds"; }
+        TextBody { text: "TextBody - prose, the shape line"; }
+        TextSmall { text: "TextSmall - the word on a button"; }
+        TextSmallMuted { text: "TextSmallMuted - a heading, a label, a hint"; }
         TextMono { text: "TextMono - 7 graphemes . 7 code points . 13 bytes"; }
         TextCounter { text: "TextCounter - 7 / 34"; }
 
@@ -153,14 +158,69 @@ export component Gallery inherits Window {
         }
         ProgressBar { fraction: 1; }
 
-        // The palette's own ground, at both opacities. Over the gallery's
-        // background the dimmed one barely differs, and that is honest: the
+        // The frame every window stands in (`D110`): the header with its title
+        // and a count, a section, the footer with the keys and the status line
+        // with a sentence - then the palette's header, whose title opens a
+        // list, with a title far too long, elided before the count and the
+        // button keep their place, dimmed as at rest. Over the gallery's
+        // background the dimmed ground barely differs, and that is honest: the
         // difference only appears over somebody else's window.
+        WindowFrame {
+            packed: true;
+            WindowHeader {
+                title: "WindowHeader";
+                VerticalLayout {
+                    alignment: center;
+                    TextSmallMuted { text: "packs: 9"; }
+                }
+            }
+            Zone {
+                divided: false;
+                TextSmallMuted { text: "Zone - a section of the content"; }
+                TextBody { text: "The gutter of every window, header and footer included."; wrap: word-wrap; }
+            }
+            Zone {
+                TextSmallMuted { text: "Zone - the next section, with its rule"; }
+            }
+            WindowFooter {
+                HintBar {
+                    rows: [
+                        { key: "Enter", action: "WindowFooter - the keys the window answers" },
+                    ];
+                }
+            }
+            WindowStatus {
+                TextBody { text: "WindowStatus - what the tool has to say, last in the window."; wrap: word-wrap; }
+            }
+        }
+        WindowFrame {
+            packed: true;
+            dimmed: true;
+            WindowHeader {
+                title: "A pack whose name is far too long for the palette's header";
+                opens: true;
+                action: "Find a value";
+                dimmed: true;
+                VerticalLayout {
+                    alignment: center;
+                    TextCounter { text: "100000 / 100000"; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    SmallButton { text: "Expand"; action: "Expand"; }
+                }
+            }
+            WindowStatus {
+                dimmed: true;
+                TextBody { text: "The dimmed status line, as the resting palette shows it."; wrap: word-wrap; }
+            }
+        }
+        // A section that takes the room left - the value window's list.
         HorizontalLayout {
-            spacing: Tokens.space-2;
             height: Tokens.sample-height;
-            WindowSurface { }
-            WindowSurface { dimmed: true; }
+            ZoneFill {
+                TextSmallMuted { text: "ZoneFill - takes the room the window has left"; }
+            }
         }
 
         Hairline {}
@@ -175,15 +235,6 @@ export component Gallery inherits Window {
         QueryField { query: "cannot be used"; enabled: false; }
         QueryField { query: "a wrong value"; invalid: true; }
         QueryField { query: "a query long enough to run past the right edge of the line - so it shows this end"; }
-
-        // A band of a window's chrome, as the pack window's header uses it.
-        ChromeBand {
-            HorizontalLayout {
-                TextName { text: "ChromeBand"; }
-                Spacer { }
-                TextSmallMuted { text: "packs: 9"; }
-            }
-        }
 
         // The pick list as the value window's tree (the owner's points 4 to
         // 6): the fold of the values used last, closed, a heading, the pack in
@@ -207,6 +258,7 @@ export component Gallery inherits Window {
                 { title: "A pack whose name is far too long for one line of the list", detail: "What it is for.", enabled: true, tree: true, foldable: true, detail-wraps: true },
                 { title: "broken", detail: "broken, does not load", badge: "problems: 3", has-badge: true, badge-risky: true, enabled: false, tree: true, detail-wraps: true },
                 { title: "PESEL with a valid checksum", detail: "_Kowalski", aside: "Polish locale - in its id", has-aside: true, enabled: true, detail-mono: true },
+                { title: "A value whose name is long enough to need eliding before what it types", detail: "a value long enough to be elided at its own end too", enabled: true, tree: true, child: true, detail-mono: true },
             ];
         }
         PickList {
@@ -250,6 +302,11 @@ export component Gallery inherits Window {
         HorizontalLayout {
             spacing: Tokens.space-2;
             PickerOpener { text: "PickerOpener without the mark"; action: "Change shortcuts"; }
+            Spacer { }
+        }
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            PickerOpener { text: "PickerOpener as a title"; action: "Find a value"; chevron: true; title: true; }
             Spacer { }
         }
 
@@ -325,6 +382,16 @@ export component Gallery inherits Window {
             SmallButton { text: "Copy"; action: "Copy the last sent value"; }
         }
         Disclosure { text: "Last sent"; detail: "A value name far too long for the row it stands in, so it is elided"; action: "Show or hide the whole value"; }
+        // Before the first value: nothing to unfold, faded in place.
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                Disclosure { text: "Last sent"; detail: ""; action: "Show or hide the whole value"; enabled: false; }
+            }
+            SmallButton { text: "Copy"; action: "Copy the last sent value"; enabled: false; }
+        }
         HorizontalLayout {
             spacing: Tokens.space-2;
             Disclosure { text: "Disclosure, open"; detail: "not shown while open"; open: true; action: "Show or hide"; }

@@ -9,7 +9,7 @@
 // markup (GUI rule 8).
 
 import { Tokens } from "../tokens.slint";
-import { TextName, TextBody, TextSmallMuted } from "typography.slint";
+import { TextTitle, TextName, TextBody, TextSmallMuted } from "typography.slint";
 import { Pill, Chevron } from "chrome.slint";
 
 
@@ -21,11 +21,12 @@ import { Pill, Chevron } from "chrome.slint";
 // an empty string would put a quoted string in a view, which `ui_guard.rs`
 // refuses (D58).
 //
-// Two shapes, one row (K5): a pack is a name over a detail line, a shortcut is
-// an action on ONE line with its key combination at the end - the way a menu
-// shows its shortcuts. `single-line` and `key` are the whole difference, so a
-// change to how a row is selected, pressed or faded reaches both lists at once
-// (GUI rule 5).
+// Three shapes, one row: a pack is a name over what it is for (`detail-wraps`),
+// a shortcut is an action on ONE line with its key combination at the end -
+// the way a menu shows its shortcuts (K5) - and a value is one line too, with
+// what it types at the end where a shortcut has its keys (`D110`, the owner's
+// point 3). The flags are the whole difference, so a change to how a row is
+// selected, pressed or faded reaches every list at once (GUI rule 5).
 export struct PickRow {
     title: string,
     detail: string,
@@ -39,8 +40,9 @@ export struct PickRow {
     // It stays in the list, faded, because a thing that vanished from a list
     // cannot be asked about - untouchable rule 1.
     enabled: bool,
-    // No detail line: the row is as tall as its title. The default is two lines,
-    // so a list that says nothing about this keeps the pack list's shape.
+    // No detail at all: the row is its title, and a key if it has one - a
+    // heading, an action. A row that is neither this nor `detail-wraps` is a
+    // value, one line with its detail at the end.
     single-line: bool,
     // A key combination at the end of the row, in the typeface the hint bar
     // writes keys in: `Alt+Shift+N`.
@@ -58,20 +60,21 @@ export struct PickRow {
     // keeps the column of the fold marks at its left, mark or not, so every
     // title of one level starts in one column (GUI rule 19).
     tree: bool,
-    // The row stands under another one and is indented one column further.
+    // The row stands under another one: one step in from that row's title,
+    // and no column of fold marks of its own, since it never folds.
     child: bool,
     // The row folds what stands under it - and whether that is open now.
     foldable: bool,
     open: bool,
-    // The detail line wraps rather than elides: what a pack is for, which the
-    // owner could not read cut off (point 6). Nothing in the row changes while
-    // the list is open, so a row taller by a line moves nothing under the
-    // tester's eyes.
+    // The detail stands on a line of its own and wraps rather than elides:
+    // what a pack is for, which the owner could not read cut off (point 6).
+    // Nothing in the row changes while the list is open, so a row taller by a
+    // line moves nothing under the tester's eyes.
     detail-wraps: bool,
-    // The detail line is a value as the palette previews it, in the typeface
-    // of values (point 5): `Kowalski␣`, `255 × "a"`.
+    // The detail is a value as the palette previews it, in the typeface of
+    // values (point 5): `Kowalski␣`, `255 × "a"`.
     detail-mono: bool,
-    // Beside the row, in the muted role: the pack of a value listed away from
+    // Beside the name, in the muted role: the pack of a value listed away from
     // it, or where a query found a row in a part it does not show.
     aside: string,
     has-aside: bool,
@@ -110,6 +113,13 @@ component PickRowView inherits Rectangle {
     // Asks the list to scroll so that this row is visible.
     callback reveal(length, length);
 
+    // The row is one line: a heading, an action with its key, or a value with
+    // what it types at the end of the line. Only a pack is two - its name
+    // over what it is for, which is read whole.
+    property <bool> one-line: root.item.single-line || !root.item.detail-wraps;
+    // A value, with what it types at the right edge of its line.
+    property <bool> value-line: !root.item.single-line && !root.item.heading && !root.item.detail-wraps;
+
     border-radius: Tokens.radius;
     border-width: Tokens.hairline;
     border-color: root.selected ? Tokens.accent : transparent;
@@ -147,15 +157,21 @@ component PickRowView inherits Rectangle {
             padding: Tokens.space-2;
             spacing: Tokens.space-2;
 
-            // One column further in for a row under another.
+            // A row under another: ONE step in from the title of the row it
+            // stands under - the fold mark's column and one spacing step past
+            // it. Until 2026-10-07 a value stood two whole columns in, the
+            // second one empty because a value never folds, and the owner
+            // found the gap at the left of the value window "fatal" (point 3).
             if root.item.child: Rectangle {
-                width: Tokens.fold-column;
+                width: Tokens.fold-column + Tokens.space-4;
             }
-            // The column of the fold marks. The mark has a pointer of its own
-            // and answers before the row does, so a click on it folds and a
-            // click beside it chooses - the whole height of the row is the
-            // mark's target, not the few pixels of the triangle.
-            if root.item.tree: Rectangle {
+            // The column of the fold marks, kept by every row of a tree's top
+            // level so their titles start in one column (GUI rule 19). The
+            // mark has a pointer of its own and answers before the row does,
+            // so a click on it folds and a click beside it chooses - the whole
+            // height of the row is the mark's target, not the few pixels of
+            // the triangle.
+            if root.item.tree && !root.item.child: Rectangle {
                 width: Tokens.fold-column;
                 if root.item.foldable: fold := TouchArea {
                     mouse-cursor: pointer;
@@ -199,13 +215,14 @@ component PickRowView inherits Rectangle {
                         horizontal-stretch: 1;
                     }
 
-                    // Where a pack was found, beside its name: its description
-                    // below is read whole, so nothing else goes on that line.
-                    if root.item.has-aside && root.item.detail-wraps: VerticalLayout {
+                    // Where a row was found, or the pack of a value listed away
+                    // from it - beside the name, quieter than it.
+                    if root.item.has-aside: VerticalLayout {
                         alignment: center;
                         horizontal-stretch: 0;
                         TextSmallMuted {
                             text: root.item.aside;
+                            overflow: elide;
                         }
                     }
 
@@ -216,8 +233,9 @@ component PickRowView inherits Rectangle {
                     // moved every row below it. This pill is never drawn and
                     // takes no width - it only lends the row its height, so the
                     // floor follows the pill's own typeface and padding instead
-                    // of a number fitted to one machine (GUI rule 14).
-                    if root.item.single-line && !root.item.heading: Pill {
+                    // of a number fitted to one machine (GUI rule 14). A value
+                    // is one line too, and its `next` pill comes and goes.
+                    if root.one-line && !root.item.heading: Pill {
                         text: root.current-label;
                         width: 0px;
                         visible: false;
@@ -248,36 +266,37 @@ component PickRowView inherits Rectangle {
                         font-family: Tokens.font-mono;
                         horizontal-stretch: 0;
                     }
+                    // What a value types, at the right edge as a key is in the
+                    // shortcuts window: the name reads on the left, the value
+                    // in one column on the right, and the row is one line -
+                    // the owner's point 3, where two short lines left most of
+                    // the window's width empty. Elided like the name, at the
+                    // end, because a value can be any length - the palette
+                    // shows it whole once it is chosen.
+                    if root.value-line && root.item.detail-mono: TextBody {
+                        text: root.item.detail;
+                        font-family: Tokens.font-mono;
+                        overflow: elide;
+                        horizontal-alignment: right;
+                        horizontal-stretch: 1;
+                        max-width: self.preferred-width;
+                    }
+                    if root.value-line && !root.item.detail-mono: TextBody {
+                        text: root.item.detail;
+                        overflow: elide;
+                        horizontal-alignment: right;
+                        horizontal-stretch: 1;
+                        max-width: self.preferred-width;
+                    }
                 }
 
                 // What a pack is for, whole: wrapped, and directly in the
                 // column rather than in a layout of its own, which behind an
                 // `if` would report one line for the wrapped text
                 // (`slint.md` 2.23).
-                if !root.item.single-line && !root.item.heading && root.item.detail-wraps: TextBody {
+                if !root.one-line && !root.item.heading: TextBody {
                     text: root.item.detail;
                     wrap: word-wrap;
-                }
-                // What a value types, on one line - elided, because a value
-                // can be any length - with its pack beside it when it is
-                // listed away from it.
-                if !root.item.single-line && !root.item.heading && !root.item.detail-wraps: HorizontalLayout {
-                    spacing: Tokens.space-2;
-                    if root.item.detail-mono: TextBody {
-                        text: root.item.detail;
-                        font-family: Tokens.font-mono;
-                        overflow: elide;
-                        horizontal-stretch: 1;
-                    }
-                    if !root.item.detail-mono: TextBody {
-                        text: root.item.detail;
-                        overflow: elide;
-                        horizontal-stretch: 1;
-                    }
-                    if root.item.has-aside: TextSmallMuted {
-                        text: root.item.aside;
-                        horizontal-stretch: 0;
-                    }
                 }
             }
         }
@@ -359,6 +378,11 @@ export component PickList inherits Rectangle {
 // The name of the thing in use, as the way to choose another - the pack's name
 // in the palette, which opens the pack window.
 //
+// `title`: the name is the window's title as well - the palette's header
+// (`WindowHeader { opens: true }`) - and is written in the title role, in the
+// primary colour at rest, like every other window's title. A link elsewhere
+// stays in the body role and the secondary colour.
+//
 //     pointer here     the name - and its mark, when it has one - in the accent,
 //                      like a link
 //     pressed          the same - the pack window opens at once, so there is no
@@ -400,10 +424,14 @@ export component PickerOpener inherits Rectangle {
     in property <string> action;
     // The click opens a list to choose from - see the header.
     in property <bool> chevron;
+    // The window's title - see the header.
+    in property <bool> title;
     callback clicked();
 
     // The words and the mark wear one colour, so the pair reads as one thing.
-    property <color> ink: area.has-hover || area.pressed ? Tokens.accent : Tokens.text-secondary;
+    property <color> ink: area.has-hover || area.pressed ? Tokens.accent
+        : root.title ? Tokens.text-primary
+        : Tokens.text-secondary;
 
     min-width: content.min-width;
     preferred-width: content.preferred-width;
@@ -431,7 +459,12 @@ export component PickerOpener inherits Rectangle {
     // `space-1` each side put it four pixels right of the value name below.
     content := HorizontalLayout {
         spacing: Tokens.space-1;
-        TextBody {
+        if !root.title: TextBody {
+            text: root.text;
+            overflow: elide;
+            color: root.ink;
+        }
+        if root.title: TextTitle {
             text: root.text;
             overflow: elide;
             color: root.ink;
@@ -458,7 +491,10 @@ export component PickerOpener inherits Rectangle {
 //     pressed          the same - the fold opens at once
 //     keyboard here    NEVER, for `PickerOpener`'s reason: the palette refuses
 //                      the keyboard focus (`D62`)
-//     cannot be used   not a state it has: folding draws, it sends nothing
+//     cannot be used   faded as a whole, no pointer and no click - before the
+//                      first value there is nothing to unfold, and the band
+//                      stands in place rather than appearing with the first
+//                      press and moving everything below it (2026-10-07)
 //
 // The mark points right while closed and down while open (`Chevron`), and it
 // stands BEFORE the words - the mark a tree wears - where `PickerOpener` puts
@@ -471,27 +507,33 @@ export component Disclosure inherits Rectangle {
     in property <string> text;
     in property <string> detail;
     in property <bool> open;
+    in property <bool> enabled: true;
     // What a click does, as UI Automation reads it.
     in property <string> action;
     callback clicked();
 
-    property <color> ink: area.has-hover || area.pressed ? Tokens.accent : Tokens.text-muted;
+    property <color> ink: root.enabled && (area.has-hover || area.pressed) ? Tokens.accent : Tokens.text-muted;
 
     min-width: content.min-width;
     height: content.preferred-height;
     vertical-stretch: 0;
+    opacity: root.enabled ? 1 : Tokens.alpha-disabled;
 
     accessible-role: button;
     accessible-label: root.text;
     accessible-description: root.action;
+    accessible-enabled: root.enabled;
     accessible-expanded: root.open;
     accessible-expandable: true;
     accessible-action-default => {
-        root.clicked();
+        if root.enabled {
+            root.clicked();
+        }
     }
 
     area := TouchArea {
-        mouse-cursor: pointer;
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
         clicked => {
             root.clicked();
         }

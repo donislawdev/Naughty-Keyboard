@@ -104,7 +104,7 @@ use nkb_core::preview::ValuePreview;
 use nkb_core::report::Arrival;
 use nkb_core::sequence::Delivery;
 use nkb_core::typeface::outside_guarantee;
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
+use slint::{ModelRc, SharedString, VecModel, Weak};
 
 use crate::clipboard::SystemClipboard;
 use crate::focus::{Standing, standing_line};
@@ -1701,7 +1701,15 @@ fn show_next(palette: &Palette, next: Option<NextView>) {
             palette.set_next_markers(markers_model(value.markers));
             palette.set_next_has_value(true);
         }
-        None => palette.set_next_has_value(false),
+        // At the end of a pack the band keeps its lines, drawn empty, so it is
+        // as tall as anywhere else in the pack (`D110`) - so what stood on them
+        // goes, the markers included, which no `visible` in the view reaches.
+        None => {
+            palette.set_next_name(SharedString::new());
+            palette.set_next_preview(SharedString::new());
+            palette.set_next_markers(markers_model(Vec::new()));
+            palette.set_next_has_value(false);
+        }
     }
     palette.set_has_next(true);
 }
@@ -1744,52 +1752,22 @@ fn markers_model(markers: Vec<(String, bool)>) -> ModelRc<Marker> {
     ))
 }
 
-/// Keeps the expanded palette from getting shorter by itself (`D83`).
-///
-/// Call once, on the main thread, after the window is built. From then on every
-/// change in what the content asks for goes through [`hold_height`].
-pub fn hold_height_on_change(palette: &Palette) {
-    let weak = palette.as_weak();
-    palette.on_content_height_changed(move |content| {
-        if let Some(palette) = weak.upgrade() {
-            hold_height(&palette, content);
-        }
-    });
-}
-
-/// Moves the height floor up to what the content asks for, never down.
-///
-/// The expanded palette then keeps the height of its tallest content since it
-/// was last expanded, so a short value after a long one leaves room below
-/// rather than pulling the bottom edge up. Only `set_compact` lowers it.
-///
-/// Takes the height as an argument rather than reading it, because a read
-/// straight after the properties change is stale (`slint.md` 2.27): the palette
-/// calls this from its `changed` handler, after the new bands exist.
-pub(crate) fn hold_height(palette: &Palette, content: f32) {
-    if palette.get_compact() {
-        return;
-    }
-    if content > palette.get_height_floor() {
-        palette.set_height_floor(content);
-    }
-}
-
 /// Puts the palette into the compact or the expanded state.
 ///
 /// 🔴 The window is never hidden - `OBS-80` measured that `hide()` destroys it
 /// on Windows and loses `WS_EX_NOACTIVATE` with it. Compact is the background
-/// going translucent and the bands below the counter going away.
+/// going translucent and the bands below the header going away.
 ///
-/// The floor starts again from nothing, so the palette expands to fit what it
-/// shows now rather than to the tallest thing it ever showed. The height the
-/// expanded content asks for arrives through the `changed` handler.
+/// The window is as tall as what it shows in either state (`D110`): until
+/// 2026-10-07 the expanded palette kept the tallest height it had had, and the
+/// room left under the content when a sentence went stayed empty - the owner's
+/// point 2. Nothing above the status line changes height by itself any more,
+/// so following the content moves only the bottom edge.
 ///
 /// Takes the state rather than flipping it: the worker owns the switch from
 /// the start (`Collapse`), so the state it saves is the state drawn.
 pub fn set_compact(palette: &Palette, compact: bool) {
     palette.set_compact(compact);
-    palette.set_height_floor(0.0);
 }
 
 /// Opens the whole last value sent under its heading, or folds it back to the
@@ -1798,13 +1776,8 @@ pub fn set_compact(palette: &Palette, compact: bool) {
 /// A switch of the window alone, so neither the worker nor the settings file
 /// hold it: it starts folded at every run, which is what the owner asked for,
 /// and a key in the file would be a new public name (`settings-format.md`).
-///
-/// The floor starts over, as for the compact switch: folding is the tester's
-/// own click, so the window gets shorter at once - `D83` forbids the palette
-/// shrinking BY ITSELF, under the tester's eyes, and this is the opposite.
 pub fn set_last_sent_open(palette: &Palette, open: bool) {
     palette.set_last_sent_open(open);
-    palette.set_height_floor(0.0);
 }
 
 /// The compact switch and the memory of it, both owned by the worker.
@@ -1979,8 +1952,8 @@ mod tests {
         Command, Delivery, Duration, HotkeyAction, InFlight, LiveShortcuts, Memory, Outcome,
         Palette, PaletteShortcuts, Progress, ShortcutRegistration, ShownKey, Standing, ValueBand,
         ValueKey, ValuePreview, Wait, apply, apply_in_flight, between_presses, choose,
-        clipboard_bar, copy_command, hold_height, in_flight_view, markers_in_flight, markers_of,
-        set_compact, share, view_between, view_of, with_standing,
+        clipboard_bar, copy_command, in_flight_view, markers_in_flight, markers_of, set_compact,
+        share, view_between, view_of, with_standing,
     };
 
     /// No standing sentence: the ordinary case, and the one the field-by-field
@@ -2441,38 +2414,9 @@ mod tests {
             ]
         );
 
-        // ---- the window never gets shorter by itself (`D83`) ---------------
-        // The heights are given, as the `changed` handler gives them: a read
-        // of the content height here would be stale (`slint.md` 2.27). The
-        // render test measures the same rule in pixels.
-        palette.set_height_floor(0.0);
-        hold_height(&palette, 300.0);
-        assert_eq!(
-            palette.get_height_floor(),
-            300.0,
-            "the floor follows the content up"
-        );
-        hold_height(&palette, 120.0);
-        assert_eq!(
-            palette.get_height_floor(),
-            300.0,
-            "a shorter content pulled the floor down"
-        );
-
         // ---- the tester collapses it, and only the tester expands it -------
         set_compact(&palette, true);
         assert!(palette.get_compact());
-        assert_eq!(
-            palette.get_height_floor(),
-            0.0,
-            "compact starts the floor over"
-        );
-        hold_height(&palette, 60.0);
-        assert_eq!(
-            palette.get_height_floor(),
-            0.0,
-            "the floor moved while compact"
-        );
         apply(
             &palette,
             view_of(
@@ -2489,12 +2433,6 @@ mod tests {
         );
         set_compact(&palette, false);
         assert!(!palette.get_compact());
-        hold_height(&palette, 120.0);
-        assert_eq!(
-            palette.get_height_floor(),
-            120.0,
-            "expanding fits what is shown now, not the tallest thing ever shown"
-        );
 
         // ---- another pack takes the value away -----------------------------
         // The value on screen came from the pack before. Under the new pack's

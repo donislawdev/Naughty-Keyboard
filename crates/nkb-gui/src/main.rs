@@ -183,9 +183,6 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
             .set_position(slint::PhysicalPosition::new(at.x, at.y));
     }
     palette.set_window_title(i18n::label(PaletteLabel::Title).into());
-    // Before anything is shown, so the first height the content asks for
-    // already sets the floor (`D83`).
-    live::hold_height_on_change(&palette);
     // The clipboard bar's words come with each view, because two conditions
     // share the bar and say different things (`D72`) - see `live::View`. The
     // words naming the shortcuts come from the table of this run, by the same

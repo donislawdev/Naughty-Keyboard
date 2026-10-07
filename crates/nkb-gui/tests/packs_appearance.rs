@@ -36,6 +36,9 @@ const HEIGHT: u32 = 600;
 /// palette test gives: a test that reads the value it checks cannot fail.
 const ACCENT: (u8, u8, u8) = (0x7A, 0xA2, 0xF7);
 
+/// `border-strong`, the scroll thumb's colour - copied for the same reason.
+const THUMB: (u8, u8, u8) = (0x45, 0x4C, 0x5C);
+
 /// The row of the next value in [`specimen`], selected for the pictures.
 const NEXT_ROW: usize = 4;
 
@@ -280,6 +283,36 @@ fn the_pack_window_shows_where_the_keyboard_is_and_which_row_it_reached() {
     offscreen::save(&unfocused, WIDTH, HEIGHT, "packs.png");
     let before = accent_in(&unfocused, field_band.clone());
 
+    // ---- the list says there is more below it ----------------------------------
+    // The specimen is taller than the room the window leaves the list, so the
+    // thumb at the list's right edge must be drawn - and with three rows it
+    // must not. The pack window is the one whose list scrolls: the shortcuts
+    // window is as tall as its rows since K5.7, so its own test can only see
+    // the thumb absent, and mutation M308 walked past it (2026-10-07).
+    let thumb_column = (WIDTH - 20)..(WIDTH - 12);
+    let thumb_in = |picture: &[offscreen::Pixel]| {
+        list_band
+            .clone()
+            .flat_map(|y| thumb_column.clone().map(move |x| (y * WIDTH + x) as usize))
+            .filter(|&at| {
+                let p = picture[at];
+                (p.r, p.g, p.b) == THUMB
+            })
+            .count()
+    };
+    assert!(
+        thumb_in(&unfocused) > 20,
+        "the list is longer than its room and draws no scroll thumb - the rows below the \
+         fold have no sign. Look at packs.png"
+    );
+    window.set_rows(ModelRc::new(VecModel::from(specimen()[..3].to_vec())));
+    assert_eq!(
+        thumb_in(&offscreen::draw(&surface, WIDTH, HEIGHT)),
+        0,
+        "three rows fit, and the list still draws a scroll thumb"
+    );
+    window.set_rows(ModelRc::new(VecModel::from(specimen())));
+
     window.invoke_focus_search();
     let focused = offscreen::draw(&surface, WIDTH, HEIGHT);
     let path = offscreen::save(&focused, WIDTH, HEIGHT, "packs-focused.png");
@@ -382,11 +415,14 @@ fn the_pack_window_shows_where_the_keyboard_is_and_which_row_it_reached() {
         "two renders of an unchanged window differ"
     );
 
-    // ---- the notes below the list (K3.2c) ------------------------------------
-    // The sentence the product says today, and one twice as long. Drawn, below
-    // the list and above the footer, and WRAPPED: a text that does not wrap may
-    // not be narrower than itself (`slint.md` 2.29), so it would run into the
-    // right margin - which must stay exactly as it was without the notes.
+    // ---- the notes in the status line (K3.2c, D110) --------------------------
+    // The sentence the product says today, and one twice as long. Drawn in the
+    // status line, the last band of the window, where every window of the
+    // product says what the tool has to say - so the list gives up the room
+    // and the footer stands above it, while the header and the query line stay
+    // exactly where they were. And WRAPPED: a text that does not wrap may not
+    // be narrower than itself (`slint.md` 2.29), so it would run into the
+    // right margin, which holds nothing but the grounds and the rules.
     window.set_rows(ModelRc::new(VecModel::from(specimen())));
     let bare = offscreen::draw(&surface, WIDTH, HEIGHT);
     window.set_notes(ModelRc::new(VecModel::from(vec![
@@ -400,25 +436,46 @@ fn the_pack_window_shows_where_the_keyboard_is_and_which_row_it_reached() {
     ])));
     let noted = offscreen::draw(&surface, WIDTH, HEIGHT);
     let noted_path = offscreen::save(&noted, WIDTH, HEIGHT, "packs-notes.png");
-    let footer = (HEIGHT - 44)..HEIGHT;
     let differ = |rows: std::ops::Range<u32>, columns: std::ops::Range<u32>| {
         rows.flat_map(|y| columns.clone().map(move |x| (y * WIDTH + x) as usize))
             .filter(|&at| bare[at] != noted[at])
             .count()
     };
+    // The header and the query line: the title band and the line under it,
+    // well short of the first row of the list.
     assert_eq!(
-        differ(footer, 0..WIDTH),
+        differ(0..100, 0..WIDTH),
         0,
-        "the notes moved the footer. Look at {}",
+        "the notes moved the header or the query line. Look at {}",
         noted_path.display()
     );
     assert!(
-        differ((HEIGHT - 200)..(HEIGHT - 44), 0..WIDTH) > 300,
-        "the notes are not drawn above the footer. Look at {}",
+        differ((HEIGHT - 80)..HEIGHT, 0..WIDTH) > 300,
+        "the notes are not drawn in the status line at the bottom. Look at {}",
         noted_path.display()
     );
+    // The right margin is narrower than the gutter, so no glyph and no control
+    // ever reaches it: only the content's ground, the raised ground of the
+    // chrome and the rules between them. Checked on both renders - on the bare
+    // one it is the control that the predicate itself is not too strict.
+    let grounds = [(0x14, 0x16, 0x1A), (0x1C, 0x1F, 0x26), (0x2A, 0x2F, 0x3A)];
+    let in_margin = |buffer: &[offscreen::Pixel]| {
+        (0..HEIGHT)
+            .flat_map(|y| ((WIDTH - 12)..WIDTH).map(move |x| (y * WIDTH + x) as usize))
+            .filter(|&at| {
+                let pixel = buffer[at];
+                !grounds.contains(&(pixel.r, pixel.g, pixel.b))
+            })
+            .count()
+    };
     assert_eq!(
-        differ(0..HEIGHT, (WIDTH - 12)..WIDTH),
+        in_margin(&bare),
+        0,
+        "the bare window draws something other than its grounds in the right margin, so the \
+         check below cannot tell a wrapped note from one that ran over"
+    );
+    assert_eq!(
+        in_margin(&noted),
         0,
         "a note ran into the right margin instead of wrapping. Look at {}",
         noted_path.display()
@@ -456,6 +513,52 @@ fn the_pack_window_shows_where_the_keyboard_is_and_which_row_it_reached() {
     assert!(
         margin(&one_line) == margin(&wrapped),
         "a description ran into the right margin. Look at {}",
+        tree_path.display()
+    );
+
+    // ---- a value is one line, one step in from its pack (the owner's point 3) --
+    // Until 2026-10-07 a value stood two whole columns in from its pack's name -
+    // the second one empty, since a value never folds - over two short lines,
+    // and the owner found the room left and right of it "fatal". Now its name
+    // stands ONE step in from the pack's name, and what it types stands on the
+    // same line at the row's right edge (`D110`). Each found as the pixels its
+    // words change, so the measurement is where the words ARE.
+    let emptied = |at: usize, title: bool| {
+        let mut rows = specimen();
+        if title {
+            rows[at].title = "".into();
+        } else {
+            rows[at].detail = "".into();
+        }
+        window.set_rows(ModelRc::new(VecModel::from(rows)));
+        let picture = offscreen::draw(&surface, WIDTH, HEIGHT);
+        window.set_rows(ModelRc::new(VecModel::from(specimen())));
+        picture
+    };
+    let pack_name = offscreen::added(&emptied(LONG_ROW, true), &wrapped, WIDTH, HEIGHT)
+        .expect("the pack's name is not drawn");
+    let value_name = offscreen::added(&emptied(NEXT_ROW, true), &wrapped, WIDTH, HEIGHT)
+        .expect("the value's name is not drawn");
+    let value_types = offscreen::added(&emptied(NEXT_ROW, false), &wrapped, WIDTH, HEIGHT)
+        .expect("what the value types is not drawn");
+    let step = value_name.left.saturating_sub(pack_name.left);
+    assert!(
+        value_name.left > pack_name.left && step <= 24,
+        "a value's name stands {step} px in from its pack's name ({value_name:?} against \
+         {pack_name:?}) - one step of the tree is the fold column at most, and two columns \
+         left the room the owner called fatal. Look at {}",
+        tree_path.display()
+    );
+    assert!(
+        value_types.top < value_name.bottom && value_types.bottom > value_name.top,
+        "what the value types is not on its name's line ({value_types:?} against \
+         {value_name:?}) - two short lines leave the row's right side empty. Look at {}",
+        tree_path.display()
+    );
+    assert!(
+        value_types.right + 40 > WIDTH,
+        "what the value types does not end at the row's right edge ({value_types:?}), so the \
+         previews of the list do not stand in one column. Look at {}",
         tree_path.display()
     );
 

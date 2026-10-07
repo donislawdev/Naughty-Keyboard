@@ -53,16 +53,45 @@ fn away(palette: &Palette) {
     );
 }
 
-/// The button as the pixels its word changes: the same render without the word
-/// and with it, so the pointer goes where the button IS. The box is the whole
-/// frame rather than the word alone, because an empty word narrows the button -
-/// measured on the first run, 21 pixels tall.
-fn find_button(palette: &Palette, surface: &Rc<MinimalSoftwareWindow>) -> Ink {
+/// Rows with no change between two buttons before they count as two boxes.
+const BETWEEN_BUTTONS: u32 = 4;
+
+/// Every button as the pixels its word changes, top to bottom: the same render
+/// without the word and with it, so the pointer goes where a button IS. A box
+/// is the whole frame rather than the word alone, because an empty word
+/// narrows the button - measured on the first run, 21 pixels tall.
+///
+/// Boxes rather than one: the two buttons share their word, and since `D110`
+/// the band of the last value stands before the first one is sent, its Copy
+/// faded in place - so the word changes the render in two places at once.
+fn find_buttons(palette: &Palette, surface: &Rc<MinimalSoftwareWindow>) -> Vec<Ink> {
     palette.set_copy_label("".into());
     let without = offscreen::draw(surface, WIDTH, HEIGHT);
     palette.set_copy_label("Copy".into());
     let with = offscreen::draw(surface, WIDTH, HEIGHT);
-    added(&without, &with, WIDTH, HEIGHT).expect("the button's word is drawn")
+    let mut boxes: Vec<Ink> = Vec::new();
+    for y in 0..HEIGHT {
+        let changed: Vec<u32> = (0..WIDTH)
+            .filter(|&x| without[(y * WIDTH + x) as usize] != with[(y * WIDTH + x) as usize])
+            .collect();
+        let (Some(&left), Some(&right)) = (changed.iter().min(), changed.iter().max()) else {
+            continue;
+        };
+        match boxes.last_mut() {
+            Some(open) if y <= open.bottom + BETWEEN_BUTTONS => {
+                open.left = open.left.min(left);
+                open.right = open.right.max(right);
+                open.bottom = y;
+            }
+            _ => boxes.push(Ink {
+                left,
+                right,
+                top: y,
+                bottom: y,
+            }),
+        }
+    }
+    boxes
 }
 
 #[test]
@@ -90,7 +119,14 @@ fn each_copy_button_answers_the_pointer_and_asks_for_its_own_band() {
     palette.set_has_value(false);
     palette.set_has_next(true);
     palette.set_next_has_value(true);
-    let button = find_button(&palette, &surface);
+    let both = find_buttons(&palette, &surface);
+    assert_eq!(
+        both.len(),
+        2,
+        "before the first value the next band's Copy and the value band's faded one must \
+         both stand, in two places: {both:?}"
+    );
+    let button = both[0];
     assert!(
         button.left > WIDTH / 2 && button.bottom - button.top < 30,
         "the word of the next band's button is not one short word at the right end of \
@@ -136,7 +172,9 @@ fn each_copy_button_answers_the_pointer_and_asks_for_its_own_band() {
     // ---- the button beside the value sent last ----------------------------------
     palette.set_has_next(false);
     palette.set_has_value(true);
-    let button = find_button(&palette, &surface);
+    let only = find_buttons(&palette, &surface);
+    assert_eq!(only.len(), 1, "one band, one button: {only:?}");
+    let button = only[0];
     assert!(
         button.left > WIDTH / 2 && button.bottom - button.top < 30,
         "the word of the value band's button is not one short word at the right end of \
@@ -155,7 +193,7 @@ fn each_copy_button_answers_the_pointer_and_asks_for_its_own_band() {
     palette.set_sending(true);
     let sending = offscreen::draw(&surface, WIDTH, HEIGHT);
     let path = offscreen::save(&sending, WIDTH, HEIGHT, "palette-copy-sending.png");
-    // The send band above pushes the value band down - the button is found again.
+    // Found again rather than reused: the faded word is a different picture.
     palette.set_copy_label("".into());
     let without = offscreen::draw(&surface, WIDTH, HEIGHT);
     let faded = added(&without, &sending, WIDTH, HEIGHT).expect("the faded word is drawn");

@@ -16,8 +16,11 @@
 // # Chrome, content, chrome (PORADNIK-GUI 4)
 //
 //     header    the title and how many shortcuts are the tester's own
-//     content   what the window does, the list, what the last key press did
+//     content   what the window does, and the list
 //     footer    the keys the window answers - the hint bar the palette uses
+//     status    what the last key press came to, with room kept for it
+//
+// The frame every window stands in (`components/frame.slint`, `D110`).
 //
 // The main action has no button, for the reason the pack window gives: it is
 // the selected row, edged in the accent, and Enter - which the footer names
@@ -48,13 +51,15 @@
 
 import {
     Tokens,
-    TextName,
     TextBody,
     TextSmallMuted,
-    Spacer,
     HintRow,
     HintBar,
-    ChromeBand,
+    Zone,
+    WindowFrame,
+    WindowHeader,
+    WindowFooter,
+    WindowStatus,
     KeyScope,
     PickRow,
     PickList,
@@ -107,24 +112,21 @@ export component ShortcutsWindow inherits Window {
     always-on-top: true;
 
     keys := KeyScope {
-        body := VerticalLayout {
-            ChromeBand {
-                HorizontalLayout {
-                    spacing: Tokens.space-2;
-                    TextName {
-                        text: root.heading;
-                    }
-                    Spacer { }
+        body := WindowFrame {
+            packed: true;
+
+            WindowHeader {
+                title: root.heading;
+                VerticalLayout {
+                    alignment: center;
                     TextSmallMuted {
                         text: root.summary;
                     }
                 }
             }
 
-            VerticalLayout {
-                padding: Tokens.space-4;
-                spacing: Tokens.space-3;
-                vertical-stretch: 1;
+            Zone {
+                divided: false;
 
                 // Wrapped, for the reason the pack window's notes give: a text
                 // that does not wrap may not be narrower than itself
@@ -138,27 +140,28 @@ export component ShortcutsWindow inherits Window {
                     rows: root.rows;
                     selected: root.selected;
                     current-label: root.current-label;
-                    vertical-stretch: 1;
                 }
+            }
 
-                // Room kept from the start, so the list does not shrink - and
-                // its last rows go under the fold - the moment the first
-                // sentence appears (GUI rule 3). Measured on the live window
-                // before this band had a floor: the answer to a recording took
-                // a row away from the list, four showing before it, three after.
+            WindowFooter {
+                HintBar {
+                    rows: root.hints;
+                }
+            }
+
+            // What the last press came to, in the status line every window
+            // says such things in. Room kept from the start, so the window does
+            // not grow - and the list does not move - the moment the first
+            // sentence appears (GUI rule 3). Measured on the live window before
+            // this band had a floor: the answer to a recording took a row away
+            // from the list, four showing before it, three after.
+            WindowStatus {
                 VerticalLayout {
                     min-height: Tokens.shortcuts-message-lines * line.preferred-height;
                     for message in root.messages: TextBody {
                         text: message;
                         wrap: word-wrap;
                     }
-                }
-            }
-
-            ChromeBand {
-                at-bottom: true;
-                HintBar {
-                    rows: root.hints;
                 }
             }
         }

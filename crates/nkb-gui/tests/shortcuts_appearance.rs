@@ -50,6 +50,10 @@ fn specimen(single_line: bool) -> Vec<PickRow> {
         current: false,
         enabled: true,
         single_line,
+        // The other shape a row has: a pack's, its detail on a line of its
+        // own. Since 2026-10-07 a row that is not single-line and not this is
+        // a value, one line too, with what it types at the end (`D110`).
+        detail_wraps: !single_line,
         heading: false,
         key: key.into(),
         has_key: true,
@@ -253,6 +257,26 @@ fn the_shortcuts_window_keeps_its_promises() {
             bare_path.display()
         );
     }
+    // A single-line row draws no detail at all - not under its title and not
+    // after its keys. The specimen carries the detail `default` on every row,
+    // so emptying it must change no pixel. Mutation M306 walked past every check
+    // above: since D110 a row that is not single-line puts its detail at the
+    // end of its line, and a word after each combination still ends ten rows
+    // in one column. A first version measured where each row ends without its
+    // keys - and a pill moves to the edge when the keys are gone.
+    let mut detailless = specimen(true);
+    for row in &mut detailless {
+        row.detail = SharedString::new();
+    }
+    window.set_rows(ModelRc::new(VecModel::from(detailless)));
+    let without_detail = offscreen::draw(&surface, WIDTH, TALL);
+    window.set_rows(ModelRc::new(VecModel::from(specimen(true))));
+    assert!(
+        without_detail == bare,
+        "emptying the detail of single-line rows changed the window, so a shortcut row draws \
+         a detail it must not have. Look at {}",
+        bare_path.display()
+    );
     assert_eq!(
         count(&bare, WIDTH, area.clone(), (WIDTH - 24)..WIDTH, THUMB),
         0,

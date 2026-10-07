@@ -17,6 +17,9 @@
 //     header    the title and how many packs there are
 //     content   the query line above the list
 //     footer    the keys the window answers - the hint bar the palette uses
+//     status    the sources the list did not read, while there are any
+//
+// The frame every window stands in (`components/frame.slint`, `D110`).
 //
 // With nothing typed the list is a tree of packs, every one folded (the
 // owner's points 4 to 6): the fold marks and the arrows open and close, Enter
@@ -37,12 +40,15 @@
 
 import {
     Tokens,
-    TextName,
+    TextBody,
     TextSmallMuted,
-    Spacer,
     HintRow,
     HintBar,
-    ChromeBand,
+    WindowFrame,
+    WindowHeader,
+    WindowFooter,
+    WindowStatus,
+    ZoneFill,
     QueryField,
     PickerKeys,
     PickRow,
@@ -104,24 +110,19 @@ export component PacksWindow inherits Window {
     always-on-top: true;
 
     keys := PickerKeys {
-        VerticalLayout {
-            ChromeBand {
-                HorizontalLayout {
-                    spacing: Tokens.space-2;
-                    TextName {
-                        text: root.heading;
-                    }
-                    Spacer { }
+        WindowFrame {
+            WindowHeader {
+                title: root.heading;
+                VerticalLayout {
+                    alignment: center;
                     TextSmallMuted {
                         text: root.summary;
                     }
                 }
             }
 
-            VerticalLayout {
-                padding: Tokens.space-4;
-                spacing: Tokens.space-3;
-                vertical-stretch: 1;
+            ZoneFill {
+                divided: false;
 
                 // A visible label above the line, not a placeholder inside it:
                 // a placeholder disappears with the first letter, and with it
@@ -144,20 +145,22 @@ export component PacksWindow inherits Window {
                     empty-text: root.empty-text;
                     vertical-stretch: 1;
                 }
+            }
 
-                // Wrapped, because a text that does not wrap may not be
-                // narrower than itself and would widen the window past its
-                // minimum (`slint.md` 2.29).
-                for note in root.notes: TextSmallMuted {
-                    text: note;
-                    wrap: word-wrap;
+            WindowFooter {
+                HintBar {
+                    rows: root.hints;
                 }
             }
 
-            ChromeBand {
-                at-bottom: true;
-                HintBar {
-                    rows: root.hints;
+            // In the status line, last in the window, where every window says
+            // what the tool has to say. Wrapped, because a text that does not
+            // wrap may not be narrower than itself and would widen the window
+            // past its minimum (`slint.md` 2.29).
+            if root.notes.length > 0: WindowStatus {
+                for note in root.notes: TextBody {
+                    text: note;
+                    wrap: word-wrap;
                 }
             }
         }

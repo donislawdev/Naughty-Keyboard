@@ -3,23 +3,51 @@
 // Document 13 section 2.3 asks for a fixed set of SIZE-WEIGHT PAIRS rather than
 // two independent axes, and section 2.4 asks for the right look to come from a
 // default rather than from remembering to apply one. Both are the same shape:
-// a screen picks a ROLE - `Body`, `Hint` - and never picks a size.
+// a screen picks a ROLE - `Body`, `Title` - and never picks a size.
+//
+// # One role, one job, in every window (the owner's point 4, 2026-10-07)
+//
+// The four windows looked like four programs because each picked its roles
+// for itself: the shortcuts window wrote its rows in the name role at 15 px,
+// the welcome its steps at 13, the palette its title at 13 in a muted colour
+// and the other windows theirs at 15. So the roles are now named after the JOB
+// a text does, and the job decides the role wherever the window is:
+//
+//     the window's title             TextTitle        15, strong
+//     a name a list or a band holds  TextName         13, strong
+//     prose                          TextBody         13
+//     a section's heading, a label,
+//     a hint, a note                 TextSmallMuted   12
+//     the word on a button           TextSmall        12
+//     the value                      TextPreview      17, monospaced
 //
 // Adding a role here means saying why the existing ones did not fit. That
 // sentence belongs in the commit message, not in this comment.
 
 import { Tokens } from "../tokens.slint";
 
-// The value's own name. The one line the tester actually reads, so it is the
-// only role that carries the strong weight.
-export component TextName inherits Text {
+// The title of a window, in its header - and the palette's pack, which is
+// what the palette is titled by.
+export component TextTitle inherits Text {
     color: Tokens.text-primary;
-    font-size: Tokens.type-name;
+    font-size: Tokens.type-title;
     font-weight: Tokens.weight-strong;
     vertical-alignment: center;
 }
 
-// Ordinary interface prose: pack name, the shape line under a preview.
+// A name the tester reads to know what a thing is: the value's own name, a
+// pack's name in a list, an action in the shortcuts list. Prose size, the
+// strong weight and the primary colour - set apart from prose by those two,
+// not by a size of its own.
+export component TextName inherits Text {
+    color: Tokens.text-primary;
+    font-size: Tokens.type-body;
+    font-weight: Tokens.weight-strong;
+    vertical-alignment: center;
+}
+
+// Ordinary interface prose: the shape line under a preview, a step of the
+// welcome, a sentence the tool says.
 export component TextBody inherits Text {
     color: Tokens.text-secondary;
     font-size: Tokens.type-body;
@@ -27,8 +55,7 @@ export component TextBody inherits Text {
     vertical-alignment: center;
 }
 
-// Supporting detail that must be readable but must not compete: the target
-// application, the window title.
+// The word on a button or a switch: readable, and quieter than prose.
 export component TextSmall inherits Text {
     color: Tokens.text-primary;
     font-size: Tokens.type-small;
@@ -36,8 +63,12 @@ export component TextSmall inherits Text {
     vertical-alignment: center;
 }
 
-// The same size, dimmed. Split from TextSmall so the choice between "this
-// matters" and "this is context" is made once here rather than per screen.
+// The same size, dimmed: a section's heading, a label beside a control, a
+// hint, a note. Split from TextSmall so the choice between "this matters" and
+// "this is context" is made once here rather than per screen.
+//
+// ⚠️ Never in the resting palette: `text-muted` loses 4.5:1 over a white window
+// under the dimmed background (D53).
 export component TextSmallMuted inherits Text {
     color: Tokens.text-muted;
     font-size: Tokens.type-small;
@@ -45,20 +76,11 @@ export component TextSmallMuted inherits Text {
     vertical-alignment: center;
 }
 
-// The hint bar. Smallest role in the product and the only one allowed to be,
-// because it disappears after twenty uses and returns on demand.
-export component TextHint inherits Text {
-    color: Tokens.text-muted;
-    font-size: Tokens.type-hint;
-    font-weight: Tokens.weight-regular;
-    vertical-alignment: center;
-}
-
-// Counts and positions. Monospaced so that a changing number does not shift the
-// characters around it - the counter is glanced at, not read.
+// Counts, positions, references. Monospaced so that a changing number does not
+// shift the characters around it - the counter is glanced at, not read.
 export component TextMono inherits Text {
     color: Tokens.text-muted;
-    font-size: Tokens.type-hint;
+    font-size: Tokens.type-small;
     font-family: Tokens.font-mono;
     vertical-alignment: center;
 }

@@ -4,17 +4,18 @@
 //!
 //! # What this proves that reading `palette.slint` cannot
 //!
-//! The route switch under the hint bar shows both ways, `Keyboard` and
-//! `Clipboard`, and fills the one in effect (the owner's point 2 of
-//! 2026-10-07). A click on the other way asks for it by its index, a click on
-//! the way in effect asks for nothing. While the tester's mode is on, the
-//! standing bar carries "Turn off" as well - the one way back the compact
-//! palette shows, where the switch is not drawn. On the bar of a window with
-//! higher privileges (`D72`) there is no way out, because that is not a mode a
-//! click could end, and the switch shows `Keyboard`: the tester did not choose
-//! the clipboard. While a value goes neither answers: the route cannot change
-//! under a value in flight. Each piece is found as the ink its words add to
-//! the render, and its absence as no ink at all.
+//! The route switch shows both ways, `Keyboard` and `Clipboard`, and fills the
+//! one in effect (the owner's point 2 of 2026-10-07). A click on the other way
+//! asks for it by its index, a click on the way in effect asks for nothing.
+//! The expanded palette says the tester's mode with the switch alone - since
+//! `D110` no standing bar repeats it under the switch - and the compact one,
+//! which draws no switch, says it on the standing bar, with "Turn off" as the
+//! one way back. On the bar of a window with higher privileges (`D72`) there is
+//! no way out, because that is not a mode a click could end, and the switch
+//! shows `Keyboard`: the tester did not choose the clipboard. While a value
+//! goes neither answers: the route cannot change under a value in flight. Each
+//! piece is found as the ink its words add to the render, and its absence as no
+//! ink at all.
 //!
 //! Its own binary for the reason `palette_appearance.rs` gives: one platform
 //! per process.
@@ -135,44 +136,49 @@ fn the_route_switch_turns_clipboard_mode_on_and_off_and_its_bar_turns_it_off() {
         "a click on the way in effect asked for something"
     );
 
-    // ---- the tester's mode: Clipboard filled, Turn off on the bar ---------------
+    // ---- the tester's mode: Clipboard filled, and said once --------------------
     palette.set_clipboard_mode(true);
     palette.set_clipboard_mode_on(true);
     palette.set_route_selected(1);
     let in_mode = offscreen::draw(&surface, WIDTH, HEIGHT);
     let path = offscreen::save_cropped(&in_mode, WIDTH, HEIGHT, "palette-clipboard-on.png");
-    let out = way_out(&palette, &surface).expect("no way out of clipboard mode on its bar");
     assert!(
-        out.left > WIDTH / 2 && out.bottom < clipboard.top && out.bottom - out.top < 30,
-        "Turn off is not one button at the right end of the bar, above the hints: {out:?}. \
-         Look at {}",
+        way_out(&palette, &surface).is_none(),
+        "the expanded palette says the tester's mode twice - a Turn off stands under the \
+         switch that already says it and ends it (D110). Look at {}",
         path.display()
-    );
-    click(palette.window(), out.centre());
-    assert_eq!(
-        *clicks.borrow(),
-        seen(&[1], 1),
-        "a click on Turn off must ask to leave the mode, once, and nothing else"
     );
     let keyboard = way(&palette, &surface, 0).expect("the switch left in clipboard mode");
     click(palette.window(), keyboard.centre());
     assert_eq!(
         *clicks.borrow(),
-        seen(&[1, 0], 1),
+        seen(&[1, 0], 0),
         "a click on Keyboard in clipboard mode did not ask to leave the mode"
     );
 
-    // ---- compact: the bar stays, and its way out with it -----------------------
+    // ---- compact: no switch, so the bar says it, with its way out --------------
     palette.set_compact(true);
     assert!(
         way(&palette, &surface, 1).is_none(),
         "the compact palette shows the route switch"
     );
+    let small_picture = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let small_path = offscreen::save_cropped(
+        &small_picture,
+        WIDTH,
+        HEIGHT,
+        "palette-clipboard-compact.png",
+    );
     let small = way_out(&palette, &surface).expect("Turn off left the compact palette");
+    assert!(
+        small.left > WIDTH / 2 && small.bottom - small.top < 30,
+        "Turn off is not one button at the right end of the bar: {small:?}. Look at {}",
+        small_path.display()
+    );
     click(palette.window(), small.centre());
     assert_eq!(
         *clicks.borrow(),
-        seen(&[1, 0], 2),
+        seen(&[1, 0], 1),
         "Turn off in the compact palette did not answer"
     );
     palette.set_compact(false);
@@ -196,11 +202,12 @@ fn the_route_switch_turns_clipboard_mode_on_and_off_and_its_bar_turns_it_off() {
     click(palette.window(), faded.centre());
     palette.set_clipboard_mode_label("clipboard mode".into());
     palette.set_clipboard_mode_on(true);
+    palette.set_compact(true);
     let faded_out = way_out(&palette, &surface).expect("Turn off vanished while a value goes");
     click(palette.window(), faded_out.centre());
     assert_eq!(
         *clicks.borrow(),
-        seen(&[1, 0], 2),
+        seen(&[1, 0], 1),
         "the switch or the bar changed the route while a value was on its way"
     );
 }

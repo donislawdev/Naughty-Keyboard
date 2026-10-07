@@ -12,9 +12,11 @@
 //! stays where it was, faded, and a click asks for nothing: the worker answers
 //! a click between presses, so it would land after the send.
 //!
-//! The mark after the pack's name and after the next band's heading is a
-//! shape, not a word, so it is found the other way round: with the words
-//! emptied, whatever ink is left at the start of the band is the mark.
+//! The mark after the pack's name is a shape, not a word, so it is found the
+//! other way round: with the words emptied, whatever ink is left at the start
+//! of the line is the mark. The next band's heading opens nothing since `D107`
+//! (the owner's point 3), so the same measurement there must find NONE - the
+//! pack's mark is its positive control.
 //!
 //! Its own binary for the reason `palette_appearance.rs` gives: one platform
 //! per process.
@@ -169,8 +171,9 @@ fn the_pack_band_has_a_way_back_from_compact_and_its_name_says_it_opens_a_list()
     );
     palette.set_pack("whitespace".into());
 
-    // ---- and after the next band's heading ------------------------------------
-    // The same way: at the end of a pack the band is its heading alone.
+    // ---- and none after the next band's heading ---------------------------------
+    // The same way, at the end of a pack, where nothing else stands on the
+    // heading's row: a mark there would promise a list that no click opens.
     palette.set_has_next(true);
     palette.set_next_has_value(false);
     let heading_line = find(
@@ -188,8 +191,8 @@ fn the_pack_band_has_a_way_back_from_compact_and_its_name_says_it_opens_a_list()
         heading_line.top..heading_line.bottom + 1,
     );
     assert!(
-        heading_mark > 4,
-        "no mark after the next band's heading ({heading_mark} pixels on the rows of \
-         {heading_line:?}) - it opens the value window too"
+        heading_mark <= 4,
+        "a mark after the next band's heading ({heading_mark} pixels on the rows of \
+         {heading_line:?}) - it opens nothing since D107"
     );
 }

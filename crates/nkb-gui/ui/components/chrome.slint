@@ -5,7 +5,7 @@
 // replacement is here, so this file is the other half of the guard.
 
 import { Tokens } from "../tokens.slint";
-import { TextHint, TextSmallMuted } from "typography.slint";
+import { TextSmallMuted } from "typography.slint";
 
 // A one-pixel divider between zones.
 export component Hairline inherits Rectangle {
@@ -54,7 +54,7 @@ export component Pill inherits Rectangle {
         padding-bottom: Tokens.space-1;
         alignment: center;
 
-        TextHint {
+        TextSmallMuted {
             text: root.text;
             color: root.tint;
         }
@@ -109,47 +109,35 @@ export component HintBar inherits GridLayout {
     in property <[HintRow]> rows;
     spacing: Tokens.space-1;
 
+    // The key in the secondary colour and the action muted: one size since the
+    // scale lost its 11 px step (2026-10-07), so the column the eye hunts in
+    // is set apart by its typeface and its colour.
     for hint in root.rows: Row {
         TextSmallMuted {
             text: hint.key;
+            color: Tokens.text-secondary;
             font-family: Tokens.font-mono;
             horizontal-stretch: 0;
         }
-        TextHint {
+        TextSmallMuted {
             text: hint.action;
             horizontal-stretch: 1;
         }
     }
 }
 
-// The ground the whole palette stands on.
-//
-// # Why the window itself is transparent and this carries the colour
-//
-// D53 puts the resting alpha on the BACKGROUND and never on the text, and that
-// rules out `opacity`, which in Slint fades an element together with everything
-// inside it. So the alpha rides on the colour. `slint.md` 2.12 measured both
-// routes on Windows and both hold (`Window.background` directly: 6 of 6 runs,
-// this one: 4 of 4) - this one is chosen because a window background cannot be
-// rounded and a rectangle can.
-//
-// ⚠️ The alpha is honoured only where the system allows translucency at all.
-// With transparency effects off (Windows), "reduce transparency" (macOS) or high
-// contrast anywhere, the palette must be solid - which is why `dimmed` is an
-// input rather than something computed from the state here.
-export component WindowSurface inherits Rectangle {
-    in property <bool> dimmed;
-    background: root.dimmed ? Tokens.surface.with-alpha(Tokens.alpha-resting) : Tokens.surface;
-    border-radius: Tokens.radius-window;
-}
-
-// One band of the palette, with the rule above it.
+// One section of a window's content, with the rule above it - a band of the
+// palette, a step of the welcome.
 //
 // Document 13 sections 18 and 19 ask that a section be a component with its own
 // spacing rather than whatever container happened to be there, and there is a
 // second reason here: a band that hides must take its own divider with it.
 // Written as a bare `Hairline` between bands, hiding a band leaves a rule
 // floating over nothing, and the two would have to be gated in step forever.
+//
+// The side padding is the window's gutter, the same in every window and in its
+// header and footer (`ChromeBand`), so every line of every window starts in one
+// column - until 2026-10-07 the palette's was 12 px and the other windows' 16.
 //
 // # Why the height is stated here rather than left to the layout
 //
@@ -164,6 +152,13 @@ export component WindowSurface inherits Rectangle {
 // holds: measured with the band behind the same `if`, and with long counters,
 // the longest reference and the two-line typeface note. `palette_appearance.rs`
 // fails when anything is drawn below the palette's surface.
+//
+// ⊕ Since the palette stands in `WindowFrame` (2026-10-07, `D110`) the trap does
+// not show there: without this line every render of the palette and the welcome
+// came out the same to the byte - the bands reach the frame's layout through
+// `@children`, and that path reports a wrapped text's height correctly. The line
+// stays for a `Zone` placed straight in a layout behind an `if`, which is where
+// the trap was measured, and it costs nothing where it is not needed.
 export component Zone inherits Rectangle {
     in property <bool> divided: true;
 
@@ -173,31 +168,71 @@ export component Zone inherits Rectangle {
         if root.divided: Hairline { }
 
         VerticalLayout {
-            padding: Tokens.space-3;
+            padding-left: Tokens.space-4;
+            padding-right: Tokens.space-4;
+            padding-top: Tokens.space-3;
+            padding-bottom: Tokens.space-3;
             spacing: Tokens.space-2;
             @children
         }
     }
 }
 
-// A band of an ordinary window's chrome: the header above the content, or the
-// footer below it.
+// A section that takes the room the window has left: the list of a window the
+// tester resizes. `Zone`'s gutter and rule, and no height of its own - it
+// stretches, so the list inside can, and scrolls inside it.
+//
+// Not behind an `if` anywhere, so the measured trap that gave `Zone` its stated
+// height (`slint.md` 2.23) has nothing to bite here.
+export component ZoneFill inherits Rectangle {
+    in property <bool> divided: true;
+    vertical-stretch: 1;
+
+    VerticalLayout {
+        if root.divided: Hairline { }
+
+        VerticalLayout {
+            padding-left: Tokens.space-4;
+            padding-right: Tokens.space-4;
+            padding-top: Tokens.space-3;
+            padding-bottom: Tokens.space-3;
+            spacing: Tokens.space-3;
+            vertical-stretch: 1;
+            @children
+        }
+    }
+}
+
+// A band of a window's chrome: the header above the content, the footer and
+// the status line below it. Not in the door: a screen reaches chrome only
+// through the frame's own pieces (`frame.slint`), so no window can build a
+// header of its own (the owner's point 4).
 //
 // PORADNIK-GUI 4: chrome touches the window's edge, stands on a ground of its
 // own and is parted from the content by a hairline - no rounding and no frame,
 // because chrome is not content. The hairline sits on the side that faces the
 // content, which is why the band is told where it is rather than left to guess.
 //
+// `dimmed`: the palette's resting state, where the window's whole ground takes
+// the resting alpha (D53) - its chrome included, or the header would stand
+// solid on a translucent window. `tools/kontrast.py` measures the roles the
+// resting state shows on this ground too.
+//
 // The height is stated from the band's own layout for the reason `Zone` gives
 // (`slint.md` 2.23): a band that only reports it can come out short.
 export component ChromeBand inherits Rectangle {
     in property <bool> at-bottom;
+    in property <bool> dimmed;
+    // False where the band meets another band of chrome that already draws the
+    // rule - the resting palette's status line right under its header, where
+    // two rules side by side read as one thick line.
+    in property <bool> divided: true;
 
-    background: Tokens.surface-raised;
+    background: root.dimmed ? Tokens.surface-raised.with-alpha(Tokens.alpha-resting) : Tokens.surface-raised;
     height: band.preferred-height;
 
     band := VerticalLayout {
-        if root.at-bottom: Hairline { }
+        if root.at-bottom && root.divided: Hairline { }
 
         VerticalLayout {
             padding-left: Tokens.space-4;
@@ -208,7 +243,7 @@ export component ChromeBand inherits Rectangle {
             @children
         }
 
-        if !root.at-bottom: Hairline { }
+        if !root.at-bottom && root.divided: Hairline { }
     }
 }
 
@@ -316,11 +351,23 @@ export struct Marker {
 
 export component MarkerRow inherits HorizontalLayout {
     in property <[Marker]> markers;
+    // As tall as a pill when it holds none: for a line that must be as tall
+    // with a marker as without - the next value's, which changes with every
+    // press and must not move what stands below it (`D110`). Off by default,
+    // so a row of markers on a line of its own takes no room when empty.
+    in property <bool> keeps-height;
     spacing: Tokens.space-2;
     alignment: start;
 
     for marker in root.markers: Pill {
         text: marker.text;
         tint: marker.risky ? Tokens.risk : Tokens.text-muted;
+    }
+    // Never drawn and no width: it lends the row a pill's height from the
+    // pill's own typeface and padding, not from a number fitted to one machine
+    // (GUI rule 14) - the shape `PickRowView` measured first (`slint.md` 2.36).
+    if root.keeps-height: Pill {
+        width: 0px;
+        visible: false;
     }
 }

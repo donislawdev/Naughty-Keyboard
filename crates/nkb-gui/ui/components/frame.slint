@@ -1,0 +1,146 @@
+// The frame every window of the product stands in.
+//
+// # Why the frame is a part and not a convention (the owner's point 4)
+//
+// On 2026-10-07 the owner put the four windows side by side and saw four
+// programs: the palette had no header and a 12 px gutter, the other three a
+// raised header and 16 px, two of them listed their keys in a raised footer and
+// two in their content, and each picked its own text sizes. Nothing was wrong
+// with any one of them. They had simply been built one at a time, each copying
+// the last one it remembered - and the owner said more windows are coming.
+//
+// So a window is now assembled from these pieces and from nothing else, and
+// `ui_guard.rs` refuses a window that does not stand in `WindowFrame` with a
+// `WindowHeader` - `ChromeBand` is not in the door, so a screen cannot build a
+// header of its own:
+//
+//     WindowFrame       the ground, and the column the rest stands in
+//       WindowHeader    the title, and what belongs beside it
+//       Zone ...        the content, section by section (`chrome.slint`)
+//       ZoneFill        or one section that takes the room left
+//       WindowFooter    the keys the window answers, or its main action
+//       WindowStatus    what the tool has to say - the last thing in the
+//                       window, so a sentence that comes and goes moves only
+//                       the bottom edge and nothing anybody is looking at
+//
+// The gutter is one value for all of them, so every line of every window
+// starts in one column.
+//
+// # Why the status line is at the very bottom
+//
+// The owner's point 1: a click on "Clipboard" or on "Change shortcuts" made a
+// sentence appear ABOVE the control just clicked, and the control jumped away
+// from under the pointer. A sentence can only appear where nothing stands below
+// it, and the one such place in a window is its bottom edge. PORADNIK-GUI,
+// "nic nie skacze": a message appearing must not move what is under it.
+
+import { Tokens } from "../tokens.slint";
+import { TextTitle } from "typography.slint";
+import { ChromeBand, Spacer } from "chrome.slint";
+import { PickerOpener } from "list.slint";
+
+// The ground of a window and the column its pieces stand in.
+//
+// The ground is drawn here rather than by the window, because the palette's
+// resting alpha rides on the colour and never on the text (D53, `slint.md`
+// 2.12) - and one frame for every window means one place that draws it.
+//
+// ⚠️ `dimmed` is honoured only where the system allows translucency at all.
+// With transparency effects off (Windows), "reduce transparency" (macOS) or high
+// contrast anywhere, the palette must be solid - which is why it is an input
+// rather than something computed from the state here.
+export component WindowFrame inherits Rectangle {
+    in property <bool> dimmed;
+    // Packed to the top, for a window as tall as its content (the palette, the
+    // welcome, the shortcuts window): where the system gives it more room, the
+    // sections must not stretch to fill it. False for a window the tester
+    // resizes, where `ZoneFill` takes the room.
+    in property <bool> packed;
+
+    background: root.dimmed ? Tokens.surface.with-alpha(Tokens.alpha-resting) : Tokens.surface;
+
+    VerticalLayout {
+        alignment: root.packed ? LayoutAlignment.start : LayoutAlignment.stretch;
+        @children
+    }
+}
+
+// The title of a window and what stands beside it at the right - a count, a
+// button. The title is elided rather than wrapped, so a long name never moves
+// the content below.
+//
+// `opens`: the title is the way to choose another - the palette's pack, which
+// opens the value window. It then answers the pointer the way the product's
+// links do (`PickerOpener`) and carries the mark a drop-down list wears.
+export component WindowHeader inherits Rectangle {
+    in property <string> title;
+    in property <bool> opens;
+    // What a click on the title does, as UI Automation reads it.
+    in property <string> action;
+    in property <bool> dimmed;
+    callback clicked();
+
+    height: band.preferred-height;
+
+    band := ChromeBand {
+        dimmed: root.dimmed;
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            // Centred on the row: whatever stands at the right may be taller
+            // than the title, and a layout puts a fixed-height element at the
+            // top of its row (`slint.md` 2.43).
+            VerticalLayout {
+                alignment: center;
+                if !root.opens: TextTitle {
+                    text: root.title;
+                    overflow: elide;
+                }
+                if root.opens: PickerOpener {
+                    text: root.title;
+                    action: root.action;
+                    chevron: true;
+                    title: true;
+                    clicked => {
+                        root.clicked();
+                    }
+                }
+            }
+            // Takes the room between, so what stands beside the title keeps
+            // the right edge - and the title gives way before it does.
+            Spacer { }
+            @children
+        }
+    }
+}
+
+// The bottom of a window's chrome: the keys it answers, or its main action.
+export component WindowFooter inherits Rectangle {
+    height: band.preferred-height;
+
+    band := ChromeBand {
+        at-bottom: true;
+        @children
+    }
+}
+
+// What the tool has to say: the last band of a window, below the footer.
+//
+// Prose, in the body role, and every sentence the window says goes here - the
+// palette's messages, the answer to the last key press in the shortcuts
+// window, the note about catalogue sources the value window could not read.
+// Shown only while there is something to say, except where a window keeps
+// room for it from the start so the list above does not move.
+export component WindowStatus inherits Rectangle {
+    in property <bool> dimmed;
+    // False right under the header, which draws the rule already.
+    in property <bool> divided: true;
+
+    height: band.preferred-height;
+
+    band := ChromeBand {
+        at-bottom: true;
+        dimmed: root.dimmed;
+        divided: root.divided;
+        @children
+    }
+}

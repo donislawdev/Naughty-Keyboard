@@ -15,6 +15,14 @@
 // for. A single door does fix it: the question "what already exists" has ONE
 // file as its answer, and the routing table in CLAUDE.md points at it.
 //
+// # A new window
+//
+// Starts from `WindowFrame` and `WindowHeader` in `components/frame.slint`, and
+// `ui_guard.rs` refuses one that does not - the owner's point 4 of 2026-10-07,
+// four windows that looked like four programs. `ChromeBand` is deliberately NOT
+// re-exported below: a screen reaches chrome only through the frame's pieces,
+// so it cannot build a header of its own.
+//
 // # Adding to the vocabulary
 //
 // New file in `ui/components/`, one line here, one entry in the gallery screen.
@@ -24,11 +32,11 @@
 
 import { Tokens } from "tokens.slint";
 import {
+    TextTitle,
     TextName,
     TextBody,
     TextSmall,
     TextSmallMuted,
-    TextHint,
     TextMono,
     TextCounter,
     TextPreview,
@@ -45,22 +53,22 @@ import {
     Marker,
     MarkerRow,
     Zone,
-    WindowSurface,
-    ChromeBand,
+    ZoneFill,
     ProgressBar,
     Chevron,
 } from "components/chrome.slint";
+import { WindowFrame, WindowHeader, WindowFooter, WindowStatus } from "components/frame.slint";
 import { QueryField, PickerKeys, KeyScope } from "components/field.slint";
 import { PickRow, PickList, PickerOpener, Disclosure } from "components/list.slint";
 import { SmallButton, Segmented } from "components/button.slint";
 
 export {
     Tokens,
+    TextTitle,
     TextName,
     TextBody,
     TextSmall,
     TextSmallMuted,
-    TextHint,
     TextMono,
     TextCounter,
     TextPreview,
@@ -75,8 +83,11 @@ export {
     Marker,
     MarkerRow,
     Zone,
-    WindowSurface,
-    ChromeBand,
+    ZoneFill,
+    WindowFrame,
+    WindowHeader,
+    WindowFooter,
+    WindowStatus,
     ProgressBar,
     QueryField,
     PickerKeys,

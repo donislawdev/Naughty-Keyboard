@@ -109,10 +109,20 @@ export global Tokens {
     // Section 2.3 asks for a fixed set of size-weight pairs rather than two
     // independent axes. The pairing is enforced one level up, by the text
     // components in ui/components/: a screen picks `Body`, never a size.
-    out property <length> type-hint: 11px;
+    //
+    // FOUR sizes and no fifth - the owner's hard rule in PORADNIK-GUI. Until
+    // 2026-10-07 there were five (an 11 px step for hints and pills under the
+    // 12 px one), and the windows that leaned on different neighbours of a
+    // one-pixel step looked like four programs: the owner's point 4. A step
+    // that differs by one pixel reads as a mistake, not as a level.
+    //
+    //     small    12   hints, labels, section headings, pills, buttons
+    //     body     13   prose, and the names a list or a band holds
+    //     title    15   the window's own title in its header
+    //     preview  17   the value itself, monospaced
     out property <length> type-small: 12px;
     out property <length> type-body: 13px;
-    out property <length> type-name: 15px;
+    out property <length> type-title: 15px;
     out property <length> type-preview: 17px;
 
     out property <int> weight-regular: 400;
@@ -185,10 +195,11 @@ export global Tokens {
     out property <length> chevron-width: 8px;
     out property <length> chevron-height: 4px;
     // The column at the left of a row in the value window's tree that holds
-    // the fold mark, and the step a row under another is indented by (the
-    // owner's point 4). As wide as the largest spacing step below a line of
-    // text: the whole column is the mark's target, and a narrower one is a
-    // target a pointer misses.
+    // the fold mark (the owner's point 4). As wide as the largest spacing step
+    // below a line of text: the whole column is the mark's target, and a
+    // narrower one is a target a pointer misses. A row under another stands
+    // this column and one spacing step in - one step of the tree, never two
+    // columns (`D110`, point 3).
     out property <length> fold-column: 24px;
 
     // ---- opacity -----------------------------------------------------------
@@ -203,9 +214,13 @@ export global Tokens {
     out property <float> alpha-disabled: 0.5;
 
     // ---- shape -------------------------------------------------------------
+    // ⊕ No window radius since 2026-10-07: every window of the product has
+    // the system's frame, and the system rounds it. The palette's own
+    // rounded ground was a leftover from a frameless design, and under a
+    // header band of its own it would have shown the window's corners as
+    // notches (`slint.md` 2.47).
     out property <length> radius-small: 4px;
     out property <length> radius: 6px;
-    out property <length> radius-window: 10px;
     out property <length> hairline: 1px;
 
     // ---- the monospaced typeface -------------------------------------------

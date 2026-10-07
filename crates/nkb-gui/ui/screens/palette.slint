@@ -6,35 +6,70 @@
 // is no text field here and nothing that wants the keyboard. Everything arrives
 // as a property and everything leaves as a shortcut - with the pointer as the
 // one exception: the pack's name opens the value window (K3.2d), the link
-// under the hints opens the shortcuts window (K5.5), two Copy buttons put a
+// under the switches opens the shortcuts window (K5.5), two Copy buttons put a
 // value on the clipboard (D98), two switches choose how values travel and how
 // they meet the field (D99, D101, the owner's point 2 of 2026-10-07), the
-// heading of the last value sent folds it (point 7), and the button at the end
-// of the pack band collapses or expands the palette (D100). A click
-// reaches this window without activating it (`D62`), so it takes nothing from
-// the field under test.
+// heading of the last value sent folds it (point 7), and the button in the
+// header collapses or expands the palette (D100). A click reaches this window
+// without activating it (`D62`), so it takes nothing from the field under test.
 //
-// # Two axes and a bar, not five states
+// # The frame every window stands in (`D110`)
+//
+// The palette is a window like the others: a header with its title - the pack
+// - and what belongs beside it, the content in sections, the keys in a footer,
+// and what the tool has to say in a status line at the very bottom
+// (`components/frame.slint`). Until 2026-10-07 it had no header, a narrower
+// gutter and its keys among the content, and the owner saw a different program
+// in each window (point 4).
+//
+//     header      the pack, which opens the value window · the counter ·
+//                 Collapse or Expand
+//     Next        what the next press sends - one line each, so the band is as
+//                 tall at the end of a pack as anywhere else
+//     Last sent   folded to one row, unfolded by the tester
+//     settings    how values travel, how they meet the field, the link to the
+//                 shortcuts window
+//     footer      the keys
+//     status      the standing clipboard bar where the switch cannot say it, a
+//                 send in progress, every sentence the tool has to say, and
+//                 before the first value how to send one
+//
+// # Nothing the tester clicks moves (the owner's point 1)
+//
+// Every band above the footer is as tall whatever happens: the next value is
+// elided rather than wrapped, the last value sent is folded unless the tester
+// opens it, and before the first value its row stands faded rather than
+// missing. Everything that comes and goes - a sentence, a send in progress, the
+// standing bar - stands in the status line, below everything else, so it moves
+// only the window's bottom edge. Until 2026-10-07 a click on "Clipboard" put
+// the standing bar and a three-line sentence ABOVE the switch, and a click on
+// "Change shortcuts" a sentence above the link, and both jumped away from under
+// the pointer.
+//
+// # The window is as tall as its content (the owner's point 2, `D110`)
+//
+// `D83` kept the expanded palette at the tallest it had been, so that a short
+// value after a long one would not pull the bottom edge up. With the sentences
+// in the middle of the window that held the edge but not the content: the
+// bands below jumped up anyway, and the room they left stayed empty at the
+// bottom - and grew with every sentence, the owner measured it by clicking
+// "Change shortcuts" a few times. Now a sentence can only be at the bottom, so
+// the window simply follows its content, and what `D83` is really about still
+// holds: the value stays until the next one, no timer changes anything, and
+// collapsing is the tester's alone.
+//
+// # Two axes, not five states
 //
 // `OBS-94` settled this for the core and it holds for the window: clipboard mode
 // is a SECOND AXIS, not another state. So:
 //
-//     compact          the tester's choice: only the pack band, background dimmed
-//     clipboard-mode   a standing condition, visible in both
-//     hints            the first twenty uses, and on demand afterwards
+//     compact          the tester's choice: the header and the status line,
+//                      the ground dimmed
+//     clipboard-mode   a standing condition, said in both
 //
 // 🔴 Nothing here ever hides the WINDOW. `OBS-80` measured that `hide()` and
 // `show()` destroy the window on Windows and lose `WS_EX_NOACTIVATE` with it, so
 // the states are transparency and which bands are visible - never the window.
-//
-// # Why the window no longer shrinks by itself (D83)
-//
-// Until D83 the palette dimmed four seconds after every value and dropped every
-// band but the pack, which is what `ux-spec.md` 2 drew. In use it was the wrong
-// design: the window jumped from a full panel to one line under the tester's
-// eyes, and what had just gone out was gone before they looked back. So the
-// value stays until the next one replaces it, the window never gets shorter on
-// its own, and the compact form is a shortcut the tester presses.
 //
 // # What the compact state may show, and why it is so short
 //
@@ -42,20 +77,16 @@
 // window lying under the palette - it would need 0.96 - so it MUST NOT appear
 // while the palette is dimmed. Every muted role therefore lives inside a band
 // gated on `compact`, and `palette_appearance.rs` measures the rendered pixels
-// rather than trusting this sentence. The message band stays in both states:
+// rather than trusting this sentence. The status line stays in both states:
 // rule 1 of this project forbids a palette that goes quiet because the tester
 // made it small, and its text is not muted.
 //
-// # One zone from the sketch in `ux-spec.md` 2 is absent, on purpose
+// # One zone from the sketch in `ux-spec.md` 2 is a line, not a band
 //
-// The TARGET band (application, window title, field kind). `nkb-sys` knows one
-// thing about the target today, its window handle, and nothing that could be
-// written next to a person. A band with no source would be a promise, so it
-// waits for `TargetInspector` - `OBS-91`. Named here rather than left as a gap
-// the next session rediscovers.
-//
-// Until 2026-09-23 this said the preview and its shape line were absent too.
-// They arrived with C4b-1 (`D64`) and the sentence stayed behind for a day.
+// The TARGET (application, window title, field kind) has no band: what the
+// tool knows of it since UX8 (`D104`) - the program's file name and the kind of
+// control - is one line under the last value's name. The window title is not
+// read (`D104`).
 
 import {
     Tokens,
@@ -72,7 +103,10 @@ import {
     HintBar,
     Marker,
     MarkerRow,
-    WindowSurface,
+    WindowFrame,
+    WindowHeader,
+    WindowFooter,
+    WindowStatus,
     PickerOpener,
     Disclosure,
     ProgressBar,
@@ -253,35 +287,15 @@ export component Palette inherits Window {
     // `showing` because it is the system's answer, not the palette's state.
     in property <bool> translucency-allowed: true;
 
-    // ---- height ------------------------------------------------------------
-    // The tallest the expanded palette has been since it was last expanded.
-    // Kept by the worker (`live.rs`), because remembering is logic and a view
-    // holds none: without it, a value with a one-line preview after one with a
-    // three-line preview would pull the window's bottom edge up under the
-    // tester's eyes - the jump D83 removed, only smaller.
-    in property <length> height-floor;
-    // What the content asks for right now.
-    out property <length> content-height: surface.preferred-height;
-    // Said whenever that changes, so Rust can move the floor.
-    //
-    // 🔴 An event and not a value Rust reads, and the reason is measured: bands
-    // behind `if` are built when the window is next drawn, not when a property
-    // is read (`slint.md` 2.27). Read straight after the properties were set,
-    // this height still lacks the band that was just switched on - 105 px for a
-    // one-letter value and for a three-hundred-letter one alike.
-    callback content-height-changed(length);
-    changed content-height => {
-        root.content-height-changed(self.content-height);
-    }
     // Asks for the pack window: a click on the pack's name, and Rust invokes
     // the same callback when the shortcut arrives on the worker - so both ways
     // in reach the same Rust on the main thread, and the view holds no handler
     // body.
-    callback open-packs <=> opener.clicked;
+    callback open-packs <=> header.clicked;
     // What the click does, in the hint bar's words, for UI Automation.
     in property <string> open-packs-label;
     // Asks for the shortcuts window (step 7, K5.5) - a click on the link under
-    // the hint bar. No eleventh global shortcut: each one is a collision in
+    // the switches. No eleventh global shortcut: each one is a collision in
     // somebody's application (`ux-spec.md` 5.4).
     //
     // ⚠️ Declared, not an alias like `open-packs`: the link stands in a band
@@ -292,125 +306,361 @@ export component Palette inherits Window {
     in property <string> shortcuts-link;
 
     title: root.window-title;
-    // The colour lives on the surface below, so that the palette can have
-    // rounded corners - a window background cannot.
+    // The colour lives on the frame below, which takes the resting alpha
+    // (D53) - a window background would take it too, but one frame for every
+    // window means one place that draws the ground.
     background: transparent;
     always-on-top: true;
     width: Tokens.palette-width;
-    // The palette follows its own content. Measured 2026-09-22: Slint does NOT
-    // resize a window when what is inside it changes, so without this binding
-    // the compact state would be one line of text at the top of a panel the size
-    // of the expanded one. Expanded, it never gets shorter than the floor.
-    height: root.compact ? surface.preferred-height : max(root.height-floor, surface.preferred-height);
+    // The palette follows its own content, in both states. Measured 2026-09-22:
+    // Slint does NOT resize a window when what is inside it changes, so
+    // without this binding the window keeps whatever size it had - see the
+    // header for why there is no floor under it any more (`D110`).
+    height: frame.preferred-height;
 
-    surface := WindowSurface {
+    // A sentence about clipboard mode, where the switch cannot say it: in the
+    // compact state, which shows no switches, and for the window in front,
+    // which is not a mode the tester chose and not one the switch shows (D72).
+    property <bool> bar-said: root.clipboard-mode && (root.compact || !root.clipboard-mode-on);
+    // How to send the first value, until there is one. Expanded only, as the
+    // band it replaced was.
+    property <bool> nothing-sent-said: !root.compact && !root.has-value;
+
+    frame := WindowFrame {
         dimmed: root.compact && root.translucency-allowed;
+        packed: true;
 
-        VerticalLayout {
-            // Packed to the top: the window sizes to its content, and where the
-            // system gives it more room the bands must not stretch to fill it.
-            alignment: start;
+        // The pack and the counter: the palette's title, and at rest the one
+        // band besides the status line. A pack name is somebody else's string
+        // and can be any length, so the header elides it before the counter
+        // and the button give way. A click on it opens the value window, and
+        // the mark after it says so with the pointer elsewhere
+        // (`UX-GUI-015`).
+        header := WindowHeader {
+            title: root.pack;
+            opens: true;
+            action: root.open-packs-label;
+            dimmed: root.compact && root.translucency-allowed;
+            VerticalLayout {
+                alignment: center;
+                TextCounter {
+                    text: root.counter;
+                }
+            }
+            // Collapse and expand, in BOTH states and in one place
+            // (`UX-GUI-004`). The word says what a click does now. Faded while
+            // a value goes, like every button here: the worker answers a click
+            // between presses, so it would land after the send.
+            VerticalLayout {
+                alignment: center;
+                SmallButton {
+                    text: root.compact ? root.expand-label : root.collapse-label;
+                    action: root.compact ? root.expand-label : root.collapse-label;
+                    enabled: !root.sending;
+                    clicked => {
+                        root.toggle-compact();
+                    }
+                }
+            }
+        }
 
-            // The pack and the counter. No rule above it: it is the first band,
-            // and at rest it is the only one.
-            Zone {
-                divided: false;
-                HorizontalLayout {
-                    spacing: Tokens.space-2;
-                    // A pack name is somebody else's string and can be any
-                    // length. Elided rather than wrapped: the counter beside
-                    // it must keep its place, and a band that grows a line
-                    // because of a long name moves everything below it. A click
-                    // on it opens the value window, and the mark after it says
-                    // so with the pointer elsewhere (`UX-GUI-015`).
-                    //
-                    // Centred on the button's row, like every heading beside a
-                    // button in this window (`slint.md` 2.43).
-                    VerticalLayout {
-                        alignment: center;
-                        opener := PickerOpener {
-                            text: root.pack;
-                            action: root.open-packs-label;
-                            chevron: true;
-                        }
+        // What the next press sends (UX-GUI-001). One line each, ELIDED rather
+        // than wrapped, and every line kept at the end of a pack, where there
+        // is no value - drawn empty rather than taken away: the band changes
+        // with every press, and a band that grew and shrank would move
+        // everything below it. The whole value is drawn in the band below once
+        // it is sent. Expanded only - the heading is muted (D53).
+        //
+        // While a send runs, which value comes next depends on how the one in
+        // flight ends, so the band fades in place rather than going away and
+        // taking its height with it.
+        if !root.compact && root.has-next: Zone {
+            divided: false;
+            opacity: root.sending ? Tokens.alpha-disabled : 1;
+            // Copy at the other end of the heading's row, where the band below
+            // has its own: the two buttons stand in one column, each at the top
+            // of the value it copies (D98). Not at the end of a pack - there is
+            // no value to copy then - and its place kept.
+            HorizontalLayout {
+                spacing: Tokens.space-2;
+                // Centred on the button's row: the heading's height is its own
+                // text, and a layout puts such an element at the top - four
+                // pixels above the word beside it, in the first render.
+                VerticalLayout {
+                    alignment: center;
+                    TextSmallMuted {
+                        text: root.next-heading;
+                        overflow: elide;
                     }
-                    Spacer { }
-                    VerticalLayout {
-                        alignment: center;
-                        TextCounter {
-                            text: root.counter;
-                        }
+                }
+                Spacer { }
+                SmallButton {
+                    text: root.copy-label;
+                    action: root.copy-next-action;
+                    visible: root.next-has-value;
+                    enabled: root.next-has-value && !root.sending;
+                    clicked => {
+                        root.copy-next();
                     }
-                    // Collapse and expand, in BOTH states and in one place
-                    // (`UX-GUI-004`): until this button the compact palette
-                    // said nothing about how to get the rest back, and it
-                    // starts compact on the next run when the tester left it
-                    // so. The word says what a click does now. A click reaches
-                    // the palette without activating it (`D62`). Faded while a
-                    // value goes, like every button here: the worker answers a
-                    // click between presses, so it would land after the send.
-                    SmallButton {
-                        text: root.compact ? root.expand-label : root.collapse-label;
-                        action: root.compact ? root.expand-label : root.collapse-label;
-                        enabled: !root.sending;
+                }
+            }
+            // The risk beside the name rather than on a row of its own: the
+            // palette stays on top of the application under test, and a row
+            // spent on one pill is height taken from it. The name gives way,
+            // the pill does not, and the line is a pill's height when there is
+            // none, so a value with a risk is as tall as one without.
+            HorizontalLayout {
+                spacing: Tokens.space-2;
+                TextName {
+                    text: root.next-name;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                    visible: root.next-has-value;
+                }
+                // Empty at the end of a pack, where a layout has no `visible`
+                // of its own to hide it by - and as tall as a pill either way.
+                MarkerRow {
+                    markers: root.next-has-value ? root.next-markers : [];
+                    keeps-height: true;
+                }
+            }
+            TextPreview {
+                text: root.next-preview;
+                overflow: elide;
+                visible: root.next-has-value;
+            }
+        }
+
+        // The value that went out last. It stays until the next one.
+        //
+        // FOLDED at every start (the owner's point 7, 2026-10-07): the heading
+        // and the value's name on one row, and the rest under a click. Every
+        // line below stands behind its own `if` rather than inside one folding
+        // layout: a layout behind an `if` reports one line for each of its
+        // texts that wraps (`slint.md` 2.23), and the preview, the shape and
+        // the counters all wrap. Folding hides no warning: every "did less than
+        // asked" has a sentence of its own in the status line (untouchable
+        // rule 1), and the markers here repeat the value's facts.
+        //
+        // Before the first value the row stands faded, so the first press
+        // fills it rather than putting a band in and moving everything below.
+        if !root.compact: Zone {
+            divided: root.has-next;
+            // While a value goes, this band shows THAT value, not the last
+            // one sent, and the button's key still names the last one. So it
+            // cannot be used then - faded in place rather than taken away,
+            // because a control that vanishes under the pointer moves the row
+            // it stood in (GUI rule 3).
+            HorizontalLayout {
+                spacing: Tokens.space-2;
+                // Centred on the button's row, like the next band's heading.
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    Disclosure {
+                        text: root.last-sent-label;
+                        detail: root.value-name;
+                        open: root.last-sent-open && root.has-value;
+                        enabled: root.has-value;
+                        action: root.last-sent-action;
                         clicked => {
-                            root.toggle-compact();
+                            root.toggle-last-sent();
+                        }
+                    }
+                }
+                SmallButton {
+                    text: root.copy-label;
+                    action: root.copy-last-action;
+                    enabled: root.has-value && !root.sending;
+                    clicked => {
+                        root.copy-last();
+                    }
+                }
+            }
+            if root.last-sent-open && root.has-value: TextName {
+                text: root.value-name;
+                wrap: word-wrap;
+            }
+            // Under the name, because "which value went where" is the
+            // question this band answers - and a tester who switched windows a
+            // moment before the press sees it here, not in a ticket a day later
+            // (`UX-GUI-013`).
+            if root.last-sent-open && root.has-value && root.has-sent-to: TextBody {
+                text: root.value-sent-to;
+                wrap: word-wrap;
+            }
+            // The preview, in the order the sketch draws: name, preview,
+            // shape, counters.
+            //
+            // ⚠️ ONE text element rather than coloured segments, and the reason
+            // is the layout engine: colouring the markers apart from the value
+            // would mean one element per segment, and a horizontal layout in
+            // Slint does not wrap - a hundred-code-point value at preview size
+            // would run off the window. `TextPreviewInvisible` therefore stays
+            // unused for now. The marker is told apart by its SHAPE, which is a
+            // visible box, rather than by colour.
+            if root.last-sent-open && root.has-value: TextPreview {
+                text: root.value-preview;
+                wrap: char-wrap;
+            }
+            if root.last-sent-open && root.has-value && root.has-elided: TextSmallMuted {
+                text: root.value-elided;
+            }
+            // Under the preview because it qualifies the preview, and in the
+            // muted role because it is a note about the tool's display rather
+            // than a fact about the value. Wrapped: a list of code points is
+            // somebody else's data and has no fixed length.
+            if root.last-sent-open && root.has-value && root.has-not-guaranteed: TextSmallMuted {
+                text: root.value-not-guaranteed;
+                wrap: word-wrap;
+            }
+            if root.last-sent-open && root.has-value && root.has-shape: TextBody {
+                text: root.value-shape;
+                wrap: word-wrap;
+            }
+            // Both wrap, and both did not until 2026-09-23: a render with the
+            // shipped `len-100000` cut the counters off at the window's edge,
+            // mid-word. A reference is up to 89 characters with no space in it
+            // (`pack-format.md` 7), so it breaks anywhere. The counters have
+            // spaces, so they break between words.
+            if root.last-sent-open && root.has-value: TextMono {
+                text: root.value-reference;
+                wrap: char-wrap;
+            }
+            if root.last-sent-open && root.has-value: TextMono {
+                text: root.value-counts;
+                wrap: word-wrap;
+            }
+            if root.last-sent-open && root.has-value: MarkerRow {
+                markers: root.markers;
+            }
+        }
+
+        // The two switches (the owner's point 2): a label column and the ways
+        // beside it, the shape of a form (GUI rule 13). How values travel
+        // first, because the second row only means something for typed values
+        // - in clipboard mode it stays in place, faded, rather than leaving a
+        // hole that moves the link below it (GUI rule 3). Said before the first
+        // value, so the tester knows the line is cleared before it happens, not
+        // from the marker after (D101). Faded while a value goes: the worker
+        // answers a click between presses, so it would land after it.
+        //
+        // Above the footer and the status line, so whatever a click here makes
+        // the tool say appears BELOW the control clicked (the owner's point 1).
+        if !root.compact: Zone {
+            GridLayout {
+                spacing: Tokens.space-2;
+                Row {
+                    TextSmallMuted {
+                        text: root.route-label;
+                        horizontal-stretch: 0;
+                    }
+                    HorizontalLayout {
+                        alignment: start;
+                        horizontal-stretch: 1;
+                        Segmented {
+                            label: root.route-label;
+                            options: root.route-options;
+                            selected: root.route-selected;
+                            enabled: !root.sending;
+                            chosen(index) => {
+                                root.choose-route(index);
+                            }
+                        }
+                    }
+                }
+                Row {
+                    TextSmallMuted {
+                        text: root.clearing-label;
+                        horizontal-stretch: 0;
+                    }
+                    HorizontalLayout {
+                        alignment: start;
+                        horizontal-stretch: 1;
+                        Segmented {
+                            label: root.clearing-label;
+                            options: root.clearing-options;
+                            selected: root.clearing-selected;
+                            enabled: !root.sending && !root.clipboard-mode-on;
+                            chosen(index) => {
+                                root.choose-clearing(index);
+                            }
                         }
                     }
                 }
             }
+            // Under the shortcuts' switches, and in the same component as the
+            // pack's name above: a link in the palette looks and answers the
+            // pointer one way (GUI rule 2).
+            HorizontalLayout {
+                alignment: start;
+                PickerOpener {
+                    text: root.shortcuts-link;
+                    action: root.shortcuts-link;
+                    clicked => {
+                        root.open-shortcuts();
+                    }
+                }
+            }
+        }
+
+        // The keys, in the footer as every window of the product lists them.
+        // Hidden in the compact state, which is meant to take little room and
+        // no attention - and the keys are muted (D53).
+        if root.hints-visible && !root.compact: WindowFooter {
+            HintBar {
+                rows: root.hints;
+            }
+        }
+
+        // What the tool has to say, last in the window: whatever comes and
+        // goes here moves the bottom edge and nothing above it. In BOTH
+        // states - rule 1 of this project forbids a palette that goes quiet
+        // because the tester made it small - so every role in it is one the
+        // resting state may show (D53): no muted text.
+        if root.bar-said || root.sending || root.messages.length > 0 || root.nothing-sent-said: WindowStatus {
+            dimmed: root.compact && root.translucency-allowed;
+            // Collapsed, the line stands right under the header, whose rule
+            // already parts them.
+            divided: !root.compact;
 
             // The standing bar. Permanent by design: a message that disappears
-            // stops existing while the limitation stays - `ux-spec.md` 2.
-            //
-            // Right under the pack band, and that is a correction from the
-            // first render (D71): placed after the messages it stood under the
-            // counter at rest and some two hundred pixels lower once a value
-            // went out - a standing condition that JUMPS between the two states
-            // of the window, which GUI rule 3 forbids. Here it holds one place.
-            //
-            // The ACCENT tint, not the risk one, and that is the point of the
-            // colour here (D71). Risk is what `offensive` wears, and clipboard
-            // mode is a full route rather than a failure - `ux-spec.md` 8 says so
-            // in words, and a bar in the risk colour would say the opposite
-            // without any. The gallery drew this pill in accent from the start.
-            //
-            // The way out stands on the bar itself (D99): the tester who reads
-            // that the mode is on finds how to end it in the same place. In
-            // both states of the window, like the bar - the button's words are
-            // a role the resting state may show (D53). Faded while a value goes:
-            // the route cannot change under a value in flight.
-            if root.clipboard-mode: Zone {
-                HorizontalLayout {
-                    spacing: Tokens.space-2;
-                    // Centred on the button's row, as the next band's heading
-                    // is beside its Copy (`slint.md` 2.43).
-                    VerticalLayout {
-                        alignment: center;
-                        Pill {
-                            text: root.clipboard-mode-label;
-                            tint: Tokens.accent;
-                        }
+            // stops existing while the limitation stays - `ux-spec.md` 2. The
+            // ACCENT tint, not the risk one (D71): clipboard mode is a full
+            // route rather than a failure, `ux-spec.md` 8 says so in words, and
+            // a bar in the risk colour would say the opposite without any. The
+            // way out stands on it while the switch is out of sight (D99).
+            if root.bar-said: HorizontalLayout {
+                spacing: Tokens.space-2;
+                // Centred on the button's row (`slint.md` 2.43).
+                VerticalLayout {
+                    alignment: center;
+                    Pill {
+                        text: root.clipboard-mode-label;
+                        tint: Tokens.accent;
                     }
-                    Spacer { }
-                    if root.clipboard-mode-on: SmallButton {
-                        text: root.turn-off-label;
-                        action: root.turn-off-action;
-                        enabled: !root.sending;
-                        clicked => {
-                            root.turn-off-clipboard();
-                        }
+                }
+                Spacer { }
+                if root.clipboard-mode-on: SmallButton {
+                    text: root.turn-off-label;
+                    action: root.turn-off-action;
+                    enabled: !root.sending;
+                    clicked => {
+                        root.turn-off-clipboard();
                     }
                 }
             }
 
-            // A send in progress. In BOTH states, like the standing bar above it:
-            // a tester who made the palette small must still be told that a send
-            // is running and how to stop it, so every role here is one the
-            // resting state may show (D53) - no muted text, the hint bar's own
-            // look included. Right under the pack band and the bar, so it holds
-            // one place whatever the bands below are doing.
-            if root.sending: Zone {
+            // A send in progress (W3, D96, OBS-160): until this band a long
+            // send left the palette showing what it showed before, for
+            // minutes, with nothing to say that Escape stops it. No muted role
+            // here, the hint bar's own look included.
+            //
+            // The counter and the bar in one layout: neither wraps, so the
+            // trap of a wrapped text behind an `if` (`slint.md` 2.23) has
+            // nothing to bite, and the two come and go as one.
+            if root.sending: VerticalLayout {
+                spacing: Tokens.space-2;
                 HorizontalLayout {
                     spacing: Tokens.space-2;
                     TextBody {
@@ -425,263 +675,25 @@ export component Palette inherits Window {
                 ProgressBar {
                     fraction: root.sending-fraction;
                 }
-                TextBody {
-                    text: root.sending-hint;
-                    wrap: word-wrap;
-                }
+            }
+            if root.sending: TextBody {
+                text: root.sending-hint;
+                wrap: word-wrap;
             }
 
-            // What the next press sends (UX-GUI-001), above the value that went
-            // out last. One line each, ELIDED rather than wrapped: the band
-            // changes with every press, and a band that grew and shrank with
-            // the value would move everything below it (D83). The whole value
-            // is drawn in the band below once it is sent. Expanded only - the
-            // heading is muted (D53). Not while a send runs: which value comes
-            // next depends on how the one in flight ends.
-            if !root.compact && root.has-next && !root.sending: Zone {
-                // A heading and nothing more. Until 2026-10-07 it opened the
-                // value window too (UX2), and the owner found two places that
-                // open one window "pointless" (point 3): the pack's name above
-                // is the one way in by the pointer, and the shortcut the other.
-                //
-                // Copy at the other end of the heading's row, where the value
-                // band below has its own: the two buttons stand in one column,
-                // each at the top of the value it copies (D98). Not at the end
-                // of a pack - there is no value to copy then.
-                HorizontalLayout {
-                    spacing: Tokens.space-2;
-                    // Centred on the button's row: the heading's height is its
-                    // own text, and a layout puts such an element at the top -
-                    // four pixels above the word beside it, in the first render.
-                    VerticalLayout {
-                        alignment: center;
-                        TextSmallMuted {
-                            text: root.next-heading;
-                        }
-                    }
-                    Spacer { }
-                    if root.next-has-value: SmallButton {
-                        text: root.copy-label;
-                        action: root.copy-next-action;
-                        clicked => {
-                            root.copy-next();
-                        }
-                    }
-                }
-                // The risk beside the name rather than on a row of its own: the
-                // palette stays on top of the application under test, and a row
-                // spent on one pill is height taken from it (second look at the
-                // first render). The name gives way, the pill does not.
-                // The name in the value band's own role, so the two values on
-                // screen read alike and the heading above stays the smaller
-                // line (second look at the render: in the body role the name
-                // and the heading were one style).
-                if root.next-has-value: HorizontalLayout {
-                    spacing: Tokens.space-2;
-                    TextName {
-                        text: root.next-name;
-                        overflow: elide;
-                        horizontal-stretch: 1;
-                    }
-                    MarkerRow {
-                        markers: root.next-markers;
-                    }
-                }
-                if root.next-has-value: TextPreview {
-                    text: root.next-preview;
-                    overflow: elide;
-                }
+            // Rule 1 of this project: a run that did less than it promised
+            // says so, and this is where the palette says it.
+            for message in root.messages: TextBody {
+                text: message;
+                wrap: word-wrap;
             }
 
-            // Before the first value: what to do to send one.
-            if !root.compact && !root.has-value: Zone {
-                TextBody {
-                    text: root.no-value;
-                    wrap: word-wrap;
-                }
-            }
-
-            // The value that went out last. It stays until the next one.
-            //
-            // FOLDED at every start (the owner's point 7, 2026-10-07): the
-            // heading and the value's name on one row, and the rest under a
-            // click. Every line below stands behind its own `if` rather than
-            // inside one folding layout: a layout behind an `if` reports one
-            // line for each of its texts that wraps (`slint.md` 2.23), and the
-            // preview, the shape and the counters all wrap. Folding hides no
-            // warning: every "did less than asked" has a sentence of its own in
-            // the message band below (untouchable rule 1), and the markers here
-            // repeat the value's facts.
-            if !root.compact && root.has-value: Zone {
-                // While a value goes, this band shows THAT value, not the last
-                // one sent, and the button's key still names the last one. So it
-                // cannot be used then - faded in place rather than taken away,
-                // because a control that vanishes under the pointer moves the
-                // row it stood in (GUI rule 3).
-                HorizontalLayout {
-                    spacing: Tokens.space-2;
-                    // Centred on the button's row, like the next band's heading.
-                    VerticalLayout {
-                        alignment: center;
-                        horizontal-stretch: 1;
-                        Disclosure {
-                            text: root.last-sent-label;
-                            detail: root.value-name;
-                            open: root.last-sent-open;
-                            action: root.last-sent-action;
-                            clicked => {
-                                root.toggle-last-sent();
-                            }
-                        }
-                    }
-                    SmallButton {
-                        text: root.copy-label;
-                        action: root.copy-last-action;
-                        enabled: !root.sending;
-                        clicked => {
-                            root.copy-last();
-                        }
-                    }
-                }
-                if root.last-sent-open: TextName {
-                    text: root.value-name;
-                    wrap: word-wrap;
-                }
-                // Under the name, because "which value went where" is the
-                // question this band answers - and a tester who switched
-                // windows a moment before the press sees it here, not in a
-                // ticket a day later (`UX-GUI-013`).
-                if root.last-sent-open && root.has-sent-to: TextBody {
-                    text: root.value-sent-to;
-                    wrap: word-wrap;
-                }
-                // The preview, in the order the sketch draws: name, preview,
-                // shape, counters.
-                //
-                // ⚠️ ONE text element rather than coloured segments, and the
-                // reason is the layout engine: colouring the markers apart from
-                // the value would mean one element per segment, and a horizontal
-                // layout in Slint does not wrap - a hundred-code-point value at
-                // preview size would run off the window. `TextPreviewInvisible`
-                // therefore stays unused for now. The marker is told apart by its
-                // SHAPE, which is a visible box, rather than by colour.
-                if root.last-sent-open: TextPreview {
-                    text: root.value-preview;
-                    wrap: char-wrap;
-                }
-                if root.last-sent-open && root.has-elided: TextSmallMuted {
-                    text: root.value-elided;
-                }
-                // Under the preview because it qualifies the preview, and in
-                // the muted role because it is a note about the tool's display
-                // rather than a fact about the value. Wrapped: a list of code
-                // points is somebody else's data and has no fixed length.
-                if root.last-sent-open && root.has-not-guaranteed: TextSmallMuted {
-                    text: root.value-not-guaranteed;
-                    wrap: word-wrap;
-                }
-                if root.last-sent-open && root.has-shape: TextBody {
-                    text: root.value-shape;
-                    wrap: word-wrap;
-                }
-                // Both wrap, and both did not until 2026-09-23: a render with the
-                // shipped `len-100000` cut the counters off at the window's edge,
-                // mid-word. A reference is up to 89 characters with no space in
-                // it (`pack-format.md` 7), so it breaks anywhere. The counters
-                // have spaces, so they break between words.
-                if root.last-sent-open: TextMono {
-                    text: root.value-reference;
-                    wrap: char-wrap;
-                }
-                if root.last-sent-open: TextMono {
-                    text: root.value-counts;
-                    wrap: word-wrap;
-                }
-                if root.last-sent-open: MarkerRow {
-                    markers: root.markers;
-                }
-            }
-
-            // What the tool has to say about it. Rule 1 of this project: a run
-            // that did less than it promised says so, and this band is where
-            // the palette says it - in the compact state as well, because a
-            // palette the tester made small must not go quiet.
-            if root.messages.length > 0: Zone {
-                for message in root.messages: TextBody {
-                    text: message;
-                    wrap: word-wrap;
-                }
-            }
-
-            // The hints. Hidden in the compact state, which is meant to take
-            // little room and no attention.
-            if root.hints-visible && !root.compact: Zone {
-                HintBar {
-                    rows: root.hints;
-                }
-                // The two switches (the owner's point 2): a label column and
-                // the ways beside it, the shape of a form (GUI rule 13). How
-                // values travel first, because the second row only means
-                // something for typed values - in clipboard mode it stays in
-                // place, faded, rather than leaving a hole that moves the link
-                // below it (GUI rule 3). Said before the first value, so the
-                // tester knows the line is cleared before it happens, not from
-                // the marker after (D101). Faded while a value goes: the worker
-                // answers a click between presses, so it would land after it.
-                GridLayout {
-                    spacing: Tokens.space-2;
-                    Row {
-                        TextSmallMuted {
-                            text: root.route-label;
-                            horizontal-stretch: 0;
-                        }
-                        HorizontalLayout {
-                            alignment: start;
-                            horizontal-stretch: 1;
-                            Segmented {
-                                label: root.route-label;
-                                options: root.route-options;
-                                selected: root.route-selected;
-                                enabled: !root.sending;
-                                chosen(index) => {
-                                    root.choose-route(index);
-                                }
-                            }
-                        }
-                    }
-                    Row {
-                        TextSmallMuted {
-                            text: root.clearing-label;
-                            horizontal-stretch: 0;
-                        }
-                        HorizontalLayout {
-                            alignment: start;
-                            horizontal-stretch: 1;
-                            Segmented {
-                                label: root.clearing-label;
-                                options: root.clearing-options;
-                                selected: root.clearing-selected;
-                                enabled: !root.sending && !root.clipboard-mode-on;
-                                chosen(index) => {
-                                    root.choose-clearing(index);
-                                }
-                            }
-                        }
-                    }
-                }
-                // Under the shortcuts it changes, and in the same component
-                // as the pack's name above: a link in the palette looks and
-                // answers the pointer one way (GUI rule 2).
-                HorizontalLayout {
-                    alignment: start;
-                    PickerOpener {
-                        text: root.shortcuts-link;
-                        action: root.shortcuts-link;
-                        clicked => {
-                            root.open-shortcuts();
-                        }
-                    }
-                }
+            // Before the first value: what to do to send one. GUI rule 3: the
+            // palette has an empty state and it is on screen from the first
+            // frame.
+            if root.nothing-sent-said: TextBody {
+                text: root.no-value;
+                wrap: word-wrap;
             }
         }
     }
