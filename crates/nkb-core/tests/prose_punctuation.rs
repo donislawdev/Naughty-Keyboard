@@ -18,11 +18,14 @@
 //!
 //! - Every comment: `//`, `///`, `//!` and `/* */` in Rust, `//` and `/* */` in
 //!   Slint and in the Windows resource script, `<!-- -->` in the SVG drawings,
-//!   `#` in TOML and in the two git files at the root. Code quoted in a
-//!   comment is syntax, not prose, and is recognised the way rustdoc does it:
+//!   `#` in TOML, in the two git files at the root and in `.github/CODEOWNERS`.
+//!   Code quoted in a comment is syntax, not prose, and is recognised the way rustdoc does it:
 //!   between backticks, or between fence lines of three backticks or tildes. A
 //!   block indented by four spaces is NOT recognised as code. Fence it.
 //! - Every Markdown file, with the same two ways out for code.
+//! - Every YAML file, which here means the issue forms on GitHub. Their words
+//!   are values and not comments, so the whole file is read as prose, with the
+//!   same two ways out for code.
 //! - String literals, with a narrower question, because a literal also holds
 //!   code under test. A semicolon counts there only when one space and then a
 //!   letter or a backtick follow it: that is how a sentence goes on, and how a
@@ -113,6 +116,7 @@ enum Syntax {
     Markdown,
     Svg,
     Resource,
+    Yaml,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -670,6 +674,7 @@ fn scan(syntax: Syntax, source: &str) -> Scan {
         Syntax::Git => lex_git(source),
         Syntax::Markdown => lex_markdown(source),
         Syntax::Svg => lex_svg(source),
+        Syntax::Yaml => lex_markdown(source),
     };
     let mut breaches = Vec::new();
     for block in blocks(&lexed.comments) {
@@ -744,6 +749,7 @@ fn syntax_of(path: &Path) -> Option<Syntax> {
         "toml" => Some(Syntax::Toml),
         "md" => Some(Syntax::Markdown),
         "svg" => Some(Syntax::Svg),
+        "yml" | "yaml" => Some(Syntax::Yaml),
         "rc" => Some(Syntax::Resource),
         _ => None,
     }
@@ -810,6 +816,12 @@ fn walk(root: &Path, dir: &Path, tree: &mut Tree) {
             }
             continue;
         }
+        // The file GitHub reads to ask the owner for a review. It has no extension
+        // and its comments are `#` lines, so it is read the way the git files are.
+        if here == ".github" && name == "CODEOWNERS" {
+            tree.files.push((path, Syntax::Git));
+            continue;
+        }
         let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
         match syntax_of(&path) {
             Some(syntax) => tree.files.push((path, syntax)),
@@ -847,7 +859,7 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
     );
 
     let mut findings = Vec::new();
-    let mut seen = [0usize; 7];
+    let mut seen = [0usize; 8];
     let mut comment_lines = 0;
     let mut literals = 0;
     for (path, syntax) in &tree.files {
@@ -870,7 +882,7 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
 
     // Without these, a clean result would also be what a wrong path or a blind
     // lexer produces.
-    let [rust, slint, toml, git, markdown, svg, resource] = seen;
+    let [rust, slint, toml, git, markdown, svg, resource, yaml] = seen;
     assert!(
         rust >= 50,
         "read {rust} Rust files, expected at least 50 - the walk looked in the wrong place"
@@ -881,8 +893,8 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
         "read {toml} TOML files, expected the seven manifests at least"
     );
     assert!(
-        git == 2,
-        "read {git} git files, expected .gitignore and .gitattributes"
+        git == 3,
+        "read {git} git files, expected .gitignore, .gitattributes and .github/CODEOWNERS"
     );
     assert!(
         markdown >= 1,
@@ -892,6 +904,10 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
     assert!(
         resource >= 1,
         "read {resource} resource scripts, expected the icon's one"
+    );
+    assert!(
+        yaml >= 1,
+        "read {yaml} YAML files, expected the issue forms in .github/ISSUE_TEMPLATE"
     );
     assert!(
         comment_lines >= 5_000,
@@ -1156,4 +1172,20 @@ fn control_the_icon_files_are_read() {
         found(Syntax::Resource, "// aSEMI b\n1 ICON \"edamame.ico\"\n"),
         [(1, Semicolon)]
     );
+}
+
+#[test]
+fn control_the_issue_forms_are_read() {
+    use Breach::{Dash, Semicolon};
+    // A form's words are values and not comments, so the whole file is prose.
+    assert_eq!(
+        found(
+            Syntax::Yaml,
+            "name: Bug\ndescription: aSEMI b\nbody:\n  - type: markdown\n"
+        ),
+        [(2, Semicolon)]
+    );
+    assert_eq!(found(Syntax::Yaml, "label: one EMDASH two\n"), [(1, Dash)]);
+    // Code between backticks keeps its semicolon, as in every other kind of file.
+    assert_eq!(found(Syntax::Yaml, "description: `aSEMI b`\n"), []);
 }

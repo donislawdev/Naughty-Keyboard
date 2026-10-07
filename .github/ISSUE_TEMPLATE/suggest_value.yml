@@ -1,0 +1,102 @@
+name: Suggest a value
+description: Propose an awkward value, or a whole pack, for the catalogue
+title: "[Value] "
+labels: ["new-value"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The catalogue is a list of awkward values, and each one earns its place by
+        saying what it breaks. A value with no `breaks` is refused by `nkb lint`,
+        because that field is what the catalogue exists for. The more of this form
+        you can fill in, the sooner the value can go into a pack.
+
+        The format is still moving and your own packs cannot be loaded yet, so an
+        issue is the way in for now, rather than a pull request.
+  - type: textarea
+    id: value
+    attributes:
+      label: The value
+      description: >-
+        Write it the way a pack file does, so that invisible characters can be
+        seen: `​` for a zero-width space, `\n` for a line break. If it is long
+        and regular, describe the recipe, a unit and how many times it repeats,
+        instead of pasting it.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: name
+    attributes:
+      label: A short name
+      description: As the packs name them.
+      placeholder: "Trailing space"
+    validations:
+      required: true
+  - type: dropdown
+    id: pack
+    attributes:
+      label: Which pack does it fit?
+      description: The nine packs are listed by `nkb packs`.
+      options:
+        - whitespace
+        - unicode-text
+        - length-bombs
+        - magic-values
+        - numbers-extreme
+        - dates-impossible
+        - export-breakers
+        - locale-pl
+        - filenames-paths
+        - A new pack
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: fields
+    attributes:
+      label: What kind of field is it for?
+      description: A name, a number, a date, a file name, an e-mail address, or any field at all.
+      placeholder: "name, text"
+  - type: textarea
+    id: breaks
+    attributes:
+      label: What does it break, and why?
+      description: >-
+        What goes wrong in a typical application. This becomes the `breaks` field,
+        so say why: which parser, comparison or limit does the damage.
+    validations:
+      required: true
+  - type: textarea
+    id: expect
+    attributes:
+      label: What should a correct application do?
+      description: >-
+        This becomes the `expect` field. Say what is right, such as rejected with a
+        message, stored unchanged or trimmed everywhere, and not only that it must
+        not crash.
+    validations:
+      required: true
+  - type: textarea
+    id: seen
+    attributes:
+      label: Where did you see it?
+      description: >-
+        A real case: a product, a library, a kind of system, a bug report. An
+        actual breakage is what puts a value in a pack.
+  - type: input
+    id: credit
+    attributes:
+      label: How should it be credited?
+      description: A name or a handle for the `source` field, or leave it empty.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send it
+      options:
+        - label: This is a value that real users or real data produce, not an exploit payload. The catalogue holds the first kind.
+          required: true
+        - label: I looked in the packs, with `nkb show`, and this value or a close one is not there yet.
+          required: true
+        - label: I am happy for it to go into the packs under CC-BY-4.0, the licence the built-in packs carry.
+          required: true

@@ -1,0 +1,58 @@
+name: Question or problem
+description: Ask about using the tool, or report something that does not fit the other templates
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Questions belong here rather than in private mail, because the next person
+        to hit the same thing can find the answer.
+
+        If it turns out to be a defect we will relabel it - you do not have to
+        decide that first. The same goes the other way: "typing does nothing on my
+        Mac, is that expected?" is a fair question, and the answer is often yes
+        with a reason. The honest limits in the README are the place to look
+        first.
+  - type: textarea
+    id: question
+    attributes:
+      label: What are you trying to do?
+      description: The testing situation, and what you have tried so far.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >-
+        If the tool is already built, `nkb --version` prints it, and a report
+        block from the palette carries it on its `Tool:` line.
+      placeholder: "nkb 0.1.0"
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which program, if it is about using one
+      options:
+        - Palette (nkb-gui)
+        - Command line (nkb)
+        - Both
+        - Not relevant
+  - type: dropdown
+    id: system
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS
+        - Linux
+        - Something else
+  - type: textarea
+    id: extra
+    attributes:
+      label: The command or the report block, if there is one
+      description: >-
+        Paste it rather than describing it. Anything you paste is public, and a
+        report block carries a `Target:` line naming the program the value went
+        to, so check it before it goes in.
+      render: shell
