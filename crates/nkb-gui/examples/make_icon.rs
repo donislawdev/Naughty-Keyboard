@@ -15,7 +15,7 @@
 //! 256 px are stored as PNG, which keeps the file under 100 kB.
 
 // A tool prints what it wrote, and a failure here is a failure of the tool.
-#![allow(clippy::print_stdout, clippy::expect_used)]
+#![allow(clippy::print_stdout, clippy::expect_used, clippy::panic)]
 
 #[allow(dead_code)]
 #[path = "../tests/icon_render/mod.rs"]
