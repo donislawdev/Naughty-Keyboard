@@ -24,6 +24,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc;
 
+use nkb_core::hotkeys::HotkeyAction;
 use nkb_gui::WelcomeWindow;
 use nkb_gui::live::Command;
 use nkb_gui::packs::Keyboard;
@@ -84,6 +85,15 @@ fn calls(keyboard: &Rc<Recorded>) -> Vec<&'static str> {
     std::mem::take(&mut *keyboard.calls.borrow_mut())
 }
 
+/// The chord of `action` in the default table of the system the test runs on -
+/// `Alt+Shift` on Windows and Linux, `Alt+Win` on macOS (`D82`). The sentences
+/// are composed from it, so the test holds on every system rather than on the
+/// one it was written on: measured on macOS 2026-10-07, the first full run there
+/// since this test was written with the Windows chords spelled out.
+fn default_chord(action: HotkeyAction) -> String {
+    nkb_adapters::default_bindings().chord(action).text()
+}
+
 #[test]
 fn the_welcome_window_takes_a_value_and_remembers_it_was_closed() {
     let _surface = offscreen::start(480, 900);
@@ -116,7 +126,10 @@ fn the_welcome_window_takes_a_value_and_remembers_it_was_closed() {
     assert_eq!(window.get_window_title(), "Naughty Keyboard - welcome");
     assert_eq!(
         window.get_try_it(),
-        "Click the box below and press Alt+Shift+N."
+        format!(
+            "Click the box below and press {}.",
+            default_chord(HotkeyAction::NextValue)
+        )
     );
     assert_eq!(window.get_hints().row_count(), 3);
     assert_eq!(window.get_box_facts(), "Nothing has arrived yet.");
@@ -126,9 +139,12 @@ fn the_welcome_window_takes_a_value_and_remembers_it_was_closed() {
     assert!(welcome.is_open());
     assert_eq!(
         window.get_ready(),
-        "Start testing opens the palette: a small window that stays on top and shows what each \
-         press sends. It starts on the pack whitespace. Press Alt+Shift+Space to choose another \
-         pack or value."
+        format!(
+            "Start testing opens the palette: a small window that stays on top and shows what \
+             each press sends. It starts on the pack whitespace. Press {} to choose another \
+             pack or value.",
+            default_chord(HotkeyAction::OpenPacks)
+        )
     );
     assert_eq!(
         calls(&keyboard),
@@ -198,8 +214,11 @@ fn closing_the_palette_hides_the_welcome_without_remembering_it() {
     welcome.open(None);
     assert_eq!(
         welcome.window().get_ready(),
-        "Start testing opens the palette: a small window that stays on top and shows what each \
-         press sends. Press Alt+Shift+Space to choose a pack or a value."
+        format!(
+            "Start testing opens the palette: a small window that stays on top and shows what \
+             each press sends. Press {} to choose a pack or a value.",
+            default_chord(HotkeyAction::OpenPacks)
+        )
     );
     let _ = calls(&keyboard);
 

@@ -3360,6 +3360,23 @@ mod tests {
                 .carry_out(Command::TurnOffClipboard)
                 .view
                 .expect("turning off is answered");
+            // Only where this build types into other applications - Windows
+            // today. Elsewhere (`OBS-70`) there is no way to leave the mode
+            // for, and the palette says why rather than pretending: measured
+            // on macOS 2026-10-07, the first full run there since this test
+            // was written assuming Windows.
+            if !cfg!(windows) {
+                assert_eq!(off.messages.len(), 1, "{:?}", off.messages);
+                assert!(
+                    off.messages[0]
+                        .starts_with("This build cannot type into other applications on "),
+                    "{:?}",
+                    off.messages
+                );
+                assert_eq!(off.clipboard_bar, Some("clipboard mode"));
+                assert!(off.clipboard_mode_on);
+                return;
+            }
             assert_eq!(
                 off.messages,
                 vec![String::from(
