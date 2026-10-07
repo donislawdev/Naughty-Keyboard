@@ -241,6 +241,10 @@ export component PickerKeys inherits FocusScope {
     callback next();
     callback choose();
     callback cancel();
+    // Left and right fold and open (the owner's point 4). The query line has
+    // no caret to move (`OBS-145`), so the arrows are free to take.
+    callback fold();
+    callback unfold();
 
     focus-on-click: false;
     focus-on-tab-navigation: false;
@@ -260,6 +264,14 @@ export component PickerKeys inherits FocusScope {
         }
         if event.text == Key.Escape {
             root.cancel();
+            return accept;
+        }
+        if event.text == Key.LeftArrow {
+            root.fold();
+            return accept;
+        }
+        if event.text == Key.RightArrow {
+            root.unfold();
             return accept;
         }
         return reject;

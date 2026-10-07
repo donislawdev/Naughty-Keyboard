@@ -76,7 +76,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::focus::{HANDLE_WAIT, POLL, window_handle};
 use crate::live::{Command, InUse, in_use_now};
-use crate::picker::{Chosen, PackPicker, Row, RowKind};
+use crate::picker::{Chosen, Folding, PackPicker, Row, RowKind};
 use crate::query::{KeyPress, Pressed};
 use crate::{HintRow, PacksWindow, PickRow};
 
@@ -196,8 +196,26 @@ impl Packs {
         let weak = Rc::downgrade(&packs);
         packs.window.on_choose(move || {
             if let Some(packs) = weak.upgrade() {
-                let chosen = packs.with_picker(|picker| picker.chosen());
+                let chosen = packs.with_picker(PackPicker::enter);
                 packs.act(chosen.unwrap_or(Chosen::Nothing));
+            }
+        });
+        let weak = Rc::downgrade(&packs);
+        packs.window.on_toggled(move |row| {
+            if let Some(packs) = weak.upgrade() {
+                packs.toggle(row);
+            }
+        });
+        let weak = Rc::downgrade(&packs);
+        packs.window.on_fold(move || {
+            if let Some(packs) = weak.upgrade() {
+                packs.folded(PackPicker::fold);
+            }
+        });
+        let weak = Rc::downgrade(&packs);
+        packs.window.on_unfold(move || {
+            if let Some(packs) = weak.upgrade() {
+                packs.folded(PackPicker::unfold);
             }
         });
         let weak = Rc::downgrade(&packs);
@@ -365,12 +383,33 @@ impl Packs {
         self.act(chosen);
     }
 
+    /// A click on the fold mark of row `row`.
+    fn toggle(&self, row: i32) {
+        let Ok(row) = usize::try_from(row) else {
+            return;
+        };
+        self.folded(|picker| picker.toggle(row));
+    }
+
+    /// Shows what a fold key or a click on a fold mark did: the rows again
+    /// when they changed, the selection alone when only it moved - so the
+    /// list keeps its place whenever it can.
+    fn folded(&self, fold: impl FnOnce(&mut PackPicker) -> Folding) {
+        match self.with_picker(fold) {
+            Some(Folding::Reshaped) => self.show_list(),
+            Some(Folding::Moved) => self.show_selected(),
+            Some(Folding::Nothing) | None => {}
+        }
+    }
+
     /// What Enter or a click comes to.
     fn act(&self, chosen: Chosen) {
         match chosen {
             // Nothing can be chosen - nothing matches, or nothing loads. The
             // window stays, because closing it would look like a choice.
             Chosen::Nothing => {}
+            // A fold opened or closed - the window stays, with its new rows.
+            Chosen::Folded => self.show_list(),
             Chosen::InUse => self.close(),
             Chosen::Pack(pack) => self.hand_over(Command::Choose(pack)),
             Chosen::Value { pack, value } => self.hand_over(Command::ChooseValue { pack, value }),
@@ -488,6 +527,7 @@ fn label(window: &PacksWindow) {
         (PacksLabel::KeyEnter, PacksLabel::UseSelected),
         (PacksLabel::KeyEscape, PacksLabel::Close),
         (PacksLabel::KeyArrows, PacksLabel::Move),
+        (PacksLabel::KeyFold, PacksLabel::Fold),
     ]
     .into_iter()
     .map(|(key, action)| HintRow {
@@ -514,16 +554,33 @@ fn pick_row(row: &Row) -> PickRow {
         current: row.current,
         enabled: row.enabled,
         // A pack and a value are a name over a detail line, with no key
-        // combination. A heading is one line of its own look. The restart row
-        // is one line with its shortcut at the end - the shape of a row in the
-        // shortcuts window, so it reads as an action and not as a value.
-        single_line: matches!(row.kind, RowKind::Heading | RowKind::Restart),
-        heading: row.kind == RowKind::Heading,
+        // combination. A heading - the fold of the values used last too - is
+        // one line of its own look. The restart row is one line with its
+        // shortcut at the end - the shape of a row in the shortcuts window, so
+        // it reads as an action and not as a value.
+        single_line: matches!(
+            row.kind,
+            RowKind::Heading | RowKind::Fold | RowKind::Restart
+        ),
+        heading: matches!(row.kind, RowKind::Heading | RowKind::Fold),
         key: row
             .key
             .as_deref()
             .map_or_else(SharedString::new, SharedString::from),
         has_key: row.key.is_some(),
+        tree: row.tree,
+        child: row.child,
+        foldable: row.fold.is_some(),
+        open: row.fold == Some(true),
+        // What a pack is for is read whole (point 6). What a value types is
+        // a preview, in the typeface of values (point 5).
+        detail_wraps: row.kind == RowKind::Pack,
+        detail_mono: row.kind == RowKind::Value,
+        aside: row
+            .aside
+            .as_deref()
+            .map_or_else(SharedString::new, SharedString::from),
+        has_aside: row.aside.is_some(),
     }
 }
 

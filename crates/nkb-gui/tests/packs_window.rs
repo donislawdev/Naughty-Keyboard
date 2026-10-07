@@ -40,6 +40,8 @@ use slint::{ComponentHandle, Model, SharedString};
 const RETURN: &str = "\n";
 const ESCAPE: &str = "\u{1b}";
 const DOWN: &str = "\u{F701}";
+const LEFT: &str = "\u{F702}";
+const RIGHT: &str = "\u{F703}";
 
 fn tap(window: &PacksWindow, text: &str) {
     for event in [
@@ -156,11 +158,11 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     assert_eq!(window.get_window_title(), "Naughty Keyboard - find a value");
     assert_eq!(
         window.get_hints().row_count(),
-        3,
-        "Enter, Esc and the arrows are named in the footer"
+        4,
+        "Enter, Esc, the up and down arrows and the fold arrows are named in the footer"
     );
 
-    // ---- opening on the pack in use ----------------------------------------
+    // ---- opening on the pack in use, every pack folded (points 4 to 6) ------
     packs.open();
     assert!(packs.is_open());
     assert_eq!(
@@ -170,33 +172,85 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     );
     assert_eq!(
         titles(window).len(),
-        1 + 1 + 12 + 1 + 9,
-        "the restart row and the values of the pack in use, then every shipped pack, each \
-         section under a heading: {:?}",
+        1 + 9,
+        "every shipped pack under one heading, no value spread out: {:?}",
         titles(window)
     );
-    assert_eq!(
-        window.get_rows().iter().filter(|row| row.heading).count(),
-        2
+    assert_eq!(titles(window)[0], "Packs");
+    assert!(
+        window
+            .get_rows()
+            .iter()
+            .skip(1)
+            .all(|row| row.tree && row.foldable && !row.open && row.detail_wraps),
+        "every pack a closed fold whose description wraps"
     );
-    assert_eq!(titles(window)[0], "Values in Whitespace");
-    // UX-GUI-007: the way back to the start, first in the section, as a row
-    // of the shortcuts window's shape - one line, the shortcut of the table in
-    // effect at its end, choosable.
-    let restart = window.get_rows().row_data(1).expect("a second row");
-    assert_eq!(restart.title, "Restart pack");
-    assert!(restart.enabled && !restart.heading && restart.single_line);
-    assert!(restart.has_key);
-    assert_eq!(restart.key, "Alt+Shift+F9");
     assert_eq!(
         selected_title(window),
         "Whitespace",
-        "with no next value known it opens on the pack in use"
+        "it opens on the pack in use"
     );
     assert!(
         window.get_notes().row_count() >= 1,
         "the sources it did not read are said below the list"
     );
+
+    // ---- the right arrow opens the pack, again steps into it ----------------
+    // UX-GUI-007: the way back to the start, first under the pack in use, as
+    // a row of the shortcuts window's shape - one line, the shortcut of the
+    // table in effect at its end, choosable.
+    let whitespace = window.get_selected();
+    tap(window, RIGHT);
+    assert_eq!(titles(window).len(), 1 + 9 + 1 + 12);
+    assert_eq!(window.get_selected(), whitespace, "the pack stays selected");
+    tap(window, RIGHT);
+    let restart = window
+        .get_rows()
+        .row_data(usize::try_from(window.get_selected()).expect("a row is selected"))
+        .expect("the selected row");
+    assert_eq!(restart.title, "Restart pack");
+    assert!(restart.enabled && !restart.heading && restart.single_line && restart.child);
+    assert!(restart.has_key);
+    assert_eq!(restart.key, "Alt+Shift+F9");
+    let values: Vec<_> = window
+        .get_rows()
+        .iter()
+        .filter(|row| row.child && row.detail_mono)
+        .collect();
+    assert_eq!(
+        values.len(),
+        12,
+        "each value says what it types, in the typeface of values"
+    );
+    // The left arrow steps out to the pack, and again folds it.
+    tap(window, LEFT);
+    assert_eq!(window.get_selected(), whitespace);
+    tap(window, LEFT);
+    assert_eq!(titles(window).len(), 1 + 9);
+    // A click on a fold mark opens and closes it, and selects the pack.
+    let unicode = titles(window)
+        .iter()
+        .position(|title| title == "Unicode and text")
+        .expect("a shipped pack");
+    let unicode = i32::try_from(unicode).expect("a small index");
+    window.invoke_toggled(unicode);
+    assert_eq!(
+        titles(window).len(),
+        1 + 9 + 12,
+        "no restart row under another pack"
+    );
+    assert_eq!(window.get_selected(), unicode);
+    window.invoke_toggled(unicode);
+    assert_eq!(titles(window).len(), 1 + 9);
+    assert!(
+        packs.is_open(),
+        "folding chooses nothing and closes nothing"
+    );
+    assert_eq!(commands.try_recv(), Err(mpsc::TryRecvError::Empty));
+    tap(window, ESCAPE);
+    let _ = calls(&keyboard);
+    packs.open();
+    let _ = calls(&keyboard);
 
     // ---- asked again while open: the same window, the same place ------------
     packs.open();
@@ -241,11 +295,22 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     assert!(!packs.is_open());
     assert_eq!(calls(&keyboard), vec!["give back"]);
 
-    // ---- with a next value known, the window opens on it --------------------
+    // ---- with a next value known, the window still opens on the pack --------
+    // Opened, the pack marks the next value with its pill.
     in_use_slot.lock().expect("the slot").next = Some(String::from("leading-space"));
     packs.open();
     let _ = calls(&keyboard);
-    assert_eq!(selected_title(window), "Leading space");
+    assert_eq!(selected_title(window), "Whitespace");
+    tap(window, RIGHT);
+    let next = window
+        .get_rows()
+        .iter()
+        .find(|row| row.title == "Leading space")
+        .expect("the next value under its pack");
+    assert!(
+        next.has_badge && next.badge_current,
+        "the next value wears its pill"
+    );
     tap(window, ESCAPE);
     in_use_slot.lock().expect("the slot").next = None;
     let _ = calls(&keyboard);

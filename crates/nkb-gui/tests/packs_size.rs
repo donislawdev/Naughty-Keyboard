@@ -42,7 +42,9 @@ use slint::{LogicalSize, PhysicalSize};
 
 /// The dictionary's values, copied rather than read for the reason the other
 /// render tests give: a test that reads the value it checks cannot fail.
-const PREFERRED: LogicalSize = LogicalSize::new(440.0, 560.0);
+// 440 x 560 until 2026-10-07, when the window grew for the descriptions of
+// the packs to be read whole (the owner's point 6).
+const PREFERRED: LogicalSize = LogicalSize::new(520.0, 600.0);
 const MINIMUM: LogicalSize = LogicalSize::new(360.0, 360.0);
 
 /// A window adapter that remembers every set of constraints its window sent.

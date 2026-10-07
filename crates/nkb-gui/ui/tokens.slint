@@ -134,8 +134,13 @@ export global Tokens {
     // default is where it opens and the minimum is where the layout still
     // reads: the query line, three rows of the list and the key hints. GUI
     // rules 21 and 22 - both are dimensions, and dimensions are tokens.
-    out property <length> packs-width: 440px;
-    out property <length> packs-height: 560px;
+    // ⊕ 440 x 560 until 2026-10-07, when the owner could not read what a pack
+    // is for (point 6): at 440 the description - up to a hundred characters in
+    // the shipped catalogue - was cut after half a line. It wraps now, and the
+    // wider default keeps it to two lines for every shipped pack, so the nine
+    // packs still fit with their descriptions above the footer.
+    out property <length> packs-width: 520px;
+    out property <length> packs-height: 600px;
     out property <length> packs-min-width: 360px;
     out property <length> packs-min-height: 360px;
     // The shortcuts window (step 7, K5). Wider than the pack window because a
@@ -179,6 +184,12 @@ export global Tokens {
     // small enough to stay a mark beside the words rather than a second word.
     out property <length> chevron-width: 8px;
     out property <length> chevron-height: 4px;
+    // The column at the left of a row in the value window's tree that holds
+    // the fold mark, and the step a row under another is indented by (the
+    // owner's point 4). As wide as the largest spacing step below a line of
+    // text: the whole column is the mark's target, and a narrower one is a
+    // target a pointer misses.
+    out property <length> fold-column: 24px;
 
     // ---- opacity -----------------------------------------------------------
     // Background alpha of the palette in its resting state (ux-spec.md 2,

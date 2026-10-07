@@ -53,6 +53,7 @@ fn specimen(single_line: bool) -> Vec<PickRow> {
         heading: false,
         key: key.into(),
         has_key: true,
+        ..PickRow::default()
     };
     vec![
         row("Next value", "Alt+Shift+N"),

@@ -29,29 +29,33 @@ mod offscreen;
 use nkb_gui::{HintRow, PacksWindow, PickRow};
 use slint::{ComponentHandle, ModelRc, VecModel};
 
-const WIDTH: u32 = 440;
-const HEIGHT: u32 = 560;
+const WIDTH: u32 = 520;
+const HEIGHT: u32 = 600;
 
 /// `accent` from the dictionary, copied rather than read for the reason the
 /// palette test gives: a test that reads the value it checks cannot fail.
 const ACCENT: (u8, u8, u8) = (0x7A, 0xA2, 0xF7);
 
-/// The row of the next value in [`specimen`] - where the window opens.
-const NEXT_ROW: usize = 5;
+/// The row of the next value in [`specimen`], selected for the pictures.
+const NEXT_ROW: usize = 4;
+
+/// The row of a pack with a description long enough for two lines in
+/// [`specimen`] - the pack in use, so it is in view without scrolling.
+const LONG_ROW: usize = 2;
 
 /// Specimen data - the test's own, like the gallery's labels. The product fills
 /// these from `nkb-adapters::i18n` and the catalogue.
 fn fill(window: &PacksWindow, rows: Vec<PickRow>) {
     window.set_window_title("Naughty Keyboard - find a value".into());
     window.set_heading("Find a value".into());
-    window.set_summary("values: 12, packs: 9".into());
+    window.set_summary("values: 102, packs: 9".into());
     window.set_search_label("Search values and packs by name, tag or id".into());
     window.set_query("unicode".into());
     window.set_current_label("in use".into());
     window.set_empty_text("Nothing matches \"zzz\". Press Backspace to widen the search.".into());
     window.set_rows(ModelRc::new(VecModel::from(rows)));
-    // The next value, under the recent ones, the heading and the restart row -
-    // where the window opens.
+    // The next value inside the opened pack in use - so the picture shows the
+    // selection, the pill and the fold marks at once.
     window.set_selected(NEXT_ROW as i32);
     window.set_hints(ModelRc::new(VecModel::from(vec![
         HintRow {
@@ -66,89 +70,135 @@ fn fill(window: &PacksWindow, rows: Vec<PickRow>) {
             key: "\u{2191} \u{2193}".into(),
             action: "Move through the list".into(),
         },
+        HintRow {
+            key: "\u{2190} \u{2192}".into(),
+            action: "Show or hide values".into(),
+        },
     ])));
 }
 
-fn row(title: &str, detail: &str, current: bool) -> PickRow {
+/// A pack in the tree: its name, and what it is for, wrapped.
+fn pack(title: &str, detail: &str) -> PickRow {
     PickRow {
         title: title.into(),
         detail: detail.into(),
-        badge: "".into(),
-        has_badge: false,
-        badge_risky: false,
-        badge_current: false,
-        current,
         enabled: true,
-        single_line: false,
-        heading: false,
-        key: "".into(),
-        has_key: false,
+        tree: true,
+        foldable: true,
+        detail_wraps: true,
+        ..PickRow::default()
     }
 }
 
-/// A section heading (UX2): one line, muted, never chosen.
+/// A value under its pack: its name, and what it types.
+fn value(title: &str, detail: &str) -> PickRow {
+    PickRow {
+        title: title.into(),
+        detail: detail.into(),
+        enabled: true,
+        tree: true,
+        child: true,
+        detail_mono: true,
+        ..PickRow::default()
+    }
+}
+
+/// A section heading: one line, muted, never chosen.
 fn heading(title: &str) -> PickRow {
     PickRow {
+        title: title.into(),
         heading: true,
         single_line: true,
-        enabled: false,
-        ..row(title, "", false)
+        tree: true,
+        ..PickRow::default()
     }
 }
 
-/// The window as UX2 opens it with nothing typed: the values used last in
-/// other packs (`UX-GUI-016`), the values of the pack in use under the row
-/// that starts it again (UX4), the next one marked and selected, then the
-/// packs with what each is for.
+/// The window as the tree opens it (the owner's points 4 to 6): the fold of
+/// the values used last, closed, then the packs, each with what it is for - the pack
+/// in use opened by the tester, with the row that starts it again (UX4) and
+/// its values saying what each types, the next one marked - and the rest closed.
 fn specimen() -> Vec<PickRow> {
     vec![
-        heading("Recent"),
-        row(
-            "PESEL with a valid checksum",
-            "Polish locale - value 1 of 6",
-            false,
-        ),
         PickRow {
-            badge: "offensive".into(),
-            has_badge: true,
-            badge_risky: true,
-            ..row("Script tag in a name", "Injections - value 4 of 40", false)
+            enabled: true,
+            foldable: true,
+            ..heading("Recent (2)")
         },
-        heading("Values in Whitespace"),
+        heading("Packs"),
+        PickRow {
+            current: true,
+            open: true,
+            ..pack(
+                "Whitespace",
+                "Characters that take up space, or claim to, and are impossible to see in a form.",
+            )
+        },
         PickRow {
             single_line: true,
             key: "Alt+Shift+0".into(),
             has_key: true,
-            ..row("Restart pack", "", false)
+            detail_mono: false,
+            ..value("Restart pack", "")
         },
         PickRow {
             badge: "next".into(),
             has_badge: true,
             badge_current: true,
-            ..row("Trailing space", "Whitespace - value 1 of 12", false)
+            ..value("Trailing space", "Kowalski\u{2423}")
         },
-        row("Leading space", "Whitespace - value 2 of 12", false),
-        heading("Packs"),
-        row(
-            "Whitespace",
-            "whitespace, values: 12 - Spaces at the edges, inside and instead of ordinary ones",
-            true,
+        value(
+            "A value whose name is long enough to need eliding here",
+            "255 \u{D7} \"a\"",
         ),
         PickRow {
             badge: "offensive".into(),
             has_badge: true,
             badge_risky: true,
-            ..row(
-                "Injections",
-                "injections, values: 40 - Strings that a careless backend executes",
-                false,
+            ..pack("Injections", "Strings that a careless backend executes.")
+        },
+        pack(
+            "Dates that cannot be",
+            "Dates that do not exist, that are ambiguous, or that are written differently than \
+             the field assumes.",
+        ),
+        pack(
+            "Numbers at the extremes",
+            "Numbers at the edges of their types, in foreign notations, and where precision runs \
+             out.",
+        ),
+    ]
+}
+
+/// The window with a query typed: the values found, each with its pack and
+/// where the query hit beside it, then a pack found by a tag.
+fn search() -> Vec<PickRow> {
+    vec![
+        PickRow {
+            tree: false,
+            ..heading("Values")
+        },
+        PickRow {
+            tree: false,
+            child: false,
+            aside: "Polish locale - in its id".into(),
+            has_aside: true,
+            ..value("PESEL with a valid checksum", "\u{2423}Kowalski")
+        },
+        PickRow {
+            tree: false,
+            ..heading("Packs")
+        },
+        PickRow {
+            tree: false,
+            foldable: false,
+            aside: "in its tags".into(),
+            has_aside: true,
+            ..pack(
+                "Whitespace",
+                "Characters that take up space, or claim to, and are impossible to see in a form.",
             )
         },
-        row(
-            "Numbers at the extremes",
-            "numbers-extreme, values: 12 - Limits of integer and float types",
-            false,
-        ),
     ]
 }
 
@@ -224,7 +274,7 @@ fn the_pack_window_shows_where_the_keyboard_is_and_which_row_it_reached() {
     // spacing change does not break the test - only a state that stops being
     // drawn does.
     let field_band = 0..140;
-    let list_band = 140..(HEIGHT - 120);
+    let list_band = 140..(HEIGHT - 140);
 
     let unfocused = offscreen::draw(&surface, WIDTH, HEIGHT);
     offscreen::save(&unfocused, WIDTH, HEIGHT, "packs.png");
@@ -372,5 +422,91 @@ fn the_pack_window_shows_where_the_keyboard_is_and_which_row_it_reached() {
         0,
         "a note ran into the right margin instead of wrapping. Look at {}",
         noted_path.display()
+    );
+
+    // ---- what a pack is for is read whole (the owner's point 6) -------------
+    // A long description WRAPS: the same list with it cut to a word, and the
+    // rows under it must move down - a description elided at the end of one
+    // line would change one line and move nothing. And it wraps inside the
+    // window: the right margin stays as it was.
+    window.set_notes(ModelRc::new(VecModel::from(
+        Vec::<slint::SharedString>::new(),
+    )));
+    let mut short = specimen();
+    short[LONG_ROW].detail = "Short.".into();
+    window.set_rows(ModelRc::new(VecModel::from(short)));
+    let one_line = offscreen::draw(&surface, WIDTH, HEIGHT);
+    window.set_rows(ModelRc::new(VecModel::from(specimen())));
+    let wrapped = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let tree_path = offscreen::save(&wrapped, WIDTH, HEIGHT, "packs-tree.png");
+    let moved = offscreen::added(&one_line, &wrapped, WIDTH, HEIGHT)
+        .expect("a longer description changed nothing on screen");
+    assert!(
+        moved.bottom - moved.top > 40,
+        "a long description changed one line only ({moved:?}), so it is cut rather than \
+         wrapped and the tester cannot read what the pack is for. Look at {}",
+        tree_path.display()
+    );
+    let margin = |picture: &[offscreen::Pixel]| {
+        (0..HEIGHT)
+            .flat_map(|y| ((WIDTH - 12)..WIDTH).map(move |x| (y * WIDTH + x) as usize))
+            .map(|at| picture[at])
+            .collect::<Vec<_>>()
+    };
+    assert!(
+        margin(&one_line) == margin(&wrapped),
+        "a description ran into the right margin. Look at {}",
+        tree_path.display()
+    );
+
+    // ---- a click on a fold mark asks for that row's fold (point 4) ----------
+    // The mark found as the pixels it changes between open and closed - the
+    // only difference between the two renders - and clicked there: the list
+    // must say which row, and choose nothing.
+    let toggled = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let chosen = std::rc::Rc::new(std::cell::Cell::new(0));
+    let log = std::rc::Rc::clone(&toggled);
+    window.on_toggled(move |row| log.borrow_mut().push(row));
+    let count = std::rc::Rc::clone(&chosen);
+    window.on_clicked(move |_| count.set(count.get() + 1));
+    let mut closed = specimen();
+    closed[LONG_ROW].open = false;
+    window.set_rows(ModelRc::new(VecModel::from(closed)));
+    let mark_closed = offscreen::draw(&surface, WIDTH, HEIGHT);
+    window.set_rows(ModelRc::new(VecModel::from(specimen())));
+    let mark_open = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let mark = offscreen::added(&mark_closed, &mark_open, WIDTH, HEIGHT)
+        .expect("the fold mark does not change between open and closed");
+    assert!(
+        mark.right - mark.left < 20 && mark.bottom - mark.top < 20 && mark.left < WIDTH / 4,
+        "open and closed differ in more than the mark at the row's left: {mark:?}. Look at {}",
+        tree_path.display()
+    );
+    offscreen::click(window.window(), mark.centre());
+    assert_eq!(
+        (toggled.borrow().clone(), chosen.get()),
+        (vec![LONG_ROW as i32], 0),
+        "a click on the fold mark did not ask for that row's fold alone"
+    );
+
+    // ---- a search: each found value names its pack beside it (point 5) -----
+    // The aside is drawn - a difference of two renders - and on the right of
+    // the row, beside what the value types, not over it.
+    window.set_query("pesel".into());
+    let mut found = search();
+    found[1].has_aside = false;
+    window.set_rows(ModelRc::new(VecModel::from(found)));
+    window.set_selected(1);
+    let without_aside = offscreen::draw(&surface, WIDTH, HEIGHT);
+    window.set_rows(ModelRc::new(VecModel::from(search())));
+    let with_aside = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let search_path = offscreen::save(&with_aside, WIDTH, HEIGHT, "packs-search.png");
+    let aside = offscreen::added(&without_aside, &with_aside, WIDTH, HEIGHT)
+        .expect("the value's pack is not drawn beside it");
+    assert!(
+        aside.left > WIDTH / 2 && aside.bottom - aside.top < 30,
+        "the pack beside a found value is not one line at the right of its row: {aside:?}. \
+         Look at {}",
+        search_path.display()
     );
 }

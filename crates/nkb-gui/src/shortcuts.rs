@@ -459,5 +459,7 @@ fn pick_row(row: &ShortcutRow) -> PickRow {
         heading: false,
         key: row.key.as_str().into(),
         has_key: true,
+        // A flat list: no tree, no folds, no second line.
+        ..PickRow::default()
     }
 }

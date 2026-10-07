@@ -185,21 +185,28 @@ export component Gallery inherits Window {
             }
         }
 
-        // The pick list: a section heading, a value selected with the "next"
-        // pill in the accent (UX2), a second heading, a pack in use, a risk
-        // badge, a row that cannot be chosen, and a name far too long - then the
-        // same list with nothing in it.
+        // The pick list as the value window's tree (the owner's points 4 to
+        // 6): the fold of the values used last, closed, a heading, the pack in
+        // use, open, with its description wrapped, the restart row and two
+        // values saying what each types - the next one selected with its pill
+        // in the accent, a closed pack with a risk badge, a name far too long,
+        // a pack that cannot be chosen and does not fold. Then a value as a
+        // search lists it, with its pack beside it - then the same list with
+        // nothing in it.
         PickList {
-            selected: 1;
+            selected: 4;
             current-label: "in use";
             rows: [
-                { title: "Values in Whitespace", heading: true, single-line: true },
-                { title: "Trailing space", detail: "Whitespace - value 1 of 12", badge: "next", has-badge: true, badge-current: true, enabled: true },
-                { title: "Packs", heading: true, single-line: true },
-                { title: "Unicode & text", detail: "unicode-text . values: 34", current: true, enabled: true },
-                { title: "Injections", detail: "injections . values: 40", badge: "offensive", has-badge: true, badge-risky: true, enabled: true },
-                { title: "A pack whose name is far too long for one line of the list", detail: "long-name . values: 1", enabled: true },
-                { title: "Broken pack", detail: "broken . problems: 3", badge: "problems: 3", has-badge: true, badge-risky: true, enabled: false },
+                { title: "Recent (2)", heading: true, single-line: true, enabled: true, tree: true, foldable: true },
+                { title: "Packs", heading: true, single-line: true, tree: true },
+                { title: "Whitespace", detail: "Characters that take up space, or claim to, and are impossible to see in a form.", current: true, enabled: true, tree: true, foldable: true, open: true, detail-wraps: true },
+                { title: "Restart pack", key: "Alt+Shift+0", has-key: true, single-line: true, enabled: true, tree: true, child: true },
+                { title: "Trailing space", detail: "Kowalski_", badge: "next", has-badge: true, badge-current: true, enabled: true, tree: true, child: true, detail-mono: true },
+                { title: "255 characters", detail: "255 x \"a\"", enabled: true, tree: true, child: true, detail-mono: true },
+                { title: "Injections", detail: "Strings that a careless backend executes.", badge: "offensive", has-badge: true, badge-risky: true, enabled: true, tree: true, foldable: true, detail-wraps: true },
+                { title: "A pack whose name is far too long for one line of the list", detail: "What it is for.", enabled: true, tree: true, foldable: true, detail-wraps: true },
+                { title: "broken", detail: "broken, does not load", badge: "problems: 3", has-badge: true, badge-risky: true, enabled: false, tree: true, detail-wraps: true },
+                { title: "PESEL with a valid checksum", detail: "_Kowalski", aside: "Polish locale - in its id", has-aside: true, enabled: true, detail-mono: true },
             ];
         }
         PickList {

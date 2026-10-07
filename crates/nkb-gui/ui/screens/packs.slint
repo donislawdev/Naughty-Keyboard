@@ -18,6 +18,10 @@
 //     content   the query line above the list
 //     footer    the keys the window answers - the hint bar the palette uses
 //
+// With nothing typed the list is a tree of packs, every one folded (the
+// owner's points 4 to 6): the fold marks and the arrows open and close, Enter
+// and a click choose - `picker.rs` says why. The footer names both.
+//
 // The main action has no button: it is the selected row, edged in the accent,
 // and Enter - which the footer names first. A button saying "Open" beside a
 // list whose row already opens on Enter and on a click would be a second way
@@ -71,6 +75,9 @@ export component PacksWindow inherits Window {
     callback choose <=> keys.choose;
     callback cancel <=> keys.cancel;
     callback clicked <=> list.clicked;
+    callback toggled <=> list.toggled;
+    callback fold <=> keys.fold;
+    callback unfold <=> keys.unfold;
     callback deactivated <=> field.window-left;
     callback activated <=> field.window-entered;
 

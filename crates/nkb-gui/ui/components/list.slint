@@ -50,10 +50,31 @@ export struct PickRow {
     // sends (UX2) - so it wears the accent, as `current` does. A fact, like
     // `badge-risky`, and the look is chosen here.
     badge-current: bool,
-    // A section heading, not a thing to pick (UX2: the values of the pack in
-    // use, then the packs). Drawn as a small muted label, never selected,
-    // never pressed - the list skips it as it skips a faded row.
+    // A section heading, not a thing to pick: drawn as a small muted label.
+    // Never selected and never pressed, unless it also folds (below) - the
+    // fold of the values used last is a heading the tester opens.
     heading: bool,
+    // ⊕ The tree (the owner's points 4 to 6, 2026-10-07). A row in the tree
+    // keeps the column of the fold marks at its left, mark or not, so every
+    // title of one level starts in one column (GUI rule 19).
+    tree: bool,
+    // The row stands under another one and is indented one column further.
+    child: bool,
+    // The row folds what stands under it - and whether that is open now.
+    foldable: bool,
+    open: bool,
+    // The detail line wraps rather than elides: what a pack is for, which the
+    // owner could not read cut off (point 6). Nothing in the row changes while
+    // the list is open, so a row taller by a line moves nothing under the
+    // tester's eyes.
+    detail-wraps: bool,
+    // The detail line is a value as the palette previews it, in the typeface
+    // of values (point 5): `Kowalski␣`, `255 × "a"`.
+    detail-mono: bool,
+    // Beside the row, in the muted role: the pack of a value listed away from
+    // it, or where a query found a row in a part it does not show.
+    aside: string,
+    has-aside: bool,
 }
 
 // One row, in every state.
@@ -63,17 +84,29 @@ export struct PickRow {
 //     keyboard here    the edge in the accent
 //     in use           a pill with the word - never the colour alone
 //     cannot be used   faded as a whole, no pointer state
+//     folds            a mark at the left, right when closed and down when
+//                      open, in the accent under the pointer - a click on the
+//                      mark folds, a click on the rest of the row chooses
 //
 // 🔴 Pressed goes DARKER, and that is measured rather than a style. Every
 // ground brighter than `surface-raised` takes `text-muted` below 4.5:1 - the
 // best candidate gave 4.11 - so a brighter pressed step would have been one
 // more colour pair that fails. The inset ground is already measured with every
 // text role, and a row that sinks when pressed reads as pressed.
+//
+// # Why the pills moved onto the title's line (2026-10-07)
+//
+// They stood in a column of their own at the right, beside BOTH lines, and
+// took that width from the detail line too - which is where the description
+// of a pack now has to be read whole. On the title's line they take width
+// from the title alone, which elides.
 component PickRowView inherits Rectangle {
     in property <PickRow> item;
     in property <bool> selected;
     in property <string> current-label;
     callback clicked();
+    // A click on the fold mark.
+    callback toggled();
     // Asks the list to scroll so that this row is visible.
     callback reveal(length, length);
 
@@ -114,65 +147,137 @@ component PickRowView inherits Rectangle {
             padding: Tokens.space-2;
             spacing: Tokens.space-2;
 
+            // One column further in for a row under another.
+            if root.item.child: Rectangle {
+                width: Tokens.fold-column;
+            }
+            // The column of the fold marks. The mark has a pointer of its own
+            // and answers before the row does, so a click on it folds and a
+            // click beside it chooses - the whole height of the row is the
+            // mark's target, not the few pixels of the triangle.
+            if root.item.tree: Rectangle {
+                width: Tokens.fold-column;
+                if root.item.foldable: fold := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => {
+                        root.toggled();
+                    }
+                    VerticalLayout {
+                        alignment: start;
+                        // On the title's line, whatever the row's height: a
+                        // wrapped description must not pull the mark down.
+                        padding-top: Tokens.space-1;
+                        HorizontalLayout {
+                            alignment: center;
+                            Chevron {
+                                open: root.item.open;
+                                ink: fold.has-hover ? Tokens.accent : Tokens.text-secondary;
+                            }
+                        }
+                    }
+                }
+            }
+
             VerticalLayout {
                 alignment: center;
                 spacing: Tokens.space-1;
                 horizontal-stretch: 1;
 
-                // Elided, not wrapped: a row that grows a line because of a long
-                // name moves every row below it, and a list must hold still.
-                if root.item.heading: TextSmallMuted {
-                    text: root.item.title;
-                    overflow: elide;
-                }
-                if !root.item.heading: TextName {
-                    text: root.item.title;
-                    overflow: elide;
-                }
-                if !root.item.single-line && !root.item.heading: TextBody {
-                    text: root.item.detail;
-                    overflow: elide;
-                }
-            }
+                title-line := HorizontalLayout {
+                    spacing: Tokens.space-2;
 
-            HorizontalLayout {
-                alignment: end;
-                spacing: Tokens.space-2;
-                horizontal-stretch: 0;
+                    // Elided, not wrapped: a row that grows a line because of
+                    // a long name moves every row below it.
+                    if root.item.heading: TextSmallMuted {
+                        text: root.item.title;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                    if !root.item.heading: TextName {
+                        text: root.item.title;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
 
-                // 🔴 A one-line row is as tall as a pill whether it shows one or
-                // not. Measured on the first render: a title is shorter than a
-                // pill, so the rows with a pill stood taller, and the pill that
-                // appears when recording starts moved every row below it. This
-                // pill is never drawn and takes no width - it only lends the row
-                // its height, so the floor follows the pill's own typeface and
-                // padding instead of a number fitted to one machine (GUI rule 14).
-                if root.item.single-line && !root.item.heading: Pill {
-                    text: root.current-label;
-                    width: 0px;
-                    visible: false;
-                }
-                if root.item.current: VerticalLayout {
-                    alignment: center;
-                    Pill {
+                    // Where a pack was found, beside its name: its description
+                    // below is read whole, so nothing else goes on that line.
+                    if root.item.has-aside && root.item.detail-wraps: VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 0;
+                        TextSmallMuted {
+                            text: root.item.aside;
+                        }
+                    }
+
+                    // 🔴 A one-line row is as tall as a pill whether it shows
+                    // one or not. Measured on the first render: a title is
+                    // shorter than a pill, so the rows with a pill stood
+                    // taller, and the pill that appears when recording starts
+                    // moved every row below it. This pill is never drawn and
+                    // takes no width - it only lends the row its height, so the
+                    // floor follows the pill's own typeface and padding instead
+                    // of a number fitted to one machine (GUI rule 14).
+                    if root.item.single-line && !root.item.heading: Pill {
                         text: root.current-label;
-                        tint: Tokens.accent;
+                        width: 0px;
+                        visible: false;
+                    }
+                    if root.item.current: VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 0;
+                        Pill {
+                            text: root.current-label;
+                            tint: Tokens.accent;
+                        }
+                    }
+                    if root.item.has-badge: VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 0;
+                        Pill {
+                            text: root.item.badge;
+                            tint: root.item.badge-risky ? Tokens.risk
+                                : root.item.badge-current ? Tokens.accent
+                                : Tokens.text-muted;
+                        }
+                    }
+                    // Last, at the row's right edge, so the combinations of
+                    // every row end in one column whatever the pills before
+                    // them say.
+                    if root.item.has-key: TextBody {
+                        text: root.item.key;
+                        font-family: Tokens.font-mono;
+                        horizontal-stretch: 0;
                     }
                 }
-                if root.item.has-badge: VerticalLayout {
-                    alignment: center;
-                    Pill {
-                        text: root.item.badge;
-                        tint: root.item.badge-risky ? Tokens.risk
-                            : root.item.badge-current ? Tokens.accent
-                            : Tokens.text-muted;
-                    }
+
+                // What a pack is for, whole: wrapped, and directly in the
+                // column rather than in a layout of its own, which behind an
+                // `if` would report one line for the wrapped text
+                // (`slint.md` 2.23).
+                if !root.item.single-line && !root.item.heading && root.item.detail-wraps: TextBody {
+                    text: root.item.detail;
+                    wrap: word-wrap;
                 }
-                // Last, at the row's right edge, so the combinations of every
-                // row end in one column whatever the pills before them say.
-                if root.item.has-key: TextBody {
-                    text: root.item.key;
-                    font-family: Tokens.font-mono;
+                // What a value types, on one line - elided, because a value
+                // can be any length - with its pack beside it when it is
+                // listed away from it.
+                if !root.item.single-line && !root.item.heading && !root.item.detail-wraps: HorizontalLayout {
+                    spacing: Tokens.space-2;
+                    if root.item.detail-mono: TextBody {
+                        text: root.item.detail;
+                        font-family: Tokens.font-mono;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                    if !root.item.detail-mono: TextBody {
+                        text: root.item.detail;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                    if root.item.has-aside: TextSmallMuted {
+                        text: root.item.aside;
+                        horizontal-stretch: 0;
+                    }
                 }
             }
         }
@@ -189,6 +294,8 @@ export component PickList inherits Rectangle {
     in property <string> current-label;
     in property <string> empty-text;
     callback clicked(int);
+    // A click on the fold mark of a row.
+    callback toggled(int);
 
     // As tall as its rows, or as its empty sentence, when nothing asks for
     // more - so the catalogue shows the whole list. A window that gives it
@@ -210,6 +317,9 @@ export component PickList inherits Rectangle {
                 current-label: root.current-label;
                 clicked => {
                     root.clicked(index);
+                }
+                toggled => {
+                    root.toggled(index);
                 }
                 // The smallest move that shows the whole row: up to its top
                 // when it is above the view, down to its bottom when below.

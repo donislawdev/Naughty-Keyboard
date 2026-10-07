@@ -1446,8 +1446,10 @@ fn next_view(upcoming: Option<&UpcomingValue>) -> Option<NextView> {
 
 /// The line a preview draws, and - when it is a fragment - the sentence that
 /// says how much of the value it is. One function for the band of the value
-/// that went out and the band of the one about to go.
-fn preview_line(preview: &ValuePreview) -> (String, String) {
+/// that went out, the band of the one about to go, and every value row of the
+/// value window (the owner's point 5), so the three cannot preview one value
+/// two ways.
+pub(crate) fn preview_line(preview: &ValuePreview) -> (String, String) {
     match preview {
         ValuePreview::Text(text) => (
             text.shown.clone(),

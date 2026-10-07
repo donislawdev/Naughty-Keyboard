@@ -1543,21 +1543,17 @@ pub enum PacksLabel {
     InUse,
     /// The pill on the value the next press sends (`UX-GUI-001`).
     Next,
-    /// The second line of a pack that loads: its id, how many values, and what
-    /// it is for (`UX-GUI-008` - the query searches the description, so the row
-    /// shows it).
-    Detail,
-    /// The second line of a value: the pack it is in and where.
-    ValueDetail,
-    /// The same, for a value a query found in a part of it the row does not
-    /// show - its id, tags or fields (`UX-GUI-008`). Without it a value found
-    /// by its id looked found at random, as a pack found by its description
-    /// did before the row showed the description.
-    ValueDetailFound,
-    /// The second line of a pack a query found in its tags, which the row does
-    /// not show. The place stands BEFORE the description, because the view
-    /// elides the line at its end and a long description would take it along.
-    DetailFound,
+    /// Beside a pack a query found in a part its row does not show - its id or
+    /// its tags (`UX-GUI-008`). Since the owner's points 5 and 6 of 2026-10-07
+    /// the row shows the name and the whole description and nothing else, so
+    /// this stands apart from the description, at the end of the name's line.
+    FoundIn,
+    /// Beside a value listed away from its pack - found by a query, or used
+    /// last: the pack it is in, and the parts of it the query was found in
+    /// that its row does not show (`UX-GUI-008`). Without the places a value
+    /// found by its id looked found at random. With none, the pack's name
+    /// alone stands there, and it needs no pattern.
+    ValueFound,
     /// The parts the two above name, one word each.
     PlaceId,
     PlaceTags,
@@ -1566,13 +1562,12 @@ pub enum PacksLabel {
     /// is never built from an English joining rule.
     PlacesTwo,
     PlacesThree,
-    /// The section heading over the values of the pack in use, with nothing
-    /// typed.
-    ValuesIn,
     /// The section heading over the values a query found, in every pack.
     FoundValues,
-    /// The section heading over the values the tester sent or chose last, in
-    /// packs other than the one in use (`UX-GUI-016`).
+    /// The heading that folds the values the tester sent or chose last, in
+    /// packs other than the one in use (`UX-GUI-016`), with how many - folded
+    /// at every opening (the owner's choice, 2026-10-07), so the number says
+    /// what the fold holds.
     Recent,
     /// The section heading over the packs.
     PacksSection,
@@ -1616,6 +1611,9 @@ pub enum PacksLabel {
     Close,
     KeyArrows,
     Move,
+    /// The keys that open and fold a pack's values (the owner's point 4).
+    KeyFold,
+    Fold,
 }
 
 fn pattern_packs_label(label: PacksLabel) -> &'static str {
@@ -1629,18 +1627,15 @@ fn pattern_packs_label(label: PacksLabel) -> &'static str {
         PacksLabel::Search => "Search values and packs by name, tag or id",
         PacksLabel::InUse => "in use",
         PacksLabel::Next => "next",
-        PacksLabel::Detail => "{id}, values: {count} - {description}",
-        PacksLabel::ValueDetail => "{pack} - value {index} of {total}",
-        PacksLabel::ValueDetailFound => "{pack} - value {index} of {total} - in its {places}",
-        PacksLabel::DetailFound => "{id}, values: {count} - in its {places} - {description}",
+        PacksLabel::FoundIn => "in its {places}",
+        PacksLabel::ValueFound => "{pack} - in its {places}",
         PacksLabel::PlaceId => "id",
         PacksLabel::PlaceTags => "tags",
         PacksLabel::PlaceFields => "fields",
         PacksLabel::PlacesTwo => "{first} and {second}",
         PacksLabel::PlacesThree => "{first}, {second} and {third}",
-        PacksLabel::ValuesIn => "Values in {pack}",
         PacksLabel::FoundValues => "Values",
-        PacksLabel::Recent => "Recent",
+        PacksLabel::Recent => "Recent ({count})",
         PacksLabel::PacksSection => "Packs",
         PacksLabel::ValueGone => {
             "Value \"{value}\" is not in {pack} any more, so the next value did not change."
@@ -1673,6 +1668,8 @@ fn pattern_packs_label(label: PacksLabel) -> &'static str {
         PacksLabel::Close => "Close",
         PacksLabel::KeyArrows => "↑ ↓",
         PacksLabel::Move => "Move through the list",
+        PacksLabel::KeyFold => "← →",
+        PacksLabel::Fold => "Show or hide values",
     }
 }
 
@@ -1723,7 +1720,8 @@ pub fn packs_summary_filtered(
 /// a window needs to know which parts of a row are on screen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MatchPlace {
-    /// A value's id - a pack's stands in its row.
+    /// A value's id, or a pack's - since 2026-10-07 the pack row shows its
+    /// name and description only (the owner's point 6).
     Id,
     Tags,
     /// The field kinds a value narrows its pack's list to.
@@ -1762,58 +1760,39 @@ fn places(found: &[MatchPlace]) -> String {
     }
 }
 
-/// The second line of a pack that loads: `whitespace, values: 12 - Spaces...`.
-/// With `found`, the parts of the pack a query was found in that the row does
-/// not show, named before the description: `locale-pl, values: 12 - in its
-/// tags - Polish...`.
+/// Beside a pack a query found in a part its row does not show: `in its tags`.
+/// `None` when the row shows every word of the query.
 #[must_use]
-pub fn pack_detail(id: &str, values: usize, description: &str, found: &[MatchPlace]) -> String {
-    let count = values.to_string();
+pub fn found_in(found: &[MatchPlace]) -> Option<String> {
+    (!found.is_empty()).then(|| {
+        fill(
+            pattern_packs_label(PacksLabel::FoundIn),
+            &[("places", &places(found))],
+        )
+    })
+}
+
+/// Beside a value listed away from its pack: the pack's name, and with
+/// `found` the parts of the value a query was found in that its row does not
+/// show - `Whitespace - in its id`.
+#[must_use]
+pub fn value_aside(pack: &str, found: &[MatchPlace]) -> String {
     if found.is_empty() {
-        return fill(
-            pattern_packs_label(PacksLabel::Detail),
-            &[("id", id), ("count", &count), ("description", description)],
-        );
+        return pack.to_owned();
     }
     fill(
-        pattern_packs_label(PacksLabel::DetailFound),
-        &[
-            ("id", id),
-            ("count", &count),
-            ("places", &places(found)),
-            ("description", description),
-        ],
+        pattern_packs_label(PacksLabel::ValueFound),
+        &[("pack", pack), ("places", &places(found))],
     )
 }
 
-/// The second line of a value: `Polish locale - value 3 of 12`. With `found`,
-/// the parts of the value a query was found in that the row does not show:
-/// `Whitespace - value 5 of 12 - in its id`.
+/// The heading that folds the values used last, with how many it holds.
 #[must_use]
-pub fn value_detail(pack: &str, index: usize, total: usize, found: &[MatchPlace]) -> String {
-    let index = index.to_string();
-    let total = total.to_string();
-    if found.is_empty() {
-        return fill(
-            pattern_packs_label(PacksLabel::ValueDetail),
-            &[("pack", pack), ("index", &index), ("total", &total)],
-        );
-    }
+pub fn recent_heading(count: usize) -> String {
     fill(
-        pattern_packs_label(PacksLabel::ValueDetailFound),
-        &[
-            ("pack", pack),
-            ("index", &index),
-            ("total", &total),
-            ("places", &places(found)),
-        ],
+        pattern_packs_label(PacksLabel::Recent),
+        &[("count", &count.to_string())],
     )
-}
-
-/// The heading over the values of the pack in use.
-#[must_use]
-pub fn values_in(pack: &str) -> String {
-    fill(pattern_packs_label(PacksLabel::ValuesIn), &[("pack", pack)])
 }
 
 /// Said when the value chosen in the window is not in the pack in use.
@@ -2901,16 +2880,13 @@ mod tests {
             PacksLabel::Search,
             PacksLabel::InUse,
             PacksLabel::Next,
-            PacksLabel::Detail,
-            PacksLabel::ValueDetail,
-            PacksLabel::ValueDetailFound,
-            PacksLabel::DetailFound,
+            PacksLabel::FoundIn,
+            PacksLabel::ValueFound,
             PacksLabel::PlaceId,
             PacksLabel::PlaceTags,
             PacksLabel::PlaceFields,
             PacksLabel::PlacesTwo,
             PacksLabel::PlacesThree,
-            PacksLabel::ValuesIn,
             PacksLabel::FoundValues,
             PacksLabel::Recent,
             PacksLabel::PacksSection,
@@ -2937,17 +2913,17 @@ mod tests {
             PacksLabel::Close,
             PacksLabel::KeyArrows,
             PacksLabel::Move,
+            PacksLabel::KeyFold,
+            PacksLabel::Fold,
         ] {
             let takes_values = match label {
                 PacksLabel::Summary
                 | PacksLabel::SummaryFiltered
-                | PacksLabel::Detail
-                | PacksLabel::ValueDetail
-                | PacksLabel::ValueDetailFound
-                | PacksLabel::DetailFound
+                | PacksLabel::FoundIn
+                | PacksLabel::ValueFound
+                | PacksLabel::Recent
                 | PacksLabel::PlacesTwo
                 | PacksLabel::PlacesThree
-                | PacksLabel::ValuesIn
                 | PacksLabel::ValueGone
                 | PacksLabel::Refused
                 | PacksLabel::Problems
@@ -2960,7 +2936,6 @@ mod tests {
                 | PacksLabel::InUse
                 | PacksLabel::Next
                 | PacksLabel::FoundValues
-                | PacksLabel::Recent
                 | PacksLabel::PlaceId
                 | PacksLabel::PlaceTags
                 | PacksLabel::PlaceFields
@@ -2981,7 +2956,9 @@ mod tests {
                 | PacksLabel::KeyEscape
                 | PacksLabel::Close
                 | PacksLabel::KeyArrows
-                | PacksLabel::Move => false,
+                | PacksLabel::Move
+                | PacksLabel::KeyFold
+                | PacksLabel::Fold => false,
             };
             let pattern = pattern_packs_label(label);
             assert_eq!(
@@ -3001,14 +2978,12 @@ mod tests {
             "values: 2 of 102, packs: 0 of 9"
         );
         assert_eq!(
-            pack_detail("unicode-text", 34, "Text that breaks", &[]),
-            "unicode-text, values: 34 - Text that breaks"
+            found_in(&[]),
+            None,
+            "a row that shows every word says nothing more"
         );
-        assert_eq!(
-            value_detail("Polish locale", 3, 12, &[]),
-            "Polish locale - value 3 of 12"
-        );
-        assert_eq!(values_in("Whitespace"), "Values in Whitespace");
+        assert_eq!(value_aside("Polish locale", &[]), "Polish locale");
+        assert_eq!(recent_heading(3), "Recent (3)");
         // A value id with braces is text, like a query (`fill` does not substitute twice).
         assert_eq!(
             value_gone("{pack}", "Whitespace"),
@@ -3020,24 +2995,21 @@ mod tests {
     }
 
     /// `UX-GUI-008`: a row names the parts a query was found in that it does
-    /// not show - each once, in one order, and for a pack before the
-    /// description the view elides.
+    /// not show - each once, in one order.
     #[test]
     fn a_row_says_where_a_query_was_found_when_it_does_not_show_it() {
         assert_eq!(
-            value_detail("Whitespace", 5, 12, &[MatchPlace::Id]),
-            "Whitespace - value 5 of 12 - in its id"
+            value_aside("Whitespace", &[MatchPlace::Id]),
+            "Whitespace - in its id"
         );
         assert_eq!(
-            value_detail("Whitespace", 5, 12, &[MatchPlace::Tags, MatchPlace::Id]),
-            "Whitespace - value 5 of 12 - in its id and tags",
+            value_aside("Whitespace", &[MatchPlace::Tags, MatchPlace::Id]),
+            "Whitespace - in its id and tags",
             "in the order of the places, not of the caller"
         );
         assert_eq!(
-            value_detail(
+            value_aside(
                 "Whitespace",
-                5,
-                12,
                 &[
                     MatchPlace::Fields,
                     MatchPlace::Tags,
@@ -3045,22 +3017,22 @@ mod tests {
                     MatchPlace::Id
                 ]
             ),
-            "Whitespace - value 5 of 12 - in its id, tags and fields",
+            "Whitespace - in its id, tags and fields",
             "each place once"
         );
         assert_eq!(
-            value_detail("Whitespace", 5, 12, &[MatchPlace::Tags, MatchPlace::Tags]),
-            "Whitespace - value 5 of 12 - in its tags",
+            value_aside("Whitespace", &[MatchPlace::Tags, MatchPlace::Tags]),
+            "Whitespace - in its tags",
             "two words in tags are one place"
         );
         assert_eq!(
-            pack_detail("locale-pl", 12, "Polish data", &[MatchPlace::Tags]),
-            "locale-pl, values: 12 - in its tags - Polish data"
+            found_in(&[MatchPlace::Tags]).as_deref(),
+            Some("in its tags")
         );
-        // A description with braces stays text after the places went in.
+        // A pack name with braces stays text after the places went in.
         assert_eq!(
-            pack_detail("x", 1, "{places}", &[MatchPlace::Tags]),
-            "x, values: 1 - in its tags - {places}"
+            value_aside("{places}", &[MatchPlace::Tags]),
+            "{places} - in its tags"
         );
     }
 
