@@ -172,9 +172,12 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
         "a click beside the name opened the pack window"
     );
 
-    // ---- the heading of the next band opens the value window too (UX2) ------
-    // Found as the ink its words add, like the link below: the band shows only
-    // its heading at the end of a pack, so the words are the only difference.
+    // ---- the heading of the next band opens nothing (the owner's point 3) ---
+    // Until 2026-10-07 it opened the value window too, and two ways in one
+    // window for one window was the complaint. Found as the ink its words add,
+    // like the link below: the band shows only its heading at the end of a
+    // pack, so the words are the only difference. The pointer over it adds no
+    // accent either - a heading that lit up would still invite the click.
     palette.set_next_has_value(false);
     palette.set_has_next(true);
     palette.set_next_heading("".into());
@@ -186,19 +189,66 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
         heading.bottom - heading.top < 30,
         "the heading's words changed more than one line of the palette: {heading:?}"
     );
-    press(
+    let on_heading = LogicalPosition::new(
+        ((heading.left + heading.right) / 2) as f32,
+        ((heading.top + heading.bottom) / 2) as f32,
+    );
+    pointer(
         &palette,
-        LogicalPosition::new(
-            ((heading.left + heading.right) / 2) as f32,
-            ((heading.top + heading.bottom) / 2) as f32,
-        ),
+        WindowEvent::PointerMoved {
+            position: on_heading,
+        },
     );
     assert_eq!(
+        accent_in(&offscreen::draw(&surface, WIDTH, HEIGHT), &heading),
+        accent_in(&words, &heading),
+        "the next band's heading lights up under the pointer, so it still invites a click"
+    );
+    press(&palette, on_heading);
+    assert_eq!(
         opened.get(),
-        2,
-        "a click on the next band's heading did not open the value window"
+        1,
+        "a click on the next band's heading opened the value window - the pack's name is \
+         the one way in by the pointer"
     );
     palette.set_has_next(false);
+
+    // ---- the heading of the last value folds it (the owner's point 7) -------
+    // Found as the ink its words add, like the link below. Its own callback,
+    // once per click, and the value window stays shut: the fold shows more
+    // of this window, it does not open another. The pointer over it lights
+    // the heading in the accent, as it does a link, so the click is invited.
+    let folds = Rc::new(Cell::new(0));
+    let count = Rc::clone(&folds);
+    palette.on_toggle_last_sent(move || count.set(count.get() + 1));
+    palette.set_has_value(true);
+    palette.set_value_name("Three zero-width spaces".into());
+    palette.set_last_sent_label("".into());
+    let no_words = offscreen::draw(&surface, WIDTH, HEIGHT);
+    palette.set_last_sent_label("Last sent".into());
+    let words = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let fold = added(&no_words, &words);
+    assert!(
+        fold.bottom - fold.top < 30,
+        "the heading's words changed more than one line of the palette: {fold:?}"
+    );
+    let on_fold = LogicalPosition::new(
+        ((fold.left + fold.right) / 2) as f32,
+        ((fold.top + fold.bottom) / 2) as f32,
+    );
+    pointer(&palette, WindowEvent::PointerMoved { position: on_fold });
+    assert!(
+        accent_in(&offscreen::draw(&surface, WIDTH, HEIGHT), &fold) > accent_in(&words, &fold) + 10,
+        "the heading of the last value does not answer the pointer, so nothing says it folds"
+    );
+    press(&palette, on_fold);
+    assert_eq!(
+        (folds.get(), opened.get()),
+        (1, 1),
+        "a click on the heading of the last value did not ask to fold it once, or opened the \
+         value window"
+    );
+    palette.set_has_value(false);
 
     // ---- the link under the hint bar: the same states, its own callback ------
     // In this test rather than a second one, because the platform may be
@@ -244,11 +294,11 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
         hover_path.display()
     );
     press(&palette, centre);
-    // Two openings of the value window so far - the pack's name and the next
-    // band's heading - and the link must not add a third.
+    // One opening of the value window so far - the pack's name - and the link
+    // must not add a second.
     assert_eq!(
         (asked.get(), opened.get()),
-        (1, 2),
+        (1, 1),
         "a click on the link did not ask for the shortcuts window once, or opened the pack \
          window. Look at {}",
         path.display()
@@ -260,7 +310,7 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
     );
     assert_eq!(
         (asked.get(), opened.get()),
-        (1, 2),
+        (1, 1),
         "a click on the hint bar above the link asked for a window"
     );
 }

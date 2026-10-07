@@ -242,6 +242,67 @@ export component ProgressBar inherits Rectangle {
     }
 }
 
+// The small triangle that says a thing opens: pointing down where a click
+// opens a list or a fold is open, pointing right where a fold is closed.
+//
+// One shape for every such mark in the product - the pack's name in the
+// palette, the folds of the value window and of the last value sent - so a
+// change to how the mark looks is a change in one place (GUI rule 5). Drawn as
+// a path rather than a character: a character would be a quoted string, which
+// a view may not hold (`D58`), and its look would depend on the typeface.
+//
+// Only a shape: what a click does is the business of whatever holds it, and
+// the colour comes from there too, so the mark and its words wear one colour.
+export component Chevron inherits Rectangle {
+    // Down when true, right when false.
+    in property <bool> open: true;
+    in property <color> ink: Tokens.text-secondary;
+
+    width: root.open ? Tokens.chevron-width : Tokens.chevron-height;
+    height: root.open ? Tokens.chevron-height : Tokens.chevron-width;
+
+    if root.open: Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 2;
+        viewbox-height: 1;
+        fill: root.ink;
+        MoveTo {
+            x: 0;
+            y: 0;
+        }
+        LineTo {
+            x: 2;
+            y: 0;
+        }
+        LineTo {
+            x: 1;
+            y: 1;
+        }
+        Close { }
+    }
+    if !root.open: Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 1;
+        viewbox-height: 2;
+        fill: root.ink;
+        MoveTo {
+            x: 0;
+            y: 0;
+        }
+        LineTo {
+            x: 1;
+            y: 1;
+        }
+        LineTo {
+            x: 0;
+            y: 2;
+        }
+        Close { }
+    }
+}
+
 // One thing worth knowing about the value that just went out.
 //
 // 🔴 `risky` is a fact, not a colour. The layer that fills this model must not

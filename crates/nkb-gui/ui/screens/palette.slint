@@ -5,11 +5,12 @@
 // leave the field under test at every insertion, which is the product. So there
 // is no text field here and nothing that wants the keyboard. Everything arrives
 // as a property and everything leaves as a shortcut - with the pointer as the
-// one exception: the pack's name and the next band's heading open the value
-// window (K3.2d, UX2), the link under the hints opens the shortcuts window
-// (K5.5), two Copy buttons put a value on the clipboard (D98), one button
-// at a time turns clipboard mode on or off (D99), and the button at the end of
-// the pack band collapses or expands the palette (D100). A click
+// one exception: the pack's name opens the value window (K3.2d), the link
+// under the hints opens the shortcuts window (K5.5), two Copy buttons put a
+// value on the clipboard (D98), two switches choose how values travel and how
+// they meet the field (D99, D101, the owner's point 2 of 2026-10-07), the
+// heading of the last value sent folds it (point 7), and the button at the end
+// of the pack band collapses or expands the palette (D100). A click
 // reaches this window without activating it (`D62`), so it takes nothing from
 // the field under test.
 //
@@ -73,8 +74,10 @@ import {
     MarkerRow,
     WindowSurface,
     PickerOpener,
+    Disclosure,
     ProgressBar,
     SmallButton,
+    Segmented,
 } from "../components.slint";
 
 // Which value a Copy button copies: the pack's identifier and the value's.
@@ -120,6 +123,14 @@ export component Palette inherits Window {
     // ---- the value band ----------------------------------------------------
     // Its heading, now that a second value stands above it.
     in property <string> last-sent-label;
+    // Whether the whole value is drawn under the heading, or the heading and
+    // the value's name alone (the owner's point 7, 2026-10-07): folded at
+    // every start, opened and closed by a click on the heading. Rust holds
+    // the switch - the view only draws it.
+    in property <bool> last-sent-open;
+    // What a click on the heading does, for UI Automation.
+    in property <string> last-sent-action;
+    callback toggle-last-sent();
     in property <string> value-name;
     // Where the value was typed, read at the press (UX8, `D104`): the program
     // and the kind of control. Never for a value put on the clipboard.
@@ -176,30 +187,34 @@ export component Palette inherits Window {
     in property <string> clipboard-mode-label;
 
     // ---- clipboard mode on and off (UX-GUI-010, D99) ------------------------
-    // Two clicks and no shortcut: each new global shortcut is a collision in
-    // somebody's application (`main.rs`, D71). On: a button under the hint
-    // bar. Off: a button on the standing bar, beside the words that say the
-    // mode is on. The tester's MODE, not the window's: false while only the
-    // window in front is on the clipboard (D72), which is not a mode the
-    // tester chose and not one a click could end.
+    // Clicks and no shortcut: each new global shortcut is a collision in
+    // somebody's application (`main.rs`, D71). Chosen on the switch under the
+    // hint bar, ended there or on the standing bar, beside the words that say
+    // the mode is on - the one way back the compact palette shows. The
+    // tester's MODE, not the window's: false while only the window in front is
+    // on the clipboard (D72), which is not a mode the tester chose and not one
+    // a click could end.
     in property <bool> clipboard-mode-on;
-    in property <string> use-clipboard-label;
     in property <string> turn-off-label;
     in property <string> turn-off-action;
-    // ⚠️ Declared, not aliases: both buttons stand in bands behind `if`. Each
+    // ⚠️ Declared, not an alias: the button stands in a band behind `if`. The
     // click only hands on to its callback - one call, no logic.
-    callback use-clipboard();
     callback turn-off-clipboard();
 
-    // ---- how a typed value meets the field (UX-GUI-005, D101) ---------------
-    // What happens now - the line cleared first, or the value at the cursor -
-    // and the button's words, which name the other way. Both finished text
-    // from `i18n`, chosen in Rust from the worker's state: the view does not
-    // decide which sentence is true.
-    in property <string> clearing-state;
-    in property <string> clearing-switch;
-    // A click on the button. The worker holds the choice and remembers it.
-    callback switch-clearing();
+    // ---- the two switches under the hint bar (the owner's point 2) ---------
+    // How values travel (D99) and how a typed one meets the field (D101). Each
+    // a label and its ways, finished text from `i18n`, and the way in effect
+    // as an index Rust sets from the worker's state: the view does not decide
+    // which way is true. A click hands the index of the way chosen to Rust,
+    // which knows what each index means.
+    in property <string> route-label;
+    in property <[string]> route-options;
+    in property <int> route-selected;
+    callback choose-route(int);
+    in property <string> clearing-label;
+    in property <[string]> clearing-options;
+    in property <int> clearing-selected;
+    callback choose-clearing(int);
 
     // ---- a send in progress (W3, D96, OBS-160) ------------------------------
     // Until this band a long send left the palette showing what it showed
@@ -424,10 +439,10 @@ export component Palette inherits Window {
             // heading is muted (D53). Not while a send runs: which value comes
             // next depends on how the one in flight ends.
             if !root.compact && root.has-next && !root.sending: Zone {
-                // The heading opens the value window on this value (UX2): the
-                // way to choose another one starts where the tester reads which
-                // one is next. The pack's name and the shortcut open the same
-                // window through the same callback.
+                // A heading and nothing more. Until 2026-10-07 it opened the
+                // value window too (UX2), and the owner found two places that
+                // open one window "pointless" (point 3): the pack's name above
+                // is the one way in by the pointer, and the shortcut the other.
                 //
                 // Copy at the other end of the heading's row, where the value
                 // band below has its own: the two buttons stand in one column,
@@ -440,13 +455,8 @@ export component Palette inherits Window {
                     // four pixels above the word beside it, in the first render.
                     VerticalLayout {
                         alignment: center;
-                        PickerOpener {
+                        TextSmallMuted {
                             text: root.next-heading;
-                            action: root.open-packs-label;
-                            chevron: true;
-                            clicked => {
-                                root.open-packs();
-                            }
                         }
                     }
                     Spacer { }
@@ -492,6 +502,16 @@ export component Palette inherits Window {
             }
 
             // The value that went out last. It stays until the next one.
+            //
+            // FOLDED at every start (the owner's point 7, 2026-10-07): the
+            // heading and the value's name on one row, and the rest under a
+            // click. Every line below stands behind its own `if` rather than
+            // inside one folding layout: a layout behind an `if` reports one
+            // line for each of its texts that wraps (`slint.md` 2.23), and the
+            // preview, the shape and the counters all wrap. Folding hides no
+            // warning: every "did less than asked" has a sentence of its own in
+            // the message band below (untouchable rule 1), and the markers here
+            // repeat the value's facts.
             if !root.compact && root.has-value: Zone {
                 // While a value goes, this band shows THAT value, not the last
                 // one sent, and the button's key still names the last one. So it
@@ -500,10 +520,20 @@ export component Palette inherits Window {
                 // row it stood in (GUI rule 3).
                 HorizontalLayout {
                     spacing: Tokens.space-2;
-                    TextSmallMuted {
-                        text: root.last-sent-label;
+                    // Centred on the button's row, like the next band's heading.
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+                        Disclosure {
+                            text: root.last-sent-label;
+                            detail: root.value-name;
+                            open: root.last-sent-open;
+                            action: root.last-sent-action;
+                            clicked => {
+                                root.toggle-last-sent();
+                            }
+                        }
                     }
-                    Spacer { }
                     SmallButton {
                         text: root.copy-label;
                         action: root.copy-last-action;
@@ -513,7 +543,7 @@ export component Palette inherits Window {
                         }
                     }
                 }
-                TextName {
+                if root.last-sent-open: TextName {
                     text: root.value-name;
                     wrap: word-wrap;
                 }
@@ -521,7 +551,7 @@ export component Palette inherits Window {
                 // question this band answers - and a tester who switched
                 // windows a moment before the press sees it here, not in a
                 // ticket a day later (`UX-GUI-013`).
-                if root.has-sent-to: TextBody {
+                if root.last-sent-open && root.has-sent-to: TextBody {
                     text: root.value-sent-to;
                     wrap: word-wrap;
                 }
@@ -535,22 +565,22 @@ export component Palette inherits Window {
                 // preview size would run off the window. `TextPreviewInvisible`
                 // therefore stays unused for now. The marker is told apart by its
                 // SHAPE, which is a visible box, rather than by colour.
-                TextPreview {
+                if root.last-sent-open: TextPreview {
                     text: root.value-preview;
                     wrap: char-wrap;
                 }
-                if root.has-elided: TextSmallMuted {
+                if root.last-sent-open && root.has-elided: TextSmallMuted {
                     text: root.value-elided;
                 }
                 // Under the preview because it qualifies the preview, and in
                 // the muted role because it is a note about the tool's display
                 // rather than a fact about the value. Wrapped: a list of code
                 // points is somebody else's data and has no fixed length.
-                if root.has-not-guaranteed: TextSmallMuted {
+                if root.last-sent-open && root.has-not-guaranteed: TextSmallMuted {
                     text: root.value-not-guaranteed;
                     wrap: word-wrap;
                 }
-                if root.has-shape: TextBody {
+                if root.last-sent-open && root.has-shape: TextBody {
                     text: root.value-shape;
                     wrap: word-wrap;
                 }
@@ -559,15 +589,15 @@ export component Palette inherits Window {
                 // mid-word. A reference is up to 89 characters with no space in
                 // it (`pack-format.md` 7), so it breaks anywhere. The counters
                 // have spaces, so they break between words.
-                TextMono {
+                if root.last-sent-open: TextMono {
                     text: root.value-reference;
                     wrap: char-wrap;
                 }
-                TextMono {
+                if root.last-sent-open: TextMono {
                     text: root.value-counts;
                     wrap: word-wrap;
                 }
-                MarkerRow {
+                if root.last-sent-open: MarkerRow {
                     markers: root.markers;
                 }
             }
@@ -589,58 +619,66 @@ export component Palette inherits Window {
                 HintBar {
                     rows: root.hints;
                 }
-                // How a typed value meets the field (UX-GUI-005, D101): what
-                // happens now on the left, the other way as a button on the
-                // right - the shape of the clipboard row below it. Said before
-                // the first value, so the tester learns that the line is
-                // cleared before it happens, not from the marker after. Only
-                // while values are typed: the clipboard route clears nothing.
-                if !root.clipboard-mode-on: HorizontalLayout {
+                // The two switches (the owner's point 2): a label column and
+                // the ways beside it, the shape of a form (GUI rule 13). How
+                // values travel first, because the second row only means
+                // something for typed values - in clipboard mode it stays in
+                // place, faded, rather than leaving a hole that moves the link
+                // below it (GUI rule 3). Said before the first value, so the
+                // tester knows the line is cleared before it happens, not from
+                // the marker after (D101). Faded while a value goes: the worker
+                // answers a click between presses, so it would land after it.
+                GridLayout {
                     spacing: Tokens.space-2;
-                    VerticalLayout {
-                        alignment: center;
-                        TextBody {
-                            text: root.clearing-state;
-                            overflow: elide;
+                    Row {
+                        TextSmallMuted {
+                            text: root.route-label;
+                            horizontal-stretch: 0;
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            horizontal-stretch: 1;
+                            Segmented {
+                                label: root.route-label;
+                                options: root.route-options;
+                                selected: root.route-selected;
+                                enabled: !root.sending;
+                                chosen(index) => {
+                                    root.choose-route(index);
+                                }
+                            }
                         }
                     }
-                    Spacer { }
-                    SmallButton {
-                        text: root.clearing-switch;
-                        action: root.clearing-switch;
-                        enabled: !root.sending;
-                        clicked => {
-                            root.switch-clearing();
+                    Row {
+                        TextSmallMuted {
+                            text: root.clearing-label;
+                            horizontal-stretch: 0;
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            horizontal-stretch: 1;
+                            Segmented {
+                                label: root.clearing-label;
+                                options: root.clearing-options;
+                                selected: root.clearing-selected;
+                                enabled: !root.sending && !root.clipboard-mode-on;
+                                chosen(index) => {
+                                    root.choose-clearing(index);
+                                }
+                            }
                         }
                     }
                 }
                 // Under the shortcuts it changes, and in the same component
                 // as the pack's name above: a link in the palette looks and
                 // answers the pointer one way (GUI rule 2).
-                //
-                // Clipboard mode is turned on at the other end of the same row
-                // (D99): a button, not a link, because it changes how values
-                // travel rather than opening a window. Only while values are
-                // typed - in the mode, its way out stands on the bar above.
                 HorizontalLayout {
-                    spacing: Tokens.space-2;
-                    VerticalLayout {
-                        alignment: center;
-                        PickerOpener {
-                            text: root.shortcuts-link;
-                            action: root.shortcuts-link;
-                            clicked => {
-                                root.open-shortcuts();
-                            }
-                        }
-                    }
-                    Spacer { }
-                    if !root.clipboard-mode-on: SmallButton {
-                        text: root.use-clipboard-label;
-                        action: root.use-clipboard-label;
-                        enabled: !root.sending;
+                    alignment: start;
+                    PickerOpener {
+                        text: root.shortcuts-link;
+                        action: root.shortcuts-link;
                         clicked => {
-                            root.use-clipboard();
+                            root.open-shortcuts();
                         }
                     }
                 }

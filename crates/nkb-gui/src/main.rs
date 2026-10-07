@@ -197,13 +197,24 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // The value band's heading: since UX-GUI-001 the band of the next value
     // stands above it, and two values on screen need telling apart.
     palette.set_last_sent_label(i18n::label(PaletteLabel::LastSent).into());
+    // Folded at every start, opened by a click on the heading (point 7).
+    palette.set_last_sent_action(i18n::label(PaletteLabel::LastSentAction).into());
+    palette.on_toggle_last_sent({
+        let palette = palette.as_weak();
+        move || {
+            if let Some(palette) = palette.upgrade() {
+                live::set_last_sent_open(&palette, !palette.get_last_sent_open());
+            }
+        }
+    });
     // The Copy buttons beside the next value and the last one sent (`D98`):
     // one word on both, and what each does in UI Automation's words.
     palette.set_copy_label(i18n::label(PaletteLabel::Copy).into());
     palette.set_copy_next_action(i18n::label(PaletteLabel::CopyNext).into());
     palette.set_copy_last_action(i18n::label(PaletteLabel::CopyLast).into());
-    // Clipboard mode on, under the hint bar, and off, on the standing bar (`D99`).
-    palette.set_use_clipboard_label(i18n::label(PaletteLabel::UseClipboard).into());
+    // The two switches under the hint bar (point 2), and the way out of
+    // clipboard mode on the standing bar (`D99`).
+    live::label_switches(&palette);
     palette.set_turn_off_label(i18n::label(PaletteLabel::TurnOff).into());
     palette.set_turn_off_action(i18n::label(PaletteLabel::TurnOffClipboard).into());
     // The button at the end of the pack band, in both states (`UX-GUI-004`).
@@ -245,14 +256,14 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     palette.on_copy_last(copy_on_click(&palette, &choose, Palette::get_last_key));
     // Clipboard mode on and off (`D99`): the worker holds the sequence, so the
     // click only asks.
-    palette.on_use_clipboard(ask_on_click(&choose, live::Command::UseClipboard));
+    palette.on_choose_route(ask_for_way(&choose, live::route_command));
     palette.on_turn_off_clipboard(ask_on_click(&choose, live::Command::TurnOffClipboard));
     // Collapse and expand: the worker owns the switch and remembers it (`D84`),
     // so the click asks, as the shortcut does.
     palette.on_toggle_compact(ask_on_click(&choose, live::Command::ToggleCompact));
-    // The other way of meeting the field (`D101`) - the worker holds the
-    // choice, and its view brings the words for both lines.
-    palette.on_switch_clearing(ask_on_click(&choose, live::Command::SwitchClearing));
+    // The way of meeting the field (`D101`) - the worker holds the choice, and
+    // its view brings back the way in effect.
+    palette.on_choose_clearing(ask_for_way(&choose, live::clearing_command));
     // The same way: created once, shown on request - and the one window the
     // worker's answers about shortcuts are delivered to (`shortcuts::tell`).
     let shortcuts = Shortcuts::new(
@@ -390,6 +401,22 @@ fn ask_on_click(
     let asks = asks.clone();
     // A send that fails is a palette already closing - nobody is left to tell.
     move || drop(asks.send(command.clone()))
+}
+
+/// What a click on way `index` of a switch does: asks the worker for what
+/// `meaning` says that way means. An index the switch does not show asks for
+/// nothing.
+fn ask_for_way(
+    asks: &std::sync::mpsc::Sender<live::Command>,
+    meaning: fn(i32) -> Option<live::Command>,
+) -> impl Fn(i32) + 'static {
+    let asks = asks.clone();
+    // A send that fails is a palette already closing - nobody is left to tell.
+    move |index| {
+        if let Some(command) = meaning(index) {
+            let _ = asks.send(command);
+        }
+    }
 }
 
 /// A line into the palette's message band, for a window that has something to

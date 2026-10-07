@@ -1274,10 +1274,13 @@ pub enum PaletteLabel {
     CopyNext,
     /// The same, for the Copy button beside the value that went out last.
     CopyLast,
-    /// The button that turns clipboard mode on (`UX-GUI-010`, `D99`) - its
-    /// words, which also say what it does. Under the hint bar, beside the link
-    /// to the shortcuts window, and only while values are typed.
-    UseClipboard,
+    /// The label of the switch under the hint bar that chooses how values
+    /// travel (`UX-GUI-010`, `D99`, the owner's point 2 of 2026-10-07).
+    SendBy,
+    /// The switch's first way: values typed into the field.
+    RouteKeyboard,
+    /// Its second way: values put on the clipboard for the tester to paste.
+    RouteClipboard,
     /// The button on the standing clipboard bar that turns the mode off - its
     /// words. Short, because the bar beside it already says which mode.
     TurnOff,
@@ -1291,16 +1294,18 @@ pub enum PaletteLabel {
     /// rest of the palette that the compact state shows (`UX-GUI-004`): until
     /// it, the compact palette said nothing about how to expand it again.
     Expand,
-    /// The line under the hint bar that says how a typed value meets the
-    /// field, while the line is cleared first (`UX-GUI-005`, `D101`). Said
-    /// before the first value, so the tester knows before it happens.
-    ClearsLine,
-    /// The same line while values go in at the cursor.
-    AtCursor,
-    /// The button beside the first line: what a click changes to.
-    InsertAtCursor,
-    /// The button beside the second line.
+    /// The label of the switch that chooses how a typed value meets the field
+    /// (`UX-GUI-005`, `D101`). Until the owner's point 2 of 2026-10-07 this
+    /// was a sentence naming the way in effect beside a button naming the
+    /// other, and which was which could not be told - the switch shows both.
+    EachValue,
+    /// The switch's first way: the line cleared, then the value typed.
     ClearLineFirst,
+    /// Its second way: the value typed where the cursor stands.
+    InsertAtCursor,
+    /// What a click on the heading of the last value sent does, for UI
+    /// Automation: it opens or folds the whole value (the owner's point 7).
+    LastSentAction,
     /// Where the value that went out last was typed, under its heading (UX8,
     /// `UX-GUI-013`, `D104`): the program's file name and the kind of control,
     /// read at the press. Never for a value put on the clipboard.
@@ -1348,15 +1353,17 @@ fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::Copy => "Copy",
         PaletteLabel::CopyNext => "Copy the next value",
         PaletteLabel::CopyLast => "Copy the last sent value",
-        PaletteLabel::UseClipboard => "Use clipboard mode",
+        PaletteLabel::SendBy => "Send by",
+        PaletteLabel::RouteKeyboard => "Keyboard",
+        PaletteLabel::RouteClipboard => "Clipboard",
         PaletteLabel::TurnOff => "Turn off",
         PaletteLabel::TurnOffClipboard => "Turn off clipboard mode",
         PaletteLabel::Collapse => "Collapse",
         PaletteLabel::Expand => "Expand",
-        PaletteLabel::ClearsLine => "The line is cleared before each value",
-        PaletteLabel::AtCursor => "Each value goes in at the cursor",
-        PaletteLabel::InsertAtCursor => "Insert at cursor",
+        PaletteLabel::EachValue => "Each value",
         PaletteLabel::ClearLineFirst => "Clear line first",
+        PaletteLabel::InsertAtCursor => "Insert at cursor",
+        PaletteLabel::LastSentAction => "Show or hide the whole value",
         PaletteLabel::SentTo => "to {program}, {control}",
         PaletteLabel::SentToUnnamed => "to a program that did not give its name, {control}",
         PaletteLabel::ControlTextField => "a text field",
@@ -3149,15 +3156,17 @@ mod tests {
             PaletteLabel::Copy,
             PaletteLabel::CopyNext,
             PaletteLabel::CopyLast,
-            PaletteLabel::UseClipboard,
+            PaletteLabel::SendBy,
+            PaletteLabel::RouteKeyboard,
+            PaletteLabel::RouteClipboard,
             PaletteLabel::TurnOff,
             PaletteLabel::TurnOffClipboard,
             PaletteLabel::Collapse,
             PaletteLabel::Expand,
-            PaletteLabel::ClearsLine,
-            PaletteLabel::AtCursor,
-            PaletteLabel::InsertAtCursor,
+            PaletteLabel::EachValue,
             PaletteLabel::ClearLineFirst,
+            PaletteLabel::InsertAtCursor,
+            PaletteLabel::LastSentAction,
             PaletteLabel::SentTo,
             PaletteLabel::SentToUnnamed,
             PaletteLabel::ControlTextField,
@@ -3196,15 +3205,17 @@ mod tests {
                 | PaletteLabel::Copy
                 | PaletteLabel::CopyNext
                 | PaletteLabel::CopyLast
-                | PaletteLabel::UseClipboard
+                | PaletteLabel::SendBy
+                | PaletteLabel::RouteKeyboard
+                | PaletteLabel::RouteClipboard
                 | PaletteLabel::TurnOff
                 | PaletteLabel::TurnOffClipboard
                 | PaletteLabel::Collapse
                 | PaletteLabel::Expand
-                | PaletteLabel::ClearsLine
-                | PaletteLabel::AtCursor
-                | PaletteLabel::InsertAtCursor
+                | PaletteLabel::EachValue
                 | PaletteLabel::ClearLineFirst
+                | PaletteLabel::InsertAtCursor
+                | PaletteLabel::LastSentAction
                 | PaletteLabel::ControlTextField
                 | PaletteLabel::ControlTerminal
                 | PaletteLabel::ControlUnconfirmed

@@ -190,6 +190,43 @@ pub fn added(before: &[Pixel], after: &[Pixel], width: u32, height: u32) -> Opti
     })
 }
 
+/// The two ways of a two-way switch (`Segmented`) as boxes, or `None` when the
+/// switch is not drawn. `set` puts a pair of words on the switch, and the
+/// words are back in place on return, so a click aims at the switch as the
+/// tester sees it.
+///
+/// Found by the ink the words add, like every control here - with one twist
+/// the first try measured (2026-10-07): blanking the FIRST word shrinks its
+/// half and moves the second to the left, so that difference covers both. The
+/// LAST word moves nothing before it, so its box is exact, and the first runs
+/// from where its own ink starts to where the second half begins.
+pub fn two_ways(
+    window: &Rc<MinimalSoftwareWindow>,
+    width: u32,
+    height: u32,
+    words: [&str; 2],
+    set: &dyn Fn([&str; 2]),
+) -> Option<[Ink; 2]> {
+    let found = |blank: [&str; 2]| {
+        set(blank);
+        let without = draw(window, width, height);
+        set(words);
+        let with = draw(window, width, height);
+        added(&without, &with, width, height)
+    };
+    let second = found([words[0], ""])?;
+    let both = found(["", words[1]])?;
+    Some([
+        Ink {
+            left: both.left,
+            right: second.left.saturating_sub(1),
+            top: both.top,
+            bottom: both.bottom,
+        },
+        second,
+    ])
+}
+
 /// Moves the pointer to `at`.
 pub fn point(window: &slint::Window, at: slint::LogicalPosition) {
     window.dispatch_event(slint::platform::WindowEvent::PointerMoved { position: at });

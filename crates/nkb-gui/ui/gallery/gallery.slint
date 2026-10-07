@@ -38,7 +38,10 @@ import {
     QueryField,
     PickList,
     PickerOpener,
+    Disclosure,
     SmallButton,
+    Segmented,
+    Chevron,
 } from "../components.slint";
 
 export component Gallery inherits Window {
@@ -266,6 +269,61 @@ export component Gallery inherits Window {
             Spacer { }
             SmallButton { text: "Start testing"; action: "Close the welcome"; primary: true; }
             SmallButton { text: "Start testing"; action: "Close the welcome"; primary: true; enabled: false; }
+        }
+
+        // The switch: every way on screen, the one in effect filled - as the
+        // palette's two rows carry it, the second faded as in clipboard mode -
+        // and three ways long enough to be a translation. The pointer states
+        // need a pointer, so `palette_clearing.rs` measures them on the real
+        // palette.
+        GridLayout {
+            spacing: Tokens.space-2;
+            Row {
+                TextSmallMuted { text: "Segmented"; }
+                HorizontalLayout {
+                    alignment: start;
+                    horizontal-stretch: 1;
+                    Segmented { label: "Send by"; options: ["Keyboard", "Clipboard"]; selected: 0; }
+                }
+            }
+            Row {
+                TextSmallMuted { text: "faded"; }
+                HorizontalLayout {
+                    alignment: start;
+                    horizontal-stretch: 1;
+                    Segmented { label: "Each value"; options: ["Clear line first", "Insert at cursor"]; selected: 1; enabled: false; }
+                }
+            }
+            Row {
+                TextSmallMuted { text: "three"; }
+                HorizontalLayout {
+                    alignment: start;
+                    horizontal-stretch: 1;
+                    Segmented { label: "Three"; options: ["A longer way", "Another", "The third way"]; selected: 2; }
+                }
+            }
+        }
+
+        // The fold of the last value sent: closed, with the value's name after
+        // the heading - elided when it is far too long - and open, where the
+        // band below names the value itself. The mark alone in both positions
+        // beside them.
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                Disclosure { text: "Last sent"; detail: "Three zero-width spaces"; action: "Show or hide the whole value"; }
+            }
+            SmallButton { text: "Copy"; action: "Copy the last sent value"; }
+        }
+        Disclosure { text: "Last sent"; detail: "A value name far too long for the row it stands in, so it is elided"; action: "Show or hide the whole value"; }
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            Disclosure { text: "Disclosure, open"; detail: "not shown while open"; open: true; action: "Show or hide"; }
+            Spacer { }
+            Chevron { open: false; }
+            Chevron { open: true; ink: Tokens.accent; }
         }
 
         Hairline {}

@@ -1,17 +1,19 @@
-//! How a typed value meets the field (`UX-GUI-005`, `D101`) - the line that
-//! says it and the button for the other way, MEASURED on the rendered palette,
-//! and the click followed to its callback.
+//! How a typed value meets the field (`UX-GUI-005`, `D101`) - the switch that
+//! shows both ways and fills the one in effect, MEASURED on the rendered
+//! palette, and each click followed to its callback.
 //!
 //! # What this proves that reading `palette.slint` cannot
 //!
-//! The line stands under the hint bar from the first frame, so the tester
-//! knows the line is cleared before a value goes - the audit's complaint was
-//! learning it from the marker afterwards. Its button stands at the right end
-//! of the same row, above the clipboard button. Neither stands in clipboard
-//! mode, where nothing is cleared whatever the choice, nor in the compact
-//! palette, which shows no hint bar. While a value goes the button stays,
-//! faded and deaf: the worker answers between presses. Each piece is found as
-//! the ink its words add to the render, its absence as no ink at all.
+//! The owner's point 2 of 2026-10-07: a sentence naming the way in effect
+//! beside a button naming the other did not say which was which. So the switch
+//! stands under the hint bar from the first frame, below the route switch, with
+//! BOTH ways drawn and the one in effect filled in the accent. A click on the
+//! other way asks for that way by its index, a click on the way in effect asks
+//! for nothing. In clipboard mode it stays where it is, faded and deaf -
+//! nothing is cleared there, and a row that vanished would move the link below
+//! it. The compact palette shows no switch at all, and while a value goes it
+//! is faded and deaf as well: the worker answers between presses. Each way is
+//! found as the ink its word adds to the render, its absence as no ink at all.
 //!
 //! Its own binary for the reason `palette_appearance.rs` gives: one platform
 //! per process.
@@ -21,117 +23,154 @@
 #[allow(dead_code)]
 mod offscreen;
 
-use std::cell::Cell;
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use nkb_gui::Palette;
-use offscreen::{Ink, added, click};
+use offscreen::{Ink, click};
 use slint::platform::software_renderer::MinimalSoftwareWindow;
-use slint::{ComponentHandle, SharedString};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 const WIDTH: u32 = 420;
 const HEIGHT: u32 = 460;
 
-const STATE: &str = "The line is cleared before each value";
-const SWITCH: &str = "Insert at cursor";
-const WAY_IN: &str = "Use clipboard mode";
+const ROUTE: [&str; 2] = ["Keyboard", "Clipboard"];
+const CLEARING: [&str; 2] = ["Clear line first", "Insert at cursor"];
 
-/// A piece as the pixels its words change, or `None` when it is not drawn.
-/// The words are back in place on return, so a click aims at the piece as the
-/// tester sees it - the lesson of mutation M435 in `palette_copy.rs`.
-fn find(
-    palette: &Palette,
-    surface: &Rc<MinimalSoftwareWindow>,
-    words: fn(&Palette, SharedString),
-    text: &str,
-) -> Option<Ink> {
-    words(palette, "".into());
-    let without = offscreen::draw(surface, WIDTH, HEIGHT);
-    words(palette, text.into());
-    let with = offscreen::draw(surface, WIDTH, HEIGHT);
-    added(&without, &with, WIDTH, HEIGHT)
+/// `accent` from the dictionary - the ground of the way in effect. The test's
+/// own copy, for the reason `palette_appearance.rs` gives for its colours.
+const ACCENT: (u8, u8, u8) = (0x7A, 0xA2, 0xF7);
+
+fn ways(words: &[&str]) -> ModelRc<SharedString> {
+    ModelRc::new(VecModel::from(
+        words
+            .iter()
+            .map(|word| SharedString::from(*word))
+            .collect::<Vec<_>>(),
+    ))
 }
 
-fn state(palette: &Palette, surface: &Rc<MinimalSoftwareWindow>) -> Option<Ink> {
-    find(palette, surface, Palette::set_clearing_state, STATE)
+/// Way `at` of the clearing switch as the pixels its word changes, or `None`
+/// when it is not drawn - `offscreen::two_ways`, which puts the words back,
+/// so a click aims at the way as the tester sees it (the lesson of mutation
+/// M435 in `palette_copy.rs`).
+fn way(palette: &Palette, surface: &Rc<MinimalSoftwareWindow>, at: usize) -> Option<Ink> {
+    offscreen::two_ways(surface, WIDTH, HEIGHT, CLEARING, &|words| {
+        palette.set_clearing_options(ways(&words));
+    })
+    .map(|both| both[at])
 }
 
-fn switch(palette: &Palette, surface: &Rc<MinimalSoftwareWindow>) -> Option<Ink> {
-    find(palette, surface, Palette::set_clearing_switch, SWITCH)
+/// Accent pixels inside `at` - the fill of the way in effect.
+fn accent_in(buffer: &[offscreen::Pixel], at: &Ink) -> usize {
+    (at.top..=at.bottom)
+        .flat_map(|y| (at.left..=at.right).map(move |x| (x, y)))
+        .filter(|&(x, y)| {
+            let p = buffer[(y * WIDTH + x) as usize];
+            (p.r, p.g, p.b) == ACCENT
+        })
+        .count()
 }
 
 #[test]
-fn the_way_a_value_meets_the_field_is_said_under_the_hints_with_a_button_for_the_other() {
+fn both_ways_of_meeting_the_field_stand_on_one_switch_and_the_one_in_effect_is_filled() {
     let surface = offscreen::start(WIDTH, HEIGHT);
     let palette = Palette::new().expect("the palette must build");
     palette.set_pack("whitespace".into());
     palette.set_counter("3 / 12".into());
     palette.set_shortcuts_link("Change shortcuts".into());
-    palette.set_use_clipboard_label(WAY_IN.into());
-    palette.set_clearing_state(STATE.into());
-    palette.set_clearing_switch(SWITCH.into());
-    let switches = Rc::new(Cell::new(0));
-    let others = Rc::new(Cell::new(0));
-    let count = Rc::clone(&switches);
-    palette.on_switch_clearing(move || count.set(count.get() + 1));
+    palette.set_route_label("Send by".into());
+    palette.set_route_options(ways(&ROUTE));
+    palette.set_clearing_label("Each value".into());
+    palette.set_clearing_options(ways(&CLEARING));
+    palette.set_clearing_selected(0);
+    let asked = Rc::new(RefCell::new(Vec::new()));
+    let others = Rc::new(RefCell::new(0));
+    let log = Rc::clone(&asked);
+    palette.on_choose_clearing(move |index| log.borrow_mut().push(index));
     let count = Rc::clone(&others);
-    palette.on_use_clipboard(move || count.set(count.get() + 1));
+    palette.on_choose_route(move |_| *count.borrow_mut() += 1);
     let count = Rc::clone(&others);
-    palette.on_open_shortcuts(move || count.set(count.get() + 1));
+    palette.on_open_shortcuts(move || *count.borrow_mut() += 1);
     palette.show().expect("the palette must show");
-    let clicks = || (switches.get(), others.get());
+    let clicks = || (asked.borrow().clone(), *others.borrow());
 
-    // ---- values typed: the line and its button, above the clipboard row ------
+    // ---- values typed: both ways, side by side, the line filled --------------
     let typed = offscreen::draw(&surface, WIDTH, HEIGHT);
     let path = offscreen::save_cropped(&typed, WIDTH, HEIGHT, "palette-clearing.png");
-    let line = state(&palette, &surface).expect("no line says how a value meets the field");
-    let button = switch(&palette, &surface).expect("no button for the other way");
-    let way_in = find(&palette, &surface, Palette::set_use_clipboard_label, WAY_IN)
-        .expect("the clipboard button is drawn");
+    let line = way(&palette, &surface, 0).expect("the way of clearing the line is not drawn");
+    let cursor = way(&palette, &surface, 1).expect("the way at the cursor is not drawn");
     assert!(
-        line.left < WIDTH / 2 && button.left > WIDTH / 2,
-        "the line is not on the left with its button on the right: {line:?}, {button:?}. \
-         Look at {}",
+        line.right < cursor.left && line.bottom - line.top < 30 && cursor.top < line.bottom,
+        "the two ways are not side by side on one row: {line:?}, {cursor:?}. Look at {}",
         path.display()
     );
     assert!(
-        button.bottom < way_in.top && button.bottom - button.top < 30,
-        "the button is not one row above the clipboard button: {button:?}, {way_in:?}. \
-         Look at {}",
+        accent_in(&typed, &line) > accent_in(&typed, &cursor) + 50,
+        "the way in effect is not the filled one: {} accent pixels on the line, {} at the \
+         cursor. Look at {}",
+        accent_in(&typed, &line),
+        accent_in(&typed, &cursor),
         path.display()
     );
-    click(palette.window(), button.centre());
+    // The fill follows the state, not the order: the other way filled now.
+    palette.set_clearing_selected(1);
+    let other = offscreen::draw(&surface, WIDTH, HEIGHT);
+    assert!(
+        accent_in(&other, &cursor) > accent_in(&other, &line) + 50,
+        "the fill did not move with the way in effect. Look at {}",
+        path.display()
+    );
+    palette.set_clearing_selected(0);
+    click(palette.window(), cursor.centre());
     assert_eq!(
         clicks(),
-        (1, 0),
-        "a click on the button must ask for the other way, once, and nothing else"
+        (vec![1], 0),
+        "a click on the other way must ask for that way, once, and nothing else"
+    );
+    click(palette.window(), line.centre());
+    assert_eq!(
+        clicks(),
+        (vec![1], 0),
+        "a click on the way in effect asked for something"
     );
 
-    // ---- clipboard mode: nothing is cleared, so nothing is said --------------
+    // ---- clipboard mode: in place, faded, and deaf ---------------------------
     palette.set_clipboard_mode(true);
     palette.set_clipboard_mode_on(true);
-    assert!(
-        state(&palette, &surface).is_none() && switch(&palette, &surface).is_none(),
-        "the clipboard route clears nothing, and the palette still offers a way of clearing"
+    // Across, the same place. Down, the standing bar the mode adds at the top
+    // moves every band below it, the switch included - that is the bar's
+    // place (D71), not the switch leaving its own.
+    let faded = way(&palette, &surface, 1).expect("the switch left its place in clipboard mode");
+    assert_eq!(
+        (faded.left, faded.right),
+        (cursor.left, cursor.right),
+        "the switch moved across, or changed its width, in clipboard mode"
+    );
+    click(palette.window(), faded.centre());
+    assert_eq!(
+        clicks(),
+        (vec![1], 0),
+        "the clearing switch answered in clipboard mode, where nothing is cleared"
     );
     palette.set_clipboard_mode(false);
     palette.set_clipboard_mode_on(false);
 
-    // ---- compact: no hint bar, no line ---------------------------------------
+    // ---- compact: no hint bar, no switch -------------------------------------
     palette.set_compact(true);
     assert!(
-        state(&palette, &surface).is_none() && switch(&palette, &surface).is_none(),
-        "the compact palette shows the line about clearing"
+        way(&palette, &surface, 0).is_none() && way(&palette, &surface, 1).is_none(),
+        "the compact palette shows the clearing switch"
     );
     palette.set_compact(false);
 
     // ---- while a value goes: in place, faded, and deaf -------------------------
     palette.set_sending(true);
-    let faded = switch(&palette, &surface).expect("the button vanished while a value goes");
+    let faded = way(&palette, &surface, 1).expect("the switch vanished while a value goes");
     click(palette.window(), faded.centre());
     assert_eq!(
         clicks(),
-        (1, 0),
-        "the button asked for something while a value was on its way"
+        (vec![1], 0),
+        "the switch asked for something while a value was on its way"
     );
 }

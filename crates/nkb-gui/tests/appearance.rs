@@ -93,7 +93,11 @@ impl Platform for Headless {
 }
 
 const WIDTH: u32 = 420;
-const HEIGHT: u32 = 1280;
+/// Taller than the catalogue. 1280 until 2026-10-07, when the switch, the
+/// fold and the mark came in: the catalogue outgrew it, its lists were squeezed
+/// to a row each and the newest entries fell below the picture - a catalogue
+/// that shows less than it holds misrepresents it (document 13 section 3).
+const HEIGHT: u32 = 2000;
 
 fn draw(window: &Rc<MinimalSoftwareWindow>) -> Vec<Pixel> {
     let mut buffer = vec![Pixel::default(); (WIDTH * HEIGHT) as usize];

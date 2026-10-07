@@ -106,3 +106,100 @@ export component SmallButton inherits Rectangle {
         }
     }
 }
+
+// A choice between ways, every way on screen and the one in effect filled.
+//
+// # Why not a button (the owner's point 2, 2026-10-07)
+//
+// The palette said how a typed value meets the field in a sentence and offered
+// the OTHER way on a button - "Insert at cursor" beside "The line is cleared
+// before each value". The owner could not tell which way was in effect and
+// which one a click would give: a button names what it DOES, and here what it
+// does is the state the tester is not in. A switch names both ways and fills
+// the one in effect, so the state is read off the control itself and a click
+// on the other half is the change.
+//
+//     the way in effect   ground in the accent, word in the window's ground
+//                         colour - the pair the primary button already wears,
+//                         so no new colour pair is measured into the product
+//     another way         the word in the secondary colour on the raised ground
+//     pointer there       the word in the accent
+//     pressed there       the ground sunk to `surface-sample`
+//     keyboard here       NEVER in the palette, `SmallButton`'s reason (`D62`)
+//     cannot be used      faded as a whole, no pointer and no click
+//
+// A click on the way already in effect asks for nothing: it is not a change.
+// The ways come as a list, so a third is more data and never more markup (GUI
+// rule 8), and the index chosen goes back to Rust, which decides what it means.
+export component Segmented inherits Rectangle {
+    in property <[string]> options;
+    in property <int> selected;
+    in property <bool> enabled: true;
+    // What the choice is about, as UI Automation reads the group - the label
+    // the row gives it on screen.
+    in property <string> label;
+    callback chosen(int);
+
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    min-width: ways.min-width;
+    preferred-width: ways.preferred-width;
+    height: ways.preferred-height;
+
+    border-width: Tokens.hairline;
+    border-radius: Tokens.radius-small;
+    border-color: Tokens.border;
+    background: Tokens.surface-raised;
+    clip: true;
+    opacity: root.enabled ? 1 : Tokens.alpha-disabled;
+
+    accessible-role: radio-group;
+    accessible-label: root.label;
+    accessible-enabled: root.enabled;
+
+    ways := HorizontalLayout {
+        for option[index] in root.options: segment := Rectangle {
+            property <bool> on: index == root.selected;
+            min-width: way.min-width;
+            preferred-width: way.preferred-width;
+            height: way.preferred-height;
+            background: self.on ? Tokens.accent
+                : root.enabled && area.pressed ? Tokens.surface-sample
+                : transparent;
+
+            accessible-role: radio-button;
+            accessible-label: option;
+            accessible-checkable: true;
+            accessible-checked: self.on;
+            accessible-enabled: root.enabled;
+            accessible-action-default => {
+                if root.enabled && !self.on {
+                    root.chosen(index);
+                }
+            }
+
+            area := TouchArea {
+                enabled: root.enabled && !segment.on;
+                mouse-cursor: self.enabled ? pointer : default;
+                clicked => {
+                    root.chosen(index);
+                }
+            }
+
+            way := HorizontalLayout {
+                padding-left: Tokens.space-2;
+                padding-right: Tokens.space-2;
+                padding-top: Tokens.space-1;
+                padding-bottom: Tokens.space-1;
+                alignment: center;
+
+                TextSmall {
+                    text: option;
+                    color: segment.on ? Tokens.surface
+                        : root.enabled && (area.has-hover || area.pressed) ? Tokens.accent
+                        : Tokens.text-secondary;
+                }
+            }
+        }
+    }
+}

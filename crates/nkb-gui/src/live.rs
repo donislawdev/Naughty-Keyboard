@@ -140,39 +140,110 @@ pub struct View {
     clipboard_bar: Option<&'static str>,
     /// Whether the sequence is in clipboard mode - the tester's mode, which a
     /// click turns off, as against the window in front that only the next
-    /// window ends (`D99`). Decides which of the two buttons stands.
+    /// window ends (`D99`). Decides which way the route switch fills and
+    /// whether the bar carries its Turn off.
     clipboard_mode_on: bool,
-    /// How a typed value meets the field (`D101`), for the line under the hint
-    /// bar - `None` leaves the words on screen, as a press does: only a choice
-    /// between presses changes it.
+    /// How a typed value meets the field (`D101`), for the switch under the
+    /// hint bar - `None` leaves the switch as it stands, as a press does: only
+    /// a choice between presses changes it.
     clearing: Option<Clearing>,
     /// The words naming the shortcuts, when the table in effect changed with
     /// this view - `None` leaves the ones on screen.
     legend: Option<Legend>,
 }
 
-/// The two lines that say how a typed value meets the field: what happens
-/// now, and the button's words for the other way (`UX-GUI-005`, `D101`).
-fn clearing_words(clearing: Clearing) -> (&'static str, &'static str) {
+/// The ways a typed value meets the field, in the order the switch under the
+/// hint bar shows them (`UX-GUI-005`, `D101`, the owner's point 2). ONE list
+/// for the words and for what a click on each means, so the two cannot drift
+/// apart by one index.
+const CLEARINGS: [Clearing; 2] = [Clearing::Line, Clearing::Keep];
+
+/// How values travel, in the order the other switch shows them (`D99`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Route {
+    /// Typed into the field.
+    Keyboard,
+    /// Put on the clipboard for the tester to paste - clipboard mode.
+    Clipboard,
+}
+
+/// The same rule as [`CLEARINGS`]: one list for the words and the meaning.
+const ROUTES: [Route; 2] = [Route::Keyboard, Route::Clipboard];
+
+fn clearing_word(clearing: Clearing) -> &'static str {
     match clearing {
-        Clearing::Line => (
-            i18n::label(PaletteLabel::ClearsLine),
-            i18n::label(PaletteLabel::InsertAtCursor),
-        ),
-        Clearing::Keep => (
-            i18n::label(PaletteLabel::AtCursor),
-            i18n::label(PaletteLabel::ClearLineFirst),
-        ),
+        Clearing::Line => i18n::label(PaletteLabel::ClearLineFirst),
+        Clearing::Keep => i18n::label(PaletteLabel::InsertAtCursor),
     }
 }
 
-/// Puts the two lines about clearing on the palette. On the MAIN thread - at
+fn route_word(route: Route) -> &'static str {
+    match route {
+        Route::Keyboard => i18n::label(PaletteLabel::RouteKeyboard),
+        Route::Clipboard => i18n::label(PaletteLabel::RouteClipboard),
+    }
+}
+
+/// Where `item` stands in `ways`, as the view's index. Every item of the two
+/// lists above stands in them, so the fallback is never reached.
+fn index_in<T: PartialEq>(ways: &[T], item: &T) -> i32 {
+    ways.iter()
+        .position(|way| way == item)
+        .and_then(|at| i32::try_from(at).ok())
+        .unwrap_or_default()
+}
+
+/// The thing at `index` of `ways`, or `None` for an index the switch never
+/// shows - a negative one included.
+fn at_index<T: Copy>(ways: &[T], index: i32) -> Option<T> {
+    usize::try_from(index)
+        .ok()
+        .and_then(|at| ways.get(at).copied())
+}
+
+/// Puts the words of both switches on the palette - their labels and ways,
+/// which never change while it runs. On the MAIN thread, once, at start.
+pub fn label_switches(palette: &Palette) {
+    let words = |ways: Vec<&'static str>| {
+        ModelRc::new(VecModel::from(
+            ways.into_iter().map(SharedString::from).collect::<Vec<_>>(),
+        ))
+    };
+    palette.set_route_label(i18n::label(PaletteLabel::SendBy).into());
+    palette.set_route_options(words(
+        ROUTES.iter().map(|&route| route_word(route)).collect(),
+    ));
+    palette.set_clearing_label(i18n::label(PaletteLabel::EachValue).into());
+    palette.set_clearing_options(words(
+        CLEARINGS
+            .iter()
+            .map(|&clearing| clearing_word(clearing))
+            .collect(),
+    ));
+}
+
+/// Puts the way of clearing in effect on its switch. On the MAIN thread - at
 /// start, before the worker's first view, and from every view that carries
-/// them, so the words cannot be chosen two ways.
+/// one, so the switch cannot be set two ways.
 pub fn show_clearing(palette: &Palette, clearing: Clearing) {
-    let (state, switch) = clearing_words(clearing);
-    palette.set_clearing_state(state.into());
-    palette.set_clearing_switch(switch.into());
+    palette.set_clearing_selected(index_in(&CLEARINGS, &clearing));
+}
+
+/// What a click on way `index` of the clearing switch asks the worker for.
+/// `None` for an index the switch does not show.
+#[must_use]
+pub fn clearing_command(index: i32) -> Option<Command> {
+    at_index(&CLEARINGS, index).map(Command::SetClearing)
+}
+
+/// What a click on way `index` of the route switch asks the worker for: the
+/// two commands the two buttons sent before the switch (`D99`).
+#[must_use]
+pub fn route_command(index: i32) -> Option<Command> {
+    at_index(&ROUTES, index).map(|route| match route {
+        Route::Keyboard => Command::TurnOffClipboard,
+        Route::Clipboard => Command::UseClipboard,
+    })
 }
 
 /// The way of clearing the palette starts with: what the tester last chose,
@@ -294,20 +365,23 @@ pub enum Command {
     /// (`UX-GUI-003`, `D98`). By identifiers, looked up in the pack the worker
     /// holds, so the value copied is the one drawn where the tester clicked.
     Copy(ValueKey),
-    /// Turn clipboard mode on - the button under the hint bar (`UX-GUI-010`,
-    /// `D99`).
+    /// Turn clipboard mode on - the route switch under the hint bar
+    /// (`UX-GUI-010`, `D99`).
     UseClipboard,
-    /// Turn clipboard mode off - the button on the standing clipboard bar.
+    /// Turn clipboard mode off - the same switch, or the button on the
+    /// standing clipboard bar.
     TurnOffClipboard,
     /// Collapse the palette, or expand it - the button at the end of the pack
     /// band (`UX-GUI-004`). What `ToggleVisibility` does, through the same
     /// switch, so a click and a press cannot disagree about the state.
     ToggleCompact,
-    /// Type values the other way: at the cursor after clearing the line, or
-    /// the reverse - the button under the hint bar (`UX-GUI-005`, `D101`). A
-    /// switch rather than a named way, like the collapse: the button's words
-    /// come from the worker's state, so a click always means "the other one".
-    SwitchClearing,
+    /// Type values this way from the next press: the line cleared first, or
+    /// the value at the cursor - the clearing switch under the hint bar
+    /// (`UX-GUI-005`, `D101`). The way itself rather than "the other one",
+    /// which the button before the switch sent: two quick clicks on one half
+    /// of a switch that has not redrawn yet then ask twice for the same way,
+    /// where two toggles would have undone each other.
+    SetClearing(Clearing),
     /// The tester closed the welcome window - remember it, so it does not open
     /// again (`[welcome] done`, UX7, `D103`, `D105`). Here, because the worker
     /// owns the settings for the run.
@@ -874,16 +948,18 @@ impl Worker<'_> {
                 told: None,
                 toggled: Some(self.collapse.toggle()),
             },
-            // `D101`: the other way, in effect from the next press and kept for
-            // the next run. Between presses like every command, so a value in
-            // flight keeps the way it started with. The band is rebuilt as the
-            // clipboard buttons rebuild it, with the line about saving when the
-            // save failed for a reason not said before.
-            Command::SwitchClearing => {
-                let clearing = match self.sequence.clearing() {
-                    Clearing::Line => Clearing::Keep,
-                    Clearing::Keep => Clearing::Line,
-                };
+            // `D101`: the way asked for, in effect from the next press and kept
+            // for the next run. Between presses like every command, so a value
+            // in flight keeps the way it started with. The band is rebuilt as
+            // the route switch rebuilds it, with the line about saving when the
+            // save failed for a reason not said before. Asked for the way in
+            // effect already, it changes nothing and saves nothing.
+            Command::SetClearing(clearing) if clearing == self.sequence.clearing() => Carried {
+                view: None,
+                told: None,
+                toggled: None,
+            },
+            Command::SetClearing(clearing) => {
                 self.sequence.set_clearing(clearing);
                 let lines = self
                     .memory
@@ -1542,6 +1618,14 @@ fn apply(palette: &Palette, view: View) {
         palette.set_clipboard_mode_label(words.into());
     }
     palette.set_clipboard_mode_on(view.clipboard_mode_on);
+    palette.set_route_selected(index_in(
+        &ROUTES,
+        &if view.clipboard_mode_on {
+            Route::Clipboard
+        } else {
+            Route::Keyboard
+        },
+    ));
     if let Some(clearing) = view.clearing {
         show_clearing(palette, clearing);
     }
@@ -1697,6 +1781,21 @@ pub(crate) fn hold_height(palette: &Palette, content: f32) {
 /// the start (`Collapse`), so the state it saves is the state drawn.
 pub fn set_compact(palette: &Palette, compact: bool) {
     palette.set_compact(compact);
+    palette.set_height_floor(0.0);
+}
+
+/// Opens the whole last value sent under its heading, or folds it back to the
+/// heading and the name (the owner's point 7, 2026-10-07). On the MAIN thread.
+///
+/// A switch of the window alone, so neither the worker nor the settings file
+/// hold it: it starts folded at every run, which is what the owner asked for,
+/// and a key in the file would be a new public name (`settings-format.md`).
+///
+/// The floor starts over, as for the compact switch: folding is the tester's
+/// own click, so the window gets shorter at once - `D83` forbids the palette
+/// shrinking BY ITSELF, under the tester's eyes, and this is the opposite.
+pub fn set_last_sent_open(palette: &Palette, open: bool) {
+    palette.set_last_sent_open(open);
     palette.set_height_floor(0.0);
 }
 
@@ -2209,6 +2308,11 @@ mod tests {
             palette.get_clipboard_mode_on(),
             "the mode is the tester's, so the bar carries its way out (D99)"
         );
+        assert_eq!(
+            palette.get_route_selected(),
+            1,
+            "the route switch does not fill Clipboard in clipboard mode"
+        );
 
         // ---- and so does the window in front (`D72`), in its own words ---
         let for_window = Outcome {
@@ -2233,6 +2337,11 @@ mod tests {
         assert!(
             !palette.get_clipboard_mode_on(),
             "a window the tester is looking at is not a mode a click could end (D99)"
+        );
+        assert_eq!(
+            palette.get_route_selected(),
+            0,
+            "the route switch fills Clipboard for a window the tester did not choose it for"
         );
         apply(
             &palette,
@@ -2264,11 +2373,28 @@ mod tests {
                 false,
             ),
         );
+        // The switch's words, once, and the way in effect filled: the second
+        // way is the cursor (the owner's point 2).
+        super::label_switches(&palette);
+        let words = |model: slint::ModelRc<slint::SharedString>| {
+            model
+                .iter()
+                .map(|word| word.to_string())
+                .collect::<Vec<_>>()
+        };
         assert_eq!(
-            palette.get_clearing_state(),
-            "Each value goes in at the cursor"
+            words(palette.get_clearing_options()),
+            ["Clear line first", "Insert at cursor"]
         );
-        assert_eq!(palette.get_clearing_switch(), "Clear line first");
+        assert_eq!(
+            words(palette.get_route_options()),
+            ["Keyboard", "Clipboard"]
+        );
+        assert_eq!(
+            palette.get_clearing_selected(),
+            1,
+            "the cursor way is not filled"
+        );
         apply(
             &palette,
             view_of(
@@ -2280,17 +2406,31 @@ mod tests {
             ),
         );
         assert_eq!(
-            palette.get_clearing_switch(),
-            "Clear line first",
-            "a press changed the words about clearing"
+            palette.get_clearing_selected(),
+            1,
+            "a press changed the way of clearing the switch shows"
         );
         super::show_clearing(&palette, super::Clearing::Line);
+        assert_eq!(palette.get_clearing_selected(), 0);
+        // A click on each way asks for that way, never for "the other one" -
+        // and an index the switch does not show asks for nothing.
         assert_eq!(
-            (
-                palette.get_clearing_state().as_str(),
-                palette.get_clearing_switch().as_str()
-            ),
-            ("The line is cleared before each value", "Insert at cursor")
+            [0, 1, 2, -1].map(super::clearing_command),
+            [
+                Some(Command::SetClearing(super::Clearing::Line)),
+                Some(Command::SetClearing(super::Clearing::Keep)),
+                None,
+                None,
+            ]
+        );
+        assert_eq!(
+            [0, 1, 2, -1].map(super::route_command),
+            [
+                Some(Command::TurnOffClipboard),
+                Some(Command::UseClipboard),
+                None,
+                None,
+            ]
         );
 
         // ---- the window never gets shorter by itself (`D83`) ---------------
@@ -2749,24 +2889,32 @@ mod tests {
         );
     }
 
-    /// `D101`: the button under the hint bar switches how typed values meet the
-    /// field - the sequence's own choice, so the next press uses it - draws the
-    /// words of the new way and saves exactly that way, and moves nothing in
-    /// the pack. A second click is the other way back.
+    /// `D101`: a click on a way of the clearing switch sets how typed values
+    /// meet the field - the sequence's own choice, so the next press uses it -
+    /// draws the switch with that way filled and saves exactly that way, and
+    /// moves nothing in the pack. A click on the way in effect already, which
+    /// two quick clicks before a redraw produce, changes and saves nothing -
+    /// where the toggle before the switch would have undone the first click.
     #[test]
-    fn a_click_on_the_clearing_button_switches_the_way_and_saves_it() {
+    fn a_click_on_a_way_of_clearing_sets_that_way_and_saves_it_once() {
         let store = a_store(false);
         let registrar = Registrar::default();
         with_worker(&store, &registrar, true, |worker, _| {
             let before = worker.sequence.upcoming();
             assert_eq!(worker.sequence.clearing(), super::Clearing::Line);
-            let carried = worker.carry_out(Command::SwitchClearing);
+            let carried = worker.carry_out(Command::SetClearing(super::Clearing::Keep));
             assert_eq!(worker.sequence.clearing(), super::Clearing::Keep);
-            let view = carried.view.expect("the palette says the new way");
+            let view = carried.view.expect("the palette shows the new way");
             assert_eq!(view.clearing, Some(super::Clearing::Keep));
             assert!(view.messages.is_empty(), "{:?}", view.messages);
             assert_eq!(worker.sequence.upcoming(), before, "the pack moved");
-            let back = worker.carry_out(Command::SwitchClearing);
+            let again = worker.carry_out(Command::SetClearing(super::Clearing::Keep));
+            assert_eq!(worker.sequence.clearing(), super::Clearing::Keep);
+            assert!(
+                again.view.is_none() && again.told.is_none(),
+                "asking for the way in effect redrew the palette"
+            );
+            let back = worker.carry_out(Command::SetClearing(super::Clearing::Line));
             assert_eq!(worker.sequence.clearing(), super::Clearing::Line);
             assert_eq!(
                 back.view.expect("drawn").clearing,

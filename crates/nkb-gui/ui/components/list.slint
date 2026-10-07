@@ -10,7 +10,7 @@
 
 import { Tokens } from "../tokens.slint";
 import { TextName, TextBody, TextSmallMuted } from "typography.slint";
-import { Pill } from "chrome.slint";
+import { Pill, Chevron } from "chrome.slint";
 
 
 // One row, as finished strings and facts.
@@ -331,26 +331,83 @@ export component PickerOpener inherits Rectangle {
         if root.chevron: VerticalLayout {
             alignment: center;
             horizontal-stretch: 0;
-            Path {
-                width: Tokens.chevron-width;
-                height: Tokens.chevron-height;
-                viewbox-width: 2;
-                viewbox-height: 1;
-                fill: root.ink;
-                MoveTo {
-                    x: 0;
-                    y: 0;
-                }
-                LineTo {
-                    x: 2;
-                    y: 0;
-                }
-                LineTo {
-                    x: 1;
-                    y: 1;
-                }
-                Close { }
+            Chevron {
+                ink: root.ink;
             }
+        }
+    }
+}
+
+// A heading that folds what stands under it - the last value sent in the
+// palette (the owner's point 7, 2026-10-07): closed, the band is this one row,
+// and open, the whole value is drawn below it.
+//
+//     at rest          the mark and the heading in the muted role, the detail
+//                      after them in the secondary one
+//     pointer here     the mark and the heading in the accent, like a link
+//     pressed          the same - the fold opens at once
+//     keyboard here    NEVER, for `PickerOpener`'s reason: the palette refuses
+//                      the keyboard focus (`D62`)
+//     cannot be used   not a state it has: folding draws, it sends nothing
+//
+// The mark points right while closed and down while open (`Chevron`), and it
+// stands BEFORE the words - the mark a tree wears - where `PickerOpener` puts
+// its mark after them, the mark a drop-down list wears. The two say different
+// things: this one shows more of the same window, that one opens another.
+//
+// `detail` is said only while closed: open, the band below names the value in
+// full, and the name twice would be the noise the owner asked to take away.
+export component Disclosure inherits Rectangle {
+    in property <string> text;
+    in property <string> detail;
+    in property <bool> open;
+    // What a click does, as UI Automation reads it.
+    in property <string> action;
+    callback clicked();
+
+    property <color> ink: area.has-hover || area.pressed ? Tokens.accent : Tokens.text-muted;
+
+    min-width: content.min-width;
+    height: content.preferred-height;
+    vertical-stretch: 0;
+
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-description: root.action;
+    accessible-expanded: root.open;
+    accessible-expandable: true;
+    accessible-action-default => {
+        root.clicked();
+    }
+
+    area := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    // No padding of its own: the heading stays in the column every other band
+    // of the palette starts in (GUI rule 19), as `PickerOpener` does.
+    content := HorizontalLayout {
+        spacing: Tokens.space-2;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            Chevron {
+                open: root.open;
+                ink: root.ink;
+            }
+        }
+        TextSmallMuted {
+            text: root.text;
+            color: root.ink;
+            horizontal-stretch: 0;
+        }
+        if !root.open: TextBody {
+            text: root.detail;
+            overflow: elide;
+            horizontal-stretch: 1;
         }
     }
 }

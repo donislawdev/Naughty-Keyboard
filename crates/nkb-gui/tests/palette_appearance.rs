@@ -109,14 +109,16 @@ fn fill(palette: &Palette) {
     // below, with a value that earns one.
     palette.set_has_not_guaranteed(false);
     palette.set_clipboard_mode_label("clipboard mode".into());
-    // Clipboard mode on and off (D99): the words of both buttons, whichever the
-    // state below shows.
-    palette.set_use_clipboard_label("Use clipboard mode".into());
+    // The way out of clipboard mode on its bar (D99).
     palette.set_turn_off_label("Turn off".into());
     // There IS a value, so the value band is gated by `compact` alone - which is
     // what the compact rule below is about, and what mutation M52 flips.
     palette.set_has_value(true);
     palette.set_last_sent_label("Last sent".into());
+    // Open, so every line of the value band below is drawn and measured. The
+    // folded band, the product's start (the owner's point 7), has its own
+    // measurement further down.
+    palette.set_last_sent_open(true);
     palette.set_copy_label("Copy".into());
     // The next value (UX-GUI-001): a different value from the one above, so the
     // picture shows both bands telling two values apart.
@@ -154,9 +156,14 @@ fn fill(palette: &Palette) {
     palette.set_collapse_label("Collapse".into());
     palette.set_expand_label("Expand".into());
     palette.set_shortcuts_link("Change shortcuts".into());
-    // How a typed value meets the field (UX-GUI-005), as the line is cleared.
-    palette.set_clearing_state("The line is cleared before each value".into());
-    palette.set_clearing_switch("Insert at cursor".into());
+    // The two switches under the hint bar (the owner's point 2): values typed,
+    // the line cleared first.
+    palette.set_route_label("Send by".into());
+    palette.set_route_options(words(&["Keyboard", "Clipboard"]));
+    palette.set_route_selected(0);
+    palette.set_clearing_label("Each value".into());
+    palette.set_clearing_options(words(&["Clear line first", "Insert at cursor"]));
+    palette.set_clearing_selected(0);
 
     // Every action the build carries out (UX-GUI-007), as `live::legend`
     // lists them for the default table.
@@ -186,6 +193,15 @@ fn fill(palette: &Palette) {
             action: "Collapse or expand the palette".into(),
         },
     ])));
+}
+
+/// Words as the view's model of them.
+fn words(list: &[&str]) -> ModelRc<SharedString> {
+    ModelRc::new(VecModel::from(
+        list.iter()
+            .map(|word| SharedString::from(*word))
+            .collect::<Vec<_>>(),
+    ))
 }
 
 fn render(
@@ -456,6 +472,45 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
         surface_edge(&refit)
     );
 
+    // ---- the last value sent, folded: how the palette starts (point 7) ----
+    // A difference of two renders, like everything above. Folded, the band is
+    // its heading row and nothing more: the bottom edge moves up, and the
+    // preview's ink - `text-primary` at preview size, which the folded row
+    // never draws - is gone. Through the product's own switch, which also
+    // starts the height floor over: folding is the tester's click, so the
+    // window gets shorter at once rather than keeping the open height (D83 is
+    // about the palette shrinking by itself).
+    fill(&palette);
+    palette.set_compact(false);
+    let open = render(&window);
+    let edge_open = surface_edge(&open);
+    nkb_gui::live::set_last_sent_open(&palette, false);
+    render(&window);
+    let folded = render(&window);
+    let folded_path =
+        offscreen::save_cropped(&folded, WIDTH, HEIGHT, "palette-last-sent-folded.png");
+    assert_nothing_escapes_the_surface(
+        &folded,
+        "with the last value folded",
+        &folded_path.display().to_string(),
+    );
+    assert!(
+        surface_edge(&folded) + 60 < edge_open,
+        "folding the last value did not make the palette shorter by the band's lines ({} vs \
+         {edge_open}), so the fold draws the whole value anyway or the floor held the height. \
+         Look at {}",
+        surface_edge(&folded),
+        folded_path.display()
+    );
+    palette.set_value_preview("".into());
+    assert!(
+        render(&window) == folded,
+        "blanking the preview changed the folded palette, so the folded band still draws the \
+         value. Look at {}",
+        folded_path.display()
+    );
+    nkb_gui::live::set_last_sent_open(&palette, true);
+
     // Put the specimen back, so the renders saved below are the ones the gallery
     // and the calibration tool compare against.
     fill(&palette);
@@ -515,8 +570,6 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     palette.set_sending_counter("1784 / 65535".into());
     palette.set_sending_hint("Press Esc to stop.".into());
     palette.set_sending_fraction(0.25);
-    palette.set_sending(false);
-    let accent_idle = offscreen::count_exactly(&render(&window), ACCENT);
     palette.set_sending(true);
     let sending = render(&window);
     let sending_path = offscreen::save_cropped(&sending, WIDTH, HEIGHT, "palette-sending.png");
@@ -525,7 +578,16 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
         "while a value is being typed",
         &sending_path.display().to_string(),
     );
-    let accent_quarter = offscreen::count_exactly(&sending, ACCENT);
+    // The accent is counted with the hint band hidden: the switches in it wear
+    // the accent on the way in effect and fade while a value goes, so with
+    // them in the picture the send band ADDS accent while the switches TAKE
+    // it away - measured, 2444 at rest against 407 sending, the first run
+    // after the switches came in (2026-10-07).
+    palette.set_hints_visible(false);
+    palette.set_sending(false);
+    let accent_idle = offscreen::count_exactly(&render(&window), ACCENT);
+    palette.set_sending(true);
+    let accent_quarter = offscreen::count_exactly(&render(&window), ACCENT);
     assert!(
         accent_quarter > accent_idle,
         "switching the send band on added no accent ink ({accent_idle} vs {accent_quarter}), \
@@ -569,6 +631,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     );
     palette.set_compact(false);
     palette.set_sending(false);
+    palette.set_hints_visible(true);
 
     // ---- before the first value: the empty state draws (D83) ---------------
     // GUI rule 3: the value band has an empty state and it is on screen from
