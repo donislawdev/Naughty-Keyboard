@@ -2,14 +2,23 @@
 //! `D105`): opened once, at the first run, with the keyboard taken for its box
 //! and handed back when it closes - and remembered as closed.
 //!
-//! # When it opens
+//! # When it opens - and the palette only after it (the owner's point 1)
 //!
 //! When `KeptSettings::welcome_due` says so: the settings file has no
 //! `[welcome] done = true` and a closing could be remembered (`D103`). It opens
-//! once the palette has refused the keyboard (`focus::refuse_focus`): the
-//! palette hands the foreground back to the window the tool was started from,
-//! and a welcome window that took the keyboard before that would lose it again
-//! a moment later.
+//! ALONE, as the event loop starts, once the worker has said which pack the
+//! palette starts on. Until 2026-10-07 the palette opened first and the
+//! welcome beside it, and the owner could not tell what the two windows were
+//! for. Now the palette appears when the welcome goes - by "Start testing",
+//! the close button or `Alt+F4` alike, and also when the welcome could not
+//! open at all - through the one callback the window is given (`D109`).
+//!
+//! 🔴 The palette is shown BEFORE the welcome is hidden. Slint keeps its event
+//! loop alive by counting the windows shown and quits when the count falls to
+//! nothing (`release_keepalive` in i-slint-core 1.18.1, read), so hiding the
+//! only window first would end the run. The palette is never hidden after
+//! that (`OBS-80`): it is shown for the first time here, and refuses the
+//! keyboard then, as at any start.
 //!
 //! # The keyboard
 //!
@@ -37,7 +46,7 @@ use nkb_core::preview::preview;
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::focus::{HANDLE_WAIT, POLL, window_handle};
-use crate::live::Command;
+use crate::live::{Command, InUse, in_use_now};
 use crate::packs::{Keyboard, build_before_the_loop, forget_held_modifiers};
 use crate::query::Pressed;
 use crate::trial::{Trial, TrialKey};
@@ -54,11 +63,15 @@ pub struct Welcome {
     open: Cell<bool>,
     /// Puts a line in the palette's message band.
     say: Box<dyn Fn(String)>,
+    /// Shows the palette - once, when the welcome goes or cannot open.
+    appear: RefCell<Option<Box<dyn FnOnce()>>>,
 }
 
 impl Welcome {
     /// The window, labelled and wired, not yet shown. `bindings` are the
     /// shortcuts of this run, so the steps name the ones the palette answers.
+    /// `appear` shows the palette, and runs once: when the welcome goes, or
+    /// when it could not open (`D109`).
     #[must_use]
     pub fn new(
         window: WelcomeWindow,
@@ -66,6 +79,7 @@ impl Welcome {
         commands: Sender<Command>,
         bindings: &Bindings,
         say: Box<dyn Fn(String)>,
+        appear: Box<dyn FnOnce()>,
     ) -> Rc<Self> {
         label(&window, bindings);
         // After the words, which are part of what the layout measures - the
@@ -79,6 +93,7 @@ impl Welcome {
             open_packs: bindings.chord(HotkeyAction::OpenPacks),
             open: Cell::new(false),
             say,
+            appear: RefCell::new(Some(appear)),
         });
         welcome.show_box();
         let weak = Rc::downgrade(&welcome);
@@ -136,8 +151,29 @@ impl Welcome {
         self.trial.borrow().text().to_owned()
     }
 
+    /// Opens the window once the worker has said which pack the palette
+    /// starts on, so the third step can name it - asked again every [`POLL`],
+    /// and opened without the name after [`HANDLE_WAIT`] rather than not at
+    /// all. Call it before the event loop runs: the poll is delivered once it
+    /// starts (`slint.md` 1.9).
+    pub fn open_on_start(self: &Rc<Self>, in_use: InUse, started: Instant) {
+        let now = in_use_now(&in_use);
+        if now.pack.is_none() && started.elapsed() < HANDLE_WAIT {
+            let weak = Rc::downgrade(self);
+            slint::Timer::single_shot(POLL, move || {
+                if let Some(welcome) = weak.upgrade() {
+                    welcome.open_on_start(in_use, started);
+                }
+            });
+            return;
+        }
+        self.open(now.pack.as_deref());
+    }
+
     /// Opens the window with the keyboard in the box. `pack` is the pack the
-    /// palette is on, when the worker has said so already.
+    /// palette is on, when the worker has said so already. A window that does
+    /// not open says so in the palette - and the palette appears, or the run
+    /// would show nothing at all.
     pub fn open(self: &Rc<Self>, pack: Option<&str>) {
         if self.is_open() {
             return;
@@ -150,6 +186,7 @@ impl Welcome {
                 Startup::WindowFailed,
                 &error.to_string(),
             ));
+            self.appear();
             return;
         }
         self.open.set(true);
@@ -167,8 +204,10 @@ impl Welcome {
         }
     }
 
-    /// Hands the keyboard back, hides the window and asks the worker to
-    /// remember it closed. In THAT order, for the pack window's reason.
+    /// Hands the keyboard back, shows the palette, hides the window and asks
+    /// the worker to remember it closed and start the pack over. In THAT
+    /// order: the keyboard for the pack window's reason, the palette before
+    /// the hiding for the event loop's (the module header).
     pub fn close(&self) {
         if !self.open.replace(false) {
             return;
@@ -176,10 +215,19 @@ impl Welcome {
         if let Err(reason) = self.keyboard.give_back(window_handle(self.window.window())) {
             (self.say)(i18n::environment(Environment::FocusNotReturned, &reason));
         }
+        self.appear();
         let _ = self.window.hide();
         // A worker already gone is a palette already closing - nobody is left
         // to welcome, and the next run asks again.
         let _ = self.commands.send(Command::WelcomeDone);
+    }
+
+    /// Shows the palette, the first time only.
+    fn appear(&self) {
+        let appear = self.appear.borrow_mut().take();
+        if let Some(appear) = appear {
+            appear();
+        }
     }
 
     /// Asks for the keyboard as soon as the window has a handle to ask with -

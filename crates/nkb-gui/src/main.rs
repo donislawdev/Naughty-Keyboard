@@ -49,7 +49,9 @@
 //! failure, not to repair it quietly.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+use std::cell::RefCell;
 use std::process::ExitCode;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -281,28 +283,42 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         let packs = std::rc::Rc::clone(&packs);
         move || packs.open()
     });
-    // The first run's window (UX7, `ux-spec.md` 5.1, `D105`), opened once the
-    // palette has refused the keyboard - see `focus::refuse_focus`.
+    // Showing the palette, once: at start, or - on the first run - when the
+    // welcome goes (the owner's point 1, `D109`). A palette that cannot be
+    // shown ends the run with the error, as `run()` did before.
+    let failed: Rc<RefCell<Option<slint::PlatformError>>> = Rc::default();
+    let appear = {
+        let palette = palette.as_weak();
+        let standing = Arc::clone(&standing);
+        let failed = Rc::clone(&failed);
+        move || {
+            let Some(palette) = palette.upgrade() else {
+                return;
+            };
+            if let Err(error) = show_palette(&palette, kept, &standing) {
+                *failed.borrow_mut() = Some(error);
+                let _ = slint::quit_event_loop();
+            }
+        }
+    };
+    // The first run's window (UX7, `ux-spec.md` 5.1, `D105`), ALONE until it
+    // goes: two windows at once, with nothing saying which is which, was the
+    // owner's first complaint (`D109`).
     let welcome = if welcome_due {
-        Some(Welcome::new(
+        let welcome = Welcome::new(
             WelcomeWindow::new()?,
             Box::new(SystemKeyboard::default()),
             choose.clone(),
             &bindings,
             say_in(&palette),
-        ))
+            Box::new(appear),
+        );
+        welcome.open_on_start(Arc::clone(&in_use), std::time::Instant::now());
+        Some(welcome)
     } else {
+        appear();
         None
     };
-    focus::refuse_focus(&palette, kept, &standing, {
-        let welcome = welcome.clone();
-        let in_use = Arc::clone(&in_use);
-        move || {
-            if let Some(welcome) = welcome {
-                welcome.open(live::in_use_now(&in_use).pack.as_deref());
-            }
-        }
-    });
     // Closing the palette closes the pack window too - otherwise the event
     // loop would wait for it, and the process would outlive the palette.
     // Where it stood is read here, while the window is still up (UX7).
@@ -349,7 +365,9 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         move || live::drive(&palette, &stop, &commands, &in_use, start, &standing)
     });
 
-    let ran = palette.run();
+    // The loop rather than `palette.run()`, which would show the palette at
+    // once: on the first run the welcome stands alone until it goes.
+    let ran = slint::run_event_loop().and_then(|()| failed.take().map_or(Ok(()), Err));
     stop.store(true, Ordering::Relaxed);
     // A worker that panicked has already lost its shortcuts to its own unwind,
     // and the window is closing either way. Nothing is swallowed that anyone
@@ -368,6 +386,20 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         let _ = kept.keep_position(&remembers, &layout, at);
     }
     ran
+}
+
+/// Shows the palette and makes it refuse the keyboard - the two belong
+/// together, because the handle `focus` waits for exists only once the window
+/// is shown, and a palette that took the keyboard would take it from the field
+/// under test (`D62`). Called once per run, never after a hide (`OBS-80`).
+fn show_palette(
+    palette: &Palette,
+    kept: KeptFocus,
+    standing: &focus::Standing,
+) -> Result<(), slint::PlatformError> {
+    palette.show()?;
+    focus::refuse_focus(palette, kept, standing, || {});
+    Ok(())
 }
 
 /// What a click on a Copy button does: reads the key the palette holds beside

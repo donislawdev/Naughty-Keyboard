@@ -2020,9 +2020,11 @@ fn pattern_welcome_label(label: WelcomeLabel) -> &'static str {
         WelcomeLabel::Allowed => "Use it only on systems you are allowed to test.",
         WelcomeLabel::ReadyHeading => "Ready",
         WelcomeLabel::Ready => {
-            "The palette is on the pack {pack}. Press {shortcut} to choose another pack or value."
+            "Start testing opens the palette: a small window that stays on top and shows what each press sends. It starts on the pack {pack}. Press {shortcut} to choose another pack or value."
         }
-        WelcomeLabel::ReadyNoPack => "Press {shortcut} to choose a pack or a value.",
+        WelcomeLabel::ReadyNoPack => {
+            "Start testing opens the palette: a small window that stays on top and shows what each press sends. Press {shortcut} to choose a pack or a value."
+        }
         WelcomeLabel::Start => "Start testing",
         WelcomeLabel::StartAction => "Close the welcome and start testing",
     }

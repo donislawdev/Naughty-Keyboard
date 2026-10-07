@@ -500,6 +500,27 @@ impl AdvanceSequence {
         chosen
     }
 
+    /// Makes the first value of the pack in use the next one again, nothing
+    /// sent - the start of testing after the welcome window's box, where the
+    /// tester may have sent a value or two to try it (the owner's point 1,
+    /// `D109`). Without it the first real field would get value 3, and values
+    /// 1 and 2 would have gone only into the box.
+    ///
+    /// What went out last stays: it did go out, into the box, and the report
+    /// block of it is still true. `false` with no pack, an empty one, or while
+    /// a value is in flight - then nothing moved.
+    pub fn start_over(&mut self) -> bool {
+        let Some(first) = self
+            .loaded
+            .as_ref()
+            .and_then(|loaded| loaded.pack.values.first())
+            .map(|value| value.id.clone())
+        else {
+            return false;
+        };
+        self.choose_next(&first)
+    }
+
     /// What the next press of "next value" will do, with what the palette
     /// shows of the value - see [`UpcomingValue`]. `None` where the core says
     /// nothing is upcoming, and where the pack does not hold the value the
@@ -1886,6 +1907,38 @@ mod tests {
             advance.upcoming(),
             Some(UpcomingValue::Value { index: 1, .. })
         ));
+    }
+
+    /// `D109`: after the welcome window's box, testing starts at value 1 - and
+    /// the value that went into the box is still the last one sent.
+    #[test]
+    fn starting_over_makes_value_one_next_and_keeps_the_last_value_sent() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert!(matches!(
+            advance.upcoming(),
+            Some(UpcomingValue::Value { index: 3, .. })
+        ));
+        assert!(advance.start_over());
+        assert!(matches!(
+            advance.upcoming(),
+            Some(UpcomingValue::Value { index: 1, .. })
+        ));
+        let block = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+        assert!(
+            block.messages.iter().any(|message| matches!(
+                message,
+                Message::ReportCopied { reference } if reference == "sample/two"
+            )),
+            "the value that went into the box is still the last one sent: {:?}",
+            block.messages
+        );
+        assert!(
+            !AdvanceSequence::new().start_over(),
+            "no pack, nothing to start over"
+        );
     }
 
     #[test]

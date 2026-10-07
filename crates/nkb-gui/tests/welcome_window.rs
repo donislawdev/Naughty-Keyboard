@@ -92,12 +92,23 @@ fn the_welcome_window_takes_a_value_and_remembers_it_was_closed() {
     let said: Rc<RefCell<Vec<String>>> = Rc::default();
     let heard = Rc::clone(&said);
     let bindings = nkb_adapters::default_bindings();
+    // The palette appearing (`D109`): recorded with whether the welcome was
+    // still shown at that moment - it must be, or the event loop ends.
+    let built = WelcomeWindow::new().expect("the welcome window must build");
+    let seen = built.as_weak();
+    let appeared: Rc<RefCell<Vec<bool>>> = Rc::default();
+    let record = Rc::clone(&appeared);
     let welcome = Welcome::new(
-        WelcomeWindow::new().expect("the welcome window must build"),
+        built,
         Box::new(Shared(Rc::clone(&keyboard))),
         asks,
         &bindings,
         Box::new(move |line| heard.borrow_mut().push(line)),
+        Box::new(move || {
+            record
+                .borrow_mut()
+                .push(seen.upgrade().is_some_and(|w| w.window().is_visible()));
+        }),
     );
     let window = welcome.window();
 
@@ -115,8 +126,9 @@ fn the_welcome_window_takes_a_value_and_remembers_it_was_closed() {
     assert!(welcome.is_open());
     assert_eq!(
         window.get_ready(),
-        "The palette is on the pack whitespace. Press Alt+Shift+Space to choose another pack \
-         or value."
+        "Start testing opens the palette: a small window that stays on top and shows what each \
+         press sends. It starts on the pack whitespace. Press Alt+Shift+Space to choose another \
+         pack or value."
     );
     assert_eq!(
         calls(&keyboard),
@@ -146,17 +158,28 @@ fn the_welcome_window_takes_a_value_and_remembers_it_was_closed() {
     type_text(window, " Kowalski");
     assert_eq!(welcome.box_text(), " Kowalski");
     assert!(said.borrow().is_empty(), "nothing went wrong to say");
+    assert!(
+        appeared.borrow().is_empty(),
+        "the palette appeared while the welcome was open (the owner's point 1)"
+    );
 
-    // ---- closing: keyboard back, window hidden, remembered by the worker ----
+    // ---- closing: keyboard back, the palette shown BEFORE the welcome goes,
+    // ---- remembered by the worker ----------------------------------------------
     window.invoke_start();
     assert!(!welcome.is_open());
     assert!(!window.window().is_visible());
     assert_eq!(calls(&keyboard), vec!["give back"]);
+    assert_eq!(
+        *appeared.borrow(),
+        vec![true],
+        "the palette appears once, while the welcome is still shown"
+    );
     assert_eq!(worker.try_recv(), Ok(Command::WelcomeDone));
     // A second close is nothing at all.
     welcome.close();
     assert!(calls(&keyboard).is_empty());
     assert!(worker.try_recv().is_err());
+    assert_eq!(appeared.borrow().len(), 1, "the palette appears once");
 }
 
 #[test]
@@ -170,11 +193,13 @@ fn closing_the_palette_hides_the_welcome_without_remembering_it() {
         asks,
         &nkb_adapters::default_bindings(),
         Box::new(|_| {}),
+        Box::new(|| panic!("closing the palette made the palette appear")),
     );
     welcome.open(None);
     assert_eq!(
         welcome.window().get_ready(),
-        "Press Alt+Shift+Space to choose a pack or a value."
+        "Start testing opens the palette: a small window that stays on top and shows what each \
+         press sends. Press Alt+Shift+Space to choose a pack or a value."
     );
     let _ = calls(&keyboard);
 

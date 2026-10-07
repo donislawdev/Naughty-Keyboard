@@ -57,8 +57,9 @@ fn fill(window: &WelcomeWindow) {
     window.set_allowed("Use it only on systems you are allowed to test.".into());
     window.set_ready_heading("Ready".into());
     window.set_ready(
-        "The palette starts on the pack Whitespace. Press Alt+Shift+Space to choose another pack \
-         or value."
+        "Start testing opens the palette: a small window that stays on top and shows what each \
+         press sends. It starts on the pack whitespace. Press Alt+Shift+Space to choose another \
+         pack or value."
             .into(),
     );
     window.set_hints(ModelRc::new(VecModel::from(

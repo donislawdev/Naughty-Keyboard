@@ -383,8 +383,9 @@ pub enum Command {
     /// where two toggles would have undone each other.
     SetClearing(Clearing),
     /// The tester closed the welcome window - remember it, so it does not open
-    /// again (`[welcome] done`, UX7, `D103`, `D105`). Here, because the worker
-    /// owns the settings for the run.
+    /// again (`[welcome] done`, UX7, `D103`, `D105`), and start the pack over
+    /// from its first value (`D109`). Here, because the worker owns the
+    /// settings and the sequence for the run.
     WelcomeDone,
 }
 
@@ -972,16 +973,21 @@ impl Worker<'_> {
                     toggled: None,
                 }
             }
-            // Nothing on screen changes. A save that failed for a reason not
-            // said before is said, like every other change.
+            // Testing starts at the first value (`D109`): what the tester sent
+            // into the box to try it is not where the real field starts. The
+            // palette shows it as it appears, so the view is drawn. A save that
+            // failed for a reason not said before is said, like every other
+            // change.
             Command::WelcomeDone => {
+                let moved = self.sequence.start_over();
                 let lines: Vec<String> = self
                     .memory
                     .keep(SettingChange::WelcomeDone)
                     .into_iter()
                     .collect();
                 Carried {
-                    view: (!lines.is_empty()).then(|| self.view(lines, ValueBand::Keep, None)),
+                    view: (moved || !lines.is_empty())
+                        .then(|| self.view(lines, ValueBand::Keep, None)),
                     told: None,
                     toggled: None,
                 }
@@ -2889,6 +2895,34 @@ mod tests {
             *store.saved.borrow(),
             vec![SettingChange::Compact(true), SettingChange::Compact(false)]
         );
+    }
+
+    /// `D109`: closing the welcome window starts the pack over - values tried
+    /// in its box do not eat the first ones of the real field - and draws the
+    /// palette that now appears, and remembers the welcome as done.
+    #[test]
+    fn closing_the_welcome_starts_the_pack_over_and_remembers_it() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        with_worker(&store, &registrar, true, |worker, _| {
+            // Where two values tried in the box leave the sequence.
+            assert!(worker.sequence.choose_next("space-only"));
+            assert!(matches!(
+                worker.sequence.upcoming(),
+                Some(UpcomingValue::Value { index: 3, .. })
+            ));
+            let carried = worker.carry_out(Command::WelcomeDone);
+            assert!(
+                matches!(
+                    worker.sequence.upcoming(),
+                    Some(UpcomingValue::Value { index: 1, .. })
+                ),
+                "testing starts at the first value"
+            );
+            let view = carried.view.expect("the palette appearing is drawn");
+            assert!(view.messages.is_empty(), "{:?}", view.messages);
+        });
+        assert_eq!(*store.saved.borrow(), vec![SettingChange::WelcomeDone]);
     }
 
     /// `D101`: a click on a way of the clearing switch sets how typed values
