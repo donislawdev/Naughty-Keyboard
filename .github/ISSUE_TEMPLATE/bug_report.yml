@@ -1,0 +1,136 @@
+name: Bug report
+description: Something in Naughty Keyboard does not work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. The version, which program you
+        used and the report block are the three most useful things you can give us.
+
+        **A value that breaks your application is not a bug.** Finding that is what
+        the packs are for. Report it here only if Naughty Keyboard did something
+        other than what it says: typed a different value, dropped or reordered
+        characters, counted a value wrongly, drew the wrong marker, or typed where
+        it should have refused.
+
+        **A refusal is not a bug either.** `nkb send` exits with 4 when it will not
+        type into a window with higher privileges, while Ctrl, Alt, Shift or Win is
+        held, or when the focus is on a button, a link or a list item. Each of those
+        is the tool doing its job. Report it if you believe the refusal itself is
+        wrong.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >-
+        `nkb --version` prints it. For the palette, the report block (`Alt+Shift+B`)
+        carries it on its `Tool:` line. If you built from source, add the commit
+        too, because there is no release yet: `git rev-parse --short HEAD`.
+      placeholder: "nkb 0.1.0, commit 84aba19"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: How were you running it?
+      description: Both programs sit on the same engine, so a bug in one is often a bug in both. Which one you saw it in narrows it down.
+      options:
+        - Palette (nkb-gui)
+        - Command line (nkb)
+        - Both
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: Operating system
+      description: Typing into other windows works on Windows only, so this decides which part of the tool you were using.
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS
+        - Linux
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: system-version
+    attributes:
+      label: System version
+      description: Output of `winver`, `sw_vers` or `uname -a`, or just "Windows 11 24H2".
+      placeholder: "Windows 11 24H2"
+  - type: dropdown
+    id: delivery
+    attributes:
+      label: How did the value reach the field?
+      options:
+        - Typed by the palette
+        - Typed by `nkb send`
+        - Clipboard mode
+        - Copied with a Copy button
+        - Printed by `nkb emit` or `nkb show`
+        - Not a value, a pack file I was checking
+        - Not sure
+  - type: input
+    id: value
+    attributes:
+      label: Pack and value
+      description: >-
+        The reference from the report block, or from `nkb emit`, for example
+        `magic-values/word-null`. For a pack file you wrote, give its name.
+      placeholder: "whitespace/trailing-space"
+  - type: input
+    id: target
+    attributes:
+      label: What was the target application?
+      description: >-
+        The kind of field matters more than the name: a browser form, a native
+        text box, a terminal, a remote desktop or a virtual machine window. If it
+        is not something you can name publicly, say what kind it is and leave the
+        name out.
+      placeholder: "A text field in a desktop application, 64-bit"
+  - type: input
+    id: layout
+    attributes:
+      label: Keyboard layout or input method
+      description: Typing characters outside the layout can depend on it, and an input method editor (IME) can interfere. Leave it out if you do not use either.
+      placeholder: "US layout, no IME"
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: The command, or the steps
+      description: >-
+        The smallest thing that triggers it. For the command line, paste the
+        command rather than describing it. For the palette, say which window was
+        in front, what the field was, and which chords you pressed.
+    validations:
+      required: true
+  - type: input
+    id: exit
+    attributes:
+      label: Exit code
+      description: >-
+        What `echo %ERRORLEVEL%` printed after the command, or `$LASTEXITCODE` in
+        PowerShell, or `echo $?` elsewhere. The codes are documented in each
+        command's `--help`, so a wrong one is a bug on its own.
+      placeholder: "4"
+  - type: textarea
+    id: report
+    attributes:
+      label: The report block, if there is one
+      description: >-
+        `Alt+Shift+B` in the palette copies it. This is the most valuable thing in
+        the whole report, because it says what the tool believed it did.
+
+        Before pasting: the `Target:` line names the program the value went to,
+        such as `notepad.exe`. This issue is public, so read the block first and
+        remove anything you would rather not publish.
+      render: shell
