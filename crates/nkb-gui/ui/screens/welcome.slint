@@ -1,0 +1,174 @@
+// The welcome window: the first run, three steps and no more (`ux-spec.md` 5.1,
+// UX7, `UX-GUI-011`, `D105`).
+//
+// # Why a window of its own
+//
+// The first value a new tester sends should not land in somebody else's
+// application. The palette refuses the keyboard (`D62`), so it cannot hold a
+// box to type into - this window can, and it takes the keyboard when it opens,
+// like the pack window. It opens once: closing it is remembered as
+// `[welcome] done = true` (`D103`).
+//
+// # Chrome, content, chrome (PORADNIK-GUI 4)
+//
+//     header    the window's heading
+//     content   three steps, each a section with its own heading:
+//               1  the box - "Click the box below and press {shortcut}." -
+//                  and what arrived in it, counted as the palette counts
+//               2  what the tool does to other windows and what it reads, and
+//                  that it is for systems the tester may test (`product-spec.md`
+//                  10.2 point 3). On Windows there is no permission to grant,
+//                  so the step is the sentence the spec asks for, not a prompt
+//               3  the pack the palette starts on and three shortcuts
+//     footer    the one main action, "Start testing", in the accent
+//
+// # The box is the query line
+//
+// `QueryField`, the pack search's line: no text field (`D85`), a focus scope
+// that hands each key to Rust (`nkb_gui::trial`), and the text before and after
+// the caret drawn on either side of the mark. Invisible characters arrive as
+// the palette's marker - Rust substitutes them before they reach this file.
+//
+// # Nothing is decided here
+//
+// Every word is a property filled from `nkb-adapters::i18n` (untouchable
+// rule 9), what a key does is Rust's, and the callbacks are aliases (GUI
+// rule 11).
+
+import {
+    Tokens,
+    TextName,
+    TextBody,
+    TextSmallMuted,
+    Spacer,
+    Hairline,
+    HintRow,
+    HintBar,
+    ChromeBand,
+    QueryField,
+    SmallButton,
+} from "../components.slint";
+
+export component WelcomeWindow inherits Window {
+    in property <string> window-title;
+    in property <string> heading;
+    // Step 1.
+    in property <string> try-heading;
+    in property <string> try-it;
+    // What UI Automation calls the box.
+    in property <string> box-name;
+    in property <string> box-before;
+    in property <string> box-after;
+    // What arrived, counted - or that nothing has.
+    in property <string> box-facts;
+    // Step 2.
+    in property <string> does-heading;
+    in property <string> does;
+    in property <string> allowed;
+    // Step 3.
+    in property <string> ready-heading;
+    in property <string> ready;
+    in property <[HintRow]> hints;
+    // The main action.
+    in property <string> start-label;
+    in property <string> start-action;
+
+    callback pressed <=> box.pressed;
+    callback activated <=> box.window-entered;
+    callback start();
+
+    // The keyboard goes to the box as the window opens, so the first press of
+    // the shortcut already lands there.
+    public function focus-box() {
+        box.focus-field();
+    }
+
+    title: root.window-title;
+    background: Tokens.surface;
+    // BOUND, for the shortcuts window's reason (`slint.md` 2.38): the backend
+    // creates every window when the event loop starts and keeps that size.
+    width: Tokens.welcome-width;
+    height: body.preferred-height;
+    always-on-top: true;
+
+    body := VerticalLayout {
+        ChromeBand {
+            TextName {
+                text: root.heading;
+            }
+        }
+
+        VerticalLayout {
+            padding: Tokens.space-4;
+            spacing: Tokens.space-4;
+
+            VerticalLayout {
+                spacing: Tokens.space-2;
+                TextSmallMuted {
+                    text: root.try-heading;
+                }
+                TextBody {
+                    text: root.try-it;
+                    wrap: word-wrap;
+                }
+                box := QueryField {
+                    query: root.box-before;
+                    query-after: root.box-after;
+                    accessible-name: root.box-name;
+                }
+                TextSmallMuted {
+                    text: root.box-facts;
+                    wrap: word-wrap;
+                }
+            }
+
+            Hairline { }
+
+            VerticalLayout {
+                spacing: Tokens.space-2;
+                TextSmallMuted {
+                    text: root.does-heading;
+                }
+                TextBody {
+                    text: root.does;
+                    wrap: word-wrap;
+                }
+                TextBody {
+                    text: root.allowed;
+                    wrap: word-wrap;
+                }
+            }
+
+            Hairline { }
+
+            VerticalLayout {
+                spacing: Tokens.space-2;
+                TextSmallMuted {
+                    text: root.ready-heading;
+                }
+                TextBody {
+                    text: root.ready;
+                    wrap: word-wrap;
+                }
+                HintBar {
+                    rows: root.hints;
+                }
+            }
+        }
+
+        ChromeBand {
+            at-bottom: true;
+            HorizontalLayout {
+                Spacer { }
+                SmallButton {
+                    text: root.start-label;
+                    action: root.start-action;
+                    primary: true;
+                    clicked => {
+                        root.start();
+                    }
+                }
+            }
+        }
+    }
+}

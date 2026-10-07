@@ -26,6 +26,11 @@ import { Tokens } from "../tokens.slint";
 // letter goes and that the keyboard is here - it does not move and it does not
 // blink, because nothing in this tool changes on a timer (`D83`).
 //
+// ⊕ The welcome window's box for the first try (UX7, `nkb_gui::trial`) is the
+// same line with a caret Rust moves: `query-after` is the text after the caret,
+// drawn after the mark, and empty for the search, which always types at the end.
+// `shift` reaches Rust because the palette's clearing recipe holds it over `End`.
+//
 // # One language of states (PORADNIK-GUI 10.9)
 //
 //     pointer here      the edge one step brighter (`border-strong`)
@@ -47,6 +52,8 @@ import { Tokens } from "../tokens.slint";
 // a long query would have widened the whole window (`slint.md` 2.29).
 export component QueryField inherits Rectangle {
     in property <string> query;
+    // The text after the caret - see the header. Empty: the caret is at the end.
+    in property <string> query-after;
     in property <bool> enabled: true;
     in property <bool> invalid;
     // What UI Automation calls the line - the address a harness finds it by
@@ -56,7 +63,7 @@ export component QueryField inherits Rectangle {
     // One key press, as the text it produced and the modifiers held. Rust
     // answers whether the press was the query's: false lets it travel on, so a
     // key the query does not want is not silently eaten.
-    callback pressed(text: string, control: bool, alt: bool, meta: bool) -> bool;
+    callback pressed(text: string, control: bool, alt: bool, shift: bool, meta: bool) -> bool;
     // The window holding the line stopped being the active one - the tester
     // clicked another window or switched away. Only that reason: focus moved
     // by code or by a click inside the window is not the tester leaving
@@ -97,9 +104,9 @@ export component QueryField inherits Rectangle {
         enabled: root.enabled;
         accessible-role: text-input;
         accessible-label: root.accessible-name;
-        accessible-value: root.query;
+        accessible-value: root.query + root.query-after;
         key-pressed(event) => {
-            return root.pressed(event.text, event.modifiers.control, event.modifiers.alt, event.modifiers.meta) ? accept : reject;
+            return root.pressed(event.text, event.modifiers.control, event.modifiers.alt, event.modifiers.shift, event.modifiers.meta) ? accept : reject;
         }
         focus-lost(reason) => {
             if (reason == FocusReason.window-activation) {
@@ -154,6 +161,18 @@ export component QueryField inherits Rectangle {
                         width: Tokens.caret-width;
                         height: parent.height;
                         background: Tokens.accent;
+                    }
+
+                    // After the mark, and clipped at the right edge when it
+                    // does not fit: the caret stays in view, the end may not.
+                    Text {
+                        text: root.query-after;
+                        color: root.enabled ? Tokens.text-primary : Tokens.text-muted;
+                        font-size: Tokens.type-body;
+                        vertical-alignment: center;
+                        width: self.preferred-width;
+                        height: parent.height;
+                        x: shown.x + shown.width + Tokens.caret-width;
                     }
                 }
             }

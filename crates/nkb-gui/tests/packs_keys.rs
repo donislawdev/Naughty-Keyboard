@@ -82,7 +82,7 @@ fn the_query_line_types_letters_and_nothing_from_the_clipboard_shortcuts() {
     let query = Rc::new(RefCell::new(Query::default()));
     let weak = window.as_weak();
     let kept = query.clone();
-    window.on_query_pressed(move |text, control, alt, meta| {
+    window.on_query_pressed(move |text, control, alt, _shift, meta| {
         let mut query = kept.borrow_mut();
         let pressed = query.press(KeyPress {
             text: text.as_str(),

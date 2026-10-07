@@ -63,7 +63,8 @@ use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::screens::Point;
 use nkb_gui::packs::{Packs, SystemKeyboard};
 use nkb_gui::shortcuts::{Shortcuts, System};
-use nkb_gui::{Gallery, PacksWindow, Palette, ShortcutsWindow, focus, live};
+use nkb_gui::welcome::Welcome;
+use nkb_gui::{Gallery, PacksWindow, Palette, ShortcutsWindow, WelcomeWindow, focus, live};
 use slint::ComponentHandle;
 
 /// The pack the palette opens on when the command line names none and the
@@ -164,6 +165,8 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     let (bindings, refused) = settings.bindings(default_bindings(), &altgr_character);
     said.extend(refused);
     let compact = live::starts_compact(settings.settings());
+    // Asked here, before the settings move to the worker (UX7, `D103`).
+    let welcome_due = settings.welcome_due();
     let palette = Palette::new()?;
     // Where the tester left it on this layout of screens (UX7). Asked after the
     // window is built, because from then on the process sees physical pixels
@@ -220,7 +223,6 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // sentence saying the palette could not refuse the focus. The worker rebuilds
     // the message band on every view and has to find that sentence again.
     let standing = focus::standing();
-    focus::refuse_focus(&palette, kept, &standing);
 
     let stop = Arc::new(AtomicBool::new(false));
     // What the pack window asks of the worker between presses - another pack.
@@ -257,7 +259,7 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         ShortcutsWindow::new()?,
         Box::new(SystemKeyboard::default()),
         Box::new(System),
-        choose,
+        choose.clone(),
         say_in(&palette),
     );
     palette.on_open_shortcuts({
@@ -268,6 +270,28 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         let packs = std::rc::Rc::clone(&packs);
         move || packs.open()
     });
+    // The first run's window (UX7, `ux-spec.md` 5.1, `D105`), opened once the
+    // palette has refused the keyboard - see `focus::refuse_focus`.
+    let welcome = if welcome_due {
+        Some(Welcome::new(
+            WelcomeWindow::new()?,
+            Box::new(SystemKeyboard::default()),
+            choose.clone(),
+            &bindings,
+            say_in(&palette),
+        ))
+    } else {
+        None
+    };
+    focus::refuse_focus(&palette, kept, &standing, {
+        let welcome = welcome.clone();
+        let in_use = Arc::clone(&in_use);
+        move || {
+            if let Some(welcome) = welcome {
+                welcome.open(live::in_use_now(&in_use).pack.as_deref());
+            }
+        }
+    });
     // Closing the palette closes the pack window too - otherwise the event
     // loop would wait for it, and the process would outlive the palette.
     // Where it stood is read here, while the window is still up (UX7).
@@ -277,6 +301,7 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         let shortcuts = std::rc::Rc::clone(&shortcuts);
         let closed_at = std::rc::Rc::clone(&closed_at);
         let palette = palette.as_weak();
+        let welcome = welcome.clone();
         move || {
             if let Some(palette) = palette.upgrade() {
                 let at = palette.window().position();
@@ -284,6 +309,9 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
             }
             packs.close();
             shortcuts.close();
+            if let Some(welcome) = &welcome {
+                welcome.dismiss();
+            }
             slint::CloseRequestResponse::HideWindow
         }
     });

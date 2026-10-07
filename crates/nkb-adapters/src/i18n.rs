@@ -759,6 +759,10 @@ pub enum Environment {
     /// The shortcuts window could not keep its menu from opening on
     /// `Alt+Space` (`D91`, `slint.md` 2.37).
     ShortcutsMenuOpen,
+    /// The welcome window opened, and the system kept the keyboard somewhere
+    /// else - the first value would go to the window in front, not the box
+    /// (UX7, `D105`).
+    WelcomeFocusNotTaken,
 }
 
 /// The pattern for an environment limit. `ux-spec.md` 6, section B.
@@ -785,6 +789,9 @@ fn pattern_environment(limit: Environment) -> &'static str {
         }
         Environment::ShortcutsMenuOpen => {
             "The shortcuts window could not keep its menu shut: {reason}. Press Esc if a menu opens."
+        }
+        Environment::WelcomeFocusNotTaken => {
+            "The welcome window could not take the keyboard focus: {reason}. Click the box in the welcome window before pressing the shortcut."
         }
     }
 }
@@ -1872,6 +1879,99 @@ pub enum ShortcutsLabel {
     SeveralKeys,
     /// This system cannot tell which key was pressed.
     CannotTell,
+}
+
+/// The words of the welcome window (`ux-spec.md` 5.1 and 6 N, UX7, `D105`).
+///
+/// A fourth window with its own words, for the reason `PacksLabel` gives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WelcomeLabel {
+    /// The window's title, which the system shows in the task switcher.
+    Title,
+    /// The heading in the window's header.
+    Heading,
+    /// The first step's heading.
+    TryHeading,
+    /// The first step: `ux-spec.md` 5.1's own sentence, with the shortcut in
+    /// effect.
+    TryIt,
+    /// What UI Automation calls the box.
+    BoxName,
+    /// Under the box while nothing has arrived in it.
+    Empty,
+    /// The second step's heading.
+    DoesHeading,
+    /// The second step: what the tool does to other windows and what it reads
+    /// (`product-spec.md` 10.3).
+    Does,
+    /// `product-spec.md` 10.2 point 3, said once, here.
+    Allowed,
+    /// The third step's heading.
+    ReadyHeading,
+    /// The third step, naming the pack the palette is on.
+    Ready,
+    /// The same, before the palette has said which pack it is on.
+    ReadyNoPack,
+    /// The window's main action.
+    Start,
+    /// What it does, for UI Automation.
+    StartAction,
+}
+
+fn pattern_welcome_label(label: WelcomeLabel) -> &'static str {
+    match label {
+        WelcomeLabel::Title => "Naughty Keyboard - welcome",
+        WelcomeLabel::Heading => "Welcome to Naughty Keyboard",
+        WelcomeLabel::TryHeading => "Try it here first",
+        WelcomeLabel::TryIt => "Click the box below and press {shortcut}.",
+        WelcomeLabel::BoxName => "The box for the first try",
+        WelcomeLabel::Empty => "Nothing has arrived yet.",
+        WelcomeLabel::DoesHeading => "What it does",
+        WelcomeLabel::Does => {
+            "Naughty Keyboard types into the window in front, the way a keyboard does. It does not read what the window shows - only the name of its program and the kind of control that has the keyboard."
+        }
+        WelcomeLabel::Allowed => "Use it only on systems you are allowed to test.",
+        WelcomeLabel::ReadyHeading => "Ready",
+        WelcomeLabel::Ready => {
+            "The palette is on the pack {pack}. Press {shortcut} to choose another pack or value."
+        }
+        WelcomeLabel::ReadyNoPack => "Press {shortcut} to choose a pack or a value.",
+        WelcomeLabel::Start => "Start testing",
+        WelcomeLabel::StartAction => "Close the welcome and start testing",
+    }
+}
+
+/// A welcome window label that carries nothing, ready to show. A pattern
+/// with a placeholder has a typed function below.
+#[must_use]
+pub fn welcome_label(label: WelcomeLabel) -> &'static str {
+    pattern_welcome_label(label)
+}
+
+/// The first step, naming the shortcut that sends the next value.
+#[must_use]
+pub fn welcome_try_it(next_value: HotkeyChord) -> String {
+    fill(
+        pattern_welcome_label(WelcomeLabel::TryIt),
+        &[("shortcut", &chord(next_value))],
+    )
+}
+
+/// The third step: the pack the palette is on, when it is known, and the
+/// shortcut of the value window.
+#[must_use]
+pub fn welcome_ready(pack: Option<&str>, open_packs: HotkeyChord) -> String {
+    let shortcut = chord(open_packs);
+    match pack {
+        Some(pack) => fill(
+            pattern_welcome_label(WelcomeLabel::Ready),
+            &[("pack", pack), ("shortcut", &shortcut)],
+        ),
+        None => fill(
+            pattern_welcome_label(WelcomeLabel::ReadyNoPack),
+            &[("shortcut", &shortcut)],
+        ),
+    }
 }
 
 fn pattern_shortcuts_label(label: ShortcutsLabel) -> &'static str {

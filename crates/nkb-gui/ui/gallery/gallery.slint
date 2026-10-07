@@ -260,6 +260,13 @@ export component Gallery inherits Window {
             Spacer { }
             SmallButton { text: "Copy to the clipboard"; action: "Copy the next value"; }
         }
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            TextSmallMuted { text: "primary"; }
+            Spacer { }
+            SmallButton { text: "Start testing"; action: "Close the welcome"; primary: true; }
+            SmallButton { text: "Start testing"; action: "Close the welcome"; primary: true; enabled: false; }
+        }
 
         Hairline {}
 

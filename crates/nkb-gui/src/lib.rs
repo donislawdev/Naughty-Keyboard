@@ -67,3 +67,9 @@ pub mod shortcuts;
 // the window, the keyboard taken on opening and handed back on closing. Beside
 // `focus` for the reason `focus` gives - it is main-thread code.
 pub mod packs;
+// The welcome window's box for the first try: its text, caret and selection,
+// tested without a window like `query` (UX7, `D105`).
+pub mod trial;
+// The welcome window itself, on the main thread: opened once at the first run,
+// the keyboard taken for the box, closing remembered through the worker.
+pub mod welcome;

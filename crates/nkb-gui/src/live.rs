@@ -308,6 +308,10 @@ pub enum Command {
     /// switch rather than a named way, like the collapse: the button's words
     /// come from the worker's state, so a click always means "the other one".
     SwitchClearing,
+    /// The tester closed the welcome window - remember it, so it does not open
+    /// again (`[welcome] done`, UX7, `D103`, `D105`). Here, because the worker
+    /// owns the settings for the run.
+    WelcomeDone,
 }
 
 /// What the worker tells the shortcuts window.
@@ -839,6 +843,20 @@ impl Worker<'_> {
                     .collect();
                 Carried {
                     view: Some(self.view(lines, ValueBand::Keep, None)),
+                    told: None,
+                    toggled: None,
+                }
+            }
+            // Nothing on screen changes. A save that failed for a reason not
+            // said before is said, like every other change.
+            Command::WelcomeDone => {
+                let lines: Vec<String> = self
+                    .memory
+                    .keep(SettingChange::WelcomeDone)
+                    .into_iter()
+                    .collect();
+                Carried {
+                    view: (!lines.is_empty()).then(|| self.view(lines, ValueBand::Keep, None)),
                     told: None,
                     toggled: None,
                 }

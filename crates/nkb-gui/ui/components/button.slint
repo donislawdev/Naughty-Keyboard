@@ -30,6 +30,15 @@
 // A click reaches the palette without activating it (measured, `D62`), so the
 // field under test keeps the keyboard.
 //
+// ⊕ `primary` - the ONE main action of a window (GUI rule 17), first the
+// welcome window's "Start testing" (UX7): the ground in the accent and the word
+// in the window's own ground colour, so it is the brightest thing on the screen
+// before the pointer comes. Pointer and press move the frame, not the ground:
+//
+//     at rest          ground `accent`, word `surface`, frame `accent`
+//     pointer here     frame `text-primary`
+//     pressed          frame `text-primary`, ground `border-strong`
+//
 // Sized by its content, like `Pill`, whose frame and padding it shares: the
 // width comes from a layout, never from arithmetic on the word - `Pill` says
 // what the arithmetic did to the word "offensive".
@@ -42,6 +51,8 @@ export component SmallButton inherits Rectangle {
     // word - the palette has two Copy buttons - and this tells them apart.
     in property <string> action;
     in property <bool> enabled: true;
+    // The window's main action - see the header.
+    in property <bool> primary;
     callback clicked();
 
     horizontal-stretch: 0;
@@ -53,10 +64,13 @@ export component SmallButton inherits Rectangle {
     border-width: Tokens.hairline;
     border-radius: Tokens.radius-small;
     border-color: !root.enabled ? Tokens.border
+        : root.primary && (area.pressed || area.has-hover) ? Tokens.text-primary
+        : root.primary ? Tokens.accent
         : area.pressed ? Tokens.accent
         : area.has-hover ? Tokens.border-strong
         : Tokens.border;
-    background: root.enabled && area.pressed ? Tokens.surface-sample : Tokens.surface-raised;
+    background: root.primary ? (root.enabled && area.pressed ? Tokens.border-strong : Tokens.accent)
+        : root.enabled && area.pressed ? Tokens.surface-sample : Tokens.surface-raised;
     opacity: root.enabled ? 1 : Tokens.alpha-disabled;
 
     accessible-role: button;
@@ -86,7 +100,9 @@ export component SmallButton inherits Rectangle {
 
         TextSmall {
             text: root.text;
-            color: root.enabled && (area.has-hover || area.pressed) ? Tokens.accent : Tokens.text-secondary;
+            color: root.primary ? Tokens.surface
+                : root.enabled && (area.has-hover || area.pressed) ? Tokens.accent
+                : Tokens.text-secondary;
         }
     }
 }

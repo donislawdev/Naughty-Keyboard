@@ -79,7 +79,17 @@ pub fn standing_line(standing: &Standing) -> Option<String> {
 ///
 /// Call it before `run()`: work handed to the loop beforehand is delivered once
 /// the loop starts, measured in `tools/sonda-petla` (`slint.md` 1.9).
-pub fn refuse_focus(palette: &Palette, kept: KeptFocus, standing: &Standing) {
+///
+/// `then` runs once, right after the palette refused the focus and handed it
+/// back - or gave up trying. The welcome window opens there (UX7, `D105`): a
+/// window that took the keyboard earlier would lose it to that hand-back.
+pub fn refuse_focus(
+    palette: &Palette,
+    kept: KeptFocus,
+    standing: &Standing,
+    then: impl FnOnce() + 'static,
+) {
+    let mut then = Some(then);
     let weak = palette.as_weak();
     let standing = Arc::clone(standing);
     let started = std::time::Instant::now();
@@ -104,6 +114,9 @@ pub fn refuse_focus(palette: &Palette, kept: KeptFocus, standing: &Standing) {
                 &standing,
                 &i18n::environment(Environment::FocusNotRefused, &error.to_string()),
             );
+        }
+        if let Some(then) = then.take() {
+            then();
         }
     });
     // Dropping a `slint::Timer` cancels it, so it is kept alive here for the

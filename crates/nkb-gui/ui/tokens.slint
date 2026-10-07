@@ -155,6 +155,11 @@ export global Tokens {
     // its thumb says so. A count, not a length: the line is measured from the
     // typeface in the window itself.
     out property <int> shortcuts-message-lines: 2;
+    // The welcome window (UX7, `ux-spec.md` 5.1): the width of the shortcuts
+    // window, so the two read as one family, and room for each step's sentence
+    // on two lines. No height, for the shortcuts window's reason: it is as tall
+    // as its three steps, and the size is bound (`slint.md` 2.38).
+    out property <length> welcome-width: 480px;
     // The thumb that says a list scrolls. Thin, because it is a sign rather
     // than a control - the list scrolls with the wheel and the arrow keys.
     out property <length> scroll-thumb: 4px;

@@ -171,7 +171,7 @@ impl Packs {
         let weak = Rc::downgrade(&packs);
         packs
             .window
-            .on_query_pressed(move |text, control, alt, meta| {
+            .on_query_pressed(move |text, control, alt, _shift, meta| {
                 weak.upgrade().is_some_and(|packs| {
                     packs.press(KeyPress {
                         text: text.as_str(),
