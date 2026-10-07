@@ -43,7 +43,7 @@ pub use hotkeys::{
     Bindings, ChordError, ChordProblem, Convention, DEFAULT_BINDINGS, HotkeyAction, HotkeyChord,
     HotkeyKey, MACOS_DEFAULT_BINDINGS, Refusal, Refused, default_bindings, default_chord,
 };
-pub use identity::{is_pack_id, is_value_id};
+pub use identity::{ValueKey, is_pack_id, is_value_id};
 pub use lint::{
     LintProblem, LintReport, LintRule, MAX_VALUES_PER_PACK, RULES, RuleCode, RuleCoverage,
     RuleStatus, Severity, SkipReason, SkippedRule, rule_for,

@@ -50,13 +50,13 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use nkb_app::{
-    Clearing, POSITIONS_KEPT, SaveError, SettingChange, Settings, SettingsLoad, SettingsNote,
-    SettingsStore, SettingsUnusable, ShortcutUnreadable,
+    Clearing, POSITIONS_KEPT, RECENT_KEPT, SaveError, SettingChange, Settings, SettingsLoad,
+    SettingsNote, SettingsStore, SettingsUnusable, ShortcutUnreadable,
 };
 use nkb_core::hotkeys::{HotkeyAction, HotkeyChord};
-use nkb_core::identity::is_pack_id;
+use nkb_core::identity::{ValueKey, is_pack_id};
 use nkb_core::screens::{Layout, Point};
-use toml_edit::{DocumentMut, Item, Table, TableLike, Value};
+use toml_edit::{Array, DocumentMut, Item, Table, TableLike, Value};
 
 /// The one schema this version reads and writes.
 pub const SCHEMA: i64 = 1;
@@ -223,8 +223,27 @@ fn settings_of(document: &DocumentMut) -> (Settings, Vec<SettingsNote>) {
     let mut unknown = Vec::new();
 
     for (key, _) in document.iter() {
-        if key != "schema" && key != "palette" && key != "shortcuts" && key != "welcome" {
+        if !["schema", "palette", "shortcuts", "welcome", "find"].contains(&key) {
             unknown.push(key.to_owned());
+        }
+    }
+    match document.get("find").map(Item::as_table_like) {
+        None => {}
+        Some(None) => notes.push(SettingsNote::NotATable {
+            key: String::from("find"),
+        }),
+        Some(Some(find)) => {
+            for (key, item) in find.iter() {
+                match key {
+                    "recent" => match recent_of(item) {
+                        Some(recent) => settings.recent = recent,
+                        None => notes.push(SettingsNote::NotARecentList {
+                            key: String::from("find.recent"),
+                        }),
+                    },
+                    other => unknown.push(format!("find.{other}")),
+                }
+            }
         }
     }
     match document.get("welcome").map(Item::as_table_like) {
@@ -324,6 +343,41 @@ fn settings_of(document: &DocumentMut) -> (Settings, Vec<SettingsNote>) {
         notes.push(SettingsNote::UnknownKeys { keys: unknown });
     }
     (settings, notes)
+}
+
+/// The recent values in `[find] recent` (`UX-GUI-016`): an array whose every
+/// entry reads as `pack/value`, or nothing at all - one entry that does not
+/// read refuses the list rather than leaving a hole the tester cannot see. A
+/// list longer than [`RECENT_KEPT`], or with an entry twice, can only be
+/// written by hand, and reads as the tool would have kept it: each value once,
+/// the first ones.
+fn recent_of(item: &Item) -> Option<Vec<ValueKey>> {
+    let mut recent: Vec<ValueKey> = Vec::new();
+    for entry in item.as_array()? {
+        let key = ValueKey::parse(entry.as_str()?)?;
+        if !recent.contains(&key) {
+            recent.push(key);
+        }
+    }
+    recent.truncate(RECENT_KEPT);
+    Some(recent)
+}
+
+/// The list as the file holds it: one reference per line, because eight side
+/// by side make a line some three hundred characters long.
+fn recent_array(recent: &[ValueKey]) -> Value {
+    let mut array = Array::new();
+    for key in recent {
+        array.push(key.text());
+    }
+    if !array.is_empty() {
+        for value in array.iter_mut() {
+            value.decor_mut().set_prefix("\n    ");
+        }
+        array.set_trailing_comma(true);
+        array.set_trailing("\n");
+    }
+    Value::Array(array)
 }
 
 /// One remembered place: a key that reads as a layout of screens, and a table
@@ -462,6 +516,12 @@ fn set_key(document: &mut DocumentMut, change: &SettingChange) -> bool {
             current.and_then(Item::as_bool) == Some(true),
             Some(Value::from(true)),
         ),
+        // Read back the way it is read at start, so a list the tester wrote on
+        // one line, or longer than the tool keeps, is the same list.
+        SettingChange::Recent(recent) => (
+            current.and_then(recent_of).as_ref() == Some(recent),
+            Some(recent_array(recent)),
+        ),
         // Not one key - `set` hands it to `set_position`, and `place_of` has
         // already answered `None` for it.
         SettingChange::Position { .. } => return false,
@@ -513,6 +573,7 @@ fn place_of(change: &SettingChange) -> Option<(&'static str, &'static str)> {
         SettingChange::Clearing(_) => Some(("palette", "clearing")),
         SettingChange::Shortcut { action, .. } => Some(("shortcuts", action.id())),
         SettingChange::WelcomeDone => Some(("welcome", "done")),
+        SettingChange::Recent(_) => Some(("find", "recent")),
         SettingChange::Position { .. } => None,
     }
 }
@@ -1743,6 +1804,113 @@ mod tests {
                     keys: vec![String::from("welcome.shown")]
                 },
             ]
+        );
+    }
+
+    fn key(pack: &str, value: &str) -> ValueKey {
+        ValueKey {
+            pack: pack.to_owned(),
+            value: value.to_owned(),
+        }
+    }
+
+    /// `UX-GUI-016`: one reference per line, in a table of its own, read back
+    /// as written - and a list already in the file is not written again.
+    #[test]
+    fn the_recent_values_are_one_list_in_a_table_of_their_own_and_read_back() {
+        let scratch = Scratch::new("recent");
+        let store = scratch.store();
+        let recent = vec![
+            key("locale-pl", "pesel-valid"),
+            key("whitespace", "trailing-space"),
+        ];
+        assert_eq!(store.save(&SettingChange::Recent(recent.clone())), Ok(()));
+        assert_eq!(
+            scratch.text(),
+            "schema = 1\n\n[find]\nrecent = [\n    \"locale-pl/pesel-valid\",\n    \
+             \"whitespace/trailing-space\",\n]\n"
+        );
+        assert_eq!(read(&store).0.recent, recent);
+
+        // The tester's own way of writing it is the same list, so it stays.
+        let one_line = "schema = 1\n[find]\nrecent = [\"locale-pl/pesel-valid\", \
+                        \"whitespace/trailing-space\"]  # mine\n";
+        scratch.write(one_line);
+        assert_eq!(store.save(&SettingChange::Recent(recent.clone())), Ok(()));
+        assert_eq!(scratch.text(), one_line, "nothing changed, nothing written");
+
+        // A change replaces the list and keeps the comment after it.
+        let changed = vec![key("whitespace", "trailing-space")];
+        assert_eq!(store.save(&SettingChange::Recent(changed.clone())), Ok(()));
+        assert_eq!(read(&store).0.recent, changed);
+        assert!(
+            scratch.text().ends_with("]  # mine\n"),
+            "{}",
+            scratch.text()
+        );
+    }
+
+    #[test]
+    fn a_recent_list_with_one_entry_that_does_not_read_is_not_used_at_all() {
+        let scratch = Scratch::new("recent-wrong");
+        let store = scratch.store();
+        for wrong in [
+            "recent = \"whitespace/trailing-space\"",
+            "recent = [\"whitespace/trailing-space\", \"whitespace\"]",
+            "recent = [\"whitespace/trailing-space\", 3]",
+            "recent = [\"Whitespace/trailing-space\"]",
+            "recent = [\"../x/y\"]",
+        ] {
+            scratch.write(&format!("schema = 1\n[find]\n{wrong}\n"));
+            let (settings, notes) = read(&store);
+            assert_eq!(settings.recent, Vec::new(), "{wrong}");
+            assert_eq!(
+                notes,
+                vec![SettingsNote::NotARecentList {
+                    key: String::from("find.recent")
+                }],
+                "{wrong}"
+            );
+        }
+
+        scratch.write("schema = 1\nfind = 3\n");
+        assert_eq!(
+            read(&store).1,
+            vec![SettingsNote::NotATable {
+                key: String::from("find")
+            }]
+        );
+        scratch.write("schema = 1\n[find]\nfavourites = []\n");
+        assert_eq!(
+            read(&store).1,
+            vec![SettingsNote::UnknownKeys {
+                keys: vec![String::from("find.favourites")]
+            }]
+        );
+    }
+
+    /// Only a hand can write a longer list or one value twice, and it reads as
+    /// the tool would have kept it.
+    #[test]
+    fn a_hand_written_recent_list_reads_as_the_tool_keeps_one() {
+        let scratch = Scratch::new("recent-long");
+        let store = scratch.store();
+        let entries: Vec<String> = (0..10)
+            .map(|n| format!("\"length-bombs/{n}\""))
+            .chain(std::iter::once(String::from("\"length-bombs/0\"")))
+            .collect();
+        scratch.write(&format!(
+            "schema = 1\n[find]\nrecent = [\"length-bombs/0\", {}]\n",
+            entries.join(", ")
+        ));
+        let (settings, notes) = read(&store);
+        assert_eq!(notes, Vec::new());
+        assert_eq!(
+            settings.recent,
+            (0..RECENT_KEPT)
+                .map(|n| key("length-bombs", &n.to_string()))
+                .collect::<Vec<_>>(),
+            "each value once, the first eight"
         );
     }
 }

@@ -28,11 +28,12 @@
 use std::mem::{Discriminant, discriminant};
 
 use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord, Refusal, Refused};
+use nkb_core::identity::ValueKey;
 use nkb_core::screens::{Layout, Point};
 
 use crate::advance_sequence::ChooseError;
 use crate::ports::{
-    HotkeyRegistrar, POSITIONS_KEPT, SaveError, SettingChange, Settings, SettingsLoad,
+    HotkeyRegistrar, POSITIONS_KEPT, RECENT_KEPT, SaveError, SettingChange, Settings, SettingsLoad,
     SettingsNote, SettingsStore, SettingsUnusable, ShortcutRegistration, ShortcutsUnavailable,
 };
 
@@ -465,6 +466,7 @@ impl KeptSettings {
                 self.settings.positions.last() == Some(&(layout.clone(), *at))
             }
             SettingChange::WelcomeDone => self.settings.welcome_done == Some(true),
+            SettingChange::Recent(recent) => self.settings.recent == *recent,
         }
     }
 
@@ -484,6 +486,7 @@ impl KeptSettings {
                 positions.drain(..over);
             }
             SettingChange::WelcomeDone => self.settings.welcome_done = Some(true),
+            SettingChange::Recent(recent) => self.settings.recent = recent,
         }
     }
 
@@ -534,6 +537,18 @@ impl KeptSettings {
             },
         )
     }
+}
+
+/// Puts `used` first in a list of recent values (`UX-GUI-016`): moved there
+/// when the list holds it already, so a value is in it once, and the oldest
+/// dropped past [`RECENT_KEPT`].
+///
+/// A value sent ten times in a row is one entry, not ten - the list says what
+/// the tester went back to, and repetition says nothing new.
+pub fn note_used(recent: &mut Vec<ValueKey>, used: ValueKey) {
+    recent.retain(|held| *held != used);
+    recent.insert(0, used);
+    recent.truncate(RECENT_KEPT);
 }
 
 /// One action's wish put into a list of the file's wishes the way the store
@@ -1797,5 +1812,72 @@ mod tests {
         assert!(!kept.welcome_due());
         assert_eq!(kept.keep(&store, SettingChange::WelcomeDone), None);
         assert_eq!(store.saves(), vec![SettingChange::WelcomeDone]);
+    }
+
+    fn key(pack: &str, value: &str) -> ValueKey {
+        ValueKey {
+            pack: pack.to_owned(),
+            value: value.to_owned(),
+        }
+    }
+
+    /// `UX-GUI-016`: the value used last is first, a value is listed once,
+    /// and the list stops at the owner's eight.
+    #[test]
+    fn a_used_value_goes_first_once_and_the_list_keeps_eight() {
+        let mut recent = Vec::new();
+        note_used(&mut recent, key("whitespace", "a"));
+        note_used(&mut recent, key("locale-pl", "b"));
+        assert_eq!(recent, vec![key("locale-pl", "b"), key("whitespace", "a")]);
+
+        note_used(&mut recent, key("whitespace", "a"));
+        assert_eq!(
+            recent,
+            vec![key("whitespace", "a"), key("locale-pl", "b")],
+            "used again, it moves to the front and is not listed twice"
+        );
+        note_used(&mut recent, key("whitespace", "a"));
+        assert_eq!(recent.len(), 2, "sent ten times in a row is one entry");
+
+        // The same value id in another pack is another value.
+        note_used(&mut recent, key("locale-pl", "a"));
+        assert_eq!(recent.len(), 3);
+
+        for n in 0..RECENT_KEPT {
+            note_used(&mut recent, key("length-bombs", &n.to_string()));
+        }
+        assert_eq!(recent.len(), RECENT_KEPT);
+        assert_eq!(recent.first(), Some(&key("length-bombs", "7")));
+        assert_eq!(recent.last(), Some(&key("length-bombs", "0")));
+        assert!(
+            !recent.contains(&key("whitespace", "a")),
+            "the oldest went: {recent:?}"
+        );
+    }
+
+    #[test]
+    fn the_recent_list_is_saved_only_when_it_changed() {
+        let first = vec![key("whitespace", "a")];
+        let store = FakeStore::loading(SettingsLoad::Read {
+            settings: Settings {
+                recent: first.clone(),
+                ..Settings::default()
+            },
+            notes: Vec::new(),
+        });
+        let (mut kept, _) = KeptSettings::open(&store);
+        assert_eq!(
+            kept.keep(&store, SettingChange::Recent(first.clone())),
+            None
+        );
+        assert_eq!(store.saves(), Vec::new(), "the list read, unchanged");
+
+        let changed = vec![key("locale-pl", "b"), key("whitespace", "a")];
+        assert_eq!(
+            kept.keep(&store, SettingChange::Recent(changed.clone())),
+            None
+        );
+        assert_eq!(store.saves(), vec![SettingChange::Recent(changed.clone())]);
+        assert_eq!(kept.settings().recent, changed);
     }
 }

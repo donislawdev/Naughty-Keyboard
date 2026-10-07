@@ -263,11 +263,9 @@ pub enum UpcomingValue {
 /// What a Copy button holds rather than a position, because the sequence may
 /// move between a click and its turn - an identifier still names the value
 /// the tester saw, or none. [`AdvanceSequence::copy_value`] takes the two.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ValueKey {
-    pub pack: String,
-    pub value: String,
-}
+/// Defined in the core since the settings remember values by it too
+/// (`[find] recent`, `UX-GUI-016`) and its written form is one function.
+pub use nkb_core::identity::ValueKey;
 
 /// What the palette shows about the value that just went out - whole, or cut
 /// short part-way.

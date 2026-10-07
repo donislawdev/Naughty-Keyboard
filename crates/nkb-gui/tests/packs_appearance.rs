@@ -36,6 +36,9 @@ const HEIGHT: u32 = 560;
 /// palette test gives: a test that reads the value it checks cannot fail.
 const ACCENT: (u8, u8, u8) = (0x7A, 0xA2, 0xF7);
 
+/// The row of the next value in [`specimen`] - where the window opens.
+const NEXT_ROW: usize = 5;
+
 /// Specimen data - the test's own, like the gallery's labels. The product fills
 /// these from `nkb-adapters::i18n` and the catalogue.
 fn fill(window: &PacksWindow, rows: Vec<PickRow>) {
@@ -47,9 +50,9 @@ fn fill(window: &PacksWindow, rows: Vec<PickRow>) {
     window.set_current_label("in use".into());
     window.set_empty_text("Nothing matches \"zzz\". Press Backspace to widen the search.".into());
     window.set_rows(ModelRc::new(VecModel::from(rows)));
-    // The next value, under the heading and the restart row - where the
-    // window opens.
-    window.set_selected(2);
+    // The next value, under the recent ones, the heading and the restart row -
+    // where the window opens.
+    window.set_selected(NEXT_ROW as i32);
     window.set_hints(ModelRc::new(VecModel::from(vec![
         HintRow {
             key: "Enter".into(),
@@ -93,11 +96,24 @@ fn heading(title: &str) -> PickRow {
     }
 }
 
-/// The window as UX2 opens it with nothing typed: the values of the pack in
-/// use under the row that starts it again (UX4), the next one marked and
-/// selected, then the packs with what each is for.
+/// The window as UX2 opens it with nothing typed: the values used last in
+/// other packs (`UX-GUI-016`), the values of the pack in use under the row
+/// that starts it again (UX4), the next one marked and selected, then the
+/// packs with what each is for.
 fn specimen() -> Vec<PickRow> {
     vec![
+        heading("Recent"),
+        row(
+            "PESEL with a valid checksum",
+            "Polish locale - value 1 of 6",
+            false,
+        ),
+        PickRow {
+            badge: "offensive".into(),
+            has_badge: true,
+            badge_risky: true,
+            ..row("Script tag in a name", "Injections - value 4 of 40", false)
+        },
         heading("Values in Whitespace"),
         PickRow {
             single_line: true,
@@ -285,7 +301,7 @@ fn the_pack_window_shows_where_the_keyboard_is_and_which_row_it_reached() {
     // A difference of two renders, the pill marked and not: the colour is the
     // whole difference between "next" and any other pill.
     let mut unmarked = specimen();
-    unmarked[2].badge_current = false;
+    unmarked[NEXT_ROW].badge_current = false;
     window.set_rows(ModelRc::new(VecModel::from(unmarked)));
     let plain = offscreen::draw(&surface, WIDTH, HEIGHT);
     window.set_rows(ModelRc::new(VecModel::from(specimen())));

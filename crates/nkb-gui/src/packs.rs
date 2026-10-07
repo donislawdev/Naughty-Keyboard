@@ -257,7 +257,8 @@ impl Packs {
                 now.pack.as_deref(),
                 now.next.as_deref(),
             )
-            .with_restart_key(now.restart.map(i18n::chord));
+            .with_restart_key(now.restart.map(i18n::chord))
+            .with_recent(&now.recent);
             self.window.set_notes(strings(picker.notes()));
             *self.picker.borrow_mut() = Some(picker);
             self.show_list();

@@ -879,6 +879,9 @@ fn pattern_settings_note(note: &SettingsNote) -> &'static str {
         SettingsNote::NotAPosition { .. } => {
             "In the settings file {file}, {key} should name a layout of screens and give the palette's place on it as whole numbers x and y, so it is not used. Fix the line, or remove it."
         }
+        SettingsNote::NotARecentList { .. } => {
+            "In the settings file {file}, {key} should be a list of values written as pack/value, such as \"whitespace/trailing-space\", so the value window starts with no recent values. The list is written anew when the palette closes."
+        }
     }
 }
 
@@ -1062,7 +1065,8 @@ pub fn settings_message(
                 | SettingsNote::NotAClearing { key }
                 | SettingsNote::NotATable { key }
                 | SettingsNote::NotAShortcut { key, .. }
-                | SettingsNote::NotAPosition { key } => {
+                | SettingsNote::NotAPosition { key }
+                | SettingsNote::NotARecentList { key } => {
                     (key.as_str(), String::new(), String::new())
                 }
             };
@@ -1090,7 +1094,8 @@ pub fn settings_message(
                 | SettingsNote::NotAPackName { .. }
                 | SettingsNote::NotAClearing { .. }
                 | SettingsNote::NotATable { .. }
-                | SettingsNote::NotAPosition { .. } => String::new(),
+                | SettingsNote::NotAPosition { .. }
+                | SettingsNote::NotARecentList { .. } => String::new(),
             };
             Some(fill(
                 pattern_settings_note(note),
@@ -1559,6 +1564,9 @@ pub enum PacksLabel {
     ValuesIn,
     /// The section heading over the values a query found, in every pack.
     FoundValues,
+    /// The section heading over the values the tester sent or chose last, in
+    /// packs other than the one in use (`UX-GUI-016`).
+    Recent,
     /// The section heading over the packs.
     PacksSection,
     /// Said in the palette when the value chosen in the window is not in the
@@ -1625,6 +1633,7 @@ fn pattern_packs_label(label: PacksLabel) -> &'static str {
         PacksLabel::PlacesThree => "{first}, {second} and {third}",
         PacksLabel::ValuesIn => "Values in {pack}",
         PacksLabel::FoundValues => "Values",
+        PacksLabel::Recent => "Recent",
         PacksLabel::PacksSection => "Packs",
         PacksLabel::ValueGone => {
             "Value \"{value}\" is not in {pack} any more, so the next value did not change."
@@ -2896,6 +2905,7 @@ mod tests {
             PacksLabel::PlacesThree,
             PacksLabel::ValuesIn,
             PacksLabel::FoundValues,
+            PacksLabel::Recent,
             PacksLabel::PacksSection,
             PacksLabel::ValueGone,
             PacksLabel::Offensive,
@@ -2943,6 +2953,7 @@ mod tests {
                 | PacksLabel::InUse
                 | PacksLabel::Next
                 | PacksLabel::FoundValues
+                | PacksLabel::Recent
                 | PacksLabel::PlaceId
                 | PacksLabel::PlaceTags
                 | PacksLabel::PlaceFields

@@ -133,6 +133,7 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
         pack: Some(String::from("whitespace")),
         next: None,
         restart: HotkeyChord::parse("Alt+Shift+F9").ok(),
+        recent: Vec::new(),
     };
     let in_use_slot = std::sync::Arc::clone(&in_use);
     let said: Rc<RefCell<Vec<String>>> = Rc::default();

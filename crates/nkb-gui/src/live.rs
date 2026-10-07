@@ -97,7 +97,7 @@ use nkb_app::ports::{
 };
 use nkb_app::{
     AdvanceSequence, Ended, KeptSettings, Message, Opening, Outcome, SettingsMessage,
-    ShortcutChange, UpcomingValue, ValueFacts, ValueKey, drive_sequence,
+    ShortcutChange, UpcomingValue, ValueFacts, ValueKey, drive_sequence, note_used,
 };
 use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord};
 use nkb_core::preview::ValuePreview;
@@ -426,6 +426,10 @@ pub struct InUseNow {
     /// row names at its end (`UX-GUI-007`). Here because the table lives with
     /// the worker and changes when the shortcuts window closes.
     pub restart: Option<HotkeyChord>,
+    /// The values sent or chosen last, the most recent first (`UX-GUI-016`) -
+    /// the list itself, not a copy: the worker keeps it here, for the window
+    /// to read when it opens, and saves it from here when the palette closes.
+    pub recent: Vec<ValueKey>,
 }
 
 /// A fresh slot, empty until the worker opens a pack.
@@ -444,12 +448,53 @@ pub fn in_use_now(in_use: &InUse) -> InUseNow {
 
 fn publish(in_use: &InUse, sequence: &AdvanceSequence, bindings: &Bindings) {
     if let Ok(mut held) = in_use.lock() {
-        *held = InUseNow {
-            pack: sequence.pack_id().map(str::to_owned),
-            next: next_id(sequence.upcoming().as_ref()),
-            restart: Some(bindings.chord(HotkeyAction::RestartPack)),
-        };
+        held.pack = sequence.pack_id().map(str::to_owned);
+        held.next = next_id(sequence.upcoming().as_ref());
+        held.restart = Some(bindings.chord(HotkeyAction::RestartPack));
     }
+}
+
+/// What a press changes in the slot: the next value moves, and a value that
+/// went out is recent - whole or cut short, typed or put on the clipboard,
+/// the tester used it either way (`UX-GUI-016`).
+fn after_press(in_use: &InUse, outcome: &Outcome) {
+    publish_next(in_use, outcome.upcoming.as_ref());
+    if let (Some(sent), Ok(mut held)) = (&outcome.sent, in_use.lock()) {
+        note_used(&mut held.recent, sent.key.clone());
+    }
+}
+
+/// Carries out `command`, and notes a value chosen in the value window as
+/// recent once it IS the next one - a pack that would not open, or a value
+/// it no longer holds, left the sequence where it was and was not used.
+fn carry_out_noting(worker: &mut Worker<'_>, in_use: &InUse, command: Command) -> Carried {
+    let chosen = match &command {
+        Command::ChooseValue { pack, value } => Some(ValueKey {
+            pack: pack.clone(),
+            value: value.clone(),
+        }),
+        _ => None,
+    };
+    let carried = worker.carry_out(command);
+    if let Some(chosen) = chosen {
+        let sequence = &worker.sequence;
+        let is_next = sequence.pack_id() == Some(chosen.pack.as_str())
+            && next_id(sequence.upcoming().as_ref()).as_deref() == Some(chosen.value.as_str());
+        if let (true, Ok(mut held)) = (is_next, in_use.lock()) {
+            note_used(&mut held.recent, chosen);
+        }
+    }
+    carried
+}
+
+/// Saves the recent values, once, as the palette closes - not after every
+/// press, where a write between two presses could cost the next one (`W1`)
+/// and the file would be rewritten all day (`settings-format.md` 4). A
+/// process that is killed keeps the list it started with, as it keeps the
+/// palette's place.
+fn keep_recent(memory: &Memory, in_use: &InUse) {
+    // The palette is closing: a line about a failed save has nowhere to go.
+    let _ = memory.keep(SettingChange::Recent(in_use_now(in_use).recent));
 }
 
 /// After a press: the pack is the same, the next value may have moved.
@@ -547,6 +592,9 @@ pub fn drive(
     // Before the first view, which says how values meet the field (`D101`).
     sequence.set_clearing(starts_clearing(kept.settings()));
     publish(in_use, &sequence, &bindings);
+    if let Ok(mut held) = in_use.lock() {
+        held.recent.clone_from(&kept.settings().recent);
+    }
 
     let memory = Memory {
         kept: RefCell::new(kept),
@@ -602,7 +650,7 @@ pub fn drive(
                 let mut present = |outcome: Outcome| {
                     // The value window opens on the next value (UX2), and a
                     // press moves it.
-                    publish_next(in_use, outcome.upcoming.as_ref());
+                    after_press(in_use, &outcome);
                     show(
                         palette,
                         view_of(&outcome, &pack_shown, pack, standing, &bindings),
@@ -636,7 +684,7 @@ pub fn drive(
                 show(palette, worker.view(said, ValueBand::Keep, None));
             }
             Next::Command(command) => {
-                let carried = worker.carry_out(command);
+                let carried = carry_out_noting(&mut worker, in_use, command);
                 if let Some(view) = carried.view {
                     show(palette, view);
                 }
@@ -655,6 +703,7 @@ pub fn drive(
     // after the palette is gone would take `Alt+Shift+N` away from whoever
     // wants it next.
     drop(worker);
+    keep_recent(&memory, in_use);
 }
 
 /// What the loop in [`drive`] does next.
@@ -3293,6 +3342,7 @@ mod tests {
                 pack: Some(String::from("whitespace")),
                 next: Some(String::from("trailing-space")),
                 restart: Some(chord("Alt+Shift+F9")),
+                recent: Vec::new(),
             }
         );
         let mut later = on("whitespace");
@@ -3310,6 +3360,93 @@ mod tests {
             Some(&nkb_app::UpcomingValue::EndOfPack { total: 12 }),
         );
         assert_eq!(super::in_use_now(&slot).next, None);
+    }
+
+    fn value_key(pack: &str, value: &str) -> ValueKey {
+        ValueKey {
+            pack: pack.to_owned(),
+            value: value.to_owned(),
+        }
+    }
+
+    /// `UX-GUI-016`: a value that went out is recent, and a press that sent
+    /// nothing changes nothing - and a publish after a command keeps the list,
+    /// which only the worker's notes change.
+    #[test]
+    fn a_value_that_went_out_is_recent_and_a_publish_keeps_the_list() {
+        let slot = super::in_use();
+        super::after_press(&slot, &an_outcome(None, Vec::new()));
+        assert!(super::in_use_now(&slot).recent.is_empty());
+
+        super::after_press(&slot, &an_outcome(Some(a_sent()), Vec::new()));
+        let now = super::in_use_now(&slot);
+        assert_eq!(now.recent, vec![a_sent().key]);
+        assert_eq!(
+            now.next,
+            super::next_id(Some(&an_upcoming())),
+            "the press also moved the next value"
+        );
+        assert!(now.next.is_some());
+
+        super::publish(&slot, &on("whitespace"), &nkb_adapters::default_bindings());
+        assert_eq!(super::in_use_now(&slot).recent, vec![a_sent().key]);
+    }
+
+    /// A value chosen in the window is recent once it is the next one, and a
+    /// choice that did not happen is not.
+    #[test]
+    fn a_value_chosen_in_the_window_is_recent_only_when_it_became_the_next() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        with_worker(&store, &registrar, false, |worker, _| {
+            let slot = super::in_use();
+            let choose = |worker: &mut Worker<'_>, pack: &str, value: &str| {
+                let _ = super::carry_out_noting(
+                    worker,
+                    &slot,
+                    Command::ChooseValue {
+                        pack: pack.to_owned(),
+                        value: value.to_owned(),
+                    },
+                );
+            };
+            choose(worker, "whitespace", "no-such-value");
+            choose(worker, "no-such-pack", "trailing-space");
+            assert!(super::in_use_now(&slot).recent.is_empty());
+
+            choose(worker, "whitespace", "leading-space");
+            choose(worker, "locale-pl", "pesel-valid");
+            let _ = super::carry_out_noting(worker, &slot, Command::ToggleCompact);
+            assert_eq!(
+                super::in_use_now(&slot).recent,
+                vec![
+                    value_key("locale-pl", "pesel-valid"),
+                    value_key("whitespace", "leading-space"),
+                ]
+            );
+        });
+    }
+
+    /// The list goes to the settings once, as the palette closes - and not
+    /// at all when it is the one the palette started with.
+    #[test]
+    fn the_recent_values_are_saved_once_when_the_palette_closes() {
+        let store = a_store(false);
+        let memory = memory_over(&store);
+        let slot = super::in_use();
+        super::keep_recent(&memory, &slot);
+        assert_eq!(
+            *store.saved.borrow(),
+            Vec::new(),
+            "the list it started with"
+        );
+
+        super::after_press(&slot, &an_outcome(Some(a_sent()), Vec::new()));
+        super::keep_recent(&memory, &slot);
+        assert_eq!(
+            *store.saved.borrow(),
+            vec![SettingChange::Recent(vec![a_sent().key])]
+        );
     }
 
     /// UX2: a value chosen in the value window becomes the next one - in the

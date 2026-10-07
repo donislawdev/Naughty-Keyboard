@@ -44,6 +44,39 @@ pub fn is_value_id(text: &str) -> bool {
     })
 }
 
+/// A value named by identifiers: its pack's and its own (`D98`).
+///
+/// What names a value across a move of the sequence, a window and a restart:
+/// a position names whatever stands there now, an identifier the value the
+/// tester saw - or none (`pack-format.md` 7: never reused).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ValueKey {
+    pub pack: String,
+    pub value: String,
+}
+
+impl ValueKey {
+    /// `pack/value` - `unicode-text/zero-width-space-x3`, the reference a
+    /// session, a report block and `nkb emit` already write.
+    #[must_use]
+    pub fn text(&self) -> String {
+        format!("{}/{}", self.pack, self.value)
+    }
+
+    /// The key [`Self::text`] writes, and nothing else: a pack identifier, one
+    /// slash, a value identifier. Neither identifier holds a slash, so the
+    /// split is never in doubt, and a reference that does not read is `None`
+    /// rather than a guess.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        let (pack, value) = text.split_once('/')?;
+        (is_pack_id(pack) && is_value_id(value)).then(|| Self {
+            pack: pack.to_owned(),
+            value: value.to_owned(),
+        })
+    }
+}
+
 /// The half both patterns share: a first character, a tail, and a length.
 ///
 /// Length is counted in characters rather than bytes. For an identifier that
@@ -107,6 +140,40 @@ mod tests {
         for id in ["Whitespace", "magic_values", "magic values", "magic.values"] {
             assert!(!is_pack_id(id), "{id}");
             assert!(!is_value_id(id), "{id}");
+        }
+    }
+
+    #[test]
+    fn a_value_key_reads_back_exactly_what_it_writes_and_nothing_else() {
+        let key = ValueKey {
+            pack: String::from("unicode-text"),
+            value: String::from("zero-width-space-x3"),
+        };
+        assert_eq!(key.text(), "unicode-text/zero-width-space-x3");
+        assert_eq!(ValueKey::parse(&key.text()), Some(key));
+        assert_eq!(
+            ValueKey::parse("locale-pl/0"),
+            Some(ValueKey {
+                pack: String::from("locale-pl"),
+                value: String::from("0"),
+            }),
+            "a value identifier may be one digit"
+        );
+        for text in [
+            "",
+            "/",
+            "unicode-text",
+            "unicode-text/",
+            "/zero-width-space-x3",
+            "unicode-text/a/b",
+            "Unicode-text/a",
+            "unicode-text/A",
+            " unicode-text/a",
+            "unicode-text/a ",
+            "0-day/a",
+            "unicode-text\\a",
+        ] {
+            assert_eq!(ValueKey::parse(text), None, "{text:?}");
         }
     }
 

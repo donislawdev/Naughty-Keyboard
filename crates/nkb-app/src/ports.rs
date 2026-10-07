@@ -11,6 +11,7 @@
 //! capability undeclared means it cannot be reached for by accident.
 
 use nkb_core::hotkeys::{ChordError, HotkeyAction, HotkeyChord};
+use nkb_core::identity::ValueKey;
 use nkb_core::keys::KeyChord;
 use nkb_core::lint::LintProblem;
 use nkb_core::pack::Pack;
@@ -791,6 +792,11 @@ pub struct Settings {
     pub positions: Vec<(Layout, Point)>,
     /// Whether the tester closed the welcome window (`ux-spec.md` 5.1).
     pub welcome_done: Option<bool>,
+    /// The values the tester last sent or chose in the value window, the most
+    /// recent first, at most [`RECENT_KEPT`] and each once (`UX-GUI-016`).
+    /// Only a list whose every entry reads as a value (`ValueKey::parse`)
+    /// arrives here - by identifiers, never the value itself.
+    pub recent: Vec<ValueKey>,
 }
 
 /// One setting the tester changed. A save carries exactly one, so a save can
@@ -819,7 +825,15 @@ pub enum SettingChange {
     },
     /// The tester closed the welcome window, so it does not open again.
     WelcomeDone,
+    /// The values the tester last used, the most recent first - the whole
+    /// list, which is one key, so one save writes it whole (`UX-GUI-016`).
+    Recent(Vec<ValueKey>),
 }
+
+/// How many values the value window remembers as recent (`UX-GUI-016`, the
+/// owner's choice). A list a tester reads at a glance above the pack in use,
+/// not a history - the session (`session-format.md`) is the history.
+pub const RECENT_KEPT: usize = 8;
 
 /// How many layouts of screens the settings remember a place for.
 ///
@@ -879,6 +893,9 @@ pub enum SettingsNote {
     /// not a layout of screens, or a value that is not `x` and `y` as whole
     /// numbers. The palette opens where the system puts it on that layout.
     NotAPosition { key: String },
+    /// The list of recent values is not a list of texts that each read as
+    /// `pack/value`. None of it is used, and the next save writes it anew.
+    NotARecentList { key: String },
 }
 
 /// Why a shortcut in the settings file did not read.

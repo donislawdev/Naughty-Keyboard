@@ -20,6 +20,15 @@
 //! and the pack changed without typing a letter. With a query, the values that
 //! match come first, from every pack, then the packs that match.
 //!
+//! ⊕ Above them, with nothing typed, the values the tester sent or chose last
+//! (`UX-GUI-016`, the owner's choice: eight, no favourites): a value sent an
+//! hour ago in another pack is one Enter away instead of a pack change and a
+//! count. Only values of OTHER packs - the pack in use lists all of its own
+//! right below, and the same row twice would push the next value, the row the
+//! window opens on, further down. A remembered value the catalogue no longer
+//! has is not listed: there is nothing to choose. The window does not keep
+//! the list - the worker does, and hands it over with the pack in use.
+//!
 //! A fourth row opens the section of the pack in use: `Restart pack`, under
 //! the action's own name and with its shortcut at the end (`UX-GUI-007`).
 //! Until it, the way back to the start of a pack was a shortcut the hint bar
@@ -67,6 +76,7 @@ use nkb_adapters::i18n::{self, MatchPlace, PacksLabel};
 use nkb_app::browse_packs::{Listing, PackEntry};
 use nkb_app::ports::SourceError;
 use nkb_core::hotkeys::HotkeyAction;
+use nkb_core::identity::ValueKey;
 use nkb_core::pack::{Pack, PackValue, Risk};
 
 use crate::query::{KeyPress, Pressed, Query};
@@ -187,6 +197,8 @@ enum Item {
 /// Which section a heading opens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Section {
+    /// The values sent or chosen last, in other packs, with nothing typed.
+    Recent,
     /// The values of the pack in use, with nothing typed.
     InUse(usize),
     /// The values a query found.
@@ -274,6 +286,8 @@ pub struct PackPicker {
     notes: Vec<String>,
     /// The restart shortcut as the hint bar words it, for the restart row.
     restart_key: Option<String>,
+    /// The values the tester used last, the most recent first.
+    recent: Vec<ValueKey>,
 }
 
 impl PackPicker {
@@ -303,13 +317,31 @@ impl PackPicker {
             empty,
             notes,
             restart_key: None,
+            recent: Vec::new(),
         };
         picker.filter();
-        picker.selected = picker
-            .position_of_next()
-            .or_else(|| picker.position_of_in_use())
-            .or_else(|| picker.first_enabled());
+        picker.select_on_opening();
         picker
+    }
+
+    /// The same picker with the values the tester used last above the pack in
+    /// use, the most recent first (`UX-GUI-016`). Opening still selects the
+    /// next value - the recent ones are a way back, not where the tester is.
+    #[must_use]
+    pub fn with_recent(mut self, recent: &[ValueKey]) -> Self {
+        recent.clone_into(&mut self.recent);
+        self.filter();
+        self.select_on_opening();
+        self
+    }
+
+    /// Where the selection stands when the window opens - see the module
+    /// header, "Opening without a known next value".
+    fn select_on_opening(&mut self) {
+        self.selected = self
+            .position_of_next()
+            .or_else(|| self.position_of_in_use())
+            .or_else(|| self.first_enabled());
     }
 
     /// The same picker, its restart row ending in `key` - the restart
@@ -465,6 +497,11 @@ impl PackPicker {
         let matches = |haystack: &Haystack| haystack.matches(&words);
         let mut visible = Vec::new();
         if words.is_empty() {
+            let recent = self.recent_items();
+            if !recent.is_empty() {
+                visible.push(Item::Heading(Section::Recent));
+                visible.extend(recent);
+            }
             if let Some(at) = self.in_use_index()
                 && !self.packs[at].values.is_empty()
             {
@@ -516,6 +553,7 @@ impl PackPicker {
                 title: match section {
                     Section::InUse(at) => i18n::values_in(&self.packs[at].title),
                     Section::Found => i18n::packs_label(PacksLabel::FoundValues).to_owned(),
+                    Section::Recent => i18n::packs_label(PacksLabel::Recent).to_owned(),
                     Section::Packs => i18n::packs_label(PacksLabel::PacksSection).to_owned(),
                 },
                 detail: String::new(),
@@ -594,6 +632,29 @@ impl PackPicker {
                 key: self.restart_key.clone(),
             },
         }
+    }
+
+    /// The recent values as rows: each that the catalogue still has, in a pack
+    /// that loads and is not the one in use, in the order used.
+    fn recent_items(&self) -> Vec<Item> {
+        let in_use = self.in_use_index();
+        self.recent
+            .iter()
+            .filter_map(|key| {
+                let pack = self
+                    .packs
+                    .iter()
+                    .position(|pack| pack.enabled && pack.id == key.pack)?;
+                if Some(pack) == in_use {
+                    return None;
+                }
+                let value = self.packs[pack]
+                    .values
+                    .iter()
+                    .position(|value| value.id == key.value)?;
+                Some(Item::Value { pack, value })
+            })
+            .collect()
     }
 
     fn enabled_at(&self, position: usize) -> bool {
@@ -1116,6 +1177,83 @@ mod tests {
              comparison and display.",
             "found by its name and id, which the row shows"
         );
+    }
+
+    fn recent_key(pack: &str, value: &str) -> ValueKey {
+        ValueKey {
+            pack: pack.to_owned(),
+            value: value.to_owned(),
+        }
+    }
+
+    /// `UX-GUI-016`: the values used last stand above the pack in use, the
+    /// most recent first, and the window still opens on the next value.
+    #[test]
+    fn the_values_used_last_stand_on_top_and_the_window_still_opens_on_the_next() {
+        let next = value_id("whitespace", 3);
+        let mut picker = PackPicker::new(Ok(listing()), Some("whitespace"), Some(&next))
+            .with_recent(&[
+                recent_key("locale-pl", "pesel-valid"),
+                recent_key("whitespace", "trailing-space"),
+                recent_key("unicode-text", &value_id("unicode-text", 2)),
+            ]);
+        let rows = picker.rows();
+        assert_eq!(rows[0].kind, RowKind::Heading);
+        assert_eq!(rows[0].title, "Recent");
+        assert_eq!(rows[1].detail, "Polish locale - value 1 of 6");
+        assert_eq!(rows[2].detail, "Unicode and text - value 2 of 12");
+        assert_eq!(
+            rows[3].title, "Values in Whitespace",
+            "a value of the pack in use is listed below with its pack, not twice"
+        );
+        let selected = picker.selected().expect("a row is selected");
+        assert_eq!(rows[selected].detail, "Whitespace - value 3 of 12");
+        assert_eq!(
+            picker.click(1),
+            Chosen::Value {
+                pack: String::from("locale-pl"),
+                value: String::from("pesel-valid")
+            },
+            "a recent value is chosen like any other"
+        );
+    }
+
+    /// A remembered value the catalogue no longer has, or whose pack does not
+    /// load, is not listed - and with nothing to list there is no heading.
+    #[test]
+    fn a_recent_value_that_cannot_be_chosen_is_not_listed() {
+        let gone = [
+            recent_key("whitespace", "no-such-value"),
+            recent_key("no-such-pack", "a"),
+            recent_key("broken", "a"),
+            recent_key("whitespace", "trailing-space"),
+        ];
+        let picker = mixed().with_recent(&gone);
+        let rows = picker.rows();
+        assert_eq!(
+            rows.iter()
+                .filter(|row| row.kind == RowKind::Heading)
+                .map(|row| row.title.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Recent", "Packs"],
+            "nothing is in use in this list, so Whitespace's value is a recent one"
+        );
+        assert_eq!(of_kind(&picker, RowKind::Value).len(), 1);
+
+        let picker = mixed().with_recent(&gone[..3]);
+        assert_eq!(picker.rows()[0].title, "Packs", "no heading over nothing");
+    }
+
+    /// A query searches the whole catalogue, so the recent section is gone
+    /// while one is typed, and back when it is erased.
+    #[test]
+    fn a_query_hides_the_recent_values() {
+        let mut picker =
+            shipped(Some("whitespace")).with_recent(&[recent_key("locale-pl", "pesel-valid")]);
+        type_in(&mut picker, "p");
+        assert!(picker.rows().iter().all(|row| row.title != "Recent"));
+        picker.press(key("\u{8}"));
+        assert_eq!(picker.rows()[0].title, "Recent");
     }
 
     #[test]

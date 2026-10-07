@@ -32,7 +32,7 @@ pub use drive_sequence::{Ended, drive_sequence};
 pub use emit_values::{Emission, EmitOutcome, EmittedValue, emit_values};
 pub use format_pack::{FormatOutcome, format_pack};
 pub use keep_settings::{
-    Considered, KeptSettings, Opened, Opening, SettingsMessage, ShortcutChange,
+    Considered, KeptSettings, Opened, Opening, SettingsMessage, ShortcutChange, note_used,
 };
 pub use lint_pack::{LintOutcome, lint_pack};
 pub use load_pack::{LoadedPack, Refused, load};
@@ -40,10 +40,10 @@ pub use new_pack::{NewPackOutcome, new_pack};
 pub use ports::{
     Availability, CatalogueCoverage, CatalogueSource, Clock, Date, Delivered, DeliveryError,
     HotkeyRegistrar, KeystrokeError, KeystrokeSender, LiveShortcuts, POSITIONS_KEPT, PackCatalogue,
-    PackFormat, PackSink, PackSource, Progress, SaveError, SettingChange, Settings, SettingsLoad,
-    SettingsNote, SettingsStore, SettingsUnusable, ShortcutRegistration, ShortcutUnreadable,
-    ShortcutsUnavailable, SinkError, SourceError, SourceSkipped, StopReason, TargetInspector,
-    TargetRef, TranslationCheck, TranslationTarget, ValueDelivery, Wait,
+    PackFormat, PackSink, PackSource, Progress, RECENT_KEPT, SaveError, SettingChange, Settings,
+    SettingsLoad, SettingsNote, SettingsStore, SettingsUnusable, ShortcutRegistration,
+    ShortcutUnreadable, ShortcutsUnavailable, SinkError, SourceError, SourceSkipped, StopReason,
+    TargetInspector, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery, Wait,
 };
 pub use send_value::{
     Clearing, ClearingOutcome, SendOutcome, SendRequest, Sending, SkipReason, ValueFacts,
