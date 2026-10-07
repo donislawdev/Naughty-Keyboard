@@ -43,6 +43,8 @@
 //!   tables and the typeface. `Cargo.lock`, which a tool writes.
 //! - The `.ico` of the application icon: nine pictures behind a directory of
 //!   offsets, with no prose in it. The drawings it is made from are read.
+//! - The `.png` of the social preview: a picture, with no prose in it. The
+//!   drawing it is rendered from is read, and so is the README beside it.
 //! - The project memory that the root `.gitignore` keeps out of this repository.
 //!   Its names are listed here AND checked against that file, so the list cannot
 //!   hide a file this repository does carry.
@@ -91,6 +93,10 @@ const LEFTOVER_EXTENSIONS: [&str; 4] = ["bk", "log", "pdb", "pyc"];
 
 /// Where the application icon lives. Its `.ico` is binary and is not read.
 const ICON_DIR: &str = "crates/nkb-gui/assets";
+
+/// Where the repository's social preview lives. Its `.png` is a picture and is
+/// not read.
+const SOCIAL_PREVIEW_DIR: &str = ".github/social-preview";
 
 fn is_leftover(path: &Path) -> bool {
     path.extension()
@@ -814,6 +820,9 @@ fn walk(root: &Path, dir: &Path, tree: &mut Tree) {
             // The drawings beside it are read, and `tests/app_icon.rs` holds the
             // file to them.
             None if here == ICON_DIR && extension == "ico" => {}
+            // The picture GitHub shows beside a link: nothing in it is prose.
+            // The drawing it is rendered from is read.
+            None if here == SOCIAL_PREVIEW_DIR && extension == "png" => {}
             None => tree.unreadable.push(format!(
                 "{} is a file this test cannot read",
                 relative(root, &path)
