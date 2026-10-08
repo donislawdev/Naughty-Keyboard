@@ -92,6 +92,32 @@ highlight = "all"
 deny = [
     { crate = "slint", wrappers = ["nkb-gui"] },
     { crate = "arboard", wrappers = ["nkb-gui", "i-slint-backend-winit"] },
+
+    # The program opens no network connection: no telemetry, no update check, no
+    # account (the README says so and the negative promises of the project rest on
+    # it). These are the crates through which that promise is broken in practice,
+    # an HTTP client, a TLS stack or a websocket. None is in the tree today, so a
+    # pull request that adds one fails here and has to be argued with the owner.
+    #
+    # This is a tripwire and not a proof. A crate that opens a socket through the
+    # standard library is not on this list, and `tokio` and `socket2` are left off
+    # because they also serve purely local code. The proof that nothing leaves the
+    # machine is watching the program from outside while it runs, not this list.
+    { crate = "reqwest", reason = "an HTTP client, and the program opens no network connection" },
+    { crate = "hyper", reason = "an HTTP implementation, and the program opens no network connection" },
+    { crate = "h2", reason = "an HTTP/2 implementation, and the program opens no network connection" },
+    { crate = "ureq", reason = "an HTTP client, and the program opens no network connection" },
+    { crate = "isahc", reason = "an HTTP client, and the program opens no network connection" },
+    { crate = "attohttpc", reason = "an HTTP client, and the program opens no network connection" },
+    { crate = "surf", reason = "an HTTP client, and the program opens no network connection" },
+    { crate = "curl", reason = "an HTTP client, and the program opens no network connection" },
+    { crate = "curl-sys", reason = "an HTTP client, and the program opens no network connection" },
+    { crate = "quinn", reason = "a QUIC implementation, and the program opens no network connection" },
+    { crate = "tungstenite", reason = "a websocket client, and the program opens no network connection" },
+    { crate = "native-tls", reason = "a TLS stack, which only a program that connects somewhere needs" },
+    { crate = "rustls", reason = "a TLS stack, which only a program that connects somewhere needs" },
+    { crate = "openssl", reason = "a TLS stack, which only a program that connects somewhere needs" },
+    { crate = "openssl-sys", reason = "a TLS stack, which only a program that connects somewhere needs" },
 ]
 
 [sources]

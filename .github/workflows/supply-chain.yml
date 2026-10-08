@@ -11,9 +11,14 @@ name: Supply chain
 #
 # There is no paths filter, on purpose. A check that a branch rule requires and
 # that never started blocks the merge for good, and a filter is exactly how that
-# happens. Licences, bans and sources can be required. Advisories should not be:
-# they depend on a database that changes by itself, so a new advisory against a
-# crate inside Slint would block every merge for a reason no change here can fix.
+# happens. Both jobs can be required.
+#
+# Requiring advisories is the strict choice and it has a price. A new advisory
+# against any crate in the tree, one inside Slint included, then blocks every merge
+# until the crate is updated or the advisory is written into deny.toml with the
+# reason it does not apply to this project. The second is one small pull request,
+# and the check passes on it, because it runs against the deny.toml of the pull
+# request. The Monday run below is what tells you before a pull request does.
 
 on:
   push:
