@@ -9,16 +9,15 @@ name: Workflow lint
 # command, permissions wider than the job needs, a credential left on disk.
 # Nothing else in this repository would notice either kind, because a workflow
 # that is wrong in these ways still runs.
+#
+# There is no paths filter, on purpose: a check that a branch rule requires and
+# that never started blocks the merge for good. Both jobs take about a minute.
 
 on:
   push:
     branches: [main]
-    paths:
-      - .github/**
   pull_request:
     branches: [main]
-    paths:
-      - .github/**
   workflow_dispatch:
 
 permissions:

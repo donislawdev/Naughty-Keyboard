@@ -9,28 +9,17 @@ name: Supply chain
 # result there can appear with no change at all. Kept apart, a new advisory
 # never hides the licence verdict, and nobody learns to ignore a red check.
 #
-# The paths filter below makes a run happen only when something it reads
-# changed. Do not make either job a required check of a branch rule while the
-# filter is there: a required check that never started blocks every change that
-# does not touch these paths.
+# There is no paths filter, on purpose. A check that a branch rule requires and
+# that never started blocks the merge for good, and a filter is exactly how that
+# happens. Licences, bans and sources can be required. Advisories should not be:
+# they depend on a database that changes by itself, so a new advisory against a
+# crate inside Slint would block every merge for a reason no change here can fix.
 
 on:
   push:
     branches: [main]
-    paths:
-      - Cargo.toml
-      - Cargo.lock
-      - deny.toml
-      - crates/*/Cargo.toml
-      - .github/workflows/supply-chain.yml
   pull_request:
     branches: [main]
-    paths:
-      - Cargo.toml
-      - Cargo.lock
-      - deny.toml
-      - crates/*/Cargo.toml
-      - .github/workflows/supply-chain.yml
   # New advisories arrive with no change here, so the tree is asked again every
   # Monday. A failed scheduled run is reported to whoever last edited the
   # schedule below.
