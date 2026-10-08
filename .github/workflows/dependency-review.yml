@@ -1,0 +1,52 @@
+name: Dependency review
+
+# Looks at what a pull request CHANGES in the dependency tree and fails when it
+# brings in a dependency with a known vulnerability.
+#
+# This is the check that stops somebody adding a vulnerable crate. It is a
+# different question from the advisories job in supply-chain.yml. That one asks
+# whether anything in the whole tree is named in an advisory today, so it can turn
+# red for a crate nobody touched. This one compares the tree before and after the
+# pull request, so it can only turn red for what the pull request itself added or
+# moved to a vulnerable version. The two together cover the new dependency and the
+# old one that becomes vulnerable later.
+#
+# It reads GitHub's dependency graph, so it knows what the graph knows, which for
+# Rust is the lock file. It runs only on pull requests, because a push to main has
+# nothing to compare with. Licences are cargo-deny's job, so they are switched off
+# here and are not checked twice.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: dependency review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Moderate and above fails the check. Every scope is looked at, the test-only
+      # dependencies too: a vulnerable crate that is only used by the tests is still
+      # a crate somebody downloads and builds on the way to a green run. The summary
+      # stays in the run and is not posted as a comment, which would need a
+      # permission to write to the pull request that nothing else here has.
+      - name: Review the dependency changes
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: moderate
+          fail-on-scopes: runtime, development, unknown
+          license-check: false
+          comment-summary-in-pr: never
