@@ -35,6 +35,7 @@ pub fn program_name(window: WindowRef) -> Option<String> {
 
 /// The longest path the system hands out, in UTF-16 units - the extended
 /// limit, not `MAX_PATH`, so a program in a deep folder is still named.
+#[cfg(windows)]
 const PATH_LIMIT: usize = 32_768;
 
 /// The last part of a path, after either kind of slash - or `None` for a path

@@ -39,11 +39,13 @@ pub fn monitors() -> Option<Vec<Monitor>> {
 
 /// More screens than any machine this tool has met. A longer list is not
 /// trusted, the same rule as `layout::LAYOUT_LIMIT`.
+#[cfg(windows)]
 const MONITOR_LIMIT: usize = 64;
 
 /// The screen a rectangle given by its edges is - or `None` for one with no
 /// area, which no window can stand on. Apart from the system call, so it is
 /// checked on every system.
+#[cfg(any(windows, test))]
 fn monitor_of(left: i32, top: i32, right: i32, bottom: i32) -> Option<Monitor> {
     let width = u32::try_from(i64::from(right) - i64::from(left)).ok()?;
     let height = u32::try_from(i64::from(bottom) - i64::from(top)).ok()?;
