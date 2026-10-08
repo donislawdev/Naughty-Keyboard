@@ -152,7 +152,7 @@ impl Welcome {
     }
 
     /// Opens the window once the worker has said which pack the palette
-    /// starts on, so the third step can name it - asked again every [`POLL`],
+    /// starts on, so the third step can name it - asked again every `POLL`,
     /// and opened without the name after [`HANDLE_WAIT`] rather than not at
     /// all. Call it before the event loop runs: the poll is delivered once it
     /// starts (`slint.md` 1.9).

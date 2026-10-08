@@ -98,7 +98,7 @@ pub enum ReportPhrase {
     Recipe,
     /// A generated value as code points: the unit's, and how many in a row.
     RecipeCodePoints,
-    /// A list of code points cut at [`CODE_POINTS_LISTED`].
+    /// A list of code points cut at `CODE_POINTS_LISTED`.
     CodePointsMore,
     /// `value = ""` is a legal test value, and a label followed by nothing
     /// reads as a line that lost its content.

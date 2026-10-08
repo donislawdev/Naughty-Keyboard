@@ -62,7 +62,7 @@
 //! yet. Its layout then answered with a maximum width no larger than its
 //! content's minimum, and the window opened 360 wide instead of 440 every time
 //! (`OBS-154`). So the constructor builds the tree before the loop starts: see
-//! [`build_before_the_loop`].
+//! `build_before_the_loop`.
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
