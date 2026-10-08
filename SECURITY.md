@@ -143,8 +143,10 @@ release is published, this section will say what is signed and how to check it.
 
 `Cargo.lock` is tracked on purpose, so the same tag builds to the same bytes. The direct
 dependencies are pinned deliberately, and where one needs an argument about its licence, the argument
-is written beside it in `Cargo.toml`. There are no workflows in this repository yet, so nothing here
-runs with a token or a secret.
+is written beside it in `Cargo.toml`. The workflows in `.github/workflows` run with a read-only token
+and use no secret, so a pull request from a fork gets the same checks as one from the owner. The static
+analysis (Semgrep) fetches its rules from the public registry. The scan itself runs on the CI machine,
+sends no usage data and does not send the code anywhere.
 
 ## Code of conduct
 

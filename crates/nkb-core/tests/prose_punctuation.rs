@@ -18,7 +18,10 @@
 //!
 //! - Every comment: `//`, `///`, `//!` and `/* */` in Rust, `//` and `/* */` in
 //!   Slint and in the Windows resource script, `<!-- -->` in the SVG drawings,
-//!   `#` in TOML, in the two git files at the root and in `.github/CODEOWNERS`.
+//!   `#` in TOML, in the two git files at the root, in `.github/CODEOWNERS` and
+//!   in the pinned requirements beside the CI scripts, and `#` in those scripts
+//!   themselves, which are Python. A Python string is read the way a TOML string
+//!   is, including the triple-quoted ones that hold a module's description.
 //!   Code quoted in a comment is syntax, not prose, and is recognised the way rustdoc does it:
 //!   between backticks, or between fence lines of three backticks or tildes. A
 //!   block indented by four spaces is NOT recognised as code. Fence it.
@@ -101,6 +104,10 @@ const ICON_DIR: &str = "crates/nkb-gui/assets";
 /// not read.
 const SOCIAL_PREVIEW_DIR: &str = ".github/social-preview";
 
+/// Where the scripts the workflows run live, and the pins they install. The
+/// scripts are Python and the pins are a `.txt`, and both are read.
+const CI_SCRIPTS_DIR: &str = ".github/scripts";
+
 fn is_leftover(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
@@ -117,6 +124,7 @@ enum Syntax {
     Svg,
     Resource,
     Yaml,
+    Python,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -670,7 +678,9 @@ fn scan(syntax: Syntax, source: &str) -> Scan {
     let lexed = match syntax {
         Syntax::Rust => lex_c_like(source, true),
         Syntax::Slint | Syntax::Resource => lex_c_like(source, false),
-        Syntax::Toml => lex_toml(source),
+        // Python has the comments and the three string forms that TOML has, and
+        // the CI scripts use no other form that would read differently.
+        Syntax::Toml | Syntax::Python => lex_toml(source),
         Syntax::Git => lex_git(source),
         Syntax::Markdown => lex_markdown(source),
         Syntax::Svg => lex_svg(source),
@@ -750,6 +760,7 @@ fn syntax_of(path: &Path) -> Option<Syntax> {
         "md" => Some(Syntax::Markdown),
         "svg" => Some(Syntax::Svg),
         "yml" | "yaml" => Some(Syntax::Yaml),
+        "py" => Some(Syntax::Python),
         "rc" => Some(Syntax::Resource),
         _ => None,
     }
@@ -823,6 +834,12 @@ fn walk(root: &Path, dir: &Path, tree: &mut Tree) {
             continue;
         }
         let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        // The pinned requirements of the CI scripts: `#` lines and the package
+        // pins that nothing here treats as prose.
+        if here == CI_SCRIPTS_DIR && extension == "txt" {
+            tree.files.push((path, Syntax::Git));
+            continue;
+        }
         match syntax_of(&path) {
             Some(syntax) => tree.files.push((path, syntax)),
             None if is_leftover(&path) || name.starts_with('.') => {}
@@ -859,7 +876,7 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
     );
 
     let mut findings = Vec::new();
-    let mut seen = [0usize; 8];
+    let mut seen = [0usize; 9];
     let mut comment_lines = 0;
     let mut literals = 0;
     for (path, syntax) in &tree.files {
@@ -882,7 +899,17 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
 
     // Without these, a clean result would also be what a wrong path or a blind
     // lexer produces.
-    let [rust, slint, toml, git, markdown, svg, resource, yaml] = seen;
+    let [
+        rust,
+        slint,
+        toml,
+        git,
+        markdown,
+        svg,
+        resource,
+        yaml,
+        python,
+    ] = seen;
     assert!(
         rust >= 50,
         "read {rust} Rust files, expected at least 50 - the walk looked in the wrong place"
@@ -893,8 +920,13 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
         "read {toml} TOML files, expected the seven manifests at least"
     );
     assert!(
-        git == 3,
-        "read {git} git files, expected .gitignore, .gitattributes and .github/CODEOWNERS"
+        git == 4,
+        "read {git} git files, expected .gitignore, .gitattributes, .github/CODEOWNERS and \
+         the pins in .github/scripts"
+    );
+    assert!(
+        python >= 2,
+        "read {python} Python files, expected the Semgrep gate and its tests in .github/scripts"
     );
     assert!(
         markdown >= 1,
@@ -1188,4 +1220,34 @@ fn control_the_issue_forms_are_read() {
     assert_eq!(found(Syntax::Yaml, "label: one EMDASH two\n"), [(1, Dash)]);
     // Code between backticks keeps its semicolon, as in every other kind of file.
     assert_eq!(found(Syntax::Yaml, "description: `aSEMI b`\n"), []);
+}
+
+#[test]
+fn control_the_ci_scripts_are_read() {
+    use Breach::{Dash, LiteralSemicolon, Semicolon};
+    // A comment is prose, and a statement that ends in a semicolon is code.
+    assert_eq!(
+        found(Syntax::Python, "# aSEMI b\nx = 1SEMI y = 2\n"),
+        [(1, Semicolon)]
+    );
+    // A docstring is a literal, so it is asked the narrower question.
+    assert_eq!(
+        found(
+            Syntax::Python,
+            "\"\"\"\nOne sentenceSEMI another.\n\"\"\"\n"
+        ),
+        [(2, LiteralSemicolon)]
+    );
+    assert_eq!(found(Syntax::Python, "x = 'a;b'\ny = \"c;d\"\n"), []);
+    assert_eq!(found(Syntax::Python, "# one EMDASH two\n"), [(1, Dash)]);
+    // A quote inside a comment opens no string, so what follows is still read.
+    assert_eq!(
+        found(Syntax::Python, "# it's here\n# aSEMI b\n"),
+        [(2, Semicolon)]
+    );
+    // The pins beside the scripts are read like the git files.
+    assert_eq!(
+        found(Syntax::Git, "# aSEMI b\nsemgrep==1.0.0\n"),
+        [(1, Semicolon)]
+    );
 }

@@ -99,3 +99,19 @@ updates:
       actions:
         patterns:
           - "*"
+
+  # ---- The Semgrep engine that the scan installs --------------------------------------
+  # One pinned package in .github/scripts/requirements.txt. A newer release arrives as
+  # a pull request, and the Semgrep check on it runs the gate's own tests and the file
+  # that is bad on purpose with the new engine, so a release that changes how findings
+  # are reported shows up there before it is merged. The same week of waiting as above.
+  - package-ecosystem: "pip"
+    directory: "/.github/scripts"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: "chore(ci)"

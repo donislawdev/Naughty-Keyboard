@@ -38,16 +38,19 @@
 //! The text goes under a neighbouring temporary name, is flushed, and takes
 //! the real name by a rename - the pattern `PackSink::replace` uses, for the
 //! same reason: an interrupted plain write leaves half a file that still looks
-//! like one. The temporary name carries the process number, so two palettes
-//! saving at once never write into the same temporary file (`W4`).
+//! like one. The temporary name carries the process number and a serial, so two
+//! palettes saving at once, or two saves in one palette, never write into the
+//! same temporary file (`W4`). The file is made with `create_new`, so a name
+//! that is already taken is skipped and never written through.
 //!
 //! A settings file that is a symbolic link is written THROUGH the link: a
 //! rename over the link would replace it with a plain file and quietly cut a
 //! tester's dotfiles folder out of the loop.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use nkb_app::{
     Clearing, POSITIONS_KEPT, RECENT_KEPT, SaveError, SettingChange, Settings, SettingsLoad,
@@ -707,18 +710,60 @@ fn write_target(path: &Path) -> Result<PathBuf, SaveError> {
     }
 }
 
+/// How many temporary names one save tries before it gives up.
+const TEMPORARY_ATTEMPTS: u64 = 16;
+
+/// The next serial number for a temporary name, shared by every save in this
+/// process. Two saves running at once start from different names.
+static NEXT_TEMPORARY: AtomicU64 = AtomicU64::new(0);
+
+/// The neighbouring name a save writes first: the real name, the process number
+/// and a serial.
+fn temporary_path(folder: &Path, name: &OsStr, serial: u64) -> PathBuf {
+    let mut temporary_name = name.to_os_string();
+    temporary_name.push(format!(".nkb-new-{}-{serial}", std::process::id()));
+    folder.join(temporary_name)
+}
+
+/// Creates the file a save writes first, under a name nobody holds.
+///
+/// `create_new` asks the operating system for a file that is NOT there yet, in
+/// one step. A name that is taken is skipped and never opened: the leftover of
+/// a save that was cut short, or a link somebody put there, is neither written
+/// through nor removed, because it is not ours. The next serial is tried
+/// instead, and after `TEMPORARY_ATTEMPTS` names the save fails and says so.
+fn create_temporary(
+    folder: &Path,
+    name: &OsStr,
+    first: u64,
+) -> std::io::Result<(std::fs::File, PathBuf)> {
+    for step in 0..TEMPORARY_ATTEMPTS {
+        let temporary = temporary_path(folder, name, first.wrapping_add(step));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+        {
+            Ok(file) => return Ok((file, temporary)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Err(std::io::ErrorKind::AlreadyExists.into())
+}
+
 /// Writes `text` to `target` so that either the old content or the new one is
 /// there afterwards, and nothing in between.
 fn write_atomically(target: &Path, text: &str) -> std::io::Result<()> {
     let folder = target.parent().ok_or(std::io::ErrorKind::InvalidInput)?;
     let name = target.file_name().ok_or(std::io::ErrorKind::InvalidInput)?;
     std::fs::create_dir_all(folder)?;
-    let mut temporary_name = name.to_os_string();
-    temporary_name.push(format!(".nkb-new-{}", std::process::id()));
-    let temporary = folder.join(temporary_name);
+    let serial = NEXT_TEMPORARY.fetch_add(1, Ordering::Relaxed);
+    // Before the closure, so that only a file this save created is ever removed
+    // below. A save that could not create one has nothing of its own to clean.
+    let (mut file, temporary) = create_temporary(folder, name, serial)?;
 
     let written = (|| -> std::io::Result<()> {
-        let mut file = std::fs::File::create(&temporary)?;
         std::io::Write::write_all(&mut file, text.as_bytes())?;
         // Before the rename: a rename that publishes content the system has
         // not committed is a rename that publishes an empty file on the next
@@ -1627,6 +1672,98 @@ mod tests {
             std::fs::read_to_string(&real)
                 .expect("the real file")
                 .contains("compact = true")
+        );
+    }
+
+    /// A folder with the neighbouring names a save would use, for the tests
+    /// below that plant something under one of them.
+    fn temporary_folder(scratch: &Scratch) -> PathBuf {
+        let folder = scratch.0.join("nested");
+        std::fs::create_dir_all(&folder).expect("a folder");
+        folder
+    }
+
+    #[test]
+    fn a_temporary_name_that_is_taken_is_skipped_and_left_as_it_was() {
+        let scratch = Scratch::new("taken-name");
+        let folder = temporary_folder(&scratch);
+        let name = OsStr::new(FILE_NAME);
+        let planted = temporary_path(&folder, name, 7);
+        std::fs::write(&planted, "someone else's file").expect("a planted file");
+
+        let (file, made) = create_temporary(&folder, name, 7).expect("a free name is found");
+        drop(file);
+
+        assert_eq!(made, temporary_path(&folder, name, 8));
+        assert_eq!(
+            std::fs::read_to_string(&planted).expect("still there"),
+            "someone else's file",
+            "a file that was not ours was opened"
+        );
+    }
+
+    #[test]
+    fn when_every_temporary_name_is_taken_nothing_is_written_and_nothing_is_removed() {
+        let scratch = Scratch::new("all-taken");
+        let folder = temporary_folder(&scratch);
+        let name = OsStr::new(FILE_NAME);
+        for serial in 0..TEMPORARY_ATTEMPTS {
+            std::fs::write(temporary_path(&folder, name, serial), "planted").expect("a plant");
+        }
+
+        let error = create_temporary(&folder, name, 0).expect_err("no name is free");
+
+        assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+        let entries = std::fs::read_dir(&folder).expect("the folder").count();
+        assert_eq!(entries, usize::try_from(TEMPORARY_ATTEMPTS).unwrap_or(0));
+        for serial in 0..TEMPORARY_ATTEMPTS {
+            assert_eq!(
+                std::fs::read_to_string(temporary_path(&folder, name, serial)).expect("a plant"),
+                "planted"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_under_the_temporary_name_is_not_written_through() {
+        let scratch = Scratch::new("planted-link");
+        let folder = temporary_folder(&scratch);
+        let name = OsStr::new(FILE_NAME);
+        let victim = scratch.0.join("victim.txt");
+        std::fs::write(&victim, "keep me").expect("the victim");
+        let planted = temporary_path(&folder, name, 3);
+        std::os::unix::fs::symlink(&victim, &planted).expect("a planted link");
+
+        let (mut file, made) = create_temporary(&folder, name, 3).expect("a free name is found");
+        std::io::Write::write_all(&mut file, b"new content").expect("our own file");
+        drop(file);
+
+        assert_eq!(made, temporary_path(&folder, name, 4));
+        assert_eq!(
+            std::fs::read_to_string(&victim).expect("the victim"),
+            "keep me",
+            "the save wrote through a link it did not make"
+        );
+        assert!(
+            std::fs::symlink_metadata(&planted)
+                .expect("still there")
+                .file_type()
+                .is_symlink(),
+            "the planted link was removed"
+        );
+    }
+
+    #[test]
+    fn two_saves_in_one_process_start_from_different_temporary_names() {
+        let first = NEXT_TEMPORARY.fetch_add(1, Ordering::Relaxed);
+        let second = NEXT_TEMPORARY.fetch_add(1, Ordering::Relaxed);
+        assert_ne!(first, second);
+        let folder = Path::new("folder");
+        let name = OsStr::new(FILE_NAME);
+        assert_ne!(
+            temporary_path(folder, name, first),
+            temporary_path(folder, name, second)
         );
     }
 
