@@ -92,6 +92,37 @@ jobs:
                  printf "%d passed, %d failed, %d ignored\n", passed, failed, ignored
                }' "$RUNNER_TEMP/test.log" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: Set up Python
+        if: ${{ !cancelled() }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # The shape of the code. The clippy step above holds all of it to the
+      # ceilings in clippy.toml. The code the two programs are made of has lower
+      # ceilings of its own, in .github/shape.toml, and this asks clippy for them.
+      #
+      # On Windows it also requires every ceiling and every count of functions
+      # near a ceiling to be the measurement, because a ceiling above the largest
+      # function is room nobody decided to give. Only there, because code behind
+      # cfg(windows) compiles only there, and it holds some of the ceilings.
+      #
+      # It runs after the tests, and whatever they did, so that a red in one
+      # never hides the other. Why and how: .github/scripts/shape_gate.py.
+      - name: Hold the shape of the code to its ceilings
+        if: ${{ !cancelled() }}
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python -m unittest discover -s .github/scripts -p "test_shape_gate.py"
+          if [ "$RUNNER_OS" = "Windows" ]
+          then
+            python .github/scripts/shape_gate.py --pinned
+          else
+            python .github/scripts/shape_gate.py
+          fi
+
       # Disk is the limit most likely to bite as the workspace grows, and it
       # fails far from its cause, in a linker error. Printing the numbers on
       # every run makes the approach visible long before the failure.

@@ -1,0 +1,57 @@
+# The shape of the code beyond what clippy.toml holds, as a RATCHET: every
+# number here may only come down, and each must BE today's measurement.
+#
+# Read by .github/scripts/shape_gate.py (the clippy tables) and by
+# crates/nkb-cli/tests/shape.rs (the file tables). Why each number exists and
+# what checks it is written there.
+
+[clippy]
+# Near a ceiling, for length and complexity: at or above this fraction of it.
+# Nesting and arguments count only what stands at the ceiling itself.
+band = 0.7
+
+# The code the two programs are made of: libraries and binaries, without tests
+# and examples. Measured 2026-10-08 on Windows with clippy 0.1.99.
+[clippy.product]
+too-many-lines-threshold = 163
+cognitive-complexity-threshold = 25
+excessive-nesting-threshold = 6
+too-many-arguments-threshold = 7
+
+# How many stand near each ceiling, per scope.
+[clippy.near.product]
+too-many-lines-threshold = 8
+cognitive-complexity-threshold = 1
+excessive-nesting-threshold = 1
+too-many-arguments-threshold = 3
+
+[clippy.near.all]
+too-many-lines-threshold = 3
+cognitive-complexity-threshold = 2
+excessive-nesting-threshold = 1
+too-many-arguments-threshold = 3
+
+# The size of a file, in lines that hold code: a comment or a blank line is
+# free, a line inside a string is code. Clippy has no lint for it, so
+# crates/nkb-adapters/tests/shape.rs measures it. Measured 2026-10-08.
+[files]
+band = 0.7
+
+# A Rust file under src, up to its test module: what the programs are made of.
+# nkb-adapters/src/i18n.rs, then nkb-gui/src/live.rs at 1196 and
+# nkb-cli/src/main.rs at 1132.
+[files.rust-product]
+ceiling = 1440
+near = 3
+
+# A whole Rust file, its tests included. nkb-gui/src/live.rs, then
+# nkb-adapters/src/i18n.rs at 2739.
+[files.rust-whole]
+ceiling = 2907
+near = 2
+
+# A Slint file, the gallery excepted. ui/screens/palette.slint, then
+# ui/components/list.slint at 312.
+[files.slint]
+ceiling = 346
+near = 2

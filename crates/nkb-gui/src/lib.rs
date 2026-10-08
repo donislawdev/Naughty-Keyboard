@@ -13,10 +13,17 @@
 //!
 //! So the allowance is scoped to exactly the generated module and no further.
 //! Hand-written code in this crate still answers to the full set.
+//!
+//! The same holds for the shape ceilings. `clippy::all` and `clippy::pedantic`
+//! cover three of them, and `cognitive_complexity` is named because it belongs
+//! to neither group - measured 2026-10-08, the generated code gave it 2794
+//! reports. The count of these names in the workspace is frozen in
+//! crates/nkb-cli/tests/shape.rs, so a second allowance cannot appear quietly.
 
 #[allow(
     clippy::all,
     clippy::pedantic,
+    clippy::cognitive_complexity,
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,

@@ -1,0 +1,34 @@
+# The shape ceilings of ALL the code, tests and examples included, as a RATCHET:
+# these numbers may only come down. Every `cargo clippy` reads this file, so
+# `-D warnings` in CI and in the local gates holds every target to it.
+#
+# The code the two programs are made of has its own, lower ceilings in
+# .github/shape.toml. Why there are ceilings at all, why these four lints, and
+# how a ceiling is kept equal to the measurement rather than above it is written
+# in .github/scripts/shape_gate.py, which checks both files.
+#
+# Down is routine, up is the owner's decision. When something crosses a
+# ceiling, the answer is to move code out, not to move the number. When the
+# largest function shrinks, its ceiling comes down in the same change, because
+# `shape_gate.py --pinned` fails until it does.
+#
+# Measured 2026-10-08 on Windows with clippy 0.1.99, the whole workspace with
+# `--all-targets`. The holder of each ceiling is named beside it.
+
+# The test `palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one`
+# in nkb-gui/tests/palette_appearance.rs, with the test
+# `a_view_reaches_the_window_field_by_field` in nkb-gui/src/live.rs at 406.
+too-many-lines-threshold = 408
+
+# The same test in nkb-gui/src/live.rs, then a test in nkb-gui/tests/packs_window.rs
+# at 72. The product stops at 25.
+cognitive-complexity-threshold = 76
+
+# A test in nkb-app/src/keep_settings.rs. This lint reports no number, so the
+# depth is found by asking one level below. Off unless a threshold is set here.
+excessive-nesting-threshold = 10
+
+# Clippy's own default, written down so that it is a ceiling and not an
+# accident. Three functions of the product take seven: `live::choose_value`,
+# `send_value::deliver_value` and `keep_settings::change_shortcut`.
+too-many-arguments-threshold = 7
