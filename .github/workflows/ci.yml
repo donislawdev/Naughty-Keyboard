@@ -1,0 +1,238 @@
+name: CI
+
+# Builds and tests the workspace on the three systems the program is for.
+#
+# What this does NOT run, and the reason: the repository holds the product and
+# nothing else. Checks that live outside it, and the ones that need a person at
+# a screen (the palette taking the keyboard, a field receiving a value), are not
+# here. A green run means the code builds, lints and passes its tests on three
+# systems. It does not mean the program was seen working on a desktop.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request replaces the run in progress. A push to
+# main never does, so every commit on main ends with a verdict of its own.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  # Incremental builds only pay off when the same directory is built again and
+  # again. A runner builds once, and the cache would only grow.
+  CARGO_INCREMENTAL: "0"
+  # No debug symbols. A runner has about 14 GB of disk, a debug build of this
+  # workspace with its test programs is several gigabytes, and symbols are most
+  # of the size. A failing test still prints its message and a backtrace of
+  # function names.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_NET_RETRY: "10"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      # A failure on one system must not hide the result on the other two.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          components: clippy
+
+      # Clippy runs on every system, not once. The code that talks to Windows is
+      # compiled only there, and the same holds for the other two systems.
+      #
+      # The toolchain is the newest stable one on purpose. A new release can add
+      # a lint, and then this step goes red with no change in the code. That is
+      # the price of hearing about it early, and the fix is in the code or in
+      # the lint settings, never in pinning the toolchain.
+      - name: Lint with Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Run the tests
+        shell: bash
+        run: |
+          cargo test --workspace --locked 2>&1 | tee "$RUNNER_TEMP/test.log"
+
+      # The count is printed so that a drop is visible. Tests that silently stop
+      # being found would otherwise leave a run that is green and smaller.
+      - name: Count the tests
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          [ -f "$RUNNER_TEMP/test.log" ] || {
+            echo "No test log, the tests did not start." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          }
+          awk '/^test result:/ {
+                 passed += $4
+                 failed += $6
+                 ignored += $8
+               }
+               END {
+                 printf "%d passed, %d failed, %d ignored\n", passed, failed, ignored
+               }' "$RUNNER_TEMP/test.log" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Disk is the limit most likely to bite as the workspace grows, and it
+      # fails far from its cause, in a linker error. Printing the numbers on
+      # every run makes the approach visible long before the failure.
+      - name: Report disk use
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: |
+          du -sh target 2>/dev/null || true
+          df -h . | tail -n 1
+
+  fmt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt
+          system-libraries: "false"
+          cache: "false"
+
+      - name: Check the formatting
+        run: cargo fmt --all --check
+
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+
+      # A broken link in a doc comment is a documented promise that points
+      # nowhere, and rustdoc says so only when asked to treat it as an error.
+      - name: Build the documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps --locked
+
+  msrv:
+    name: minimum Rust version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The version is read from the manifest and not written here, so that the
+      # promise and the check of the promise cannot drift apart.
+      - name: Read the declared minimum
+        id: declared
+        shell: bash
+        run: |
+          version="$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml)"
+          [ -n "$version" ] || {
+            echo "::error::No rust-version in the workspace Cargo.toml."
+            exit 1
+          }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          toolchain: ${{ steps.declared.outputs.version }}
+
+      # Compiling is the whole question here. The tests ran on stable above.
+      - name: Check that everything compiles on the minimum
+        run: cargo check --workspace --all-targets --locked
+
+  smoke:
+    name: smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Only the command line program, as a release build. It links no
+      # graphical toolkit, so this is a short build. A release build is a
+      # different compilation from the debug one the tests use.
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          system-libraries: "false"
+
+      - name: Build the command line program
+        run: cargo build --release --locked -p nkb-cli
+
+      # This is the contract other people's pipelines depend on, run the way they
+      # would run it: the version line, the exit codes, the shipped packs going
+      # through the validator and through emit.
+      - name: Run it
+        shell: bash
+        run: |
+          nkb="target/release/nkb"
+          [ "$RUNNER_OS" != "Windows" ] || nkb="$nkb.exe"
+          fail() {
+            echo "::error::$*"
+            exit 1
+          }
+
+          version="$("$nkb" --version)"
+          [ "${version#nkb }" != "$version" ] ||
+            fail "--version printed '$version', which does not start with 'nkb '."
+
+          "$nkb" packs || fail "nkb packs failed."
+
+          for pack in packs/*.toml
+          do
+            name="$(basename "$pack" .toml)"
+            "$nkb" lint "$pack" || fail "$pack does not pass nkb lint."
+            values="$("$nkb" emit "$name" --format json)" || fail "nkb emit $name failed."
+            [ -n "$values" ] || fail "nkb emit $name printed nothing."
+          done
+
+          # Exit code 1 is a pack that breaks a blocking rule and 3 is no file
+          # at that path. Both are in the table every pipeline reads.
+          rejected="tests/packs/rejected/breaks-too-short.toml"
+          [ -f "$rejected" ] || fail "$rejected is gone, so the smoke test has nothing to reject."
+          set +e
+          "$nkb" lint "$rejected" > /dev/null 2>&1
+          code=$?
+          [ "$code" -eq 1 ] || fail "nkb lint of a broken pack exited $code, expected 1."
+          "$nkb" lint no-such-pack.toml > /dev/null 2>&1
+          code=$?
+          [ "$code" -eq 3 ] || fail "nkb lint of a missing file exited $code, expected 3."
+          echo "The command line program behaves as documented."

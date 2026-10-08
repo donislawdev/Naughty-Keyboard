@@ -1,0 +1,70 @@
+name: Set up Rust
+description: Installs a Rust toolchain, the system libraries the graphical crate links against on Linux, and a cache of the build.
+
+# One place for the three steps every job that compiles has in common, so that a
+# change to the way Rust is installed is a change to this file and nowhere else.
+#
+# A local action is referenced by its path, so the repository setting that
+# requires every action to be pinned to a commit does not apply to this one. The
+# actions it uses itself are pinned below, and Dependabot reads this directory
+# (see .github/dependabot.yml).
+
+inputs:
+  toolchain:
+    description: A rustup toolchain name, such as stable or 1.98.
+    default: stable
+  components:
+    description: Comma-separated rustup components to add, such as clippy.
+    default: ""
+  system-libraries:
+    description: Whether to install the Linux libraries the graphical crate needs. A job that only formats code does not.
+    default: "true"
+  cache:
+    description: Whether to restore the build cache, and to save it on the main branch.
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    # Building the graphical crate on Ubuntu needs these two packages: the
+    # font-lookup crate under Slint asks pkg-config for fontconfig while it
+    # builds. That was found on a bare Ubuntu under WSL. The runner image may
+    # already carry them, and then this step changes nothing.
+    - name: Install the libraries the graphical crate links against
+      if: ${{ runner.os == 'Linux' && inputs.system-libraries == 'true' }}
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install --yes --no-install-recommends pkg-config libfontconfig1-dev
+
+    # The runner images carry rustup, so this adds a toolchain and does not
+    # fetch a tool of its own. The inputs reach the script through the
+    # environment and never through the script text, so no input can become a
+    # command.
+    - name: Install Rust
+      shell: bash
+      env:
+        TOOLCHAIN: ${{ inputs.toolchain }}
+        COMPONENTS: ${{ inputs.components }}
+      run: |
+        args=(toolchain install "$TOOLCHAIN" --profile minimal)
+        wanted=()
+        [ -z "$COMPONENTS" ] || IFS=',' read -ra wanted <<< "$COMPONENTS"
+        for component in "${wanted[@]}"
+        do
+          args+=(--component "$component")
+        done
+        rustup "${args[@]}"
+        rustup default "$TOOLCHAIN"
+        rustc --version --verbose
+        cargo --version
+
+    # Only the main branch writes the cache. A cache is limited to 10 GB for the
+    # whole repository, a build of this workspace is several gigabytes per
+    # system, and a pull request that saved its own would push the one from main
+    # out. Pull requests still read what main saved.
+    - name: Cache the build
+      if: ${{ inputs.cache == 'true' }}
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      with:
+        save-if: ${{ github.ref == 'refs/heads/main' }}
