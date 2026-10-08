@@ -504,6 +504,26 @@ enum SendSwitch {
     Delay,
 }
 
+impl SendSwitch {
+    /// The switch as the person typed it, for the sentence that says what is
+    /// missing after it.
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Index => "--index",
+            Self::Delay => "--delay",
+        }
+    }
+}
+
+/// What `nkb send` was asked to do, read from its arguments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SendArgs<'a> {
+    wanted: &'a str,
+    position: u64,
+    delay_seconds: u64,
+    clearing: Clearing,
+}
+
 /// `nkb send <pack> [--index N] [--delay S] [--clear]` - put one value into the
 /// focused field.
 ///
@@ -530,6 +550,53 @@ enum SendSwitch {
 /// to data, and this command's data does not come back to the caller - it goes
 /// into somebody else's window. Everything a person reads is on standard error.
 fn send(args: &[String]) -> ExitCode {
+    let asked = match send_args(args) {
+        Ok(asked) => asked,
+        Err(code) => return code,
+    };
+    let wanted = asked.wanted;
+
+    let delivery = DirectInjection;
+    if let Err(code) = wait_for_a_target(&delivery, wanted, asked.delay_seconds) {
+        return code;
+    }
+
+    let catalogue = BuiltInCatalogue::new();
+    let position = usize::try_from(asked.position).unwrap_or(usize::MAX);
+    let request = SendRequest {
+        pack_id: wanted,
+        position,
+        clearing: asked.clearing,
+    };
+
+    // `DirectInjection` is both the delivery and the keystroke route: one
+    // adapter, two ports, so the two cannot disagree about the target.
+    // `OBS-160`: a send still running after a second says so once, on the way,
+    // with how to stop it - the palette's send band, in this command's words.
+    let started = std::time::Instant::now();
+    let mut said = false;
+    let mut on_the_way = |sending: Sending<'_>| {
+        if let Some(line) = still_typing(started.elapsed(), &mut said, sending.progress) {
+            let _ = writeln!(std::io::stderr(), "{line}");
+        }
+    };
+    let outcome = send_value(
+        &catalogue,
+        &TomlPackFormat,
+        &delivery,
+        &delivery,
+        &request,
+        &mut on_the_way,
+    );
+    report_send(&mut std::io::stderr(), wanted, outcome)
+}
+
+/// The arguments of `nkb send`, or the exit code to stop with.
+///
+/// `Err` means the command is over and what there was to say has been said: a
+/// usage error on standard error, or the help on standard output - which is why
+/// `--help` comes back as `Err(ExitCode::Ok)`.
+fn send_args(args: &[String]) -> Result<SendArgs<'_>, ExitCode> {
     let mut wanted: Option<&str> = None;
     let mut position: u64 = 1;
     let mut delay_seconds: u64 = 3;
@@ -538,14 +605,11 @@ fn send(args: &[String]) -> ExitCode {
 
     for arg in args {
         if let Some(which) = expecting {
-            let name = match which {
-                SendSwitch::Index => "--index",
-                SendSwitch::Delay => "--delay",
-            };
+            let name = which.name();
             let Ok(number) = arg.parse::<u64>() else {
                 let mut err = std::io::stderr();
                 let _ = writeln!(err, "nkb send: {name} needs a whole number, got '{arg}'.");
-                return ExitCode::Usage;
+                return Err(ExitCode::Usage);
             };
             match which {
                 SendSwitch::Index => position = number,
@@ -557,7 +621,7 @@ fn send(args: &[String]) -> ExitCode {
         match arg.as_str() {
             "-h" | "--help" => {
                 print_send_help();
-                return ExitCode::Ok;
+                return Err(ExitCode::Ok);
             }
             "--index" => expecting = Some(SendSwitch::Index),
             "--delay" => expecting = Some(SendSwitch::Delay),
@@ -566,13 +630,13 @@ fn send(args: &[String]) -> ExitCode {
                 let mut err = std::io::stderr();
                 let _ = writeln!(err, "nkb send: unknown switch '{other}'");
                 let _ = writeln!(err, "Run 'nkb send --help' to see what is available.");
-                return ExitCode::Usage;
+                return Err(ExitCode::Usage);
             }
             name => {
                 if wanted.is_some() {
                     let mut err = std::io::stderr();
                     let _ = writeln!(err, "nkb send: name one pack, not two.");
-                    return ExitCode::Usage;
+                    return Err(ExitCode::Usage);
                 }
                 wanted = Some(name);
             }
@@ -580,25 +644,36 @@ fn send(args: &[String]) -> ExitCode {
     }
 
     if let Some(which) = expecting {
-        let name = match which {
-            SendSwitch::Index => "--index",
-            SendSwitch::Delay => "--delay",
-        };
+        let name = which.name();
         let mut err = std::io::stderr();
         let _ = writeln!(err, "nkb send: {name} needs a number.");
-        return ExitCode::Usage;
+        return Err(ExitCode::Usage);
     }
 
     let Some(wanted) = wanted else {
         let mut err = std::io::stderr();
         let _ = writeln!(err, "nkb send: name a pack.");
         let _ = writeln!(err, "Run 'nkb packs' to see what there is.");
-        return ExitCode::Usage;
+        return Err(ExitCode::Usage);
     };
 
+    Ok(SendArgs {
+        wanted,
+        position,
+        delay_seconds,
+        clearing,
+    })
+}
+
+/// Asks whether this system can send at all, counts down and says where the
+/// value is about to go - or gives the exit code to stop with, having said why.
+fn wait_for_a_target(
+    delivery: &DirectInjection,
+    wanted: &str,
+    delay_seconds: u64,
+) -> Result<(), ExitCode> {
     // Asked before the countdown, so a machine with no route does not make
     // somebody watch three seconds tick away for nothing.
-    let delivery = DirectInjection;
     if let Availability::Unavailable { reason } = delivery.availability() {
         let mut err = std::io::stderr();
         let _ = writeln!(
@@ -609,7 +684,7 @@ fn send(args: &[String]) -> ExitCode {
             err,
             "Nothing was sent. `nkb emit {wanted}` writes the values instead."
         );
-        return ExitCode::InsertFailed;
+        return Err(ExitCode::InsertFailed);
     }
 
     // Measured 2026-09-08: run from a terminal with nothing else focused, this
@@ -633,59 +708,37 @@ fn send(args: &[String]) -> ExitCode {
     // read once here - "WindowsTerminal.exe, a terminal" is the sentence a tester
     // can act on, and the palette says the same after each value (parity,
     // untouchable rule 12).
-    {
-        let mut err = std::io::stderr();
-        match after {
-            Some(target) => {
+    let mut err = std::io::stderr();
+    match after {
+        Some(target) => {
+            let _ = writeln!(
+                err,
+                "nkb send: target is window {:#x} - {}",
+                target.0,
+                where_it_goes(&delivery.inspect(target))
+            );
+            if delay_seconds > 0 && before == after {
                 let _ = writeln!(
                     err,
-                    "nkb send: target is window {:#x} - {}",
-                    target.0,
-                    where_it_goes(&delivery.inspect(target))
+                    "  the focus did not change during the countdown - if that is the terminal, stop now"
                 );
-                if delay_seconds > 0 && before == after {
-                    let _ = writeln!(
-                        err,
-                        "  the focus did not change during the countdown - if that is the terminal, stop now"
-                    );
-                }
             }
-            None => {
-                let _ = writeln!(err, "nkb send: nothing holds the keyboard focus.");
-                let _ = writeln!(err, "Click into a field, then run this again.");
-                return ExitCode::InsertFailed;
-            }
+            Ok(())
+        }
+        None => {
+            let _ = writeln!(err, "nkb send: nothing holds the keyboard focus.");
+            let _ = writeln!(err, "Click into a field, then run this again.");
+            Err(ExitCode::InsertFailed)
         }
     }
+}
 
-    let catalogue = BuiltInCatalogue::new();
-    let position = usize::try_from(position).unwrap_or(usize::MAX);
-    let request = SendRequest {
-        pack_id: wanted,
-        position,
-        clearing,
-    };
-
-    let mut err = std::io::stderr();
-    // `DirectInjection` is both the delivery and the keystroke route: one
-    // adapter, two ports, so the two cannot disagree about the target.
-    // `OBS-160`: a send still running after a second says so once, on the way,
-    // with how to stop it - the palette's send band, in this command's words.
-    let started = std::time::Instant::now();
-    let mut said = false;
-    let mut on_the_way = |sending: Sending<'_>| {
-        if let Some(line) = still_typing(started.elapsed(), &mut said, sending.progress) {
-            let _ = writeln!(std::io::stderr(), "{line}");
-        }
-    };
-    match send_value(
-        &catalogue,
-        &TomlPackFormat,
-        &delivery,
-        &delivery,
-        &request,
-        &mut on_the_way,
-    ) {
+/// What `nkb send` says about one send, and the exit code it ends with.
+///
+/// Every word goes to `err` - standard error in the command, a buffer in the
+/// tests. Standard output stays empty, for the reason given on [`send`].
+fn report_send(err: &mut impl Write, wanted: &str, outcome: SendOutcome) -> ExitCode {
+    match outcome {
         SendOutcome::Sent {
             facts:
                 ValueFacts {
@@ -792,52 +845,7 @@ fn send(args: &[String]) -> ExitCode {
             ExitCode::InsertFailed
         }
         SendOutcome::NotCleared { error } => {
-            let _ = match &error {
-                KeystrokeError::ModifierHeld { which } => writeln!(
-                    err,
-                    "nkb send: {which} is still held on the keyboard, so nothing was sent - release it and run again."
-                ),
-                KeystrokeError::NoTarget => {
-                    writeln!(
-                        err,
-                        "nkb send: nothing holds the keyboard focus, so there is nothing to clear."
-                    )
-                }
-                KeystrokeError::Unsupported { system } => {
-                    writeln!(err, "nkb send: clearing is not supported on {system} yet.")
-                }
-                KeystrokeError::Partial {
-                    chords_sent,
-                    chords_expected,
-                    reason,
-                } => writeln!(
-                    err,
-                    "nkb send: only {chords_sent} of {chords_expected} clearing key presses arrived - {}. The field may be half-cleared. Nothing else was sent.",
-                    stop_reason(*reason)
-                ),
-                // `OBS-157`: zero presses acted, so the field is as it was -
-                // "half-cleared" would send the tester looking for damage.
-                KeystrokeError::NothingArrived { reason } => writeln!(
-                    err,
-                    "nkb send: none of the clearing key presses reached the field - {}. The field is as it was, and nothing was sent.",
-                    stop_reason(*reason)
-                ),
-                KeystrokeError::HigherPrivileges => writeln!(err, "{HIGHER_PRIVILEGES}"),
-                KeystrokeError::NoTextField => writeln!(err, "{NO_TEXT_FIELD}"),
-                // `send_value` treats this one as a skip and sends the value, so
-                // it does not arrive here. If that ever stops, nothing was
-                // pressed and nothing was sent, and that is what is said.
-                KeystrokeError::FieldUnconfirmed => writeln!(
-                    err,
-                    "nkb send: the focus could not be confirmed as a text field, so it was not cleared and nothing was sent."
-                ),
-                // The same skip for a terminal, and the same fallback if it ever
-                // arrives here: nothing pressed, nothing sent.
-                KeystrokeError::InTerminal => writeln!(
-                    err,
-                    "nkb send: the focus is a terminal, so it was not cleared and nothing was sent."
-                ),
-            };
+            say_not_cleared(err, &error);
             ExitCode::InsertFailed
         }
         SendOutcome::Interrupted {
@@ -847,7 +855,7 @@ fn send(args: &[String]) -> ExitCode {
             clearing,
             reason,
         } => {
-            say_clearing_before_failure(&mut err, clearing);
+            say_clearing_before_failure(err, clearing);
             // The loudest message in this command on purpose: the field now
             // holds a fragment, and a person who does not know that will report
             // the fragment as the application's doing. It names the value, as a
@@ -870,79 +878,136 @@ fn send(args: &[String]) -> ExitCode {
             ExitCode::InsertFailed
         }
         SendOutcome::NotDelivered { error, clearing } => {
-            say_clearing_before_failure(&mut err, clearing);
-            match &error {
-                DeliveryError::NoTarget => {
-                    let _ = writeln!(err, "nkb send: nothing holds the keyboard focus.");
-                    let _ = writeln!(err, "Click into a field, then run this again.");
-                }
-                DeliveryError::Unsupported { system } => {
-                    let _ = writeln!(err, "nkb send: not supported on {system} yet.");
-                }
-                DeliveryError::ModifierHeld { which } => {
-                    let _ = writeln!(
-                        err,
-                        "nkb send: {which} is still held on the keyboard, so the value was not sent - release it and run again."
-                    );
-                }
-                // `send_value` reports a fragment as `Interrupted`, above, with
-                // the value it belongs to. Reached only if a route ever reports
-                // one another way - still said, without the name it does not have.
-                DeliveryError::Partial {
-                    units_sent,
-                    units_expected,
-                    reason,
-                } => {
-                    let _ = writeln!(
-                        err,
-                        "nkb send: only {units_sent} of {units_expected} UTF-16 units arrived - {}.",
-                        stop_reason(*reason)
-                    );
-                    let _ = writeln!(
-                        err,
-                        "The field holds a PARTIAL value. Clear it before testing."
-                    );
-                }
-                // The three below belong to the clipboard route of the palette,
-                // which this command does not have and will not have (D71,
-                // OBS-131). Typing reports none of them. They are answered in
-                // plain words rather than folded into a guess, should a route
-                // ever start to.
-                DeliveryError::Busy => {
-                    let _ = writeln!(
-                        err,
-                        "nkb send: the route was held by another application, so nothing was sent - run again in a moment."
-                    );
-                }
-                DeliveryError::Refused { detail } => {
-                    let _ = writeln!(err, "nkb send: the route refused the value: {detail}.");
-                }
-                DeliveryError::CannotCarry { character } => {
-                    let _ = writeln!(
-                        err,
-                        "nkb send: this route cannot carry U+{:04X}, so nothing was sent.",
-                        u32::from(*character)
-                    );
-                }
-                DeliveryError::HigherPrivileges => {
-                    let _ = writeln!(err, "{HIGHER_PRIVILEGES}");
-                }
-                DeliveryError::NoTextField => {
-                    let _ = writeln!(err, "{NO_TEXT_FIELD}");
-                }
-                // `OBS-157`: the keys stopped before any reached the field. No
-                // fragment - "PARTIAL" here sent testers to clear a field that
-                // held only its own content. A clearing that went first was
-                // said just above.
-                DeliveryError::NothingArrived { reason } => {
-                    let _ = writeln!(
-                        err,
-                        "nkb send: nothing of the value reached the field - {}.",
-                        stop_reason(*reason)
-                    );
-                }
-            }
+            say_clearing_before_failure(err, clearing);
+            say_not_delivered(err, &error);
             ExitCode::InsertFailed
+        }
+    }
+}
+
+/// Why the clearing asked for with `--clear` did not go through. Nothing was
+/// sent after it, and every sentence says so.
+fn say_not_cleared(err: &mut impl Write, error: &KeystrokeError) {
+    let _ = match error {
+        KeystrokeError::ModifierHeld { which } => writeln!(
+            err,
+            "nkb send: {which} is still held on the keyboard, so nothing was sent - release it and run again."
+        ),
+        KeystrokeError::NoTarget => {
+            writeln!(
+                err,
+                "nkb send: nothing holds the keyboard focus, so there is nothing to clear."
+            )
+        }
+        KeystrokeError::Unsupported { system } => {
+            writeln!(err, "nkb send: clearing is not supported on {system} yet.")
+        }
+        KeystrokeError::Partial {
+            chords_sent,
+            chords_expected,
+            reason,
+        } => writeln!(
+            err,
+            "nkb send: only {chords_sent} of {chords_expected} clearing key presses arrived - {}. The field may be half-cleared. Nothing else was sent.",
+            stop_reason(*reason)
+        ),
+        // `OBS-157`: zero presses acted, so the field is as it was -
+        // "half-cleared" would send the tester looking for damage.
+        KeystrokeError::NothingArrived { reason } => writeln!(
+            err,
+            "nkb send: none of the clearing key presses reached the field - {}. The field is as it was, and nothing was sent.",
+            stop_reason(*reason)
+        ),
+        KeystrokeError::HigherPrivileges => writeln!(err, "{HIGHER_PRIVILEGES}"),
+        KeystrokeError::NoTextField => writeln!(err, "{NO_TEXT_FIELD}"),
+        // `send_value` treats this one as a skip and sends the value, so
+        // it does not arrive here. If that ever stops, nothing was
+        // pressed and nothing was sent, and that is what is said.
+        KeystrokeError::FieldUnconfirmed => writeln!(
+            err,
+            "nkb send: the focus could not be confirmed as a text field, so it was not cleared and nothing was sent."
+        ),
+        // The same skip for a terminal, and the same fallback if it ever
+        // arrives here: nothing pressed, nothing sent.
+        KeystrokeError::InTerminal => writeln!(
+            err,
+            "nkb send: the focus is a terminal, so it was not cleared and nothing was sent."
+        ),
+    };
+}
+
+/// Why none of the value, or only part of it, reached the field - for a route
+/// that reports it other than through [`SendOutcome::Interrupted`].
+fn say_not_delivered(err: &mut impl Write, error: &DeliveryError) {
+    match error {
+        DeliveryError::NoTarget => {
+            let _ = writeln!(err, "nkb send: nothing holds the keyboard focus.");
+            let _ = writeln!(err, "Click into a field, then run this again.");
+        }
+        DeliveryError::Unsupported { system } => {
+            let _ = writeln!(err, "nkb send: not supported on {system} yet.");
+        }
+        DeliveryError::ModifierHeld { which } => {
+            let _ = writeln!(
+                err,
+                "nkb send: {which} is still held on the keyboard, so the value was not sent - release it and run again."
+            );
+        }
+        // `send_value` reports a fragment as `Interrupted`, above, with
+        // the value it belongs to. Reached only if a route ever reports
+        // one another way - still said, without the name it does not have.
+        DeliveryError::Partial {
+            units_sent,
+            units_expected,
+            reason,
+        } => {
+            let _ = writeln!(
+                err,
+                "nkb send: only {units_sent} of {units_expected} UTF-16 units arrived - {}.",
+                stop_reason(*reason)
+            );
+            let _ = writeln!(
+                err,
+                "The field holds a PARTIAL value. Clear it before testing."
+            );
+        }
+        // The three below belong to the clipboard route of the palette,
+        // which this command does not have and will not have (D71,
+        // OBS-131). Typing reports none of them. They are answered in
+        // plain words rather than folded into a guess, should a route
+        // ever start to.
+        DeliveryError::Busy => {
+            let _ = writeln!(
+                err,
+                "nkb send: the route was held by another application, so nothing was sent - run again in a moment."
+            );
+        }
+        DeliveryError::Refused { detail } => {
+            let _ = writeln!(err, "nkb send: the route refused the value: {detail}.");
+        }
+        DeliveryError::CannotCarry { character } => {
+            let _ = writeln!(
+                err,
+                "nkb send: this route cannot carry U+{:04X}, so nothing was sent.",
+                u32::from(*character)
+            );
+        }
+        DeliveryError::HigherPrivileges => {
+            let _ = writeln!(err, "{HIGHER_PRIVILEGES}");
+        }
+        DeliveryError::NoTextField => {
+            let _ = writeln!(err, "{NO_TEXT_FIELD}");
+        }
+        // `OBS-157`: the keys stopped before any reached the field. No
+        // fragment - "PARTIAL" here sent testers to clear a field that
+        // held only its own content. A clearing that went first was
+        // said before this, by `report_send`.
+        DeliveryError::NothingArrived { reason } => {
+            let _ = writeln!(
+                err,
+                "nkb send: nothing of the value reached the field - {}.",
+                stop_reason(*reason)
+            );
         }
     }
 }
@@ -1382,6 +1447,7 @@ fn print_fmt_help() {
 )]
 mod tests {
     use super::*;
+    use nkb_core::preview::{Recipe, ValuePreview};
 
     fn args(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| (*s).to_owned()).collect()
@@ -1418,6 +1484,10 @@ mod tests {
     // this project is checked on. What a real send does is measured by running
     // it, and that measurement is written down rather than automated, because
     // automating it means typing into whatever window the build agent has.
+    //
+    // What the command SAYS about a send is another matter: `report_send` takes
+    // the outcome and a writer, so every ending is checked below with no machine
+    // and no window at all.
 
     #[test]
     fn send_without_a_pack_name_is_a_usage_error() {
@@ -1485,6 +1555,227 @@ mod tests {
             ExitCode::Ok,
             "a send that delivered nothing must not exit successfully"
         );
+    }
+
+    #[test]
+    fn send_reads_its_switches_into_what_it_was_asked_to_do() {
+        assert_eq!(
+            send_args(&args(&["whitespace"])),
+            Ok(SendArgs {
+                wanted: "whitespace",
+                position: 1,
+                delay_seconds: 3,
+                clearing: Clearing::Keep,
+            }),
+            "the defaults are the first value, three seconds and no clearing"
+        );
+        assert_eq!(
+            send_args(&args(&[
+                "--clear",
+                "--index",
+                "7",
+                "unicode-text",
+                "--delay",
+                "0"
+            ])),
+            Ok(SendArgs {
+                wanted: "unicode-text",
+                position: 7,
+                delay_seconds: 0,
+                clearing: Clearing::Line,
+            }),
+            "switches are read wherever they stand, before or after the pack"
+        );
+    }
+
+    /// What `report_send` said, and the code it ended with.
+    fn reported(outcome: SendOutcome) -> (String, ExitCode) {
+        let mut said = Vec::new();
+        let code = report_send(&mut said, "some-pack", outcome);
+        let said = String::from_utf8(said).unwrap_or_else(|e| panic!("not UTF-8: {e}"));
+        (said, code)
+    }
+
+    fn some_facts() -> ValueFacts {
+        ValueFacts {
+            reference: "some-pack/some-value".to_owned(),
+            name: "Some value".to_owned(),
+            graphemes: 1,
+            code_points: 1,
+            bytes: 1,
+            warnings: 0,
+            preview: ValuePreview::Recipe(Recipe {
+                unit: "a".to_owned(),
+                count: 1,
+            }),
+            shape: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn every_ending_of_a_send_has_its_exit_code_and_only_a_delivery_says_sent() {
+        // The exit codes are the table every pipeline reads (`D46`), and a zero
+        // with nothing delivered is the bug this command is most likely to grow.
+        let reason = StopReason::FocusMoved;
+        let endings = [
+            (
+                SendOutcome::Sent {
+                    facts: some_facts(),
+                    utf16_units: 1,
+                    clearing: ClearingOutcome::Done,
+                    paced: true,
+                },
+                ExitCode::Ok,
+            ),
+            (
+                SendOutcome::Interrupted {
+                    facts: some_facts(),
+                    units_sent: 1,
+                    units_expected: 2,
+                    clearing: ClearingOutcome::Done,
+                    reason,
+                },
+                ExitCode::InsertFailed,
+            ),
+            (SendOutcome::NotFound, ExitCode::NotFound),
+            (SendOutcome::Unreadable, ExitCode::IoFailed),
+            (
+                SendOutcome::Refused { errors: 2 },
+                ExitCode::ValidationFailed,
+            ),
+            (
+                SendOutcome::NoSuchIndex {
+                    asked: 9,
+                    available: 3,
+                },
+                ExitCode::NotFound,
+            ),
+            (
+                SendOutcome::ValueTooLarge {
+                    id: "huge".to_owned(),
+                    code: "E026",
+                },
+                ExitCode::ValidationFailed,
+            ),
+            (
+                SendOutcome::RouteUnavailable {
+                    reason: "this system".to_owned(),
+                },
+                ExitCode::InsertFailed,
+            ),
+            (
+                SendOutcome::NotCleared {
+                    error: KeystrokeError::NoTarget,
+                },
+                ExitCode::InsertFailed,
+            ),
+            (
+                SendOutcome::NotDelivered {
+                    error: DeliveryError::NothingArrived { reason },
+                    clearing: ClearingOutcome::Done,
+                },
+                ExitCode::InsertFailed,
+            ),
+        ];
+        for (outcome, expected) in endings {
+            let shown = format!("{outcome:?}");
+            let (said, code) = reported(outcome);
+            assert_eq!(code, expected, "{shown} ended with the wrong code:\n{said}");
+            assert!(
+                said.starts_with("nkb send: "),
+                "{shown} did not open with the command's name:\n{said}"
+            );
+            assert_eq!(
+                said.contains("nkb send: sent "),
+                code == ExitCode::Ok,
+                "{shown} - only a value that arrived may be called sent:\n{said}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_cleared_line_is_said_before_the_news_that_the_value_did_not_arrive() {
+        // The field is empty-plus-nothing, not as the tester left it, and the
+        // order of the two sentences is the order of what happened to it.
+        let (said, _) = reported(SendOutcome::NotDelivered {
+            error: DeliveryError::NoTarget,
+            clearing: ClearingOutcome::Done,
+        });
+        let cleared = said.find("the line was cleared");
+        let focus = said.find("nothing holds the keyboard focus");
+        assert!(
+            cleared.is_some() && focus.is_some() && cleared < focus,
+            "the clearing and the failure are both said, in that order:\n{said}"
+        );
+    }
+
+    #[test]
+    fn every_failure_to_clear_or_to_deliver_has_a_sentence_of_its_own() {
+        let reason = StopReason::Dropped;
+        let not_cleared = [
+            KeystrokeError::Unsupported {
+                system: "this system".to_owned(),
+            },
+            KeystrokeError::NoTarget,
+            KeystrokeError::ModifierHeld {
+                which: "Shift".to_owned(),
+            },
+            KeystrokeError::Partial {
+                chords_sent: 1,
+                chords_expected: 3,
+                reason,
+            },
+            KeystrokeError::NothingArrived { reason },
+            KeystrokeError::HigherPrivileges,
+            KeystrokeError::NoTextField,
+            KeystrokeError::FieldUnconfirmed,
+            KeystrokeError::InTerminal,
+        ];
+        let mut seen = std::collections::BTreeSet::new();
+        for error in &not_cleared {
+            let mut said = Vec::new();
+            say_not_cleared(&mut said, error);
+            let said = String::from_utf8(said).unwrap_or_else(|e| panic!("not UTF-8: {e}"));
+            assert!(said.starts_with("nkb send: "), "{error:?} said: {said}");
+            assert!(
+                seen.insert(said.clone()),
+                "{error:?} says what another failure says: {said}"
+            );
+        }
+
+        let not_delivered = [
+            DeliveryError::Unsupported {
+                system: "this system".to_owned(),
+            },
+            DeliveryError::NoTarget,
+            DeliveryError::ModifierHeld {
+                which: "Shift".to_owned(),
+            },
+            DeliveryError::Partial {
+                units_sent: 1,
+                units_expected: 3,
+                reason,
+            },
+            DeliveryError::NothingArrived { reason },
+            DeliveryError::Busy,
+            DeliveryError::Refused {
+                detail: "the route said no".to_owned(),
+            },
+            DeliveryError::CannotCarry { character: '\0' },
+            DeliveryError::HigherPrivileges,
+            DeliveryError::NoTextField,
+        ];
+        let mut seen = std::collections::BTreeSet::new();
+        for error in &not_delivered {
+            let mut said = Vec::new();
+            say_not_delivered(&mut said, error);
+            let said = String::from_utf8(said).unwrap_or_else(|e| panic!("not UTF-8: {e}"));
+            assert!(said.starts_with("nkb send: "), "{error:?} said: {said}");
+            assert!(
+                seen.insert(said.clone()),
+                "{error:?} says what another failure says: {said}"
+            );
+        }
     }
 
     #[test]

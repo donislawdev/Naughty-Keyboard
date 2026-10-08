@@ -40,6 +40,10 @@ unsafe_code = "allow"
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
+too_many_lines = "warn"
+cognitive_complexity = "warn"
+excessive_nesting = "warn"
+too_many_arguments = "warn"
 
 # Only where this API exists. On the other two systems the package still
 # compiles and says plainly that it cannot deliver - untouchable rule 1.

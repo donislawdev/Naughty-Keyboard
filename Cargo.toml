@@ -145,3 +145,16 @@ unsafe_code = "forbid"
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
+
+# The shape of the code, held to ceilings that may only come down. The numbers
+# are in clippy.toml and .github/shape.toml, and the reason is in
+# .github/scripts/shape_gate.py. A warning and not a denial, because
+# `-D warnings` in CI and in the local gates is what makes them a gate, and a
+# local `cargo clippy` must still run to the end in the middle of an edit.
+#
+# nkb-gui and nkb-sys repeat this table rather than inherit it, and
+# crates/nkb-cli/tests/shape.rs checks that both copies still carry these four.
+too_many_lines = "warn"
+cognitive_complexity = "warn"
+excessive_nesting = "warn"
+too_many_arguments = "warn"
