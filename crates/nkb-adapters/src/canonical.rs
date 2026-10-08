@@ -98,16 +98,6 @@ pub fn render(text: &str) -> Option<String> {
     Some(doc.to_string())
 }
 
-/// Whether the file is already written the way this module would write it.
-///
-/// A file that does not parse is not judged: the answer is `true`, because
-/// saying "and it is badly formatted" about a file nobody could read would be
-/// a second finding invented out of the first one.
-#[must_use]
-pub fn is_canonical(text: &str) -> bool {
-    render(text).is_none_or(|canonical| canonical == text)
-}
-
 /// Whether two versions of a file describe the same insertions.
 ///
 /// The guard on the write path, and deliberately blunt: it compares both the
@@ -296,7 +286,6 @@ since  = \"1.0\"
     #[test]
     fn a_file_already_in_shape_comes_back_byte_for_byte() {
         assert_eq!(render(CANONICAL).as_deref(), Some(CANONICAL));
-        assert!(is_canonical(CANONICAL));
     }
 
     #[test]
@@ -428,9 +417,8 @@ id=\"one\"
     }
 
     #[test]
-    fn a_file_that_is_not_toml_produces_nothing_and_is_not_called_badly_formatted() {
+    fn a_file_that_is_not_toml_produces_nothing() {
         assert_eq!(render("format = ="), None);
-        assert!(is_canonical("format = ="));
     }
 
     #[test]

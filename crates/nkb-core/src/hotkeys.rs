@@ -479,18 +479,6 @@ pub const fn default_bindings(
     }
 }
 
-/// The default chord for one action, if the default table names it.
-///
-/// Total over [`HotkeyAction::ALL`] by the test below, so the `Option` is really
-/// only `None` for a hypothetical action added without a default - which the
-/// test refuses.
-#[must_use]
-pub fn default_chord(convention: Convention, action: HotkeyAction) -> Option<HotkeyChord> {
-    default_bindings(convention)
-        .iter()
-        .find_map(|(candidate, chord)| (*candidate == action).then_some(*chord))
-}
-
 /// The shortcut of every action for one run of the palette: the defaults,
 /// with the tester's own choices on top where they can be used.
 ///
@@ -660,6 +648,15 @@ pub enum Refusal {
 )]
 mod tests {
     use super::*;
+
+    /// The default chord for one action, if the default table names it. Read
+    /// straight from the table, so the tests below can hold the table and
+    /// [`Bindings::defaults`] to each other.
+    fn default_chord(convention: Convention, action: HotkeyAction) -> Option<HotkeyChord> {
+        default_bindings(convention)
+            .iter()
+            .find_map(|(candidate, chord)| (*candidate == action).then_some(*chord))
+    }
 
     const CONVENTIONS: [Convention; 2] = [Convention::WindowsAndLinux, Convention::MacOs];
 

@@ -33,8 +33,6 @@
 //! is exact: only the form [`Layout::text`] writes reads back, so one layout
 //! cannot hide under two spellings as two keys.
 
-use std::fmt::Write as _;
-
 /// The most screens a layout may hold. A machine with more is not one this
 /// tool has met, and a longer key is more likely a file edited by mistake.
 pub const MAX_SCREENS: usize = 16;
@@ -119,11 +117,13 @@ impl Layout {
             if at > 0 {
                 text.push(' ');
             }
-            let _ = write!(
-                text,
+            // `format!` rather than `write!` into the string: writing into a
+            // `String` cannot fail, but its `Result` would still have to be
+            // thrown away, and this layer never throws a result away.
+            text.push_str(&format!(
                 "{}x{}@{},{}",
                 screen.width, screen.height, screen.x, screen.y
-            );
+            ));
         }
         text
     }
