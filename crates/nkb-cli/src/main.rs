@@ -17,6 +17,7 @@ mod exit;
 mod json;
 mod lint_json;
 mod lint_report;
+mod output;
 
 use emit_output::{EmitFormat, Form};
 use exit::ExitCode;
@@ -31,6 +32,7 @@ use nkb_app::{
     format_pack, lint_pack, list_packs, new_pack, send_value, show_pack,
 };
 use nkb_core::report::{ControlKind, Target};
+use output::{out, outln};
 use std::io::Write;
 use std::path::Path;
 
@@ -38,7 +40,8 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() -> std::process::ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let code = run(&args);
+    // What the command found, unless its answer could not be written (`output`).
+    let code = output::settle(run(&args));
     std::process::ExitCode::from(u8::try_from(code.as_i32()).unwrap_or(2))
 }
 
@@ -58,7 +61,7 @@ fn run(args: &[String]) -> ExitCode {
         "--version" => {
             // Data goes to standard output, everything else to standard error,
             // so a pipeline gets the value and nothing but the value.
-            println!("nkb {VERSION}");
+            outln!("nkb {VERSION}");
             ExitCode::Ok
         }
         "packs" => packs(&args[1..]),
@@ -113,10 +116,10 @@ fn lint(args: &[String]) -> ExitCode {
     // for this one case would double the work of every consumer.
     if explain && path.is_none() {
         if json {
-            print!("{}", lint_json::document(&[], VERSION).render());
+            out!("{}", lint_json::document(&[], VERSION).render());
         } else {
             for line in lint_report::explanation() {
-                println!("{line}");
+                outln!("{line}");
             }
         }
         return ExitCode::Ok;
@@ -126,9 +129,9 @@ fn lint(args: &[String]) -> ExitCode {
     // else. One stray line of prose beside it and the consumer's parse fails.
     if explain && !json {
         for line in lint_report::explanation() {
-            println!("{line}");
+            outln!("{line}");
         }
-        println!();
+        outln!();
     }
 
     let Some(path) = path else {
@@ -147,7 +150,7 @@ fn lint(args: &[String]) -> ExitCode {
     let outcome = lint_pack(&source, &TomlPackFormat, &id);
 
     if json {
-        print!(
+        out!(
             "{}",
             lint_json::document(&[(path.to_owned(), outcome.clone())], VERSION).render()
         );
@@ -161,10 +164,10 @@ fn lint(args: &[String]) -> ExitCode {
     match outcome {
         LintOutcome::Judged(report) => {
             for line in lint_report::lines(&report, path) {
-                println!("{line}");
+                outln!("{line}");
             }
             for line in lint_report::summary(&report) {
-                println!("{line}");
+                outln!("{line}");
             }
             if report.accepted() {
                 ExitCode::Ok
@@ -234,17 +237,17 @@ fn fmt(args: &[String]) -> ExitCode {
 
     match format_pack(&source, &sink, &TomlPackFormat, &id, dry_run) {
         FormatOutcome::AlreadyCanonical => {
-            println!("{path} is already in shape. Nothing was written.");
+            outln!("{path} is already in shape. Nothing was written.");
             ExitCode::Ok
         }
         FormatOutcome::Formatted => {
-            println!("Wrote {path} in canonical shape.");
+            outln!("Wrote {path} in canonical shape.");
             ExitCode::Ok
         }
         FormatOutcome::WouldFormat => {
             // A dry run reports on standard output because the report is what it
             // was asked for. It is the product of this run, not a complaint.
-            println!("{path} is not in shape. Run without --dry-run to rewrite it.");
+            outln!("{path} is not in shape. Run without --dry-run to rewrite it.");
             ExitCode::Ok
         }
         FormatOutcome::DidNotParse => {
@@ -333,9 +336,9 @@ fn new_pack_command(args: &[String]) -> ExitCode {
         NewPackOutcome::Created { file } => {
             // The command's answer, on standard output the way the linter's
             // verdict is. Nothing else is written there, so nothing is polluted.
-            println!("Wrote {file}.");
-            println!("Edit it, then run `nkb lint {file}` - it reports everything in one pass.");
-            println!(
+            outln!("Wrote {file}.");
+            outln!("Edit it, then run `nkb lint {file}` - it reports everything in one pass.");
+            outln!(
                 "The pack format is not frozen yet: it freezes with the first public release that ships packs."
             );
             ExitCode::Ok
@@ -403,7 +406,7 @@ fn packs(args: &[String]) -> ExitCode {
     match list_packs(&catalogue, &format) {
         Ok(found) => {
             for line in browse_report::listing(&found) {
-                println!("{line}");
+                outln!("{line}");
             }
             // A catalogue holding a pack nobody can load is not a failed run:
             // the run succeeded and the answer includes the bad news. `nkb lint`
@@ -454,7 +457,7 @@ fn show(args: &[String]) -> ExitCode {
     match show_pack(&catalogue, &format, wanted) {
         ShowOutcome::Shown { pack, warnings } => {
             for line in browse_report::pack(&pack, warnings) {
-                println!("{line}");
+                outln!("{line}");
             }
             ExitCode::Ok
         }
@@ -485,16 +488,16 @@ fn show(args: &[String]) -> ExitCode {
 }
 
 fn print_packs_help() {
-    println!("nkb packs - list the packs this build can offer");
-    println!();
-    println!("Usage:");
-    println!("  nkb packs");
-    println!();
-    println!("Every run also states which pack sources were read and which were not,");
-    println!("because a list drawn from one source looks exactly like a complete one.");
-    println!();
-    println!("Options:");
-    println!("  -h, --help     Show this help and exit with 0");
+    outln!("nkb packs - list the packs this build can offer");
+    outln!();
+    outln!("Usage:");
+    outln!("  nkb packs");
+    outln!();
+    outln!("Every run also states which pack sources were read and which were not,");
+    outln!("because a list drawn from one source looks exactly like a complete one.");
+    outln!();
+    outln!("Options:");
+    outln!("  -h, --help     Show this help and exit with 0");
 }
 
 /// Which switch is still waiting for its number.
@@ -1158,37 +1161,37 @@ fn count_down(seconds: u64) {
 }
 
 fn print_send_help() {
-    println!("nkb send - type one value into the focused field");
-    println!();
-    println!("Usage:");
-    println!("  nkb send <pack> [--index N] [--delay S] [--clear]");
-    println!();
-    println!("Put one value of a pack into whatever field has the keyboard focus.");
-    println!();
-    println!("Options:");
-    println!("  --index N      which value, counting from 1 in the pack's own order");
-    println!("                 (default: 1). The order of values is the order of testing.");
-    println!("  --delay S      seconds to wait first, so you can focus the target");
-    println!("                 (default: 3). Use 0 when something else focuses it.");
-    println!("  --clear        press Home, Shift+End, Delete first, clearing the current");
-    println!("                 line of the field. Never selects beyond the line, so a");
-    println!("                 multi-line field keeps its other lines. Without this switch");
-    println!("                 the only keys sent are the value's own characters.");
-    println!("  -h, --help     Show this help and exit with 0");
-    println!();
-    println!("The value goes to the focused window, not to standard output.");
-    println!("Everything you read here is on standard error.");
-    println!("Nothing is sent while Ctrl, Alt, Shift or Win is held on the keyboard:");
-    println!("the command waits up to two seconds for them to come up, then refuses.");
-    println!("Nothing is sent to a window running with higher privileges than nkb,");
-    println!("such as an application started as administrator: the system would drop");
-    println!("the keystrokes without a word, so the command refuses and exits with 4.");
-    println!("Nothing is sent when the keyboard focus is on a button, a link, a list item");
-    println!("or a page that is not editable: keys there act on that control, so the");
-    println!("command refuses and exits with 4. Where it cannot tell, it sends.");
-    println!("Press Escape to stop a send in progress: nothing more is typed, the command");
-    println!("says how much arrived and exits with 4. Escape belongs to the command only");
-    println!("while it types - before and after, the key is the application's.");
+    outln!("nkb send - type one value into the focused field");
+    outln!();
+    outln!("Usage:");
+    outln!("  nkb send <pack> [--index N] [--delay S] [--clear]");
+    outln!();
+    outln!("Put one value of a pack into whatever field has the keyboard focus.");
+    outln!();
+    outln!("Options:");
+    outln!("  --index N      which value, counting from 1 in the pack's own order");
+    outln!("                 (default: 1). The order of values is the order of testing.");
+    outln!("  --delay S      seconds to wait first, so you can focus the target");
+    outln!("                 (default: 3). Use 0 when something else focuses it.");
+    outln!("  --clear        press Home, Shift+End, Delete first, clearing the current");
+    outln!("                 line of the field. Never selects beyond the line, so a");
+    outln!("                 multi-line field keeps its other lines. Without this switch");
+    outln!("                 the only keys sent are the value's own characters.");
+    outln!("  -h, --help     Show this help and exit with 0");
+    outln!();
+    outln!("The value goes to the focused window, not to standard output.");
+    outln!("Everything you read here is on standard error.");
+    outln!("Nothing is sent while Ctrl, Alt, Shift or Win is held on the keyboard:");
+    outln!("the command waits up to two seconds for them to come up, then refuses.");
+    outln!("Nothing is sent to a window running with higher privileges than nkb,");
+    outln!("such as an application started as administrator: the system would drop");
+    outln!("the keystrokes without a word, so the command refuses and exits with 4.");
+    outln!("Nothing is sent when the keyboard focus is on a button, a link, a list item");
+    outln!("or a page that is not editable: keys there act on that control, so the");
+    outln!("command refuses and exits with 4. Where it cannot tell, it sends.");
+    outln!("Press Escape to stop a send in progress: nothing more is typed, the command");
+    outln!("says how much arrived and exits with 4. Escape belongs to the command only");
+    outln!("while it types - before and after, the key is the application's.");
 }
 
 /// `nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]`
@@ -1275,14 +1278,10 @@ fn emit(args: &[String]) -> ExitCode {
             for note in &rendered.notes {
                 let _ = writeln!(err, "nkb emit: {note}");
             }
-            // Written through `write!` rather than `print!` so that a closed
-            // pipe - `nkb emit pack | head -1` - ends the run quietly instead of
-            // panicking in the middle of somebody's shell.
-            let mut out = std::io::stdout();
-            match out.write_all(rendered.data.as_bytes()) {
-                Ok(()) => ExitCode::Ok,
-                Err(_) => ExitCode::Ok,
-            }
+            // A closed pipe - `nkb emit pack | head -1` - ends the run quietly
+            // with 0, a full disk under `> file` ends it with 5 (`output`).
+            out!("{}", rendered.data);
+            ExitCode::Ok
         }
         EmitOutcome::Refused { errors } => {
             let mut err = std::io::stderr();
@@ -1323,121 +1322,123 @@ fn emit(args: &[String]) -> ExitCode {
 }
 
 fn print_emit_help() {
-    println!("nkb emit - print a pack's values for a script or a file");
-    println!();
-    println!("Usage:");
-    println!("  nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]");
-    println!();
-    println!("Values go to standard output. The account of what came out, and any");
-    println!("note about what a format could not carry, go to standard error - so a");
-    println!("redirected file holds values and nothing else.");
-    println!();
-    println!("Formats:");
-    println!("  json     Both forms of every value, and every field. The default,");
-    println!("           because it is the only one that carries the whole catalogue");
-    println!("  csv      One row per value. Escaped by default, because this");
-    println!("           catalogue contains values that destroy CSV files");
-    println!("  lines    One value per line. Refuses a value containing a line");
-    println!("           break by name, rather than splitting it silently");
-    println!();
-    println!("Options:");
-    println!("      --escaped  Print values as a pack file stores them");
-    println!("      --raw      Print values literally");
-    println!("      --base64   Encode values, for channels that damage text");
-    println!("  -h, --help     Show this help and exit with 0");
+    outln!("nkb emit - print a pack's values for a script or a file");
+    outln!();
+    outln!("Usage:");
+    outln!("  nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]");
+    outln!();
+    outln!("Values go to standard output. The account of what came out, and any");
+    outln!("note about what a format could not carry, go to standard error - so a");
+    outln!("redirected file holds values and nothing else.");
+    outln!();
+    outln!("Formats:");
+    outln!("  json     Both forms of every value, and every field. The default,");
+    outln!("           because it is the only one that carries the whole catalogue");
+    outln!("  csv      One row per value. Escaped by default, because this");
+    outln!("           catalogue contains values that destroy CSV files");
+    outln!("  lines    One value per line. Refuses a value containing a line");
+    outln!("           break by name, rather than splitting it silently");
+    outln!();
+    outln!("Options:");
+    outln!("      --escaped  Print values as a pack file stores them");
+    outln!("      --raw      Print values literally");
+    outln!("      --base64   Encode values, for channels that damage text");
+    outln!("  -h, --help     Show this help and exit with 0");
 }
 
 fn print_show_help() {
-    println!("nkb show - print one pack in full");
-    println!();
-    println!("Usage:");
-    println!("  nkb show <pack>");
-    println!();
-    println!("Values are printed ESCAPED, which is the only readable form for a value");
-    println!("made of characters nobody can see. A generated value is printed as its");
-    println!("recipe and is never expanded here.");
-    println!();
-    println!("Options:");
-    println!("  -h, --help     Show this help and exit with 0");
+    outln!("nkb show - print one pack in full");
+    outln!();
+    outln!("Usage:");
+    outln!("  nkb show <pack>");
+    outln!();
+    outln!("Values are printed ESCAPED, which is the only readable form for a value");
+    outln!("made of characters nobody can see. A generated value is printed as its");
+    outln!("recipe and is never expanded here.");
+    outln!();
+    outln!("Options:");
+    outln!("  -h, --help     Show this help and exit with 0");
 }
 
 fn print_help() {
-    println!("nkb {VERSION} - malicious test data, one shortcut away");
-    println!();
-    println!("Usage:");
-    println!("  nkb <command> [options]");
-    println!();
-    println!("Commands:");
-    println!("  packs             List the packs this build can offer");
-    println!("  show <pack>       Print one pack in full");
-    println!("  emit <pack>       Print a pack's values for a script or a file");
-    println!("  send <pack>       Type one value into the focused field");
-    println!("  lint <file>       Check a pack file against the format rules");
-    println!("  fmt <file>        Rewrite a pack file in canonical shape");
-    println!("  new-pack <name>   Write the skeleton for a new pack");
-    println!();
-    println!("Options:");
-    println!("  -h, --help        Show this help and exit with 0");
-    println!("      --version     Print the version and exit with 0");
-    println!();
-    println!("The graphical interface is a separate executable: nkb-gui");
+    outln!("nkb {VERSION} - malicious test data, one shortcut away");
+    outln!();
+    outln!("Usage:");
+    outln!("  nkb <command> [options]");
+    outln!();
+    outln!("Commands:");
+    outln!("  packs             List the packs this build can offer");
+    outln!("  show <pack>       Print one pack in full");
+    outln!("  emit <pack>       Print a pack's values for a script or a file");
+    outln!("  send <pack>       Type one value into the focused field");
+    outln!("  lint <file>       Check a pack file against the format rules");
+    outln!("  fmt <file>        Rewrite a pack file in canonical shape");
+    outln!("  new-pack <name>   Write the skeleton for a new pack");
+    outln!();
+    outln!("Options:");
+    outln!("  -h, --help        Show this help and exit with 0");
+    outln!("      --version     Print the version and exit with 0");
+    outln!();
+    outln!("The graphical interface is a separate executable: nkb-gui");
 }
 
 fn print_new_pack_help() {
-    println!("nkb new-pack - write the skeleton for a new pack");
-    println!();
-    println!("Usage:");
-    println!("  nkb new-pack <name>");
-    println!();
-    println!("The name becomes both the file name and the pack identifier, so it has");
-    println!("to be lower case letters, digits and hyphens, starting with a letter.");
-    println!("The file is written in the current folder and never over an existing one.");
-    println!();
-    println!("Options:");
-    println!("  -h, --help     Show this help and exit with 0");
+    outln!("nkb new-pack - write the skeleton for a new pack");
+    outln!();
+    outln!("Usage:");
+    outln!("  nkb new-pack <name>");
+    outln!();
+    outln!("The name becomes both the file name and the pack identifier, so it has");
+    outln!("to be lower case letters, digits and hyphens, starting with a letter.");
+    outln!("The file is written in the current folder and never over an existing one.");
+    outln!();
+    outln!("Options:");
+    outln!("  -h, --help     Show this help and exit with 0");
 }
 
 fn print_lint_help() {
-    println!("nkb lint - check a pack file against the format rules");
-    println!();
-    println!("Usage:");
-    println!("  nkb lint <file.toml> [--json] [--explain]");
-    println!();
-    println!("Options:");
-    println!("      --json     Write the verdict as JSON, and nothing else");
-    println!("      --explain  List every rule and whether this build checks it");
-    println!("  -h, --help     Show this help and exit with 0");
-    println!();
-    println!("Exit codes:");
-    println!("  0  the pack passed every rule this build checks");
-    println!("  1  the pack broke at least one blocking rule");
-    println!("  2  the command was called wrongly");
-    println!("  3  there is no pack file to read at that path");
-    println!("  5  the file is there and could not be read");
+    outln!("nkb lint - check a pack file against the format rules");
+    outln!();
+    outln!("Usage:");
+    outln!("  nkb lint <file.toml> [--json] [--explain]");
+    outln!();
+    outln!("Options:");
+    outln!("      --json     Write the verdict as JSON, and nothing else");
+    outln!("      --explain  List every rule and whether this build checks it");
+    outln!("  -h, --help     Show this help and exit with 0");
+    outln!();
+    outln!("Exit codes:");
+    outln!("  0  the pack passed every rule this build checks");
+    outln!("  1  the pack broke at least one blocking rule");
+    outln!("  2  the command was called wrongly");
+    outln!("  3  there is no pack file to read at that path");
+    outln!("  5  the file is there and could not be read, or the verdict");
+    outln!("     could not be written to standard output");
 }
 
 fn print_fmt_help() {
-    println!("nkb fmt - rewrite a pack file in canonical shape");
-    println!();
-    println!("Usage:");
-    println!("  nkb fmt <file.toml> [--dry-run]");
-    println!();
-    println!("Puts the fields of each table in the order the format defines and lines");
-    println!("up the equals signs. Comments, blank lines and the order of the values");
-    println!("themselves are left exactly as they are - the order of the values is the");
-    println!("order a tester meets them.");
-    println!();
-    println!("Options:");
-    println!("      --dry-run  Say what would change and write nothing");
-    println!("  -h, --help     Show this help and exit with 0");
-    println!();
-    println!("Exit codes:");
-    println!("  0  the file is in shape, or was put in shape");
-    println!("  1  the file is not TOML, so there was nothing to put in order");
-    println!("  2  the command was called wrongly");
-    println!("  3  there is no pack file to read at that path");
-    println!("  4  formatting would have changed a value, so nothing was written");
-    println!("  5  the file could not be read or written");
+    outln!("nkb fmt - rewrite a pack file in canonical shape");
+    outln!();
+    outln!("Usage:");
+    outln!("  nkb fmt <file.toml> [--dry-run]");
+    outln!();
+    outln!("Puts the fields of each table in the order the format defines and lines");
+    outln!("up the equals signs. Comments, blank lines and the order of the values");
+    outln!("themselves are left exactly as they are - the order of the values is the");
+    outln!("order a tester meets them.");
+    outln!();
+    outln!("Options:");
+    outln!("      --dry-run  Say what would change and write nothing");
+    outln!("  -h, --help     Show this help and exit with 0");
+    outln!();
+    outln!("Exit codes:");
+    outln!("  0  the file is in shape, or was put in shape");
+    outln!("  1  the file is not TOML, so there was nothing to put in order");
+    outln!("  2  the command was called wrongly");
+    outln!("  3  there is no pack file to read at that path");
+    outln!("  4  formatting would have changed a value, so nothing was written");
+    outln!("  5  the file could not be read or written, or standard output");
+    outln!("     could not be");
 }
 
 #[cfg(test)]
