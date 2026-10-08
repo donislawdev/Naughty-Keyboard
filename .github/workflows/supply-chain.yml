@@ -1,0 +1,76 @@
+name: Supply chain
+
+# Asks cargo-deny four questions about the dependency tree. The rules and the
+# reason for each are in deny.toml.
+#
+# Two jobs and not one, on purpose. Licences, bans and sources depend only on
+# what is in this repository, so a red result there is always about a change
+# made here. Advisories depend on a database that changes by itself, so a red
+# result there can appear with no change at all. Kept apart, a new advisory
+# never hides the licence verdict, and nobody learns to ignore a red check.
+#
+# The paths filter below makes a run happen only when something it reads
+# changed. Do not make either job a required check of a branch rule while the
+# filter is there: a required check that never started blocks every change that
+# does not touch these paths.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - deny.toml
+      - crates/*/Cargo.toml
+      - .github/workflows/supply-chain.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - deny.toml
+      - crates/*/Cargo.toml
+      - .github/workflows/supply-chain.yml
+  # New advisories arrive with no change here, so the tree is asked again every
+  # Monday. A failed scheduled run is reported to whoever last edited the
+  # schedule below.
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supply-chain-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  rules:
+    name: licences, bans and sources
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check licences, bans and sources
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check bans licenses sources
+
+  advisories:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check advisories
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check advisories

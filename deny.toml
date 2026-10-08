@@ -1,0 +1,101 @@
+# Rules for `cargo deny`, run by .github/workflows/supply-chain.yml.
+#
+# Four questions are asked of the dependency tree, and the workflow keeps the
+# first of them apart from the other three on purpose:
+#
+#   advisories  is a crate in the tree named in a published vulnerability report?
+#               This one depends on a database that changes without any change
+#               here, so it runs as its own job and also once a week.
+#   licenses    is every licence in the tree one this project may ship under?
+#   bans        is a crate present that must not be, or present where it must not be?
+#   sources     does every crate come from the registry we expect?
+#
+# The licence question is the untouchable rule 5 of this project written as a
+# check instead of a promise: a dependency is admitted only if its licence can
+# be combined with GPL-3.0-only, and the answer has two halves, one for code
+# and one for data. Nothing here is data, so only the first half is asked.
+
+[graph]
+# Every platform at once. The lock file holds the Windows, macOS and Linux
+# crates together, and a licence problem in a crate that only builds on one of
+# them is still a licence problem in the project.
+all-features = true
+
+[advisories]
+version = 2
+# A yanked release is one its own author withdrew, usually because it was broken.
+yanked = "deny"
+# Every entry names the advisory and says why it does not stop this project.
+# cargo-deny reports an entry that no longer matches anything, so the list
+# cleans itself when Slint moves: delete the entry the run points at.
+#
+# The entry below is "unmaintained", not "vulnerable". No vulnerability is
+# reported against the crate and there is no fixed release to move to, which is
+# why the solution line in the report says "no safe upgrade is available". It
+# sits inside Slint's own tree, so the one who can drop it is Slint, and the next
+# Slint release is the moment to look again.
+ignore = [
+    { id = "RUSTSEC-2026-0192", reason = "`ttf-parser` is reached only through the window decorations that Slint's winit backend draws itself under Wayland on Linux (sctk-adwaita, then ab_glyph). It reads a font the toolkit ships and never a file the tester supplies. No vulnerability is reported against it." },
+]
+
+[licenses]
+version = 2
+# Each of these can be combined with GPL-3.0-only. When a crate offers a choice
+# (`MIT OR Apache-2.0`, or `GPL-3.0-only OR` a commercial licence), one allowed
+# term is enough, so the list holds the terms this project actually relies on
+# rather than every term it happens to see.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "BSL-1.0",
+    "CC0-1.0",
+    # A public-domain dedication, offered by `ksni` (the Linux tray icon, reached
+    # through Slint's core) with no alternative. The FSF lists it as free.
+    "Unlicense",
+    # Slint is offered under GPL-3.0-only OR two proprietary licences, and this
+    # is the one taken. It is also the licence of the workspace itself. The
+    # price is written beside `slint` in the root Cargo.toml: nkb-gui cannot be
+    # relicensed without buying a Slint licence.
+    "GPL-3.0-only",
+]
+confidence-threshold = 0.9
+
+[bans]
+# Slint pulls in several copies of some crates (hashbrown, windows-sys, and
+# more), and which copies is Slint's decision, not ours. The three crates this
+# project must keep to a single copy each have a test of their own in nkb-gui.
+multiple-versions = "allow"
+# Not asked, and the reason is measured. The wildcard check reads every
+# workspace crate's manifest itself and cannot follow `nkb-core.workspace = true`
+# (cargo-deny 0.20.2 prints "failed to resolve a workspace dependency" for each
+# one), so it reports our own path dependencies as wildcards. What it was meant to
+# catch, an external crate accepting any version, cannot happen here: every
+# external dependency is declared once, with a version, in the root manifest, and
+# CI builds with `--locked`.
+wildcards = "allow"
+highlight = "all"
+
+# D25: the command line program carries no graphical toolkit. Each entry says
+# which crates may depend on the banned one directly, and that is the whole
+# structure: `nkb-cli` is on none of these lists, so adding a dependency that
+# reaches the toolkit from the command line fails this check, whoever adds it.
+#
+# `slint` is the toolkit. `arboard` is the clipboard crate, and it is listed
+# because pulling it in through `nkb-adapters` would carry AppKit and the X11
+# client into `nkb` (the reason is written beside it in the root Cargo.toml).
+deny = [
+    { crate = "slint", wrappers = ["nkb-gui"] },
+    { crate = "arboard", wrappers = ["nkb-gui", "i-slint-backend-winit"] },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
