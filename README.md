@@ -94,9 +94,10 @@ cargo build --release -p nkb-gui    # the palette: target/release/nkb-gui
 -->
 
 Run the whole test suite with `cargo test --workspace`. Every pull request runs it on Windows, Linux
-and macOS, together with Clippy, a check of the dependencies' licences and advisories, and a release
-build of `nkb` that is run against the shipped packs. What no automated run can see is the palette on
-a real desktop: taking the keyboard, and a value arriving in somebody else's field.
+and macOS, together with Clippy, a check of the dependencies' licences and advisories, a static
+analysis with Semgrep that fails on any finding of severity error or higher, and a release build of
+`nkb` that is run against the shipped packs. What no automated run can see is the palette on a real
+desktop: taking the keyboard, and a value arriving in somebody else's field.
 
 The first start of `nkb-gui` opens a welcome window with a box to try the first value in, so the first
 value does not land in somebody else's application. Closing it opens the palette and is remembered.

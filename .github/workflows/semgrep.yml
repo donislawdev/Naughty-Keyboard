@@ -1,0 +1,106 @@
+name: Semgrep
+
+# Static analysis of the code in this repository. A finding of severity error or
+# higher fails the check, and so does a scan that did not run.
+#
+# Who decides. Semgrep scans and writes a report, and the verdict is made by
+# .github/scripts/semgrep_gate.py, which reads that report. The flag that looks
+# like it does the same, `semgrep --severity ERROR --error`, ignores every
+# severity newer than ERROR. Measured on another project: a rule that declared
+# HIGH gave 19 findings without the flag and none with it. The script says what
+# blocks, what passes and what is no verdict at all.
+#
+# Which rules. The public packs of the Semgrep registry (default, rust and
+# github-actions), fetched when the job runs. No account and no secret are used,
+# so the check is the same on a pull request from a fork. The price is that a
+# rule offered only to a logged-in account is not in it, and this check cannot
+# tell what such a rule would say.
+#
+# The packs are not pinned. A rule added to a pack tomorrow applies to the next
+# run, so a pull request can turn red with no change of ours. That is the price
+# of rules that keep up, the same price the Monday run below and the floating
+# stable toolchain in ci.yml already pay. The answer to a new finding is a change
+# in the code, or a `nosemgrep` comment that says why the finding does not apply.
+# It is never an older pack.
+#
+# Semgrep's own summary calls every finding blocking, an informational one too.
+# Read the last line of the Decide step instead, which counts by the rule above.
+#
+# The registry is a dependency too. When it cannot be reached the scan fails, the
+# check goes red and the merge waits for a re-run. A gate that passed when the
+# scan did not happen would be worse than a gate that waits.
+#
+# The gate is proved before it is trusted, in two steps. Its own tests run first.
+# Then a file that is bad on purpose is scanned, and the gate has to block it. That
+# file is written during the run and is not kept in the repository, so it is
+# never a finding in this code for any scanner that reads the repository.
+#
+# There is no paths filter, on purpose. A check that a branch rule requires and
+# that never started blocks the merge for good, and a filter is exactly how that
+# happens.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # The packs change with no change here, so the code is asked again every Monday.
+  # A failed scheduled run is reported to whoever last edited the schedule below.
+  schedule:
+    - cron: "29 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: semgrep-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the gate
+        run: python3 -m unittest discover -s .github/scripts -p "test_*.py"
+
+      # A virtual environment, so that nothing is written into the Python that the
+      # runner image owns. The version is the one in the requirements file, which
+      # Dependabot keeps current.
+      - name: Install Semgrep
+        run: |
+          python3 -m venv "$RUNNER_TEMP/semgrep-venv"
+          "$RUNNER_TEMP/semgrep-venv/bin/python" -m pip install --disable-pip-version-check --quiet --requirement .github/scripts/requirements.txt
+          "$RUNNER_TEMP/semgrep-venv/bin/semgrep" --version
+
+      # The file below runs a command through a shell with text it was handed,
+      # which the default pack reports at severity error. If the gate lets it
+      # through, the gate is broken and nothing it says afterwards is worth
+      # reading.
+      - name: Prove the gate can block
+        run: |
+          mkdir "$RUNNER_TEMP/canary"
+          printf 'import subprocess\n\n\ndef run(command):\n    subprocess.call(command, shell=True)\n' > "$RUNNER_TEMP/canary/bad.py"
+          "$RUNNER_TEMP/semgrep-venv/bin/semgrep" scan --config p/default --metrics off --disable-version-check --json --output "$RUNNER_TEMP/canary.json" "$RUNNER_TEMP/canary"
+          python3 .github/scripts/semgrep_gate.py --canary "$RUNNER_TEMP/canary.json"
+
+      # Metrics are off, so no usage data is sent. The rules are fetched and the
+      # code is not sent anywhere, because the scan runs on this machine.
+      - name: Scan the code
+        run: >
+          "$RUNNER_TEMP/semgrep-venv/bin/semgrep" scan
+          --config p/default --config p/rust --config p/github-actions
+          --metrics off --disable-version-check
+          --json --output "$RUNNER_TEMP/semgrep.json"
+          .
+
+      - name: Decide
+        run: python3 .github/scripts/semgrep_gate.py "$RUNNER_TEMP/semgrep.json"

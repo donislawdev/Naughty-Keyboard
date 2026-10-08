@@ -1,0 +1,12 @@
+# The one package that .github/workflows/semgrep.yml installs, at an exact version.
+#
+# The pin keeps two runs of the same commit from being judged by two different
+# engines. Dependabot reads this file and proposes a newer release as a pull
+# request, after the same week of waiting that cargo gets, and the checks on that
+# pull request are the answer to whether the new engine still behaves.
+#
+# Only this package is pinned. What it needs is resolved by pip when the job runs,
+# so a run can differ from the last one in a dependency of Semgrep. The job holds
+# no secret and a read-only token, which is what makes that acceptable. Pinning
+# every dependency with hashes is the next step if this ever changes.
+semgrep==1.178.0
