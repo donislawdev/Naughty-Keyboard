@@ -1,0 +1,70 @@
+name: Supply chain
+
+# Asks cargo-deny four questions about the dependency tree. The rules and the
+# reason for each are in deny.toml.
+#
+# Two jobs and not one, on purpose. Licences, bans and sources depend only on
+# what is in this repository, so a red result there is always about a change
+# made here. Advisories depend on a database that changes by itself, so a red
+# result there can appear with no change at all. Kept apart, a new advisory
+# never hides the licence verdict, and nobody learns to ignore a red check.
+#
+# There is no paths filter, on purpose. A check that a branch rule requires and
+# that never started blocks the merge for good, and a filter is exactly how that
+# happens. Both jobs can be required.
+#
+# Requiring advisories is the strict choice and it has a price. A new advisory
+# against any crate in the tree, one inside Slint included, then blocks every merge
+# until the crate is updated or the advisory is written into deny.toml with the
+# reason it does not apply to this project. The second is one small pull request,
+# and the check passes on it, because it runs against the deny.toml of the pull
+# request. The Monday run below is what tells you before a pull request does.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # New advisories arrive with no change here, so the tree is asked again every
+  # Monday. A failed scheduled run is reported to whoever last edited the
+  # schedule below.
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supply-chain-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  rules:
+    name: licences, bans and sources
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check licences, bans and sources
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check bans licenses sources
+
+  advisories:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check advisories
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check advisories

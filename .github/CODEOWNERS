@@ -24,12 +24,13 @@
 #
 # What actually guards the code today
 # -----------------------------------
-# Checked on 2026-10-07: GitHub reports the default branch as not protected, so
-# nothing mechanically blocks a merge. There is no CI workflow in this repository
-# yet either, so no gate runs on a pull request. What exists is the test suite in
-# the workspace, which includes tests that hold the project's promises, such as
-# what the tool may read about a window and which keys it may send. It runs when
-# somebody runs it, and nothing runs it for you yet. That is a weaker guarantee
+# Checked on 2026-10-08: GitHub reports the default branch as not protected, so
+# nothing mechanically blocks a merge. A CI workflow builds and tests the
+# workspace on Windows, Linux and macOS for every pull request and every push to
+# main (.github/workflows/ci.yml), and the test suite includes tests that hold the
+# project's promises, such as what the tool may read about a window and which keys
+# it may send. But the result is advice and not a gate: no rule requires a green
+# run before a merge, so a red one can still be merged. That is a weaker guarantee
 # than an enforced rule and it is stated plainly rather than dressed up.
 #
 # Syntax note: gitignore-style patterns, with three exceptions - a pattern may not

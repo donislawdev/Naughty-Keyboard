@@ -28,7 +28,7 @@ use core::fmt;
 
 /// Text as it appears inside a pack file, before the TOML parser touches it.
 ///
-/// Never sent to a field. The only way to produce one is [`escape`].
+/// Never sent to a field. The only way to produce one is [`LiteralText::escape`].
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EscapedText(String);
 

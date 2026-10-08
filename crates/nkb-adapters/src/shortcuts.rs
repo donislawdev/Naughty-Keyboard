@@ -8,7 +8,7 @@
 //!
 //! # What the handle owns, and why that is all it owns
 //!
-//! [`Live`] holds exactly three things: the outcomes the system gave, the table
+//! `Live` holds exactly three things: the outcomes the system gave, the table
 //! from a fired id back to its action, and the `nkb-sys` listener whose drop
 //! releases every shortcut. No cached "last press", no flag - architektura.md
 //! 6a puts state in `app`, and the one piece an adapter may hold is its own
@@ -46,7 +46,7 @@ pub const fn default_bindings() -> Bindings {
 /// chord has it. It does not look at the chord's own `Ctrl` and `Alt`:
 /// whether a chord CAN be `AltGr` is the core's question
 /// (`HotkeyChord::could_be_altgr`), asked before this one - so the two
-/// vocabularies still meet only in [`virtual_key`].
+/// vocabularies still meet only in `virtual_key`.
 #[must_use]
 pub fn altgr_character(chord: HotkeyChord) -> Option<char> {
     nkb_sys::layout::altgr_character(virtual_key(chord.key), chord.shift)

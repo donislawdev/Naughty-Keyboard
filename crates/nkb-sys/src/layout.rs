@@ -49,6 +49,7 @@ pub fn altgr_character(vk: u16, shift: bool) -> Option<char> {
 /// character in the buffer, and counts, because the tester would lose the dead
 /// key too. A control character is not typing: a layout without `AltGr` may
 /// answer `Ctrl+Alt+A` with `U+0001`, which no application inserts.
+#[cfg(any(windows, test))]
 fn typed_character(written: i32, buffer: &[u16]) -> Option<char> {
     let units = match written {
         0 => return None,

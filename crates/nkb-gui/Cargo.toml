@@ -52,8 +52,14 @@ embed-resource.workspace = true
 # Test-only, never linked into a released artefact. Document 09 section 10 puts
 # that in the lighter tier: pin the version, read the licence, no registry entry.
 # Checked against the registry 2026-09-07: 0.25.10, MIT OR Apache-2.0.
+#
+# Only PNG, and not the default set. The tests build a picture from raw pixels,
+# write it as a PNG, and decode the PNGs inside the program's icon, and nothing
+# else. The default set also switches on the AVIF and OpenEXR codecs, which
+# dragged in an AV1 encoder, a fuzzing runtime and an unmaintained macro crate
+# that nothing here ever calls, and made the first build in CI the slowest.
 [dev-dependencies]
-image = "0.25.10"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 
 # The oracle for the typeface guarantee (D66): what the toolkit's own text layout
 # reads from the font's character map. Test-only, the same lighter tier as the

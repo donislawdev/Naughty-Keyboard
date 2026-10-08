@@ -5,10 +5,12 @@ version: 2
 # separate switch in the repository's security settings (Dependabot alerts and
 # Dependabot security updates), and this file does not control them.
 #
-# There is no CI in this repository yet, so a pull request from the bot arrives
-# with no checks. Run `cargo test --workspace` on it before merging. A bump of
-# `windows-sys` needs more than that: it is compiled only on Windows, so only a
-# Windows build can tell whether it broke anything.
+# A pull request from the bot runs the checks in .github/workflows, which build
+# and test the workspace on Windows, Linux and macOS and ask cargo-deny about the
+# licences of whatever the bump brought in. A red check is the answer to read
+# before merging. A bump of `windows-sys` is the case that needed this most: it
+# is compiled only on Windows, so only the Windows run can tell whether it broke
+# anything.
 #
 # Updates are grouped on purpose. This project has one maintainer, and a separate
 # pull request per crate is how a dependency bot gets muted, which costs more than
@@ -70,13 +72,19 @@ updates:
           - "patch"
 
   # ---- The workflows themselves ------------------------------------------------------
-  # There is no workflow in this repository yet, so until the first one is added this
-  # entry has nothing to look at, and the Dependabot tab may say that it found no files.
-  # That is expected. From the first workflow on it keeps the actions that workflow
-  # uses current, and where they are pinned to a full commit it moves the pin and the
-  # version comment beside it together.
+  # Keeps the actions the workflows use current. Where an action is pinned to a full
+  # commit, it moves the pin and the version comment beside it together.
+  #
+  # Two places hold workflows. "/" covers .github/workflows. The wildcard covers the
+  # composite actions under .github/actions, which are not looked at otherwise, and
+  # the one there today pins the build cache. The documentation does not show this
+  # wildcard for this ecosystem, so check the Dependabot tab after the first Monday
+  # run: if it lists no file under .github/actions, the pin there has to be moved by
+  # hand.
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: "weekly"
       day: "monday"

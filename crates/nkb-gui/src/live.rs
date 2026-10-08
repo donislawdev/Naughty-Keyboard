@@ -39,7 +39,7 @@
 //! between turns - never between a send and the drain after it - so a choice
 //! made during a send waits for its end, and `W1` holds.
 //!
-//! ⚠️ A command is noticed at the end of the current wait, up to one [`TICK`]
+//! ⚠️ A command is noticed at the end of the current wait, up to one `TICK`
 //! later. A press that arrives after the command within that tick is still
 //! answered with the pack it was pressed in, and the palette shows that value
 //! under that pack's name before it shows the new one - late, never false.
