@@ -1,0 +1,64 @@
+name: Workflow lint
+
+# Checks the files in .github with two linters that look for different things.
+#
+# actionlint finds mistakes: a wrong key, an expression that cannot work, a
+# shell script with an error in it (it runs shellcheck on the run steps).
+#
+# zizmor finds weaknesses: a step that lets text from a pull request become a
+# command, permissions wider than the job needs, a credential left on disk.
+# Nothing else in this repository would notice either kind, because a workflow
+# that is wrong in these ways still runs.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/**
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-lint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Built from source at an exact version. The Go module system checks what
+      # it downloads against a public log of checksums, so a release that was
+      # replaced after the fact is refused.
+      - name: Run actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          "$(go env GOPATH)/bin/actionlint" -color
+
+  zizmor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The findings are printed in the log. The other way is to send them to
+      # the code scanning tab, which needs a permission to write security
+      # events that nothing else in this repository has.
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        with:
+          advanced-security: false
