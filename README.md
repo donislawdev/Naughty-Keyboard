@@ -4,13 +4,11 @@
 ![Typing: Windows](https://img.shields.io/badge/typing-Windows-0078D6)
 ![CLI: Windows, macOS, Linux](https://img.shields.io/badge/CLI-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Status: early development](https://img.shields.io/badge/status-early%20development-orange)
+[![CI](https://github.com/donislawdev/Naughty-Keyboard/actions/workflows/ci.yml/badge.svg)](https://github.com/donislawdev/Naughty-Keyboard/actions/workflows/ci.yml)
 
 <!--
   Badges to switch on when the thing they point at exists. Move a line out of
   this comment and it is live.
-
-  CI, once a workflow exists:
-  [![CI](https://github.com/donislawdev/Naughty-Keyboard/actions/workflows/ci.yml/badge.svg)](https://github.com/donislawdev/Naughty-Keyboard/actions/workflows/ci.yml)
 
   Latest release and downloads, once the first release is published:
   [![Latest release](https://img.shields.io/github/v/release/donislawdev/Naughty-Keyboard?sort=semver)](https://github.com/donislawdev/Naughty-Keyboard/releases/latest)
@@ -95,7 +93,10 @@ cargo build --release -p nkb-gui    # the palette: target/release/nkb-gui
   paragraph. Leave the build instructions below it for people who want the source.
 -->
 
-Run the whole test suite with `cargo test --workspace`.
+Run the whole test suite with `cargo test --workspace`. Every pull request runs it on Windows, Linux
+and macOS, together with Clippy, a check of the dependencies' licences and advisories, and a release
+build of `nkb` that is run against the shipped packs. What no automated run can see is the palette on
+a real desktop: taking the keyboard, and a value arriving in somebody else's field.
 
 The first start of `nkb-gui` opens a welcome window with a box to try the first value in, so the first
 value does not land in somebody else's application. Closing it opens the palette and is remembered.
