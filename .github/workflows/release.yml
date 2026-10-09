@@ -1,0 +1,407 @@
+name: Release
+
+# Phase A of the release: build here, prove it was built here, open an empty draft.
+#
+# The programs are signed afterwards, on the machines that hold the keys. The key
+# for Windows is on a card that cannot be exported, and no runner GitHub hosts can
+# reach it. A runner of our own could, and in a public repository that is a machine
+# anybody can aim a pull request at. So the build happens where builds belong and
+# the signature where the keys are, and what travels between them is the build and
+# a signed statement of how it was made.
+#
+# THIS PHASE PUBLISHES NOTHING. Not an archive, not a checksum, not the bill of
+# materials. These are not the bytes a person will download, and an unsigned
+# program on a release page, even on a draft and even for a quarter of an hour, is
+# a program somebody downloads. The draft it opens is empty on purpose.
+#
+# The four phases:
+#   A  this file, on a v* tag     check the commit, build, run what was built,
+#                                 describe it, attest the UNSIGNED build, open an
+#                                 empty draft, hand the build over as an artifact
+#   B  on the signing machines    verify this statement before touching anything,
+#                                 sign, write the checksums, upload to the draft
+#   C  a workflow run by hand     attest the bill of materials against the signed
+#                                 bytes, never provenance, because a person signed
+#   D  on publish                 check the release page the way a user would
+#
+# Run by hand, or on a pull request that changes the release machinery, this
+# builds and runs everything under a version no release can carry
+# (0.1.0-dev.<run>) and writes nothing to the releases of the repository. A run by
+# hand still attests its build and hands it over, so that phase B can rehearse on
+# it. A pull request does neither.
+#
+# Every decision is in .github/scripts/release.py, where each one has a test.
+# What a release contains is in .github/release/archives.toml and nowhere else.
+
+on:
+  push:
+    tags: ["v*"]
+  # Only the pull requests that change how a release is made. Not a required
+  # check, so the paths filter cannot leave a merge waiting for a run that never
+  # started.
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/release.yml"
+      - ".github/scripts/release.py"
+      - ".github/scripts/contents.py"
+      - ".github/release/**"
+      - ".github/actions/setup-rust/**"
+      - ".cargo/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: "10"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  check:
+    name: the commit is fit to release
+    runs-on: ubuntu-latest
+    # Most of it is waiting: a tag pushed right after a merge finds CI still
+    # running on that commit, and the check waits for its verdict.
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read # to read the runs of the other workflows on this commit
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+      platforms: ${{ steps.plan.outputs.platforms }}
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The Python of the runner image is not enough everywhere: Ubuntu 22.04,
+      # where Linux is built, carries 3.10, which cannot read TOML.
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # The names of the event and the tag reach the script through the
+      # environment, never through the text of the script. A tag may hold a quote
+      # or a semicolon, and text pasted into a script is run as part of it.
+      - name: Decide what this run builds
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: >
+          python .github/scripts/release.py plan
+          --event "$EVENT" --ref-type "$REF_TYPE" --ref-name "$REF_NAME" --run-number "$RUN_NUMBER"
+
+      - name: The tag is not a published release already
+        if: steps.plan.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.plan.outputs.tag }}
+        run: python .github/scripts/release.py released --tag "$TAG"
+
+      # A release page points at its section of the changelog, and lines left
+      # under Unreleased are changes that would go out undescribed.
+      - name: The changelog is closed for this version
+        if: steps.plan.outputs.release == 'true'
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: python .github/scripts/release.py changelog --version "$VERSION"
+
+      # This workflow builds and does not test. Without this step the only thing
+      # between a red commit and a release is somebody's memory of having looked.
+      - name: Every required workflow passed on this commit on main
+        if: steps.plan.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: python .github/scripts/release.py green --sha "$SHA"
+
+      # Asked again here and not only on Monday, because the database of
+      # advisories changes with no change in this repository.
+      - name: No advisory against the dependencies since
+        if: steps.plan.outputs.release == 'true'
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check advisories
+
+  contents:
+    name: the bill of materials and the notices
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # No cache in any job of this workflow. A cache is shared with every other
+      # run in the repository, a pull request included, and a release built from
+      # what somebody else's run left behind is a release nobody built.
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          system-libraries: "false"
+          cache: "false"
+
+      # One job writes the notices of every archive, so that they are the same
+      # bytes whichever system an archive is for. The crates are fetched first,
+      # because the notices quote the licence files inside them.
+      - name: Describe every archive
+        env:
+          TAG: ${{ needs.check.outputs.tag }}
+        run: |
+          cargo fetch --locked
+          python .github/scripts/release.py contents --tag "$TAG" --out described
+
+      - name: Keep the bill of materials
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom
+          path: described/sbom/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Keep the notices
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: notices
+          path: described/notices/
+          if-no-files-found: error
+          retention-days: 14
+
+  build:
+    name: build on ${{ matrix.os }}
+    needs: [check, contents]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      # One system failing must not throw away the logs of the other two.
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.check.outputs.platforms) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: "false"
+
+      - name: Fetch the notices
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: notices
+          path: notices
+
+      # Each program by its own cargo build, because one build of both would
+      # give each the features of the other, and the bill of materials describes
+      # each program alone. The script refuses to build with a compiler flag
+      # variable in the environment: it would replace .cargo/config.toml, and on
+      # Windows the programs would then need a runtime Windows does not ship.
+      - name: Build each program on its own
+        env:
+          OS: ${{ matrix.os }}
+        run: python .github/scripts/release.py build --os "$OS"
+
+      - name: Pack
+        env:
+          TAG: ${{ needs.check.outputs.tag }}
+          OS: ${{ matrix.os }}
+        run: python .github/scripts/release.py pack --tag "$TAG" --os "$OS" --notices notices --out dist
+
+      # Unpacked with the tools a person would use, not with the code that packed
+      # them, so a mistake in the packing cannot be read back as its own answer.
+      - name: Unpack with the system's own tools
+        run: |
+          mkdir unpacked
+          for archive in dist/*
+          do
+            name="$(basename "$archive")"
+            mkdir "unpacked/$name"
+            if [[ "$name" == *.zip ]]
+            then
+              ARCHIVE="$archive" UNPACKED="unpacked/$name" pwsh -NoProfile -Command \
+                "Expand-Archive -LiteralPath \$env:ARCHIVE -DestinationPath \$env:UNPACKED"
+            elif [[ "$name" == *.tar.gz ]]
+            then
+              tar -xzf "$archive" -C "unpacked/$name"
+            else
+              echo "::error::$name is neither a zip nor a tar.gz"
+              exit 1
+            fi
+          done
+
+      # A program that was never started is a program nobody has run. These are
+      # the shipped files, from where the archive puts them: the layout, the link
+      # into the macOS bundle, the libraries a Windows program asks for, and the
+      # command line tool against every shipped pack. The palette has no way to
+      # end without a window, so of it only the file and its bundle are checked.
+      - name: Run what was built, from the unpacked archives
+        env:
+          TAG: ${{ needs.check.outputs.tag }}
+          OS: ${{ matrix.os }}
+        run: python .github/scripts/release.py try --tag "$TAG" --os "$OS" --unpacked unpacked
+
+      - name: Keep the archives
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-${{ matrix.os }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  handover:
+    name: attest the build and hand it over
+    needs: [check, build]
+    # A pull request builds and stops here. A statement signed in the name of
+    # this repository is made for a tag or for a run the owner started.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write # a short-lived identity to sign the statement with
+      attestations: write # the store of this repository, which keeps the statement
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Fetch the archives
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: build-*
+          path: incoming
+          merge-multiple: true
+
+      - name: Fetch the bill of materials
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sbom
+          path: incoming
+
+      - name: The build holds every file archives.toml lists and no other
+        env:
+          TAG: ${{ needs.check.outputs.tag }}
+        run: python .github/scripts/release.py handover --tag "$TAG" --dir incoming
+
+      # build.sha256 and not the checksums a person reads. These are the bytes
+      # the runners made, and signing changes some of them, so the list a person
+      # checks a download against is written where the signed bytes are made.
+      # This one exists so that the statement below names exactly what was built.
+      - name: One list of what this build produced
+        working-directory: incoming
+        run: |
+          sha256sum -- * > build.sha256
+          cat build.sha256
+
+      # WHO built it and FROM WHAT: this repository, this commit, this workflow,
+      # a runner GitHub hosts. Phase B verifies it before it touches the build.
+      # It describes the UNSIGNED files, which is true and is not what a person
+      # downloads, so it travels with the build and not to the release page.
+      - name: Attest how the unsigned build was made
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: incoming/build.sha256
+
+      - name: Keep the statement with the build
+        env:
+          BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: cp "$BUNDLE" incoming/build.provenance.sigstore.json
+
+      # The seam between the build and the signatures. Phase B asks for it by
+      # this name.
+      - name: Hand the build over
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unsigned-build-${{ needs.check.outputs.tag }}
+          path: incoming/*
+          if-no-files-found: error
+          retention-days: 14
+
+  draft:
+    name: open the draft, empty
+    needs: [check, handover]
+    if: needs.check.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # to open the draft, and it gets no files here
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # The notes are the section of CHANGELOG.md for this version, word for
+      # word. Never generated from the titles of pull requests, which would put
+      # on the page something nobody wrote for it.
+      - name: Take the release notes from the changelog
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: python .github/scripts/release.py changelog --version "$VERSION" --notes "$RUNNER_TEMP/notes.md"
+
+      # A draft, so the tag starts the release and a person finishes it. A tag
+      # with a hyphen in it is marked a pre-release. A draft already open is left
+      # alone, and a published release refuses the whole run.
+      - name: Open the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.check.outputs.tag }}
+        run: python .github/scripts/release.py draft --tag "$TAG" --notes "$RUNNER_TEMP/notes.md"
+
+      - name: What happens next
+        env:
+          TAG: ${{ needs.check.outputs.tag }}
+        run: |
+          {
+            echo "Built, attested and handed over as unsigned-build-$TAG. The draft of $TAG is open and empty."
+            echo
+            echo "Nothing is published. Phase B signs the build on the machines that hold the keys,"
+            echo "uploads it to the draft and asks for the statement about the signed bytes."
+            echo "Then a person reads the draft and publishes it."
+          } | tee -a "$GITHUB_STEP_SUMMARY"

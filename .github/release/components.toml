@@ -23,9 +23,10 @@
 #                     document carries for a LicenseRef-
 #   source            where it comes from
 #   programs          the programs it is compiled into
-#   files             files compiled in, with the sha256 of each one that is
-#                     somebody else's bytes, kept as its authors wrote them. A
-#                     path ending in a slash covers everything under it.
+#   files             files compiled in, or packed into an archive beside the
+#                     program by archives.toml, with the sha256 of each one that
+#                     is somebody else's bytes, kept as its authors wrote them.
+#                     A path ending in a slash covers everything under it.
 #   derived           files generated from the component and compiled in
 #   own               true for work of this project. The bill of materials lists
 #                     it like everything else, and the notices name it only when
@@ -79,9 +80,13 @@ name = "Naughty Keyboard application icon"
 licence = "GPL-3.0-only"
 source = "https://github.com/donislawdev/Naughty-Keyboard/tree/main/crates/nkb-gui/assets"
 programs = ["nkb-gui"]
+# The .icns is the same drawing at the sizes macOS asks for. It is not compiled
+# in: archives.toml packs it into the .app bundle of both programs on macOS, so
+# it is listed for those two archives and for no other.
 files = [
     { path = "crates/nkb-gui/assets/edamame.svg" },
     { path = "crates/nkb-gui/assets/edamame.ico" },
+    { path = "crates/nkb-gui/assets/edamame.icns" },
 ]
 own = true
 

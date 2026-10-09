@@ -24,10 +24,13 @@ digest from Cargo.lock.
 
 Everything Cargo cannot see is in .github/release/components.toml: files
 compiled in through `include_bytes!`, `include_str!`, a Slint import or a
-resource script, and tables generated from somebody else's data. That list is
-policed, not trusted. The source of the programs is searched for every such
-reference and every generated table, and one the register does not account for
-is refused, and so is an entry that points at nothing.
+resource script, tables generated from somebody else's data, and files that
+.github/release/archives.toml packs into an archive beside a program, such as
+the icon of a macOS bundle. That list is policed, not trusted. The source of the
+programs is searched for every such reference and every generated table, and
+one the register does not account for is refused, and so is an entry that
+points at nothing. A packed file is listed for the archives it is packed into
+and for no other.
 
 Which licence, and which text
 -----------------------------
@@ -171,6 +174,9 @@ def version_of_tag(tag, workspace):
     return tag[1:]
 
 
+MACOS = "macos"
+
+
 @dataclasses.dataclass(frozen=True)
 class Archive:
     program: str
@@ -180,12 +186,20 @@ class Archive:
     arch: str
     target: str
     format: str
+    runner: str = ""
+    # The oldest macOS the program promises to start on, and the .app bundle it
+    # goes into there. Empty on the other systems, which have no bundle.
+    minimum_os: str = ""
+    bundle_id: str = ""
+    # Files the packaging puts into the archive beside the program, rather than
+    # compiled into it, as paths from the root of the repository.
+    packaged: tuple = ()
 
     def name(self, version):
         return "%s_%s_%s_%s.%s" % (self.program, version, self.os, self.arch, self.format)
 
 
-def load_archives(path=os.path.join(RELEASE, "archives.toml")):
+def load_archives(path=os.path.join(RELEASE, "archives.toml"), root=ROOT):
     data = read_toml(path)
     problems = []
     if data.get("schema") != 1:
@@ -196,18 +210,27 @@ def load_archives(path=os.path.join(RELEASE, "archives.toml")):
         problems.append("%s names no programs" % relative(path))
     if not platforms:
         problems.append("%s names no platforms" % relative(path))
+    bundles = any(platform.get("os") == MACOS for platform in platforms)
     for name, program in programs.items():
-        for key in ("package", "summary", "macos-bundle-id"):
+        for key in ("package", "summary", "macos-bundle-id") + (("macos-icon",) if bundles else ()):
             if not program.get(key):
                 problems.append("program %s has no %s" % (name, key))
+        icon = program.get("macos-icon")
+        if icon and not os.path.isfile(os.path.join(root, icon)):
+            problems.append("program %s: its macos-icon %s is not there" % (name, icon))
     seen = set()
     for platform in platforms:
-        for key in ("os", "arch", "target", "format"):
+        for key in ("os", "arch", "target", "format", "runner"):
             if not platform.get(key):
                 problems.append("a platform has no %s: %r" % (key, platform))
         if platform.get("format") not in ("zip", "tar.gz"):
             problems.append("platform %s has format %r, and an archive is a zip or a tar.gz"
                             % (platform.get("os"), platform.get("format")))
+        if platform.get("os") == MACOS and not re.fullmatch(r"\d+\.\d+", platform.get("minimum-os", "")):
+            problems.append("platform macos has minimum-os %r, and macOS is told a version "
+                            "such as 11.0" % platform.get("minimum-os"))
+        if platform.get("os") != MACOS and platform.get("minimum-os"):
+            problems.append("platform %s has a minimum-os, and only macOS is told one" % platform.get("os"))
         key = (platform.get("os"), platform.get("arch"))
         if key in seen:
             problems.append("platform %s %s is listed twice" % key)
@@ -216,7 +239,11 @@ def load_archives(path=os.path.join(RELEASE, "archives.toml")):
         raise Refused(problems)
     return [
         Archive(name, program["package"], program["summary"],
-                platform["os"], platform["arch"], platform["target"], platform["format"])
+                platform["os"], platform["arch"], platform["target"], platform["format"],
+                runner=platform["runner"],
+                minimum_os=platform.get("minimum-os", ""),
+                bundle_id=program["macos-bundle-id"] if platform["os"] == MACOS else "",
+                packaged=(program["macos-icon"],) if platform["os"] == MACOS else ())
         for name, program in sorted(programs.items())
         for platform in platforms
     ]
@@ -323,8 +350,9 @@ def references_in(path):
     return RESOURCE_FILE.findall(code), False
 
 
-def check_register_against_source(components, allowances, root=ROOT):
-    """The source check: every file compiled in is accounted for, both ways."""
+def check_register_against_source(components, allowances, root=ROOT, packaged=()):
+    """The source check: every file compiled in or packed beside a program is
+    accounted for, both ways. `packaged` is the files archives.toml packs."""
     problems = []
     covered_files = {}
     covered_dirs = {}
@@ -362,10 +390,16 @@ def check_register_against_source(components, allowances, root=ROOT):
             if owner is None:
                 problems.append("%s compiles in %s, and no component in "
                                 ".github/release/components.toml names it" % (source, target))
+    for where in sorted(set(packaged)):
+        if where in covered_files:
+            used_entries.add(where)
+        else:
+            problems.append(".github/release/archives.toml packs %s into an archive, and no "
+                            "component in .github/release/components.toml names it" % where)
     for where, name in list(covered_files.items()) + list(covered_dirs.items()) + list(derived.items()):
         if where not in used_entries:
             problems.append("component %r lists %s, and nothing in the source of the programs "
-                            "compiles it in" % (name, where))
+                            "compiles it in and no archive packs it" % (name, where))
     for allowance in allowances:
         if allowance not in used_allowances:
             problems.append("the not-compiled-in entry for %s (%s) matches nothing any more - "
@@ -756,12 +790,19 @@ def gather(archives, components, crates, allowed, root=ROOT):
             if made[key][0] is not None:
                 parts.append(made[key][0])
         for component in sorted(components, key=lambda c: c.name):
-            if archive.program in component.programs:
+            if in_archive(component, archive):
                 parts.append(component_part(component, root))
         result.append(Contents(archive, parts))
     if problems:
         raise Refused(sorted(set(problems)))
     return result
+
+
+def in_archive(component, archive):
+    """Compiled into the program, or packed beside it in this one archive."""
+    if archive.program in component.programs:
+        return True
+    return any(where in archive.packaged for where, _ in component.files)
 
 
 # --------------------------------------------------------------------------- #
@@ -1042,7 +1083,8 @@ def prepare(root=ROOT):
     workspace = load_workspace(root)
     archives = load_archives()
     components, allowances = load_register(programs={a.program for a in archives}, root=root)
-    problems.extend(check_register_against_source(components, allowances, root))
+    packaged = [where for archive in archives for where in archive.packaged]
+    problems.extend(check_register_against_source(components, allowances, root, packaged))
     text_problems, licence_list = check_standard_texts()
     problems.extend(text_problems)
     allowed = allowed_licences(os.path.join(root, "deny.toml"))

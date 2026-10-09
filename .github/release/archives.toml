@@ -19,33 +19,61 @@ schema = 1
 
 # The two programs of D25. `package` is the Cargo package the program is built
 # from, which is also the package the bill of materials asks Cargo about.
+#
+# On macOS each program goes into an .app bundle, with a link to it beside the
+# bundle. The bundle is not decoration: a notarisation ticket can be stapled to a
+# bundle and not to a bare program, and without the ticket macOS refuses the
+# program a person downloaded. `macos-bundle-id` names the bundle to macOS, and
+# `macos-icon` is the icon the bundle carries. The icon is packed beside the
+# program rather than compiled into it, and the bill of materials lists it for
+# the macOS archives because it is named here.
 [programs.nkb]
 package = "nkb-cli"
 summary = "the command line tool"
 macos-bundle-id = "com.donislawdev.nkb"
+macos-icon = "crates/nkb-gui/assets/edamame.icns"
 
 [programs.nkb-gui]
 package = "nkb-gui"
 summary = "the palette, the window that types a value into the field you are in"
 macos-bundle-id = "com.donislawdev.nkb-gui"
+macos-icon = "crates/nkb-gui/assets/edamame.icns"
 
 # `os` and `arch` are the words a person reads on the download page, so macOS is
 # `macos` and not the `darwin` a compiler is told, and x86-64 is `amd64`, the way
 # the other projects of this author spell it. `target` is what Cargo is told.
+#
+# `runner` is the GitHub runner image the platform is built on, and the release
+# workflow builds on no other. Each system builds its own programs, because the
+# palette links each system's own graphics libraries and cannot be cross
+# compiled from one machine.
+#
+# Linux is built on the oldest Ubuntu image GitHub still offers, because a
+# program linked against a C library runs on that version of it and newer ones
+# only. Ubuntu 22.04 carries glibc 2.35. When GitHub retires the image, the next
+# oldest one goes here, and the oldest Linux the programs start on moves with it.
 [[platforms]]
 os = "windows"
 arch = "amd64"
 target = "x86_64-pc-windows-msvc"
 format = "zip"
+runner = "windows-latest"
 
+# `minimum-os` is the oldest macOS the programs promise to start on. The build is
+# told it through MACOSX_DEPLOYMENT_TARGET and the bundle through
+# LSMinimumSystemVersion, both from this one line. 11.0 is the first macOS that
+# runs on Apple silicon, the only Mac this project builds for.
 [[platforms]]
 os = "macos"
 arch = "arm64"
 target = "aarch64-apple-darwin"
 format = "tar.gz"
+runner = "macos-latest"
+minimum-os = "11.0"
 
 [[platforms]]
 os = "linux"
 arch = "amd64"
 target = "x86_64-unknown-linux-gnu"
 format = "tar.gz"
+runner = "ubuntu-22.04"
