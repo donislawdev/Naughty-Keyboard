@@ -194,7 +194,7 @@ class TheBuild(Folder):
 
     def test_a_list_of_digests_with_a_line_that_is_not_one_is_refused(self):
         with self.assertRaises(contents.Refused):
-            sign_release.listed_digests("not a digest  file.zip\n")
+            release.listed_digests("not a digest  file.zip\n", release.BUILD_SUMS)
 
 
 class Bundles(unittest.TestCase):
@@ -244,7 +244,7 @@ class Publication(Folder):
         self.put(sign_release.BUILD_BUNDLE, b"{}")
         sign_release.name_for_publication(self.root, self.TAG)
         sign_release.write_checksums(self.root, self.TAG)
-        self.assertEqual(sorted(os.listdir(self.root)), sign_release.published_files(self.TAG))
+        self.assertEqual(sorted(os.listdir(self.root)), release.published_files(self.TAG))
         self.assertIn("verify-naughty-keyboard_0.1.0-dev.2.provenance.sigstore.json", os.listdir(self.root))
         with open(os.path.join(self.root, sign_release.SUMS), "rb") as handle:
             listed = handle.read()
@@ -253,7 +253,7 @@ class Publication(Folder):
         self.assertNotIn(release.BUILD_SUMS.encode("ascii"), listed)
 
     def test_the_checksums_refuse_a_file_that_is_not_for_the_page(self):
-        for name in sign_release.published_files(self.TAG):
+        for name in release.published_files(self.TAG):
             if name != sign_release.SUMS:
                 self.put(name, b"x")
         self.put("nkb.exe", b"left behind")
@@ -271,12 +271,139 @@ class Publication(Folder):
         self.assertEqual(asked, [])
 
     def test_a_draft_missing_a_file_or_a_different_list_or_published_is_refused(self):
-        expected = sign_release.published_files(self.TAG)
+        expected = release.published_files(self.TAG)
         view = {"isDraft": True, "assets": [{"name": n} for n in expected]}
         self.assertEqual(sign_release.draft_problems(view, expected, b"sums", b"sums"), [])
         self.assertTrue(sign_release.draft_problems(dict(view, assets=view["assets"][1:]), expected, b"s", b"s"))
         self.assertTrue(sign_release.draft_problems(view, expected, b"sums", b"other"))
         self.assertTrue(sign_release.draft_problems(dict(view, isDraft=False), expected, b"s", b"s"))
+
+
+class Statement(Folder):
+    """Steps 7 and 8: phase C started from the tag, waited for, and the draft
+    checked to be the whole release."""
+    TAG = "v0.1.0"
+    NAME = "verify-naughty-keyboard_0.1.0.sbom.sigstore.json"
+
+    def gh(self, views, runs=()):
+        """gh answering the draft with each view in turn and the runs of phase C
+        with each list in turn, keeping what it was asked."""
+        views, runs = list(views), list(runs)
+
+        def run(command, **_):
+            run.asked.append(command)
+            if command[1:3] == ["release", "view"]:
+                answer = views.pop(0) if len(views) > 1 else views[0]
+            elif command[1:3] == ["run", "list"]:
+                answer = runs.pop(0) if len(runs) > 1 else (runs[0] if runs else [])
+            else:
+                answer = None
+            return subprocess.CompletedProcess(command, 0, json.dumps(answer), "")
+
+        run.asked = []
+        return run
+
+    def wait(self, run, earlier_runs=(), earlier_id=None, limit=300):
+        clock = iter(range(0, 10000, 10))
+        return sign_release.wait_for_the_statement(self.TAG, "o/r", set(earlier_runs), earlier_id, run,
+                                                   sleep=lambda s: None, clock=lambda: next(clock), limit=limit)
+
+    def view(self, statement=None, draft=True):
+        assets = [{"name": "a.zip"}] + ([{"name": self.NAME, "id": statement}] if statement else [])
+        return {"isDraft": draft, "assets": assets}
+
+    def test_phase_c_is_started_from_the_tag_with_the_tag_and_the_digest(self):
+        run = self.gh([None], [[{"databaseId": 7, "status": "completed", "conclusion": "success"}]])
+        earlier = sign_release.ask_for_the_statement(self.TAG, "d" * 64, "o/r", run)
+        self.assertEqual(earlier, {"7"})
+        started = run.asked[-1]
+        self.assertEqual(started[:4], ["gh", "workflow", "run", "attest-release.yml"])
+        self.assertEqual(started[started.index("--ref") + 1], self.TAG)
+        self.assertIn("tag=" + self.TAG, started)
+        self.assertIn("digest=" + "d" * 64, started)
+
+    def test_the_wait_ends_when_a_new_statement_is_on_the_draft_and_not_on_an_old_one(self):
+        run = self.gh([self.view("old"), self.view("old"), self.view("new")])
+        self.assertEqual(sign_release.statement_id(self.wait(run, earlier_id="old"), self.TAG), "new")
+        self.assertEqual(len([c for c in run.asked if c[1:3] == ["release", "view"]]), 3)
+
+    def test_a_failed_run_of_phase_c_stops_the_wait_at_once(self):
+        failed = [{"databaseId": 8, "status": "completed", "conclusion": "failure", "url": "https://x/8"}]
+        run = self.gh([self.view()], [failed])
+        with self.assertRaises(contents.Refused) as refusal:
+            self.wait(run, earlier_runs={"7"})
+        self.assertIn("https://x/8", refusal.exception.problems[0])
+        self.assertIn("--attest-only", refusal.exception.problems[-1])
+        self.assertEqual(len([c for c in run.asked if c[1:3] == ["run", "list"]]), 1)
+
+    def test_a_run_from_before_is_not_this_one(self):
+        old = [{"databaseId": 7, "status": "completed", "conclusion": "failure", "url": "https://x/7"}]
+        run = self.gh([self.view(), self.view("new")], [old])
+        self.assertEqual(sign_release.statement_id(self.wait(run, earlier_runs={"7"}), self.TAG), "new")
+
+    def test_a_run_that_passed_and_left_no_statement_is_refused_and_not_waited_out(self):
+        passed = [{"databaseId": 8, "status": "completed", "conclusion": "success"}]
+        run = self.gh([self.view()], [passed])
+        with self.assertRaises(contents.Refused) as refusal:
+            self.wait(run)
+        self.assertIn("no new statement", refusal.exception.problems[0])
+
+    def test_a_statement_that_never_comes_is_refused_after_the_limit(self):
+        running = [{"databaseId": 8, "status": "in_progress", "conclusion": ""}]
+        run = self.gh([self.view()], [running])
+        with self.assertRaises(contents.Refused) as refusal:
+            self.wait(run, limit=60)
+        self.assertIn("60 seconds", refusal.exception.problems[0])
+
+    def lay_out(self):
+        for name in release.published_files(self.TAG):
+            self.put(name, name.encode("ascii"))
+        return {"isDraft": True, "assets": [{"name": n, "id": n, "digest": "sha256:" + hashlib.sha256(
+            n.encode("ascii")).hexdigest()} for n in release.published_files(self.TAG)] + [{"name": self.NAME}]}
+
+    def test_the_whole_release_and_nothing_else_each_file_the_one_signed_here(self):
+        view = self.lay_out()
+        self.assertEqual(sign_release.complete_problems(view, self.TAG, self.root), [])
+        fewer = dict(view, assets=view["assets"][:-1])
+        more = dict(view, assets=view["assets"] + [{"name": "stray.zip"}])
+        other = json.loads(json.dumps(view))
+        other["assets"][0]["digest"] = "sha256:" + "0" * 64
+        published = dict(view, isDraft=False)
+        for changed, says in ((fewer, "holds"), (more, "holds"), (other, "not the file"), (published, "no longer")):
+            with self.subTest(says=says):
+                problems = sign_release.complete_problems(changed, self.TAG, self.root)
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn(says, problems[0])
+
+    def test_the_statement_on_the_draft_is_checked_against_every_signed_archive(self):
+        view = self.lay_out()
+        asked = []
+        with unittest.mock.patch.object(sign_release, "run", asked.append):
+            sign_release.confirm_draft(view, self.TAG, self.root, "o/r", asked.append)
+        download = asked[0]
+        self.assertEqual(download[:4], ["gh", "release", "download", self.TAG])
+        self.assertEqual(download[download.index("--pattern") + 1], self.NAME)
+        checks = asked[1:]
+        self.assertEqual(sorted(os.path.basename(c[3]) for c in checks),
+                         sorted(a.name("0.1.0") for a in contents.load_archives()))
+        for check in checks:
+            self.assertEqual(check[check.index("--predicate-type") + 1], release.load_promise().predicate)
+            self.assertTrue(check[check.index("--bundle") + 1].endswith(self.NAME))
+
+    def test_an_incomplete_draft_is_refused_before_anything_is_downloaded(self):
+        view = self.lay_out()
+        asked = []
+        with unittest.mock.patch.object(sign_release, "run", asked.append):
+            with self.assertRaises(contents.Refused):
+                sign_release.confirm_draft(dict(view, assets=view["assets"][:-1]), self.TAG, self.root, "o/r",
+                                           asked.append)
+        self.assertEqual(asked, [])
+
+    def test_asking_again_takes_a_tag_and_nothing_to_try_dry(self):
+        for argv in (["--attest-only", "--rehearse", "1"], ["v0.1.0", "--attest-only", "--dry-run"]):
+            with self.subTest(argv=argv):
+                with unittest.mock.patch("sys.stderr", io.StringIO()):
+                    self.assertEqual(sign_release.main(argv), 1)
 
 
 class Mac(Folder):

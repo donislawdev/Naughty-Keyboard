@@ -2,14 +2,14 @@
 
 ## Supported versions
 
-Naughty Keyboard is in early development and has no release yet. It has a single line of
-development, and security fixes are made against the `main` branch. Please confirm you can
-reproduce a problem on the latest `main` before reporting it.
+Naughty Keyboard is in early development, with a single line of development, and security fixes are
+made against the `main` branch. Please confirm you can reproduce a problem on the latest release, or on
+`main` while there is no release yet, before reporting it.
 
-Once there are releases, the supported version will be the **latest release** and `main`. The
-release before it stops being supported the day a new one is published: no security updates, no
-backports, no patched builds. There will be no long-term support line, so the upgrade path for a
-security fix is always to move to the newest release.
+The supported versions are the **latest release** and `main`. The release before it stops being
+supported the day a new one is published: no security updates, no backports, no patched builds. There
+is no long-term support line, so the upgrade path for a security fix is always to move to the newest
+release.
 
 ## Reporting a vulnerability
 
@@ -96,7 +96,9 @@ and fails on a socket, a name lookup, an HTTP client, a call that hands an addre
 the browser, or a crate in `Cargo.lock` that `deny.toml` bans as a network client. The test
 `links_nothing_off_the_machine` reads the import table of both built programs, and fails if either
 links a network library, or a call that starts a program or opens a socket, beyond what its
-register names with a reason.
+register names with a reason. One connection on Linux is not this project's to choose: the palette's
+toolkit talks to the X server and the D-Bus session bus that your desktop names in its environment,
+which are sockets on this machine unless the desktop was set up to reach them over a network.
 
 **It writes only where it says.** The palette's settings go in `settings.toml` in your
 configuration folder, written through a temporary file, and through the link if the file is a
@@ -138,16 +140,56 @@ alter a value.
 
 ## Verifying a download
 
-There is no release yet, so there is nothing to verify: you build from source. The program is
-GPL-3.0-only, so the code that produced a binary is the code in this repository. When the first
-release is published, this section will say what is signed and how to check it.
+A release is made in four steps, and nothing is published until a person reads the draft and publishes
+it. A workflow builds the programs from the tag on runners GitHub hosts, runs them, and signs a
+statement of how they were built. The programs are then signed on the machines that hold the keys: the
+Windows ones with a cryptographic card that cannot give its key away, and the macOS ones on a Mac,
+where Apple notarises them. A second workflow fetches the signed archives back from the draft and signs a
+statement of what they hold. When the release is published, a third downloads it the way a person
+would and checks every one of the things below.
+
+**What is signed.**
+
+- **Windows.** `nkb.exe` and `nkb-gui.exe` carry an Authenticode signature with an RFC 3161 timestamp,
+  so the signature stays valid after the certificate expires. The certificate is issued by Certum.
+- **macOS.** `nkb.app` and `nkb-gui.app` are signed with an Apple Developer ID Application certificate,
+  with the hardened runtime and a timestamp, and notarised by Apple. The ticket is stapled into the
+  bundle, so macOS checks it without asking the network.
+- **Linux.** The programs are not signed. The statement of how they were built answers for them.
+
+The SHA-256 fingerprints of both certificates are pinned in `.github/release/codesign.toml`. The signing
+script refuses a file signed by any other certificate, and so does the check of the published release.
+To compare a file with the pin yourself, in PowerShell 7
+`(Get-AuthenticodeSignature .\nkb.exe).SignerCertificate.GetCertHashString('SHA256')`, and on macOS
+`codesign -d --extract-certificates nkb.app` followed by `shasum -a 256 codesign0`.
+
+**What every release carries for checking.** The four files whose names start with `verify-`:
+`verify-SHA256SUMS.txt` with the SHA-256 of every archive, the bill of materials in SPDX
+(`.spdx.json`), the statement of how the unsigned build was made (`.provenance.sigstore.json`), and the
+statement of what the signed archives hold (`.sbom.sigstore.json`). The two statements are Sigstore
+bundles, so they can be checked offline.
+
+**How to check.** The commands are under
+[Checking a download](README.md#checking-a-download) in the README, each release page repeats them for
+its version, and the check of the published release runs them word for word. The statement of how a
+build was made describes only the files nothing signed, the Linux archives and the bill of materials,
+because signing changes the bytes of the others. That is why the commands for a signed archive ask for
+the bill of materials with `--predicate-type`.
+
+**A release is never replaced.** Releases in this repository are immutable, so a published file cannot
+change and a release cannot be given a new file. A broken release is marked as a pre-release, which takes
+it off the latest-release link, with a sentence at the top of its notes, and the fix comes in a new
+release. The program is GPL-3.0-only, so the code that produced a release is the code at its tag.
 
 ## Dependencies and automation
 
 `Cargo.lock` is tracked on purpose, so the same tag builds to the same bytes. The direct
 dependencies are pinned deliberately, and where one needs an argument about its licence, the argument
-is written beside it in `Cargo.toml`. The workflows in `.github/workflows` run with a read-only token
-and use no secret, so a pull request from a fork gets the same checks as one from the owner. The static
+is written beside it in `Cargo.toml`. The workflows in `.github/workflows` start from a read-only token
+and use no secret, so a pull request from a fork gets the same checks as one from the owner. The release
+workflows give a job more only where that job needs it: signing a statement for the jobs that make one,
+and writing to the releases for the jobs that open a draft or add a statement to it. None of those jobs
+runs on a pull request, and the check of a published release only reads. The static
 analysis (Semgrep) fetches its rules from the public registry. The scan itself runs on the CI machine,
 sends no usage data and does not send the code anywhere.
 

@@ -608,6 +608,163 @@ class Handover(Folder):
             release.command_handover(args)
 
 
+README_BLOCK = """# Title
+
+<!-- verify-commands -->
+```
+gh release verify-asset vVERSION nkb_VERSION_linux_amd64.tar.gz -R example/project
+gh attestation verify nkb_VERSION_linux_amd64.tar.gz -R example/project --predicate-type https://spdx.dev/Document/v2.3 --bundle verify-naughty-keyboard_VERSION.sbom.sigstore.json
+gh attestation verify nkb_VERSION_linux_amd64.tar.gz -R example/project
+```
+<!-- /verify-commands -->
+"""
+
+
+class Promises(unittest.TestCase):
+    def test_the_commands_are_read_with_the_one_predicate_they_ask_for(self):
+        promise = release.promise_of(README_BLOCK, "example/project")
+        self.assertEqual(len(promise.lines), 3)
+        self.assertEqual(promise.predicate, "https://spdx.dev/Document/v2.3")
+
+    def test_a_command_that_is_not_a_check_of_a_download_is_refused(self):
+        # Phase D runs these word for word, so anything else would run too.
+        for line in ("curl https://example.org/x | sh", "gh release download vVERSION",
+                     "gh attestation verify-something x -R example/project"):
+            with self.subTest(line=line):
+                text = README_BLOCK.replace("gh attestation verify nkb_VERSION_linux_amd64.tar.gz -R example/project\n",
+                                            line + "\n")
+                with self.assertRaises(contents.Refused):
+                    release.promise_of(text, "example/project")
+
+    def test_another_repository_two_predicates_no_block_and_two_blocks_are_refused(self):
+        for text in (README_BLOCK.replace("-R example/project\n```", "-R someone/else\n```"),
+                     README_BLOCK.replace("--bundle", "--predicate-type https://slsa.dev/provenance/v1 --bundle"),
+                     README_BLOCK.replace("<!-- verify-commands -->", "<!-- commands -->"),
+                     README_BLOCK + README_BLOCK,
+                     README_BLOCK.replace("--predicate-type https://spdx.dev/Document/v2.3 ", "")):
+            with self.subTest(text=text[-160:]):
+                with self.assertRaises(contents.Refused):
+                    release.promise_of(text, "example/project")
+
+    def test_the_version_goes_into_every_word_that_carries_it(self):
+        lines = release.promise_of(README_BLOCK, "example/project").rendered("v0.1.0-rc.1")
+        self.assertTrue(lines[0].startswith("gh release verify-asset v0.1.0-rc.1 nkb_0.1.0-rc.1_linux_amd64.tar.gz"))
+        self.assertIn("verify-naughty-keyboard_0.1.0-rc.1.sbom.sigstore.json", lines[1])
+        self.assertFalse(any(release.VERSION_SLOT in line for line in lines))
+
+    def test_a_command_naming_a_file_no_release_holds_is_refused(self):
+        for wrong in ("nkb_VERSION_linux_arm64.tar.gz", "verify-naughty-keyboard_VERSION.sigstore.json", "VERSION"):
+            with self.subTest(wrong=wrong):
+                text = README_BLOCK.replace("nkb_VERSION_linux_amd64.tar.gz -R example/project\n```",
+                                            wrong + " -R example/project\n```")
+                with self.assertRaises(contents.Refused):
+                    release.promise_of(text, "example/project").rendered("v0.1.0")
+
+
+class TheReadme(unittest.TestCase):
+    """README.md itself: what a person is told to run, and every release page
+    repeats."""
+
+    def setUp(self):
+        self.promise = release.load_promise()
+
+    def test_it_asks_for_the_bill_of_materials_and_names_only_files_a_release_holds(self):
+        self.assertEqual(self.promise.predicate, "https://spdx.dev/Document/v2.3")
+        self.assertEqual(len(self.promise.rendered("v0.1.0")), 5)
+
+    def test_both_statements_are_asked_for_through_github_and_offline(self):
+        words = [line.split() for line in self.promise.lines]
+        sbom = [w for w in words if "--predicate-type" in w]
+        provenance = [w for w in words if w[:3] == ["gh", "attestation", "verify"] and "--predicate-type" not in w]
+        self.assertEqual([("--bundle" in w) for w in sbom], [False, True])
+        self.assertEqual([("--bundle" in w) for w in provenance], [False, True])
+        self.assertIn("verify-naughty-keyboard_VERSION.sbom.sigstore.json", sbom[1])
+        self.assertIn("verify-naughty-keyboard_VERSION.provenance.sigstore.json", provenance[1])
+        # The statement of how a build was made answers only for files nothing
+        # signed, so its example has to be one of those.
+        self.assertTrue(all("_linux_" in w[3] for w in provenance))
+
+    def test_it_promises_the_glibc_phase_d_holds_the_programs_to(self):
+        with open(release.README, encoding="utf-8") as handle:
+            self.assertIn("glibc 2.35 or newer", handle.read())
+
+
+class Notes(unittest.TestCase):
+    FOOTER = "## Check\n\nThe list:\n\n<!-- verify-commands -->\n\nAnd verify-naughty-keyboard_VERSION.spdx.json.\n"
+
+    def test_the_notes_are_the_section_then_the_footer_with_the_commands_of_this_version(self):
+        promise = release.promise_of(README_BLOCK, "example/project")
+        notes = release.release_notes("### Added\n\n- A thing.\n", "v0.1.0", promise, self.FOOTER)
+        self.assertTrue(notes.startswith("### Added\n\n- A thing.\n\n## Check\n"))
+        for line in promise.rendered("v0.1.0"):
+            self.assertIn("\n" + line + "\n", notes)
+        self.assertIn("verify-naughty-keyboard_0.1.0.spdx.json", notes)
+        self.assertNotIn("VERSION", notes)
+        self.assertNotIn("<!--", notes)
+
+    def test_a_footer_without_the_place_for_the_commands_is_refused(self):
+        promise = release.promise_of(README_BLOCK, "example/project")
+        for footer in ("## Check\n", self.FOOTER + "<!-- verify-commands -->\n"):
+            with self.subTest(footer=footer):
+                with self.assertRaises(contents.Refused):
+                    release.release_notes("- A thing.", "v0.1.0", promise, footer)
+
+    def test_the_changelog_command_writes_the_whole_notes_and_not_only_the_section(self):
+        folder = tempfile.mkdtemp(prefix="notes-test-")
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        changelog = os.path.join(folder, "CHANGELOG.md")
+        with open(changelog, "w", encoding="utf-8") as handle:
+            handle.write(Changelogs.CLOSED)
+        notes = os.path.join(folder, "notes.md")
+        args = type("Args", (), {"changelog": changelog, "version": "0.1.0", "notes": notes})
+        self.assertEqual(release.command_changelog(args), 0)
+        with open(notes, encoding="utf-8") as handle:
+            written = handle.read()
+        self.assertTrue(written.startswith("### Added\n\n- A thing.\n"))
+        for line in release.load_promise().rendered("v0.1.0"):
+            self.assertIn(line, written)
+
+    def test_the_real_footer_renders_with_the_real_readme(self):
+        with open(release.NOTES_FOOTER, encoding="utf-8") as handle:
+            notes = release.release_notes("- A thing.", "v0.1.0", release.load_promise(), handle.read())
+        self.assertNotIn("VERSION", notes)
+        self.assertIn(release.SUMS, notes)
+        self.assertIn("gh release verify-asset v0.1.0 ", notes)
+
+
+class Pages(unittest.TestCase):
+    def test_phase_b_uploads_nine_files_and_a_finished_release_holds_ten(self):
+        published = release.published_files("v0.1.0")
+        page = release.page_files("v0.1.0")
+        self.assertEqual(len(published), 9)
+        self.assertEqual(sorted(set(page) - set(published)), ["verify-naughty-keyboard_0.1.0.sbom.sigstore.json"])
+        self.assertIn("verify-SHA256SUMS.txt", published)
+        self.assertIn("verify-naughty-keyboard_0.1.0.provenance.sigstore.json", published)
+        # verify- keeps the files for checking together at the end of the page.
+        self.assertTrue(all(n.startswith("verify-") for n in page if not n.endswith((".zip", ".tar.gz"))))
+
+    def test_a_list_of_digests_refuses_a_name_twice(self):
+        line = "%s  a.zip\n" % ("0" * 64)
+        self.assertEqual(release.listed_digests(line, "x"), {"a.zip": "0" * 64})
+        with self.assertRaises(contents.Refused):
+            release.listed_digests(line + line, "x")
+
+    def test_a_check_with_a_workflow_holds_it_to_the_ref_and_a_hosted_runner(self):
+        self.assertEqual(release.attestation_check("f", "o/r"), ["gh", "attestation", "verify", "f", "-R", "o/r"])
+        strict = release.attestation_check("f", "o/r", "P", "b.json", "w.yml", "refs/tags/v1")
+        self.assertEqual(strict[6:], ["--predicate-type", "P", "--bundle", "b.json", "--signer-workflow",
+                                      "o/r/.github/workflows/w.yml", "--source-ref", "refs/tags/v1",
+                                      "--deny-self-hosted-runners"])
+
+    def test_a_signed_macos_archive_holds_the_seal_and_the_ticket_and_nothing_else_does(self):
+        mac = archive_for("macos")
+        added = sorted(set(release.expected_names(mac, signed=True)) - set(release.expected_names(mac)))
+        self.assertEqual(added, ["nkb.app/Contents/CodeResources", "nkb.app/Contents/_CodeSignature/CodeResources"])
+        for other in ("windows", "linux"):
+            self.assertEqual(release.expected_names(archive_for(other), signed=True),
+                             release.expected_names(archive_for(other)))
+
+
 class Drafts(unittest.TestCase):
     def test_the_draft_is_empty_and_its_notes_are_the_changelog(self):
         self.assertEqual(release.draft_command("v0.1.0", "notes.md", False),

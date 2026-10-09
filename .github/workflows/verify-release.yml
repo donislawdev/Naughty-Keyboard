@@ -1,0 +1,192 @@
+# Phase D of the release: check the published page the way a person would.
+#
+# The phases before this one check a build, a draft and a digest handed between
+# them, and none of them looks at the page a person actually sees. This
+# downloads what a person downloads, unpacks it with the tools of each system,
+# runs it, reads its signature the way that system does, and runs the commands
+# README.md gives word for word, so that if one stops working it is the thing
+# that turns red.
+#
+# It runs when a release is published, and by hand with a tag, because "does
+# that older release still verify" is worth asking without making a new one.
+# Everything it checks it reads out of the tag of that release: the archives,
+# the pinned certificates and the commands.
+#
+# It only reads. A verifier that can publish is not a verifier any more. Every
+# decision is made by .github/scripts/verify_release.py, which has tests, and
+# each job lists every problem it finds, not the first one.
+name: Verify a published release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The published tag to check, for example v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# One check of a release at a time, and none cut short: an answer half given
+# reads like a pass.
+concurrency:
+  group: verify-release-${{ inputs.tag || github.event.release.tag_name }}
+  cancel-in-progress: false
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  which:
+    name: which release, and on which systems
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+      platforms: ${{ steps.plan.outputs.platforms }}
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag || github.event.release.tag_name }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Plan the checks
+        id: plan
+        env:
+          TAG: ${{ inputs.tag || github.event.release.tag_name }}
+        run: python .github/scripts/verify_release.py plan --tag "$TAG"
+
+  page:
+    name: the page and every statement on it
+    needs: which
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ needs.which.outputs.tag }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # Every file, the checksums, GitHub's own statement of what the release
+      # published, the commands of README.md word for word, every statement held
+      # to the workflow that made it, the notes, and the latest release.
+      - name: Check the page
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.which.outputs.tag }}
+        run: python .github/scripts/verify_release.py page --tag "$TAG" --dir "$RUNNER_TEMP/published"
+
+  programs:
+    name: run what ${{ matrix.os }} downloads
+    needs: which
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.which.outputs.platforms) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ needs.which.outputs.tag }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Download the archives of this system
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.which.outputs.tag }}
+          OS: ${{ matrix.os }}
+        run: python .github/scripts/verify_release.py fetch --tag "$TAG" --os "$OS" --dir "$RUNNER_TEMP/published"
+
+      # With the tools a person would use, not with the code that packed them.
+      - name: Unpack with the system's own tools
+        run: |
+          mkdir "$RUNNER_TEMP/unpacked"
+          for archive in "$RUNNER_TEMP"/published/*.zip "$RUNNER_TEMP"/published/*.tar.gz
+          do
+            name="$(basename "$archive")"
+            if [[ ! -f "$archive" ]]
+            then
+              continue
+            fi
+            mkdir "$RUNNER_TEMP/unpacked/$name"
+            if [[ "$name" == *.zip ]]
+            then
+              ARCHIVE="$archive" UNPACKED="$RUNNER_TEMP/unpacked/$name" pwsh -NoProfile -Command \
+                "Expand-Archive -LiteralPath \$env:ARCHIVE -DestinationPath \$env:UNPACKED"
+            else
+              tar -xzf "$archive" -C "$RUNNER_TEMP/unpacked/$name"
+            fi
+          done
+
+      # The names, the link beside a macOS bundle, the programs run, and the
+      # signature read the way this system reads it.
+      - name: Check and run what they hold
+        env:
+          TAG: ${{ needs.which.outputs.tag }}
+          OS: ${{ matrix.os }}
+        run: python .github/scripts/verify_release.py programs --tag "$TAG" --os "$OS" --unpacked "$RUNNER_TEMP/unpacked"
+
+  verdict:
+    name: one verdict
+    needs: [which, page, programs]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Each job above lists its own problems. This one says which of them have
+      # any, so a red run is read from the top and not job by job.
+      - name: What this release page answers for
+        env:
+          WHICH: ${{ needs.which.result }}
+          PAGE: ${{ needs.page.result }}
+          PROGRAMS: ${{ needs.programs.result }}
+        run: |
+          failed=0
+          {
+            echo "| What | Answer |"
+            echo "|---|---|"
+            echo "| which release, and on which systems | $WHICH |"
+            echo "| the page and every statement on it | $PAGE |"
+            echo "| the programs of every system, run and their signatures read | $PROGRAMS |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          for answer in "$WHICH" "$PAGE" "$PROGRAMS"
+          do
+            if [ "$answer" != "success" ]
+            then
+              failed=1
+            fi
+          done
+          if [ "$failed" != "0" ]
+          then
+            echo "This release page does not answer for itself. Every job above that is not success"
+            echo "lists every problem it found."
+            exit 1
+          fi
+          echo "The release page answers for itself."

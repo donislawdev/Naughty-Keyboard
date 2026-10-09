@@ -4,8 +4,9 @@ What changed for someone who uses Naughty Keyboard, newest first. The format fol
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-A release is made from a dated section of this file, and that section becomes its release notes word
-for word. Changes wait under Unreleased until then.
+A release is made from a dated section of this file. That section becomes the top of its release notes
+word for word, followed by the same few lines on every release about downloading and checking a file.
+Changes wait under Unreleased until then.
 
 ## [Unreleased]
 
@@ -22,3 +23,7 @@ for word. Changes wait under Unreleased until then.
   numbers, impossible dates, export breakers, file names and paths, and Polish locale data.
 - Archives for Windows, macOS and Linux. Each carries the licence notices of everything compiled into
   the program, and a bill of materials in SPDX describes all of them.
+- Signed downloads. The Windows programs carry an Authenticode signature with a timestamp, the macOS
+  bundles are signed and notarised by Apple, and every release carries signed statements of how it was
+  built and of what each archive holds, which `gh attestation verify` checks. The README shows the
+  commands.
