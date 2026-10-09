@@ -40,6 +40,7 @@ use crate::ports::{
     SourceError, StopReason, ValueDelivery,
 };
 use nkb_core::keys::line_clearing_recipe;
+use nkb_core::metrics::TextMetrics;
 use nkb_core::pack::{Pack, PackValue};
 use nkb_core::preview::{ShapeFact, ValuePreview, preview_of, shape};
 use nkb_core::value::ValueProblem;
@@ -112,6 +113,43 @@ pub struct ValueFacts {
     pub preview: ValuePreview,
     /// What the value is made of, as facts rather than as a sentence.
     pub shape: Vec<ShapeFact>,
+}
+
+impl ValueFacts {
+    /// The facts about `value`, worked out the one way the palette and the
+    /// project website both show them.
+    ///
+    /// `literal` is the value built from its body and `metrics` its size
+    /// measured from the recipe, both already in the caller's hands - a send
+    /// has them before it touches the field, and building them twice would
+    /// walk a value of a million characters twice.
+    #[must_use]
+    pub fn of(
+        pack: &Pack,
+        value: &PackValue,
+        literal: &str,
+        metrics: TextMetrics,
+        warnings: usize,
+    ) -> Self {
+        Self {
+            reference: format!("{}/{}", pack.id, value.id),
+            name: value.name.clone(),
+            // Counted from the literal that went out, like the preview below and
+            // for the same reason: the written form is escaped, so counting it
+            // would answer a question nobody asked.
+            graphemes: nkb_core::graphemes::count(literal),
+            code_points: metrics.code_points,
+            bytes: metrics.bytes,
+            warnings,
+            // Built from the RECIPE, not from the literal: a generated value is
+            // shown as `255 × "a"`, and a written one as the text that went out
+            // (never the escaped form, which `nkb emit` already answers for).
+            // From the recipe also means a million-character value is not
+            // walked end to end to show a hundred characters of it.
+            preview: preview_of(&value.body),
+            shape: shape(literal),
+        }
+    }
 }
 
 /// What happened to one send.
@@ -344,24 +382,7 @@ pub fn deliver_value(
     let expected_units = literal.encode_utf16().count();
     // Built only when something reached the field, so a refusal costs no
     // grapheme walk over a value that may be a million characters long.
-    let facts = || ValueFacts {
-        reference: format!("{}/{}", pack.id, value.id),
-        name: value.name.clone(),
-        // Counted from the literal that went out, like the preview below and
-        // for the same reason: the written form is escaped, so counting it
-        // would answer a question nobody asked.
-        graphemes: nkb_core::graphemes::count(&literal),
-        code_points: metrics.code_points,
-        bytes: metrics.bytes,
-        warnings,
-        // Built from the RECIPE, not from the literal: a generated value is
-        // shown as `255 × "a"`, and a written one as the text that went out
-        // (never the escaped form, which `nkb emit` already answers for).
-        // From the recipe also means a million-character value is not
-        // walked end to end to show a hundred characters of it.
-        preview: preview_of(&value.body),
-        shape: shape(&literal),
-    };
+    let facts = || ValueFacts::of(pack, value, &literal, metrics, warnings);
 
     // Counted at the first report, if there is one, and kept for the outcome.
     let mut counted: Option<ValueFacts> = None;

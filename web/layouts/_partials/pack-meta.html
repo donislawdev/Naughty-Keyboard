@@ -1,0 +1,19 @@
+{{- /*
+  A pack by its id, with what a page about it is called and how a search result
+  describes it, in the language being built.
+*/ -}}
+{{- $id := . }}
+{{- $pack := false }}
+{{- range hugo.Data.facts.catalogue.packs }}{{ if eq .id $id }}{{ $pack = . }}{{ end }}{{ end }}
+{{- if not $pack }}
+  {{- errorf "there is a page for the pack %s, which the catalogue does not have" $id }}
+{{- end }}
+{{- $name := partial "pack-text.html" (dict "pack" $pack "field" "name") }}
+{{- $about := partial "pack-text.html" (dict "pack" $pack "field" "description") }}
+{{- return (dict
+  "pack" $pack
+  "name" $name
+  "about" $about
+  "title" (T "pack_title" (dict "name" $name))
+  "description" (T "pack_description" (dict "about" $about "count" (int $pack.value_count)))
+) }}

@@ -1,0 +1,81 @@
+# The website's menus, by the path of the page each entry opens.
+#
+# A path is the same in every language. The page found under it is the one in
+# the language being built, and the words are that language's file. A path
+# with no page in a language stops the build, so a menu cannot lead to a page
+# that is not there.
+
+[[main]]
+key = "nav_docs"
+page = "/docs"
+
+[[main]]
+key = "nav_packs"
+page = "/packs"
+
+[[main]]
+key = "nav_cli"
+page = "/docs/cli"
+
+[[main]]
+key = "nav_download"
+page = "/download"
+
+# The documentation's own menu, in reading order. The pager at the foot of a
+# page follows it too.
+[[sidebar]]
+key = "side_start"
+pages = ["/docs", "/docs/getting-started", "/download", "/docs/limits"]
+
+[[sidebar]]
+key = "side_palette"
+pages = ["/docs/palette", "/docs/shortcuts", "/docs/clipboard-mode"]
+
+[[sidebar]]
+key = "side_cli"
+pages = [
+  "/docs/cli",
+  "/docs/cli/packs",
+  "/docs/cli/show",
+  "/docs/cli/emit",
+  "/docs/cli/send",
+  "/docs/cli/lint",
+  "/docs/cli/fmt",
+  "/docs/cli/new-pack",
+  "/docs/cli/exit-codes",
+]
+
+[[sidebar]]
+key = "side_packs"
+# Every pack after the catalogue, in the order the program ships them.
+pages = ["/packs"]
+catalogue = true
+
+[[sidebar]]
+key = "side_trust"
+pages = ["/docs/verify-a-download", "/security", "/faq"]
+
+[[footer]]
+key = "footer_product"
+pages = ["/download", "/packs", "/security", "/faq"]
+
+[[footer]]
+key = "footer_docs"
+pages = ["/docs/getting-started", "/docs/palette", "/docs/shortcuts", "/docs/cli"]
+
+# Addresses outside the site. The repository is the only place they point.
+[[project]]
+key = "link_github"
+url = "https://github.com/donislawdev/Naughty-Keyboard"
+
+[[project]]
+key = "link_releases"
+url = "https://github.com/donislawdev/Naughty-Keyboard/releases"
+
+[[project]]
+key = "link_suggest"
+url = "https://github.com/donislawdev/Naughty-Keyboard/issues/new?template=suggest_value.yml"
+
+[[project]]
+key = "link_report_security"
+url = "https://github.com/donislawdev/Naughty-Keyboard/security/advisories/new"

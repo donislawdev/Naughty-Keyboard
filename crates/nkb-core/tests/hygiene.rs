@@ -44,7 +44,9 @@
 mod repo_text;
 
 use nkb_core::text::needs_escaping;
-use repo_text::{Syntax, blocks, code, lex, product_tree, prose, relative, workspace_root};
+use repo_text::{
+    Syntax, blocks, code, lex, product_tree, prose, relative, site_language, workspace_root,
+};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -289,6 +291,15 @@ fn polish_in_comments(syntax: Syntax, source: &str) -> Vec<(usize, String)> {
     found
 }
 
+/// Whether the Polish scan reads a file. Everything is read but a page of the
+/// website in another language, which is that language on purpose - and only a
+/// page: the comments of its language file stay English, because its words are
+/// in the strings (`D118`).
+fn read_for_polish(relative: &str, syntax: Syntax) -> bool {
+    let elsewhere = site_language(relative).is_some_and(|l| l != "en");
+    !(syntax == Syntax::Markdown && elsewhere)
+}
+
 #[test]
 fn every_comment_in_the_repository_is_english() {
     let root = workspace_root();
@@ -296,6 +307,9 @@ fn every_comment_in_the_repository_is_english() {
     let mut files = 0;
     for (path, syntax) in every_text_file(&root) {
         let Some(syntax) = syntax else { continue };
+        if !read_for_polish(&relative(&root, &path), syntax) {
+            continue;
+        }
         files += 1;
         for (line, why) in polish_in_comments(syntax, &read(&path)) {
             offenders.push(format!("{}:{line}: {why}", relative(&root, &path)));
@@ -336,6 +350,49 @@ fn the_comment_scan_reads_prose_and_leaves_code_paths_and_values_alone() {
     // A whole word only: `Danie` is not `nie`, and `dlatego` is.
     assert!(polish_in_prose(&chars_of("Danie tablets")).is_empty());
     assert_eq!(polish_in_prose(&chars_of("so, dlatego.")).len(), 1);
+    // A template of the website: both kinds of comment are prose, the markup
+    // and the template code around them are not.
+    let template = "<!-- nie -->\n<p>{{ T \"nie\" }}</p>\n{{- /* dlatego */ -}}\n{{/* fine */}}\n";
+    let found: Vec<usize> = polish_in_comments(Syntax::Html, template)
+        .into_iter()
+        .map(|(line, _)| line)
+        .collect();
+    assert_eq!(
+        found,
+        [1, 3],
+        "a template comment was missed, or template code was read"
+    );
+}
+
+/// The website may speak another language in three places and nowhere else
+/// (untouchable rule 7 as extended by `D118`). Every other path answers `None`,
+/// and the Polish scan above reads it.
+#[test]
+fn the_website_keeps_each_other_language_in_files_marked_with_it() {
+    for (path, language) in [
+        ("web/content/pl/docs/getting-started.md", Some("pl")),
+        ("web/content/en/_index.md", Some("en")),
+        ("web/i18n/pl.toml", Some("pl")),
+        ("web/data/translations/pl/packs.toml", Some("pl")),
+        ("web/layouts/home.html", None),
+        ("web/data/facts/catalogue.json", None),
+        ("web/i18n/old/pl.toml", None),
+        ("web/content/pl.md", None),
+        ("crates/nkb-cli/src/main.rs", None),
+    ] {
+        assert_eq!(site_language(path), language, "{path}");
+    }
+    // The scan passes over a page in another language, and over nothing else.
+    assert!(!read_for_polish(
+        "web/content/pl/docs/palette.md",
+        Syntax::Markdown
+    ));
+    assert!(read_for_polish(
+        "web/content/en/docs/palette.md",
+        Syntax::Markdown
+    ));
+    assert!(read_for_polish("web/i18n/pl.toml", Syntax::Toml));
+    assert!(read_for_polish("README.md", Syntax::Markdown));
 }
 
 fn chars_of(text: &str) -> Vec<(char, usize)> {

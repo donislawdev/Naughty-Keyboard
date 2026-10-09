@@ -1,0 +1,28 @@
+{{- /*
+  Questions and answers, from the page's front matter. The same list becomes
+  the page and its FAQPage structured data, so the two cannot say different
+  things.
+*/ -}}
+{{ define "main" }}
+{{- $extra := slice }}
+<div class="container docs">
+  {{ partial "sidebar.html" . }}
+  <article class="prose">
+    {{ partial "breadcrumbs.html" . }}
+    <h1>{{ .Title }}</h1>
+    {{- with .Params.lead }}
+    <p class="lead">{{ partial "rich.html" . }}</p>
+    {{- end }}
+    {{ .Content }}
+    {{- range .Params.faq }}
+    {{- $id := anchorize .question }}
+    {{- $extra = $extra | append (dict "id" $id "title" .question) }}
+    <h2 id="{{ $id }}">{{ .question }}</h2>
+    {{- /* Rendered by the page, so a link in an answer goes to the page in this language. */ -}}
+    {{ $.RenderString (partial "counted.html" .answer) }}
+    {{- end }}
+    {{ partial "pager.html" . }}
+  </article>
+  {{ partial "toc.html" (dict "page" . "extra" $extra) }}
+</div>
+{{ end }}

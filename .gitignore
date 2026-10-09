@@ -8,8 +8,11 @@
 # Consequence to remember: ripgrep and the Grep tool honour this file, so the
 # whole project memory is invisible to a directory-wide search. Name the path
 # explicitly (docs/, CLAUDE.md) or use Select-String, which reads what it is told.
-docs/
-tools/
+#
+# Anchored to the root: the website keeps its own documentation pages in
+# web/content/<language>/docs/, and an unanchored docs/ would hide them.
+/docs/
+/tools/
 CLAUDE.md
 CHANGELOG-DEV.md
 

@@ -90,4 +90,66 @@ mod tests {
             }
         }
     }
+
+    /// The name the project website gives each code. A `match` and not a list,
+    /// so a code added here does not compile until it has a name there too.
+    fn site_name(code: ExitCode) -> &'static str {
+        match code {
+            ExitCode::Ok => "ok",
+            ExitCode::ValidationFailed => "validation-failed",
+            ExitCode::Usage => "usage",
+            ExitCode::NotFound => "not-found",
+            ExitCode::InsertFailed => "insert-failed",
+            ExitCode::IoFailed => "io-failed",
+        }
+    }
+
+    /// The website lists every exit code, read from here.
+    ///
+    /// `web/data/facts/exit-codes.json` is what the site's page of exit codes
+    /// is built from. With `NKB_WRITE_SITE=1` this writes it, and otherwise it
+    /// fails when the file and this enum disagree. The words about each code
+    /// are the site's own, in every language it is built in, and the site build
+    /// refuses a code that has none.
+    #[test]
+    #[allow(
+        clippy::expect_used,
+        reason = "a failed expectation in a test is a failed test"
+    )]
+    fn the_site_lists_every_exit_code() {
+        let all = [
+            ExitCode::Ok,
+            ExitCode::ValidationFailed,
+            ExitCode::Usage,
+            ExitCode::NotFound,
+            ExitCode::InsertFailed,
+            ExitCode::IoFailed,
+        ];
+        let rows: Vec<String> = all
+            .iter()
+            .map(|code| {
+                format!(
+                    "  {{\n    \"code\": {},\n    \"name\": \"{}\"\n  }}",
+                    code.as_i32(),
+                    site_name(*code)
+                )
+            })
+            .collect();
+        let now = format!("[\n{}\n]\n", rows.join(",\n"));
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../web/data/facts/exit-codes.json");
+        if std::env::var_os("NKB_WRITE_SITE").is_some_and(|v| v == "1") {
+            std::fs::write(&path, &now).expect("the facts can be written");
+            return;
+        }
+        let kept = std::fs::read_to_string(&path).expect(
+            "web/data/facts/exit-codes.json is readable. \
+             Write it: NKB_WRITE_SITE=1 cargo test -p nkb-cli the_site_lists_every_exit_code",
+        );
+        assert_eq!(
+            kept, now,
+            "the website lists other exit codes than the program has. If the program is \
+             right: NKB_WRITE_SITE=1 cargo test -p nkb-cli the_site_lists_every_exit_code"
+        );
+    }
 }

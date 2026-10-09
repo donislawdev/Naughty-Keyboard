@@ -1,0 +1,2 @@
+{{- /* A number from the catalogue in the text of a page: count "pack" or count "value". */ -}}
+{{- index hugo.Data.facts.catalogue (printf "%s_count" (.Get 0)) -}}

@@ -1,0 +1,18 @@
+{{- /* The way down from the home page, shown and said to search engines the same way. */ -}}
+{{- $trail := .Ancestors.Reverse | append . }}
+<ol class="breadcrumbs">
+  {{- range $trail }}
+  {{- if eq . $ }}
+  <li aria-current="page">{{ .LinkTitle }}</li>
+  {{- else }}
+  <li><a href="{{ .RelPermalink }}">{{ if .IsHome }}{{ T "home" }}{{ else }}{{ .LinkTitle }}{{ end }}</a></li>
+  {{- end }}
+  {{- end }}
+</ol>
+{{- $items := slice }}
+{{- range $k, $p := $trail }}
+  {{- $name := $p.LinkTitle }}
+  {{- if $p.IsHome }}{{ $name = T "home" }}{{ end }}
+  {{- $items = $items | append (dict "@type" "ListItem" "position" (add $k 1) "name" $name "item" $p.Permalink) }}
+{{- end }}
+<script type="application/ld+json">{{ dict "@context" "https://schema.org" "@type" "BreadcrumbList" "itemListElement" $items | jsonify | safeJS }}</script>

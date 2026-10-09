@@ -1,0 +1,15 @@
+{{- /*
+  The SHA-256 of the certificate each system's programs are signed with, and
+  when it expires, from .github/release/codesign.toml - the pins the signing
+  script and the check of a published release hold every signature to.
+*/ -}}
+{{- $pins := hugo.Data.release.codesign }}
+<div class="table-wrap"><table>
+  <thead><tr><th>{{ T "system" }}</th><th>{{ T "fingerprint" }}</th><th>{{ T "expires" }}</th></tr></thead>
+  <tbody>
+    {{- range slice "windows" "macos" }}
+    {{- $pin := index $pins . }}
+    <tr><td>{{ T (printf "certificate_%s" .) }}</td><td><code>{{ index $pin "certificate-sha256" }}</code></td><td>{{ index $pin "expires" | time.Format "2006-01-02" }}</td></tr>
+    {{- end }}
+  </tbody>
+</table></div>

@@ -228,6 +228,13 @@ const ALLOWED: &[(&str, &str, &str)] = &[
         "runs the `nkb` this test run built to ask each command for its help, and reads what it \
          answers. It starts nothing else, and nothing reaches past this machine",
     ),
+    (
+        "crates/nkb-cli/tests/site_facts.rs",
+        "spawn",
+        "runs the `nkb` this test run built for its version and the help of every command, which \
+         the project website shows word for word. It starts nothing else, and nothing reaches \
+         past this machine",
+    ),
 ];
 
 /// Files whose string literals NAME what they refuse, so their literals are not

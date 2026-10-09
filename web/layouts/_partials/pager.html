@@ -1,0 +1,19 @@
+{{- $order := partial "docs-order.html" . }}
+{{- $at := -1 }}
+{{- range $k, $p := $order }}{{ if eq $p $ }}{{ $at = $k }}{{ end }}{{ end }}
+{{- if ge $at 0 }}
+<nav class="pager" aria-label="{{ T "pager_label" }}">
+  {{- if gt $at 0 }}
+  {{- with index $order (sub $at 1) }}
+  <a href="{{ .RelPermalink }}"><span>{{ T "previous" }}</span>{{ partial "link-title.html" . }}</a>
+  {{- end }}
+  {{- else }}
+  <span></span>
+  {{- end }}
+  {{- if lt (add $at 1) (len $order) }}
+  {{- with index $order (add $at 1) }}
+  <a class="next" href="{{ .RelPermalink }}"><span>{{ T "next" }}</span>{{ partial "link-title.html" . }}</a>
+  {{- end }}
+  {{- end }}
+</nav>
+{{- end }}

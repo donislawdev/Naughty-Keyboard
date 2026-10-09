@@ -1,0 +1,119 @@
+# The project website, built with Hugo.
+#
+# English is served at the root and every other language under its own
+# prefix. A language is listed here only once every one of its pages is
+# translated, because an English page served under another language's address
+# is a duplicate to a search engine and a dead end to a reader.
+
+baseURL = "https://naughtykeyboard.donislawdev.com/"
+defaultContentLanguage = "en"
+defaultContentLanguageInSubdir = false
+# English lives at the root, so the alias page Hugo would write at /en/ is an
+# address nobody needs.
+disableDefaultLanguageRedirect = true
+disableKinds = ["taxonomy", "term", "rss"]
+enableRobotsTXT = true
+# Hugo publishes into public/ next to this file, and nothing there is kept.
+publishDir = "public"
+
+[params]
+  # The colour a phone gives its bar beside the page. It is --surface in
+  # assets/css/site.css, which takes it from the palette's tokens.
+  themeColor = "#14161a"
+  # How many characters of a title a search result shows, about. The check of
+  # the built site holds every title to it.
+  titleLimit = 60
+  # The same for a description.
+  descriptionLimit = 160
+
+[languages.en]
+  label = "English"
+  locale = "en"
+  title = "Naughty Keyboard"
+  weight = 1
+  contentDir = "content/en"
+  [languages.en.params]
+    # The locale a link preview asks for, which is a language and a country.
+    ogLocale = "en_US"
+
+[markup.goldmark.renderer]
+  # Content is Markdown written for this site, and raw HTML in it would be a
+  # second way of writing a page that no template controls.
+  unsafe = false
+
+[markup.tableOfContents]
+  startLevel = 2
+  endLevel = 2
+  ordered = false
+
+[markup.highlight]
+  # Colours come from the stylesheet, so a code block follows the same tokens
+  # as everything else.
+  noClasses = false
+
+[sitemap]
+  changeFreq = ""
+  priority = -1
+
+[privacy]
+  [privacy.disqus]
+    disable = true
+  [privacy.googleAnalytics]
+    disable = true
+  [privacy.instagram]
+    disable = true
+  [privacy.vimeo]
+    disable = true
+  [privacy.x]
+    disable = true
+  [privacy.youTube]
+    disable = true
+
+# What the site shows about the program is read from where the program keeps
+# it, so the site never carries a copy that could drift from the original. A
+# mount replaces the default one for its component only, so static/, data/ and
+# assets/ are named again.
+[[module.mounts]]
+  source = "static"
+  target = "static"
+
+[[module.mounts]]
+  source = "../crates/nkb-gui/assets/edamame.svg"
+  target = "static/icon.svg"
+
+[[module.mounts]]
+  source = "data"
+  target = "data"
+
+# The workspace manifest, for the Rust version a build from source needs.
+[[module.mounts]]
+  source = "../Cargo.toml"
+  target = "data/workspace.toml"
+
+# The six archives of a release, from the one file the release reads them from.
+[[module.mounts]]
+  source = "../.github/release/archives.toml"
+  target = "data/release/archives.toml"
+
+# The SHA-256 of the two signing certificates, from the file the signing script
+# and the check of a published release pin them in. It holds no subject.
+[[module.mounts]]
+  source = "../.github/release/codesign.toml"
+  target = "data/release/codesign.toml"
+
+[[module.mounts]]
+  source = "assets"
+  target = "assets"
+
+# The social preview is an asset rather than a static file, so its width and
+# height are read from the picture itself.
+[[module.mounts]]
+  source = "../.github/social-preview/social-preview.png"
+  target = "assets/social-preview.png"
+
+# The README holds the commands that check a download, between its
+# verify-commands markers, and the release notes and the check of a published
+# release read them from there too. The site does the same.
+[[module.mounts]]
+  source = "../README.md"
+  target = "assets/readme.md"

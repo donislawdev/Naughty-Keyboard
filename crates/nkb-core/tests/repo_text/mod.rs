@@ -42,6 +42,40 @@ const SOCIAL_PREVIEW_DIR: &str = ".github/social-preview";
 /// scripts are Python and the pins are a `.txt`, and both are read.
 const CI_SCRIPTS_DIR: &str = ".github/scripts";
 
+/// What the site generator writes next to the website's source under `web/`.
+/// Never tracked, there after every local build, and made of the same pages
+/// the source already says - reading it would report each finding twice.
+const SITE_OUTPUT: [&str; 2] = ["web/public", "web/resources"];
+
+/// The file GitHub Pages reads to know the website's address. One line, no
+/// extension, nothing in it is prose.
+const SITE_ADDRESS: &str = "web/static/CNAME";
+
+/// The template of the website's `robots.txt`. A template like the others,
+/// named for the file it makes.
+const SITE_ROBOTS: &str = "web/layouts/robots.txt";
+
+/// Where the website keeps words in a language other than English, and the
+/// language they are in (untouchable rule 7 as extended by `D118`).
+///
+/// Three places and no others: a page under `web/content/<language>/`, the
+/// interface words in `web/i18n/<language>.toml`, and the translations of what
+/// the program says in `web/data/translations/<language>/`. English is a
+/// language here too and the answer for it is `Some("en")`, so a caller that
+/// lets a language through has to name which one.
+pub fn site_language(relative: &str) -> Option<&str> {
+    if let Some(rest) = relative
+        .strip_prefix("web/content/")
+        .or_else(|| relative.strip_prefix("web/data/translations/"))
+    {
+        return rest.split_once('/').map(|(language, _)| language);
+    }
+    relative
+        .strip_prefix("web/i18n/")
+        .and_then(|name| name.strip_suffix(".toml"))
+        .filter(|language| !language.contains('/'))
+}
+
 fn is_leftover(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
@@ -60,6 +94,13 @@ pub enum Syntax {
     Yaml,
     Python,
     Shell,
+    /// A template of the website: HTML with Hugo's template actions.
+    Html,
+    Css,
+    /// Data, never prose: the facts the website is built from carry the
+    /// catalogue's own sentences, which follow the pack format's rules
+    /// (`D31`) and not this repository's.
+    Json,
 }
 
 /// Which comments may run together into one block. Only line comments of the
@@ -539,6 +580,53 @@ fn lex_svg(source: &str) -> Lexed {
     out
 }
 
+/// A template of the website: the comments of the markup, `<!-- ... -->`, and
+/// the comments of the template, `{{/* ... */}}` with or without the dashes
+/// that trim the space around them. Everything else is markup and template
+/// code, and the words a reader sees come from the language files, which are
+/// read as TOML.
+fn lex_html(source: &str) -> Lexed {
+    let s: Vec<char> = source.chars().collect();
+    let mut out = Lexed::default();
+    let mut line = 1;
+    let mut i = 0;
+    while i < s.len() {
+        let (open, close_mark) = if at(&s, i, "<!--") {
+            (Some(i + 4), "-->")
+        } else if at(&s, i, "{{") {
+            let mut j = i + 2;
+            if j < s.len() && s[j] == '-' {
+                j += 1;
+            }
+            while j < s.len() && s[j] == ' ' {
+                j += 1;
+            }
+            (at(&s, j, "/*").then_some(j + 2), "*/")
+        } else {
+            (None, "")
+        };
+        let Some(open) = open else {
+            if s[i] == '\n' {
+                line += 1;
+            }
+            i += 1;
+            continue;
+        };
+        let close = (open..s.len())
+            .find(|&j| at(&s, j, close_mark))
+            .unwrap_or(s.len());
+        let body: String = s[open..close].iter().collect();
+        out.comments.push(Comment {
+            first_line: line,
+            kind: CommentKind::Block,
+            lines: body.split('\n').map(str::to_string).collect(),
+        });
+        line += count_newlines(&s[i..close]);
+        i = (close + close_mark.chars().count()).min(s.len());
+    }
+    out
+}
+
 // ---- prose -----------------------------------------------------------------
 
 /// Line comments of one kind on consecutive lines, run together.
@@ -640,6 +728,12 @@ pub fn lex(syntax: Syntax, source: &str) -> Lexed {
         Syntax::Markdown => lex_markdown(source),
         Syntax::Svg => lex_svg(source),
         Syntax::Yaml => lex_markdown(source),
+        Syntax::Html => lex_html(source),
+        // A stylesheet has the block comments and the quoted strings of a
+        // C-like language, and no line comments - a URL in it would read as one,
+        // and the website's stylesheet names none.
+        Syntax::Css => lex_c_like(source, false),
+        Syntax::Json => Lexed::default(),
     }
 }
 
@@ -687,6 +781,10 @@ pub fn syntax_of(path: &Path) -> Option<Syntax> {
         "py" => Some(Syntax::Python),
         "sh" => Some(Syntax::Shell),
         "rc" => Some(Syntax::Resource),
+        // A content adapter of the website is a template with no markup around it.
+        "html" | "gotmpl" => Some(Syntax::Html),
+        "css" => Some(Syntax::Css),
+        "json" => Some(Syntax::Json),
         _ => None,
     }
 }
@@ -709,7 +807,7 @@ pub fn product_tree(root: &Path) -> Tree {
         let name = entry.file_name().to_string_lossy().into_owned();
         if path.is_dir() {
             match name.as_str() {
-                "crates" | "tests" | ".github" | ".cargo" => walk(root, &path, &mut tree),
+                "crates" | "tests" | ".github" | ".cargo" | "web" => walk(root, &path, &mut tree),
                 "packs" | "target" => {}
                 n if MEMORY.contains(&n) || n.starts_with('.') => {}
                 _ => tree.unreadable.push(format!(
@@ -747,9 +845,18 @@ fn walk(root: &Path, dir: &Path, tree: &mut Tree) {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().into_owned();
         if path.is_dir() {
-            if name != "target" && name != "__pycache__" {
+            let output = SITE_OUTPUT.contains(&relative(root, &path).as_str());
+            if name != "target" && name != "__pycache__" && !output {
                 walk(root, &path, tree);
             }
+            continue;
+        }
+        if relative(root, &path) == SITE_ADDRESS {
+            tree.files.push((path, Syntax::Git));
+            continue;
+        }
+        if relative(root, &path) == SITE_ROBOTS {
+            tree.files.push((path, Syntax::Html));
             continue;
         }
         // The file GitHub reads to ask the owner for a review. It has no extension

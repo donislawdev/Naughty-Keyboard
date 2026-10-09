@@ -1,0 +1,23 @@
+{{- $here := . }}
+<details class="sidebar" open>
+  <summary>{{ T "nav_docs" }}</summary>
+  <div class="sidebar-groups">
+    {{- range hugo.Data.menus.sidebar }}
+    <div>
+      <h2>{{ T .key }}</h2>
+      <ul>
+        {{- range .pages }}
+        {{- $page := partial "find-page.html" . }}
+        <li><a href="{{ $page.RelPermalink }}"{{ if eq $page $here }} aria-current="page"{{ end }}>{{ partial "link-title.html" $page }}</a></li>
+        {{- end }}
+        {{- if .catalogue }}
+        {{- range hugo.Data.facts.catalogue.packs }}
+        {{- $page := partial "find-page.html" (printf "/packs/%s" .id) }}
+        <li><a href="{{ $page.RelPermalink }}"{{ if eq $page $here }} aria-current="page"{{ end }}>{{ partial "link-title.html" $page }}</a></li>
+        {{- end }}
+        {{- end }}
+      </ul>
+    </div>
+    {{- end }}
+  </div>
+</details>

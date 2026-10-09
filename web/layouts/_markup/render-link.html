@@ -1,0 +1,21 @@
+{{- /*
+  A link in the text of a page. A link to a path of this site, such as
+  `/download/` or `/docs/cli/emit/#options`, is the page at that path in the
+  language being built, so one Markdown link serves every language. A path
+  with no page stops the build: no page goes out with a link to nowhere.
+  A link to another site is left as it was written.
+*/ -}}
+{{- $href := .Destination }}
+{{- $url := urls.Parse .Destination }}
+{{- if and (not $url.IsAbs) (strings.HasPrefix $url.Path "/") }}
+  {{- $path := strings.TrimSuffix "/" $url.Path }}
+  {{- $page := site.Home }}
+  {{- if $path }}{{ $page = site.GetPage $path }}{{ end }}
+  {{- if not $page }}
+    {{- errorf "%s links to %s, which is not a page in %s" .Page.File.Path .Destination site.Language.Lang }}
+  {{- end }}
+  {{- $href = $page.RelPermalink }}
+  {{- with $url.Fragment }}{{ $href = printf "%s#%s" $href . }}{{ end }}
+{{- end -}}
+<a href="{{ $href }}"{{ with .Title }} title="{{ . }}"{{ end }}>{{ .Text | safeHTML }}</a>
+{{- /* Nothing after the link, so no space creeps in before the punctuation that follows it. */ -}}

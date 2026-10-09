@@ -1,0 +1,8 @@
+{{- /*
+  One page for every pack the program ships, read from the facts. The page
+  carries only the pack's id: its title, description and values are worked out
+  by layouts/packs/page.html, in the language being built.
+*/ -}}
+{{- range hugo.Data.facts.catalogue.packs }}
+  {{- $.AddPage (dict "path" .id "title" .id "kind" "page" "params" (dict "pack" .id)) }}
+{{- end }}

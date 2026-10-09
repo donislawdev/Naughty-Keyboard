@@ -1,0 +1,26 @@
+{{- /*
+  Every shortcut of the palette, from the facts the palette's own test writes:
+  the default chord, the palette's name for the action, and whether it does
+  anything in this build.
+*/ -}}
+{{- $table := false }}
+{{- if ne site.Language.Lang "en" }}
+  {{- with index hugo.Data.translations site.Language.Lang }}{{ $table = index . "shortcuts" }}{{ end }}
+{{- end }}
+<div class="table-wrap"><table>
+  <thead><tr><th>{{ T "chord" }}</th><th>{{ T "action" }}</th><th>{{ T "today" }}</th><th>{{ T "settings_name" }}</th></tr></thead>
+  <tbody>
+    {{- range index hugo.Data.facts "shortcuts" }}
+    {{- $name := .name }}
+    {{- if ne site.Language.Lang "en" }}
+      {{- $name = partial "translated.html" (dict "english" .name "table" $table "key" .id "what" (printf "the shortcut %s" .id)) }}
+    {{- end }}
+    <tr>
+      <td>{{ partial "chord.html" .chord }}</td>
+      <td>{{ $name }}</td>
+      <td>{{ if .works }}{{ T "works" }}{{ else }}{{ T "not_yet" }}{{ end }}</td>
+      <td><code>{{ .id }}</code></td>
+    </tr>
+    {{- end }}
+  </tbody>
+</table></div>

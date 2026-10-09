@@ -1,0 +1,16 @@
+{{- /*
+  The same page in every other language the site is built in. A plain link and
+  nothing else: no script, no cookie, and nothing guessed from the browser.
+  Shown only when there is another language to go to.
+*/ -}}
+{{- if gt (len .AllTranslations) 1 }}
+<div class="languages" role="navigation" aria-label="{{ T "language" }}">
+  {{- range .AllTranslations }}
+  {{- if eq .Language.Lang site.Language.Lang }}
+  <span aria-current="true">{{ upper .Language.Lang }}</span>
+  {{- else }}
+  <a href="{{ .RelPermalink }}" hreflang="{{ .Language.Locale }}" lang="{{ .Language.Locale }}" title="{{ .Language.Label }}">{{ upper .Language.Lang }}</a>
+  {{- end }}
+  {{- end }}
+</div>
+{{- end }}
