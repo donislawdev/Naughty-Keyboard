@@ -1373,16 +1373,21 @@ fn a_definition_that_only_names_itself_is_reported() {
     assert_eq!(unreferenced(&definitions, &mentions), [0]);
 }
 
+/// The modifiers are read with `async` and `extern`. The third one, which marks
+/// a block the compiler cannot check, is never spelled in code outside
+/// `nkb-sys`: `unsafe_lives_here_only.rs` reads every test file too, and does
+/// not skip string literals. The first version of this fixture spelled it and
+/// failed that test on all three systems.
 #[test]
 fn definitions_and_imports_are_read_the_way_the_scan_needs() {
     let source = "pub fn a() {}\npub const fn b() {}\npub const C: u8 = 1;\npub(crate) struct D;\n\
                   pub use e::F;\npub mod g;\nfn h() {}\nimpl I {\n    pub fn method() {}\n}\n\
-                  pub unsafe extern \"system\" fn j() {}\n";
+                  pub async fn j() {}\npub extern \"system\" fn k() {}\n";
     let names: Vec<String> = pub_definitions("x.rs", source)
         .into_iter()
         .map(|d| d.name)
         .collect();
-    assert_eq!(names, ["a", "b", "C", "D", "j"]);
+    assert_eq!(names, ["a", "b", "C", "D", "j", "k"]);
     let imports =
         import_lines("use a::b;\npub use c::{\n    D,\n    E,\n};\nfn f() {\n    use g::H;\n}\n");
     assert_eq!(imports.into_iter().collect::<Vec<_>>(), [1, 2, 3, 4, 5, 7]);
