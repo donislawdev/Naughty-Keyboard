@@ -71,6 +71,11 @@ image = { version = "0.25.10", default-features = false, features = ["png"] }
 # Slint, and tests/typeface_guarantee.rs fails when the lock file holds two.
 skrifa = "0.44.0"
 
+# The import table of the built `nkb-gui`, read by
+# tests/links_nothing_off_the_machine.rs. Why this crate and that version: the
+# workspace manifest, beside the version.
+object.workspace = true
+
 # This package does NOT inherit the workspace lints, and the reason is one
 # single word. The workspace sets `unsafe_code = "forbid"`, and `forbid` cannot
 # be lifted by anything downstream - not even by the code that Slint generates
