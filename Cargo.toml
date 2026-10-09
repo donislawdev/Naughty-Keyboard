@@ -137,6 +137,30 @@ arboard = { version = "3.6.1", default-features = false }
 # `nkb` has no window, so nothing in it asks for an icon - D25.
 embed-resource = "=3.0.11"
 
+# Test-only: reads the import table of the two built programs, for the guard
+# that the tool opens no network connection. That guard reads our source, and
+# this is what lets it also see what the LINKER put into `nkb` and `nkb-gui`,
+# including whatever a dependency brought along. Never linked into a released
+# artefact - document 09 section 10, the lighter tier.
+#
+# Version checked against the registry on 2026-10-09 - not recalled. 0.40.0 was
+# the newest release that day and had been out for two months.
+#
+# `default-features = false` because the default adds `compression`, which pulls
+# two decompressors for the debug sections of a file, and nothing here reads
+# those. The four features left are the reader itself and the three formats the
+# three systems build: PE on Windows, ELF on Linux, Mach-O on macOS.
+#
+# Licence sieve, both questions:
+#   (a) Apache-2.0 OR MIT, both of which combine with GPL-3.0, and the choice
+#       is ours.
+#   (b) not applicable - a library, not a reference dataset.
+#
+# Only the tests of nkb-cli and nkb-gui use it, each on its own binary, because
+# a package's integration tests are the only place Cargo hands over the path of
+# the binary it has just built.
+object = { version = "0.40.0", default-features = false, features = ["read_core", "elf", "macho", "pe"] }
+
 [workspace.lints.rust]
 unsafe_code = "forbid"
 

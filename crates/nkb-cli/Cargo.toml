@@ -18,5 +18,11 @@ nkb-core.workspace = true
 nkb-app.workspace = true
 nkb-adapters.workspace = true
 
+# Test-only: the import table of the built `nkb`, read by
+# tests/links_nothing_off_the_machine.rs. Why this crate and that version: the
+# workspace manifest, beside the version.
+[dev-dependencies]
+object.workspace = true
+
 [lints]
 workspace = true

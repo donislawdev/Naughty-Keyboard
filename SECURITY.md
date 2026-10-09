@@ -90,10 +90,13 @@ The format also bounds what a file can ask for, including a generated value, who
 times its repeat count, so a small file cannot describe an enormous one (rules E024 and E026 of
 `nkb lint`).
 
-**It makes no connection off the machine.** The workspace has no code that opens a network
-connection, and `Cargo.lock` holds none of the usual HTTP, TLS or socket crates: no telemetry, no
-update check, nothing downloaded while it runs. This was checked by searching the source and the
-lockfile on 2026-10-07, and unlike the properties above, no test pins it yet.
+**It makes no connection off the machine.** No telemetry, no update check, nothing downloaded
+while it runs. The test `nothing_reaches_the_network` reads the source of every package and view,
+and fails on a socket, a name lookup, an HTTP client, a call that hands an address to the shell or
+the browser, or a crate in `Cargo.lock` that `deny.toml` bans as a network client. The test
+`links_nothing_off_the_machine` reads the import table of both built programs, and fails if either
+links a network library, or a call that starts a program or opens a socket, beyond what its
+register names with a reason.
 
 **It writes only where it says.** The palette's settings go in `settings.toml` in your
 configuration folder, written through a temporary file, and through the link if the file is a
