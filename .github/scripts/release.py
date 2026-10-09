@@ -34,6 +34,7 @@ and a decision written as shell in YAML is tested only on the day of a
 release. Here each one has a test, and the workflow only calls them.
 """
 import argparse
+import calendar
 import dataclasses
 import gzip
 import io
@@ -461,9 +462,15 @@ def read_bytes(path):
 
 
 def write_archive(path, archive_format, entries, epoch):
-    """The same entries and the same time give the same bytes, on any system:
-    entries in name order, no owner, every time the commit's. Written whole or
-    not at all."""
+    """The same entries and the same time give the same archive: entries in name
+    order, no owner, every time the commit's. Written whole or not at all.
+
+    The same CONTENT on any system, and the same BYTES from the same Python.
+    Measured on 2026-10-09: a tar.gz packed on a Linux or a macOS runner and
+    packed again here from what it holds is the same tar with the same gzip
+    header, and a different deflate stream, because the Python for Windows
+    compresses with zlib-ng and the others with zlib. A zip packed on the
+    Windows runner came out byte for byte the same."""
     temporary = path + ".partial"
     try:
         write_entries(temporary, archive_format, entries, epoch)
@@ -508,6 +515,52 @@ def write_entries(temporary, archive_format, entries, epoch):
                             out.addfile(info, io.BytesIO(entry.data))
     else:
         raise Refused(["no archive format %r" % archive_format])
+
+
+def format_of(path):
+    for archive_format in ("zip", "tar.gz"):
+        if path.endswith("." + archive_format):
+            return archive_format
+    raise Refused(["%s is neither a zip nor a tar.gz" % os.path.basename(path)])
+
+
+def read_archive(path):
+    """What an archive this script packed holds, and the time its entries carry.
+
+    The reverse of write_archive. An archive read and written again unchanged
+    holds the same entries, and by the same Python is the same bytes, so a
+    signed program can go back into its archive and nothing else in it moves. An archive this script would not have written is refused
+    rather than read loosely: a stray kind of entry, or entries of different
+    times, is not ours."""
+    archive_format = format_of(path)
+    entries = []
+    times = set()
+    if archive_format == "zip":
+        with zipfile.ZipFile(path) as packed:
+            for info in packed.infolist():
+                mode = (info.external_attr >> 16) & 0o7777
+                if info.is_dir() or not mode:
+                    raise Refused(["%s holds %s, which is not a file with a mode" % (os.path.basename(path), info.filename)])
+                entries.append(Entry(info.filename, "file", mode, packed.read(info)))
+                times.add(calendar.timegm(info.date_time + (0, 0, 0)))
+    else:
+        with tarfile.open(path, "r:gz") as packed:
+            for member in packed.getmembers():
+                times.add(member.mtime)
+                mode = member.mode & 0o7777
+                if member.isdir():
+                    entries.append(Entry(member.name, "directory", mode))
+                elif member.issym():
+                    entries.append(Entry(member.name, "link", mode, target=member.linkname))
+                elif member.isreg():
+                    entries.append(Entry(member.name, "file", mode, packed.extractfile(member).read()))
+                else:
+                    raise Refused(["%s holds %s, which is neither a file, a directory nor a link"
+                                   % (os.path.basename(path), member.name)])
+    if len(times) != 1:
+        raise Refused(["%s holds entries of %d different times, and this script writes one"
+                       % (os.path.basename(path), len(times))])
+    return archive_format, sorted(entries, key=lambda e: e.name), times.pop()
 
 
 def commit_epoch(root=ROOT, environ=os.environ):

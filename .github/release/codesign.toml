@@ -1,0 +1,37 @@
+# The certificates a release is signed with, pinned by the SHA-256 of their own
+# DER bytes. Read by .github/scripts/sign_release.py, which picks the certificate
+# by this digest and then reads the certificate back out of every file it signed
+# and refuses one that does not hash to it. A second code signing certificate on
+# the same machine, a renewal or one from another project, signs just as
+# willingly, and the release page looks the same either way.
+#
+# What is not here, on purpose: the subject of either certificate. A certificate
+# issued to a person carries their name, and the Windows one their town and
+# region too. Every signed file carries the subject with it, and the first signed
+# release makes it public. That is the certificate's to say, not this
+# repository's, so only the digests are written down.
+#
+# A renewal is a DIFFERENT certificate, not the same one with a later date. When
+# one is renewed its digest and its date move here together, and the signing
+# script warns from ninety days before a date so that this is never a surprise in
+# the middle of a release.
+
+schema = 1
+
+# The key is on a cryptographic card that cannot be exported, so the programs are
+# signed on the machine the card is plugged into and never on a runner.
+[windows]
+certificate-sha256 = "47b79ad3cfa53ef846cad03a59148f8c981d0b1196891e48b8c8d7982b10c148"
+expires = 2027-08-19
+# RFC 3161, from the authority that issued the certificate. Without a timestamp a
+# signature dies when the certificate expires.
+timestamp-url = "http://time.certum.pl/"
+
+# Developer ID Application. The key and the credentials of Apple's notary service
+# are in a keychain on a Mac, so the bundles are signed there, over ssh.
+[macos]
+certificate-sha256 = "c656a279aba94f535d6fcf9aff1ce05cd51295aea52295677ae5e1f1d7d77794"
+expires = 2029-10-27
+# The name the notary credentials were stored under on that Mac with
+# `xcrun notarytool store-credentials`. A name, not a secret.
+notary-profile = "tfg-notary"
