@@ -1,0 +1,35 @@
+# The standard texts of the licences this project accepts, kept byte for byte as
+# the SPDX License List publishes them, and the digest of each.
+#
+# What they are for. A crate is supposed to carry its licence text, and 29 of the
+# 324 crates the release archives were built from on 2026-10-09 carry none at all.
+# Their notice still has to be given, so .github/scripts/contents.py gives the
+# standard text of the licence the crate declares, from here, and says beside it
+# that the crate shipped no file of its own. A crate that does carry its text is
+# always given its own text, because that is the one with its copyright line.
+#
+# Where they come from: https://github.com/spdx/license-list-data, the `text`
+# directory at tag v3.29.0 (released 2026-09-16), downloaded on 2026-10-09. The
+# digests below are of those downloads. A digest that stops matching means the
+# file was edited, or rewritten with other line endings, and the notices would
+# then quote a text nobody published.
+#
+# The list holds the licences deny.toml allows, minus GPL-3.0-only, whose text is
+# LICENSE at the root of the repository. A licence allowed there and missing here
+# is refused when a crate needs it, not guessed.
+
+list = "SPDX License List 3.29.0"
+source = "https://github.com/spdx/license-list-data/tree/v3.29.0/text"
+
+[sha256]
+"Apache-2.0" = "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff"
+"BSD-2-Clause" = "f32fb3b417a194167cfad068223fc975ba96c5960513a10f66a3c28720aec1df"
+"BSD-3-Clause" = "5a93d5831e1297ab10fe643e1a631e83be392896da14ee2951285a79012df69d"
+"BSL-1.0" = "84c6ef3ea9e3254a54d0acf5d3e0c61ae011b8fef7dd6940591cf060e6380a8f"
+"CC0-1.0" = "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+"ISC" = "521c6f0ed8e64736684f89843d16a4df6b4b7449acbcfc6ca6630a3037ca8c53"
+"LLVM-exception" = "e34c58338bd89d43e709e226610d8f32b3e3c47f4ad9a99a8dc1d4ac7842488e"
+"MIT" = "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5"
+"Unicode-3.0" = "f7db81051789b729fea528a63ec4c938fdcb93d9d61d97dc8cc2e9df6d47f2a1"
+"Unlicense" = "0bdebfeda07d45dada625ae1317c6f833186e798b171d0db640bcf32e92a8240"
+"Zlib" = "bfb1112d49db5b1daecdfef24bd7e2f3ea0bafb33aa67aa0ab51e2bf8407c03d"

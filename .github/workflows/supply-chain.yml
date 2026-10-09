@@ -55,6 +55,24 @@ jobs:
         with:
           command: check bans licenses sources
 
+      # The same question asked the way a release asks it: can every archive be
+      # described, with a bill of materials and the licence text of everything
+      # compiled into it. A crate that brings no licence text a notice can quote,
+      # or a file compiled in that the register does not name, fails here on its
+      # pull request and not on the day of a release. Nothing is written.
+      #
+      # The Cargo of the runner image is enough: this reads the lock file and the
+      # crates, and compiles nothing. Every crate of every target is fetched,
+      # because the notices quote the licence files inside them.
+      - name: Describe what every release archive contains
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          cargo --version
+          python3 --version
+          cargo fetch --locked
+          python3 .github/scripts/contents.py check
+
   advisories:
     runs-on: ubuntu-latest
     timeout-minutes: 15

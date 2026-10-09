@@ -46,7 +46,8 @@
 //!   answers to `nkb lint`, not to this rule.
 //! - `tests/packs/`: their content is the subject of the tests.
 //! - `LICENSE`, and the third-party files kept byte for byte beside the Unicode
-//!   tables and the typeface. `Cargo.lock`, which a tool writes.
+//!   tables and the typeface, and the standard licence texts the release notices
+//!   quote. `Cargo.lock`, which a tool writes.
 //! - The `.ico` of the application icon: nine pictures behind a directory of
 //!   offsets, with no prose in it. The drawings it is made from are read.
 //! - The `.png` of the social preview: a picture, with no prose in it. The
