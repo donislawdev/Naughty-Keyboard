@@ -19,7 +19,7 @@ body:
       label: The value
       description: >-
         Write it the way a pack file does, so that invisible characters can be
-        seen: `​` for a zero-width space, `\n` for a line break. If it is long
+        seen: `\u200B` for a zero-width space, `\n` for a line break. If it is long
         and regular, describe the recipe, a unit and how many times it repeats,
         instead of pasting it.
       render: text
