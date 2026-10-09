@@ -27,6 +27,24 @@ use slint::platform::{Platform, PlatformError, WindowAdapter};
 /// the file manager's extra large view. 128 is there for tools that look for it.
 pub const SIZES: [u32; 9] = [16, 20, 24, 32, 40, 48, 64, 128, 256];
 
+/// The entries of the macOS icon, `assets/edamame.icns`, in the order the file
+/// holds them: the four-letter type macOS looks an entry up by, and its side in
+/// pixels. Ten, the set Apple's own `iconutil` writes. Several share a size - a
+/// 32 px picture is both the 32 point icon of a plain screen and the 16 point
+/// icon of a Retina one - and macOS asks for each one by its type.
+pub const MAC_ENTRIES: [(&str, u32); 10] = [
+    ("icp4", 16),
+    ("icp5", 32),
+    ("ic11", 32),
+    ("ic12", 64),
+    ("ic07", 128),
+    ("ic13", 256),
+    ("ic08", 256),
+    ("ic14", 512),
+    ("ic09", 512),
+    ("ic10", 1024),
+];
+
 /// Up to this size the heavier drawing is used. See `assets/README.md`.
 pub const SMALL_UP_TO: u32 = 32;
 

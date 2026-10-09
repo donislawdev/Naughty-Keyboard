@@ -594,3 +594,35 @@ fn control_the_ci_scripts_are_read() {
         [(1, Semicolon)]
     );
 }
+
+#[test]
+fn control_the_shell_scripts_are_read() {
+    use Breach::{LiteralSemicolon, Semicolon};
+    // A comment is prose. `$#` and `${#list[@]}` are code and open no comment,
+    // and a semicolon between two commands is code too.
+    assert_eq!(
+        found(
+            Syntax::Shell,
+            "# aSEMI b\ncount=$#\nall=${#list[@]}SEMI echo done\n"
+        ),
+        [(1, Semicolon)]
+    );
+    // A message in double quotes may run over several lines and is one literal,
+    // asked the narrower question on the line its semicolon stands on.
+    assert_eq!(
+        found(
+            Syntax::Shell,
+            "die \"one line\nsecondSEMI third\"\n# aSEMI b\n"
+        ),
+        [(2, LiteralSemicolon), (3, Semicolon)]
+    );
+    // A quote inside a comment opens no string, a hash inside a string opens no
+    // comment, and a quote escaped outside quotes opens nothing.
+    assert_eq!(
+        found(
+            Syntax::Shell,
+            "# it's here\necho 'a # bSEMI c'\necho \\\"x\n# xSEMI y\n"
+        ),
+        [(2, LiteralSemicolon), (4, Semicolon)]
+    );
+}

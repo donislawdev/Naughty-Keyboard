@@ -10,6 +10,7 @@ this project, and it is licensed like the rest of the repository.
 | `edamame.svg` | The master drawing. | The window icon (`Tokens.app-icon` in `ui/tokens.slint`), which Slint draws at the size the system asks for. Also the example below, for the 40 px and larger sizes of the `.ico`. |
 | `edamame-small.svg` | The same drawing for 32 px and below: an outline about twice as heavy, a line between the beans, flat fills. | The example below, for the 16, 20, 24 and 32 px sizes of the `.ico`. |
 | `edamame.ico` | Nine sizes, 16 to 256 px. **A build output**, committed because the build needs it and nobody should have to run a tool to compile. | `build.rs`, through `nkb-gui.rc`, which embeds it in `nkb-gui.exe` on Windows. That is the icon a file manager, a desktop shortcut and the taskbar show for the program. |
+| `edamame.icns` | Ten entries, 16 to 1024 px, all PNG: the set Apple's `iconutil` writes. **A build output**, written by the same example as the `.ico` and committed for the same reason. | The `.app` bundles of a macOS release, which show it in the Finder and the Dock. Apple's `iconutil --convert iconset` reads all ten back (checked on macOS 27). |
 | `nkb-gui.rc` | One line: the resource script that names the `.ico`. | `build.rs`. |
 
 Only `nkb-gui` carries the icon. `nkb` is a command line tool and runs in a
@@ -23,7 +24,7 @@ Edit the SVG files, then run
 cargo run -p nkb-gui --example make_icon
 ```
 
-and commit the `.ico` it writes. The example draws both files with the toolkit's
+and commit the `.ico` and the `.icns` it writes. The example draws both files with the toolkit's
 own renderer (`tests/icon_render`), which is also what draws the window icon, so
 no browser and no image tool is needed and the result is the same on every
 machine.
@@ -51,7 +52,7 @@ and the beans are light enough to hold it on a black one.
 
 ## Not done, on purpose
 
-There is nothing here for macOS (`.icns`) or for Linux desktops (a `.desktop`
-file and the icon installed under `hicolor`), because the repository has no
-packaging step that could use them. Both are made from `edamame.svg`, and they
-belong with the packaging.
+There is nothing here for Linux desktops (a `.desktop` file and the icon
+installed under `hicolor`), because a release ships a Linux archive and not a
+package that installs anything. It is made from `edamame.svg` the day there is
+such a package. The `.icns` arrived with the macOS release bundles.

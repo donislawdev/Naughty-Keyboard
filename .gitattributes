@@ -46,6 +46,7 @@
 # fails as a program with a blank icon on someone else's desktop. The two SVG
 # files beside it are text and stay normalised to LF like the rest.
 /crates/nkb-gui/assets/*.ico binary
+/crates/nkb-gui/assets/*.icns binary
 
 # THE SOCIAL PREVIEW - the bytes the browser wrote, unaltered.
 #

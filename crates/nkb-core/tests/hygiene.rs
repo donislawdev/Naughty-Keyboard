@@ -513,7 +513,12 @@ fn names_in(syntax: Syntax, source: &str) -> Vec<(usize, String)> {
 fn holds_names(syntax: Syntax) -> bool {
     matches!(
         syntax,
-        Syntax::Rust | Syntax::Slint | Syntax::Resource | Syntax::Toml | Syntax::Python
+        Syntax::Rust
+            | Syntax::Slint
+            | Syntax::Resource
+            | Syntax::Toml
+            | Syntax::Python
+            | Syntax::Shell
     )
 }
 

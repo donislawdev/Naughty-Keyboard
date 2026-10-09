@@ -182,15 +182,12 @@ fn the_icon_file_holds_every_size_and_each_one_decodes() {
     }
 }
 
-#[test]
-fn the_icon_file_is_what_the_drawings_draw() {
-    // Every entry of the file against the drawing it is made from, drawn again
-    // here by the same renderer. Compared with the colour already multiplied by
-    // the opacity, because a pixel that is nearly clear has no colour worth
-    // comparing. The tolerance is a few levels in 255, which an update of the
-    // renderer's anti-aliasing may use up. Another drawing uses up far more.
-    let ico = read_bytes(&crate_dir().join("assets/edamame.ico"));
-    let renderer = Renderer::new();
+/// An entry against the drawing it is made from, drawn again here by the same
+/// renderer. Compared with the colour already multiplied by the opacity, because
+/// a pixel that is nearly clear has no colour worth comparing. The tolerance is a
+/// few levels in 255, which an update of the renderer's anti-aliasing may use up.
+/// Another drawing uses up far more.
+fn assert_drawn(renderer: &Renderer, entry: &Entry<'_>, file: &str) {
     let weighted = |pixel: &[u8; 4]| {
         let alpha = f64::from(pixel[3]);
         [
@@ -200,33 +197,103 @@ fn the_icon_file_is_what_the_drawings_draw() {
             alpha,
         ]
     };
+    let size = entry.size;
+    let drawn = renderer.draw(drawing_for(size), size);
+    let stored = decode(entry);
+    assert_eq!(
+        drawn.len(),
+        stored.len(),
+        "the {size} px entry of {file} is another size"
+    );
+    let total: f64 = drawn
+        .iter()
+        .zip(&stored)
+        .map(|(a, b)| {
+            weighted(a)
+                .iter()
+                .zip(weighted(b))
+                .map(|(x, y)| (x - y).abs())
+                .sum::<f64>()
+        })
+        .sum();
+    let mean = total / (drawn.len() as f64 * 4.0);
+    assert!(
+        mean <= 2.0,
+        "the {size} px entry of {file} is {mean:.2} levels away from {} on average: run \
+         `cargo run -p nkb-gui --example make_icon` and commit the file",
+        drawing_for(size)
+    );
+}
+
+#[test]
+fn the_icon_file_is_what_the_drawings_draw() {
+    let ico = read_bytes(&crate_dir().join("assets/edamame.ico"));
+    let renderer = Renderer::new();
     for entry in entries(&ico) {
-        let size = entry.size;
-        let drawn = renderer.draw(drawing_for(size), size);
-        let stored = decode(&entry);
-        assert_eq!(
-            drawn.len(),
-            stored.len(),
-            "the {size} px entry is another size"
-        );
-        let total: f64 = drawn
+        assert_drawn(&renderer, &entry, "edamame.ico");
+    }
+}
+
+/// The chunks of an `.icns`: the type of each one and its picture. Lengths are
+/// big-endian and count their own eight bytes of header.
+fn mac_entries(icns: &[u8]) -> Vec<(String, Entry<'_>)> {
+    let be32 = |at: usize| {
+        let raw = icns
+            .get(at..at + 4)
+            .unwrap_or_else(|| panic!("the .icns ends before byte {at}"));
+        u32::from_be_bytes([raw[0], raw[1], raw[2], raw[3]]) as usize
+    };
+    assert_eq!(
+        icns.get(0..4),
+        Some(&b"icns"[..]),
+        "an .icns starts with icns"
+    );
+    assert_eq!(
+        be32(4),
+        icns.len(),
+        "the .icns says another length than it has"
+    );
+    let mut found = Vec::new();
+    let mut at = 8;
+    while at < icns.len() {
+        let kind = String::from_utf8_lossy(&icns[at..at + 4]).into_owned();
+        let length = be32(at + 4);
+        assert!(length > 8, "the {kind} chunk is empty");
+        let data = icns
+            .get(at + 8..at + length)
+            .unwrap_or_else(|| panic!("the {kind} chunk runs past the end of the file"));
+        let size = icon_render::MAC_ENTRIES
             .iter()
-            .zip(&stored)
-            .map(|(a, b)| {
-                weighted(a)
-                    .iter()
-                    .zip(weighted(b))
-                    .map(|(x, y)| (x - y).abs())
-                    .sum::<f64>()
-            })
-            .sum();
-        let mean = total / (drawn.len() as f64 * 4.0);
+            .find(|(k, _)| *k == kind)
+            .map_or(0, |(_, s)| *s);
+        found.push((kind, Entry { size, data }));
+        at += length;
+    }
+    found
+}
+
+#[test]
+fn the_mac_icon_holds_every_size_and_is_what_the_drawings_draw() {
+    // The bundle on macOS shows this file in the Finder and the Dock. A bundle
+    // without one shows a blank sheet of paper, the picture of a program macOS
+    // knows nothing about.
+    let icns = read_bytes(&crate_dir().join("assets/edamame.icns"));
+    let found = mac_entries(&icns);
+    assert_eq!(
+        found.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(),
+        icon_render::MAC_ENTRIES
+            .iter()
+            .map(|(k, _)| *k)
+            .collect::<Vec<_>>(),
+        "the .icns holds the ten entries iconutil writes, in its order"
+    );
+    let renderer = Renderer::new();
+    for (kind, entry) in &found {
         assert!(
-            mean <= 2.0,
-            "the {size} px entry is {mean:.2} levels away from {} on average: run \
-             `cargo run -p nkb-gui --example make_icon` and commit the file",
-            drawing_for(size)
+            entry.data.starts_with(b"\x89PNG"),
+            "the {kind} entry is not a PNG"
         );
+        assert_drawn(&renderer, entry, "edamame.icns");
     }
 }
 

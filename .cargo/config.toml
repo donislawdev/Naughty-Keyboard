@@ -1,0 +1,15 @@
+# Build settings that every cargo command in this repository reads.
+
+# The C runtime is linked into the programs on Windows rather than loaded beside
+# them. A Rust program built with the MSVC toolchain otherwise imports
+# vcruntime140.dll, which Windows does not ship: it comes with the Visual C++
+# Redistributable, and on a machine without it the program does not start at
+# all. The Universal C runtime would be loaded from the system the same way.
+#
+# Set here and not only where a release is built, so that every build, the tests
+# included, makes what a release ships. The test that reads the import table of
+# both programs (links_nothing_off_the_machine) then answers for the released
+# files. A RUSTFLAGS variable in the environment replaces this setting without a
+# word, so nothing in CI or in the release sets one.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
