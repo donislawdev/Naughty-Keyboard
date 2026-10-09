@@ -16,8 +16,14 @@ use std::path::{Path, PathBuf};
 pub const MEMORY: [&str; 4] = ["docs", "tools", "CLAUDE.md", "CHANGELOG-DEV.md"];
 
 /// Directories whose `.txt` and `.ttf` files are third-party bytes, kept as their
-/// authors wrote them. A Markdown file there is ours and is read.
-pub const VERBATIM_DIRS: [&str; 2] = ["crates/nkb-core/unicode", "crates/nkb-gui/ui/fonts"];
+/// authors wrote them. A Markdown or TOML file there is ours and is read. The
+/// standard licence texts the release notices quote are the SPDX License List's
+/// bytes, and `.github/release/licence-texts/index.toml` pins their digests.
+pub const VERBATIM_DIRS: [&str; 3] = [
+    "crates/nkb-core/unicode",
+    "crates/nkb-gui/ui/fonts",
+    ".github/release/licence-texts",
+];
 
 /// Output a tool writes next to the source: the build leftovers the root
 /// `.gitignore` names, and logs. Never tracked, sometimes on disk. Measured on

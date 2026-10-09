@@ -1,0 +1,51 @@
+# What a release publishes, as data. Read by .github/scripts/contents.py, which
+# writes the bill of materials and the licence notices, and by every later step of
+# the release that has to know which archives exist.
+#
+# One list, on purpose. A release that carries a list of its files in two places
+# ends up with two answers, and the first release that lists one more file in one
+# of them is the release that ships without its notices or is attested without it.
+#
+# An archive is one program on one platform, and every program ships on every
+# platform listed here. Its name is a public contract: pipelines download it by
+# address, so a name that changes after the first release breaks them.
+#
+#     <program>_<version>_<os>_<arch>.<format>      nkb_0.1.0_windows_amd64.zip
+#
+# The version is the tag without its leading `v`, so a release candidate carries
+# its suffix in the name too: nkb_0.1.0-rc.1_linux_amd64.tar.gz.
+
+schema = 1
+
+# The two programs of D25. `package` is the Cargo package the program is built
+# from, which is also the package the bill of materials asks Cargo about.
+[programs.nkb]
+package = "nkb-cli"
+summary = "the command line tool"
+macos-bundle-id = "com.donislawdev.nkb"
+
+[programs.nkb-gui]
+package = "nkb-gui"
+summary = "the palette, the window that types a value into the field you are in"
+macos-bundle-id = "com.donislawdev.nkb-gui"
+
+# `os` and `arch` are the words a person reads on the download page, so macOS is
+# `macos` and not the `darwin` a compiler is told, and x86-64 is `amd64`, the way
+# the other projects of this author spell it. `target` is what Cargo is told.
+[[platforms]]
+os = "windows"
+arch = "amd64"
+target = "x86_64-pc-windows-msvc"
+format = "zip"
+
+[[platforms]]
+os = "macos"
+arch = "arm64"
+target = "aarch64-apple-darwin"
+format = "tar.gz"
+
+[[platforms]]
+os = "linux"
+arch = "amd64"
+target = "x86_64-unknown-linux-gnu"
+format = "tar.gz"

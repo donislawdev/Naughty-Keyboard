@@ -1,0 +1,94 @@
+# Everything a release ships that Cargo does not know about.
+#
+# The bill of materials and the licence notices have two sources, and this file is
+# the smaller one. The crates come from Cargo itself: .github/scripts/contents.py
+# asks `cargo tree` which crates are compiled into each program for each target,
+# which is the build's own input list rather than a scan of what came out, and
+# reads each crate's licence from its manifest. What Cargo cannot see is listed
+# here by hand: files compiled into a program through `include_bytes!`,
+# `include_str!`, a Slint import or a resource script, and the tables generated
+# from somebody else's data.
+#
+# This list is POLICED rather than trusted. contents.py goes through the source
+# of the programs and refuses a release when a file is compiled in that no entry
+# here names, when a table says it was generated from something no entry here
+# names, when an entry names a file that is gone, and when a pinned file no longer
+# has the digest written beside it. A list that is only as complete as somebody's
+# memory would describe a different build than the one in the archive.
+#
+# Fields
+#   name, version     what the component is called by its authors
+#   licence           an SPDX expression. A LicenseRef- needs `licence-text`.
+#   licence-text      the file whose text the notices quote, and the SPDX
+#                     document carries for a LicenseRef-
+#   source            where it comes from
+#   programs          the programs it is compiled into
+#   files             files compiled in, with the sha256 of each one that is
+#                     somebody else's bytes, kept as its authors wrote them. A
+#                     path ending in a slash covers everything under it.
+#   derived           files generated from the component and compiled in
+#   own               true for work of this project. The bill of materials lists
+#                     it like everything else, and the notices name it only when
+#                     its licence is not the licence of the program.
+
+schema = 1
+
+[[components]]
+name = "DejaVu Sans Mono"
+version = "2.37"
+licence = "LicenseRef-DejaVu"
+licence-text = "crates/nkb-gui/ui/fonts/LICENSE-DejaVu.txt"
+source = "https://github.com/dejavu-fonts/dejavu-fonts"
+programs = ["nkb-gui"]
+files = [
+    { path = "crates/nkb-gui/ui/fonts/DejaVuSansMono.ttf", sha256 = "b4a6c3e4faab8773f4ff761d56451646409f29abedd68f05d38c2df667d3c582" },
+]
+# Which characters the typeface draws, read out of the font file. Facts about it
+# rather than its outlines, listed here because the table names the font as
+# where it came from.
+derived = ["crates/nkb-gui/src/typeface/table.rs"]
+
+[[components]]
+name = "Unicode Character Database"
+version = "17.0.0"
+licence = "Unicode-3.0"
+licence-text = "crates/nkb-core/unicode/LICENSE-UNICODE.txt"
+source = "https://www.unicode.org/Public/17.0.0/ucd/"
+programs = ["nkb", "nkb-gui"]
+# The data files themselves are kept in crates/nkb-core/unicode/ and nothing
+# there is compiled in. These three tables are, and a test derives each of them
+# again from those files for every code point.
+derived = [
+    "crates/nkb-core/src/graphemes/table.rs",
+    "crates/nkb-core/src/ignorable/table.rs",
+    "crates/nkb-core/src/normalization/table.rs",
+]
+
+[[components]]
+name = "Naughty Keyboard built-in packs"
+licence = "CC-BY-4.0"
+source = "https://github.com/donislawdev/Naughty-Keyboard/tree/main/packs"
+programs = ["nkb", "nkb-gui"]
+files = [{ path = "packs/" }]
+# Ours, and under another licence than the program, so the notices name it even
+# though nobody else wrote it.
+own = true
+
+[[components]]
+name = "Naughty Keyboard application icon"
+licence = "GPL-3.0-only"
+source = "https://github.com/donislawdev/Naughty-Keyboard/tree/main/crates/nkb-gui/assets"
+programs = ["nkb-gui"]
+files = [
+    { path = "crates/nkb-gui/assets/edamame.svg" },
+    { path = "crates/nkb-gui/assets/edamame.ico" },
+]
+own = true
+
+# A reference the source check finds that does not reach a program. Each says
+# where it is and why, and an entry that matches nothing is itself refused, so
+# none outlives its reason.
+[[not-compiled-in]]
+file = "crates/nkb-core/src/lint.rs"
+reference = "lint.rs"
+reason = "read by a unit test inside `mod tests`, to compare the rule register with the enum it describes"
