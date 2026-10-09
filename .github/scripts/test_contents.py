@@ -9,6 +9,7 @@ made-up answer, and the checks that read the real tree read only files in it, so
 CI runs them on every pull request. What Cargo says about the real dependency
 tree is asked by `contents.py check` in the supply chain workflow.
 """
+import dataclasses
 import json
 import os
 import shutil
@@ -351,6 +352,84 @@ class Register(Tree):
         with self.assertRaises(contents.Refused):
             contents.load_register(register, root=self.root, programs={"cli"})
 
+    def test_a_file_packed_beside_a_program_counts_as_its_use(self):
+        self.build()
+        self.put("crates/gui/assets/icon.icns", "icon bytes")
+        text = (self.REGISTER % contents.sha256_of(os.path.join(self.root, "crates/gui/ui/fonts/font.ttf"))).replace(
+            'files = [{ path = "data/" }]', 'files = [{ path = "data/" }, { path = "crates/gui/assets/icon.icns" }]')
+        register = self.put(".github/release/components.toml", text)
+        components, allowances = contents.load_register(register, root=self.root, programs={"gui"})
+        packed = ["crates/gui/assets/icon.icns"]
+        self.assertEqual(contents.check_register_against_source(components, allowances, self.root, packed), [])
+        problems = contents.check_register_against_source(components, allowances, self.root)
+        self.assertTrue(any("icon.icns" in p and "no archive packs it" in p for p in problems), problems)
+
+    def test_a_file_packed_and_named_by_no_component_is_refused(self):
+        components, allowances = self.build()
+        problems = contents.check_register_against_source(components, allowances, self.root,
+                                                          ["crates/gui/assets/icon.icns"])
+        self.assertTrue(any("packs crates/gui/assets/icon.icns" in p for p in problems), problems)
+
+    def test_a_packed_file_puts_its_component_into_that_archive_and_no_other(self):
+        component = contents.Component("Icon", "", "MIT", "", "here", ("gui",),
+                                       (("assets/icon.icns", None),), (), True)
+        archive = contents.Archive("cli", "c", "s", "macos", "arm64", "t", "tar.gz")
+        self.assertFalse(contents.in_archive(component, archive))
+        self.assertTrue(contents.in_archive(component, dataclasses.replace(archive, packaged=("assets/icon.icns",))))
+        self.assertTrue(contents.in_archive(component, dataclasses.replace(archive, program="gui")))
+
+
+class Archives(Tree):
+    ARCHIVES = textwrap.dedent('''\
+        schema = 1
+
+        [programs.cli]
+        package = "cli-package"
+        summary = "the tool"
+        macos-bundle-id = "org.example.cli"
+        macos-icon = "assets/icon.icns"
+
+        [[platforms]]
+        os = "windows"
+        arch = "amd64"
+        target = "x86_64-pc-windows-msvc"
+        format = "zip"
+        runner = "windows-latest"
+
+        [[platforms]]
+        os = "macos"
+        arch = "arm64"
+        target = "aarch64-apple-darwin"
+        format = "tar.gz"
+        runner = "macos-latest"
+        minimum-os = "11.0"
+        ''')
+
+    def load(self, text):
+        self.put("assets/icon.icns", "icon bytes")
+        return contents.load_archives(self.put(".github/release/archives.toml", text), root=self.root)
+
+    def test_the_bundle_and_its_icon_belong_to_macos_only(self):
+        windows, macos = self.load(self.ARCHIVES)
+        self.assertEqual((windows.runner, windows.bundle_id, windows.minimum_os, windows.packaged),
+                         ("windows-latest", "", "", ()))
+        self.assertEqual((macos.runner, macos.bundle_id, macos.minimum_os, macos.packaged),
+                         ("macos-latest", "org.example.cli", "11.0", ("assets/icon.icns",)))
+
+    def test_what_a_platform_or_a_bundle_needs_is_refused_when_missing(self):
+        for broken, says in (
+                (self.ARCHIVES.replace('runner = "windows-latest"\n', ""), "has no runner"),
+                (self.ARCHIVES.replace('minimum-os = "11.0"\n', ""), "minimum-os"),
+                (self.ARCHIVES.replace('minimum-os = "11.0"', 'minimum-os = "eleven"'), "minimum-os"),
+                (self.ARCHIVES.replace('macos-icon = "assets/icon.icns"\n', ""), "has no macos-icon"),
+                (self.ARCHIVES.replace('"assets/icon.icns"', '"assets/gone.icns"'), "is not there"),
+                (self.ARCHIVES.replace('runner = "windows-latest"', 'runner = "windows-latest"\nminimum-os = "10.0"'),
+                 "only macOS")):
+            with self.subTest(says=says):
+                with self.assertRaises(contents.Refused) as caught:
+                    self.load(broken)
+                self.assertTrue(any(says in p for p in caught.exception.problems), caught.exception.problems)
+
 
 class StandardTexts(Tree):
     def test_an_edited_text_and_an_unlisted_text_are_refused(self):
@@ -463,7 +542,28 @@ class RealTree(unittest.TestCase):
     def test_the_register_accounts_for_every_file_the_programs_compile_in(self):
         archives = contents.load_archives()
         components, allowances = contents.load_register(programs={a.program for a in archives})
-        self.assertEqual(contents.check_register_against_source(components, allowances), [])
+        packaged = [where for archive in archives for where in archive.packaged]
+        self.assertEqual(contents.check_register_against_source(components, allowances,
+                                                                packaged=packaged), [])
+
+    def test_every_macos_archive_packs_the_bundle_icon_and_no_other_archive_packs_anything(self):
+        for archive in contents.load_archives():
+            with self.subTest(archive=archive.name("0.1.0")):
+                if archive.os == contents.MACOS:
+                    self.assertEqual(archive.packaged, ("crates/nkb-gui/assets/edamame.icns",))
+                    self.assertTrue(archive.bundle_id.startswith("com.donislawdev."))
+                    self.assertEqual(archive.minimum_os, "11.0")
+                else:
+                    self.assertEqual((archive.packaged, archive.bundle_id, archive.minimum_os), ((), "", ""))
+                self.assertTrue(archive.runner)
+
+    def test_the_bundle_icon_is_in_every_palette_archive_and_in_the_command_line_on_macos_only(self):
+        archives = contents.load_archives()
+        components, _ = contents.load_register(programs={a.program for a in archives})
+        icon = next(c for c in components if c.name == "Naughty Keyboard application icon")
+        holding = sorted(a.name("0.1.0") for a in archives if contents.in_archive(icon, a))
+        self.assertEqual(holding, ["nkb-gui_0.1.0_linux_amd64.tar.gz", "nkb-gui_0.1.0_macos_arm64.tar.gz",
+                                   "nkb-gui_0.1.0_windows_amd64.zip", "nkb_0.1.0_macos_arm64.tar.gz"])
 
     def test_the_standard_texts_are_the_published_bytes(self):
         problems, listed = contents.check_standard_texts()
