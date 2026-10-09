@@ -401,7 +401,10 @@ jobs:
           {
             echo "Built, attested and handed over as unsigned-build-$TAG. The draft of $TAG is open and empty."
             echo
-            echo "Nothing is published. Phase B signs the build on the machines that hold the keys,"
-            echo "uploads it to the draft and asks for the statement about the signed bytes."
+            echo "Nothing is published. Phase B signs the build on the machines that hold the keys"
+            echo "and uploads it to the draft. On the machine with the card, with the Mac awake:"
+            echo
+            echo "    python .github/scripts/sign_release.py $TAG --macos-host user@mac"
+            echo
             echo "Then a person reads the draft and publishes it."
           } | tee -a "$GITHUB_STEP_SUMMARY"

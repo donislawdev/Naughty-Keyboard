@@ -204,6 +204,16 @@ class Handover(unittest.TestCase):
         self.assertIn("name: unsigned-build-${{ needs.check.outputs.tag }}", upload)
         self.assertIn("path: incoming/*", upload)
         self.assertIn("retention-days: 14", upload)
+        # The name phase A gives is the name phase B asks for, and the statement
+        # and the list travel under the names phase B checks.
+        script = read(os.path.join(release.ROOT, ".github", "scripts", "sign_release.py"))
+        self.assertIn('"unsigned-build-%s" % tag', script)
+        self.assertIn('BUILD_BUNDLE = "build.provenance.sigstore.json"', script)
+        self.assertIn("incoming/build.provenance.sigstore.json", "\n".join(runs(self.handover)))
+
+    def test_the_end_of_phase_a_says_how_phase_b_is_run(self):
+        last = steps(self.jobs["draft"])[-1]
+        self.assertIn("python .github/scripts/sign_release.py $TAG --macos-host user@mac", last)
 
 
 class NothingIsPublished(unittest.TestCase):

@@ -382,6 +382,42 @@ class Packing(Folder):
                           % head.stderr.strip())
         self.assertEqual(release.commit_epoch(environ={}), int(head.stdout.strip()))
 
+    def test_an_archive_read_and_written_again_is_the_same_bytes(self):
+        # What lets a signed program go back into its archive with nothing else
+        # moving: the reading is the exact reverse of the writing.
+        for os_name in ("windows", "macos", "linux"):
+            archive = archive_for(os_name, "nkb-gui")
+            with self.subTest(os=os_name):
+                first = self.pack(archive, "first")
+                archive_format, entries, epoch = release.read_archive(first)
+                self.assertEqual((archive_format, epoch), (archive.format, self.EPOCH))
+                again = os.path.join(self.root, "again." + archive.format)
+                release.write_archive(again, archive_format, entries, epoch)
+                with open(first, "rb") as one, open(again, "rb") as two:
+                    self.assertEqual(one.read(), two.read())
+
+    def test_an_archive_this_script_would_not_write_is_refused(self):
+        # A zip with DOS attributes and no Unix mode, which is what a Windows
+        # tool such as Compress-Archive writes.
+        path = os.path.join(self.root, "loose.zip")
+        with zipfile.ZipFile(path, "w") as loose:
+            info = zipfile.ZipInfo("a.txt", date_time=(2026, 1, 1, 0, 0, 0))
+            info.create_system = 0
+            info.external_attr = 0x20
+            loose.writestr(info, b"no mode")
+        with self.assertRaises(contents.Refused):
+            release.read_archive(path)
+        mixed = os.path.join(self.root, "mixed.zip")
+        with zipfile.ZipFile(mixed, "w") as packed:
+            for name, when in (("a", (2026, 1, 1, 0, 0, 0)), ("b", (2026, 1, 2, 0, 0, 0))):
+                info = zipfile.ZipInfo(name, date_time=when)
+                info.external_attr = 0o100644 << 16
+                packed.writestr(info, b"x")
+        with self.assertRaises(contents.Refused):
+            release.read_archive(mixed)
+        with self.assertRaises(contents.Refused):
+            release.read_archive(os.path.join(self.root, "x.7z"))
+
     def test_a_link_in_a_zip_is_refused(self):
         entry = release.Entry("nkb", "link", 0o755, target="elsewhere")
         with self.assertRaises(contents.Refused):
