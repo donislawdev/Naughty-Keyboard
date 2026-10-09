@@ -22,6 +22,12 @@
 //!   5 whatever the command found. Its answer did not reach the caller whole,
 //!   and a script reading 0 or 1 would act on half of it.
 //!
+//! One case ends with 0 and is not this module's choice: on Linux and macOS a
+//! standard output that is not open for writing at all (`EBADF`, as after
+//! `>&-`) is taken by the standard library as one closed on purpose, and a
+//! write there reports success. Measured on the first pull request of this
+//! module. A full disk is not that case.
+//!
 //! Standard error is written with `let _ = writeln!(err, ...)` everywhere, and
 //! its failures are dropped on purpose: a sentence nobody can read is no reason
 //! to stop the work it describes.

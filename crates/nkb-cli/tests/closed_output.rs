@@ -23,9 +23,11 @@
 //!   reader that closes first makes the failure certain rather than a race
 //!   with the pipe's buffer, which is what a reader that merely stops early
 //!   would be.
-//! - the same commands with standard output on a file opened for reading only,
-//!   which refuses every write for a reason that is not a closed pipe: the run
-//!   ends with 5 and says so on standard error.
+//! - the same commands with a standard output that refuses every write for a
+//!   reason that is not a closed pipe: the run ends with 5 and says so on
+//!   standard error. What refuses is not the same on every system, see
+//!   `refusing_output`.
+//! - on Linux, a full disk, through `/dev/full`.
 //! - that no package of the workspace writes with a macro that panics, so the
 //!   next command or the next package cannot bring the failure back.
 //!
@@ -146,12 +148,27 @@ fn closed_pipe() -> Stdio {
     Stdio::from(writer)
 }
 
-/// A file opened for reading only, which refuses every write for a reason that
-/// is not a closed pipe.
-fn read_only_file(dir: &Path) -> Stdio {
+/// A standard output that refuses every write for a reason that is not a
+/// closed pipe.
+///
+/// 🔴 Not the same thing on every system, and that was measured on the first
+/// pull request rather than assumed. On Windows a file opened for reading only
+/// refuses writes (access denied). On Linux and macOS the same file fails with
+/// `EBADF`, and the standard library takes `EBADF` on standard output as an
+/// output somebody closed on purpose and reports SUCCESS: `nkb` ended with 0
+/// there, every write gone. So Linux and macOS get a datagram socket connected
+/// to nobody, which refuses every write with an error of its own.
+#[cfg(windows)]
+fn refusing_output(dir: &Path) -> Stdio {
     let path = dir.join("stdout.txt");
     std::fs::write(&path, b"").expect("the file can be made");
     Stdio::from(std::fs::File::open(&path).expect("the file opens for reading"))
+}
+
+#[cfg(unix)]
+fn refusing_output(_dir: &Path) -> Stdio {
+    let socket = std::os::unix::net::UnixDatagram::unbound().expect("a socket can be made");
+    Stdio::from(std::os::fd::OwnedFd::from(socket))
 }
 
 fn says_it_panicked(stderr: &str) -> bool {
@@ -185,7 +202,7 @@ fn an_output_that_refuses_writes_ends_the_run_with_5_and_says_so() {
     let mut wrong = Vec::new();
     for (index, case) in cases().iter().enumerate() {
         let here = scratch(&format!("refused-{index}"));
-        let (code, stderr) = run(&case.args, read_only_file(&here), &here);
+        let (code, stderr) = run(&case.args, refusing_output(&here), &here);
         let said_once = stderr.matches(FAILURE_SENTENCE).count() == 1;
         if code != 5 || says_it_panicked(&stderr) || !said_once {
             wrong.push(format!("nkb {:?} -> {code} (want 5): {stderr}", case.args));
@@ -196,6 +213,23 @@ fn an_output_that_refuses_writes_ends_the_run_with_5_and_says_so() {
         wrong.is_empty(),
         "with standard output refusing writes: {wrong:#?}"
     );
+}
+
+/// The case the rule was written for, staged where a system can stage it: a
+/// full disk. Only Linux has a device for that.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_full_disk_ends_the_run_with_5_and_says_so() {
+    let here = scratch("full");
+    let full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .expect("/dev/full opens for writing");
+    let args = ["emit".to_string(), "length-bombs".to_string()];
+    let (code, stderr) = run(&args, Stdio::from(full), &here);
+    let _ = std::fs::remove_dir_all(&here);
+    assert_eq!(code, 5, "{stderr}");
+    assert_eq!(stderr.matches(FAILURE_SENTENCE).count(), 1, "{stderr}");
 }
 
 /// The control: the harness runs the binary it means to, and with a reader
