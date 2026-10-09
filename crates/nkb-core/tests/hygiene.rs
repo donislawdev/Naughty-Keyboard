@@ -129,9 +129,14 @@ fn no_file_carries_a_character_nobody_can_see() {
         }
     }
 
-    // Literals, not counts derived from what they check: 220 files and nine
-    // shipped packs when this was written. Fewer means the walk lost a tree.
-    assert!(files.len() >= 200, "read only {} files", files.len());
+    println!(
+        "invisible-character scan: {} files, {packs} shipped packs",
+        files.len()
+    );
+    // Literals, not counts derived from what they check: 202 files
+    // and nine shipped packs when this was written. Fewer means the walk lost
+    // a tree.
+    assert!(files.len() >= 180, "read only {} files", files.len());
     assert!(packs >= 9, "read only {packs} shipped packs");
     assert!(
         offenders.is_empty(),
@@ -296,7 +301,9 @@ fn every_comment_in_the_repository_is_english() {
             offenders.push(format!("{}:{line}: {why}", relative(&root, &path)));
         }
     }
-    assert!(files >= 200, "the language scan read only {files} files");
+    println!("comment scan: {files} files");
+    // 200 when this was written.
+    assert!(files >= 180, "the language scan read only {files} files");
     assert!(
         offenders.is_empty(),
         "a comment in the repository is not English (untouchable rules 6 and 7 - the \
@@ -560,7 +567,7 @@ fn every_name_in_the_code_is_english() {
         "name scan: {names} names against {} Polish words from {source}",
         words.len()
     );
-    // 119 000 when this was written.
+    // 123 524 when this was written.
     assert!(
         names >= 100_000,
         "the name scan read only {names} names - it is reading the wrong files"
@@ -698,4 +705,690 @@ fn the_vocabulary_says_where_it_came_from() {
         refused.is_err(),
         "docs/ without CLAUDE.md was read as a whole memory"
     );
+}
+
+// ---------------------------------------------------------------------------
+// The shipped part of a source file
+// ---------------------------------------------------------------------------
+
+/// Everything before the `#[cfg(test)]` that opens the test module, whatever
+/// attributes stand between the two. This workspace keeps a file's tests at
+/// its end, so what comes before is what ships.
+fn shipped_part(text: &str) -> &str {
+    // Inclusive of the line break, so the offsets hold for `\r\n` as well.
+    let lines: Vec<&str> = text.split_inclusive('\n').collect();
+    let mut offset = 0;
+    for (index, line) in lines.iter().enumerate() {
+        if line.trim_end() == "#[cfg(test)]" {
+            let opens = lines[index + 1..]
+                .iter()
+                .find(|l| l.starts_with(|c: char| c.is_ascii_alphabetic()))
+                .is_some_and(|l| l.starts_with("mod "));
+            if opens {
+                return &text[..offset];
+            }
+        }
+        offset += line.len();
+    }
+    text
+}
+
+/// Every `.rs` file under `dir`.
+fn rust_files(dir: &Path, into: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries {
+        let path = entry.expect("a directory entry").path();
+        if path.is_dir() {
+            rust_files(&path, into);
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            into.push(path);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// H5. The pure layer never throws a result away
+// ---------------------------------------------------------------------------
+
+/// The ways a line throws a result away without looking at it.
+const DISCARDS: &[&str] = &["let _ = ", ".ok();", "if let Err(_)"];
+
+/// Every place one line of shipped code throws a result away.
+fn discards_in(line: &str) -> Vec<&'static str> {
+    let code = line.find("//").map_or(line, |cut| &line[..cut]);
+    let mut found: Vec<&'static str> = DISCARDS
+        .iter()
+        .copied()
+        .filter(|bad| code.contains(bad))
+        .collect();
+    // An assignment to the underscore discards as surely as `let _`.
+    if code.trim_start().starts_with("_ = ") {
+        found.push("_ = ");
+    }
+    found
+}
+
+/// `nkb-core` does no input or output and calls no system (`architektura.md`
+/// 2), so its results are returned values and never side effects. A result
+/// thrown away there is a hidden defect every time, which lets the rule be
+/// absolute here and nowhere else: the adapters and the CLI drop the results
+/// of writes to standard error on purpose, and a blanket ban would need an
+/// exception list longer than itself.
+///
+/// Measured when this was written: one such line, a `write!` into a `String`
+/// in `screens.rs`. Writing into a string cannot fail, so nothing was lost,
+/// and it was rewritten rather than excused.
+#[test]
+fn the_pure_layer_never_throws_a_result_away() {
+    let mut files = Vec::new();
+    rust_files(&workspace_root().join("crates/nkb-core/src"), &mut files);
+    let mut offenders = Vec::new();
+    for path in &files {
+        let text = read(path);
+        for (number, line) in shipped_part(&text).lines().enumerate() {
+            for bad in discards_in(line) {
+                offenders.push(format!("{}:{} has `{bad}`", path.display(), number + 1));
+            }
+        }
+    }
+    println!("discard scan: {} source files of nkb-core", files.len());
+    // 24 source files when this was written.
+    assert!(
+        files.len() >= 20,
+        "the scan read only {} files",
+        files.len()
+    );
+    assert!(
+        offenders.is_empty(),
+        "nkb-core threw a result away - it does no input or output, so this hides a defect \
+         rather than ignoring a write nobody can read: {offenders:#?}"
+    );
+}
+
+#[test]
+fn the_discard_scan_finds_each_shape_and_leaves_comments_alone() {
+    assert_eq!(
+        discards_in("    let _ = write!(text, \"x\");"),
+        ["let _ = "]
+    );
+    assert_eq!(discards_in("    parse(text).ok();"), [".ok();"]);
+    assert_eq!(
+        discards_in("    if let Err(_) = check() {"),
+        ["if let Err(_)"]
+    );
+    assert_eq!(discards_in("    _ = check();"), ["_ = "]);
+    assert!(discards_in("    // let _ = in a comment").is_empty());
+    assert!(discards_in("    let value = parse(text)?;").is_empty());
+    let source = "fn a() {\n    let _ = b();\n}\n\n#[cfg(test)]\n#[allow(\n    clippy::panic,\n)]\nmod tests {\n    fn c() { let _ = d(); }\n}\n";
+    let shipped: Vec<&str> = shipped_part(source).lines().collect();
+    assert_eq!(shipped.len(), 4, "the test module was read as shipped code");
+}
+
+// ---------------------------------------------------------------------------
+// H6. Every package depends only on what its layer allows
+// ---------------------------------------------------------------------------
+
+/// What each package may depend on, ours and others' alike, in
+/// `[dependencies]`, `[build-dependencies]` and their per-target forms.
+///
+/// The direction is `architektura.md` 4: the pure layer depends on nothing,
+/// the use cases on the pure layer, the adapters on both and on the system
+/// layer, and the two programs on everything below them and never on each
+/// other. `nkb-gui` reaches the system only through the adapters.
+///
+/// 🔴 Written as the ALLOWED set rather than a forbidden one, and naming the
+/// dependencies of other people as well as ours: a dependency added anywhere
+/// fails here until somebody decides which layer it belongs to, and a package
+/// with no entry fails `the_dependency_table_covers_every_package`. That is the
+/// decision the licence check in `09-CLI-I-CI.md` 10 is made at, and this is
+/// where it becomes visible in a pull request.
+///
+/// Not read: `[dev-dependencies]`. A test may use what it needs, and nothing
+/// a test uses ships.
+const ALLOWED_DEPENDENCIES: &[(&str, &[&str])] = &[
+    ("nkb-core", &[]),
+    ("nkb-sys", &["windows-sys"]),
+    ("nkb-app", &["nkb-core"]),
+    (
+        "nkb-adapters",
+        &["nkb-core", "nkb-app", "nkb-sys", "toml_edit"],
+    ),
+    ("nkb-cli", &["nkb-core", "nkb-app", "nkb-adapters"]),
+    (
+        "nkb-gui",
+        &[
+            "nkb-core",
+            "nkb-app",
+            "nkb-adapters",
+            "slint",
+            "raw-window-handle",
+            "arboard",
+            // Build only: the compiler of the views and the icon resource.
+            "slint-build",
+            "embed-resource",
+        ],
+    ),
+];
+
+/// Whether a table header names a table of dependencies this check reads.
+fn reads_table(header: &str) -> bool {
+    let name = header.rsplit('.').next().unwrap_or(header);
+    (header == "dependencies" || header == "build-dependencies" || header.starts_with("target."))
+        && (name == "dependencies" || name == "build-dependencies")
+}
+
+/// Every dependency a manifest declares, with the table it stands in.
+///
+/// Read line by line rather than parsed: the pure layer's tests depend on
+/// nothing, and the manifests here use two shapes only, `name = ...` and
+/// `name.workspace = true`, plus `[dependencies.name]` for a third.
+fn declared_dependencies(manifest: &str) -> Vec<(String, String)> {
+    let mut found = Vec::new();
+    let mut table: Option<String> = None;
+    for raw in manifest.lines() {
+        let line = raw.split('#').next().unwrap_or("").trim();
+        if let Some(header) = line.strip_prefix('[').and_then(|h| h.strip_suffix(']')) {
+            let header = header.trim().replace(['"', '\''], "");
+            table = None;
+            if reads_table(&header) {
+                table = Some(header);
+            } else if let Some((parent, name)) = header.rsplit_once('.')
+                && reads_table(parent)
+            {
+                found.push((parent.to_string(), name.to_string()));
+            }
+            continue;
+        }
+        let Some(table) = &table else { continue };
+        let key: String = line
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+            .collect();
+        let rest = line[key.len()..].trim_start();
+        if !key.is_empty() && (rest.starts_with('=') || rest.starts_with('.')) {
+            found.push((table.clone(), key));
+        }
+    }
+    found
+}
+
+#[test]
+fn every_package_depends_only_on_what_its_layer_allows() {
+    let root = workspace_root();
+    let mut offenders = Vec::new();
+    let mut declared = 0;
+    for (package, allowed) in ALLOWED_DEPENDENCIES.iter().copied() {
+        let manifest = read(&root.join("crates").join(package).join("Cargo.toml"));
+        for (table, name) in declared_dependencies(&manifest) {
+            declared += 1;
+            if !allowed.contains(&name.as_str()) {
+                offenders.push(format!("{package} depends on '{name}' in [{table}]"));
+            }
+        }
+    }
+    println!("dependency scan: {declared} declared dependencies");
+    // 17 declarations when this was written.
+    assert!(declared >= 15, "read only {declared} declared dependencies");
+    assert!(
+        offenders.is_empty(),
+        "a dependency points the wrong way between the layers of architektura.md 4, or was \
+         added without deciding which layer it belongs to: {offenders:#?}"
+    );
+}
+
+/// The guard for the guard above: a package with no entry is a package
+/// nothing guards.
+#[test]
+fn the_dependency_table_covers_every_package() {
+    let root = workspace_root();
+    let manifest = read(&root.join("Cargo.toml"));
+    let members: Vec<String> = manifest
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("\"crates/"))
+        .map(|l| l.trim_end_matches(['"', ',']).to_string())
+        .collect();
+    let listed: Vec<&str> = ALLOWED_DEPENDENCIES.iter().map(|(n, _)| *n).collect();
+    let missing: Vec<&String> = members
+        .iter()
+        .filter(|m| !listed.contains(&m.as_str()))
+        .collect();
+    assert!(
+        members.len() >= 6,
+        "read only {} workspace members",
+        members.len()
+    );
+    assert!(
+        missing.is_empty(),
+        "these packages have no entry in ALLOWED_DEPENDENCIES: {missing:?}"
+    );
+    let gone: Vec<&&str> = listed
+        .iter()
+        .filter(|n| !members.iter().any(|m| m == **n))
+        .collect();
+    assert!(gone.is_empty(), "these entries name no package: {gone:?}");
+}
+
+#[test]
+fn the_manifest_reader_finds_every_shape_of_declaration() {
+    let manifest = "[package]\nname = \"x\"\n\n[dependencies]\n# a comment = 1\nnkb-core.workspace = true\n\
+                    toml_edit = \"1\"\nslint = { workspace = true, features = [\n    \"a\",\n] }\n\n\
+                    [build-dependencies]\nembed-resource.workspace = true\n\n\
+                    [target.'cfg(windows)'.dependencies]\nwindows-sys = { workspace = true }\n\n\
+                    [dev-dependencies]\nimage = \"1\"\n\n[dependencies.arboard]\nversion = \"3\"\n\n\
+                    [lints]\nworkspace = true\n";
+    let names: Vec<String> = declared_dependencies(manifest)
+        .into_iter()
+        .map(|(_, name)| name)
+        .collect();
+    assert_eq!(
+        names,
+        [
+            "nkb-core",
+            "toml_edit",
+            "slint",
+            "embed-resource",
+            "windows-sys",
+            "arboard"
+        ],
+        "a declaration was missed, or a dev-dependency, a lint or a feature was read as one"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// H2. Code nothing calls any more
+// ---------------------------------------------------------------------------
+//
+// `cargo clippy -D warnings` catches an unused PRIVATE item and says nothing
+// about a `pub` one in a library, because another package might call it. In a
+// workspace whose libraries are called only by its own two programs, a `pub`
+// helper written in one session and superseded in the next keeps compiling,
+// keeps passing and keeps being read as something that matters.
+
+/// One definition the scan knows about.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Definition {
+    name: String,
+    file: String,
+    line: usize,
+}
+
+/// Where a mention came from. `Tests` is deliberately not a consumer: a
+/// definition only its own tests name is dead code with a test suite attached.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Site {
+    /// Inside the definition at this index in the definition list.
+    Inside(usize),
+    Tests,
+    External,
+}
+
+/// The definitions nothing alive reaches. Life SPREADS FROM ROOTS, to a fixed
+/// point: a definition named from outside every tracked definition lives, and
+/// one named from inside a living one lives. Spreading from the roots rather
+/// than crossing out from the leaves is what reports a CYCLE that nothing
+/// outside it reaches.
+fn unreferenced(
+    definitions: &[Definition],
+    mentions: &std::collections::BTreeMap<String, Vec<Site>>,
+) -> Vec<usize> {
+    let mut alive: Vec<bool> = definitions
+        .iter()
+        .map(|d| {
+            mentions
+                .get(&d.name)
+                .is_some_and(|sites| sites.contains(&Site::External))
+        })
+        .collect();
+    loop {
+        let mut grew = false;
+        for (index, definition) in definitions.iter().enumerate() {
+            if alive[index] {
+                continue;
+            }
+            let reached = mentions.get(&definition.name).is_some_and(|sites| {
+                sites.iter().any(|site| match site {
+                    Site::External => true,
+                    // A test is not a consumer, and a definition naming
+                    // itself is recursion.
+                    Site::Tests => false,
+                    Site::Inside(other) => *other != index && alive[*other],
+                })
+            });
+            if reached {
+                alive[index] = true;
+                grew = true;
+            }
+        }
+        if !grew {
+            return alive
+                .iter()
+                .enumerate()
+                .filter_map(|(i, a)| (!a).then_some(i))
+                .collect();
+        }
+    }
+}
+
+/// 🔴 Unreferenced ON PURPOSE, each with the reason it stays. A RATCHET: it may
+/// shrink and may not grow without somebody deciding that it should. A list
+/// that absorbs whatever the scan finds is not a guard but a place to put
+/// things.
+const KNOWN_UNUSED: &[(&str, &str)] = &[(
+    "UNICODE_VERSION",
+    "The version of the vendored Unicode data, written once. `tests/unicode_data.rs` checks \
+     every vendored file against it, and the shipped code reads the tables built from those \
+     files rather than the number. The pin exists for the tests, and deleting it would leave \
+     the version written nowhere.",
+)];
+
+/// Top-level `pub` definitions of one source, with the line each starts on.
+///
+/// Methods are not tracked: a method name such as `new`, `text` or `len`
+/// stands in many types at once, and a scan of names cannot tell them apart.
+/// Fewer findings and no false ones, which is the right way round for a guard
+/// people have to believe.
+fn pub_definitions(file: &str, text: &str) -> Vec<Definition> {
+    let mut out = Vec::new();
+    for (index, line) in text.lines().enumerate() {
+        let Some(rest) = ["pub ", "pub(crate) ", "pub(super) "]
+            .iter()
+            .find_map(|p| line.strip_prefix(p))
+        else {
+            continue;
+        };
+        let mut words: Vec<&str> = rest.split_whitespace().collect();
+        // `const` is a modifier only in `const fn`. Treated as one always, it
+        // would hide every `pub const NAME`.
+        while let Some(first) = words.first().copied() {
+            let modifier = matches!(first, "unsafe" | "async" | "extern")
+                || first.starts_with('"')
+                || (first == "const" && words.get(1) == Some(&"fn"));
+            if !modifier {
+                break;
+            }
+            words.remove(0);
+        }
+        let mut words = words.into_iter();
+        let Some(kind) = words.next() else { continue };
+        if ![
+            "fn", "struct", "enum", "trait", "union", "type", "const", "static",
+        ]
+        .contains(&kind)
+        {
+            continue;
+        }
+        let name: String = words
+            .next()
+            .unwrap_or("")
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
+        if name.is_empty() || name.starts_with('_') || name == "main" {
+            continue;
+        }
+        out.push(Definition {
+            name,
+            file: file.to_string(),
+            line: index + 1,
+        });
+    }
+    out
+}
+
+/// Every identifier on a line, as whole words.
+///
+/// 🔴 EVERY word counts, one inside a comment or a string included: prose that
+/// still names a symbol is a sign somebody thinks it is alive, and a guard
+/// that accuses living code is a guard people learn to ignore. The price is
+/// the other direction - a definition whose name is an ordinary word survives
+/// on prose alone.
+fn identifiers(line: &str) -> Vec<&str> {
+    line.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .filter(|w| !w.is_empty())
+        .collect()
+}
+
+/// One source file as the dead-code scan reads it.
+struct Source {
+    file: String,
+    text: String,
+    /// A file under `crates/*/src`, whose top-level items are tracked.
+    shipped: bool,
+    /// A file whose every line is test code.
+    tests: bool,
+}
+
+/// The lines of a shipped source that only import: `use` and `pub use`, to
+/// the semicolon that ends them. An import is not a use, and a `pub use` in a
+/// `lib.rs` would otherwise keep alive everything it re-exports, used or not.
+fn import_lines(text: &str) -> BTreeSet<usize> {
+    let mut lines = BTreeSet::new();
+    let mut open = false;
+    for (index, line) in text.lines().enumerate() {
+        let trimmed = line.trim_start();
+        let starts = ["use ", "pub use ", "pub(crate) use ", "pub(super) use "]
+            .iter()
+            .any(|p| trimmed.starts_with(p));
+        if starts || open {
+            lines.insert(index + 1);
+            open = !line.contains(';');
+        }
+    }
+    lines
+}
+
+/// Where one mention in a shipped source stands: inside a tracked definition,
+/// or somewhere the scan does not model, which counts as life.
+///
+/// The boundaries are every top-level item, not only the tracked ones: with
+/// tracked ones alone, a mention in a plain `impl` block below a `pub fn`
+/// would be read as that function calling itself.
+fn site_in_shipped(line: usize, spans: &[(usize, Option<usize>)]) -> Site {
+    spans
+        .iter()
+        .rev()
+        .find(|(start, _)| *start <= line)
+        .and_then(|(_, index)| *index)
+        .map_or(Site::External, Site::Inside)
+}
+
+/// Everything the dead-code scan reads: the definitions, and where every
+/// tracked name is mentioned from.
+fn collect_rust() -> (
+    Vec<Definition>,
+    std::collections::BTreeMap<String, Vec<Site>>,
+    usize,
+) {
+    let root = workspace_root();
+    let mut sources = Vec::new();
+    for (path, syntax) in every_text_file(&root) {
+        // Markdown is prose about the code, not code: a README naming a
+        // function does not call it.
+        let Some(syntax) = syntax.filter(|s| holds_names(*s) || *s == Syntax::Yaml) else {
+            continue;
+        };
+        let file = relative(&root, &path);
+        let shipped =
+            syntax == Syntax::Rust && file.starts_with("crates/") && file.contains("/src/");
+        let tests = file.contains("/tests/");
+        sources.push(Source {
+            file,
+            text: read(&path),
+            shipped,
+            tests,
+        });
+    }
+
+    let mut definitions = Vec::new();
+    for source in sources.iter().filter(|s| s.shipped) {
+        definitions.extend(pub_definitions(&source.file, shipped_part(&source.text)));
+    }
+    let names: BTreeSet<&str> = definitions.iter().map(|d| d.name.as_str()).collect();
+
+    let mut mentions: std::collections::BTreeMap<String, Vec<Site>> =
+        std::collections::BTreeMap::new();
+    for source in &sources {
+        let shipped_lines = if source.shipped {
+            shipped_part(&source.text).lines().count()
+        } else {
+            0
+        };
+        let imports = if source.shipped {
+            import_lines(&source.text)
+        } else {
+            BTreeSet::new()
+        };
+        let mut spans: Vec<(usize, Option<usize>)> = Vec::new();
+        if source.shipped {
+            for (index, line) in source.text.lines().enumerate() {
+                if line.starts_with(|c: char| c.is_ascii_lowercase()) {
+                    spans.push((index + 1, None));
+                }
+            }
+            for (index, definition) in definitions.iter().enumerate() {
+                if definition.file == source.file {
+                    spans.push((definition.line, Some(index)));
+                }
+            }
+            // A definition and a bare boundary on one line: the definition wins.
+            spans.sort_unstable_by_key(|(line, index)| (*line, index.is_none()));
+            spans.dedup_by_key(|(line, _)| *line);
+        }
+        for (index, line) in source.text.lines().enumerate() {
+            let number = index + 1;
+            if imports.contains(&number) {
+                continue;
+            }
+            for word in identifiers(line) {
+                if !names.contains(word) {
+                    continue;
+                }
+                let site = if source.tests || (source.shipped && number > shipped_lines) {
+                    Site::Tests
+                } else if source.shipped {
+                    site_in_shipped(number, &spans)
+                } else {
+                    Site::External
+                };
+                mentions.entry(word.to_string()).or_default().push(site);
+            }
+        }
+    }
+    (definitions, mentions, sources.len())
+}
+
+/// Nothing in the workspace is left over from a change that moved on without it.
+#[test]
+fn no_public_definition_in_the_workspace_is_unreferenced() {
+    let (definitions, mentions, files) = collect_rust();
+    let dead = unreferenced(&definitions, &mentions);
+    println!(
+        "dead-code scan: {files} files, {} public definitions, {} unreferenced",
+        definitions.len(),
+        dead.len()
+    );
+    // 422 definitions in 187 files when this was written.
+    assert!(
+        files >= 150 && definitions.len() >= 300,
+        "the dead-code scan read {files} files and found {} definitions - it is reading the \
+         wrong place",
+        definitions.len()
+    );
+    let known: Vec<&str> = KNOWN_UNUSED.iter().map(|(n, _)| *n).collect();
+    let unexpected: Vec<String> = dead
+        .iter()
+        .map(|i| &definitions[*i])
+        .filter(|d| !known.contains(&d.name.as_str()))
+        .map(|d| format!("{} ({}:{})", d.name, d.file, d.line))
+        .collect();
+    assert!(
+        unexpected.is_empty(),
+        "these public definitions are named from nowhere that is alive - delete one, or add it \
+         to KNOWN_UNUSED with the reason it stays: {unexpected:#?}"
+    );
+}
+
+/// A name that got a caller back must LEAVE the list, or the list rots.
+#[test]
+fn the_known_unused_list_only_ever_shrinks() {
+    let (definitions, mentions, _) = collect_rust();
+    let dead: Vec<&str> = unreferenced(&definitions, &mentions)
+        .iter()
+        .map(|i| definitions[*i].name.as_str())
+        .collect();
+    let revived: Vec<&str> = KNOWN_UNUSED
+        .iter()
+        .map(|(n, _)| *n)
+        .filter(|n| !dead.contains(n))
+        .collect();
+    assert!(
+        revived.is_empty(),
+        "these names are used again, so they must come out of KNOWN_UNUSED: {revived:?}"
+    );
+}
+
+fn fixture(name: &str, line: usize) -> Definition {
+    Definition {
+        name: name.to_string(),
+        file: "fixture.rs".to_string(),
+        line,
+    }
+}
+
+#[test]
+fn a_definition_only_its_tests_name_is_reported_unused() {
+    let definitions = vec![fixture("only_tested", 1)];
+    let mentions =
+        std::collections::BTreeMap::from([("only_tested".to_string(), vec![Site::Tests])]);
+    assert_eq!(unreferenced(&definitions, &mentions), [0]);
+}
+
+#[test]
+fn a_definition_named_from_a_living_one_is_left_alone() {
+    let definitions = vec![fixture("used", 1), fixture("caller", 10)];
+    let mentions = std::collections::BTreeMap::from([
+        ("used".to_string(), vec![Site::Inside(1)]),
+        ("caller".to_string(), vec![Site::External]),
+    ]);
+    assert!(unreferenced(&definitions, &mentions).is_empty());
+}
+
+#[test]
+fn two_definitions_that_only_call_each_other_are_both_reported() {
+    let definitions = vec![fixture("a", 1), fixture("b", 10)];
+    let mentions = std::collections::BTreeMap::from([
+        ("a".to_string(), vec![Site::Inside(1)]),
+        ("b".to_string(), vec![Site::Inside(0)]),
+    ]);
+    assert_eq!(unreferenced(&definitions, &mentions), [0, 1]);
+}
+
+#[test]
+fn a_definition_that_only_names_itself_is_reported() {
+    let definitions = vec![fixture("recursive", 1)];
+    let mentions =
+        std::collections::BTreeMap::from([("recursive".to_string(), vec![Site::Inside(0)])]);
+    assert_eq!(unreferenced(&definitions, &mentions), [0]);
+}
+
+/// The modifiers are read with `async` and `extern`. The third one, which marks
+/// a block the compiler cannot check, is never spelled in code outside
+/// `nkb-sys`: `unsafe_lives_here_only.rs` reads every test file too, and does
+/// not skip string literals. The first version of this fixture spelled it and
+/// failed that test on all three systems.
+#[test]
+fn definitions_and_imports_are_read_the_way_the_scan_needs() {
+    let source = "pub fn a() {}\npub const fn b() {}\npub const C: u8 = 1;\npub(crate) struct D;\n\
+                  pub use e::F;\npub mod g;\nfn h() {}\nimpl I {\n    pub fn method() {}\n}\n\
+                  pub async fn j() {}\npub extern \"system\" fn k() {}\n";
+    let names: Vec<String> = pub_definitions("x.rs", source)
+        .into_iter()
+        .map(|d| d.name)
+        .collect();
+    assert_eq!(names, ["a", "b", "C", "D", "j", "k"]);
+    let imports =
+        import_lines("use a::b;\npub use c::{\n    D,\n    E,\n};\nfn f() {\n    use g::H;\n}\n");
+    assert_eq!(imports.into_iter().collect::<Vec<_>>(), [1, 2, 3, 4, 5, 7]);
 }
