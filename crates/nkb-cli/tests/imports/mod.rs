@@ -226,17 +226,15 @@ const WINDOWS_BOTH: &[Entry] = &[
         "ProcessPrng, the random seed of the standard library's hash maps",
     ),
     (
-        "vcruntime140.dll",
-        "the Visual C++ runtime every MSVC program links",
-    ),
-    (
         "api-ms-win-core-synch-l1-2-0.dll",
         "WaitOnAddress, which the standard library's locks wait on",
     ),
-    (
-        "api-ms-win-crt-*",
-        "the Universal C runtime, in the API sets the loader maps to ucrtbase",
-    ),
+    // Absent on purpose: vcruntime140.dll and the api-ms-win-crt-* sets of the
+    // Universal C runtime. The C runtime is linked into the programs
+    // (.cargo/config.toml), because vcruntime140.dll comes with the Visual C++
+    // Redistributable and not with Windows, and a program that imports it does
+    // not start on a machine without it. This list is closed, so a build that
+    // loads the runtime again fails here. Do not add them back to make it pass.
 ];
 
 const WINDOWS_WINDOW: &[Entry] = &[

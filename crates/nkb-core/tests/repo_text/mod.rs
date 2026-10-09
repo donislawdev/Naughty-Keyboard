@@ -59,6 +59,7 @@ pub enum Syntax {
     Resource,
     Yaml,
     Python,
+    Shell,
 }
 
 /// Which comments may run together into one block. Only line comments of the
@@ -421,6 +422,57 @@ fn toml_literal(text: &[char], first_line: usize, escapes: bool) -> Literal {
     Literal { first_line, chars }
 }
 
+/// Shell scripts. A comment runs from a `#` that begins a word to the end of the
+/// line, so `$#` and `${#list[@]}` stay code. A string in single quotes takes no
+/// escape and one in double quotes takes a backslash, and both may run over
+/// several lines, the way a message for a person usually does. A backslash
+/// outside quotes escapes the character after it, a line end included.
+fn lex_shell(source: &str) -> Lexed {
+    let s: Vec<char> = source.chars().collect();
+    let mut out = Lexed::default();
+    let mut line = 1;
+    let mut i = 0;
+    while i < s.len() {
+        let c = s[i];
+        let starts_word =
+            i == 0 || s[i - 1].is_whitespace() || matches!(s[i - 1], ';' | '(' | '|' | '&');
+        if c == '\n' {
+            line += 1;
+            i += 1;
+        } else if c == '\\' {
+            if s.get(i + 1) == Some(&'\n') {
+                line += 1;
+            }
+            i += 2;
+        } else if c == '#' && starts_word {
+            let end = line_end(&s, i);
+            let body: String = s[i + 1..end].iter().collect();
+            out.comments.push(Comment {
+                first_line: line,
+                kind: CommentKind::Plain,
+                lines: vec![body],
+            });
+            out.skipped.push((i, end));
+            i = end;
+        } else if c == '"' || c == '\'' {
+            let open = i + 1;
+            let mut j = open;
+            while j < s.len() && s[j] != c {
+                j += if c == '"' && s[j] == '\\' { 2 } else { 1 };
+            }
+            let close = j.min(s.len());
+            out.literals
+                .push(toml_literal(&s[open..close], line, c == '"'));
+            line += count_newlines(&s[i..close]);
+            out.skipped.push((i, (close + 1).min(s.len())));
+            i = close + 1;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
 /// `.gitignore` and `.gitattributes`: a comment is a line that starts with `#`,
 /// and nothing else in them is prose.
 fn lex_git(source: &str) -> Lexed {
@@ -583,6 +635,7 @@ pub fn lex(syntax: Syntax, source: &str) -> Lexed {
         // Python has the comments and the three string forms that TOML has, and
         // the CI scripts use no other form that would read differently.
         Syntax::Toml | Syntax::Python => lex_toml(source),
+        Syntax::Shell => lex_shell(source),
         Syntax::Git => lex_git(source),
         Syntax::Markdown => lex_markdown(source),
         Syntax::Svg => lex_svg(source),
@@ -632,6 +685,7 @@ pub fn syntax_of(path: &Path) -> Option<Syntax> {
         "svg" => Some(Syntax::Svg),
         "yml" | "yaml" => Some(Syntax::Yaml),
         "py" => Some(Syntax::Python),
+        "sh" => Some(Syntax::Shell),
         "rc" => Some(Syntax::Resource),
         _ => None,
     }
@@ -655,7 +709,7 @@ pub fn product_tree(root: &Path) -> Tree {
         let name = entry.file_name().to_string_lossy().into_owned();
         if path.is_dir() {
             match name.as_str() {
-                "crates" | "tests" | ".github" => walk(root, &path, &mut tree),
+                "crates" | "tests" | ".github" | ".cargo" => walk(root, &path, &mut tree),
                 "packs" | "target" => {}
                 n if MEMORY.contains(&n) || n.starts_with('.') => {}
                 _ => tree.unreadable.push(format!(
@@ -719,7 +773,7 @@ fn walk(root: &Path, dir: &Path, tree: &mut Tree) {
             // Pictures behind a directory of offsets: nothing in it is prose.
             // The drawings beside it are read, and `tests/app_icon.rs` holds the
             // file to them.
-            None if here == ICON_DIR && extension == "ico" => {}
+            None if here == ICON_DIR && matches!(extension, "ico" | "icns") => {}
             // The picture GitHub shows beside a link: nothing in it is prose.
             // The drawing it is rendered from is read.
             None if here == SOCIAL_PREVIEW_DIR && extension == "png" => {}

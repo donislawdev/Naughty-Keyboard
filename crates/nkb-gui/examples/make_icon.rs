@@ -1,10 +1,11 @@
-//! Rebuilds `assets/edamame.ico` from the two drawings beside it.
+//! Rebuilds `assets/edamame.ico` and `assets/edamame.icns` from the two
+//! drawings beside them.
 //!
 //! ```text
 //! cargo run -p nkb-gui --example make_icon
 //! ```
 //!
-//! Run it when either SVG file changes, and commit the `.ico` it writes. The
+//! Run it when either SVG file changes, and commit both files it writes. The
 //! drawings are drawn by the toolkit's own renderer (`tests/icon_render`), the
 //! same one that draws the window icon, so no browser and no image tool is
 //! needed. `tests/app_icon.rs` fails when the file and the drawings disagree.
@@ -23,7 +24,7 @@ mod icon_render;
 
 use std::io::Cursor;
 
-use icon_render::{Renderer, SIZES, assets_dir, drawing_for};
+use icon_render::{MAC_ENTRIES, Renderer, SIZES, assets_dir, drawing_for};
 
 /// From this size up an entry is a PNG, and below it a bitmap.
 const PNG_FROM: u32 = 128;
@@ -114,6 +115,44 @@ fn main() {
     }
 
     let path = assets_dir().join("edamame.ico");
+    std::fs::write(&path, &file).expect("the icon must be writable");
+    println!("{}: {} bytes", path.display(), file.len());
+
+    write_mac_icon(&renderer);
+}
+
+/// `assets/edamame.icns`, the icon a macOS `.app` bundle carries.
+///
+/// The container is simple enough to write here: `icns`, the length of the whole
+/// file, then one chunk per entry, each its four-letter type, its own length and
+/// a PNG. Written here rather than with Apple's `iconutil` because the bundles
+/// are assembled on whatever machine builds the release, and a file in the
+/// repository needs no Mac to exist. Every entry is a PNG, the two smallest
+/// included, which is what `iconutil` itself writes.
+fn write_mac_icon(renderer: &Renderer) {
+    let mut pictures = std::collections::BTreeMap::new();
+    let mut chunks = Vec::new();
+    for (kind, size) in MAC_ENTRIES {
+        let png = pictures
+            .entry(size)
+            .or_insert_with(|| png_entry(size, &renderer.draw(drawing_for(size), size)));
+        chunks.extend(kind.as_bytes());
+        chunks.extend(
+            u32::try_from(png.len() + 8)
+                .expect("a small picture")
+                .to_be_bytes(),
+        );
+        chunks.extend(png.iter());
+    }
+    let mut file = b"icns".to_vec();
+    file.extend(
+        u32::try_from(chunks.len() + 8)
+            .expect("a small file")
+            .to_be_bytes(),
+    );
+    file.extend(chunks);
+
+    let path = assets_dir().join("edamame.icns");
     std::fs::write(&path, &file).expect("the icon must be writable");
     println!("{}: {} bytes", path.display(), file.len());
 }
