@@ -113,12 +113,14 @@ jobs:
         run: python .github/scripts/release.py released --tag "$TAG"
 
       # A release page points at its section of the changelog, and lines left
-      # under Unreleased are changes that would go out undescribed.
+      # under Unreleased are changes that would go out undescribed. The notes
+      # are written here too, so that commands in README.md naming a file this
+      # release would not hold stop the run before anything is built.
       - name: The changelog is closed for this version
         if: steps.plan.outputs.release == 'true'
         env:
           VERSION: ${{ steps.plan.outputs.version }}
-        run: python .github/scripts/release.py changelog --version "$VERSION"
+        run: python .github/scripts/release.py changelog --version "$VERSION" --notes "$RUNNER_TEMP/notes.md"
 
       # This workflow builds and does not test. Without this step the only thing
       # between a red commit and a release is somebody's memory of having looked.
@@ -377,8 +379,9 @@ jobs:
           python-version: "3.14"
 
       # The notes are the section of CHANGELOG.md for this version, word for
-      # word. Never generated from the titles of pull requests, which would put
-      # on the page something nobody wrote for it.
+      # word, then .github/release/notes.md with the commands of README.md for
+      # this version. Never generated from the titles of pull requests, which
+      # would put on the page something nobody wrote for it.
       - name: Take the release notes from the changelog
         env:
           VERSION: ${{ needs.check.outputs.version }}

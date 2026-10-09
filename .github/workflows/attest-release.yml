@@ -1,0 +1,104 @@
+# Phase C of the release: the statement of what the signed files hold.
+#
+# Started by .github/scripts/sign_release.py on the machine with the card, once
+# the signed files are on the draft, from the tag itself and with the digest of
+# the checksums it wrote:
+#
+#     gh workflow run attest-release.yml --ref <tag> -f tag=<tag> -f digest=<sha256>
+#
+# The files are fetched FROM THE DRAFT and checked against that digest, so the
+# statement is about bytes this job holds and not about a number it was handed.
+# It is a statement of what the six archives hold, the bill of materials, and
+# never build provenance: a person made these bytes, on the machines that hold
+# the keys, and saying a workflow did would be false in the one document nobody
+# should have to doubt. Phase A's statement of how the unsigned build was made
+# still answers for every file nothing signed.
+#
+# Nothing here publishes. The release is still a draft when this ends, and
+# sign_release.py checks that it is complete. Every decision is made by
+# .github/scripts/attest_release.py, which has tests.
+name: Attest a signed release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The tag of the release, for example v0.1.0. Start the run from the same tag."
+        required: true
+        type: string
+      digest:
+        description: "The SHA-256 of verify-SHA256SUMS.txt, as sign_release.py wrote it"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Two runs for one tag would race to put their statement on the draft, so the
+# second waits for the first.
+concurrency:
+  group: attest-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  attest:
+    name: attest what the signed files hold
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # to read the draft and add the statement to it
+      id-token: write # to sign the statement with a certificate for this workflow
+      attestations: write # to keep the statement in this repository's store
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # Every file of the draft, so a file missing or one too many is seen, and
+      # the names checked against what phase B uploads rather than taken from
+      # the page. The run has to be on the tag it attests, so that this
+      # workflow and the README.md it reads are the ones the release carries.
+      - name: Fetch the draft and check it against the digest
+        id: fetch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          DIGEST: ${{ inputs.digest }}
+        run: >-
+          python .github/scripts/attest_release.py fetch --tag "$TAG" --digest "$DIGEST"
+          --dir "$RUNNER_TEMP/signed" --subjects "$RUNNER_TEMP/subjects.sha256"
+
+      # The same check with the tool a person is told to use.
+      - name: The checksums agree
+        working-directory: ${{ runner.temp }}/signed
+        run: sha256sum -c verify-SHA256SUMS.txt
+
+      - name: Attest what the signed archives hold
+        id: attestation
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: ${{ runner.temp }}/subjects.sha256
+          sbom-path: ${{ steps.fetch.outputs.sbom }}
+
+      # As a file on the release and not only in the store: a person with no
+      # route to the API checks a download with it offline, and scanners that
+      # look for signed releases read the files of a release by their names.
+      - name: Check the statement and add it to the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          BUNDLE: ${{ steps.attestation.outputs.bundle-path }}
+        run: >-
+          python .github/scripts/attest_release.py publish --tag "$TAG" --dir "$RUNNER_TEMP/signed"
+          --bundle "$BUNDLE" --out "$RUNNER_TEMP/statement"

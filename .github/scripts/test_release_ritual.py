@@ -1,4 +1,4 @@
-"""Guards over the release workflow: what phase A must do and must never do.
+"""Guards over the release workflows: what phases A, C and D must do and must never do.
 
 Run from the root of the repository:
 
@@ -19,6 +19,8 @@ import re
 import unittest
 
 import release
+import sign_release
+import verify_release
 
 WORKFLOWS = os.path.join(release.ROOT, ".github", "workflows")
 RELEASE = os.path.join(WORKFLOWS, "release.yml")
@@ -230,6 +232,123 @@ class NothingIsPublished(unittest.TestCase):
         for script in runs(read(RELEASE)):
             self.assertNotIn("gh release", script)
         self.assertIn('"--draft"', code_of(SCRIPT))
+
+
+ATTEST = os.path.join(WORKFLOWS, "attest-release.yml")
+VERIFY = os.path.join(WORKFLOWS, "verify-release.yml")
+ATTEST_SCRIPT = os.path.join(release.ROOT, ".github", "scripts", "attest_release.py")
+VERIFY_SCRIPT = os.path.join(release.ROOT, ".github", "scripts", "verify_release.py")
+SIGN_SCRIPT = os.path.join(release.ROOT, ".github", "scripts", "sign_release.py")
+
+
+def pinned_actions(text):
+    return dict(re.findall(r"uses: ([^@\s]+)@([0-9a-f]{40})", text))
+
+
+class PhaseC(unittest.TestCase):
+    def setUp(self):
+        self.text = read(ATTEST)
+        self.jobs = jobs(self.text)
+        self.attest = self.jobs["attest"]
+
+    def test_only_a_person_starts_it_with_a_tag_and_a_digest(self):
+        on = block(self.text, "on:", 0)
+        self.assertEqual(re.findall(r"(?m)^  ([a-z_]+):", on), ["workflow_dispatch"])
+        inputs = block(on, "inputs:", 4)
+        self.assertEqual(re.findall(r"(?m)^      ([a-z_]+):", inputs), ["tag", "digest"])
+
+    def test_phase_b_starts_it_by_its_name_from_the_tag_with_those_inputs(self):
+        sign = code_of(SIGN_SCRIPT)
+        self.assertEqual(os.path.basename(ATTEST), sign_release.ATTEST_WORKFLOW)
+        for word in ('"--ref", tag', '"tag=" + tag', '"digest=" + digest'):
+            self.assertIn(word, sign)
+
+    def test_the_one_job_may_sign_and_write_to_the_releases_and_nothing_else(self):
+        self.assertEqual(block(self.text, "permissions:", 0).strip(), "contents: read")
+        self.assertEqual(list(self.jobs), ["attest"])
+        granted = [line.split("#")[0].strip() for line in block(self.attest, "permissions:", 4).splitlines()]
+        self.assertEqual(sorted(g for g in granted if g),
+                         ["attestations: write", "contents: write", "id-token: write"])
+
+    def test_the_statement_is_the_bill_of_materials_over_the_checked_archives_and_never_provenance(self):
+        attest = next(s for s in steps(self.attest) if "uses: actions/attest@" in s)
+        self.assertIn("subject-checksums: ${{ runner.temp }}/subjects.sha256", attest)
+        self.assertIn("sbom-path: ${{ steps.fetch.outputs.sbom }}", attest)
+        for other in ("subject-path", "predicate-type", "predicate-path"):
+            self.assertNotIn(other, attest)
+        # The same action at the same commit as the statement of the build.
+        self.assertEqual(pinned_actions(self.text)["actions/attest"], pinned_actions(read(RELEASE))["actions/attest"])
+
+    def test_the_draft_is_checked_before_the_statement_and_the_statement_before_it_is_uploaded(self):
+        order = [self.attest.index(marker) for marker in
+                 ("attest_release.py fetch", "sha256sum -c verify-SHA256SUMS.txt", "uses: actions/attest@",
+                  "attest_release.py publish")]
+        self.assertEqual(order, sorted(order))
+
+    def test_no_shell_writes_to_a_release_and_nothing_is_published(self):
+        for script in runs(self.text):
+            self.assertNotIn("${{", script)
+            self.assertNotIn("gh release", script)
+        code = code_of(ATTEST_SCRIPT)
+        for forbidden in ("release edit", "release create", "release delete", "gh release publish",
+                          "--draft=false", '"edit"', '"delete"', '"create"'):
+            self.assertNotIn(forbidden, code)
+        self.assertIn('"upload"', code)
+        for step in (s for s in steps(self.attest) if "uses: actions/checkout@" in s):
+            self.assertIn("persist-credentials: false", step)
+
+
+class PhaseD(unittest.TestCase):
+    def setUp(self):
+        self.text = read(VERIFY)
+        self.jobs = jobs(self.text)
+
+    def test_a_published_release_starts_it_and_a_person_can_ask_about_any_tag(self):
+        on = block(self.text, "on:", 0)
+        self.assertEqual(re.findall(r"(?m)^  ([a-z_]+):", on), ["release", "workflow_dispatch"])
+        self.assertIn("types: [published]", block(on, "release:", 2))
+        self.assertIn("tag:", block(on, "workflow_dispatch:", 2))
+
+    def test_it_only_reads(self):
+        # A verifier that can publish is not a verifier any more.
+        self.assertEqual(block(self.text, "permissions:", 0).strip(), "contents: read")
+        self.assertNotIn(": write", self.text)
+        code = code_of(VERIFY_SCRIPT)
+        for forbidden in ('"upload"', '"edit"', '"delete"', '"create"', "workflow run", "--clobber"):
+            self.assertNotIn(forbidden, code)
+        for script in runs(self.text):
+            self.assertNotIn("${{", script)
+            self.assertNotIn("gh ", script)
+
+    def test_everything_is_read_out_of_the_tag_of_the_release(self):
+        checkouts = [s for job in self.jobs.values() for s in steps(job) if "uses: actions/checkout@" in s]
+        self.assertEqual(len(checkouts), 3)
+        for step in checkouts:
+            self.assertIn("ref: refs/tags/${{ ", step)
+            self.assertIn("persist-credentials: false", step)
+
+    def test_the_systems_come_from_archives_toml_and_each_is_checked_where_it_runs(self):
+        programs = self.jobs["programs"]
+        self.assertIn("include: ${{ fromJSON(needs.which.outputs.platforms) }}", programs)
+        self.assertIn("runs-on: ${{ matrix.runner }}", programs)
+        self.assertIn("fail-fast: false", programs)
+        for runner in ("windows-latest", "macos-latest", "ubuntu-22.04"):
+            self.assertNotIn(runner, programs)
+        order = [programs.index(marker) for marker in
+                 ("verify_release.py fetch", "Expand-Archive", "tar -xzf", "verify_release.py programs")]
+        self.assertEqual(order, sorted(order))
+
+    def test_the_page_is_checked_and_one_verdict_reads_every_job(self):
+        self.assertIn("verify_release.py page", self.jobs["page"])
+        verdict = self.jobs["verdict"]
+        self.assertEqual(re.findall(r"(?m)^    if: (.*)$", verdict), ["always()"])
+        self.assertEqual(re.findall(r"(?m)^    needs: (.*)$", verdict), ["[which, page, programs]"])
+        for job in ("which", "page", "programs"):
+            self.assertIn("${{ needs.%s.result }}" % job, verdict)
+
+    def test_the_statements_are_held_to_the_workflows_that_make_them(self):
+        self.assertTrue(os.path.isfile(os.path.join(WORKFLOWS, verify_release.BUILT_BY)))
+        self.assertTrue(os.path.isfile(os.path.join(WORKFLOWS, verify_release.ATTESTED_BY)))
 
 
 class RequiredWorkflows(unittest.TestCase):

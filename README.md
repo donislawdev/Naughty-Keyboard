@@ -39,14 +39,14 @@ needs it finds out it exists.
 **What it can do**
 
 - **One shortcut, one value** - `Alt+Shift+N` clears the line and types the next value of the current
-  pack into whatever window has the keyboard. Previous, repeat and restart are one chord away, and
-  every chord can be changed.
+  pack into whatever window has the keyboard. Previous and restart are one chord away, and every chord
+  can be changed.
 - **Values that explain themselves** - each one carries `breaks` (what it usually breaks, and why) and
   `expect` (what a correct application does). The pack file, `nkb show` and the report block all say so.
 - **Invisible characters made visible** - the palette draws one as a marker, `␣`, instead of showing
   nothing, and counts every value four ways: graphemes, code points, bytes and UTF-16 units.
-- **Mark results as you go** - works, problem or suspect, each on its own chord, with a counter of how
-  far through the pack you are.
+- **Know where you are** - the palette shows the value that comes next and a counter of how far through
+  the pack you are, and the value window searches the values of every pack at once.
 - **A bug report in one chord** - `Alt+Shift+B` copies a block for the last value: which value, from
   which version of the pack, typed as what, how large, and whether all of it arrived. The value is
   written in a form someone else can type back, never as the marker the palette drew.
@@ -62,9 +62,9 @@ needs it finds out it exists.
 <!--
   PICTURE 1 - the hero GIF. Replace the banner above with it, or keep both.
   Show: a sign-up form on screen, the palette beside it, Alt+Shift+N typing "Kowalski"
-  plus a trailing space into the name field, the form accepting it, then Alt+Shift+2
-  marking the result as a problem and Alt+Shift+B copying the report, pasted into a
-  ticket. Keep it under about 15 seconds, and crop to the form and the palette.
+  plus a trailing space into the name field, the form accepting it, then Alt+Shift+B
+  copying the report, pasted into a ticket. Keep it under about 15 seconds, and crop
+  to the form and the palette.
 
   Where to put pictures: .github/media/. A new kind of file there has to be taught to
   crates/nkb-core/tests/prose_punctuation.rs, the way .github/social-preview already is,
@@ -75,8 +75,67 @@ needs it finds out it exists.
 
 ## Get it
 
-> **Early development.** There is no release yet, and the pack format is not frozen - it freezes with the
-> first public release that ships packs. Until then you build it from source.
+> **Early development.** The pack format is not frozen yet - it freezes with the first public release that
+> ships packs. If the [releases page](https://github.com/donislawdev/Naughty-Keyboard/releases) is still
+> empty, there is no release yet, and you build it from source as shown further down.
+
+Every release has six archives, one for each program and system. `nkb` is the command line and
+`nkb-gui` the palette, and `VERSION` below stands for the version, such as `0.1.0`.
+
+| System | Command line | Palette |
+|---|---|---|
+| Windows 10 or 11, x64 | `nkb_VERSION_windows_amd64.zip` | `nkb-gui_VERSION_windows_amd64.zip` |
+| macOS 11 or newer, Apple silicon | `nkb_VERSION_macos_arm64.tar.gz` | `nkb-gui_VERSION_macos_arm64.tar.gz` |
+| Linux x64 with glibc 2.35 or newer, such as Ubuntu 22.04 | `nkb_VERSION_linux_amd64.tar.gz` | `nkb-gui_VERSION_linux_amd64.tar.gz` |
+
+An archive holds the program, `LICENSE`, this `README.md` and `THIRD-PARTY-NOTICES.txt`, which carries
+the licence of everything compiled into the program. There is no folder around them, so unpack an
+archive into a folder of its own. Nothing is installed and nothing else is needed.
+
+- **Windows.** The programs are signed, with a timestamp, so Windows names the publisher. Run `nkb.exe`
+  from a terminal, or start `nkb-gui.exe`.
+- **macOS.** Each program is a bundle, `nkb.app` or `nkb-gui.app`, signed and notarised by Apple with the
+  ticket stapled inside, and next to it is a link, so `./nkb` still works. Keep the bundle and the link
+  together. A copy of the program taken out of its bundle is refused, because the signature covers the
+  bundle.
+- **Linux.** The programs are not signed, and the commands below say where they came from. The palette
+  needs a desktop session, X11 or Wayland.
+
+Typing into other windows works on Windows only for now, see [Honest limits](#honest-limits).
+
+### Checking a download
+
+The four files whose names start with `verify-` are for checking a download, and they sit together at the
+end of the list. `verify-SHA256SUMS.txt` holds the SHA-256 of every archive. The two `.sigstore.json` files
+are statements signed when the release was made, and the [GitHub CLI](https://cli.github.com/) checks
+them. Put the version in place of `VERSION` and the name of your archive in place of the example one:
+
+<!-- verify-commands -->
+```
+gh release verify-asset vVERSION nkb-gui_VERSION_windows_amd64.zip -R donislawdev/Naughty-Keyboard
+gh attestation verify nkb-gui_VERSION_windows_amd64.zip -R donislawdev/Naughty-Keyboard --predicate-type https://spdx.dev/Document/v2.3
+gh attestation verify nkb-gui_VERSION_windows_amd64.zip -R donislawdev/Naughty-Keyboard --predicate-type https://spdx.dev/Document/v2.3 --bundle verify-naughty-keyboard_VERSION.sbom.sigstore.json
+gh attestation verify nkb_VERSION_linux_amd64.tar.gz -R donislawdev/Naughty-Keyboard
+gh attestation verify nkb_VERSION_linux_amd64.tar.gz -R donislawdev/Naughty-Keyboard --bundle verify-naughty-keyboard_VERSION.provenance.sigstore.json
+```
+<!-- /verify-commands -->
+
+- **The first** asks GitHub whether the file is one this release published. It works for every file of a
+  release, because a published release here cannot change.
+- **The next two** check the statement of what an archive holds, which is the bill of materials
+  `verify-naughty-keyboard_VERSION.spdx.json`. They work for all six archives, the first through GitHub
+  and the second offline, with nothing but the file next to it. Both need `--predicate-type`: without it
+  `gh` asks for a statement of how the file was built, a signed archive has none, and the answer "no
+  attestation found" looks like a broken release.
+- **The last two** check how an archive was built: by which workflow, from which commit, on which
+  runner. They work for the two Linux archives and the bill of materials, the files nothing signed. A
+  Windows or macOS archive was signed after the build, on the machine that holds the key, so its bytes
+  are not the bytes the build made, and its signature answers for it instead: `Get-AuthenticodeSignature`
+  on Windows, and `spctl -a -vv` and `xcrun stapler validate` on the bundle on macOS.
+
+[SECURITY.md](SECURITY.md#verifying-a-download) says what is signed, with which certificate, and why.
+
+### Building from source
 
 You need [Rust](https://rustup.rs/) 1.98 or newer.
 
@@ -86,12 +145,6 @@ cd Naughty-Keyboard
 cargo build --release -p nkb-cli    # the command line: target/release/nkb
 cargo build --release -p nkb-gui    # the palette: target/release/nkb-gui
 ```
-
-<!--
-  When the first release exists, this is where the download table goes, in the style of
-  the other projects: file, what it is, size. Then a short "Checking what you downloaded"
-  paragraph. Leave the build instructions below it for people who want the source.
--->
 
 Run the whole test suite with `cargo test --workspace`. Every pull request runs it on Windows, Linux
 and macOS, together with Clippy, a check of the dependencies' licences and advisories, a static
@@ -114,27 +167,27 @@ value does not land in somebody else's application. Closing it opens the palette
   Take it on a plain background so the window reads on its own.
 -->
 
-1. Build the palette and start `nkb-gui`. The welcome window has a box to try the first value in.
+1. Start `nkb-gui`. The welcome window has a box to try the first value in.
 2. Click the field you want to test, in any application.
 3. Press `Alt+Shift+N`. The next value of the pack is typed into the field.
-4. Look at what the application did with it. Press `Alt+Shift+1`, `2` or `3` to mark the result, then
-   `Alt+Shift+N` for the next value.
+4. Look at what the application did with it, then press `Alt+Shift+N` for the next value. When one
+   breaks something, `Alt+Shift+B` copies a report block for the ticket.
 
-The palette never takes the focus, so the cursor stays in the field the whole time. These are all of
-the chords:
+The palette never takes the focus, so the cursor stays in the field the whole time. These are the
+chords that work today:
 
 | Chord | What it does |
 |---|---|
 | `Alt+Shift+N` | Clear the line, then type the next value |
 | `Alt+Shift+P` | Type the previous value |
-| `Alt+Shift+R` | Type the current value again |
 | `Alt+Shift+0` | Go back to the first value of the pack |
-| `Alt+Shift+1` | Mark the last result as works |
-| `Alt+Shift+2` | Mark the last result as a problem |
-| `Alt+Shift+3` | Mark the last result as suspect |
 | `Alt+Shift+B` | Copy the report block for the last value |
-| `Alt+Shift+Space` | Open the pack search |
+| `Alt+Shift+Space` | Open the value window, to find a value or change the pack |
 | `Alt+Shift+H` | Collapse the palette to its header, or expand it again |
+
+Four more chords are registered and do nothing yet, and the shortcuts window marks them as not
+available yet: typing the current value again, `Alt+Shift+R`, and marking the last result as works, a
+problem or suspect, `Alt+Shift+1`, `2` and `3`.
 
 Every chord can be changed in the shortcuts window, or in `settings.toml` under `[shortcuts]`:
 
@@ -304,7 +357,7 @@ says so.
   checks 39 of its 45 rules today, and `nkb lint --explain` lists every one and why a few wait.
 - **It does not look at the result.** It types the value and does not read what the window shows, only
   the name of its program and the kind of control that has the keyboard. Whether the application coped is
-  for you to judge, and marking the result is how you keep the record.
+  for you to judge. Marking a result on its own chord is not there yet, so the report block is the record.
 - **It will not type into everything.** `nkb send` refuses a window running with higher privileges than
   itself, because Windows would drop the keystrokes without a word, and a control where keys would act on
   the control and not on text. Where it cannot tell which kind of control has the focus, it sends.

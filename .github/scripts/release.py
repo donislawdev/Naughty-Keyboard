@@ -18,11 +18,14 @@ The four phases
 A  release.yml, on a tag: check the tree, build, run what was built, describe
    it, attest how the UNSIGNED build was made, open an empty draft, and hand
    the build over as a workflow artifact. Nothing is published.
-B  on the machines that hold the signing keys: verify A's statement before
-   touching anything, sign, write the checksums over what will be downloaded,
-   upload to the draft.
-C  attest the bill of materials against the signed bytes.
-D  when a person publishes the draft, check the page the way a user would.
+B  sign_release.py, on the machines that hold the signing keys: verify A's
+   statement before touching anything, sign, write the checksums over what
+   will be downloaded, upload to the draft, ask C for its statement and wait
+   until the draft is complete.
+C  attest-release.yml, attest_release.py: attest the bill of materials against
+   the signed bytes, fetched from the draft.
+D  verify-release.yml, verify_release.py: when a person publishes the draft,
+   check the page the way a user would, with the commands README.md gives.
 
 Run by hand or on a pull request that changes the release, A builds and runs
 everything and writes nothing to the releases of the repository. The version
@@ -42,6 +45,7 @@ import json
 import os
 import plistlib
 import re
+import shlex
 import struct
 import subprocess
 import sys
@@ -69,6 +73,25 @@ POLL_SECONDS = 30
 SBOM_STEM = "verify-naughty-keyboard"
 BUILD_SUMS = "build.sha256"
 BESIDE = ("LICENSE", "README.md")
+# The list a person checks a download against, written by phase B over the
+# signed files.
+SUMS = "verify-SHA256SUMS.txt"
+# What signing and stapling add to a macOS bundle: the seal of its resources and
+# the notarisation ticket.
+SIGNED_FILES = ("Contents/CodeResources", "Contents/_CodeSignature/CodeResources")
+
+# README.md holds the commands a person runs on a download, in one block, and
+# every release page repeats them for its version. Phase C reads from them the
+# kind of statement it has to make, and phase D runs them word for word. One
+# copy, so the page, the readme and the checks cannot drift apart.
+README = os.path.join(ROOT, "README.md")
+NOTES_FOOTER = os.path.join(ROOT, ".github", "release", "notes.md")
+COMMANDS_MARK = "<!-- verify-commands -->"
+COMMANDS_BLOCK = re.compile(r"<!-- verify-commands -->\n```\n(.*?)```\n<!-- /verify-commands -->", re.DOTALL)
+COMMANDS_ALLOWED = (("gh", "attestation", "verify"), ("gh", "release", "verify-asset"))
+# Stands for the version in those commands. A plain word, because a person
+# pastes them into a shell, and there <version> would be a redirection.
+VERSION_SLOT = "VERSION"
 
 # The C runtime of Microsoft's compiler. .cargo/config.toml links it into the
 # programs, because Windows does not ship it and a program that imports it does
@@ -303,8 +326,11 @@ def command_changelog(args):
     if problems:
         raise Refused(problems)
     if args.notes:
-        contents.write(args.notes, section + "\n")
-        say("wrote %s from the section for %s" % (args.notes, args.version))
+        with open(NOTES_FOOTER, encoding="utf-8") as handle:
+            footer = handle.read()
+        contents.write(args.notes, release_notes(section, "v" + args.version, load_promise(), footer))
+        say("wrote %s from the section for %s and %s" % (args.notes, args.version,
+                                                         os.path.relpath(NOTES_FOOTER, ROOT)))
     say("CHANGELOG.md is closed for %s" % args.version)
     return 0
 
@@ -445,14 +471,18 @@ def entries_of(archive, base, program, notices, root=ROOT):
     return sorted(entries, key=lambda e: e.name)
 
 
-def expected_names(archive):
-    """What a person finds after unpacking: every file and link, no directories."""
+def expected_names(archive, signed=False):
+    """What a person finds after unpacking: every file and link, no directories.
+    A signed macOS bundle also holds the seal of its resources and the
+    notarisation ticket, and nothing else that the unsigned one does not."""
     name = program_file(archive)
     names = [name] + list(BESIDE) + [contents.NOTICES_NAME]
     if archive.os == contents.MACOS:
         app = name + ".app/Contents/"
         names += [app + "Info.plist", app + "MacOS/" + name,
                   app + "Resources/" + os.path.basename(archive.packaged[0])]
+        if signed:
+            names += [name + ".app/" + added for added in SIGNED_FILES]
     return sorted(names)
 
 
@@ -667,12 +697,14 @@ def c_runtime_in(names):
     return sorted(n for n in names if C_RUNTIME.match(n))
 
 
-def tried_programs(archive, base, directory, packs, run=subprocess.run):
-    """Problems found by running what an archive holds, from where it holds it."""
+def tried_programs(archive, base, directory, packs, run=subprocess.run, signed=False):
+    """Problems found by running what an archive holds, from where it holds it.
+    Phase A asks it of the build, and phase D of the signed files on the page."""
     problems = []
     found = unpacked_names(directory)
-    if found != expected_names(archive):
-        problems.append("%s holds %s, and should hold %s" % (archive.program, found, expected_names(archive)))
+    wanted = expected_names(archive, signed)
+    if found != wanted:
+        problems.append("%s holds %s, and should hold %s" % (archive.program, found, wanted))
         return problems
     program = os.path.join(directory, program_file(archive))
     if archive.os == contents.MACOS:
@@ -803,6 +835,143 @@ def open_draft(tag, notes, run=subprocess.run):
 def command_draft(args):
     open_draft(args.tag, args.notes)
     return 0
+
+
+# --------------------------------------------------------------------------- #
+# what a release page holds, and what it tells a person to run
+# --------------------------------------------------------------------------- #
+
+def provenance_bundle_name(version):
+    """The statement phase A made about the unsigned build. It still describes,
+    byte for byte, every file nothing signed."""
+    return "%s_%s.provenance.sigstore.json" % (SBOM_STEM, version)
+
+
+def sbom_bundle_name(version):
+    """The statement phase C made about what the signed files hold."""
+    return "%s_%s.sbom.sigstore.json" % (SBOM_STEM, version)
+
+
+def published_files(tag):
+    """What phase B puts on the draft: the signed build, the statement of the
+    unsigned one under a name a person can use, and the checksums."""
+    version = contents.version_of_tag(tag, contents.load_workspace())
+    return sorted(handover_names(tag) + [provenance_bundle_name(version), SUMS])
+
+
+def page_files(tag):
+    """Everything a finished release holds, and nothing else: what phase B
+    uploaded and the statement phase C added."""
+    version = contents.version_of_tag(tag, contents.load_workspace())
+    return sorted(published_files(tag) + [sbom_bundle_name(version)])
+
+
+def repository_name(workspace):
+    """owner/name, out of the address Cargo.toml gives."""
+    return workspace.repository.split("github.com/")[-1]
+
+
+def listed_digests(text, what):
+    """name -> SHA-256 of a list in the form sha256sum writes, refused on any
+    line that is not a digest, two spaces and a name."""
+    found = {}
+    for line in text.splitlines():
+        match = re.fullmatch(r"([0-9a-f]{64})  (\S+)", line)
+        if not match:
+            raise Refused(["%s has a line that is not a digest and a name: %r" % (what, line)])
+        if match.group(2) in found:
+            raise Refused(["%s lists %s twice" % (what, match.group(2))])
+        found[match.group(2)] = match.group(1)
+    return found
+
+
+def attestation_check(path, repository, predicate=None, bundle=None, workflow=None, ref=None):
+    """gh attestation verify for one file. Without a predicate it asks for build
+    provenance, which is what gh asks for unless told otherwise. With a workflow
+    it also asks who made the statement, from which ref, and on a runner
+    GitHub hosts."""
+    command = ["gh", "attestation", "verify", path, "-R", repository]
+    if predicate:
+        command += ["--predicate-type", predicate]
+    if bundle:
+        command += ["--bundle", bundle]
+    if workflow:
+        command += ["--signer-workflow", "%s/.github/workflows/%s" % (repository, workflow),
+                    "--source-ref", ref, "--deny-self-hosted-runners"]
+    return command
+
+
+@dataclasses.dataclass(frozen=True)
+class Promise:
+    """The commands README.md tells a person to run on a download, with
+    VERSION still in them, and the kind of statement they ask for."""
+    lines: tuple
+    predicate: str
+
+    def rendered(self, tag):
+        """The commands for one release, refused if one names a file the
+        release does not hold. A word that carries VERSION is either the tag
+        or the name of a file on its page."""
+        version = tag[1:]
+        names = page_files(tag)
+        problems = []
+        for line in self.lines:
+            for word in shlex.split(line):
+                if VERSION_SLOT in word and word.replace(VERSION_SLOT, version) not in names + [tag]:
+                    problems.append("README.md names %s, and a release of %s does not hold %s"
+                                    % (word, tag, word.replace(VERSION_SLOT, version)))
+        if problems:
+            raise Refused(problems)
+        return [line.replace(VERSION_SLOT, version) for line in self.lines]
+
+
+def flag_values(words, *flags):
+    return [words[i + 1] if i + 1 < len(words) else "" for i, word in enumerate(words) if word in flags]
+
+
+def promise_of(readme, repository):
+    """The commands of the one verify-commands block in README.md.
+
+    Phase D runs them word for word on the published files, so a command that
+    is not a check of a download is refused here, before a release page could
+    tell anybody to run it."""
+    found = COMMANDS_BLOCK.findall(readme)
+    if len(found) != 1:
+        raise Refused(["README.md needs exactly one %s block, and has %d" % (COMMANDS_MARK, len(found))])
+    lines = tuple(line.strip() for line in found[0].splitlines() if line.strip())
+    problems = [] if lines else ["the %s block in README.md holds no command" % COMMANDS_MARK]
+    predicates = set()
+    for line in lines:
+        words = shlex.split(line)
+        if tuple(words[:3]) not in COMMANDS_ALLOWED:
+            problems.append("README.md tells a person to run %r, and a release page offers only %s"
+                            % (line, " and ".join(" ".join(c) for c in COMMANDS_ALLOWED)))
+            continue
+        if flag_values(words, "-R", "--repo") != [repository]:
+            problems.append("%r does not name this repository, %s, with -R" % (line, repository))
+        predicates.update(flag_values(words, "--predicate-type"))
+    if len(predicates) != 1:
+        problems.append("the commands in README.md name the predicate types %s, and the statement "
+                        "about what the signed files hold is of one type" % sorted(predicates))
+    if problems:
+        raise Refused(problems)
+    return Promise(lines, predicates.pop())
+
+
+def load_promise(readme=README, workspace=None):
+    with open(readme, encoding="utf-8") as handle:
+        return promise_of(handle.read(), repository_name(workspace or contents.load_workspace()))
+
+
+def release_notes(section, tag, promise, footer):
+    """The section of the changelog, then what every release page says: what
+    to download, and the commands of README.md for this version."""
+    if footer.count(COMMANDS_MARK) != 1:
+        raise Refused(["%s has to hold %s exactly once, where the commands go"
+                       % (os.path.relpath(NOTES_FOOTER, ROOT), COMMANDS_MARK)])
+    block = "```\n%s\n```" % "\n".join(promise.rendered(tag))
+    after = footer.replace(VERSION_SLOT, tag[1:]).replace(COMMANDS_MARK, block)
+    return section.rstrip("\n") + "\n\n" + after.strip("\n") + "\n"
 
 
 # --------------------------------------------------------------------------- #

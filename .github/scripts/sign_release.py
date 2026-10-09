@@ -4,6 +4,7 @@
     python .github/scripts/sign_release.py v0.1.0 --macos-host user@mac
     python .github/scripts/sign_release.py --rehearse <run id> --macos-host user@mac
     python .github/scripts/sign_release.py v0.1.0 --macos-host user@mac --dry-run
+    python .github/scripts/sign_release.py v0.1.0 --attest-only
 
 Run by a person, at the machine the card is plugged into, with the Mac awake.
 The card asks for its PIN and the Mac for its password on this terminal, and
@@ -39,12 +40,21 @@ What it does, in order, and what it refuses
  5. puts every signed program back into its archive with release.py, so the
     archive is written by the same code that wrote it in phase A, and only the
     signed files differ;
- 6. writes verify-SHA256SUMS.txt over everything that will be on the page;
- 7. uploads to the DRAFT and checks the draft holds what was signed.
+ 6. writes verify-SHA256SUMS.txt over everything that will be on the page,
+    uploads to the DRAFT and checks the draft holds what was signed;
+ 7. starts phase C (attest-release.yml) from the code of the tag, with the
+    digest of the checksums, to make the statement about the signed files;
+ 8. waits for it, stopping at once if that run fails, then checks the draft is
+    the whole release: every file and no other, each the one signed here, the
+    statement describing every archive by the command README.md gives, and
+    still a draft. A draft missing one file looks almost exactly like a
+    finished one.
 
 --rehearse signs the build of a run started by hand on main and stops before
-step 7, so the whole ritual can be tried without a tag. Nothing here publishes:
-the release stays a draft until a person reads it and presses the button.
+step 6, so the whole ritual can be tried without a tag. --attest-only runs
+steps 7 and 8 again for a draft that holds the signed files already, without
+signing anything again. Nothing here publishes: the release stays a draft until
+a person reads it and presses the button.
 """
 import argparse
 import dataclasses
@@ -59,6 +69,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import time
 import tomllib
 
 import contents
@@ -69,16 +80,19 @@ PINS = os.path.join(ROOT, ".github", "release", "codesign.toml")
 SIGNER_WORKFLOW = "/.github/workflows/release.yml"
 CODE_SIGNING_OID = "1.3.6.1.5.5.7.3.3"
 WARN_DAYS = 90
-# The list a person checks a download against. `verify-` sorts it with the other
-# files for checking, at the end of the page.
-SUMS = "verify-SHA256SUMS.txt"
+SUMS = release.SUMS
 BUILD_BUNDLE = "build.provenance.sigstore.json"
 MAC_SCRIPT = os.path.join(ROOT, ".github", "scripts", "sign_macos.py")
 MAC_PYTHON = "/opt/homebrew/bin/python3.14"
-# What signing and stapling may add to a bundle: the seal of its resources and
-# the notarisation ticket. Anything else that appears or goes is refused.
-SIGNED_ADDITIONS = ("Contents/_CodeSignature", "Contents/_CodeSignature/CodeResources",
-                    "Contents/CodeResources")
+# What signing and stapling may add to a bundle: the seal of its resources, the
+# folder it lives in, and the notarisation ticket. Anything else that appears or
+# goes is refused.
+SIGNED_ADDITIONS = ("Contents/_CodeSignature",) + release.SIGNED_FILES
+# Phase C, which makes the statement about the signed bytes, and how long to
+# wait for it. A run takes about a minute when GitHub is not busy.
+ATTEST_WORKFLOW = "attest-release.yml"
+WAIT_FOR_STATEMENT = 300
+POLL_SECONDS = 10
 
 
 def say(text):
@@ -276,16 +290,6 @@ def verify_command(path, tag, rehearsal, repository):
             "--source-ref", ref, "--deny-self-hosted-runners"]
 
 
-def listed_digests(text):
-    found = {}
-    for line in text.splitlines():
-        match = re.fullmatch(r"([0-9a-f]{64})  (\S+)", line)
-        if not match:
-            raise Refused(["%s has a line that is not a digest and a name: %r" % (release.BUILD_SUMS, line)])
-        found[match.group(2)] = match.group(1)
-    return found
-
-
 def check_build(directory, tag, rehearsal, repository, run_=None):
     found = sorted(os.listdir(directory))
     wanted = handover_files(tag)
@@ -294,7 +298,7 @@ def check_build(directory, tag, rehearsal, repository, run_=None):
                        "missing: %s" % sorted(set(wanted) - set(found)),
                        "not listed: %s" % sorted(set(found) - set(wanted))])
     with open(os.path.join(directory, release.BUILD_SUMS), encoding="utf-8") as handle:
-        listed = listed_digests(handle.read())
+        listed = release.listed_digests(handle.read(), release.BUILD_SUMS)
     subjects = release.handover_names(tag)
     if sorted(listed) != subjects:
         raise Refused(["%s lists %s" % (release.BUILD_SUMS, sorted(listed))])
@@ -455,15 +459,6 @@ def sign_macos(directory, tag, pins, host, python, dry_run):
 # what goes on the page
 # --------------------------------------------------------------------------- #
 
-def provenance_name(version):
-    return "%s_%s.provenance.sigstore.json" % (release.SBOM_STEM, version)
-
-
-def published_files(tag):
-    version = contents.version_of_tag(tag, contents.load_workspace())
-    return sorted(release.handover_names(tag) + [provenance_name(version), SUMS])
-
-
 def name_for_publication(directory, tag):
     """build.sha256 describes bytes that signing changed, so it does not go on
     the page beside the real list. The statement of the build does, under a name
@@ -471,7 +466,8 @@ def name_for_publication(directory, tag):
     signed - the Linux archives and the bill of materials."""
     version = contents.version_of_tag(tag, contents.load_workspace())
     os.remove(os.path.join(directory, release.BUILD_SUMS))
-    os.replace(os.path.join(directory, BUILD_BUNDLE), os.path.join(directory, provenance_name(version)))
+    os.replace(os.path.join(directory, BUILD_BUNDLE),
+               os.path.join(directory, release.provenance_bundle_name(version)))
 
 
 def checksums(directory, names):
@@ -479,7 +475,7 @@ def checksums(directory, names):
 
 
 def write_checksums(directory, tag):
-    names = [n for n in published_files(tag) if n != SUMS]
+    names = [n for n in release.published_files(tag) if n != SUMS]
     found = sorted(n for n in os.listdir(directory) if not n.endswith(".work"))
     if found != sorted(names):
         raise Refused(["what is about to be published is not what it should be",
@@ -522,6 +518,127 @@ def upload(directory, tag, repository):
 
 
 # --------------------------------------------------------------------------- #
+# phase C, and the draft it leaves
+# --------------------------------------------------------------------------- #
+
+def gh_json(command, what, run_=subprocess.run):
+    done = run_(["gh"] + command, capture_output=True, text=True)
+    if done.returncode != 0:
+        raise Refused(["gh could not read %s:\n%s" % (what, done.stderr.strip())])
+    return json.loads(done.stdout or "null")
+
+
+def draft_view(tag, repository, run_=subprocess.run):
+    return gh_json(["release", "view", tag, "--repo", repository, "--json", "assets,isDraft"],
+                   "the draft of %s" % tag, run_)
+
+
+def statement_id(view, tag):
+    """The id of the statement about the signed bytes on the draft, or None. An
+    id, because a statement left by an earlier signing has the same name and
+    describes other bytes."""
+    name = release.sbom_bundle_name(tag[1:])
+    return next((a.get("id") for a in view.get("assets", []) if a.get("name") == name), None)
+
+
+def attestation_runs(repository, run_=subprocess.run):
+    runs = gh_json(["run", "list", "--repo", repository, "--workflow", ATTEST_WORKFLOW, "--limit", "20",
+                    "--json", "databaseId,status,conclusion,url"], "the runs of %s" % ATTEST_WORKFLOW, run_)
+    return {str(r["databaseId"]): r for r in runs or []}
+
+
+def ask_for_the_statement(tag, digest, repository, run_=subprocess.run):
+    """Starts phase C from the code of the tag itself, so the statement is made
+    by the workflow this release carries. Returns the runs there were before."""
+    earlier = set(attestation_runs(repository, run_))
+    command = ["gh", "workflow", "run", ATTEST_WORKFLOW, "--repo", repository, "--ref", tag,
+               "-f", "tag=" + tag, "-f", "digest=" + digest]
+    say("    $ " + " ".join(command))
+    done = run_(command, capture_output=True, text=True)
+    if done.returncode != 0:
+        raise Refused(["gh could not start %s:\n%s" % (ATTEST_WORKFLOW, done.stderr.strip())])
+    return earlier
+
+
+def again(tag):
+    return ("Nothing is signed again by asking once more: python .github/scripts/sign_release.py %s "
+            "--attest-only" % tag)
+
+
+def wait_for_the_statement(tag, repository, earlier_runs, earlier_id, run_=subprocess.run,
+                           sleep=time.sleep, clock=time.monotonic, limit=WAIT_FOR_STATEMENT):
+    """The view of the draft once a NEW statement is on it. A run of phase C that
+    failed stops the wait at once, and one that passed without leaving a
+    statement is refused rather than waited out."""
+    started = clock()
+    passed = False
+    while True:
+        view = draft_view(tag, repository, run_)
+        current = statement_id(view, tag)
+        if current is not None and current != earlier_id:
+            return view
+        if passed:
+            raise Refused(["%s passed and the draft holds no new statement" % ATTEST_WORKFLOW, again(tag)])
+        ours = [r for i, r in attestation_runs(repository, run_).items() if i not in earlier_runs]
+        failed = [r for r in ours if r.get("status") == "completed" and r.get("conclusion") != "success"]
+        if failed:
+            raise Refused(["%s ended %s: %s" % (ATTEST_WORKFLOW, failed[0].get("conclusion"), failed[0].get("url")),
+                           again(tag)])
+        passed = any(r.get("status") == "completed" for r in ours)
+        if clock() - started > limit:
+            raise Refused(["the statement about the signed files has not reached the draft after %d seconds. "
+                           "Look at the runs of %s before publishing anything." % (limit, ATTEST_WORKFLOW),
+                           again(tag)])
+        if not passed:
+            say("    waiting for %s" % ATTEST_WORKFLOW)
+            sleep(POLL_SECONDS)
+
+
+def signed_problems(view, tag, directory):
+    """What phase B uploaded is on the draft, each file the one signed here,
+    and the draft is still a draft."""
+    problems = []
+    on_page = {a.get("name"): a for a in view.get("assets", [])}
+    for name in release.published_files(tag):
+        here = "sha256:" + sha256_of(os.path.join(directory, name))
+        if on_page.get(name, {}).get("digest") != here:
+            problems.append("%s on the draft is not the file signed here" % name)
+    if not view.get("isDraft"):
+        problems.append("the release is no longer a draft. Nothing here publishes, so somebody or "
+                        "something else did")
+    return problems
+
+
+def complete_problems(view, tag, directory):
+    """What keeps the draft from being the release: a file missing or one too
+    many, a file that is not the one signed here, or a draft no longer a draft."""
+    names = sorted(a.get("name") for a in view.get("assets", []))
+    wanted = release.page_files(tag)
+    problems = [] if names == wanted else ["the draft holds %s, and a release of %s holds %s"
+                                           % (names, tag, wanted)]
+    return problems + signed_problems(view, tag, directory)
+
+
+def confirm_draft(view, tag, directory, repository, run_=None):
+    """The draft is the release, and the statement on it describes every archive
+    signed here: checked with the command README.md gives, against the copy the
+    draft holds."""
+    problems = complete_problems(view, tag, directory)
+    if problems:
+        raise Refused(problems)
+    name = release.sbom_bundle_name(tag[1:])
+    back = os.path.join(directory, "confirm")
+    run(["gh", "release", "download", tag, "--repo", repository, "--pattern", name, "--dir", back, "--clobber"])
+    promise = release.load_promise()
+    for archive in contents.load_archives():
+        path = os.path.join(directory, archive.name(tag[1:]))
+        (run_ or run)(release.attestation_check(path, repository, promise.predicate, os.path.join(back, name)))
+    shutil.rmtree(back, ignore_errors=True)
+    say("  the draft holds the %d files of the release, each the one signed here, the statement describes "
+        "every archive, and it is still a draft" % len(release.page_files(tag)))
+
+
+# --------------------------------------------------------------------------- #
 # fetching
 # --------------------------------------------------------------------------- #
 
@@ -556,34 +673,61 @@ def fetch(directory, tag, run_id, repository):
 # the command line
 # --------------------------------------------------------------------------- #
 
+def attest(tag, directory, repository, wait):
+    """Steps 7 and 8: phase C makes its statement, and the draft is checked to be
+    the whole release."""
+    say("\n[7/8] asking %s for the statement about the signed files" % ATTEST_WORKFLOW)
+    earlier_id = statement_id(draft_view(tag, repository), tag)
+    earlier_runs = ask_for_the_statement(tag, sha256_of(os.path.join(directory, SUMS)), repository)
+    say("\n[8/8] waiting for it, then checking the draft is the whole release")
+    view = wait_for_the_statement(tag, repository, earlier_runs, earlier_id, limit=wait)
+    confirm_draft(view, tag, directory, repository)
+    say("\nDone. %s is a complete draft, and nothing is published. Read it, then publish it on the "
+        "Releases page. verify-release.yml then checks the published page the way a person would." % tag)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("tag", nargs="?", help="the tag of the release, such as v0.1.0")
     parser.add_argument("--rehearse", metavar="RUN_ID",
                         help="sign the build of a Release run started by hand on main, and stop before uploading")
+    parser.add_argument("--attest-only", action="store_true",
+                        help="the files are signed and on the draft already: only ask for the statement again")
     parser.add_argument("--macos-host", default=os.environ.get("NKB_MACOS_HOST"),
                         help="user@host of the Mac that signs the bundles, or NKB_MACOS_HOST")
     parser.add_argument("--macos-python", default=MAC_PYTHON,
                         help="a Python 3.11 or newer on the Mac (default %s)" % MAC_PYTHON)
+    parser.add_argument("--wait", type=int, default=WAIT_FOR_STATEMENT,
+                        help="seconds to wait for the statement (default %d)" % WAIT_FOR_STATEMENT)
     parser.add_argument("--dry-run", action="store_true",
                         help="everything except signing, notarising and uploading")
     args = parser.parse_args(argv)
     try:
         if bool(args.tag) == bool(args.rehearse):
             raise Refused(["give a tag, or --rehearse with the id of a run, and not both"])
+        repository = release.repository_name(contents.load_workspace())
+        if args.attest_only:
+            if not args.tag or args.dry_run:
+                raise Refused(["--attest-only asks again for the statement about a release already on its "
+                               "draft, so it takes a tag, and there is nothing to try dry"])
+            directory = os.path.join(ROOT, "target", "signing", args.tag)
+            problems = signed_problems(draft_view(args.tag, repository), args.tag, directory)
+            if problems:
+                raise Refused(problems)
+            attest(args.tag, directory, repository, args.wait)
+            return 0
         if not sys.platform.startswith("win"):
             raise Refused(["the card is read on Windows, so this runs there"])
         if not args.macos_host:
             raise Refused(["no Mac to sign the macOS bundles on: pass --macos-host user@host or set "
                            "NKB_MACOS_HOST. Without the bundles signed and stapled, macOS refuses "
                            "the two archives a person downloads."])
-        repository = contents.load_workspace().repository.split("github.com/")[-1]
         tag = args.tag or rehearsal_tag(args.rehearse, repository)
         contents.version_of_tag(tag, contents.load_workspace())
         pins = load_pins()
         today = datetime.date.today()
 
-        say("\n[0/7] before anything is downloaded")
+        say("\n[0/8] before anything is downloaded")
         say("  Windows: " + expiry_notice(pins.windows.expires, today))
         say("  macOS:   " + expiry_notice(pins.macos.expires, today))
         thumbprint = thumbprint_for(json.loads(powershell(STORE_SCRIPT, {"NKB_OID": CODE_SIGNING_OID}) or "[]"),
@@ -597,26 +741,26 @@ def main(argv=None):
                 shlex.quote(args.macos_python), pins.macos.sha256)], stdin=handle)
 
         directory = os.path.join(ROOT, "target", "signing", tag)
-        say("\n[1/7] fetching the build of %s" % tag)
+        say("\n[1/8] fetching the build of %s" % tag)
         fetch(directory, tag, args.rehearse, repository)
-        say("\n[2/7] checking it before touching it")
+        say("\n[2/8] checking it before touching it")
         check_build(directory, tag, bool(args.rehearse), repository)
-        say("\n[3/7] signing the Windows programs with the card")
+        say("\n[3/8] signing the Windows programs with the card")
         sign_windows(directory, tag, pins, thumbprint, signtool, args.dry_run)
-        say("\n[4/7] signing, notarising and stapling the macOS bundles on %s" % args.macos_host)
+        say("\n[4/8] signing, notarising and stapling the macOS bundles on %s" % args.macos_host)
         sign_macos(directory, tag, pins, args.macos_host, args.macos_python, args.dry_run)
         if args.dry_run:
             say("\nDry run: nothing was signed, notarised or uploaded.")
             return 0
-        say("\n[5/7] the files for the page")
+        say("\n[5/8] the files for the page")
         name_for_publication(directory, tag)
         write_checksums(directory, tag)
         if args.rehearse:
             say("\nRehearsal: signed, and stopped before uploading. The files are in %s." % directory)
             return 0
-        say("\n[6/7] uploading to the draft")
+        say("\n[6/8] uploading to the draft")
         upload(directory, tag, repository)
-        say("\n[7/7] done. %s is a draft holding the signed build. Read it before publishing." % tag)
+        attest(tag, directory, repository, args.wait)
         return 0
     except Refused as refusal:
         print("sign_release: refused:", file=sys.stderr)
