@@ -1,0 +1,158 @@
+# Polish translations of the pack unicode-text, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "382200bfcc35"
+text = "Unicode i tekst"
+
+[pack.description]
+source = "8b6da11f3f9b"
+text = "Znaki, które wyglądają niewinnie, a psują liczenie, porównywanie i wyświetlanie."
+
+[rtl-override.name]
+source = "ef7afd7cefe1"
+text = "Wymuszenie kierunku od prawej do lewej"
+
+[rtl-override.breaks]
+source = "d471c0701590"
+text = "Znak wymuszający kierunek sprawia, że tekst wyświetla się odwrócony: użytkownik widzi inną wartość niż zapisana."
+
+[rtl-override.expect]
+source = "cbe0ef5936d9"
+text = "Usunięte, escapowane albo pokazane ze zneutralizowanym działaniem - nigdy nie wyświetlane tak, jak jest."
+
+[soft-hyphen.name]
+source = "c14f8aa12dee"
+text = "Miękki łącznik"
+
+[soft-hyphen.breaks]
+source = "57baf9dc37e3"
+text = "Niewidoczny łącznik w środku słowa psuje dokładne wyszukiwanie i sprawia, że dwa identycznie wyglądające nazwiska są różnymi rekordami."
+
+[soft-hyphen.expect]
+source = "8fb34acc8ae2"
+text = "Zapisany bez zmian i znajdowany przez wyszukiwanie słowa Kowalski albo usuwany przez normalizację przy zapisie."
+
+[combining-acute.name]
+source = "a882e039158a"
+text = "Łączący akcent ostry"
+
+[combining-acute.breaks]
+source = "328c29be4a32"
+text = "Ta sama litera zapisana jako litera bazowa ze znakiem łączącym porównuje się jako różna od postaci jednoznakowej."
+
+[combining-acute.expect]
+source = "da217090f12c"
+text = "Normalizowany przy zapisie albo porównywany z uwzględnieniem normalizacji."
+
+[zalgo.name]
+source = "ba0307c0932d"
+text = "Spiętrzone znaki łączące"
+
+[zalgo.breaks]
+source = "d189426aa927"
+text = "Spiętrzone znaki łączące wychodzą w pionie poza wiersz i zasłaniają interfejs wokół pola."
+
+[zalgo.expect]
+source = "259873403030"
+text = "Przyjęte i przycięte do ramki pola albo odrzucone z limitem znaków łączących."
+
+[bom-inside.name]
+source = "a90bf7ff18a4"
+text = "Znacznik kolejności bajtów w wartości"
+
+[bom-inside.breaks]
+source = "a21e831ab430"
+text = "Znacznik kolejności bajtów w środku wartości przeżywa każde kopiowanie i po cichu psuje dokładne porównanie."
+
+[bom-inside.expect]
+source = "13eb2e436d80"
+text = "Usuwany przy zapisie albo zachowany i widoczny w interfejsie."
+
+[bell-control.name]
+source = "d32a8cc12bd8"
+text = "Znak sterujący dzwonka"
+
+[bell-control.breaks]
+source = "eebd0ee8db22"
+text = "Znak sterujący przekazany do terminala albo logu sprawia, że wyjście coś robi, zamiast coś mówić."
+
+[bell-control.expect]
+source = "babbfad31033"
+text = "Odrzucony albo escapowany, zanim trafi do jakiegokolwiek logu, terminala albo raportu."
+
+[fullwidth-latin.name]
+source = "0b2b75c3ab2d"
+text = "Litery łacińskie pełnej szerokości"
+
+[fullwidth-latin.breaks]
+source = "c4772190d495"
+text = "Człowiek czyta litery pełnej szerokości jak łacińskie, a wyszukiwanie, filtry i kontrola unikalności jak zupełnie inne znaki."
+
+[fullwidth-latin.expect]
+source = "1eebf79cf0e7"
+text = "Normalizowane do porównań albo przyjęte i konsekwentnie traktowane jako różne."
+
+[math-bold.name]
+source = "6694ba207b4e"
+text = "Matematyczne litery pogrubione"
+
+[math-bold.breaks]
+source = "2dc13fc315c1"
+text = "Matematyczne warianty liter omijają filtry wulgaryzmów i wyszukiwanie, a wyglądają jak zwykłe słowa."
+
+[math-bold.expect]
+source = "3c64e145fbfa"
+text = "Normalizowane do porównań i filtrowania albo odrzucane w polach, w których oczekiwany jest zwykły tekst."
+
+[upside-down.name]
+source = "a5b9aab9647b"
+text = "Litery do góry nogami"
+
+[upside-down.breaks]
+source = "fe6666d40cee"
+text = "Zwykłe litery z innego bloku Unicode, używane do omijania filtrów i do psucia wyświetlania wierszy na listach."
+
+[upside-down.expect]
+source = "446b572709f1"
+text = "Przyjęte jako zwykły tekst bez psucia układu i objęte tymi samymi filtrami co zwykły tekst."
+
+[cjk-mixed.name]
+source = "406f68e12173"
+text = "Mieszane znaki CJK"
+
+[cjk-mixed.breaks]
+source = "530576c2f896"
+text = "Znaki podwójnej szerokości psują wyrównanie kolumn i mylą liczniki, które zakładają, że jeden znak to jedna komórka."
+
+[cjk-mixed.expect]
+source = "4013f980017c"
+text = "Wyświetlane i liczone poprawnie, a szerokości kolumn dopasowują się, zamiast się przelewać."
+
+[arabic-in-latin.name]
+source = "3f9b00b03913"
+text = "Arabski w łacińskim zdaniu"
+
+[arabic-in-latin.breaks]
+source = "08949a9d0a4b"
+text = "Tekst pisany od prawej do lewej w zdaniu pisanym od lewej do prawej zmienia na ekranie kolejność, więc kolejność na ekranie nie jest kolejnością zapisu."
+
+[arabic-in-latin.expect]
+source = "6b146565120b"
+text = "Zapisany w kolejności logicznej i wyświetlany z poprawną izolacją, więc kopiowanie zwraca to, co zostało wpisane."
+
+[emoji-in-name.name]
+source = "12596994f715"
+text = "Emoji w polu imienia"
+
+[emoji-in-name.breaks]
+source = "bf8e857d2fc4"
+text = "Znak spoza podstawowej płaszczyzny w polu imienia przekracza limity długości w bajtach i psuje bazy danych skonfigurowane na wąskie kodowania."
+
+[emoji-in-name.expect]
+source = "e47ce18cd8f2"
+text = "Zapisane w całości albo odrzucone z komunikatem - nigdy nie ucięte w połowie znaku."

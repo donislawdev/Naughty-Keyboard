@@ -12,8 +12,9 @@ What it checks, on every page but the 404:
 - one `h1`, a `lang`, a title and a description within what a search result
   shows, and no title or description used twice,
 - a canonical address on the site's own host, which is the page itself,
-- `hreflang` alternates that name the page itself and `x-default`, and that
-  every alternate names back,
+- `hreflang` alternates that name the page itself and `x-default`, that
+  every alternate names back, and that the page is there in every language
+  the site has,
 - every link inside the site leads to a page, and every `#fragment` to an
   element of that page,
 - nothing loaded from another host: no script, stylesheet, picture or frame,
@@ -21,7 +22,8 @@ What it checks, on every page but the 404:
 - every block of structured data is JSON with the schema.org context.
 
 And once for the site: the 404 page is `noindex`, the sitemap lists exactly
-the pages there are, and robots.txt names the sitemap.
+the pages there are and gives none of them a priority, and robots.txt names
+the sitemap.
 
 What it cannot see: whether a sentence is true, whether a page reads well, or
 what a search engine will do with any of it.
@@ -228,17 +230,24 @@ def link_problems(site: Site, path: Path, page: Page, read_page) -> list[str]:
         if not target.is_file():
             found.append(f"links to {href!r}, which is not a page")
             continue
-        fragment = urlsplit(href).fragment
+        # A heading in Polish has an id such as `co-pamięta`, and the link to it
+        # arrives percent-escaped. A browser decodes a fragment before it looks
+        # for the element (the HTML standard, scrolling to a fragment), so this does too.
+        fragment = unquote(urlsplit(href).fragment)
         if fragment and fragment not in read_page(target).ids:
             found.append(f"links to {href!r}, and that page has no element {fragment!r}")
     return found
 
 
 def alternate_problems(site: Site, pages: dict[Path, Page]) -> list[str]:
-    """A language version that does not name back is ignored by a search engine."""
+    """A language version that does not name back is ignored by a search engine,
+    and a page the site has in one language only leaves the others incomplete."""
     found = []
+    languages = {language for page in pages.values() for language, _ in page.alternates} - {"x-default"}
     for path, page in pages.items():
         own = site.url_of(path)
+        for language in sorted(languages - {language for language, _ in page.alternates}):
+            found.append(f"{own}: there is no {language} version of it")
         for language, href in page.alternates:
             if language == "x-default":
                 continue
@@ -287,6 +296,11 @@ def site_problems(site: Site, pages: dict[Path, Page]) -> list[str]:
             found.append(f"the sitemap lists {address}, which is not a page")
         for address in sorted(there - set(listed)):
             found.append(f"the sitemap leaves out {address}")
+    # hugo.toml asks for no priority, and a page made another way, such as by a
+    # content adapter, can still get one of 0, which says it matters least.
+    for part in sorted(site.root.rglob("sitemap.xml")):
+        if "<priority>" in part.read_text(encoding="utf-8"):
+            found.append(f"{site.url_of(part)} gives a page a priority")
     robots = site.root / "robots.txt"
     if not robots.is_file() or f"Sitemap: {site.base}sitemap.xml" not in robots.read_text(encoding="utf-8"):
         found.append(f"robots.txt does not name {site.base}sitemap.xml")

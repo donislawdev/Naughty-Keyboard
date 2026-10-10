@@ -1,0 +1,158 @@
+# Polish translations of the pack filenames-paths, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "6fe651ebea31"
+text = "Nazwy plików i ścieżki"
+
+[pack.description]
+source = "a414b53dab99"
+text = "Nazwy, które system plików odrzuca, zmienia albo czyta inaczej, niż chciał użytkownik."
+
+[reserved-con.name]
+source = "78e2d67c7ec3"
+text = "Zarezerwowana nazwa urządzenia"
+
+[reserved-con.breaks]
+source = "083432f924b5"
+text = "Nazwa urządzenia zarezerwowana przez jeden z systemów operacyjnych. Pliku o tej nazwie nie da się utworzyć, a błąd często wychodzi jako ogólny komunikat."
+
+[reserved-con.expect]
+source = "c9eb85e9c0fc"
+text = "Odrzucona przy wprowadzaniu z komunikatem, który nazywa zarezerwowane słowo, a nie dopiero przy zapisie."
+
+[trailing-dot.name]
+source = "a5ecbb3472ad"
+text = "Kropka na końcu"
+
+[trailing-dot.breaks]
+source = "d8241b737b49"
+text = "Niektóre systemy plików po cichu usuwają kropki na końcu, więc zapisana nazwa różni się od żądanej."
+
+[trailing-dot.expect]
+source = "e3232224a99c"
+text = "Odrzucona albo znormalizowana w widoczny sposób, żeby użytkownik zobaczył nazwę, która zostanie użyta."
+
+[trailing-space-name.name]
+source = "398ac0090232"
+text = "Spacja na końcu nazwy pliku"
+
+[trailing-space-name.breaks]
+source = "dc0587c7e90b"
+text = "Spacja na końcu nazwy pliku jest niewidoczna, raz usuwana, raz zachowywana - dwa pliki, które wyglądają identycznie."
+
+[trailing-space-name.expect]
+source = "7a058075089a"
+text = "Przycinana konsekwentnie, a wynikowa nazwa pokazana użytkownikowi."
+
+[illegal-chars.name]
+source = "dcfa58bdf9a7"
+text = "Znaki zabronione w nazwach plików"
+
+[illegal-chars.breaks]
+source = "417d4b514c45"
+text = "Znaki dozwolone w jednym systemie i zabronione w innym. Pliku utworzonego na jednym komputerze nie da się skopiować na inny."
+
+[illegal-chars.expect]
+source = "7d4563c06007"
+text = "Odrzucone z nazwaniem zabronionych znaków, zanim plik powstanie."
+
+[double-extension.name]
+source = "42f7c66cac12"
+text = "Podwójne rozszerzenie"
+
+[double-extension.breaks]
+source = "27df0a15f590"
+text = "Interfejsy, które ukrywają znane rozszerzenia, pokazują to jako report.txt, więc użytkownik widzi dokument, a dostaje program."
+
+[double-extension.expect]
+source = "976e00dfe751"
+text = "Pełna nazwa pokazana wszędzie tam, gdzie użytkownik podejmuje decyzję o pliku."
+
+[rtl-extension.name]
+source = "7c041a3c0f49"
+text = "Wymuszenie kierunku od prawej do lewej w nazwie pliku"
+
+[rtl-extension.breaks]
+source = "77a18e5f6d0c"
+text = "Wymuszenie kierunku sprawia, że rozszerzenie czyta się od tyłu, więc program wygląda jak plik tekstowy."
+
+[rtl-extension.expect]
+source = "d99a4aceae57"
+text = "Znaki sterujące kierunkiem usunięte albo zneutralizowane w każdym miejscu, które pokazuje nazwę pliku."
+
+[dot-only.name]
+source = "de5a9c11e489"
+text = "Pojedyncza kropka"
+
+[dot-only.breaks]
+source = "4bd2e2c141f5"
+text = "Pojedyncza kropka znaczy „ten katalog”. Użyta jako nazwa pliku albo zawodzi, albo robi coś niezamierzonego."
+
+[dot-only.expect]
+source = "72695893e7fb"
+text = "Odrzucona przy wprowadzaniu."
+
+[dotdot.name]
+source = "84762c7b3cdf"
+text = "Dwie kropki"
+
+[dotdot.breaks]
+source = "d77cc63159f1"
+text = "Dwie kropki to katalog nadrzędny - najkrótszy możliwy test wyjścia poza katalog (path traversal)."
+
+[dotdot.expect]
+source = "72695893e7fb"
+text = "Odrzucone przy wprowadzaniu."
+
+[leading-dot.name]
+source = "0288ca04f450"
+text = "Kropka na początku"
+
+[leading-dot.breaks]
+source = "d29c431b4229"
+text = "Kropka na początku ukrywa plik w niektórych systemach, więc przesłany plik znika z list."
+
+[leading-dot.expect]
+source = "1e9903572387"
+text = "Przyjęta, a plik widoczny na listach niezależnie od kropki na początku."
+
+[unicode-filename.name]
+source = "81dda1be71a1"
+text = "Nazwa pliku spoza ASCII"
+
+[unicode-filename.breaks]
+source = "d6e4617af322"
+text = "Nazwy spoza ASCII psują archiwa, przesyłanie i każdą warstwę, która zakłada wąskie kodowanie."
+
+[unicode-filename.expect]
+source = "d756ccaa72ec"
+text = "Zapisana, wylistowana, pobrana i zarchiwizowana z nienaruszoną nazwą."
+
+[path-260.name]
+source = "b353d85b8e7d"
+text = "260 znaków"
+
+[path-260.breaks]
+source = "ce3243ef9ec8"
+text = "Klasyczny limit długości ścieżki. Jego przekroczenie powoduje awarie daleko od miejsca, w którym wpisano nazwę."
+
+[path-260.expect]
+source = "f1891f133792"
+text = "Nazwa odrzucona z podanym limitem tam, gdzie się ją wpisuje."
+
+[space-in-name.name]
+source = "562c950e58d2"
+text = "Spacja w nazwie pliku"
+
+[space-in-name.breaks]
+source = "bc3c51bf9d47"
+text = "Nazwy ze spacjami psują budowanie poleceń i odnośniki, które nie są ujęte w cudzysłów albo zakodowane."
+
+[space-in-name.expect]
+source = "25075f4e76bd"
+text = "Obsłużona wszędzie, gdzie używana jest nazwa pliku, także w odnośnikach do pobrania."

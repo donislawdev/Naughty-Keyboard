@@ -1,0 +1,158 @@
+# Polish translations of the pack magic-values, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "06ccb4f3a667"
+text = "Wartości magiczne"
+
+[pack.description]
+source = "418a243ef656"
+text = "Słowa, które człowiek czyta jako tekst, a parser jako wartość logiczną, brak wartości albo liczbę."
+
+[bool-no.name]
+source = "8babef046276"
+text = "Słowo no"
+
+[bool-no.breaks]
+source = "4701ebac448a"
+text = "YAML 1.1 i kilka parserów konfiguracji czyta słowo no bez cudzysłowu jako logiczne false - a NO to kod kraju Norwegii."
+
+[bool-no.expect]
+source = "ddb36b7aab16"
+text = "Zapisane i zwrócone jako dwuznakowy napis no."
+
+[word-null.name]
+source = "c4bc86230eb9"
+text = "Słowo null"
+
+[word-null.breaks]
+source = "3dc933af480c"
+text = "Serializatory i słabo typowane interfejsy zamieniają ten tekst na brak wartości. Pole wygląda na zapisane, a wraca puste."
+
+[word-null.expect]
+source = "07354ac7331c"
+text = "Zapisane i zwrócone jako czteroznakowy napis, odróżnialny od pustego pola."
+
+[bool-true.name]
+source = "b4a9fa2b58cf"
+text = "Słowo true"
+
+[bool-true.breaks]
+source = "a1b5f72a1a24"
+text = "Pole tekstowe ze słowem true gdzieś po drodze staje się wartością logiczną i przestaje wracać w tej samej postaci."
+
+[bool-true.expect]
+source = "21a5e27bbeb6"
+text = "Zwrócone jako tekst, dokładnie tak, jak zostało wpisane."
+
+[word-nan.name]
+source = "0a2489d09a41"
+text = "Słowo NaN"
+
+[word-nan.breaks]
+source = "0cdb2cde98d9"
+text = "Parsery liczb je przyjmują, a potem każde porównanie z nim daje fałsz - filtry i sortowanie po cichu gubią wiersz."
+
+[word-nan.expect]
+source = "de960334967d"
+text = "Odrzucone w polu liczbowym, zachowane dosłownie w polu tekstowym."
+
+[word-infinity.name]
+source = "6be27b30bf7f"
+text = "Słowo Infinity"
+
+[word-infinity.breaks]
+source = "d8a1f852ce13"
+text = "Niektóre warstwy przyjmują je jako liczbę, a inne odrzucają, więc ta sama wartość przechodzi walidację różnie na każdym etapie."
+
+[word-infinity.expect]
+source = "ce9b11d40715"
+text = "Jeden spójny werdykt w interfejsie, w warstwie usług i w bazie."
+
+[word-undefined.name]
+source = "fa69985dc078"
+text = "Słowo undefined"
+
+[word-undefined.breaks]
+source = "ed205d3215e6"
+text = "Często jest skutkiem błędu gdzie indziej, więc prawdziwej wartości o tej pisowni nie da się odróżnić od usterki."
+
+[word-undefined.expect]
+source = "50f03c65940e"
+text = "Zapisane i wyświetlane jako zwykły tekst, bez specjalnego traktowania."
+
+[bool-yes.name]
+source = "2029f8f12e6b"
+text = "Słowo yes"
+
+[bool-yes.breaks]
+source = "45b90b2627e1"
+text = "Ten sam problem konwersji co przy słowie no, w przeciwną stronę, i tak samo niewidoczny podczas przeglądu."
+
+[bool-yes.expect]
+source = "dfbaba7b22a3"
+text = "Zwrócone jako trzyznakowy napis."
+
+[bool-off.name]
+source = "30c83c308978"
+text = "Słowo off"
+
+[bool-off.breaks]
+source = "effd686b7090"
+text = "Kolejne słowo, które popularne parsery konfiguracji zamieniają na wartość logiczną."
+
+[bool-off.expect]
+source = "d3dc8a568810"
+text = "Zwrócone jako tekst."
+
+[word-none.name]
+source = "0792113d0439"
+text = "Słowo None"
+
+[word-none.breaks]
+source = "d704dc74093b"
+text = "Słowo kluczowe braku wartości w jednym z powszechnie używanych języków. Przechodzi przez interfejsy jako null."
+
+[word-none.expect]
+source = "d87314f5e75b"
+text = "Zwrócone jako czteroznakowy napis."
+
+[word-nil.name]
+source = "ec0592889d28"
+text = "Słowo nil"
+
+[word-nil.breaks]
+source = "ed73f648f536"
+text = "Słowo kluczowe braku wartości w innym języku. Ta sama awaria, inna warstwa."
+
+[word-nil.expect]
+source = "d3dc8a568810"
+text = "Zwrócone jako tekst."
+
+[na-slash.name]
+source = "7c12facfecc3"
+text = "N/A z ukośnikiem"
+
+[na-slash.breaks]
+source = "6613b398d3f3"
+text = "Zawiera separator, więc psuje też ścieżki, kolumny CSV i wszystko, co dzieli tekst na ukośniku."
+
+[na-slash.expect]
+source = "562b56399ab2"
+text = "Zapisane i wyświetlane w całości."
+
+[dash-only.name]
+source = "d15fd140690a"
+text = "Pojedyncza kreska"
+
+[dash-only.breaks]
+source = "31fafc14bd86"
+text = "Pojedyncza kreska to w formularzach prawdziwa odpowiedź, a w raportach znacznik „brak wartości”. Przy eksporcie oba znaczenia się zderzają."
+
+[dash-only.expect]
+source = "201fc64ccfda"
+text = "Zapisana jako wartość jednoznakowa, odróżnialna od pustego pola."

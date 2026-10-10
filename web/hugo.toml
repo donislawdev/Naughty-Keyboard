@@ -36,6 +36,22 @@ publishDir = "public"
     # The locale a link preview asks for, which is a language and a country.
     ogLocale = "en_US"
 
+# Its pages have the same files as the English ones, so Hugo pairs them, and
+# a slug in their front matter gives the address in Polish.
+[languages.pl]
+  label = "Polski"
+  locale = "pl"
+  title = "Naughty Keyboard"
+  weight = 2
+  contentDir = "content/pl"
+  # GitHub Pages serves the 404 page at the root and no other, so a language
+  # other than English has none. A language's own list replaces the site's,
+  # so it names the site's three kinds again. A language that leaves out
+  # "404" writes a page the check of the built site names.
+  disableKinds = ["404", "taxonomy", "term", "rss"]
+  [languages.pl.params]
+    ogLocale = "pl_PL"
+
 [markup.goldmark.renderer]
   # Content is Markdown written for this site, and raw HTML in it would be a
   # second way of writing a page that no template controls.

@@ -1,0 +1,46 @@
+# Polish translations of the palette's names for its actions, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[next-value]
+source = "9627d8e36496"
+text = "Następna wartość"
+
+[previous-value]
+source = "bdd8b3ba67c1"
+text = "Poprzednia wartość"
+
+[repeat-last]
+source = "b073f0d0e298"
+text = "Powtórz ostatnią wartość"
+
+[restart-pack]
+source = "86af2fcbfbe7"
+text = "Zacznij paczkę od początku"
+
+[copy-report]
+source = "cfa5ccf60bc7"
+text = "Kopiuj blok do zgłoszenia"
+
+[mark-ok]
+source = "ee4e1a4c1e25"
+text = "Oznacz jako działające"
+
+[mark-problem]
+source = "90bbf2b42647"
+text = "Oznacz jako problem"
+
+[mark-suspect]
+source = "3b2ddc5c4367"
+text = "Oznacz jako podejrzane"
+
+[open-packs]
+source = "a86dabc0ace1"
+text = "Znajdź wartość"
+
+[toggle-visibility]
+source = "90c7f938332a"
+text = "Zwiń albo rozwiń paletę"
