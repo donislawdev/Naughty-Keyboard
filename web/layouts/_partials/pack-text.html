@@ -1,0 +1,19 @@
+{{- /*
+  One field of a pack - its name or its description - in the language being
+  built. Takes: pack (from the facts), field.
+*/ -}}
+{{- $english := index .pack .field }}
+{{- $text := $english }}
+{{- if ne site.Language.Lang "en" }}
+  {{- $table := false }}
+  {{- with index hugo.Data.translations site.Language.Lang }}
+    {{- with index . "packs" }}{{ with index . $.pack.id }}{{ $table = index . "pack" }}{{ end }}{{ end }}
+  {{- end }}
+  {{- $text = partial "translated.html" (dict
+    "english" $english
+    "table" $table
+    "key" .field
+    "what" (printf "the pack %s, field %s" .pack.id .field)
+  ) }}
+{{- end }}
+{{- return $text }}

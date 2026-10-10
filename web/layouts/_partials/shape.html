@@ -1,0 +1,13 @@
+{{- /*
+  What a value is made of, the way the palette says it: "3 zero-width
+  characters", "a trailing space". The facts are the program's, the words the
+  language file's, with a plural form for every count.
+*/ -}}
+{{- with .shape }}
+<ul class="counts shape">
+  {{- range . }}
+  {{- $key := printf "shape_%s" (replace .fact "-" "_") }}
+  <li>{{ with .count }}{{ T $key (dict "count" (int .)) }}{{ else }}{{ T $key }}{{ end }}</li>
+  {{- end }}
+</ul>
+{{- end }}

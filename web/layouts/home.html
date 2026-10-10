@@ -1,0 +1,136 @@
+{{- /*
+  The home page. Its words are the front matter of content/<language>/_index.md,
+  its values and numbers are the catalogue's facts.
+*/ -}}
+{{ define "main" }}
+{{- $p := .Params }}
+{{- $catalogue := hugo.Data.facts.catalogue }}
+<div class="container">
+  <section class="hero">
+    <div class="hero-text">
+      <span class="pill">{{ $p.hero.eyebrow }}</span>
+      <h1>{{ $p.hero.title }} <span class="turn">{{ $p.hero.turn }}</span></h1>
+      <p class="lead">{{ partial "rich.html" $p.hero.lead }}</p>
+      <div class="actions">
+        <a class="button primary" href="{{ (partial "find-page.html" "/download").RelPermalink }}">{{ T "get_it" }}</a>
+        <a class="button" href="{{ (partial "find-page.html" "/docs/getting-started").RelPermalink }}">{{ T "read_the_docs" }}</a>
+      </div>
+      <ul class="facts">
+        {{- range $p.hero.facts }}
+        <li>{{ . }}</li>
+        {{- end }}
+      </ul>
+    </div>
+    <div class="panel breaks" aria-label="{{ $p.hero.rows_label }}">
+      <div class="breaks-head">
+        {{ partial "chord.html" "Alt+Shift+N" }}
+        <span>{{ $p.hero.chord_says }}</span>
+      </div>
+      {{- range $p.hero.rows }}
+      {{- $value := partial "find-value.html" .ref }}
+      <div class="breaks-row">{{ partial "value.html" $value }}<span class="what">{{ .says }}</span></div>
+      {{- end }}
+    </div>
+  </section>
+</div>
+
+<section class="section">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow">{{ $p.catalogue.eyebrow }}</span>
+      <h2>{{ $p.catalogue.title }}</h2>
+      <p>{{ $p.catalogue.text }}</p>
+    </div>
+    <div class="grid three">
+      {{- range $p.catalogue.examples }}
+      {{- $value := partial "find-value.html" . }}
+      {{- $pack := partial "find-page.html" (printf "/packs/%s" (index (split . "/") 0)) }}
+      <a class="card example" href="{{ $pack.RelPermalink }}#{{ $value.id }}">
+        {{ partial "value.html" $value }}
+        <p class="what">{{ partial "value-text.html" (dict "value" $value "field" "breaks") }}</p>
+        <span class="from">{{ $value.ref }}</span>
+      </a>
+      {{- end }}
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow">{{ $p.steps.eyebrow }}</span>
+      <h2>{{ $p.steps.title }}</h2>
+    </div>
+    <ol class="steps">
+      {{- range $p.steps.items }}
+      <li><h3>{{ .title }}{{ with .chord }} {{ partial "chord.html" . }}{{ end }}</h3><p>{{ partial "rich.html" .text }}</p></li>
+      {{- end }}
+    </ol>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow">{{ partial "counted.html" $p.packs.eyebrow }}</span>
+      <h2>{{ $p.packs.title }}</h2>
+      <p>{{ $p.packs.text }}</p>
+    </div>
+    <div class="grid three">
+      {{- range $catalogue.packs }}
+      {{- $meta := partial "pack-meta.html" .id }}
+      {{- $page := partial "find-page.html" (printf "/packs/%s" .id) }}
+      <a class="card pack-card" href="{{ $page.RelPermalink }}">
+        <div class="name"><h3>{{ $meta.name }}</h3><span class="count">{{ T "values_count" (dict "count" (int .value_count)) }}</span></div>
+        <p>{{ $meta.about }}</p>
+      </a>
+      {{- end }}
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container split">
+    <div class="section-head flush">
+      <span class="eyebrow">{{ $p.cli.eyebrow }}</span>
+      <h2>{{ $p.cli.title }}</h2>
+      <p>{{ partial "rich.html" $p.cli.text }}</p>
+      <p><a href="{{ (partial "find-page.html" "/docs/cli").RelPermalink }}">{{ $p.cli.link }}</a></p>
+    </div>
+    <div class="panel terminal">
+      <div class="terminal-bar">{{ $p.cli.terminal_title }}</div>
+      <pre>{{ $p.cli.terminal }}</pre>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="section-head">
+      <span class="eyebrow">{{ $p.promises.eyebrow }}</span>
+      <h2>{{ $p.promises.title }}</h2>
+      <p>{{ $p.promises.text }}</p>
+    </div>
+    <div class="grid three">
+      {{- range $p.promises.items }}
+      <div class="promise"><h3>{{ .title }}</h3><p>{{ .text }}</p></div>
+      {{- end }}
+    </div>
+    <p class="section-more"><a href="{{ (partial "find-page.html" "/security").RelPermalink }}">{{ $p.promises.link }}</a></p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container">
+    <div class="callout">{{ partial "rich.html" $p.limits }} <a href="{{ (partial "find-page.html" "/docs/limits").RelPermalink }}">{{ T "honest_limits" }}</a></div>
+    <div class="cta">
+      <h2>{{ $p.cta.title }}</h2>
+      <p>{{ $p.cta.text }}</p>
+      <div class="actions">
+        <a class="button primary" href="{{ (partial "find-page.html" "/download").RelPermalink }}">{{ T "get_it" }}</a>
+        <a class="button" href="{{ (index hugo.Data.menus.project 0).url }}">{{ T "view_on_github" }}</a>
+      </div>
+    </div>
+  </div>
+</section>
+{{ end }}

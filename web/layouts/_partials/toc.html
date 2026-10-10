@@ -1,0 +1,26 @@
+{{- /*
+  What is on the page: the second-level headings of its content, then the
+  sections a template adds after the content. Takes: page, extra (a list of
+  maps with id and title).
+
+  The headings come as a tree whose top depends on the highest level in the
+  content, so the second-level ones are picked out at any depth.
+*/ -}}
+{{- $items := slice }}
+{{- range .page.Fragments.Headings }}
+  {{- if eq .Level 2 }}{{ $items = $items | append (dict "id" .ID "title" .Title) }}{{ end }}
+  {{- range .Headings }}
+    {{- if eq .Level 2 }}{{ $items = $items | append (dict "id" .ID "title" .Title) }}{{ end }}
+  {{- end }}
+{{- end }}
+{{- $items = $items | append .extra }}
+{{- if $items }}
+<nav class="toc" aria-label="{{ T "on_this_page" }}">
+  <h2>{{ T "on_this_page" }}</h2>
+  <ul>
+    {{- range $items }}
+    <li><a href="#{{ .id }}">{{ .title | plainify }}</a></li>
+    {{- end }}
+  </ul>
+</nav>
+{{- end }}

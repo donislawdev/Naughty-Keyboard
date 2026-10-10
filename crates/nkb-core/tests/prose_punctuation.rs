@@ -219,7 +219,10 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
     );
 
     let mut findings = Vec::new();
-    let mut seen = [0usize; 9];
+    // One counter per kind of file, in the order `Syntax` declares them. Nine
+    // stood here while `Syntax` had ten, so the first shell script would have
+    // stopped this test with an index out of bounds instead of a finding.
+    let mut seen = [0usize; 13];
     let mut comment_lines = 0;
     let mut literals = 0;
     for (path, syntax) in &tree.files {
@@ -252,7 +255,24 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
         resource,
         yaml,
         python,
+        // No shell script is tracked today, and one would be read like the rest.
+        _shell,
+        html,
+        css,
+        json,
     ] = seen;
+    assert!(
+        html >= 2,
+        "read {html} website templates, expected at least the base and the home page in web/layouts"
+    );
+    assert!(
+        css >= 1,
+        "read {css} stylesheets, expected the website's one"
+    );
+    assert!(
+        json >= 4,
+        "read {json} data files, expected the website's four files of facts"
+    );
     assert!(
         rust >= 50,
         "read {rust} Rust files, expected at least 50 - the walk looked in the wrong place"
@@ -263,9 +283,9 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
         "read {toml} TOML files, expected the seven manifests at least"
     );
     assert!(
-        git == 4,
-        "read {git} git files, expected .gitignore, .gitattributes, .github/CODEOWNERS and \
-         the pins in .github/scripts"
+        git == 5,
+        "read {git} git files, expected .gitignore, .gitattributes, .github/CODEOWNERS, \
+         the pins in .github/scripts and the website's address in web/static/CNAME"
     );
     assert!(
         python >= 2,
@@ -546,6 +566,31 @@ fn control_the_icon_files_are_read() {
     assert_eq!(
         found(Syntax::Resource, "// aSEMI b\n1 ICON \"edamame.ico\"\n"),
         [(1, Semicolon)]
+    );
+}
+
+#[test]
+fn control_the_website_files_are_read() {
+    use Breach::{Dash, Semicolon};
+    // A template's comments are prose in both of their forms, and its markup
+    // and template code are not.
+    assert_eq!(
+        found(
+            Syntax::Html,
+            "<p style=\"a:bSEMI c:d\">{{ T \"x\" }}</p>\n<!-- aSEMI b -->\n{{/* cSEMI d */}}\n{{- /* e EMDASH f */ -}}\n"
+        ),
+        [(2, Semicolon), (3, Semicolon), (4, Dash)]
+    );
+    // The stylesheet has the block comments of C, and a declaration ends in a
+    // semicolon that is code.
+    assert_eq!(
+        found(Syntax::Css, "/* aSEMI b */\n.x { color: redSEMI }\n"),
+        [(1, Semicolon)]
+    );
+    // The facts are data: the catalogue's sentences in them follow `D31`.
+    assert_eq!(
+        found(Syntax::Json, "{\"breaks\": \"aSEMI b EMDASH c\"}\n"),
+        []
     );
 }
 

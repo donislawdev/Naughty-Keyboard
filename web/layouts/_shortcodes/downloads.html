@@ -1,0 +1,25 @@
+{{- /*
+  The archives every release carries, from .github/release/archives.toml, the
+  one file the release builds them from. `VERSION` stands for the version, as
+  it does in the README.
+*/ -}}
+{{- $archives := hugo.Data.release.archives }}
+<div class="table-wrap"><table>
+  <thead><tr>
+    <th>{{ T "system" }}</th>
+    {{- range $name, $_ := $archives.programs }}
+    <th><code>{{ $name }}</code></th>
+    {{- end }}
+  </tr></thead>
+  <tbody>
+    {{- range $archives.platforms }}
+    {{- $platform := . }}
+    <tr>
+      <td>{{ T (printf "system_%s" .os) (dict "minimum" (index . "minimum-os")) }}</td>
+      {{- range $name, $_ := $archives.programs }}
+      <td><code>{{ $name }}_VERSION_{{ $platform.os }}_{{ $platform.arch }}.{{ $platform.format }}</code></td>
+      {{- end }}
+    </tr>
+    {{- end }}
+  </tbody>
+</table></div>

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "next-value",
+    "name": "Next value",
+    "chord": "Alt+Shift+N",
+    "works": true
+  },
+  {
+    "id": "previous-value",
+    "name": "Previous value",
+    "chord": "Alt+Shift+P",
+    "works": true
+  },
+  {
+    "id": "repeat-last",
+    "name": "Repeat last value",
+    "chord": "Alt+Shift+R",
+    "works": false
+  },
+  {
+    "id": "restart-pack",
+    "name": "Restart pack",
+    "chord": "Alt+Shift+0",
+    "works": true
+  },
+  {
+    "id": "copy-report",
+    "name": "Copy report block",
+    "chord": "Alt+Shift+B",
+    "works": true
+  },
+  {
+    "id": "mark-ok",
+    "name": "Mark as working",
+    "chord": "Alt+Shift+1",
+    "works": false
+  },
+  {
+    "id": "mark-problem",
+    "name": "Mark as a problem",
+    "chord": "Alt+Shift+2",
+    "works": false
+  },
+  {
+    "id": "mark-suspect",
+    "name": "Mark as suspect",
+    "chord": "Alt+Shift+3",
+    "works": false
+  },
+  {
+    "id": "open-packs",
+    "name": "Find a value",
+    "chord": "Alt+Shift+Space",
+    "works": true
+  },
+  {
+    "id": "toggle-visibility",
+    "name": "Collapse or expand the palette",
+    "chord": "Alt+Shift+H",
+    "works": true
+  }
+]

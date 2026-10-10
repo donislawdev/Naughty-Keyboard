@@ -1,0 +1,52 @@
+{{- /*
+  One pack, every value of it, each drawn the way the palette draws it and
+  each with what it breaks and what a correct application does. Every value
+  has its own anchor, so a search result can lead straight to it.
+*/ -}}
+{{ define "main" }}
+{{- $meta := partial "pack-meta.html" .Params.pack }}
+{{- $pack := $meta.pack }}
+{{- $extra := slice }}
+<div class="container docs">
+  {{ partial "sidebar.html" . }}
+  <article class="prose">
+    {{ partial "breadcrumbs.html" . }}
+    <h1>{{ $meta.title }}</h1>
+    <p class="lead">{{ $meta.about }} {{ T "pack_lead" (dict "count" (int $pack.value_count)) }}</p>
+    <div class="pack-meta">
+      <span class="chip">{{ $pack.id }}</span>
+      <span class="chip">{{ T "pack_version" (dict "version" $pack.version "updated" $pack.updated) }}</span>
+      <span class="chip">{{ $pack.license }}</span>
+    </div>
+    <p>{{ T "pack_how" (dict "chord" (partial "chord.html" "Alt+Shift+N") "command" (printf "nkb emit %s" $pack.id)) | safeHTML }}</p>
+    <div>
+      {{- range $pack.values }}
+      {{- $name := partial "value-text.html" (dict "value" . "field" "name") }}
+      {{- $extra = $extra | append (dict "id" .id "title" $name) }}
+      <article class="card value-card" id="{{ .id }}">
+        <header><h2><a href="#{{ .id }}">{{ $name }}</a></h2><span class="id">{{ .ref }}</span></header>
+        <div class="sample">
+          {{ partial "value.html" . }}
+          {{- with .escaped }}
+          <span class="escaped">{{ . }}</span>
+          {{- end }}
+          {{ partial "shape.html" . }}
+          <ul class="counts">
+            <li><strong>{{ lang.FormatNumber 0 .counts.graphemes }}</strong> {{ T "graphemes" (int .counts.graphemes) }}</li>
+            <li><strong>{{ lang.FormatNumber 0 .counts.code_points }}</strong> {{ T "code_points" (int .counts.code_points) }}</li>
+            <li><strong>{{ lang.FormatNumber 0 .counts.bytes }}</strong> {{ T "bytes" (int .counts.bytes) }}</li>
+            <li><strong>{{ lang.FormatNumber 0 .counts.utf16_units }}</strong> {{ T "utf16_units" (int .counts.utf16_units) }}</li>
+          </ul>
+        </div>
+        <dl class="verdict">
+          <div><dt class="breaks-label">{{ T "what_it_breaks" }}</dt><dd>{{ partial "value-text.html" (dict "value" . "field" "breaks") }}</dd></div>
+          <div><dt class="expect-label">{{ T "what_to_expect" }}</dt><dd>{{ partial "value-text.html" (dict "value" . "field" "expect") }}</dd></div>
+        </dl>
+      </article>
+      {{- end }}
+    </div>
+    {{ partial "pager.html" . }}
+  </article>
+  {{ partial "toc.html" (dict "page" . "extra" $extra) }}
+</div>
+{{ end }}

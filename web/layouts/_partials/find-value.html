@@ -1,0 +1,16 @@
+{{- /*
+  A value of the catalogue by its reference, `pack/value`, from the facts the
+  program wrote. A reference the catalogue no longer has stops the build, so a
+  page cannot keep showing a value the program stopped shipping.
+*/ -}}
+{{- $found := false }}
+{{- $ref := . }}
+{{- range hugo.Data.facts.catalogue.packs }}
+  {{- range .values }}
+    {{- if eq .ref $ref }}{{ $found = . }}{{ end }}
+  {{- end }}
+{{- end }}
+{{- if not $found }}
+  {{- errorf "the site names the value %s, which the catalogue does not have" $ref }}
+{{- end }}
+{{- return $found }}

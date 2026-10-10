@@ -1,0 +1,3330 @@
+{
+  "pack_count": 9,
+  "value_count": 102,
+  "packs": [
+    {
+      "id": "whitespace",
+      "name": "Whitespace",
+      "description": "Characters that take up space, or claim to, and are impossible to see in a form.",
+      "version": "1.0",
+      "updated": "2026-09-07",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "any"
+      ],
+      "tags": [
+        "trimming",
+        "comparison",
+        "unicode"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "trailing-space",
+          "ref": "whitespace/trailing-space",
+          "name": "Trailing space",
+          "escaped": "Kowalski\\u0020",
+          "breaks": "Login and e-mail comparisons differ between browser and server; the account is created but cannot be found.",
+          "expect": "Trimmed everywhere or preserved everywhere - never one on sign-up and the other on sign-in.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Kowalski\u2423",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "trailing-space",
+              "count": null
+            }
+          ],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 9,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "leading-space",
+          "ref": "whitespace/leading-space",
+          "name": "Leading space",
+          "escaped": "\\u0020Kowalski",
+          "breaks": "Sorting puts the record at the top of every list, and exact-match search never finds it.",
+          "expect": "Same trimming rule as everywhere else in the application.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "leading-space",
+              "count": null
+            }
+          ],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 9,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "space-only",
+          "ref": "whitespace/space-only",
+          "name": "A single space",
+          "escaped": "\\u0020",
+          "breaks": "The browser counts the field as filled and the server counts it as empty, or the other way round.",
+          "expect": "One consistent verdict on both sides about whether this field is empty.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u2423",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "leading-space",
+              "count": null
+            },
+            {
+              "fact": "trailing-space",
+              "count": null
+            }
+          ],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 1,
+            "bytes": 1,
+            "utf16_units": 1
+          }
+        },
+        {
+          "id": "zero-width-space-x3",
+          "ref": "whitespace/zero-width-space-x3",
+          "name": "Three zero-width spaces",
+          "escaped": "ab\\u200B\\u200B\\u200Bcd",
+          "breaks": "Character counters, comparison and deduplication see a different value than the human does.",
+          "expect": "Stored and returned unchanged, or rejected with a message that names the characters.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "ab\u2423\u2423\u2423cd",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "zero-width",
+              "count": 3
+            }
+          ],
+          "counts": {
+            "graphemes": 7,
+            "code_points": 7,
+            "bytes": 13,
+            "utf16_units": 7
+          }
+        },
+        {
+          "id": "nbsp-between-words",
+          "ref": "whitespace/nbsp-between-words",
+          "name": "Non-breaking space between words",
+          "escaped": "Jan\\u00A0Kowalski",
+          "breaks": "Search for a plain-space spelling never finds the record; exports and mail merges keep the invisible difference forever.",
+          "expect": "Treated as a space by search, or normalised on save - consistently.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "unusual-space",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 13,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "newline-in-single-line",
+          "ref": "whitespace/newline-in-single-line",
+          "name": "Newline in a single-line field",
+          "escaped": "Jan\\u000AKowalski",
+          "breaks": "A single-line field that accepts a line break breaks CSV export, log lines and every list view below it.",
+          "expect": "Rejected, or stored with the break preserved and escaped on export.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "line-break",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 12,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "tab-inside",
+          "ref": "whitespace/tab-inside",
+          "name": "Tab inside a value",
+          "escaped": "Jan\\u0009Kowalski",
+          "breaks": "Tab-separated exports split one record into two columns; column alignment in reports collapses.",
+          "expect": "Rejected or escaped on export - never passed through raw into a delimited format.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "tab",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 12,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "crlf-in-value",
+          "ref": "whitespace/crlf-in-value",
+          "name": "Carriage return and newline inside a value",
+          "escaped": "Jan\\u000D\\u000AKowalski",
+          "breaks": "Two line-ending conventions in one field make the same text compare as different across systems.",
+          "expect": "Normalised to one convention on save, or preserved and escaped consistently.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "line-break",
+              "count": 2
+            }
+          ],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 13,
+            "bytes": 13,
+            "utf16_units": 13
+          }
+        },
+        {
+          "id": "zwsp-only",
+          "ref": "whitespace/zwsp-only",
+          "name": "A single zero-width space",
+          "escaped": "\\u200B",
+          "breaks": "A field that looks empty but is not: required-field validation passes, and the record has no usable name.",
+          "expect": "Treated as empty by validation, or shown in a way that reveals the field is not empty.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u2423",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "zero-width",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 1,
+            "bytes": 3,
+            "utf16_units": 1
+          }
+        },
+        {
+          "id": "ogham-space",
+          "ref": "whitespace/ogham-space",
+          "name": "Ogham space mark",
+          "escaped": "ab\\u1680cd",
+          "breaks": "A character in the space category that renders as a visible line - it breaks both trimming and layout assumptions.",
+          "expect": "Handled like any other whitespace character, or rejected with a message.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "ab\u2423cd",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "unusual-space",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 7,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "many-spaces-between",
+          "ref": "whitespace/many-spaces-between",
+          "name": "Three spaces between words",
+          "escaped": "Jan   Kowalski",
+          "breaks": "Search, deduplication and printed output treat runs of spaces inconsistently between layers.",
+          "expect": "Collapsed on save or preserved on save - one rule, applied everywhere.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423\u2423\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 14,
+            "code_points": 14,
+            "bytes": 14,
+            "utf16_units": 14
+          }
+        },
+        {
+          "id": "len-1000-spaces",
+          "ref": "whitespace/len-1000-spaces",
+          "name": "A thousand spaces",
+          "escaped": null,
+          "breaks": "Character-by-character trimming and layouts that do not wrap; a thousand spaces is still a short value by character count.",
+          "expect": "Rejected or trimmed - never accepted and stored in full.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "\u2423",
+            "count": 1000
+          },
+          "shape": [
+            {
+              "fact": "leading-space",
+              "count": null
+            },
+            {
+              "fact": "trailing-space",
+              "count": null
+            }
+          ],
+          "counts": {
+            "graphemes": 1000,
+            "code_points": 1000,
+            "bytes": 1000,
+            "utf16_units": 1000
+          }
+        }
+      ]
+    },
+    {
+      "id": "unicode-text",
+      "name": "Unicode and text",
+      "description": "Characters that look innocent and break counting, comparison and display.",
+      "version": "1.0",
+      "updated": "2026-09-08",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "text",
+        "name",
+        "multiline"
+      ],
+      "tags": [
+        "unicode",
+        "rendering",
+        "comparison"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "rtl-override",
+          "ref": "unicode-text/rtl-override",
+          "name": "Right-to-left override",
+          "escaped": "raport\\u202Etxt.exe",
+          "breaks": "A direction-override character makes the text render reversed: the value shown to the user is not the value stored.",
+          "expect": "Stripped, escaped, or displayed with the override neutralised - never rendered as-is.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "raport\u2423txt.exe",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "bidi-control",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 14,
+            "code_points": 14,
+            "bytes": 16,
+            "utf16_units": 14
+          }
+        },
+        {
+          "id": "soft-hyphen",
+          "ref": "unicode-text/soft-hyphen",
+          "name": "Soft hyphen",
+          "escaped": "Kowal\\u00ADski",
+          "breaks": "An invisible hyphen inside a word defeats exact search and makes two identical-looking names different records.",
+          "expect": "Stored unchanged and found by a search for Kowalski, or normalised away on save.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Kowal\u2423ski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "soft-hyphen",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 10,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "combining-acute",
+          "ref": "unicode-text/combining-acute",
+          "name": "Combining acute accent",
+          "escaped": "e\u0301",
+          "breaks": "The same letter written as a base plus a combining mark compares as different from the single-character form.",
+          "expect": "Normalised on save, or compared in a normalisation-aware way.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "e\u0301",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 2,
+            "bytes": 3,
+            "utf16_units": 2
+          }
+        },
+        {
+          "id": "zalgo",
+          "ref": "unicode-text/zalgo",
+          "name": "Stacked combining marks",
+          "escaped": "e\u0300\u0301\u0302\u0303\u0304\u0305\u0306\u0307\u0308\u0309",
+          "breaks": "Stacked combining marks overflow the line vertically and cover the interface around the field.",
+          "expect": "Accepted and clipped to the box of the field, or rejected with a limit on combining marks.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "e\u0300\u0301\u0302\u0303\u0304\u0305\u0306\u0307\u0308\u0309",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 11,
+            "bytes": 21,
+            "utf16_units": 11
+          }
+        },
+        {
+          "id": "bom-inside",
+          "ref": "unicode-text/bom-inside",
+          "name": "Byte-order mark inside a value",
+          "escaped": "Jan\\uFEFFKowalski",
+          "breaks": "A byte-order mark in the middle of a value survives every copy and silently breaks exact comparison.",
+          "expect": "Stripped on save, or preserved and made visible in the interface.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "zero-width",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 14,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "bell-control",
+          "ref": "unicode-text/bell-control",
+          "name": "Bell control character",
+          "escaped": "Jan\\u0007Kowalski",
+          "breaks": "A control character passed to a terminal or a log makes the output do something instead of saying something.",
+          "expect": "Rejected or escaped before it reaches any log, terminal or report.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "other-control",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 12,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "fullwidth-latin",
+          "ref": "unicode-text/fullwidth-latin",
+          "name": "Full-width Latin letters",
+          "escaped": "\uff46\uff55\uff4c\uff4c\uff57\uff49\uff44\uff54\uff48",
+          "breaks": "Full-width letters read as Latin to a human and as different characters to search, filters and uniqueness checks.",
+          "expect": "Normalised for comparison, or accepted and consistently treated as distinct.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\uff46\uff55\uff4c\uff4c\uff57\uff49\uff44\uff54\uff48",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 27,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "math-bold",
+          "ref": "unicode-text/math-bold",
+          "name": "Mathematical bold letters",
+          "escaped": "\ud835\udc07\ud835\udc1e\ud835\udc25\ud835\udc25\ud835\udc28",
+          "breaks": "Mathematical letter variants defeat profanity filters and search while looking like ordinary words.",
+          "expect": "Normalised for comparison and filtering, or rejected in fields where plain text is expected.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\ud835\udc07\ud835\udc1e\ud835\udc25\ud835\udc25\ud835\udc28",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 20,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "upside-down",
+          "ref": "unicode-text/upside-down",
+          "name": "Upside-down letters",
+          "escaped": "\u0287x\u01dd\u0287",
+          "breaks": "Ordinary letters from another block, used to bypass filters and to break line rendering in lists.",
+          "expect": "Accepted as plain text without breaking the layout, and covered by the same filters as normal text.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u0287x\u01dd\u0287",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 7,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "cjk-mixed",
+          "ref": "unicode-text/cjk-mixed",
+          "name": "Mixed CJK characters",
+          "escaped": "\u540d\u524d\u30c6\u30b9\u30c8",
+          "breaks": "Double-width characters break column alignment and confuse character counters that assume one character is one cell.",
+          "expect": "Rendered and counted correctly, with column widths adapting instead of overflowing.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u540d\u524d\u30c6\u30b9\u30c8",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 15,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "arabic-in-latin",
+          "ref": "unicode-text/arabic-in-latin",
+          "name": "Arabic inside a Latin sentence",
+          "escaped": "Jan \u0645\u0631\u062d\u0628\u0627 Kowalski",
+          "breaks": "Right-to-left text inside a left-to-right sentence reorders on screen, so the visual order is not the stored order.",
+          "expect": "Stored in logical order and rendered with correct isolation, so copying returns what was typed.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423\u0645\u0631\u062d\u0628\u0627\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 18,
+            "code_points": 18,
+            "bytes": 23,
+            "utf16_units": 18
+          }
+        },
+        {
+          "id": "emoji-in-name",
+          "ref": "unicode-text/emoji-in-name",
+          "name": "Emoji in a name field",
+          "escaped": "Jan\ud83d\ude00Kowalski",
+          "breaks": "A character outside the basic plane in a name field breaks byte-length limits and databases configured for narrow encodings.",
+          "expect": "Stored intact or rejected with a message - never truncated mid-character.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\ud83d\ude00Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 15,
+            "utf16_units": 13
+          }
+        }
+      ]
+    },
+    {
+      "id": "length-bombs",
+      "name": "Length bombs",
+      "description": "Values sized against common limits and against the gap between a character and a byte.",
+      "version": "1.0",
+      "updated": "2026-09-08",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "any"
+      ],
+      "tags": [
+        "limits",
+        "truncation",
+        "encoding"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "len-0",
+          "ref": "length-bombs/len-0",
+          "name": "Empty value",
+          "escaped": "",
+          "breaks": "An empty value tests the boundary between not filled in and filled in with nothing.",
+          "expect": "Required fields reject it with a clear message, optional fields store it as empty.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 0,
+            "code_points": 0,
+            "bytes": 0,
+            "utf16_units": 0
+          }
+        },
+        {
+          "id": "len-255",
+          "ref": "length-bombs/len-255",
+          "name": "255 characters",
+          "escaped": null,
+          "breaks": "The classic column width: one character short of the limit, exactly at it, and one over it are three different code paths.",
+          "expect": "Accepted at the limit and rejected above it, with the limit stated in the message.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "a",
+            "count": 255
+          },
+          "shape": [],
+          "counts": {
+            "graphemes": 255,
+            "code_points": 255,
+            "bytes": 255,
+            "utf16_units": 255
+          }
+        },
+        {
+          "id": "len-256",
+          "ref": "length-bombs/len-256",
+          "name": "256 characters",
+          "escaped": null,
+          "breaks": "One character over the classic limit, which is where silent truncation usually happens.",
+          "expect": "Rejected with a message, never silently cut down to 255.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "a",
+            "count": 256
+          },
+          "shape": [],
+          "counts": {
+            "graphemes": 256,
+            "code_points": 256,
+            "bytes": 256,
+            "utf16_units": 256
+          }
+        },
+        {
+          "id": "len-254",
+          "ref": "length-bombs/len-254",
+          "name": "254 characters",
+          "escaped": null,
+          "breaks": "The value just under the limit, used to prove the limit is off by one in either direction.",
+          "expect": "Accepted without complaint.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "a",
+            "count": 254
+          },
+          "shape": [],
+          "counts": {
+            "graphemes": 254,
+            "code_points": 254,
+            "bytes": 254,
+            "utf16_units": 254
+          }
+        },
+        {
+          "id": "len-1000",
+          "ref": "length-bombs/len-1000",
+          "name": "1000 characters",
+          "escaped": null,
+          "breaks": "Comment and description fields sized for a sentence and used for an essay.",
+          "expect": "Accepted, or rejected with the limit stated - not accepted and truncated.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "a",
+            "count": 1000
+          },
+          "shape": [],
+          "counts": {
+            "graphemes": 1000,
+            "code_points": 1000,
+            "bytes": 1000,
+            "utf16_units": 1000
+          }
+        },
+        {
+          "id": "len-4000",
+          "ref": "length-bombs/len-4000",
+          "name": "4000 characters",
+          "escaped": null,
+          "breaks": "A limit common in older database columns, and the first size at which text fields start failing quietly.",
+          "expect": "The same rule as above, applied consistently between the interface and storage.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "a",
+            "count": 4000
+          },
+          "shape": [],
+          "counts": {
+            "graphemes": 4000,
+            "code_points": 4000,
+            "bytes": 4000,
+            "utf16_units": 4000
+          }
+        },
+        {
+          "id": "len-65535",
+          "ref": "length-bombs/len-65535",
+          "name": "65535 characters",
+          "escaped": null,
+          "breaks": "The limit of the most common text column type, where crossing it usually produces a raw database error.",
+          "expect": "A readable message instead of a database error page.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "a",
+            "count": 65535
+          },
+          "shape": [],
+          "counts": {
+            "graphemes": 65535,
+            "code_points": 65535,
+            "bytes": 65535,
+            "utf16_units": 65535
+          }
+        },
+        {
+          "id": "len-100000",
+          "ref": "length-bombs/len-100000",
+          "name": "100000 characters",
+          "escaped": null,
+          "breaks": "Character counters, layout, logs and every downstream export, all at once.",
+          "expect": "Rejected early, before the value travels through the whole system.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "a",
+            "count": 100000
+          },
+          "shape": [],
+          "counts": {
+            "graphemes": 100000,
+            "code_points": 100000,
+            "bytes": 100000,
+            "utf16_units": 100000
+          }
+        },
+        {
+          "id": "bytes-vs-chars",
+          "ref": "length-bombs/bytes-vs-chars",
+          "name": "128 characters, 256 bytes",
+          "escaped": null,
+          "breaks": "128 characters but 256 bytes: a field limited in bytes rejects a value the interface said was fine.",
+          "expect": "The same unit used for the limit on both sides, and stated in the message.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "\u0105",
+            "count": 128
+          },
+          "shape": [],
+          "counts": {
+            "graphemes": 128,
+            "code_points": 128,
+            "bytes": 256,
+            "utf16_units": 128
+          }
+        },
+        {
+          "id": "emoji-truncation",
+          "ref": "length-bombs/emoji-truncation",
+          "name": "64 emoji",
+          "escaped": null,
+          "breaks": "Truncation by bytes cuts the last character in half and produces a value that is no longer valid text.",
+          "expect": "Truncation, if it happens at all, happens on character boundaries - never mid-character.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "\ud83d\ude00",
+            "count": 64
+          },
+          "shape": [],
+          "counts": {
+            "graphemes": 64,
+            "code_points": 64,
+            "bytes": 256,
+            "utf16_units": 128
+          }
+        },
+        {
+          "id": "one-word-200",
+          "ref": "length-bombs/one-word-200",
+          "name": "200 characters without a space",
+          "escaped": null,
+          "breaks": "200 characters without a space: layouts that wrap on spaces push the value outside its container.",
+          "expect": "Wrapped or clipped inside the container, never overflowing the surrounding interface.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "a",
+            "count": 200
+          },
+          "shape": [],
+          "counts": {
+            "graphemes": 200,
+            "code_points": 200,
+            "bytes": 200,
+            "utf16_units": 200
+          }
+        },
+        {
+          "id": "len-1",
+          "ref": "length-bombs/len-1",
+          "name": "One character",
+          "escaped": "a",
+          "breaks": "The shortest non-empty value, used against minimum-length rules that are rarely tested.",
+          "expect": "Accepted or rejected according to a stated minimum, not silently accepted where a minimum exists.",
+          "fields": [
+            "any"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "a",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 1,
+            "bytes": 1,
+            "utf16_units": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "magic-values",
+      "name": "Magic values",
+      "description": "Words a human reads as text and a parser reads as a boolean, an absent value or a number.",
+      "version": "1.0",
+      "updated": "2026-09-24",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "text",
+        "name",
+        "country-code"
+      ],
+      "tags": [
+        "parsing",
+        "config",
+        "serialization"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "bool-no",
+          "ref": "magic-values/bool-no",
+          "name": "The word no",
+          "escaped": "no",
+          "breaks": "YAML 1.1 and several config parsers read the unquoted word no as boolean false - and NO is the country code for Norway.",
+          "expect": "Stored and returned as the two-character string no.",
+          "fields": [
+            "text",
+            "name",
+            "country-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "no",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 2,
+            "code_points": 2,
+            "bytes": 2,
+            "utf16_units": 2
+          }
+        },
+        {
+          "id": "word-null",
+          "ref": "magic-values/word-null",
+          "name": "The word null",
+          "escaped": "null",
+          "breaks": "Serializers and loosely typed interfaces turn the text into an absent value; the field looks saved and comes back empty.",
+          "expect": "Stored and returned as the four-character string, distinct from an empty field.",
+          "fields": [
+            "text",
+            "name",
+            "country-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "null",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "bool-true",
+          "ref": "magic-values/bool-true",
+          "name": "The word true",
+          "escaped": "true",
+          "breaks": "A text field holding the word true becomes a boolean somewhere in the chain and stops round-tripping.",
+          "expect": "Returned as text, exactly as entered.",
+          "fields": [
+            "text",
+            "name",
+            "country-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "true",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "word-nan",
+          "ref": "magic-values/word-nan",
+          "name": "The word NaN",
+          "escaped": "NaN",
+          "breaks": "Numeric parsers accept it, and then every comparison against it is false - filters and sorting quietly drop the row.",
+          "expect": "Rejected in a numeric field; kept verbatim in a text field.",
+          "fields": [
+            "text",
+            "name",
+            "country-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "NaN",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 3,
+            "code_points": 3,
+            "bytes": 3,
+            "utf16_units": 3
+          }
+        },
+        {
+          "id": "word-infinity",
+          "ref": "magic-values/word-infinity",
+          "name": "The word Infinity",
+          "escaped": "Infinity",
+          "breaks": "Accepted as a number by some layers and rejected by others, so the same value validates differently at each step.",
+          "expect": "One consistent verdict across the interface, the service layer and storage.",
+          "fields": [
+            "text",
+            "name",
+            "country-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Infinity",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 8,
+            "code_points": 8,
+            "bytes": 8,
+            "utf16_units": 8
+          }
+        },
+        {
+          "id": "word-undefined",
+          "ref": "magic-values/word-undefined",
+          "name": "The word undefined",
+          "escaped": "undefined",
+          "breaks": "Often the result of a bug elsewhere, so a real value spelled this way is indistinguishable from a defect.",
+          "expect": "Stored and displayed as ordinary text, without special treatment.",
+          "fields": [
+            "text",
+            "name",
+            "country-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "undefined",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 9,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "bool-yes",
+          "ref": "magic-values/bool-yes",
+          "name": "The word yes",
+          "escaped": "yes",
+          "breaks": "The same coercion problem as the word no, in the opposite direction, and equally invisible in review.",
+          "expect": "Returned as the three-character string.",
+          "fields": [
+            "text",
+            "name",
+            "country-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "yes",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 3,
+            "code_points": 3,
+            "bytes": 3,
+            "utf16_units": 3
+          }
+        },
+        {
+          "id": "bool-off",
+          "ref": "magic-values/bool-off",
+          "name": "The word off",
+          "escaped": "off",
+          "breaks": "Another word coerced to a boolean by common configuration parsers.",
+          "expect": "Returned as text.",
+          "fields": [
+            "text",
+            "name",
+            "country-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "off",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 3,
+            "code_points": 3,
+            "bytes": 3,
+            "utf16_units": 3
+          }
+        },
+        {
+          "id": "word-none",
+          "ref": "magic-values/word-none",
+          "name": "The word None",
+          "escaped": "None",
+          "breaks": "The absent-value keyword in one widely used language; travels through interfaces as a null.",
+          "expect": "Returned as the four-character string.",
+          "fields": [
+            "text",
+            "name",
+            "country-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "None",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "word-nil",
+          "ref": "magic-values/word-nil",
+          "name": "The word nil",
+          "escaped": "nil",
+          "breaks": "The absent-value keyword in another; same failure, different layer.",
+          "expect": "Returned as text.",
+          "fields": [
+            "text",
+            "name",
+            "country-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "nil",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 3,
+            "code_points": 3,
+            "bytes": 3,
+            "utf16_units": 3
+          }
+        },
+        {
+          "id": "na-slash",
+          "ref": "magic-values/na-slash",
+          "name": "N/A with a slash",
+          "escaped": "N/A",
+          "breaks": "Contains a separator, so it also breaks paths, CSV columns and anything splitting on a slash.",
+          "expect": "Stored and displayed intact.",
+          "fields": [
+            "text",
+            "name",
+            "country-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "N/A",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 3,
+            "code_points": 3,
+            "bytes": 3,
+            "utf16_units": 3
+          }
+        },
+        {
+          "id": "dash-only",
+          "ref": "magic-values/dash-only",
+          "name": "A single dash",
+          "escaped": "-",
+          "breaks": "A single dash is a real answer in forms and a \"no value\" marker in reports - the two meanings collide on export.",
+          "expect": "Stored as a one-character value, distinguishable from an empty field.",
+          "fields": [
+            "text",
+            "name",
+            "country-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "-",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 1,
+            "bytes": 1,
+            "utf16_units": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "numbers-extreme",
+      "name": "Extreme numbers",
+      "description": "Numbers at the edges of their types, in foreign notations, and where precision runs out.",
+      "version": "1.0",
+      "updated": "2026-09-24",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "number",
+        "integer",
+        "money"
+      ],
+      "tags": [
+        "limits",
+        "parsing",
+        "precision"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "js-safe-plus-one",
+          "ref": "numbers-extreme/js-safe-plus-one",
+          "name": "Largest safe JavaScript integer plus one",
+          "escaped": "9007199254740992",
+          "breaks": "Above this value browsers and many interfaces stop representing whole numbers exactly, so an identifier returned by the server no longer matches what the user sees.",
+          "expect": "Handled as text where exactness matters, or rejected with a stated limit.",
+          "fields": [
+            "number",
+            "integer",
+            "money"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "9007199254740992",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 16,
+            "code_points": 16,
+            "bytes": 16,
+            "utf16_units": 16
+          }
+        },
+        {
+          "id": "int32-max-plus-one",
+          "ref": "numbers-extreme/int32-max-plus-one",
+          "name": "32-bit integer maximum plus one",
+          "escaped": "2147483648",
+          "breaks": "One past the most common integer limit - where counters, identifiers and quantities wrap to a negative number.",
+          "expect": "Rejected with a message, or handled by a wider type consistently.",
+          "fields": [
+            "number",
+            "integer",
+            "money"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "2147483648",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "int32-max",
+          "ref": "numbers-extreme/int32-max",
+          "name": "32-bit integer maximum",
+          "escaped": "2147483647",
+          "breaks": "The boundary itself: accepted here and failing one higher is the difference between a correct limit and an accident.",
+          "expect": "Accepted where the limit allows it.",
+          "fields": [
+            "number",
+            "integer",
+            "money"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "2147483647",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "minus-one",
+          "ref": "numbers-extreme/minus-one",
+          "name": "Minus one",
+          "escaped": "-1",
+          "breaks": "Quantity, price and count fields that never expected a negative value; often accepted and only noticed at invoicing.",
+          "expect": "Rejected wherever a negative value is meaningless, with a message that says so.",
+          "fields": [
+            "number",
+            "integer",
+            "money"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "-1",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 2,
+            "code_points": 2,
+            "bytes": 2,
+            "utf16_units": 2
+          }
+        },
+        {
+          "id": "zero",
+          "ref": "numbers-extreme/zero",
+          "name": "Zero",
+          "escaped": "0",
+          "breaks": "Distinguishing \"zero\" from \"not filled in\" is one of the most commonly confused boundaries in forms.",
+          "expect": "Stored as zero and displayed as zero, never as an empty field.",
+          "fields": [
+            "number",
+            "integer",
+            "money"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "0",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 1,
+            "bytes": 1,
+            "utf16_units": 1
+          }
+        },
+        {
+          "id": "comma-decimal",
+          "ref": "numbers-extreme/comma-decimal",
+          "name": "Comma as the decimal separator",
+          "escaped": "3,14",
+          "breaks": "The decimal separator used across most of Europe; parsers expecting a dot read it as a thousands separator or reject it.",
+          "expect": "Accepted in locales that use it, or rejected with a message naming the expected format.",
+          "fields": [
+            "number",
+            "integer",
+            "money"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "3,14",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "thousands-space",
+          "ref": "numbers-extreme/thousands-space",
+          "name": "Spaces between thousands",
+          "escaped": "1 000 000",
+          "breaks": "Copying a number out of a report brings the group separators with it; most numeric parsers refuse.",
+          "expect": "Separators stripped before parsing, or a message explaining the expected format.",
+          "fields": [
+            "number",
+            "integer",
+            "money"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "1\u2423000\u2423000",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 9,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "exp-notation",
+          "ref": "numbers-extreme/exp-notation",
+          "name": "Exponential notation",
+          "escaped": "1e10",
+          "breaks": "Spreadsheet exports produce this form for large numbers, so it arrives in fields that never expected it.",
+          "expect": "Accepted and expanded, or rejected - never read as the digit 1.",
+          "fields": [
+            "number",
+            "integer",
+            "money"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "1e10",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "leading-zeros",
+          "ref": "numbers-extreme/leading-zeros",
+          "name": "Leading zeros",
+          "escaped": "007",
+          "breaks": "Codes, room numbers and article numbers lose their leading zeros the moment they are treated as numbers.",
+          "expect": "Preserved where the value is a code, not a quantity.",
+          "fields": [
+            "number",
+            "integer",
+            "money"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "007",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 3,
+            "code_points": 3,
+            "bytes": 3,
+            "utf16_units": 3
+          }
+        },
+        {
+          "id": "minus-typographic",
+          "ref": "numbers-extreme/minus-typographic",
+          "name": "Typographic minus sign",
+          "escaped": "\u22121234",
+          "breaks": "The typographic minus sign looks identical to the ASCII one and is rejected by every numeric parser.",
+          "expect": "Normalised before parsing, or rejected with a message that names the character.",
+          "fields": [
+            "number",
+            "integer",
+            "money"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u22121234",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 7,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "fifty-digits",
+          "ref": "numbers-extreme/fifty-digits",
+          "name": "50 digits",
+          "escaped": null,
+          "breaks": "A number wider than any numeric type; usually produces an overflow or a raw error rather than a message.",
+          "expect": "A readable message instead of an error page.",
+          "fields": [
+            "number",
+            "integer",
+            "money"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "9",
+            "count": 50
+          },
+          "shape": [],
+          "counts": {
+            "graphemes": 50,
+            "code_points": 50,
+            "bytes": 50,
+            "utf16_units": 50
+          }
+        },
+        {
+          "id": "plus-prefixed",
+          "ref": "numbers-extreme/plus-prefixed",
+          "name": "Plus sign before a number",
+          "escaped": "+5",
+          "breaks": "An explicitly positive number, valid in most notations and rejected by many simple validators.",
+          "expect": "Accepted and normalised, or rejected with a stated format.",
+          "fields": [
+            "number",
+            "integer",
+            "money"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "+5",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 2,
+            "code_points": 2,
+            "bytes": 2,
+            "utf16_units": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "dates-impossible",
+      "name": "Impossible dates",
+      "description": "Dates that do not exist, that are ambiguous, or that are written differently than the field assumes.",
+      "version": "1.0",
+      "updated": "2026-09-24",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "date",
+        "datetime",
+        "text"
+      ],
+      "tags": [
+        "calendar",
+        "parsing",
+        "locale"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "feb-30",
+          "ref": "dates-impossible/feb-30",
+          "name": "30 February",
+          "escaped": "30.02.2026",
+          "breaks": "A date that cannot exist; naive parsers roll it over to the second of March instead of refusing it.",
+          "expect": "Rejected with a message - never silently moved to another day.",
+          "fields": [
+            "date",
+            "datetime",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "30.02.2026",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "feb-29-non-leap",
+          "ref": "dates-impossible/feb-29-non-leap",
+          "name": "29 February in a non-leap year",
+          "escaped": "29.02.2026",
+          "breaks": "Valid in some years and not in others, so the same input is correct or incorrect depending on the year field next to it.",
+          "expect": "Rejected for non-leap years, with the reason stated.",
+          "fields": [
+            "date",
+            "datetime",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "29.02.2026",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "nov-31",
+          "ref": "dates-impossible/nov-31",
+          "name": "31 November",
+          "escaped": "31.11.2026",
+          "breaks": "The month-length check that most hand-written validators skip.",
+          "expect": "Rejected, not rolled over into December.",
+          "fields": [
+            "date",
+            "datetime",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "31.11.2026",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "ambiguous-day-month",
+          "ref": "dates-impossible/ambiguous-day-month",
+          "name": "Day and month in an ambiguous order",
+          "escaped": "03/04/2026",
+          "breaks": "The same text means March or April depending on convention, and nothing on screen says which was assumed.",
+          "expect": "The expected order stated next to the field, or an unambiguous format enforced.",
+          "fields": [
+            "date",
+            "datetime",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "03/04/2026",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "iso-format",
+          "ref": "dates-impossible/iso-format",
+          "name": "ISO 8601 date",
+          "escaped": "2026-09-06",
+          "breaks": "A field expecting a local format receives the international one, and vice versa; both are legitimate user input.",
+          "expect": "Both accepted, or one enforced with a visible example.",
+          "fields": [
+            "date",
+            "datetime",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "2026-09-06",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "year-9999",
+          "ref": "dates-impossible/year-9999",
+          "name": "Year 9999",
+          "escaped": "31.12.9999",
+          "breaks": "The upper end of most date types; often accepted by the interface and rejected by storage.",
+          "expect": "The same range enforced on both sides.",
+          "fields": [
+            "date",
+            "datetime",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "31.12.9999",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "year-0000",
+          "ref": "dates-impossible/year-0000",
+          "name": "Year 0000",
+          "escaped": "01.01.0000",
+          "breaks": "Below the range of several date types, and the year zero does not exist in the common calendar.",
+          "expect": "Rejected with a stated range.",
+          "fields": [
+            "date",
+            "datetime",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "01.01.0000",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "year-10000",
+          "ref": "dates-impossible/year-10000",
+          "name": "Five-digit year",
+          "escaped": "01.01.10000",
+          "breaks": "Five-digit years break fixed-width parsing and column formats without producing an obvious error.",
+          "expect": "Rejected with a stated range.",
+          "fields": [
+            "date",
+            "datetime",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "01.01.10000",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 11,
+            "code_points": 11,
+            "bytes": 11,
+            "utf16_units": 11
+          }
+        },
+        {
+          "id": "epoch-zero",
+          "ref": "dates-impossible/epoch-zero",
+          "name": "Unix epoch",
+          "escaped": "01.01.1970",
+          "breaks": "The zero point of the most common timestamp representation; frequently indistinguishable from \"no date set\".",
+          "expect": "Stored and displayed as a real date, distinct from an empty field.",
+          "fields": [
+            "date",
+            "datetime",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "01.01.1970",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "negative-timestamp",
+          "ref": "dates-impossible/negative-timestamp",
+          "name": "Negative timestamp",
+          "escaped": "-1",
+          "breaks": "Dates before the epoch are negative in many representations and are silently rejected or wrapped.",
+          "expect": "Handled as an ordinary past date, or rejected with the supported range stated.",
+          "fields": [
+            "date",
+            "datetime",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "-1",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 2,
+            "code_points": 2,
+            "bytes": 2,
+            "utf16_units": 2
+          }
+        },
+        {
+          "id": "date-in-words",
+          "ref": "dates-impossible/date-in-words",
+          "name": "A date in words",
+          "escaped": "tomorrow",
+          "breaks": "Text in a date field: accepted by lenient parsers, which then produce a different date every day.",
+          "expect": "Rejected - natural-language dates belong to a deliberate feature, not to a parser's leniency.",
+          "fields": [
+            "date",
+            "datetime",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "tomorrow",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 8,
+            "code_points": 8,
+            "bytes": 8,
+            "utf16_units": 8
+          }
+        },
+        {
+          "id": "dots-vs-slashes",
+          "ref": "dates-impossible/dots-vs-slashes",
+          "name": "Slashes instead of dots",
+          "escaped": "06/09/2026",
+          "breaks": "The same date in another separator; forms often accept one and store the other without saying so.",
+          "expect": "Accepted in both, normalised once, and shown in one consistent form.",
+          "fields": [
+            "date",
+            "datetime",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "06/09/2026",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        }
+      ]
+    },
+    {
+      "id": "export-breakers",
+      "name": "Export breakers",
+      "description": "Values that pass validation and break only in the exported file.",
+      "version": "1.0",
+      "updated": "2026-09-24",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "text",
+        "name",
+        "money",
+        "id-number"
+      ],
+      "tags": [
+        "csv",
+        "spreadsheet",
+        "export"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "formula-equals",
+          "ref": "export-breakers/formula-equals",
+          "name": "Value starting with =",
+          "escaped": "=1+1",
+          "breaks": "A value starting with an equals sign is treated as a formula by spreadsheet software; the exported file shows a computed result instead of the data.",
+          "expect": "Escaped on export so the spreadsheet shows the text as entered.",
+          "fields": [
+            "text",
+            "name",
+            "money",
+            "id-number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "=1+1",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "sheet-date-mar1",
+          "ref": "export-breakers/sheet-date-mar1",
+          "name": "Code that looks like a date",
+          "escaped": "MAR1",
+          "breaks": "Spreadsheet software converts short codes that look like dates into dates, and the original value cannot be recovered from the file.",
+          "expect": "Exported as text, with the column typed so the conversion never happens.",
+          "fields": [
+            "text",
+            "name",
+            "money",
+            "id-number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "MAR1",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "csv-comma",
+          "ref": "export-breakers/csv-comma",
+          "name": "Comma inside a value",
+          "escaped": "Kowalski, Jan",
+          "breaks": "A comma inside a value splits one column into two unless the value is quoted correctly at every export step.",
+          "expect": "Quoted on export; the file parses back into the same number of columns.",
+          "fields": [
+            "text",
+            "name",
+            "money",
+            "id-number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Kowalski,\u2423Jan",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 13,
+            "code_points": 13,
+            "bytes": 13,
+            "utf16_units": 13
+          }
+        },
+        {
+          "id": "csv-quote",
+          "ref": "export-breakers/csv-quote",
+          "name": "Quotation marks inside a value",
+          "escaped": "Jan \"Janek\" Kowalski",
+          "breaks": "Quotation marks inside a quoted value must be doubled; getting this wrong shifts every following column.",
+          "expect": "Quoted and escaped so the round trip returns the original text.",
+          "fields": [
+            "text",
+            "name",
+            "money",
+            "id-number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423\"Janek\"\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 20,
+            "code_points": 20,
+            "bytes": 20,
+            "utf16_units": 20
+          }
+        },
+        {
+          "id": "csv-newline",
+          "ref": "export-breakers/csv-newline",
+          "name": "Line break inside a value",
+          "escaped": "Jan\\u000AKowalski",
+          "breaks": "A line break inside a value turns one row into two for every parser that splits on lines before parsing.",
+          "expect": "Quoted so the record stays one row, or rejected at input.",
+          "fields": [
+            "text",
+            "name",
+            "money",
+            "id-number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "line-break",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 12,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "sheet-precision",
+          "ref": "export-breakers/sheet-precision",
+          "name": "Nineteen-digit identifier",
+          "escaped": "1234567890123456789",
+          "breaks": "Spreadsheets keep about fifteen significant digits, so long identifiers come back rounded and in exponential notation.",
+          "expect": "Exported as text; the identifier survives opening and saving the file.",
+          "fields": [
+            "text",
+            "name",
+            "money",
+            "id-number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "1234567890123456789",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 19,
+            "code_points": 19,
+            "bytes": 19,
+            "utf16_units": 19
+          }
+        },
+        {
+          "id": "leading-zero-code",
+          "ref": "export-breakers/leading-zero-code",
+          "name": "Code with leading zeros",
+          "escaped": "007",
+          "breaks": "Codes lose their leading zeros the moment a spreadsheet treats the column as numeric.",
+          "expect": "Exported as text so the code stays as issued.",
+          "fields": [
+            "text",
+            "name",
+            "money",
+            "id-number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "007",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 3,
+            "code_points": 3,
+            "bytes": 3,
+            "utf16_units": 3
+          }
+        },
+        {
+          "id": "formula-plus",
+          "ref": "export-breakers/formula-plus",
+          "name": "Phone number starting with +",
+          "escaped": "+48123456789",
+          "breaks": "A phone number written with a country prefix is read as a formula, and the cell shows an error instead of the number.",
+          "expect": "Escaped on export, or the column typed as text.",
+          "fields": [
+            "text",
+            "name",
+            "money",
+            "id-number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "+48123456789",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 12,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "formula-minus",
+          "ref": "export-breakers/formula-minus",
+          "name": "Value starting with -",
+          "escaped": "-1+1",
+          "breaks": "Same as the equals sign, in a form that also looks like an ordinary negative number.",
+          "expect": "Escaped on export.",
+          "fields": [
+            "text",
+            "name",
+            "money",
+            "id-number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "-1+1",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "formula-at",
+          "ref": "export-breakers/formula-at",
+          "name": "Value starting with @",
+          "escaped": "@name",
+          "breaks": "A social handle or mention becomes a function call in some spreadsheet software.",
+          "expect": "Escaped on export.",
+          "fields": [
+            "text",
+            "name",
+            "money",
+            "id-number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "@name",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 5,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "csv-semicolon",
+          "ref": "export-breakers/csv-semicolon",
+          "name": "Semicolon inside a value",
+          "escaped": "a;b",
+          "breaks": "The alternative column separator used in several locales; a file correct in one locale breaks in another.",
+          "expect": "The separator declared in the file, and values quoted regardless of which one is used.",
+          "fields": [
+            "text",
+            "name",
+            "money",
+            "id-number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "a;b",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 3,
+            "code_points": 3,
+            "bytes": 3,
+            "utf16_units": 3
+          }
+        },
+        {
+          "id": "sheet-date-3-4",
+          "ref": "export-breakers/sheet-date-3-4",
+          "name": "Fraction that looks like a date",
+          "escaped": "3/4",
+          "breaks": "A fraction, a ratio or a house number, converted to a date on opening the file.",
+          "expect": "Exported as text; opening and saving the file does not change the value.",
+          "fields": [
+            "text",
+            "name",
+            "money",
+            "id-number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "3/4",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 3,
+            "code_points": 3,
+            "bytes": 3,
+            "utf16_units": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "locale-pl",
+      "name": "Polish locale",
+      "description": "Polish identifiers, formats and characters that global commercial products do not handle.",
+      "version": "1.0",
+      "updated": "2026-09-25",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "id-number",
+        "name",
+        "address",
+        "postal-code"
+      ],
+      "tags": [
+        "locale",
+        "checksum",
+        "identifiers"
+      ],
+      "value_count": 6,
+      "values": [
+        {
+          "id": "pesel-valid",
+          "ref": "locale-pl/pesel-valid",
+          "name": "PESEL with a valid checksum",
+          "escaped": "99023012343",
+          "breaks": "A national identifier that passes the checksum but encodes an impossible birth date - accepted by length checks, rejected by real validation.",
+          "expect": "Accepted or rejected according to which validation the field claims to do, consistently.",
+          "fields": [
+            "id-number",
+            "name",
+            "address",
+            "postal-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "99023012343",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 11,
+            "code_points": 11,
+            "bytes": 11,
+            "utf16_units": 11
+          }
+        },
+        {
+          "id": "pesel-bad-checksum",
+          "ref": "locale-pl/pesel-bad-checksum",
+          "name": "PESEL with a wrong checksum",
+          "escaped": "99023012344",
+          "breaks": "Differs from the valid one by a single digit; a field checking only the length cannot tell them apart.",
+          "expect": "Rejected with a message that says the checksum failed, not that the length is wrong.",
+          "fields": [
+            "id-number",
+            "name",
+            "address",
+            "postal-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "99023012344",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 11,
+            "code_points": 11,
+            "bytes": 11,
+            "utf16_units": 11
+          }
+        },
+        {
+          "id": "diacritics-full",
+          "ref": "locale-pl/diacritics-full",
+          "name": "Every Polish diacritic",
+          "escaped": "\u0104\u0106\u0118\u0141\u0143\u00d3\u015a\u0179\u017b \u0105\u0107\u0119\u0142\u0144\u00f3\u015b\u017a\u017c",
+          "breaks": "Encoding narrower than the full character set replaces these with question marks, and the name is corrupted on save.",
+          "expect": "Stored and returned unchanged in every layer, including exports and printouts.",
+          "fields": [
+            "id-number",
+            "name",
+            "address",
+            "postal-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u0104\u0106\u0118\u0141\u0143\u00d3\u015a\u0179\u017b\u2423\u0105\u0107\u0119\u0142\u0144\u00f3\u015b\u017a\u017c",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 19,
+            "code_points": 19,
+            "bytes": 37,
+            "utf16_units": 19
+          }
+        },
+        {
+          "id": "surname-hyphenated",
+          "ref": "locale-pl/surname-hyphenated",
+          "name": "Double-barrelled surname",
+          "escaped": "Kowalska-Nowak",
+          "breaks": "Double surnames break name splitting, sorting and the assumption that a surname is one word.",
+          "expect": "Stored as one surname; sorting and search treat it as written.",
+          "fields": [
+            "id-number",
+            "name",
+            "address",
+            "postal-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Kowalska-Nowak",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 14,
+            "code_points": 14,
+            "bytes": 14,
+            "utf16_units": 14
+          }
+        },
+        {
+          "id": "postal-code",
+          "ref": "locale-pl/postal-code",
+          "name": "Polish postal code",
+          "escaped": "00-950",
+          "breaks": "The national postal code format; a field expecting five digits without a separator rejects every real code.",
+          "expect": "The expected format shown next to the field, and the separator handled either way.",
+          "fields": [
+            "id-number",
+            "name",
+            "address",
+            "postal-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "00-950",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 6,
+            "code_points": 6,
+            "bytes": 6,
+            "utf16_units": 6
+          }
+        },
+        {
+          "id": "street-with-slash",
+          "ref": "locale-pl/street-with-slash",
+          "name": "Street with a building and flat number",
+          "escaped": "Marsza\u0142kowska 12/34",
+          "breaks": "House and flat numbers written with a slash; a field splitting on a slash produces two address lines from one.",
+          "expect": "Stored as one line, and exported without splitting.",
+          "fields": [
+            "id-number",
+            "name",
+            "address",
+            "postal-code"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Marsza\u0142kowska\u242312/34",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 19,
+            "code_points": 19,
+            "bytes": 20,
+            "utf16_units": 19
+          }
+        }
+      ]
+    },
+    {
+      "id": "filenames-paths",
+      "name": "File names and paths",
+      "description": "Names a file system rejects, alters, or reads differently than the user meant.",
+      "version": "1.0",
+      "updated": "2026-09-24",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "filename",
+        "path",
+        "text"
+      ],
+      "tags": [
+        "filesystem",
+        "reserved",
+        "portability"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "reserved-con",
+          "ref": "filenames-paths/reserved-con",
+          "name": "Reserved device name",
+          "escaped": "CON",
+          "breaks": "A device name reserved by one operating system; a file with this name cannot be created and the failure often surfaces as a generic error.",
+          "expect": "Rejected at input with a message naming the reserved word, not at write time.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "CON",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 3,
+            "code_points": 3,
+            "bytes": 3,
+            "utf16_units": 3
+          }
+        },
+        {
+          "id": "trailing-dot",
+          "ref": "filenames-paths/trailing-dot",
+          "name": "Trailing dot",
+          "escaped": "report.",
+          "breaks": "Trailing dots are silently removed by some file systems, so the stored name differs from the requested one.",
+          "expect": "Rejected, or normalised visibly so the user sees the name that will be used.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "report.",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 7,
+            "code_points": 7,
+            "bytes": 7,
+            "utf16_units": 7
+          }
+        },
+        {
+          "id": "trailing-space-name",
+          "ref": "filenames-paths/trailing-space-name",
+          "name": "Trailing space in a file name",
+          "escaped": "report\\u0020",
+          "breaks": "A trailing space in a file name is invisible, sometimes removed and sometimes kept - two files that look identical.",
+          "expect": "Trimmed consistently, and the resulting name shown to the user.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "report\u2423",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "trailing-space",
+              "count": null
+            }
+          ],
+          "counts": {
+            "graphemes": 7,
+            "code_points": 7,
+            "bytes": 7,
+            "utf16_units": 7
+          }
+        },
+        {
+          "id": "illegal-chars",
+          "ref": "filenames-paths/illegal-chars",
+          "name": "Characters forbidden in file names",
+          "escaped": "a:b*c?d\"e<f>g|h",
+          "breaks": "Characters legal on one system and forbidden on another; a file created on one machine cannot be copied to another.",
+          "expect": "Rejected with the forbidden characters named, before the file is created.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "a:b*c?d\"e<f>g|h",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 15,
+            "code_points": 15,
+            "bytes": 15,
+            "utf16_units": 15
+          }
+        },
+        {
+          "id": "double-extension",
+          "ref": "filenames-paths/double-extension",
+          "name": "Double extension",
+          "escaped": "report.txt.exe",
+          "breaks": "Interfaces hiding known extensions show this as report.txt, so the user sees a document and gets a program.",
+          "expect": "The full name shown wherever the user makes a decision about the file.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "report.txt.exe",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 14,
+            "code_points": 14,
+            "bytes": 14,
+            "utf16_units": 14
+          }
+        },
+        {
+          "id": "rtl-extension",
+          "ref": "filenames-paths/rtl-extension",
+          "name": "Right-to-left override in a file name",
+          "escaped": "report\\u202Etxt.exe",
+          "breaks": "A direction override makes the extension read in reverse, so a program looks like a text file.",
+          "expect": "Direction-control characters stripped or neutralised in every file name display.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "report\u2423txt.exe",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "bidi-control",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 14,
+            "code_points": 14,
+            "bytes": 16,
+            "utf16_units": 14
+          }
+        },
+        {
+          "id": "dot-only",
+          "ref": "filenames-paths/dot-only",
+          "name": "A single dot",
+          "escaped": ".",
+          "breaks": "A single dot means \"this directory\"; used as a file name it either fails or does something unintended.",
+          "expect": "Rejected at input.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": ".",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 1,
+            "bytes": 1,
+            "utf16_units": 1
+          }
+        },
+        {
+          "id": "dotdot",
+          "ref": "filenames-paths/dotdot",
+          "name": "Two dots",
+          "escaped": "..",
+          "breaks": "Two dots mean the parent directory; the shortest possible traversal test.",
+          "expect": "Rejected at input.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "..",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 2,
+            "code_points": 2,
+            "bytes": 2,
+            "utf16_units": 2
+          }
+        },
+        {
+          "id": "leading-dot",
+          "ref": "filenames-paths/leading-dot",
+          "name": "Leading dot",
+          "escaped": ".gitignore",
+          "breaks": "A leading dot hides the file on some systems, so an uploaded file disappears from listings.",
+          "expect": "Accepted, and listed regardless of the leading dot.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": ".gitignore",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "unicode-filename",
+          "ref": "filenames-paths/unicode-filename",
+          "name": "File name outside ASCII",
+          "escaped": "\u0107wiczenie \u0105\u0119.txt",
+          "breaks": "Non-ASCII names break archives, transfers and any layer assuming a narrow encoding.",
+          "expect": "Stored, listed, downloaded and archived with the name intact.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u0107wiczenie\u2423\u0105\u0119.txt",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 16,
+            "code_points": 16,
+            "bytes": 19,
+            "utf16_units": 16
+          }
+        },
+        {
+          "id": "path-260",
+          "ref": "filenames-paths/path-260",
+          "name": "260 characters",
+          "escaped": null,
+          "breaks": "The classic path length limit; crossing it produces failures far from the place the name was entered.",
+          "expect": "Rejected with the limit stated, at the point where the name is entered.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "a",
+            "count": 260
+          },
+          "shape": [],
+          "counts": {
+            "graphemes": 260,
+            "code_points": 260,
+            "bytes": 260,
+            "utf16_units": 260
+          }
+        },
+        {
+          "id": "space-in-name",
+          "ref": "filenames-paths/space-in-name",
+          "name": "Space in a file name",
+          "escaped": "my report.txt",
+          "breaks": "Names with spaces break command construction and links that are not quoted or encoded.",
+          "expect": "Handled everywhere the file name is used, including download links.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "my\u2423report.txt",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 13,
+            "code_points": 13,
+            "bytes": 13,
+            "utf16_units": 13
+          }
+        }
+      ]
+    }
+  ]
+}

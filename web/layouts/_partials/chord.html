@@ -1,0 +1,2 @@
+{{- /* A chord as its keys: `Alt+Shift+N` becomes three keycaps. */ -}}
+<span class="chord">{{ range split . "+" }}<kbd>{{ . }}</kbd>{{ end }}</span>

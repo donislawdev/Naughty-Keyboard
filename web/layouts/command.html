@@ -1,0 +1,98 @@
+{{- /*
+  A command of `nkb`. The page's own words are its content. Everything the
+  program says about the command - the usage, every option, every format, the
+  exit codes its help names, and the help word for word - comes from
+  data/facts/cli.json, which a test keeps equal to what the built program
+  prints. An option the program gains appears here without anyone writing it,
+  and in another language the build stops until it is translated.
+*/ -}}
+{{ define "main" }}
+{{- $name := .Params.command }}
+{{- $cli := hugo.Data.facts.cli }}
+{{- $command := false }}
+{{- range $cli.commands }}{{ if eq .name $name }}{{ $command = . }}{{ end }}{{ end }}
+{{- if not $command }}
+  {{- errorf "%s is about the command %q, which nkb does not have" .File.Path $name }}
+{{- end }}
+{{- /* In any language but English every sentence of the program goes through a translation, and a missing one stops the build. */ -}}
+{{- $translate := ne site.Language.Lang "en" }}
+{{- $table := dict "options" false "formats" false "exit_codes" false }}
+{{- if $translate }}
+  {{- with index hugo.Data.translations site.Language.Lang }}{{ with index . "cli" }}{{ with index . $name }}{{ $table = merge $table . }}{{ end }}{{ end }}{{ end }}
+{{- end }}
+{{- $extra := slice (dict "id" "options" "title" (T "options")) }}
+<div class="container docs">
+  {{ partial "sidebar.html" . }}
+  <article class="prose">
+    {{ partial "breadcrumbs.html" . }}
+    <h1 class="command-title"><code>nkb {{ $name }}</code></h1>
+    {{- with .Params.lead }}
+    <p class="lead">{{ partial "counted.html" . | markdownify }}</p>
+    {{- end }}
+    <pre>{{ delimit $command.usage "\n" }}</pre>
+    {{ .Content }}
+
+    <h2 id="options">{{ T "options" }}</h2>
+    <div class="options">
+      {{- range $command.options }}
+      {{- $flag := index .flags (sub (len .flags) 1) }}
+      {{- /* An option only the usage names has no line of help: its words say what it takes. */ -}}
+      {{- $words := T "option_one_of" (dict "values" (delimit .values ", ")) }}
+      {{- with .help }}
+        {{- $words = . }}
+        {{- if $translate }}
+          {{- $words = partial "translated.html" (dict "english" . "table" (index $table "options") "key" $flag "what" (printf "nkb %s %s" $name $flag)) }}
+        {{- end }}
+      {{- end }}
+      <div class="option" id="{{ strings.TrimLeft "-" $flag }}">
+        <div class="flag">{{ delimit .flags ", " }}{{ with .argument }} <span class="arg">{{ . }}</span>{{ end }}{{ with .values }} <span class="arg">{{ delimit . "|" }}</span>{{ end }}</div>
+        <div class="about"><p>{{ $words }}</p></div>
+      </div>
+      {{- end }}
+    </div>
+
+    {{- with $command.formats }}
+    {{- $extra = $extra | append (dict "id" "formats" "title" (T "formats")) }}
+    <h2 id="formats">{{ T "formats" }}</h2>
+    <div class="options">
+      {{- range . }}
+      {{- $words := .help }}
+      {{- if $translate }}
+        {{- $words = partial "translated.html" (dict "english" .help "table" (index $table "formats") "key" .name "what" (printf "nkb %s, format %s" $name .name)) }}
+      {{- end }}
+      <div class="option" id="format-{{ .name }}">
+        <div class="flag">{{ .name }}</div>
+        <div class="about"><p>{{ $words }}</p></div>
+      </div>
+      {{- end }}
+    </div>
+    {{- end }}
+
+    {{- $extra = $extra | append (dict "id" "exit-codes" "title" (T "exit_codes")) }}
+    <h2 id="exit-codes">{{ T "exit_codes" }}</h2>
+    {{- with $command.exit_codes }}
+    <div class="table-wrap"><table>
+      <thead><tr><th>{{ T "code" }}</th><th>{{ T "meaning" }}</th></tr></thead>
+      <tbody>
+        {{- range . }}
+        {{- $words := .help }}
+        {{- if $translate }}
+          {{- $words = partial "translated.html" (dict "english" .help "table" (index $table "exit_codes") "key" .name "what" (printf "nkb %s, exit code %s" $name .name)) }}
+        {{- end }}
+        <tr><td><code>{{ .name }}</code></td><td>{{ $words }}</td></tr>
+        {{- end }}
+      </tbody>
+    </table></div>
+    {{- else }}
+    <p>{{ T "exit_codes_shared" }} <a href="{{ (partial "find-page.html" "/docs/cli/exit-codes").RelPermalink }}">{{ T "exit_codes" }}</a></p>
+    {{- end }}
+
+    {{- $extra = $extra | append (dict "id" "help" "title" (T "the_help")) }}
+    <h2 id="help">{{ T "the_help" }}</h2>
+    <p>{{ T "the_help_says" (dict "command" (printf "nkb %s --help" $name) "version" $cli.version) }}</p>
+    <pre>{{ $command.help }}</pre>
+    {{ partial "pager.html" . }}
+  </article>
+  {{ partial "toc.html" (dict "page" . "extra" $extra) }}
+</div>
+{{ end }}

@@ -1,0 +1,13 @@
+{{- /*
+  Every exit code of `nkb`, from the facts the program's own test writes. What
+  each one means is the language file's, and a code with no words stops the
+  build.
+*/ -}}
+<div class="table-wrap"><table>
+  <thead><tr><th>{{ T "code" }}</th><th>{{ T "meaning" }}</th></tr></thead>
+  <tbody>
+    {{- range index hugo.Data.facts "exit-codes" }}
+    <tr><td><code>{{ .code }}</code></td><td>{{ T (printf "exit_%s" (replace .name "-" "_")) | markdownify }}</td></tr>
+    {{- end }}
+  </tbody>
+</table></div>

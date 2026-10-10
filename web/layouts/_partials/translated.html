@@ -1,0 +1,28 @@
+{{- /*
+  What the program says, in the language being built.
+
+  English is the program's own words, from the facts. Any other language is a
+  translation under web/data/translations/<language>/, which carries the first
+  twelve characters of the SHA-256 of the English it was made from. A missing
+  translation, or one made from words the program no longer says, stops the
+  build and names the digest to write once the translation is checked against
+  the new English. A page cannot quietly show a sentence about an option or a
+  value that is no longer true.
+
+  Takes: english (the program's words), table (a map of the language's
+  translations, or nil), key (where in it), what (for the message).
+*/ -}}
+{{- $english := .english }}
+{{- if eq site.Language.Lang "en" }}
+  {{- return $english }}
+{{- end }}
+{{- $digest := substr (sha256 $english) 0 12 }}
+{{- $entry := false }}
+{{- with .table }}{{ $entry = index . $.key }}{{ end }}
+{{- if not $entry }}
+  {{- errorf "%s has no %s translation of %q (source = %q)" .what site.Language.Lang $english $digest }}
+{{- end }}
+{{- if ne $entry.source $digest }}
+  {{- errorf "the %s translation of %s was made from other English. Check it against %q, then set source = %q" site.Language.Lang .what $english $digest }}
+{{- end }}
+{{- return $entry.text }}

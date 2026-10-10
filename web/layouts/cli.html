@@ -1,0 +1,60 @@
+{{- /*
+  The command line as a whole: every command `nkb --help` names, with the line
+  its help opens with, the options of `nkb` itself, and the general help word
+  for word. All of it from data/facts/cli.json.
+*/ -}}
+{{ define "main" }}
+{{- $cli := hugo.Data.facts.cli }}
+{{- $translate := ne site.Language.Lang "en" }}
+{{- $tables := dict }}
+{{- if $translate }}
+  {{- with index hugo.Data.translations site.Language.Lang }}{{ with index . "cli" }}{{ $tables = . }}{{ end }}{{ end }}
+{{- end }}
+<div class="container docs">
+  {{ partial "sidebar.html" . }}
+  <article class="prose">
+    {{ partial "breadcrumbs.html" . }}
+    <h1>{{ .Title }}</h1>
+    {{- with .Params.lead }}
+    <p class="lead">{{ partial "rich.html" . }}</p>
+    {{- end }}
+    {{ .Content }}
+
+    <h2 id="commands">{{ T "commands" }}</h2>
+    <div class="options">
+      {{- range $cli.commands }}
+      {{- $summary := .summary }}
+      {{- if $translate }}
+        {{- $summary = partial "translated.html" (dict "english" .summary "table" (index $tables .name) "key" "summary" "what" (printf "nkb %s, its summary" .name)) }}
+      {{- end }}
+      {{- $page := partial "find-page.html" (printf "/docs/cli/%s" .name) }}
+      <div class="option">
+        <div class="flag"><a href="{{ $page.RelPermalink }}">nkb {{ .name }}</a></div>
+        <div class="about"><p>{{ strings.FirstUpper $summary }}.</p></div>
+      </div>
+      {{- end }}
+    </div>
+
+    <h2 id="options">{{ T "options" }}</h2>
+    <div class="options">
+      {{- range $cli.general.options }}
+      {{- $flag := index .flags (sub (len .flags) 1) }}
+      {{- $words := .help }}
+      {{- if $translate }}
+        {{- $words = partial "translated.html" (dict "english" .help "table" (index (or (index $tables "general") dict) "options") "key" $flag "what" (printf "nkb %s" $flag)) }}
+      {{- end }}
+      <div class="option" id="{{ strings.TrimLeft "-" $flag }}">
+        <div class="flag">{{ delimit .flags ", " }}</div>
+        <div class="about"><p>{{ $words }}</p></div>
+      </div>
+      {{- end }}
+    </div>
+
+    <h2 id="help">{{ T "the_help" }}</h2>
+    <p>{{ T "the_help_says" (dict "command" "nkb --help" "version" $cli.version) }}</p>
+    <pre>{{ $cli.general.help }}</pre>
+    {{ partial "pager.html" . }}
+  </article>
+  {{ partial "toc.html" (dict "page" . "extra" (slice (dict "id" "commands" "title" (T "commands")) (dict "id" "options" "title" (T "options")) (dict "id" "help" "title" (T "the_help")))) }}
+</div>
+{{ end }}

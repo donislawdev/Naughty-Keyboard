@@ -1,0 +1,30 @@
+{{- /*
+  What the home page says about the program to a search engine, in its own
+  vocabulary. Only what is true today: no version until there is a release,
+  and no rating, because there are none.
+*/ -}}
+{{- if .IsHome }}
+{{- $app := dict
+  "@context" "https://schema.org"
+  "@type" "SoftwareApplication"
+  "name" site.Title
+  "description" .Description
+  "url" site.Home.Permalink
+  "image" (resources.Get "social-preview.png").Permalink
+  "applicationCategory" "DeveloperApplication"
+  "operatingSystem" "Windows, macOS, Linux"
+  "license" "https://www.gnu.org/licenses/gpl-3.0.html"
+  "isAccessibleForFree" true
+  "offers" (dict "@type" "Offer" "price" "0" "priceCurrency" "USD")
+  "codeRepository" (index hugo.Data.menus.project 0).url
+  "inLanguage" site.Language.Locale
+}}
+<script type="application/ld+json">{{ $app | jsonify | safeJS }}</script>
+{{- end }}
+{{- with .Params.faq }}
+{{- $questions := slice }}
+{{- range . }}
+  {{- $questions = $questions | append (dict "@type" "Question" "name" .question "acceptedAnswer" (dict "@type" "Answer" "text" ($.RenderString (partial "counted.html" .answer) | plainify))) }}
+{{- end }}
+<script type="application/ld+json">{{ dict "@context" "https://schema.org" "@type" "FAQPage" "mainEntity" $questions | jsonify | safeJS }}</script>
+{{- end }}

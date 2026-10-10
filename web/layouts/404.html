@@ -1,0 +1,16 @@
+{{- /*
+  The one page GitHub Pages shows for every address it does not have. It is in
+  English, because the server cannot tell which language the reader came from,
+  and it links to the home page of every language the site has.
+*/ -}}
+{{ define "main" }}
+<div class="container cta">
+  <h1>{{ T "not_found_title" }}</h1>
+  <p>{{ T "not_found_text" }}</p>
+  <div class="actions">
+    {{- range hugo.Sites }}
+    <a class="button" href="{{ .Home.RelPermalink }}" lang="{{ .Language.Locale }}">{{ .Language.Label }}</a>
+    {{- end }}
+  </div>
+</div>
+{{ end }}

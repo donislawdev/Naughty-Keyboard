@@ -1,0 +1,27 @@
+{{- /* The catalogue: what the page says, then a card for every pack the program ships. */ -}}
+{{ define "main" }}
+<div class="container docs">
+  {{ partial "sidebar.html" . }}
+  <article class="prose">
+    {{ partial "breadcrumbs.html" . }}
+    <h1>{{ .Title }}</h1>
+    {{- with .Params.lead }}
+    <p class="lead">{{ partial "counted.html" . | markdownify }}</p>
+    {{- end }}
+    {{ .Content }}
+    <div class="grid two">
+      {{- range hugo.Data.facts.catalogue.packs }}
+      {{- $meta := partial "pack-meta.html" .id }}
+      {{- $page := partial "find-page.html" (printf "/packs/%s" .id) }}
+      <a class="card pack-card" href="{{ $page.RelPermalink }}">
+        <div class="name"><h3>{{ $meta.name }}</h3><span class="count">{{ T "values_count" (dict "count" (int .value_count)) }}</span></div>
+        <p>{{ $meta.about }}</p>
+        <span class="from">{{ .id }}</span>
+      </a>
+      {{- end }}
+    </div>
+    {{ partial "pager.html" . }}
+  </article>
+  {{ partial "toc.html" (dict "page" . "extra" slice) }}
+</div>
+{{ end }}

@@ -1,0 +1,347 @@
+{
+  "version": "nkb 0.1.0",
+  "general": {
+    "name": "nkb",
+    "summary": "malicious test data, one shortcut away",
+    "usage": [
+      "nkb <command> [options]"
+    ],
+    "about": [
+      "The graphical interface is a separate executable: nkb-gui"
+    ],
+    "options": [
+      {
+        "flags": [
+          "-h",
+          "--help"
+        ],
+        "argument": null,
+        "values": [],
+        "help": "Show this help and exit with 0"
+      },
+      {
+        "flags": [
+          "--version"
+        ],
+        "argument": null,
+        "values": [],
+        "help": "Print the version and exit with 0"
+      }
+    ],
+    "formats": [],
+    "exit_codes": [],
+    "help": "nkb 0.1.0 - malicious test data, one shortcut away\n\nUsage:\n  nkb <command> [options]\n\nCommands:\n  packs             List the packs this build can offer\n  show <pack>       Print one pack in full\n  emit <pack>       Print a pack's values for a script or a file\n  send <pack>       Type one value into the focused field\n  lint <file>       Check a pack file against the format rules\n  fmt <file>        Rewrite a pack file in canonical shape\n  new-pack <name>   Write the skeleton for a new pack\n\nOptions:\n  -h, --help        Show this help and exit with 0\n      --version     Print the version and exit with 0\n\nThe graphical interface is a separate executable: nkb-gui\n"
+  },
+  "commands": [
+    {
+      "name": "packs",
+      "summary": "list the packs this build can offer",
+      "usage": [
+        "nkb packs"
+      ],
+      "about": [
+        "Every run also states which pack sources were read and which were not, because a list drawn from one source looks exactly like a complete one."
+      ],
+      "options": [
+        {
+          "flags": [
+            "-h",
+            "--help"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Show this help and exit with 0"
+        }
+      ],
+      "formats": [],
+      "exit_codes": [],
+      "help": "nkb packs - list the packs this build can offer\n\nUsage:\n  nkb packs\n\nEvery run also states which pack sources were read and which were not,\nbecause a list drawn from one source looks exactly like a complete one.\n\nOptions:\n  -h, --help     Show this help and exit with 0\n"
+    },
+    {
+      "name": "show",
+      "summary": "print one pack in full",
+      "usage": [
+        "nkb show <pack>"
+      ],
+      "about": [
+        "Values are printed ESCAPED, which is the only readable form for a value made of characters nobody can see. A generated value is printed as its recipe and is never expanded here."
+      ],
+      "options": [
+        {
+          "flags": [
+            "-h",
+            "--help"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Show this help and exit with 0"
+        }
+      ],
+      "formats": [],
+      "exit_codes": [],
+      "help": "nkb show - print one pack in full\n\nUsage:\n  nkb show <pack>\n\nValues are printed ESCAPED, which is the only readable form for a value\nmade of characters nobody can see. A generated value is printed as its\nrecipe and is never expanded here.\n\nOptions:\n  -h, --help     Show this help and exit with 0\n"
+    },
+    {
+      "name": "emit",
+      "summary": "print a pack's values for a script or a file",
+      "usage": [
+        "nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]"
+      ],
+      "about": [
+        "Values go to standard output. The account of what came out, and any note about what a format could not carry, go to standard error - so a redirected file holds values and nothing else."
+      ],
+      "options": [
+        {
+          "flags": [
+            "--format"
+          ],
+          "argument": null,
+          "values": [
+            "json",
+            "csv",
+            "lines"
+          ],
+          "help": null
+        },
+        {
+          "flags": [
+            "--escaped"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Print values as a pack file stores them"
+        },
+        {
+          "flags": [
+            "--raw"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Print values literally"
+        },
+        {
+          "flags": [
+            "--base64"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Encode values, for channels that damage text"
+        },
+        {
+          "flags": [
+            "-h",
+            "--help"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Show this help and exit with 0"
+        }
+      ],
+      "formats": [
+        {
+          "name": "json",
+          "help": "Both forms of every value, and every field. The default, because it is the only one that carries the whole catalogue"
+        },
+        {
+          "name": "csv",
+          "help": "One row per value. Escaped by default, because this catalogue contains values that destroy CSV files"
+        },
+        {
+          "name": "lines",
+          "help": "One value per line. Refuses a value containing a line break by name, rather than splitting it silently"
+        }
+      ],
+      "exit_codes": [],
+      "help": "nkb emit - print a pack's values for a script or a file\n\nUsage:\n  nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]\n\nValues go to standard output. The account of what came out, and any\nnote about what a format could not carry, go to standard error - so a\nredirected file holds values and nothing else.\n\nFormats:\n  json     Both forms of every value, and every field. The default,\n           because it is the only one that carries the whole catalogue\n  csv      One row per value. Escaped by default, because this\n           catalogue contains values that destroy CSV files\n  lines    One value per line. Refuses a value containing a line\n           break by name, rather than splitting it silently\n\nOptions:\n      --escaped  Print values as a pack file stores them\n      --raw      Print values literally\n      --base64   Encode values, for channels that damage text\n  -h, --help     Show this help and exit with 0\n"
+    },
+    {
+      "name": "send",
+      "summary": "type one value into the focused field",
+      "usage": [
+        "nkb send <pack> [--index N] [--delay S] [--clear]"
+      ],
+      "about": [
+        "Put one value of a pack into whatever field has the keyboard focus.",
+        "The value goes to the focused window, not to standard output. Everything you read here is on standard error. Nothing is sent while Ctrl, Alt, Shift or Win is held on the keyboard: the command waits up to two seconds for them to come up, then refuses. Nothing is sent to a window running with higher privileges than nkb, such as an application started as administrator: the system would drop the keystrokes without a word, so the command refuses and exits with 4. Nothing is sent when the keyboard focus is on a button, a link, a list item or a page that is not editable: keys there act on that control, so the command refuses and exits with 4. Where it cannot tell, it sends. Press Escape to stop a send in progress: nothing more is typed, the command says how much arrived and exits with 4. Escape belongs to the command only while it types - before and after, the key is the application's."
+      ],
+      "options": [
+        {
+          "flags": [
+            "--index"
+          ],
+          "argument": "N",
+          "values": [],
+          "help": "which value, counting from 1 in the pack's own order (default: 1). The order of values is the order of testing."
+        },
+        {
+          "flags": [
+            "--delay"
+          ],
+          "argument": "S",
+          "values": [],
+          "help": "seconds to wait first, so you can focus the target (default: 3). Use 0 when something else focuses it."
+        },
+        {
+          "flags": [
+            "--clear"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "press Home, Shift+End, Delete first, clearing the current line of the field. Never selects beyond the line, so a multi-line field keeps its other lines. Without this switch the only keys sent are the value's own characters."
+        },
+        {
+          "flags": [
+            "-h",
+            "--help"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Show this help and exit with 0"
+        }
+      ],
+      "formats": [],
+      "exit_codes": [],
+      "help": "nkb send - type one value into the focused field\n\nUsage:\n  nkb send <pack> [--index N] [--delay S] [--clear]\n\nPut one value of a pack into whatever field has the keyboard focus.\n\nOptions:\n  --index N      which value, counting from 1 in the pack's own order\n                 (default: 1). The order of values is the order of testing.\n  --delay S      seconds to wait first, so you can focus the target\n                 (default: 3). Use 0 when something else focuses it.\n  --clear        press Home, Shift+End, Delete first, clearing the current\n                 line of the field. Never selects beyond the line, so a\n                 multi-line field keeps its other lines. Without this switch\n                 the only keys sent are the value's own characters.\n  -h, --help     Show this help and exit with 0\n\nThe value goes to the focused window, not to standard output.\nEverything you read here is on standard error.\nNothing is sent while Ctrl, Alt, Shift or Win is held on the keyboard:\nthe command waits up to two seconds for them to come up, then refuses.\nNothing is sent to a window running with higher privileges than nkb,\nsuch as an application started as administrator: the system would drop\nthe keystrokes without a word, so the command refuses and exits with 4.\nNothing is sent when the keyboard focus is on a button, a link, a list item\nor a page that is not editable: keys there act on that control, so the\ncommand refuses and exits with 4. Where it cannot tell, it sends.\nPress Escape to stop a send in progress: nothing more is typed, the command\nsays how much arrived and exits with 4. Escape belongs to the command only\nwhile it types - before and after, the key is the application's.\n"
+    },
+    {
+      "name": "lint",
+      "summary": "check a pack file against the format rules",
+      "usage": [
+        "nkb lint <file.toml> [--json] [--explain]"
+      ],
+      "about": [],
+      "options": [
+        {
+          "flags": [
+            "--json"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Write the verdict as JSON, and nothing else"
+        },
+        {
+          "flags": [
+            "--explain"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "List every rule and whether this build checks it"
+        },
+        {
+          "flags": [
+            "-h",
+            "--help"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Show this help and exit with 0"
+        }
+      ],
+      "formats": [],
+      "exit_codes": [
+        {
+          "name": "0",
+          "help": "the pack passed every rule this build checks"
+        },
+        {
+          "name": "1",
+          "help": "the pack broke at least one blocking rule"
+        },
+        {
+          "name": "2",
+          "help": "the command was called wrongly"
+        },
+        {
+          "name": "3",
+          "help": "there is no pack file to read at that path"
+        },
+        {
+          "name": "5",
+          "help": "the file is there and could not be read, or the verdict could not be written to standard output"
+        }
+      ],
+      "help": "nkb lint - check a pack file against the format rules\n\nUsage:\n  nkb lint <file.toml> [--json] [--explain]\n\nOptions:\n      --json     Write the verdict as JSON, and nothing else\n      --explain  List every rule and whether this build checks it\n  -h, --help     Show this help and exit with 0\n\nExit codes:\n  0  the pack passed every rule this build checks\n  1  the pack broke at least one blocking rule\n  2  the command was called wrongly\n  3  there is no pack file to read at that path\n  5  the file is there and could not be read, or the verdict\n     could not be written to standard output\n"
+    },
+    {
+      "name": "fmt",
+      "summary": "rewrite a pack file in canonical shape",
+      "usage": [
+        "nkb fmt <file.toml> [--dry-run]"
+      ],
+      "about": [
+        "Puts the fields of each table in the order the format defines and lines up the equals signs. Comments, blank lines and the order of the values themselves are left exactly as they are - the order of the values is the order a tester meets them."
+      ],
+      "options": [
+        {
+          "flags": [
+            "--dry-run"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Say what would change and write nothing"
+        },
+        {
+          "flags": [
+            "-h",
+            "--help"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Show this help and exit with 0"
+        }
+      ],
+      "formats": [],
+      "exit_codes": [
+        {
+          "name": "0",
+          "help": "the file is in shape, or was put in shape"
+        },
+        {
+          "name": "1",
+          "help": "the file is not TOML, so there was nothing to put in order"
+        },
+        {
+          "name": "2",
+          "help": "the command was called wrongly"
+        },
+        {
+          "name": "3",
+          "help": "there is no pack file to read at that path"
+        },
+        {
+          "name": "4",
+          "help": "formatting would have changed a value, so nothing was written"
+        },
+        {
+          "name": "5",
+          "help": "the file could not be read or written, or standard output could not be"
+        }
+      ],
+      "help": "nkb fmt - rewrite a pack file in canonical shape\n\nUsage:\n  nkb fmt <file.toml> [--dry-run]\n\nPuts the fields of each table in the order the format defines and lines\nup the equals signs. Comments, blank lines and the order of the values\nthemselves are left exactly as they are - the order of the values is the\norder a tester meets them.\n\nOptions:\n      --dry-run  Say what would change and write nothing\n  -h, --help     Show this help and exit with 0\n\nExit codes:\n  0  the file is in shape, or was put in shape\n  1  the file is not TOML, so there was nothing to put in order\n  2  the command was called wrongly\n  3  there is no pack file to read at that path\n  4  formatting would have changed a value, so nothing was written\n  5  the file could not be read or written, or standard output\n     could not be\n"
+    },
+    {
+      "name": "new-pack",
+      "summary": "write the skeleton for a new pack",
+      "usage": [
+        "nkb new-pack <name>"
+      ],
+      "about": [
+        "The name becomes both the file name and the pack identifier, so it has to be lower case letters, digits and hyphens, starting with a letter. The file is written in the current folder and never over an existing one."
+      ],
+      "options": [
+        {
+          "flags": [
+            "-h",
+            "--help"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Show this help and exit with 0"
+        }
+      ],
+      "formats": [],
+      "exit_codes": [],
+      "help": "nkb new-pack - write the skeleton for a new pack\n\nUsage:\n  nkb new-pack <name>\n\nThe name becomes both the file name and the pack identifier, so it has\nto be lower case letters, digits and hyphens, starting with a letter.\nThe file is written in the current folder and never over an existing one.\n\nOptions:\n  -h, --help     Show this help and exit with 0\n"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{{- /*
+  Every page of the documentation's menu in reading order, as one list. The
+  menu at the side and the pager at the foot read it, so they cannot disagree
+  about what comes next.
+*/ -}}
+{{- $pages := slice }}
+{{- range hugo.Data.menus.sidebar }}
+  {{- range .pages }}
+    {{- $pages = $pages | append (partial "find-page.html" .) }}
+  {{- end }}
+  {{- if .catalogue }}
+    {{- range hugo.Data.facts.catalogue.packs }}
+      {{- $pages = $pages | append (partial "find-page.html" (printf "/packs/%s" .id)) }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- return $pages }}

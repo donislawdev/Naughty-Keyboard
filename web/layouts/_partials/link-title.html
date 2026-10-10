@@ -1,0 +1,2 @@
+{{- /* A command is named the way it is typed, in the typeface of code. */ -}}
+{{- with .Params.command }}<code>nkb {{ . }}</code>{{ else }}{{ with .Params.pack }}<code>{{ . }}</code>{{ else }}{{ $.LinkTitle }}{{ end }}{{ end -}}

@@ -1,0 +1,13 @@
+{{- /*
+  The commands that check a download, word for word from the README's
+  verify-commands block. The release notes and the check of a published
+  release read the same block, so the site cannot show a command that the
+  release does not answer to.
+*/ -}}
+{{- $readme := (resources.Get "readme.md").Content }}
+{{- $pattern := "(?s)<!-- verify-commands -->\\s*```[a-z]*\\n(.*?)\\n```\\s*<!-- /verify-commands -->" }}
+{{- $found := findRESubmatch $pattern $readme 1 }}
+{{- if not $found }}
+  {{- errorf "the README has no verify-commands block, and the site would show no way to check a download" }}
+{{- end }}
+<pre>{{ index (index $found 0) 1 }}</pre>

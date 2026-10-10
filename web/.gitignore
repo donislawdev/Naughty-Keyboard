@@ -1,0 +1,4 @@
+# What Hugo writes next to the website's source. Never tracked.
+/public/
+/resources/
+/.hugo_build.lock

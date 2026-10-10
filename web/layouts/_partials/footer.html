@@ -1,0 +1,27 @@
+<footer class="site-footer">
+  <div class="container">
+    <div>
+      <a class="brand" href="{{ site.Home.RelPermalink }}"><img src="{{ "icon.svg" | relURL }}" alt="" width="28" height="28">{{ site.Title }}</a>
+      <p class="footer-note">{{ T "footer_note" }}</p>
+    </div>
+    {{- range hugo.Data.menus.footer }}
+    <div>
+      <h2>{{ T .key }}</h2>
+      <ul>
+        {{- range .pages }}
+        {{- $page := partial "find-page.html" . }}
+        <li><a href="{{ $page.RelPermalink }}">{{ $page.LinkTitle }}</a></li>
+        {{- end }}
+      </ul>
+    </div>
+    {{- end }}
+    <div>
+      <h2>{{ T "footer_project" }}</h2>
+      <ul>
+        {{- range hugo.Data.menus.project }}
+        <li><a href="{{ .url }}">{{ T .key }}</a></li>
+        {{- end }}
+      </ul>
+    </div>
+  </div>
+</footer>

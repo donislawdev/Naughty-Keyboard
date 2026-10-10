@@ -1,0 +1,10 @@
+{{- /*
+  A sentence from a page's front matter: Markdown, the catalogue's numbers put
+  in (`{packs}`, `{values}`), and every `[[Alt+Shift+B]]` drawn as the keys of
+  that chord.
+*/ -}}
+{{- $html := partial "counted.html" . | markdownify }}
+{{- range findRESubmatch `\[\[([A-Za-z0-9+]+)\]\]` $html }}
+  {{- $html = replace $html (index . 0) (partial "chord.html" (index . 1)) }}
+{{- end }}
+{{- return (safeHTML $html) }}

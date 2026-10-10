@@ -1,0 +1,26 @@
+[
+  {
+    "code": 0,
+    "name": "ok"
+  },
+  {
+    "code": 1,
+    "name": "validation-failed"
+  },
+  {
+    "code": 2,
+    "name": "usage"
+  },
+  {
+    "code": 3,
+    "name": "not-found"
+  },
+  {
+    "code": 4,
+    "name": "insert-failed"
+  },
+  {
+    "code": 5,
+    "name": "io-failed"
+  }
+]

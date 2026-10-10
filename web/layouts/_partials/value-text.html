@@ -1,0 +1,21 @@
+{{- /*
+  One field of a value of the catalogue - its name, what it breaks, what to
+  expect - in the language being built. Takes: value, field.
+*/ -}}
+{{- $value := .value }}
+{{- $english := index $value .field }}
+{{- $text := $english }}
+{{- if ne site.Language.Lang "en" }}
+  {{- $pack := index (split $value.ref "/") 0 }}
+  {{- $table := false }}
+  {{- with index hugo.Data.translations site.Language.Lang }}
+    {{- with index . "packs" }}{{ with index . $pack }}{{ $table = index . $value.id }}{{ end }}{{ end }}
+  {{- end }}
+  {{- $text = partial "translated.html" (dict
+    "english" $english
+    "table" $table
+    "key" .field
+    "what" (printf "%s, field %s" $value.ref .field)
+  ) }}
+{{- end }}
+{{- return $text }}

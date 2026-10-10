@@ -1,0 +1,16 @@
+{{- /* A page of the documentation: the menu, the page, and what is on it. */ -}}
+{{ define "main" }}
+<div class="container docs">
+  {{ partial "sidebar.html" . }}
+  <article class="prose">
+    {{ partial "breadcrumbs.html" . }}
+    <h1>{{ .Title }}</h1>
+    {{- with .Params.lead }}
+    <p class="lead">{{ partial "counted.html" . | markdownify }}</p>
+    {{- end }}
+    {{ .Content }}
+    {{ partial "pager.html" . }}
+  </article>
+  {{ partial "toc.html" (dict "page" . "extra" slice) }}
+</div>
+{{ end }}

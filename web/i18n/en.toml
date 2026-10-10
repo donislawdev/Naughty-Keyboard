@@ -1,0 +1,293 @@
+# The words of the website's own interface, in English.
+#
+# Every other language has a file with the same keys. A key a template asks
+# for and a language does not have stops the build (--printI18nWarnings with
+# --panicOnWarning), so no page goes out with a hole where a word should be.
+#
+# What the program itself says - the catalogue, the help, the names of the
+# shortcuts - is not here. It comes from web/data/facts/, and its translations
+# from web/data/translations/<language>/.
+
+# ---- the frame of every page ------------------------------------------------
+
+[skip_to_content]
+other = "Skip to content"
+
+[nav_label]
+other = "Main"
+
+[nav_docs]
+other = "Documentation"
+
+[nav_packs]
+other = "Packs"
+
+[nav_cli]
+other = "CLI"
+
+[nav_download]
+other = "Download"
+
+[link_github]
+other = "GitHub"
+
+[menu]
+other = "Menu"
+
+[language]
+other = "Language"
+
+[home]
+other = "Home"
+
+[pager_label]
+other = "Previous and next page"
+
+[previous]
+other = "Previous"
+
+[next]
+other = "Next"
+
+[on_this_page]
+other = "On this page"
+
+[footer_note]
+other = "Test data that breaks forms, one shortcut away. The program is GPL-3.0 and the packs are CC BY 4.0. This site sets no cookies and loads nothing from anywhere else."
+
+[footer_product]
+other = "Product"
+
+[footer_docs]
+other = "Documentation"
+
+[footer_project]
+other = "Project"
+
+[link_releases]
+other = "Releases"
+
+[link_suggest]
+other = "Suggest a value"
+
+[link_report_security]
+other = "Report a security problem"
+
+[side_start]
+other = "Start"
+
+[side_palette]
+other = "The palette"
+
+[side_cli]
+other = "Command line"
+
+[side_packs]
+other = "Packs"
+
+[side_trust]
+other = "Trust"
+
+[picture_alt]
+other = "Naughty Keyboard: your form works, until someone types this. Values such as null, =1+1, 30.02.2026 and a trailing space, and what each one does to a form."
+
+[not_found_title]
+other = "There is no page here"
+
+[not_found_text]
+other = "The address may have changed, or it was typed with one character too many. Start again from the home page."
+
+# ---- the home page -----------------------------------------------------------
+
+[get_it]
+other = "Get it"
+
+[read_the_docs]
+other = "Read the documentation"
+
+[view_on_github]
+other = "View on GitHub"
+
+[honest_limits]
+other = "Honest limits"
+
+# ---- a value, the way the palette shows it ----------------------------------
+
+[invisible_character]
+other = "invisible character"
+
+[elided]
+other = "{{ .total }} code points in all, cut in the middle"
+
+[graphemes]
+one = "grapheme"
+other = "graphemes"
+
+[code_points]
+one = "code point"
+other = "code points"
+
+[bytes]
+one = "byte"
+other = "bytes"
+
+[utf16_units]
+one = "UTF-16 unit"
+other = "UTF-16 units"
+
+[what_it_breaks]
+other = "What it breaks"
+
+[what_to_expect]
+other = "What a correct application does"
+
+[shape_zero_width]
+one = "{{ .count }} zero-width character"
+other = "{{ .count }} zero-width characters"
+
+[shape_bidi_control]
+one = "{{ .count }} character that changes the direction of text"
+other = "{{ .count }} characters that change the direction of text"
+
+[shape_soft_hyphen]
+one = "{{ .count }} soft hyphen"
+other = "{{ .count }} soft hyphens"
+
+[shape_unusual_space]
+one = "{{ .count }} space that is not an ordinary space"
+other = "{{ .count }} spaces that are not an ordinary space"
+
+[shape_tab]
+one = "{{ .count }} tab"
+other = "{{ .count }} tabs"
+
+[shape_line_break]
+one = "{{ .count }} line break"
+other = "{{ .count }} line breaks"
+
+[shape_other_control]
+one = "{{ .count }} other control character"
+other = "{{ .count }} other control characters"
+
+[shape_leading_space]
+other = "starts with a space"
+
+[shape_trailing_space]
+other = "ends with a space"
+
+# ---- the catalogue -----------------------------------------------------------
+
+[values_count]
+one = "{{ .count }} value"
+other = "{{ .count }} values"
+
+[pack_title]
+other = "{{ .name }} test values"
+
+[pack_description]
+one = "{{ .about }} {{ .count }} test value and what it breaks."
+other = "{{ .about }} {{ .count }} test values and what each one breaks."
+
+[pack_lead]
+one = "{{ .count }} value, with what it breaks and what a correct application does instead."
+other = "{{ .count }} values, each with what it breaks and what a correct application does instead."
+
+[pack_version]
+other = "version {{ .version }}, updated {{ .updated }}"
+
+[pack_how]
+other = "Type them one at a time with {{ .chord }} in the palette, or take them all into a script with <code>{{ .command }}</code>."
+
+# ---- a command of nkb --------------------------------------------------------
+
+[commands]
+other = "Commands"
+
+[options]
+other = "Options"
+
+[formats]
+other = "Formats"
+
+[exit_codes]
+other = "Exit codes"
+
+[option_one_of]
+other = "One of: {{ .values }}. The formats below say what each one writes."
+
+[code]
+other = "Code"
+
+[meaning]
+other = "Meaning"
+
+[exit_codes_shared]
+other = "This command's help names no exit codes of its own. The numbers mean the same for every command:"
+
+[the_help]
+other = "The help, as the program prints it"
+
+[the_help_says]
+other = "What {{ .command }} prints, from {{ .version }}."
+
+[exit_ok]
+other = "The command did what it promised."
+
+[exit_validation_failed]
+other = "A pack did not pass validation. The finding is about the pack, not about the tool."
+
+[exit_usage]
+other = "The command was called wrongly: an unknown command, an unknown option, or an option without its value."
+
+[exit_not_found]
+other = "The pack, the value or the file that was named does not exist."
+
+[exit_insert_failed]
+other = "The value could not be typed into the field. `nkb send` refused or stopped, and its message says why."
+
+[exit_io_failed]
+other = "A file could not be read or written, or standard output could not be written."
+
+# ---- shortcuts and downloads --------------------------------------------------
+
+[chord]
+other = "Chord"
+
+[action]
+other = "What it does"
+
+[today]
+other = "Today"
+
+[settings_name]
+other = "In settings.toml"
+
+[works]
+other = "Works"
+
+[not_yet]
+other = "Not available yet"
+
+[system]
+other = "System"
+
+[fingerprint]
+other = "SHA-256 of the certificate"
+
+[expires]
+other = "Expires"
+
+[certificate_windows]
+other = "Windows, Authenticode"
+
+[certificate_macos]
+other = "macOS, Developer ID Application"
+
+[system_windows]
+other = "Windows 10 or 11, x64"
+
+[system_macos]
+other = "macOS {{ .minimum }} or newer, Apple silicon"
+
+[system_linux]
+other = "Linux x64 with glibc 2.35 or newer"

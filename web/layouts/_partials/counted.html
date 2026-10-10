@@ -1,0 +1,9 @@
+{{- /*
+  A sentence from the content with the catalogue's numbers put in: `{packs}`
+  and `{values}` become what the program ships today, so no page carries a
+  count that the next value would make wrong.
+*/ -}}
+{{- $facts := hugo.Data.facts.catalogue }}
+{{- $text := replace . "{packs}" (string $facts.pack_count) }}
+{{- $text = replace $text "{values}" (string $facts.value_count) }}
+{{- return $text }}

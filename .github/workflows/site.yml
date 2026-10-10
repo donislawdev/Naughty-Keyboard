@@ -1,0 +1,64 @@
+name: Site
+
+# The project website under web/, built with Hugo and checked page by page.
+#
+# This builds and checks, and publishes nothing. Publishing waits until the
+# website's address and GitHub Pages are set up, and it will then run after CI
+# has passed on main, for the commit CI passed on, never on a push of its own.
+# A workflow running on every push to main is one a release waits for
+# (release.py REQUIRED_WORKFLOWS), and the website is not part of a release.
+#
+# What the build already refuses, before the check runs: a page that links to
+# a page this language does not have, a value or an option the program no
+# longer has, a translation made from English the program no longer says, and
+# a word missing from a language file. web/README.md says how.
+#
+# There is no paths filter, on purpose: the facts the site is built from come
+# from the program, so a change anywhere in crates/ can change a page.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  HUGO_VERSION: "0.167.0"
+  # The SHA-256 of hugo_0.167.0_linux-amd64.tar.gz, from the release's
+  # hugo_0.167.0_checksums.txt. A new version is a new digest, set by hand.
+  HUGO_SHA256: "4d84519b9f619e6d4c3fb45a50157abeabeb724f859c60605f44c23def6e1169"
+
+jobs:
+  build:
+    name: build and check the website
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: install Hugo, held to its digest
+        run: |
+          curl --fail --location --silent --show-error --output "$RUNNER_TEMP/hugo.tar.gz" \
+            "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_${HUGO_VERSION}_linux-amd64.tar.gz"
+          echo "${HUGO_SHA256}  $RUNNER_TEMP/hugo.tar.gz" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/hugo"
+          tar -xzf "$RUNNER_TEMP/hugo.tar.gz" -C "$RUNNER_TEMP/hugo" hugo
+          "$RUNNER_TEMP/hugo/hugo" version
+
+      - name: build
+        working-directory: web
+        run: |
+          "$RUNNER_TEMP/hugo/hugo" --printI18nWarnings --panicOnWarning \
+            --destination "$RUNNER_TEMP/public"
+
+      - name: check every page
+        run: python3 .github/scripts/site_check.py "$RUNNER_TEMP/public" --config web/hugo.toml

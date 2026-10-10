@@ -1,0 +1,25 @@
+{{- $here := . }}
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="{{ site.Home.RelPermalink }}"><img src="{{ "icon.svg" | relURL }}" alt="" width="28" height="28">{{ site.Title }}</a>
+    <nav class="nav" aria-label="{{ T "nav_label" }}">
+      {{- range hugo.Data.menus.main }}
+      {{- $page := partial "find-page.html" .page }}
+      <a href="{{ $page.RelPermalink }}"{{ if eq $page $here }} aria-current="page"{{ end }}>{{ T .key }}</a>
+      {{- end }}
+      <a href="{{ (index hugo.Data.menus.project 0).url }}">{{ T "link_github" }}</a>
+    </nav>
+    {{ partial "languages.html" . }}
+    <details class="menu">
+      <summary>{{ T "menu" }}</summary>
+      <div class="menu-panel">
+        {{- range hugo.Data.menus.main }}
+        {{- $page := partial "find-page.html" .page }}
+        <a href="{{ $page.RelPermalink }}">{{ T .key }}</a>
+        {{- end }}
+        <a href="{{ (index hugo.Data.menus.project 0).url }}">{{ T "link_github" }}</a>
+        {{ partial "languages.html" . }}
+      </div>
+    </details>
+  </div>
+</header>
