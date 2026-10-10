@@ -38,20 +38,24 @@ too-many-arguments-threshold = 3
 band = 0.7
 
 # A Rust file under src, up to its test module: what the programs are made of.
-# nkb-adapters/src/i18n.rs, then nkb-gui/src/live.rs at 1196 and
-# nkb-cli/src/main.rs at 1132.
+# nkb-cli/src/main.rs. Until 2026-10-10 nkb-adapters/src/i18n.rs at 1440 and
+# nkb-gui/src/live.rs at 1196, which then moved the windows' words and the
+# palette's view into modules of their own rather than raise this.
 [files.rust-product]
-ceiling = 1440
-near = 3
+ceiling = 1133
+near = 1
 
 # A whole Rust file, its tests included. nkb-gui/src/live.rs, then
-# nkb-adapters/src/i18n.rs at 2739.
+# nkb-adapters/src/i18n.rs at 2043.
 [files.rust-whole]
-ceiling = 2907
-near = 2
+ceiling = 2481
+# 3 since 2026-10-10, the owner's choice: the ceiling came down from 2907, so
+# the band did too, and reached nkb-app/src/advance_sequence.rs, which had not
+# grown.
+near = 3
 
-# A Slint file, the gallery excepted. ui/screens/palette.slint, then
-# ui/components/list.slint at 312.
+# A Slint file, the gallery excepted. ui/components/list.slint, then
+# ui/screens/palette.slint at 281 since its two value bands became components.
 [files.slint]
-ceiling = 346
+ceiling = 312
 near = 2

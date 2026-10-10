@@ -97,7 +97,10 @@ const WIDTH: u32 = 420;
 /// fold and the mark came in: the catalogue outgrew it, its lists were squeezed
 /// to a row each and the newest entries fell below the picture - a catalogue
 /// that shows less than it holds misrepresents it (document 13 section 3).
-const HEIGHT: u32 = 2000;
+/// 2000 until 2026-10-10, when the palette's value bands came in and fell below
+/// it the same way - so the test now holds the catalogue to this height and
+/// fails with the height it needs, rather than cutting it off.
+const HEIGHT: u32 = 3200;
 
 fn draw(window: &Rc<MinimalSoftwareWindow>) -> Vec<Pixel> {
     let mut buffer = vec![Pixel::default(); (WIDTH * HEIGHT) as usize];
@@ -121,6 +124,15 @@ fn the_gallery_renders_off_screen_and_renders_the_same_way_twice() {
     let gallery = Gallery::new().expect("the gallery must build");
     window.set_size(slint::PhysicalSize::new(WIDTH, HEIGHT));
     gallery.show().expect("the gallery must show");
+
+    // The software window here draws at a scale of one, so the catalogue's
+    // logical height is its height in pixels.
+    let wanted = gallery.get_content_height();
+    assert!(
+        wanted <= HEIGHT as f32,
+        "the catalogue wants {wanted} px and the picture is {HEIGHT} - its last entries \
+         would fall below the edge unseen. Raise HEIGHT."
+    );
 
     let first = draw(&window);
     let second = draw(&window);

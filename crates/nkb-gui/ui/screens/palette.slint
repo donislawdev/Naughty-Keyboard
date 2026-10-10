@@ -90,10 +90,7 @@
 
 import {
     Tokens,
-    TextName,
     TextBody,
-    TextMono,
-    TextPreview,
     TextSmallMuted,
     TextCounter,
     Spacer,
@@ -102,16 +99,16 @@ import {
     HintRow,
     HintBar,
     Marker,
-    MarkerRow,
     WindowFrame,
     WindowHeader,
     WindowFooter,
     WindowStatus,
     PickerOpener,
-    Disclosure,
     ProgressBar,
     SmallButton,
     Segmented,
+    NextBand,
+    LastSentBand,
 } from "../components.slint";
 
 // Which value a Copy button copies: the pack's identifier and the value's.
@@ -365,175 +362,49 @@ export component Palette inherits Window {
             }
         }
 
-        // What the next press sends (UX-GUI-001). One line each, ELIDED rather
-        // than wrapped, and every line kept at the end of a pack, where there
-        // is no value - drawn empty rather than taken away: the band changes
-        // with every press, and a band that grew and shrank would move
-        // everything below it. The whole value is drawn in the band below once
-        // it is sent. Expanded only - the heading is muted (D53).
-        //
-        // While a send runs, which value comes next depends on how the one in
-        // flight ends, so the band fades in place rather than going away and
-        // taking its height with it.
-        if !root.compact && root.has-next: Zone {
-            divided: false;
-            opacity: root.sending ? Tokens.alpha-disabled : 1;
-            // Copy at the other end of the heading's row, where the band below
-            // has its own: the two buttons stand in one column, each at the top
-            // of the value it copies (D98). Not at the end of a pack - there is
-            // no value to copy then - and its place kept.
-            HorizontalLayout {
-                spacing: Tokens.space-2;
-                // Centred on the button's row: the heading's height is its own
-                // text, and a layout puts such an element at the top - four
-                // pixels above the word beside it, in the first render.
-                VerticalLayout {
-                    alignment: center;
-                    TextSmallMuted {
-                        text: root.next-heading;
-                        overflow: elide;
-                    }
-                }
-                Spacer { }
-                SmallButton {
-                    text: root.copy-label;
-                    action: root.copy-next-action;
-                    visible: root.next-has-value;
-                    enabled: root.next-has-value && !root.sending;
-                    clicked => {
-                        root.copy-next();
-                    }
-                }
-            }
-            // The risk beside the name rather than on a row of its own: the
-            // palette stays on top of the application under test, and a row
-            // spent on one pill is height taken from it. The name gives way,
-            // the pill does not, and the line is a pill's height when there is
-            // none, so a value with a risk is as tall as one without.
-            HorizontalLayout {
-                spacing: Tokens.space-2;
-                TextName {
-                    text: root.next-name;
-                    overflow: elide;
-                    horizontal-stretch: 1;
-                    visible: root.next-has-value;
-                }
-                // Empty at the end of a pack, where a layout has no `visible`
-                // of its own to hide it by - and as tall as a pill either way.
-                MarkerRow {
-                    markers: root.next-has-value ? root.next-markers : [];
-                    keeps-height: true;
-                }
-            }
-            TextPreview {
-                text: root.next-preview;
-                overflow: elide;
-                visible: root.next-has-value;
+        // What the next press sends (UX-GUI-001), and the value that went out
+        // last - each a band of its own (`components/value_bands.slint`), where
+        // the reasons for their shape stand beside it.
+        if !root.compact && root.has-next: NextBand {
+            heading: root.next-heading;
+            has-value: root.next-has-value;
+            name: root.next-name;
+            preview: root.next-preview;
+            markers: root.next-markers;
+            copy-label: root.copy-label;
+            copy-action: root.copy-next-action;
+            sending: root.sending;
+            copy => {
+                root.copy-next();
             }
         }
-
-        // The value that went out last. It stays until the next one.
-        //
-        // FOLDED at every start (the owner's point 7, 2026-10-07): the heading
-        // and the value's name on one row, and the rest under a click. Every
-        // line below stands behind its own `if` rather than inside one folding
-        // layout: a layout behind an `if` reports one line for each of its
-        // texts that wraps (`slint.md` 2.23), and the preview, the shape and
-        // the counters all wrap. Folding hides no warning: every "did less than
-        // asked" has a sentence of its own in the status line (untouchable
-        // rule 1), and the markers here repeat the value's facts.
-        //
-        // Before the first value the row stands faded, so the first press
-        // fills it rather than putting a band in and moving everything below.
-        if !root.compact: Zone {
+        if !root.compact: LastSentBand {
             divided: root.has-next;
-            // While a value goes, this band shows THAT value, not the last
-            // one sent, and the button's key still names the last one. So it
-            // cannot be used then - faded in place rather than taken away,
-            // because a control that vanishes under the pointer moves the row
-            // it stood in (GUI rule 3).
-            HorizontalLayout {
-                spacing: Tokens.space-2;
-                // Centred on the button's row, like the next band's heading.
-                VerticalLayout {
-                    alignment: center;
-                    horizontal-stretch: 1;
-                    Disclosure {
-                        text: root.last-sent-label;
-                        detail: root.value-name;
-                        open: root.last-sent-open && root.has-value;
-                        enabled: root.has-value;
-                        action: root.last-sent-action;
-                        clicked => {
-                            root.toggle-last-sent();
-                        }
-                    }
-                }
-                SmallButton {
-                    text: root.copy-label;
-                    action: root.copy-last-action;
-                    enabled: root.has-value && !root.sending;
-                    clicked => {
-                        root.copy-last();
-                    }
-                }
+            label: root.last-sent-label;
+            open: root.last-sent-open;
+            action: root.last-sent-action;
+            has-value: root.has-value;
+            name: root.value-name;
+            sent-to: root.value-sent-to;
+            has-sent-to: root.has-sent-to;
+            reference: root.value-reference;
+            counts: root.value-counts;
+            preview: root.value-preview;
+            elided: root.value-elided;
+            has-elided: root.has-elided;
+            not-guaranteed: root.value-not-guaranteed;
+            has-not-guaranteed: root.has-not-guaranteed;
+            shape: root.value-shape;
+            has-shape: root.has-shape;
+            markers: root.markers;
+            copy-label: root.copy-label;
+            copy-action: root.copy-last-action;
+            sending: root.sending;
+            toggle => {
+                root.toggle-last-sent();
             }
-            if root.last-sent-open && root.has-value: TextName {
-                text: root.value-name;
-                wrap: word-wrap;
-            }
-            // Under the name, because "which value went where" is the
-            // question this band answers - and a tester who switched windows a
-            // moment before the press sees it here, not in a ticket a day later
-            // (`UX-GUI-013`).
-            if root.last-sent-open && root.has-value && root.has-sent-to: TextBody {
-                text: root.value-sent-to;
-                wrap: word-wrap;
-            }
-            // The preview, in the order the sketch draws: name, preview,
-            // shape, counters.
-            //
-            // ⚠️ ONE text element rather than coloured segments, and the reason
-            // is the layout engine: colouring the markers apart from the value
-            // would mean one element per segment, and a horizontal layout in
-            // Slint does not wrap - a hundred-code-point value at preview size
-            // would run off the window. `TextPreviewInvisible` therefore stays
-            // unused for now. The marker is told apart by its SHAPE, which is a
-            // visible box, rather than by colour.
-            if root.last-sent-open && root.has-value: TextPreview {
-                text: root.value-preview;
-                wrap: char-wrap;
-            }
-            if root.last-sent-open && root.has-value && root.has-elided: TextSmallMuted {
-                text: root.value-elided;
-            }
-            // Under the preview because it qualifies the preview, and in the
-            // muted role because it is a note about the tool's display rather
-            // than a fact about the value. Wrapped: a list of code points is
-            // somebody else's data and has no fixed length.
-            if root.last-sent-open && root.has-value && root.has-not-guaranteed: TextSmallMuted {
-                text: root.value-not-guaranteed;
-                wrap: word-wrap;
-            }
-            if root.last-sent-open && root.has-value && root.has-shape: TextBody {
-                text: root.value-shape;
-                wrap: word-wrap;
-            }
-            // Both wrap, and both did not until 2026-09-23: a render with the
-            // shipped `len-100000` cut the counters off at the window's edge,
-            // mid-word. A reference is up to 89 characters with no space in it
-            // (`pack-format.md` 7), so it breaks anywhere. The counters have
-            // spaces, so they break between words.
-            if root.last-sent-open && root.has-value: TextMono {
-                text: root.value-reference;
-                wrap: char-wrap;
-            }
-            if root.last-sent-open && root.has-value: TextMono {
-                text: root.value-counts;
-                wrap: word-wrap;
-            }
-            if root.last-sent-open && root.has-value: MarkerRow {
-                markers: root.markers;
+            copy => {
+                root.copy-last();
             }
         }
 

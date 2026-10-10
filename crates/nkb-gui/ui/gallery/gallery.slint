@@ -45,6 +45,8 @@ import {
     SmallButton,
     Segmented,
     Chevron,
+    NextBand,
+    LastSentBand,
 } from "../components.slint";
 
 export component Gallery inherits Window {
@@ -53,7 +55,13 @@ export component Gallery inherits Window {
     background: Tokens.surface;
     width: Tokens.palette-width;
 
-    VerticalLayout {
+    // How tall the catalogue wants to be. The test renders into a buffer of a
+    // fixed size and holds the catalogue to it, so a catalogue that outgrows the
+    // picture fails there instead of losing its newest entries below the edge -
+    // which is what happened, unnoticed, until 2026-10-10.
+    out property <length> content-height: catalogue.preferred-height;
+
+    catalogue := VerticalLayout {
         padding: Tokens.space-3;
         spacing: Tokens.space-2;
 
@@ -399,6 +407,63 @@ export component Gallery inherits Window {
             Spacer { }
             Chevron { open: false; }
             Chevron { open: true; ink: Tokens.accent; }
+        }
+
+        Hairline {}
+
+        // The palette's two value bands, each a section of its own: the next
+        // value, the same band at the end of a pack and faded while a value
+        // goes, then the last value sent opened with every line it can carry,
+        // and folded before the first value.
+        NextBand {
+            heading: "Next: value 8 of 34";
+            has-value: true;
+            name: "Trailing no-break space";
+            preview: "Kowalski_";
+            markers: [{ text: "offensive", risky: true }];
+            copy-label: "Copy";
+            copy-action: "Copy the next value";
+        }
+        NextBand {
+            heading: "Next: end of pack (34 of 34)";
+            copy-label: "Copy";
+            copy-action: "Copy the next value";
+        }
+        NextBand {
+            heading: "Next: value 9 of 34";
+            has-value: true;
+            name: "Faded while a value goes";
+            preview: "abc";
+            copy-label: "Copy";
+            copy-action: "Copy the next value";
+            sending: true;
+        }
+        LastSentBand {
+            label: "Last sent";
+            open: true;
+            action: "Show or hide the whole value";
+            has-value: true;
+            name: "Three zero-width spaces";
+            sent-to: "to chrome.exe, a text field";
+            has-sent-to: true;
+            reference: "unicode-text/zero-width-spaces";
+            counts: "graphemes: 7, code points: 7, bytes: 13, UTF-16 units: 7";
+            preview: "ab___cd";
+            elided: "the first 100 and the last 100 of 100000 code points";
+            has-elided: true;
+            not-guaranteed: "not in the shipped typeface: U+1F600";
+            has-not-guaranteed: true;
+            shape: "zero-width x 3";
+            has-shape: true;
+            markers: [{ text: "offensive", risky: true }, { text: "cleared first", risky: false }];
+            copy-label: "Copy";
+            copy-action: "Copy the last sent value";
+        }
+        LastSentBand {
+            label: "Last sent";
+            action: "Show or hide the whole value";
+            copy-label: "Copy";
+            copy-action: "Copy the last sent value";
         }
 
         Hairline {}
