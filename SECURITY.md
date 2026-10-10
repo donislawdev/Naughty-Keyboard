@@ -181,6 +181,14 @@ change and a release cannot be given a new file. A broken release is marked as a
 it off the latest-release link, with a sentence at the top of its notes, and the fix comes in a new
 release. The program is GPL-3.0-only, so the code that produced a release is the code at its tag.
 
+**A test build is not a release.** Someone who reported a problem may be sent a link to a test build, to
+try the fix before it is released: the programs of one commit, built by `.github/workflows/test-build.yml`
+with the steps a release takes, once CI passed on that commit. Their archives carry `-test.` and a number
+in the name. Nothing signs them and no statement is made about how they were built, so the checks above
+do not apply to them, and they never appear on the release page. The links lead to the files of a
+workflow run in this repository, need a GitHub account, and stop working after thirty days. The summary
+of the run names the commit, and the code of the build is the code at that commit.
+
 ## Dependencies and automation
 
 `Cargo.lock` is tracked on purpose, so the same tag builds to the same bytes. The direct
