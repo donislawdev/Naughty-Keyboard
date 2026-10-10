@@ -8,7 +8,7 @@ faq:
   - question: What is Naughty Keyboard?
     answer: "A tool for testers and developers that types the next awkward value into the field in front of you with one shortcut: a trailing space, a zero-width space, `30.02.2026`, `=1+1`, a name of 65,535 characters. Every value says what it usually breaks and what a correct application does. It is a window, the palette, and a command line, `nkb`, over one engine."
   - question: How is it different from the Big List of Naughty Strings?
-    answer: "That list is a plain file of strings under headings, and a good one. Naughty Keyboard is the rest of the job: it types the value into the field for you, one press at a time and in a fixed order, says what each value usually breaks and what a correct application does, shows an invisible character as a marker and counts the value four ways, and turns a finding into a report block for a ticket. If a list is what you want, `nkb emit` prints any pack as one."
+    answer: "That list is a plain file of strings under headings, and a good one. Naughty Keyboard is the rest of the job: it types the value into the field for you, one press at a time and in a fixed order, says what each value usually breaks and what a correct application does, shows an invisible character as a marker and counts the value four ways, and turns a finding into a report block for a ticket. If a list is what you want, `nkb emit` prints any pack as one. [The comparison](/big-list-of-naughty-strings/) goes into more detail."
   - question: Is it free?
     answer: "Yes. The program is GPL-3.0-only, and the built-in packs are CC BY 4.0, which each pack states in its own licence field. There is no account and no paid edition."
   - question: Does it need the internet?

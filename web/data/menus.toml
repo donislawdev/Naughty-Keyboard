@@ -51,6 +51,12 @@ key = "side_packs"
 pages = ["/packs"]
 catalogue = true
 
+# Pages about testing rather than about the program, each written for what
+# people search for.
+[[sidebar]]
+key = "side_guides"
+pages = ["/test-cases-for-a-text-field", "/big-list-of-naughty-strings"]
+
 [[sidebar]]
 key = "side_trust"
 pages = ["/docs/verify-a-download", "/security", "/faq"]
@@ -62,6 +68,10 @@ pages = ["/download", "/packs", "/security", "/faq"]
 [[footer]]
 key = "footer_docs"
 pages = ["/docs/getting-started", "/docs/palette", "/docs/shortcuts", "/docs/cli"]
+
+[[footer]]
+key = "footer_guides"
+pages = ["/test-cases-for-a-text-field", "/big-list-of-naughty-strings"]
 
 # Addresses outside the site. The repository is the only place they point.
 [[project]]

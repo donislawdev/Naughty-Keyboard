@@ -61,6 +61,9 @@ other = "Produkt"
 [footer_docs]
 other = "Dokumentacja"
 
+[footer_guides]
+other = "Poradniki"
+
 [footer_project]
 other = "Projekt"
 
@@ -84,6 +87,9 @@ other = "Wiersz poleceń"
 
 [side_packs]
 other = "Paczki"
+
+[side_guides]
+other = "Poradniki"
 
 [side_trust]
 other = "Zaufanie"
