@@ -104,6 +104,15 @@ fn each_copy_button_answers_the_pointer_and_asks_for_its_own_band() {
     palette.set_next_heading("Next: value 4 of 12".into());
     palette.set_next_name("Leading space".into());
     palette.set_value_name("Trailing space".into());
+    // The arrows stand in the next band's row with their words, as on screen.
+    palette.set_back_label("Back".into());
+    palette.set_skip_label("Skip".into());
+    palette.set_can_go_back(true);
+    let steps = Rc::new(Cell::new(0));
+    let count = Rc::clone(&steps);
+    palette.on_back_one_value(move || count.set(count.get() + 1));
+    let count = Rc::clone(&steps);
+    palette.on_skip_value(move || count.set(count.get() + 1));
     let next = Rc::new(Cell::new(0));
     let last = Rc::new(Cell::new(0));
     let packs = Rc::new(Cell::new(0));
@@ -126,7 +135,16 @@ fn each_copy_button_answers_the_pointer_and_asks_for_its_own_band() {
         "before the first value the next band's Copy and the value band's faded one must \
          both stand, in two places: {both:?}"
     );
-    let button = both[0];
+    // The arrows that walk the pack stand left of Copy in the same row (`D120`),
+    // and a word of another width moves them too, so the box measured there
+    // reaches over them. Copy ends the row, so its right edge is its own: the
+    // box is cut to the width of the button in the band below, which stands
+    // alone in its row.
+    let width = both[1].right - both[1].left;
+    let button = Ink {
+        left: both[0].right - width,
+        ..both[0]
+    };
     assert!(
         button.left > WIDTH / 2 && button.bottom - button.top < 30,
         "the word of the next band's button is not one short word at the right end of \
@@ -158,6 +176,7 @@ fn each_copy_button_answers_the_pointer_and_asks_for_its_own_band() {
         (1, 0, 0),
         "a click on the next band's Copy must ask for the next value, once, and nothing else"
     );
+    assert_eq!(steps.get(), 0, "a click on Copy walked the pack");
 
     // ---- not at the end of a pack: nothing to copy -----------------------------
     palette.set_next_has_value(false);
@@ -214,5 +233,94 @@ fn each_copy_button_answers_the_pointer_and_asks_for_its_own_band() {
     assert!(
         accent_in(&hovered, faded) <= accent_in(&sending, faded),
         "a Copy that cannot be used still lit up under the pointer"
+    );
+}
+
+/// The arrows beside the next value (`D120`): each asks for its own step and
+/// nothing else, Back is faded and deaf on the first value, where it would
+/// move nothing, and both are deaf while a value goes.
+#[test]
+fn each_arrow_asks_for_its_own_step_and_back_rests_on_the_first_value() {
+    let surface = offscreen::start(WIDTH, HEIGHT);
+    let palette = Palette::new().expect("the palette must build");
+    palette.set_pack("whitespace".into());
+    palette.set_counter("3 / 12".into());
+    palette.set_last_sent_label("Last sent".into());
+    palette.set_next_heading("Next: value 4 of 12".into());
+    palette.set_next_name("Leading space".into());
+    palette.set_copy_label("Copy".into());
+    palette.set_skip_label("Skip".into());
+    palette.set_has_next(true);
+    palette.set_next_has_value(true);
+    palette.set_can_go_back(true);
+    let back = Rc::new(Cell::new(0));
+    let skip = Rc::new(Cell::new(0));
+    let copies = Rc::new(Cell::new(0));
+    let count = Rc::clone(&back);
+    palette.on_back_one_value(move || count.set(count.get() + 1));
+    let count = Rc::clone(&skip);
+    palette.on_skip_value(move || count.set(count.get() + 1));
+    let count = Rc::clone(&copies);
+    palette.on_copy_next(move || count.set(count.get() + 1));
+    palette.show().expect("the palette must show");
+
+    // Back is found by its word: it stands first after the gap, so its width
+    // moves nothing beside it.
+    palette.set_back_label("".into());
+    let without = offscreen::draw(&surface, WIDTH, HEIGHT);
+    palette.set_back_label("Back".into());
+    let with = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let back_box = added(&without, &with, WIDTH, HEIGHT).expect("the word Back is drawn");
+    assert!(
+        back_box.bottom - back_box.top < 30 && back_box.left > WIDTH / 3,
+        "Back is not one short word in the next band's row: {back_box:?}"
+    );
+    click(palette.window(), back_box.centre());
+    assert_eq!(
+        (back.get(), skip.get(), copies.get()),
+        (1, 0, 0),
+        "a click on Back"
+    );
+
+    // Skip moves Back when its word changes, so its box reaches over Back - and
+    // its right edge, beside Copy, is its own.
+    palette.set_skip_label("".into());
+    let without = offscreen::draw(&surface, WIDTH, HEIGHT);
+    palette.set_skip_label("Skip".into());
+    let with = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let reach = added(&without, &with, WIDTH, HEIGHT).expect("the word Skip is drawn");
+    let on_skip = LogicalPosition::new(
+        (reach.right - 6) as f32,
+        ((reach.top + reach.bottom) / 2) as f32,
+    );
+    click(palette.window(), on_skip);
+    assert_eq!(
+        (back.get(), skip.get(), copies.get()),
+        (1, 1, 0),
+        "a click on Skip"
+    );
+
+    // On the first value a step back moves nothing, so Back neither lights up
+    // nor answers.
+    palette.set_can_go_back(false);
+    let rest = offscreen::draw(&surface, WIDTH, HEIGHT);
+    point(palette.window(), back_box.centre());
+    let hovered = offscreen::draw(&surface, WIDTH, HEIGHT);
+    assert!(
+        accent_in(&hovered, back_box) <= accent_in(&rest, back_box),
+        "Back lit up under the pointer on the first value"
+    );
+    click(palette.window(), back_box.centre());
+    assert_eq!(back.get(), 1, "Back answered on the first value");
+
+    // While a value goes, neither walks.
+    palette.set_can_go_back(true);
+    palette.set_sending(true);
+    click(palette.window(), back_box.centre());
+    click(palette.window(), on_skip);
+    assert_eq!(
+        (back.get(), skip.get()),
+        (1, 1),
+        "an arrow answered while a value was going"
     );
 }

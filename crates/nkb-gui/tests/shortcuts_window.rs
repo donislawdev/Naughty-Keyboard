@@ -199,8 +199,11 @@ fn the_shortcuts_window_pauses_records_and_always_takes_the_shortcuts_back() {
     shortcuts.told(Told::Paused(now()));
     assert!(shortcuts.is_open());
     assert!(window.window().is_visible());
-    assert_eq!(window.get_rows().row_count(), 10);
-    assert_eq!(window.get_summary(), "changed: 0 of 10");
+    assert_eq!(
+        window.get_rows().row_count(),
+        nkb_core::hotkeys::HotkeyAction::COUNT
+    );
+    assert_eq!(window.get_summary(), "changed: 0 of 14");
     assert_eq!(
         keys_of(window)[0],
         i18n::chord(default_bindings().chord(HotkeyAction::NextValue))
@@ -266,7 +269,7 @@ fn the_shortcuts_window_pauses_records_and_always_takes_the_shortcuts_back() {
         not_saved: None,
     });
     assert_eq!(keys_of(window)[1], i18n::chord(wanted));
-    assert_eq!(window.get_summary(), "changed: 1 of 10");
+    assert_eq!(window.get_summary(), "changed: 1 of 14");
     assert_eq!(
         messages(window),
         i18n::shortcut_answer(

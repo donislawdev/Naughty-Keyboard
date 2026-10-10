@@ -288,9 +288,15 @@ export component ProgressBar inherits Rectangle {
 //
 // Only a shape: what a click does is the business of whatever holds it, and
 // the colour comes from there too, so the mark and its words wear one colour.
+//
+// ⊕ It also points LEFT, for the arrow on the button that steps the next value
+// back (`D120`): one shape for every such triangle, so the arrows of a button
+// and the marks of a fold cannot drift apart.
 export component Chevron inherits Rectangle {
     // Down when true, right when false.
     in property <bool> open: true;
+    // Left instead of right, where `open` is false.
+    in property <bool> backward;
     in property <color> ink: Tokens.text-secondary;
 
     width: root.open ? Tokens.chevron-width : Tokens.chevron-height;
@@ -316,7 +322,27 @@ export component Chevron inherits Rectangle {
         }
         Close { }
     }
-    if !root.open: Path {
+    if !root.open && root.backward: Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 1;
+        viewbox-height: 2;
+        fill: root.ink;
+        MoveTo {
+            x: 1;
+            y: 0;
+        }
+        LineTo {
+            x: 0;
+            y: 1;
+        }
+        LineTo {
+            x: 1;
+            y: 2;
+        }
+        Close { }
+    }
+    if !root.open && !root.backward: Path {
         width: parent.width;
         height: parent.height;
         viewbox-width: 1;

@@ -91,6 +91,7 @@ use nkb_adapters::{
     SettingsFile, TomlPackFormat, altgr_character, default_bindings, i18n,
 };
 use nkb_app::advance_sequence::{InFlight, Ports, RouteRequest, Sent};
+use nkb_app::browse_packs::{Direction, list_packs};
 use nkb_app::ports::{
     Clearing, HotkeyRegistrar, LiveShortcuts, Progress, SettingChange, Settings, SettingsStore,
     ShortcutRegistration, Wait,
@@ -112,12 +113,14 @@ use crate::typeface::SHIPPED;
 // The view's own copy of a key: the same two identifiers, as Slint holds them.
 use crate::{HintRow, Marker, Palette, ValueKey as ShownKey};
 
+mod presses;
 mod view;
 
+use presses::{PaletteShortcuts, between_presses};
 pub(crate) use view::preview_line;
 use view::*;
 pub use view::{
-    View, clearing_command, copy_command, label_switches, route_command, set_compact,
+    View, clearing_command, copy_command, label_arrows, label_switches, route_command, set_compact,
     set_last_sent_open, show_clearing, starts_clearing,
 };
 
@@ -200,6 +203,16 @@ pub enum Command {
     /// of a switch that has not redrawn yet then ask twice for the same way,
     /// where two toggles would have undone each other.
     SetClearing(Clearing),
+    /// Move the next value one forward without typing - the arrow beside it
+    /// (`D120`). What `SkipValue` does, through the same sequence.
+    Skip,
+    /// Move it one back without typing - the other arrow.
+    Back,
+    /// Open the pack one step along the value window's list, from its first
+    /// value - `NextPack` and `PreviousPack` (`D120`), taken in front of the
+    /// sequence and carried out here, where the pack in use and the settings
+    /// that remember it live.
+    Pack(Direction),
     /// The tester closed the welcome window - remember it, so it does not open
     /// again (`[welcome] done`, UX7, `D103`, `D105`), and start the pack over
     /// from its first value (`D109`). Here, because the worker owns the
@@ -243,8 +256,15 @@ pub struct ShortcutsNow {
 ///
 /// `OpenPacks` opens the value window (step 7, K3.2c) through the palette's
 /// `open-packs` callback, and `ToggleVisibility` collapses or expands the
-/// palette (`D83`).
-const PALETTE_OWN: [HotkeyAction; 2] = [HotkeyAction::OpenPacks, HotkeyAction::ToggleVisibility];
+/// palette (`D83`). `NextPack` and `PreviousPack` open another pack the way
+/// the value window does (`D120`), so the settings remember it - a choice of
+/// the palette's, not a step of the sequence.
+const PALETTE_OWN: [HotkeyAction; 4] = [
+    HotkeyAction::OpenPacks,
+    HotkeyAction::ToggleVisibility,
+    HotkeyAction::NextPack,
+    HotkeyAction::PreviousPack,
+];
 
 /// Whether a press of `action` does something in this build: the sequence
 /// carries it out, or the palette does.
@@ -274,11 +294,16 @@ pub struct Legend {
 #[must_use]
 pub fn legend(bindings: &Bindings) -> Legend {
     Legend {
-        hints: bindings
-            .as_slice()
+        // In the order a person reads them, not the table's (`D120`).
+        hints: HotkeyAction::READING_ORDER
             .iter()
-            .filter(|(action, _)| wired(*action))
-            .map(|(action, chord)| (i18n::chord(*chord), i18n::action_name(*action).to_owned()))
+            .filter(|action| wired(**action))
+            .map(|action| {
+                (
+                    i18n::chord(bindings.chord(*action)),
+                    i18n::action_name(*action).to_owned(),
+                )
+            })
             .collect(),
         no_value: i18n::no_value_yet(bindings.chord(HotkeyAction::NextValue)),
     }
@@ -527,10 +552,14 @@ pub fn drive(
                 // borrows the sequence beside it.
                 let collapse = &worker.collapse;
                 let on_toggle = || draw_toggle(palette, collapse.toggle());
+                // A press for another pack waits as a command does, and the
+                // loop below carries it out as soon as the wait ends.
+                let on_pack = |direction| pending.set(Some(Command::Pack(direction)));
                 let shortcuts = PaletteShortcuts {
                     inner: live,
                     on_toggle: &on_toggle,
                     on_open: &on_open,
+                    on_pack: &on_pack,
                 };
                 // Captured on every way in, because `drive_sequence` borrows
                 // the sequence for the whole loop and the closure that builds
@@ -668,6 +697,43 @@ struct Worker<'a> {
 }
 
 impl Worker<'_> {
+    /// A step through the pack without typing, and what the palette says of it.
+    fn step(&mut self, action: HotkeyAction) -> Carried {
+        let outcome = self.sequence.on_action(action, self.ports);
+        self.saying(&outcome.messages)
+    }
+
+    /// The pack one step along the value window's list, opened as a choice
+    /// there opens it - from its first value, and remembered (`D120`). With no
+    /// other pack that opens, the palette says so rather than doing nothing.
+    fn step_pack(&mut self, direction: Direction) -> Carried {
+        let listing = list_packs(&BuiltInCatalogue::new(), &TomlPackFormat).ok();
+        let other = listing
+            .as_ref()
+            .and_then(|listing| listing.neighbour(&self.pack, direction))
+            .map(str::to_owned);
+        let view = match other {
+            Some(pack) => choose(
+                &mut self.sequence,
+                self.memory,
+                &mut self.pack,
+                &pack,
+                self.standing,
+                self.hold.paused(),
+            ),
+            None => Some(self.view(
+                vec![i18n::label(PaletteLabel::NoOtherPack).to_owned()],
+                ValueBand::Keep,
+                None,
+            )),
+        };
+        Carried {
+            view,
+            told: None,
+            toggled: None,
+        }
+    }
+
     fn carry_out(&mut self, command: Command) -> Carried {
         match command {
             Command::Choose(asked) => Carried {
@@ -721,6 +787,12 @@ impl Worker<'_> {
             // Here, on the thread that holds the pack and the clipboard: the
             // value is built from the pack in memory (`W5`), and on Linux the
             // process that set the clipboard is the one serving it.
+            // The arrows beside the next value (`D120`): through the sequence,
+            // as the shortcuts go, so a click and a press cannot walk the pack
+            // two ways. Nothing is sent, so the value band keeps what it shows.
+            Command::Skip => self.step(HotkeyAction::SkipValue),
+            Command::Back => self.step(HotkeyAction::BackOneValue),
+            Command::Pack(direction) => self.step_pack(direction),
             Command::Copy(key) => {
                 let said = self.sequence.copy_value(&key.pack, &key.value, self.ports);
                 let line = i18n::message(&said, &key.pack, &self.memory.bindings.get());
@@ -1004,30 +1076,6 @@ impl<'a> Hold<'a> {
     }
 }
 
-/// Whether the loop goes on: no while the window is closing, and no while a
-/// command waits - which is then kept in `pending` for [`drive`] to carry out.
-///
-/// The stop is read FIRST, so a palette that is closing leaves a command
-/// unread rather than choosing a pack nobody will see.
-fn between_presses(
-    stop: &AtomicBool,
-    commands: &Receiver<Command>,
-    pending: &Cell<Option<Command>>,
-) -> bool {
-    if stop.load(Ordering::Relaxed) {
-        return false;
-    }
-    match commands.try_recv() {
-        Ok(command) => {
-            pending.set(Some(command));
-            false
-        }
-        // Nothing waiting, or nobody left to send: the stop flag, not this
-        // channel, says when the palette is closing.
-        Err(_) => true,
-    }
-}
-
 /// Opens `asked` in place of the pack in use, and the view that says what came
 /// of it. `pack` follows the pack that opened.
 ///
@@ -1188,46 +1236,6 @@ impl Memory<'_> {
     }
 }
 
-/// The palette's own shortcuts in front of the sequence.
-///
-/// `ToggleVisibility` and `OpenPacks` are about windows, not about the pack in
-/// use, so they never reach `AdvanceSequence` - which would answer them with
-/// `Unhandled`. Every other press passes through untouched, in order.
-///
-/// ⚠️ An intercepted press does not end the wait. The wait goes on for what is
-/// left of it, and a zero wait - the drain after a send, `W1` - keeps draining.
-/// Returning `Nothing` early would end that drain and leave a `NextValue`
-/// pressed during the send in the queue, to be acted on afterwards: exactly the
-/// queueing `ux-spec.md` 3 rejects.
-struct PaletteShortcuts<'a> {
-    inner: &'a dyn LiveShortcuts,
-    /// What a `ToggleVisibility` press does. A closure rather than the window
-    /// handle, so the interception can be tested without a window.
-    on_toggle: &'a dyn Fn(),
-    /// What an `OpenPacks` press does - asks the main thread to open the pack
-    /// window. A press during a send is answered after it, like a toggle: the
-    /// window opens once the value is in, and no value is replayed.
-    on_open: &'a dyn Fn(),
-}
-
-impl LiveShortcuts for PaletteShortcuts<'_> {
-    fn outcomes(&self) -> &[(HotkeyAction, ShortcutRegistration)] {
-        self.inner.outcomes()
-    }
-
-    fn next(&self, wait: Duration) -> Wait {
-        let deadline = Instant::now() + wait;
-        loop {
-            let left = deadline.saturating_duration_since(Instant::now());
-            match self.inner.next(left) {
-                Wait::Pressed(HotkeyAction::ToggleVisibility) => (self.on_toggle)(),
-                Wait::Pressed(HotkeyAction::OpenPacks) => (self.on_open)(),
-                other => return other,
-            }
-        }
-    }
-}
-
 /// Draws what a collapse came to - the press and the click alike - and says
 /// the line about saving it, when there is one.
 fn draw_toggle(palette: &Weak<Palette>, (compact, line): (bool, Option<String>)) {
@@ -1299,10 +1307,10 @@ mod tests {
 
     use super::{
         Command, Delivery, Duration, HotkeyAction, InFlight, LiveShortcuts, Memory, Outcome,
-        Palette, PaletteShortcuts, Progress, ShortcutRegistration, ShownKey, Standing, ValueBand,
-        ValueKey, ValuePreview, Wait, apply, apply_in_flight, between_presses, choose,
-        clipboard_bar, copy_command, in_flight_view, markers_in_flight, markers_of, set_compact,
-        share, view_between, view_of, with_standing,
+        Palette, Progress, ShortcutRegistration, ShownKey, Standing, ValueBand, ValueKey,
+        ValuePreview, Wait, apply, apply_in_flight, choose, clipboard_bar, copy_command,
+        in_flight_view, markers_in_flight, markers_of, set_compact, share, view_between, view_of,
+        with_standing,
     };
 
     /// No standing sentence: the ordinary case, and the one the field-by-field
@@ -1706,6 +1714,7 @@ mod tests {
         // The switch's words, once, and the way in effect filled: the second
         // way is the cursor (the owner's point 2).
         super::label_switches(&palette);
+        super::label_arrows(&palette);
         let words = |model: slint::ModelRc<slint::SharedString>| {
             model
                 .iter()
@@ -2085,82 +2094,6 @@ mod tests {
         );
     }
 
-    /// A waiting command ends the turn and is kept for `drive`. A closing
-    /// window comes first and leaves the command unread. A channel nobody
-    /// sends on any more is not a reason to stop.
-    #[test]
-    fn a_waiting_command_ends_the_turn_but_a_closing_window_comes_first() {
-        let (send, commands) = mpsc::channel();
-        let stop = AtomicBool::new(false);
-        let pending = Cell::new(None);
-        assert!(between_presses(&stop, &commands, &pending), "nothing waits");
-
-        send.send(Command::Choose(String::from("x")))
-            .expect("the receiver is alive");
-        assert!(!between_presses(&stop, &commands, &pending));
-        assert_eq!(pending.take(), Some(Command::Choose(String::from("x"))));
-
-        send.send(Command::Choose(String::from("y")))
-            .expect("the receiver is alive");
-        stop.store(true, Ordering::Relaxed);
-        assert!(!between_presses(&stop, &commands, &pending));
-        assert_eq!(pending.take(), None, "a closing palette chose a pack");
-        assert_eq!(commands.try_recv(), Ok(Command::Choose(String::from("y"))));
-
-        stop.store(false, Ordering::Relaxed);
-        drop(send);
-        assert!(
-            between_presses(&stop, &commands, &pending),
-            "a channel nobody sends on stopped the palette"
-        );
-    }
-
-    /// A queue of presses standing in for the system, for the interception test.
-    struct Queued(std::cell::RefCell<std::collections::VecDeque<HotkeyAction>>);
-
-    impl LiveShortcuts for Queued {
-        fn outcomes(&self) -> &[(HotkeyAction, ShortcutRegistration)] {
-            &[]
-        }
-
-        fn next(&self, _wait: Duration) -> Wait {
-            self.0
-                .borrow_mut()
-                .pop_front()
-                .map_or(Wait::Nothing, Wait::Pressed)
-        }
-    }
-
-    /// `wired` is the sequence's answer plus the palette's own two, and the
-    /// palette's own two are exactly what [`PaletteShortcuts`] takes in front
-    /// of the sequence - so the hint bar can neither name a press the palette
-    /// ignores nor miss one it answers.
-    #[test]
-    fn a_shortcut_is_wired_when_the_sequence_or_the_palette_answers_it() {
-        for action in HotkeyAction::ALL {
-            let queued = Queued(std::cell::RefCell::new([action].into()));
-            let taken = std::cell::Cell::new(false);
-            let on_own = || taken.set(true);
-            let shortcuts = PaletteShortcuts {
-                inner: &queued,
-                on_toggle: &on_own,
-                on_open: &on_own,
-            };
-            let passed_on = shortcuts.next(Duration::ZERO) == Wait::Pressed(action);
-            assert_eq!(
-                taken.get(),
-                super::PALETTE_OWN.contains(&action),
-                "{action:?}: the palette takes it in front of the sequence, or not"
-            );
-            assert_eq!(passed_on, !taken.get(), "{action:?}");
-            assert_eq!(
-                super::wired(action),
-                taken.get() || AdvanceSequence::handles(action),
-                "{action:?}"
-            );
-        }
-    }
-
     /// The button in the pack band reaches the same switch as the shortcut
     /// (`UX-GUI-004`): each click flips it, hands the state on to draw and
     /// saves exactly that state - and changes nothing else on the palette.
@@ -2268,43 +2201,6 @@ mod tests {
             }),
             super::Clearing::Keep
         );
-    }
-
-    /// The palette's own shortcut never reaches the sequence, and taking it out
-    /// does not end the drain after a send (`W1`).
-    #[test]
-    fn toggling_is_answered_by_the_palette_and_does_not_cut_the_drain_short() {
-        let queued = Queued(std::cell::RefCell::new(
-            [
-                HotkeyAction::ToggleVisibility,
-                HotkeyAction::OpenPacks,
-                HotkeyAction::NextValue,
-                HotkeyAction::ToggleVisibility,
-            ]
-            .into(),
-        ));
-        let toggles = std::cell::Cell::new(0);
-        let on_toggle = || toggles.set(toggles.get() + 1);
-        let opens = std::cell::Cell::new(0);
-        let on_open = || opens.set(opens.get() + 1);
-        let shortcuts = PaletteShortcuts {
-            inner: &queued,
-            on_toggle: &on_toggle,
-            on_open: &on_open,
-        };
-        // A zero wait, as the drain after a send asks: the toggle in front must
-        // not hide the NextValue behind it.
-        assert_eq!(
-            shortcuts.next(Duration::ZERO),
-            Wait::Pressed(HotkeyAction::NextValue)
-        );
-        assert_eq!(shortcuts.next(Duration::ZERO), Wait::Nothing);
-        assert_eq!(
-            toggles.get(),
-            2,
-            "both toggles were answered, none was dropped"
-        );
-        assert_eq!(opens.get(), 1, "the pack window was asked for, once");
     }
 
     /// Two conditions share one bar. The mode wins, because in clipboard mode
@@ -3251,8 +3147,9 @@ mod tests {
         });
     }
 
-    /// The hint bar names every shortcut that does something, in the table's
-    /// order, and none that does not (`UX-GUI-007`) - and the empty value band
+    /// The hint bar names every shortcut that does something, in the order a
+    /// person reads them (`D120`), and none that does not (`UX-GUI-007`) - and
+    /// the empty value band
     /// names the one that sends a value.
     #[test]
     fn the_legend_names_every_working_shortcut_of_the_table_in_effect() {
@@ -3271,9 +3168,13 @@ mod tests {
             vec![
                 hint(HotkeyAction::NextValue),
                 hint(HotkeyAction::PreviousValue),
+                hint(HotkeyAction::SkipValue),
+                hint(HotkeyAction::BackOneValue),
                 hint(HotkeyAction::RestartPack),
-                hint(HotkeyAction::CopyReport),
+                hint(HotkeyAction::NextPack),
+                hint(HotkeyAction::PreviousPack),
                 hint(HotkeyAction::OpenPacks),
+                hint(HotkeyAction::CopyReport),
                 hint(HotkeyAction::ToggleVisibility),
             ]
         );

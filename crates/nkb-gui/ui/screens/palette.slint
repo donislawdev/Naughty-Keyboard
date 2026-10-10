@@ -211,6 +211,20 @@ export component Palette inherits Window {
     callback copy-next();
     callback copy-last();
 
+    // ---- the arrows that walk the pack without typing (D120) ----------------
+    // Their words and what each does, finished text from `i18n`, and whether a
+    // step back would move anything: the worker knows where the pack stands,
+    // the view only draws it.
+    in property <string> back-label;
+    in property <string> back-action;
+    in property <bool> can-go-back;
+    in property <string> skip-label;
+    in property <string> skip-action;
+    // ⚠️ Declared, not aliases: the arrows stand in a band behind `if`. Each
+    // click only hands on to its callback - one call, no logic.
+    callback back-one-value();
+    callback skip-value();
+
     // ---- what the tool has to say ------------------------------------------
     in property <[string]> messages;
 
@@ -374,8 +388,19 @@ export component Palette inherits Window {
             copy-label: root.copy-label;
             copy-action: root.copy-next-action;
             sending: root.sending;
+            back-label: root.back-label;
+            back-action: root.back-action;
+            can-go-back: root.can-go-back;
+            skip-label: root.skip-label;
+            skip-action: root.skip-action;
             copy => {
                 root.copy-next();
+            }
+            back-one-value => {
+                root.back-one-value();
+            }
+            skip-value => {
+                root.skip-value();
             }
         }
         if !root.compact: LastSentBand {

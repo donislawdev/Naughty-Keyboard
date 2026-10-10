@@ -214,6 +214,7 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // The two switches under the hint bar (point 2), and the way out of
     // clipboard mode on the standing bar (`D99`).
     live::label_switches(&palette);
+    live::label_arrows(&palette);
     palette.set_turn_off_label(i18n::label(PaletteLabel::TurnOff).into());
     palette.set_turn_off_action(i18n::label(PaletteLabel::TurnOffClipboard).into());
     // The button at the end of the pack band, in both states (`UX-GUI-004`).
@@ -253,6 +254,10 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     );
     palette.on_copy_next(copy_on_click(&palette, &choose, Palette::get_next_key));
     palette.on_copy_last(copy_on_click(&palette, &choose, Palette::get_last_key));
+    // The arrows that walk the pack without typing (`D120`): the worker holds the
+    // sequence, so the click only asks - the same way the shortcuts go.
+    palette.on_back_one_value(ask_on_click(&choose, live::Command::Back));
+    palette.on_skip_value(ask_on_click(&choose, live::Command::Skip));
     // Clipboard mode on and off (`D99`): the worker holds the sequence, so the
     // click only asks.
     palette.on_choose_route(ask_for_way(&choose, live::route_command));

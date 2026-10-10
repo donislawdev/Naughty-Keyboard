@@ -25,7 +25,7 @@
 #[allow(dead_code)]
 mod offscreen;
 
-use nkb_gui::{HintRow, Marker, Palette};
+use nkb_gui::{Marker, Palette};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 const WIDTH: u32 = 420;
@@ -33,8 +33,9 @@ const WIDTH: u32 = 420;
 /// palette with both value bands and the longest counters outgrew it, every edge
 /// measured the buffer's floor instead of the palette's, and "the counters wrap"
 /// failed on a palette that wrapped them fine. A buffer that clips is a check
-/// that cannot see.
-const HEIGHT: u32 = 720;
+/// that cannot see. 720 until `D120`, whose four shortcuts made the hint bar
+/// four rows taller and the same thing happened again.
+const HEIGHT: u32 = 900;
 
 /// `text-muted`, the one role the resting state may not show. Written here
 /// rather than read from the dictionary on purpose: two independent copies of a
@@ -125,6 +126,10 @@ fn fill(palette: &Palette) {
     palette.set_has_next(true);
     palette.set_next_has_value(true);
     palette.set_next_heading("Next: value 8 of 34".into());
+    // The arrows that walk the pack (D120), with their words, and Back able to
+    // move - value 8 is not the first.
+    nkb_gui::live::label_arrows(palette);
+    palette.set_can_go_back(true);
     palette.set_next_name("Trailing no-break space".into());
     palette.set_next_preview("Kowalski\u{2423}".into());
     palette.set_next_markers(ModelRc::new(VecModel::from(vec![Marker {
@@ -165,34 +170,13 @@ fn fill(palette: &Palette) {
     palette.set_clearing_options(words(&["Clear line first", "Insert at cursor"]));
     palette.set_clearing_selected(0);
 
-    // Every action the build carries out (UX-GUI-007), as `live::legend`
-    // lists them for the default table.
-    palette.set_hints(ModelRc::new(VecModel::from(vec![
-        HintRow {
-            key: "Alt+Shift+N".into(),
-            action: "Next value".into(),
-        },
-        HintRow {
-            key: "Alt+Shift+P".into(),
-            action: "Previous value".into(),
-        },
-        HintRow {
-            key: "Alt+Shift+0".into(),
-            action: "Restart pack".into(),
-        },
-        HintRow {
-            key: "Alt+Shift+B".into(),
-            action: "Copy report block".into(),
-        },
-        HintRow {
-            key: "Alt+Shift+Space".into(),
-            action: "Find a value".into(),
-        },
-        HintRow {
-            key: "Alt+Shift+H".into(),
-            action: "Collapse or expand the palette".into(),
-        },
-    ])));
+    // Every action the build carries out (UX-GUI-007), from `live::legend` for
+    // the default table: the rows the palette really shows, rather than a copy
+    // of them that fell behind when `D120` added four.
+    nkb_gui::live::show_legend(
+        palette,
+        nkb_gui::live::legend(&nkb_adapters::default_bindings()),
+    );
 }
 
 /// Words as the view's model of them.

@@ -18,7 +18,7 @@ faq:
   - question: Can I use the values in automated tests?
     answer: "Yes. `nkb emit` prints any pack as JSON, CSV or one value per line, escaped or raw, and every command has exit codes a pipeline can branch on. [nkb emit](/docs/cli/emit/) shows how."
   - question: Can I change the shortcuts?
-    answer: "Yes, every one of the ten, in the shortcuts window or in `settings.toml`. A chord that would take a key away from every application is refused with the reason. [Shortcuts](/docs/shortcuts/) lists them."
+    answer: "Yes, every one of them, in the shortcuts window or in `settings.toml`. A chord that would take a key away from every application is refused with the reason. [Shortcuts](/docs/shortcuts/) lists them."
   - question: Can I add my own values?
     answer: "You can write a pack of your own and check it with `nkb new-pack`, `nkb lint` and `nkb fmt` today. Loading your own packs into the palette is not wired up yet. A value that cost you an afternoon once belongs in the catalogue, and the [Suggest a value](https://github.com/donislawdev/Naughty-Keyboard/issues/new?template=suggest_value.yml) form asks for the value, what it breaks and where you saw it."
   - question: Is this an attack tool?

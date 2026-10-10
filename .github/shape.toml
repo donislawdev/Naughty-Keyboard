@@ -46,13 +46,14 @@ ceiling = 1133
 near = 1
 
 # A whole Rust file, its tests included. nkb-gui/src/live.rs, then
-# nkb-adapters/src/i18n.rs at 2043.
+# nkb-adapters/src/i18n.rs at 2065.
 [files.rust-whole]
-ceiling = 2481
-# 3 since 2026-10-10, the owner's choice: the ceiling came down from 2907, so
-# the band did too, and reached nkb-app/src/advance_sequence.rs, which had not
-# grown.
-near = 3
+ceiling = 2408
+# 5 since 2026-10-10, the owner's choice twice that day: the ceiling came down
+# from 2907 to 2481 and then to 2408 as live.rs moved code into modules, the
+# band came down with it, and it reached advance_sequence.rs, settings_file.rs
+# and nkb-cli's main.rs, none of which had grown.
+near = 5
 
 # A Slint file, the gallery excepted. ui/components/list.slint, then
 # ui/screens/palette.slint at 281 since its two value bands became components.

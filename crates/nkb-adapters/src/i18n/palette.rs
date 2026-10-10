@@ -122,6 +122,19 @@ pub enum PaletteLabel {
     CopyNext,
     /// The same, for the Copy button beside the value that went out last.
     CopyLast,
+    /// The button beside the next value that steps it back without typing
+    /// (`D120`) - its word, after the drawn arrow.
+    Back,
+    /// What it does, for UI Automation.
+    BackAction,
+    /// The button that steps the next value forward without typing - its word,
+    /// before the drawn arrow.
+    Skip,
+    /// What it does, for UI Automation.
+    SkipAction,
+    /// "Next pack" or "previous pack" with no other pack that opens: said
+    /// rather than doing nothing (untouchable rule 1).
+    NoOtherPack,
     /// The label of the switch under the hint bar that chooses how values
     /// travel (`UX-GUI-010`, `D99`, the owner's point 2 of 2026-10-07).
     SendBy,
@@ -201,6 +214,11 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::Copy => "Copy",
         PaletteLabel::CopyNext => "Copy the next value",
         PaletteLabel::CopyLast => "Copy the last sent value",
+        PaletteLabel::Back => "Back",
+        PaletteLabel::BackAction => "Back one value, without typing it",
+        PaletteLabel::Skip => "Skip",
+        PaletteLabel::SkipAction => "Skip this value, without typing it",
+        PaletteLabel::NoOtherPack => "There is no other pack to switch to.",
         PaletteLabel::SendBy => "Send by",
         PaletteLabel::RouteKeyboard => "Keyboard",
         PaletteLabel::RouteClipboard => "Clipboard",

@@ -158,6 +158,15 @@ pub enum Event {
     /// the choice. Refused while a value is in flight, like a change of pack. A
     /// number outside the pack changes nothing.
     SetNext { index: usize },
+    /// The "skip value" shortcut or the arrow beside the next value (`D120`):
+    /// the next value moves one forward and nothing is typed. From the last
+    /// value it stops at the end of the pack, and from there it goes to the
+    /// first value - the stops a press of "next" makes, each one on screen.
+    Skip,
+    /// The "back one value" shortcut or the arrow beside the next value
+    /// (`D120`): the next value moves one back and nothing is typed. On the
+    /// first value it moves nothing and says so.
+    Back,
     /// The focused window or field changed.
     TargetChanged,
     /// There is nothing focused at all any more.
@@ -184,6 +193,9 @@ pub enum Effect {
     AnnounceStillInserting,
     /// Say the pack is finished, quoting `total`. The NEXT press starts over.
     AnnounceEndOfPack { total: usize },
+    /// Say the next value is the first one already, quoting `total` - a step
+    /// back from there moves nothing (`D120`).
+    AnnounceAtFirst { total: usize },
     /// Say the target moved while the counter stayed, quoting both numbers.
     AnnounceCounterKept { done: usize, total: usize },
     /// Say there is nowhere to send to.
@@ -208,6 +220,7 @@ impl fmt::Display for Effect {
             Self::SendValue { .. } => f.write_str("send-value"),
             Self::AnnounceStillInserting => f.write_str("still-inserting"),
             Self::AnnounceEndOfPack { .. } => f.write_str("end-of-pack"),
+            Self::AnnounceAtFirst { .. } => f.write_str("at-first"),
             Self::AnnounceCounterKept { .. } => f.write_str("counter-kept"),
             Self::AnnounceNoTarget => f.write_str("no-target"),
             Self::AnnounceNoPack => f.write_str("no-pack"),
@@ -296,6 +309,19 @@ impl Sequence {
         }
     }
 
+    /// Whether a step back ([`Event::Back`]) moves the next value: false on
+    /// the first value, where it only says so, and wherever there is nothing
+    /// to walk. The palette fades its arrow by this (`D120`), and a test holds
+    /// it to what the event really does, so the arrow cannot invite a click
+    /// that moves nothing.
+    #[must_use]
+    pub const fn steps_back(&self) -> bool {
+        matches!(
+            self.upcoming(),
+            Some(Upcoming::EndOfPack { .. } | Upcoming::Value { index: 2.., .. })
+        )
+    }
+
     /// Whether an insertion is in flight.
     ///
     /// Named rather than left to pattern matching, because `W3` makes `Escape`
@@ -324,6 +350,8 @@ impl Sequence {
             Event::Previous => self.previous(),
             Event::Restart => self.restart(),
             Event::SetNext { index } => self.set_next(index),
+            Event::Skip => self.skip(),
+            Event::Back => self.back(),
             Event::TargetChanged => self.target_changed(),
             Event::TargetLost => self.nothing_but(Effect::AnnounceNoTarget),
             Event::UseClipboard => self.use_clipboard(),
@@ -406,7 +434,9 @@ impl Sequence {
             Event::PackChosen { .. }
             | Event::UseClipboard
             | Event::UseDirect
-            | Event::SetNext { .. } => Step {
+            | Event::SetNext { .. }
+            | Event::Skip
+            | Event::Back => Step {
                 sequence: self,
                 effects: vec![Effect::AnnounceStillInserting],
             },
@@ -553,6 +583,60 @@ impl Sequence {
         Step {
             sequence: Self { position, ..self },
             effects: Vec::new(),
+        }
+    }
+
+    /// One value forward without sending anything (`D120`).
+    ///
+    /// Through the positions a walk reaches and no new one: [`Self::set_next`]
+    /// inside the pack, then the end of the pack - unwarned, so a press of
+    /// "next" there still says it before it starts over - then the first value.
+    /// So [`Self::upcoming`] needs no case of its own here either.
+    fn skip(self) -> Step {
+        match self.upcoming() {
+            None => self.unwalkable(),
+            Some(Upcoming::Value { index, total }) if index < total => self.set_next(index + 1),
+            Some(Upcoming::Value { total, .. }) => Step {
+                sequence: Self {
+                    position: Position::Exhausted {
+                        total,
+                        warned: false,
+                    },
+                    ..self
+                },
+                effects: Vec::new(),
+            },
+            Some(Upcoming::EndOfPack { total }) => Step {
+                sequence: Self {
+                    position: Position::Ready { total },
+                    ..self
+                },
+                effects: Vec::new(),
+            },
+        }
+    }
+
+    /// One value back without sending anything (`D120`). From the end of the
+    /// pack to its last value, and on the first value nowhere - said rather
+    /// than silent, because a key that does nothing leaves the tester pressing
+    /// it and wondering.
+    fn back(self) -> Step {
+        match self.upcoming() {
+            None => self.unwalkable(),
+            Some(Upcoming::Value { index: 1, total }) => {
+                self.nothing_but(Effect::AnnounceAtFirst { total })
+            }
+            Some(Upcoming::Value { index, .. }) => self.set_next(index - 1),
+            Some(Upcoming::EndOfPack { total }) => self.set_next(total),
+        }
+    }
+
+    /// What a step says where there is nothing to walk: no pack, or a pack
+    /// with no values. A value in flight never gets here - `W1` answers first.
+    fn unwalkable(self) -> Step {
+        match self.position {
+            Position::NoPack => self.nothing_but(Effect::AnnounceNoPack),
+            _ => self.nothing_but(Effect::AnnounceEndOfPack { total: 0 }),
         }
     }
 
@@ -1457,6 +1541,140 @@ mod tests {
         assert!(step.effects.is_empty());
     }
 
+    // ---- walking a pack without typing (`D120`) ---------------------------
+
+    #[test]
+    fn a_step_never_sends_and_never_changes_the_route() {
+        // From every position and on both routes: a skip or a step back moves
+        // at most which value comes next. In flight it is refused aloud, as a
+        // change of pack is (`W1`).
+        for position in every_position() {
+            for delivery in [Delivery::Direct, Delivery::ClipboardMode] {
+                let sequence = Sequence { position, delivery };
+                for event in [Event::Skip, Event::Back] {
+                    let step = sequence.apply(event);
+                    assert!(sent_values(&step).is_empty(), "{position:?} {event:?} sent");
+                    assert_eq!(step.sequence.delivery, delivery);
+                    if let Position::Inserting { .. } = position {
+                        assert_eq!(step.sequence, sequence, "{position:?} moved in flight");
+                        assert_eq!(step.effects, vec![Effect::AnnounceStillInserting]);
+                    }
+                    if position == Position::NoPack {
+                        assert_eq!(step.effects, vec![Effect::AnnounceNoPack]);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn skipping_walks_every_value_stops_at_the_end_then_starts_over() {
+        let mut sequence = run(Sequence::new(), &[Event::PackChosen { total: 3 }]).sequence;
+        let mut seen = Vec::new();
+        for _ in 0..5 {
+            seen.push(sequence.upcoming());
+            let step = sequence.apply(Event::Skip);
+            assert!(
+                step.effects.is_empty(),
+                "a skip says nothing: {:?}",
+                step.effects
+            );
+            sequence = step.sequence;
+        }
+        assert_eq!(
+            seen,
+            vec![
+                Some(Upcoming::Value { index: 1, total: 3 }),
+                Some(Upcoming::Value { index: 2, total: 3 }),
+                Some(Upcoming::Value { index: 3, total: 3 }),
+                Some(Upcoming::EndOfPack { total: 3 }),
+                Some(Upcoming::Value { index: 1, total: 3 }),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_press_after_a_skip_sends_the_value_the_band_showed() {
+        // The band is a promise about the press (`UX-GUI-001`), and a skip
+        // must keep it: after skipping to value 3, "next" sends value 3. At
+        // the end of the pack it warns first, as it does after the last send.
+        let at_three = run(
+            Sequence::new(),
+            &[Event::PackChosen { total: 3 }, Event::Skip, Event::Skip],
+        );
+        assert_eq!(sent_values(&at_three.sequence.apply(Event::Next)), vec![3]);
+        let at_end = run(at_three.sequence, &[Event::Skip]);
+        assert_eq!(
+            at_end.sequence.apply(Event::Next).effects,
+            vec![Effect::AnnounceEndOfPack { total: 3 }]
+        );
+    }
+
+    #[test]
+    fn a_step_back_goes_from_the_end_to_the_first_value_and_no_further() {
+        let mut sequence = run(
+            Sequence::new(),
+            &[
+                Event::PackChosen { total: 3 },
+                Event::Skip,
+                Event::Skip,
+                Event::Skip,
+            ],
+        )
+        .sequence;
+        let mut seen = Vec::new();
+        for _ in 0..3 {
+            let step = sequence.apply(Event::Back);
+            assert!(step.effects.is_empty(), "{:?}", step.effects);
+            sequence = step.sequence;
+            seen.push(sequence.upcoming());
+        }
+        assert_eq!(
+            seen,
+            vec![
+                Some(Upcoming::Value { index: 3, total: 3 }),
+                Some(Upcoming::Value { index: 2, total: 3 }),
+                Some(Upcoming::Value { index: 1, total: 3 }),
+            ]
+        );
+        let first = sequence.apply(Event::Back);
+        assert_eq!(
+            first.sequence, sequence,
+            "the first value is as far back as it goes"
+        );
+        assert_eq!(first.effects, vec![Effect::AnnounceAtFirst { total: 3 }]);
+    }
+
+    #[test]
+    fn steps_back_says_exactly_whether_a_step_back_moves() {
+        for position in every_position() {
+            for delivery in [Delivery::Direct, Delivery::ClipboardMode] {
+                let sequence = Sequence { position, delivery };
+                let moved = sequence.apply(Event::Back).sequence != sequence;
+                assert_eq!(sequence.steps_back(), moved, "{position:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_pack_of_one_value_walks_between_it_and_the_end() {
+        let one = run(Sequence::new(), &[Event::PackChosen { total: 1 }]).sequence;
+        let end = one.apply(Event::Skip).sequence;
+        assert_eq!(end.upcoming(), Some(Upcoming::EndOfPack { total: 1 }));
+        assert_eq!(end.apply(Event::Back).sequence.upcoming(), one.upcoming());
+        assert_eq!(end.apply(Event::Skip).sequence.upcoming(), one.upcoming());
+    }
+
+    #[test]
+    fn a_pack_with_no_values_cannot_be_walked_and_says_so() {
+        let empty = run(Sequence::new(), &[Event::PackChosen { total: 0 }]).sequence;
+        for event in [Event::Skip, Event::Back] {
+            let step = empty.apply(event);
+            assert_eq!(step.sequence, empty);
+            assert_eq!(step.effects, vec![Effect::AnnounceEndOfPack { total: 0 }]);
+        }
+    }
+
     #[test]
     fn every_effect_has_a_stable_marker_and_no_two_share_one() {
         // The markers are what a log and a test match on, so a duplicate would
@@ -1465,6 +1683,7 @@ mod tests {
             Effect::SendValue { index: 1 },
             Effect::AnnounceStillInserting,
             Effect::AnnounceEndOfPack { total: 1 },
+            Effect::AnnounceAtFirst { total: 1 },
             Effect::AnnounceCounterKept { done: 1, total: 2 },
             Effect::AnnounceNoTarget,
             Effect::AnnounceNoPack,

@@ -1,6 +1,6 @@
 //! The global shortcuts the palette listens for, as data.
 //!
-//! `ux-spec.md` 3 fixes ten global actions and a default combination for each.
+//! `ux-spec.md` 3 fixes the global actions and a default combination for each.
 //! Those combinations are DATA, in one place, the same way the clearing recipe
 //! in [`crate::keys`] is - so that the palette, the registrar and the hint bar
 //! all read one source rather than three that drift.
@@ -38,7 +38,7 @@
 //! layer that knows the system picks one - this crate has no `cfg` and keeps
 //! none.
 
-/// One of the ten global actions the palette answers to.
+/// One of the global actions the palette answers to.
 ///
 /// Only a subset is wired to the sequence in the first pass of step 3 - moving
 /// through a pack. The rest name shortcuts the later steps fill in (marking a
@@ -68,13 +68,31 @@ pub enum HotkeyAction {
     /// Collapse the palette to its pack band, or expand it again - never
     /// `hide()`, `OBS-80`. The tester's choice, never a timer's (`D83`).
     ToggleVisibility,
+    /// Move the next value one forward without typing anything - walking a
+    /// pack to see what is in it (`D120`).
+    SkipValue,
+    /// Move the next value one back without typing anything (`D120`).
+    BackOneValue,
+    /// Open the next pack of the value window's list, from its first value
+    /// (`D120`).
+    NextPack,
+    /// Open the pack before it in that list, from its first value (`D120`).
+    PreviousPack,
 }
 
 impl HotkeyAction {
+    /// How many actions there are: the size of every table that holds one
+    /// entry per action, so a new action changes this number and no other.
+    pub const COUNT: usize = 14;
+
     /// Every action, so a test can state the size of the set and check that the
     /// default table covers it. Rust has no way to enumerate variants, so this
     /// list is the source of truth and the test guards that it stays complete.
-    pub const ALL: [HotkeyAction; 10] = [
+    ///
+    /// 🔴 The ORDER is not cosmetic: where two wanted shortcuts clash, the one
+    /// earlier here keeps its combination (`D89`). A new action goes at the end,
+    /// so it never takes a combination from one that was here before it.
+    pub const ALL: [HotkeyAction; Self::COUNT] = [
         HotkeyAction::NextValue,
         HotkeyAction::PreviousValue,
         HotkeyAction::RepeatLast,
@@ -85,6 +103,35 @@ impl HotkeyAction {
         HotkeyAction::MarkSuspect,
         HotkeyAction::OpenPacks,
         HotkeyAction::ToggleVisibility,
+        HotkeyAction::SkipValue,
+        HotkeyAction::BackOneValue,
+        HotkeyAction::NextPack,
+        HotkeyAction::PreviousPack,
+    ];
+
+    /// Every action in the order a person reads them: what types, what walks
+    /// the pack, what changes the pack, the windows, and last the actions this
+    /// build does not carry out yet (`D120`). The hint bar and the shortcuts
+    /// window list them so.
+    ///
+    /// Apart from [`Self::ALL`] on purpose: that order decides which of two
+    /// clashing shortcuts is kept (`D89`), and a new action must never win
+    /// that by where it reads best.
+    pub const READING_ORDER: [HotkeyAction; Self::COUNT] = [
+        HotkeyAction::NextValue,
+        HotkeyAction::PreviousValue,
+        HotkeyAction::SkipValue,
+        HotkeyAction::BackOneValue,
+        HotkeyAction::RestartPack,
+        HotkeyAction::NextPack,
+        HotkeyAction::PreviousPack,
+        HotkeyAction::OpenPacks,
+        HotkeyAction::CopyReport,
+        HotkeyAction::ToggleVisibility,
+        HotkeyAction::RepeatLast,
+        HotkeyAction::MarkOk,
+        HotkeyAction::MarkProblem,
+        HotkeyAction::MarkSuspect,
     ];
 
     /// The action's name where a tester writes it - a key of the `[shortcuts]`
@@ -107,6 +154,10 @@ impl HotkeyAction {
             HotkeyAction::MarkSuspect => "mark-suspect",
             HotkeyAction::OpenPacks => "open-packs",
             HotkeyAction::ToggleVisibility => "toggle-visibility",
+            HotkeyAction::SkipValue => "skip-value",
+            HotkeyAction::BackOneValue => "back-one-value",
+            HotkeyAction::NextPack => "next-pack",
+            HotkeyAction::PreviousPack => "previous-pack",
         }
     }
 
@@ -422,7 +473,10 @@ pub enum Convention {
 /// modifiers differ between the conventions, so a tester who moves between
 /// systems keeps the letters. The letters are the ones `ux-spec.md` 3 chose, so
 /// the move from `Ctrl+Alt` changed the family and nothing else.
-const DEFAULT_KEYS: [(HotkeyAction, HotkeyKey); 10] = [
+///
+/// ⊕ The four of `D120` go in pairs of neighbouring keys, back on the left and
+/// forward on the right: `A` | `S` for a value, `Z` | `X` for a pack.
+const DEFAULT_KEYS: [(HotkeyAction, HotkeyKey); HotkeyAction::COUNT] = [
     (HotkeyAction::NextValue, HotkeyKey::N),
     (HotkeyAction::PreviousValue, HotkeyKey::P),
     (HotkeyAction::RepeatLast, HotkeyKey::R),
@@ -433,15 +487,19 @@ const DEFAULT_KEYS: [(HotkeyAction, HotkeyKey); 10] = [
     (HotkeyAction::MarkSuspect, HotkeyKey::Digit3),
     (HotkeyAction::OpenPacks, HotkeyKey::Space),
     (HotkeyAction::ToggleVisibility, HotkeyKey::H),
+    (HotkeyAction::SkipValue, HotkeyKey::S),
+    (HotkeyAction::BackOneValue, HotkeyKey::A),
+    (HotkeyAction::NextPack, HotkeyKey::X),
+    (HotkeyAction::PreviousPack, HotkeyKey::Z),
 ];
 
 /// One convention's table, built from [`DEFAULT_KEYS`] so the two cannot
 /// disagree about which letter belongs to which action.
-const fn table(convention: Convention) -> [(HotkeyAction, HotkeyChord); 10] {
+const fn table(convention: Convention) -> [(HotkeyAction, HotkeyChord); HotkeyAction::COUNT] {
     let mut out = [(
         HotkeyAction::NextValue,
         HotkeyChord::alt_shift(HotkeyKey::N),
-    ); 10];
+    ); HotkeyAction::COUNT];
     let mut index = 0;
     while index < DEFAULT_KEYS.len() {
         let (action, key) = DEFAULT_KEYS[index];
@@ -458,21 +516,23 @@ const fn table(convention: Convention) -> [(HotkeyAction, HotkeyChord); 10] {
 /// The default shortcut for every action, in the Windows and Linux convention.
 ///
 /// Every default is `Alt+Shift+<key>`: `ux-spec.md` 3 keeps them one family so
-/// a tester learns them as a set rather than as ten separate things. The table
+/// a tester learns them as a set rather than as so many separate things. The table
 /// is checked before any code depends on it - every action present exactly once,
 /// and no two actions on the same combination - because a duplicate combination
 /// would be a registration that reports the second action as `Taken` against the
 /// first.
-pub const DEFAULT_BINDINGS: [(HotkeyAction, HotkeyChord); 10] = table(Convention::WindowsAndLinux);
+pub const DEFAULT_BINDINGS: [(HotkeyAction, HotkeyChord); HotkeyAction::COUNT] =
+    table(Convention::WindowsAndLinux);
 
 /// The same table in the macOS convention, `Cmd+Alt+<key>`.
-pub const MACOS_DEFAULT_BINDINGS: [(HotkeyAction, HotkeyChord); 10] = table(Convention::MacOs);
+pub const MACOS_DEFAULT_BINDINGS: [(HotkeyAction, HotkeyChord); HotkeyAction::COUNT] =
+    table(Convention::MacOs);
 
 /// The default table a convention uses.
 #[must_use]
 pub const fn default_bindings(
     convention: Convention,
-) -> &'static [(HotkeyAction, HotkeyChord); 10] {
+) -> &'static [(HotkeyAction, HotkeyChord); HotkeyAction::COUNT] {
     match convention {
         Convention::WindowsAndLinux => &DEFAULT_BINDINGS,
         Convention::MacOs => &MACOS_DEFAULT_BINDINGS,
@@ -489,7 +549,7 @@ pub const fn default_bindings(
 /// needs no `Option`, and registering never reports one action as `Taken`
 /// against another of our own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Bindings([(HotkeyAction, HotkeyChord); 10]);
+pub struct Bindings([(HotkeyAction, HotkeyChord); HotkeyAction::COUNT]);
 
 impl Bindings {
     /// The default table of a convention.
@@ -553,7 +613,7 @@ impl Bindings {
     ) -> (Self, Vec<Refused>) {
         let before = self.0;
         let mut table = self.0;
-        let mut chosen = [false; 10];
+        let mut chosen = [false; HotkeyAction::COUNT];
         let mut refused = Vec::new();
         for (action, chord) in wanted {
             let Some(at) = table.iter().position(|(candidate, _)| candidate == action) else {
@@ -606,7 +666,10 @@ impl Bindings {
 /// The position of the wanted chord to send back next, if any clashes: first
 /// one shared with an action that is not changing, then the later of two
 /// wanted chords that are the same.
-fn first_clash(table: &[(HotkeyAction, HotkeyChord); 10], chosen: &[bool; 10]) -> Option<usize> {
+fn first_clash(
+    table: &[(HotkeyAction, HotkeyChord); HotkeyAction::COUNT],
+    chosen: &[bool; HotkeyAction::COUNT],
+) -> Option<usize> {
     let shares = |at: usize, with_chosen: bool| {
         table.iter().enumerate().any(|(other, (_, chord))| {
             other != at && chosen[other] == with_chosen && *chord == table[at].1
@@ -927,19 +990,20 @@ mod tests {
             asked.borrow_mut().push(chord);
             Some('x')
         };
-        let alt_shift_a = alt_shift(HotkeyKey::A);
+        // A combination no default holds, so taking it moves nothing else.
+        let alt_shift_k = alt_shift(HotkeyKey::K);
         let with_win = HotkeyChord::parse("Ctrl+Alt+Win+A").expect("reads");
         let altgr = HotkeyChord::parse("Ctrl+Alt+Shift+A").expect("reads");
         let (bindings, refused) = DEFAULTS.with(
             &[
-                (HotkeyAction::NextValue, alt_shift_a),
+                (HotkeyAction::NextValue, alt_shift_k),
                 (HotkeyAction::PreviousValue, with_win),
                 (HotkeyAction::RepeatLast, altgr),
             ],
             &every_key_types,
         );
         assert_eq!(*asked.borrow(), vec![altgr]);
-        assert_eq!(bindings.chord(HotkeyAction::NextValue), alt_shift_a);
+        assert_eq!(bindings.chord(HotkeyAction::NextValue), alt_shift_k);
         assert_eq!(bindings.chord(HotkeyAction::PreviousValue), with_win);
         assert_eq!(
             refused,
@@ -1045,6 +1109,17 @@ mod tests {
     }
 
     #[test]
+    fn the_reading_order_holds_every_action_once() {
+        let mut read: Vec<&str> = HotkeyAction::READING_ORDER.iter().map(|a| a.id()).collect();
+        let mut all: Vec<&str> = HotkeyAction::ALL.iter().map(|a| a.id()).collect();
+        read.sort_unstable();
+        all.sort_unstable();
+        assert_eq!(read, all);
+        read.dedup();
+        assert_eq!(read.len(), HotkeyAction::COUNT, "an action is read twice");
+    }
+
+    #[test]
     fn two_actions_may_swap_their_chords() {
         let (n, p) = (alt_shift(HotkeyKey::N), alt_shift(HotkeyKey::P));
         let (bindings, refused) = DEFAULTS.with(
@@ -1061,7 +1136,8 @@ mod tests {
 
     #[test]
     fn of_two_actions_wanting_one_chord_the_later_goes_back() {
-        let x = alt_shift(HotkeyKey::X);
+        // A combination no default holds - `X` has been `NextPack`'s since `D120`.
+        let x = alt_shift(HotkeyKey::J);
         let (bindings, refused) = DEFAULTS.with(
             &[(HotkeyAction::MarkOk, x), (HotkeyAction::NextValue, x)],
             &no_layout,
