@@ -16,7 +16,7 @@
 import { Tokens } from "../tokens.slint";
 import { TextName, TextBody, TextMono, TextPreview, TextSmallMuted } from "typography.slint";
 import { Spacer, Zone, Marker, MarkerRow } from "chrome.slint";
-import { SmallButton } from "button.slint";
+import { SmallButton, ButtonArrow } from "button.slint";
 import { Disclosure } from "list.slint";
 
 // What the next press sends (UX-GUI-001). One line each, ELIDED rather than
@@ -45,6 +45,17 @@ export component NextBand inherits Zone {
     in property <string> copy-action;
     in property <bool> sending;
     callback copy();
+    // The two arrows that walk the pack without typing (`D120`), their words
+    // and what each does. Back stands faded on the first value, where it would
+    // move nothing. Skip always moves - from the end of the pack to its first
+    // value.
+    in property <string> back-label;
+    in property <string> back-action;
+    in property <bool> can-go-back;
+    in property <string> skip-label;
+    in property <string> skip-action;
+    callback back-one-value();
+    callback skip-value();
 
     divided: false;
     opacity: root.sending ? Tokens.alpha-disabled : 1;
@@ -66,6 +77,28 @@ export component NextBand inherits Zone {
             }
         }
         Spacer { }
+        // The arrows before Copy: walking comes before taking a value away, and
+        // Copy keeps its column with the band below (`D98`). Faded while a value
+        // goes, like every button of the palette - the worker answers a click
+        // between presses, so it would land after the send.
+        SmallButton {
+            arrow: ButtonArrow.back;
+            text: root.back-label;
+            action: root.back-action;
+            enabled: root.can-go-back && !root.sending;
+            clicked => {
+                root.back-one-value();
+            }
+        }
+        SmallButton {
+            arrow: ButtonArrow.forward;
+            text: root.skip-label;
+            action: root.skip-action;
+            enabled: !root.sending;
+            clicked => {
+                root.skip-value();
+            }
+        }
         SmallButton {
             text: root.copy-label;
             action: root.copy-action;

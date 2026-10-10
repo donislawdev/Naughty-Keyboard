@@ -98,7 +98,7 @@ pub struct ShortcutRow {
 pub struct ShortcutList {
     defaults: Bindings,
     now: ShortcutsNow,
-    /// Position in [`HotkeyAction::ALL`] - every row can be chosen, so there
+    /// Position in [`HotkeyAction::READING_ORDER`] - every row can be chosen, so there
     /// is always one selected.
     selected: usize,
     recording: bool,
@@ -138,7 +138,7 @@ impl ShortcutList {
             Key::Down => {
                 // Stays on the last row rather than wrapping, for the reason
                 // `PackPicker::next` gives.
-                self.selected = (self.selected + 1).min(HotkeyAction::ALL.len() - 1);
+                self.selected = (self.selected + 1).min(HotkeyAction::READING_ORDER.len() - 1);
                 Act::Handled
             }
             Key::Enter => self.start_recording(),
@@ -150,7 +150,7 @@ impl ShortcutList {
 
     /// A click on row `row`: selects it and starts recording it.
     pub fn click(&mut self, row: usize) -> Act {
-        if row >= HotkeyAction::ALL.len() {
+        if row >= HotkeyAction::READING_ORDER.len() {
             return Act::Handled;
         }
         if self.waiting.is_none() {
@@ -215,17 +215,17 @@ impl ShortcutList {
     /// How many shortcuts are not the default.
     #[must_use]
     pub fn summary(&self) -> String {
-        let changed = HotkeyAction::ALL
+        let changed = HotkeyAction::READING_ORDER
             .iter()
             .filter(|action| self.now.bindings.chord(**action) != self.defaults.chord(**action))
             .count();
-        i18n::shortcuts_summary(changed, HotkeyAction::ALL.len())
+        i18n::shortcuts_summary(changed, HotkeyAction::READING_ORDER.len())
     }
 
-    /// Every action, in the table's order.
+    /// Every action, in the order a person reads them (`D120`).
     #[must_use]
     pub fn rows(&self) -> Vec<ShortcutRow> {
-        HotkeyAction::ALL
+        HotkeyAction::READING_ORDER
             .iter()
             .enumerate()
             .map(|(at, action)| {
@@ -281,7 +281,7 @@ impl ShortcutList {
     }
 
     fn action(&self) -> HotkeyAction {
-        HotkeyAction::ALL[self.selected]
+        HotkeyAction::READING_ORDER[self.selected]
     }
 
     fn start_recording(&mut self) -> Act {
@@ -395,7 +395,7 @@ mod tests {
         for _ in 0..20 {
             list.press(Key::Down, &never);
         }
-        assert_eq!(list.selected(), HotkeyAction::ALL.len() - 1);
+        assert_eq!(list.selected(), HotkeyAction::READING_ORDER.len() - 1);
         assert_eq!(list.press(Key::Other, &never), Act::NotOurs);
         assert_eq!(list.press(Key::Escape, &never), Act::Close);
     }
@@ -515,7 +515,7 @@ mod tests {
             current: false,
         };
         let list = a_list();
-        for (action, row) in HotkeyAction::ALL.iter().zip(list.rows()) {
+        for (action, row) in HotkeyAction::READING_ORDER.iter().zip(list.rows()) {
             assert_eq!(
                 row.badge.as_ref() == Some(&not_available),
                 !crate::live::wired(*action),
@@ -535,8 +535,14 @@ mod tests {
                 )],
             },
         );
+        // Found by its action, not by a number: the rows follow the reading
+        // order, which moves when an action is added (`D120`).
+        let at = HotkeyAction::READING_ORDER
+            .iter()
+            .position(|action| *action == HotkeyAction::RepeatLast)
+            .expect("every action has a row");
         assert_eq!(
-            taken.rows()[2]
+            taken.rows()[at]
                 .badge
                 .as_ref()
                 .map(|badge| badge.text.as_str()),
@@ -569,7 +575,7 @@ mod tests {
                 current: false,
             })
         );
-        assert_eq!(list.summary(), "changed: 0 of 10");
+        assert_eq!(list.summary(), "changed: 0 of 14");
 
         list.press(Key::Down, &never);
         list.press(Key::Enter, &never);
@@ -600,7 +606,7 @@ mod tests {
                 current: false,
             })
         );
-        assert_eq!(list.summary(), "changed: 1 of 10");
+        assert_eq!(list.summary(), "changed: 1 of 14");
         let mut expected =
             i18n::shortcut_answer(HotkeyAction::PreviousValue, Some(wanted), &change, previous);
         expected.push(String::from("not saved"));

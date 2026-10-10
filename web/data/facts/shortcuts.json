@@ -1,13 +1,13 @@
 [
   {
     "id": "next-value",
-    "name": "Next value",
+    "name": "Type next value",
     "chord": "Alt+Shift+N",
     "works": true
   },
   {
     "id": "previous-value",
-    "name": "Previous value",
+    "name": "Type previous value",
     "chord": "Alt+Shift+P",
     "works": true
   },
@@ -57,6 +57,30 @@
     "id": "toggle-visibility",
     "name": "Collapse or expand the palette",
     "chord": "Alt+Shift+H",
+    "works": true
+  },
+  {
+    "id": "skip-value",
+    "name": "Skip value",
+    "chord": "Alt+Shift+S",
+    "works": true
+  },
+  {
+    "id": "back-one-value",
+    "name": "Back one value",
+    "chord": "Alt+Shift+A",
+    "works": true
+  },
+  {
+    "id": "next-pack",
+    "name": "Next pack",
+    "chord": "Alt+Shift+X",
+    "works": true
+  },
+  {
+    "id": "previous-pack",
+    "name": "Previous pack",
+    "chord": "Alt+Shift+Z",
     "works": true
   }
 ]

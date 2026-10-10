@@ -310,6 +310,9 @@ pub struct Sent {
 pub enum Message {
     /// The pack is finished. The next press starts over.
     EndOfPack { total: usize },
+    /// A step back found the first value already next - nothing moved
+    /// (`D120`).
+    AtFirstValue { total: usize },
     /// The target moved but the counter did not, quoting both numbers.
     CounterKept { done: usize, total: usize },
     /// No pack has been chosen yet.
@@ -676,7 +679,11 @@ impl AdvanceSequence {
     /// palette's hint bar names every one of them and no other (`UX-GUI-007`).
     /// A question here rather than a list there: the list would be a second
     /// copy of the match below, free to drift from it, and a test holds this
-    /// answer to what `on_action` really does for all ten actions.
+    /// answer to what `on_action` really does for every action.
+    ///
+    /// `NextPack` and `PreviousPack` are not among them, and that is not a gap:
+    /// a pack is opened where the settings remember it, which is the palette's
+    /// business (`D120`) - the same path the value window takes.
     #[must_use]
     pub const fn handles(action: HotkeyAction) -> bool {
         matches!(
@@ -685,6 +692,8 @@ impl AdvanceSequence {
                 | HotkeyAction::PreviousValue
                 | HotkeyAction::RestartPack
                 | HotkeyAction::CopyReport
+                | HotkeyAction::SkipValue
+                | HotkeyAction::BackOneValue
         )
     }
 
@@ -699,6 +708,10 @@ impl AdvanceSequence {
             HotkeyAction::NextValue => Event::Next,
             HotkeyAction::PreviousValue => Event::Previous,
             HotkeyAction::RestartPack => Event::Restart,
+            // Walking the pack without typing (`D120`): the next value moves,
+            // nothing is sent, so the path below that sends is never taken.
+            HotkeyAction::SkipValue => Event::Skip,
+            HotkeyAction::BackOneValue => Event::Back,
             HotkeyAction::CopyReport => return self.copy_report(ports),
             other => {
                 return self.settled(None, vec![Message::Unhandled { action: other }], false);
@@ -1076,6 +1089,7 @@ fn send_index(step: &nkb_core::sequence::Step) -> Option<usize> {
 fn announce(effect: &Effect) -> Option<Message> {
     match effect {
         Effect::AnnounceEndOfPack { total } => Some(Message::EndOfPack { total: *total }),
+        Effect::AnnounceAtFirst { total } => Some(Message::AtFirstValue { total: *total }),
         Effect::AnnounceCounterKept { done, total } => Some(Message::CounterKept {
             done: *done,
             total: *total,
@@ -2003,6 +2017,46 @@ mod tests {
                 outcome.messages
             );
         }
+    }
+
+    #[test]
+    fn a_step_moves_the_next_value_and_types_nothing() {
+        // `D120`: the band shows a different value and the field is untouched -
+        // no key leaves for a skip or a step back, on either route.
+        let kit = Kit::ready();
+        let mut advance = chosen(Risk::Normal);
+        let skipped = advance.on_action(HotkeyAction::SkipValue, &kit.ports());
+        assert!(skipped.sent.is_none());
+        assert!(skipped.messages.is_empty(), "{:?}", skipped.messages);
+        assert!(
+            matches!(
+                skipped.upcoming,
+                Some(UpcomingValue::Value { index: 2, .. })
+            ),
+            "{:?}",
+            skipped.upcoming
+        );
+        let back = advance.on_action(HotkeyAction::BackOneValue, &kit.ports());
+        assert!(matches!(
+            back.upcoming,
+            Some(UpcomingValue::Value { index: 1, .. })
+        ));
+        let first = advance.on_action(HotkeyAction::BackOneValue, &kit.ports());
+        assert!(first.sent.is_none());
+        assert!(
+            matches!(first.messages.as_slice(), [Message::AtFirstValue { .. }]),
+            "{:?}",
+            first.messages
+        );
+        assert!(
+            kit.direct.handed.borrow().is_empty(),
+            "a step typed a value"
+        );
+        assert!(
+            kit.by_clipboard.handed.borrow().is_empty(),
+            "a step copied a value"
+        );
+        assert_eq!(*kit.keys.requests.borrow(), 0, "a step pressed a key");
     }
 
     #[test]

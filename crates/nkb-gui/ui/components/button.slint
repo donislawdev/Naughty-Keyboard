@@ -42,8 +42,18 @@
 // Sized by its content, like `Pill`, whose frame and padding it shares: the
 // width comes from a layout, never from arithmetic on the word - `Pill` says
 // what the arithmetic did to the word "offensive".
+//
+// ⊕ `arrow` - a drawn triangle beside the word, for a button that steps through
+// something (`D120`, the arrows that walk a pack): before the word for `back`,
+// after it for `forward`. Drawn by `Chevron` rather than written as a character,
+// because the interface's typeface is the system's and `◀` is not promised in
+// it - and in the word's own colour, so the two answer the pointer as one.
 import { Tokens } from "../tokens.slint";
 import { TextSmall } from "typography.slint";
+import { Chevron } from "chrome.slint";
+
+// Which side of the word an arrow stands on, if any.
+export enum ButtonArrow { none, back, forward }
 
 export component SmallButton inherits Rectangle {
     in property <string> text;
@@ -53,7 +63,14 @@ export component SmallButton inherits Rectangle {
     in property <bool> enabled: true;
     // The window's main action - see the header.
     in property <bool> primary;
+    // A triangle beside the word - see the header.
+    in property <ButtonArrow> arrow: ButtonArrow.none;
     callback clicked();
+
+    // The word's colour, which the arrow wears too.
+    property <color> ink: root.primary ? Tokens.surface
+        : root.enabled && (area.has-hover || area.pressed) ? Tokens.accent
+        : Tokens.text-secondary;
 
     horizontal-stretch: 0;
     vertical-stretch: 0;
@@ -96,13 +113,29 @@ export component SmallButton inherits Rectangle {
         padding-right: Tokens.space-2;
         padding-top: Tokens.space-1;
         padding-bottom: Tokens.space-1;
+        spacing: Tokens.space-1;
         alignment: center;
 
+        // Centred on the word's line: a path has no baseline, and a layout
+        // would put it at the top.
+        if root.arrow == ButtonArrow.back: VerticalLayout {
+            alignment: center;
+            Chevron {
+                open: false;
+                backward: true;
+                ink: root.ink;
+            }
+        }
         TextSmall {
             text: root.text;
-            color: root.primary ? Tokens.surface
-                : root.enabled && (area.has-hover || area.pressed) ? Tokens.accent
-                : Tokens.text-secondary;
+            color: root.ink;
+        }
+        if root.arrow == ButtonArrow.forward: VerticalLayout {
+            alignment: center;
+            Chevron {
+                open: false;
+                ink: root.ink;
+            }
         }
     }
 }

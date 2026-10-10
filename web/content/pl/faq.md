@@ -20,7 +20,7 @@ faq:
   - question: Czy mogę użyć wartości w testach automatycznych?
     answer: "Tak. `nkb emit` wypisuje każdą paczkę jako JSON, CSV albo jedną wartość na wiersz, w postaci escapowanej albo surowej, a każde polecenie ma kody wyjścia, według których pipeline może wybrać dalszą drogę. Jak, pokazuje [nkb emit](/docs/cli/emit/)."
   - question: Czy mogę zmienić skróty?
-    answer: "Tak, każdy z dziesięciu, w oknie skrótów albo w `settings.toml`. Kombinacja, która zabrałaby klawisz wszystkim aplikacjom, zostaje odrzucona z podaniem przyczyny. Listę mają [Skróty](/docs/shortcuts/)."
+    answer: "Tak, każdy z nich, w oknie skrótów albo w `settings.toml`. Kombinacja, która zabrałaby klawisz wszystkim aplikacjom, zostaje odrzucona z podaniem przyczyny. Listę mają [Skróty](/docs/shortcuts/)."
   - question: Czy mogę dodać własne wartości?
     answer: "Własną paczkę możesz już dziś napisać i sprawdzić poleceniami `nkb new-pack`, `nkb lint` i `nkb fmt`. Wczytywanie własnych paczek do palety nie jest jeszcze podłączone. Wartość, która kiedyś kosztowała Cię popołudnie, należy do katalogu, a formularz [Suggest a value](https://github.com/donislawdev/Naughty-Keyboard/issues/new?template=suggest_value.yml) pyta po angielsku o wartość, o to, co psuje, i o to, gdzie ją widziano."
   - question: Czy to narzędzie do ataków?

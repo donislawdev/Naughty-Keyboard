@@ -43,6 +43,7 @@ import {
     PickerOpener,
     Disclosure,
     SmallButton,
+    ButtonArrow,
     Segmented,
     Chevron,
     NextBand,
@@ -343,6 +344,16 @@ export component Gallery inherits Window {
             SmallButton { text: "Start testing"; action: "Close the welcome"; primary: true; }
             SmallButton { text: "Start testing"; action: "Close the welcome"; primary: true; enabled: false; }
         }
+        // The arrows that walk a pack (D120): drawn before the word for back and
+        // after it for forward, in the word's colour - and faded together.
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            TextSmallMuted { text: "arrow"; }
+            Spacer { }
+            SmallButton { text: "Back"; action: "Back one value"; arrow: ButtonArrow.back; }
+            SmallButton { text: "Skip"; action: "Skip this value"; arrow: ButtonArrow.forward; }
+            SmallButton { text: "Back"; action: "Back one value"; arrow: ButtonArrow.back; enabled: false; }
+        }
 
         // The switch: every way on screen, the one in effect filled - as the
         // palette's two rows carry it, the second faded as in clipboard mode -
@@ -423,11 +434,17 @@ export component Gallery inherits Window {
             markers: [{ text: "offensive", risky: true }];
             copy-label: "Copy";
             copy-action: "Copy the next value";
+            back-label: "Back";
+            skip-label: "Skip";
+            can-go-back: true;
         }
         NextBand {
             heading: "Next: end of pack (34 of 34)";
             copy-label: "Copy";
             copy-action: "Copy the next value";
+            back-label: "Back";
+            skip-label: "Skip";
+            can-go-back: true;
         }
         NextBand {
             heading: "Next: value 9 of 34";
@@ -436,6 +453,8 @@ export component Gallery inherits Window {
             preview: "abc";
             copy-label: "Copy";
             copy-action: "Copy the next value";
+            back-label: "Back";
+            skip-label: "Skip";
             sending: true;
         }
         LastSentBand {

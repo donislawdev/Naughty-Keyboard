@@ -153,8 +153,10 @@ pub(crate) fn fill(pattern: &str, values: &[(&str, &str)]) -> String {
 #[must_use]
 pub fn action_name(action: HotkeyAction) -> &'static str {
     match action {
-        HotkeyAction::NextValue => "Next value",
-        HotkeyAction::PreviousValue => "Previous value",
+        // A verb, because the press TYPES the value the next band shows: until
+        // `D120` the name said "Next value" and the owner read it as moving on.
+        HotkeyAction::NextValue => "Type next value",
+        HotkeyAction::PreviousValue => "Type previous value",
         HotkeyAction::RepeatLast => "Repeat last value",
         HotkeyAction::RestartPack => "Restart pack",
         HotkeyAction::CopyReport => "Copy report block",
@@ -163,6 +165,10 @@ pub fn action_name(action: HotkeyAction) -> &'static str {
         HotkeyAction::MarkSuspect => "Mark as suspect",
         HotkeyAction::OpenPacks => "Find a value",
         HotkeyAction::ToggleVisibility => "Collapse or expand the palette",
+        HotkeyAction::SkipValue => "Skip value",
+        HotkeyAction::BackOneValue => "Back one value",
+        HotkeyAction::NextPack => "Next pack",
+        HotkeyAction::PreviousPack => "Previous pack",
     }
 }
 
@@ -253,6 +259,7 @@ fn pattern_message(message: &Message) -> &'static str {
             "This application's pace could not be followed, so characters may be missing if it was busy. Check the field before testing."
         }
         Message::EndOfPack { .. } => "End of pack ({total}/{total}). Press again to start over.",
+        Message::AtFirstValue { .. } => "Already at the first value (1/{total}).",
         Message::CounterKept { .. } => {
             "New field - the counter is still at {done}/{total}. Press {shortcut} to start this pack from the beginning."
         }
@@ -350,7 +357,9 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
         Message::NothingArrived { reason } | Message::ClearedThenNothingArrived { reason } => {
             fill(pattern, &[("reason", stop_reason(*reason))])
         }
-        Message::EndOfPack { total } => fill(pattern, &[("total", &total.to_string())]),
+        Message::EndOfPack { total } | Message::AtFirstValue { total } => {
+            fill(pattern, &[("total", &total.to_string())])
+        }
         Message::CounterKept { done, total } => fill(
             pattern,
             &[
@@ -1233,6 +1242,7 @@ mod tests {
             },
             Message::NotPaced,
             Message::EndOfPack { total: 34 },
+            Message::AtFirstValue { total: 34 },
             Message::CounterKept { done: 7, total: 34 },
             Message::NoPack,
             Message::ModifierHeld {
@@ -1554,10 +1564,11 @@ mod tests {
             Message::CopyFailed { .. } => 28,
             Message::CopyGone { .. } => 29,
             Message::ClipboardModeOff => 30,
+            Message::AtFirstValue { .. } => 31,
         }
     }
 
-    const SLOTS: usize = 31;
+    const SLOTS: usize = 32;
 
     #[test]
     fn every_message_variant_is_listed_here() {
@@ -2083,6 +2094,11 @@ mod tests {
             PaletteLabel::ControlTerminal,
             PaletteLabel::ControlUnconfirmed,
             PaletteLabel::ControlNotTextField,
+            PaletteLabel::Back,
+            PaletteLabel::BackAction,
+            PaletteLabel::Skip,
+            PaletteLabel::SkipAction,
+            PaletteLabel::NoOtherPack,
         ] {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
@@ -2129,7 +2145,12 @@ mod tests {
                 | PaletteLabel::ControlTextField
                 | PaletteLabel::ControlTerminal
                 | PaletteLabel::ControlUnconfirmed
-                | PaletteLabel::ControlNotTextField => false,
+                | PaletteLabel::ControlNotTextField
+                | PaletteLabel::Back
+                | PaletteLabel::BackAction
+                | PaletteLabel::Skip
+                | PaletteLabel::SkipAction
+                | PaletteLabel::NoOtherPack => false,
             };
             let pattern = pattern_palette_label(label);
             assert_eq!(
@@ -2288,7 +2309,7 @@ mod tests {
             ),
             (
                 Refusal::SameAs(HotkeyAction::PreviousValue),
-                "\"Previous value\"",
+                "\"Type previous value\"",
             ),
             (
                 Refusal::TypesCharacter('\u{105}'),
@@ -2313,7 +2334,10 @@ mod tests {
             )
             .expect("said");
             assert!(!out.contains('{'), "{out}");
-            assert!(out.contains("\"Next value\" the shortcut Shift+M"), "{out}");
+            assert!(
+                out.contains("\"Type next value\" the shortcut Shift+M"),
+                "{out}"
+            );
             assert!(out.contains(named), "{out}");
             assert!(
                 out.contains(&chord_text(&bindings, HotkeyAction::NextValue)),

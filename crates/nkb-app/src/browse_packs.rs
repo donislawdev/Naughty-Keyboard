@@ -78,6 +78,47 @@ impl Listing {
     pub fn unusable(&self) -> usize {
         self.entries.len() - self.loaded()
     }
+
+    /// The pack one step from `current` among the packs that loaded, in the
+    /// order of this listing and wrapping at either end - what "next pack" and
+    /// "previous pack" open (`D120`). The order is the value window's, which
+    /// lists the same entries, so the shortcut walks the list the tester sees.
+    ///
+    /// `None` when no pack besides `current` loaded: there is nothing to switch
+    /// to, and the caller says so. A `current` the listing does not hold - a
+    /// pack that stopped loading since it was opened - starts the walk at the
+    /// first pack, or at the last one for a step back.
+    #[must_use]
+    pub fn neighbour(&self, current: &str, direction: Direction) -> Option<&str> {
+        let loaded: Vec<&str> = self
+            .entries
+            .iter()
+            .filter_map(|entry| match entry {
+                PackEntry::Loaded { pack, .. } => Some(pack.id.as_str()),
+                PackEntry::Refused { .. } | PackEntry::Unreadable { .. } => None,
+            })
+            .collect();
+        if loaded.iter().all(|id| *id == current) {
+            return None;
+        }
+        let count = loaded.len();
+        let index = match (loaded.iter().position(|id| *id == current), direction) {
+            (Some(at), Direction::Next) => (at + 1) % count,
+            (Some(at), Direction::Previous) => (at + count - 1) % count,
+            (None, Direction::Next) => 0,
+            (None, Direction::Previous) => count - 1,
+        };
+        loaded.get(index).copied()
+    }
+}
+
+/// Which way [`Listing::neighbour`] steps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    /// Further down the list.
+    Next,
+    /// Further up it.
+    Previous,
 }
 
 /// Loads one pack the honest way: check first, refuse on any error, parse after.
@@ -437,5 +478,65 @@ mod tests {
             }
             other => panic!("expected the pack, got {other:?}"),
         }
+    }
+
+    fn listing_of(entries: &[(&str, bool)]) -> Listing {
+        Listing {
+            entries: entries
+                .iter()
+                .map(|(id, loads)| {
+                    if *loads {
+                        PackEntry::Loaded {
+                            pack: Box::new(a_pack(id)),
+                            warnings: 0,
+                        }
+                    } else {
+                        PackEntry::Refused {
+                            id: (*id).to_owned(),
+                            errors: 1,
+                        }
+                    }
+                })
+                .collect(),
+            coverage: CatalogueCoverage {
+                consulted: vec![CatalogueSource::BuiltIn],
+                skipped: Vec::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn the_next_pack_skips_what_does_not_load_and_wraps_both_ways() {
+        let listing = listing_of(&[("a", true), ("b", false), ("c", true), ("d", true)]);
+        assert_eq!(listing.neighbour("a", Direction::Next), Some("c"));
+        assert_eq!(listing.neighbour("c", Direction::Next), Some("d"));
+        assert_eq!(
+            listing.neighbour("d", Direction::Next),
+            Some("a"),
+            "wraps at the end"
+        );
+        assert_eq!(
+            listing.neighbour("a", Direction::Previous),
+            Some("d"),
+            "wraps at the start"
+        );
+        assert_eq!(listing.neighbour("c", Direction::Previous), Some("a"));
+    }
+
+    #[test]
+    fn with_no_other_pack_that_loads_there_is_nowhere_to_go() {
+        let alone = listing_of(&[("a", true), ("b", false)]);
+        assert_eq!(alone.neighbour("a", Direction::Next), None);
+        assert_eq!(alone.neighbour("a", Direction::Previous), None);
+        assert_eq!(listing_of(&[]).neighbour("a", Direction::Next), None);
+    }
+
+    #[test]
+    fn a_pack_no_longer_in_the_list_starts_the_walk_at_an_end() {
+        let listing = listing_of(&[("a", true), ("b", true), ("c", false)]);
+        assert_eq!(listing.neighbour("gone", Direction::Next), Some("a"));
+        assert_eq!(listing.neighbour("gone", Direction::Previous), Some("b"));
+        // A pack that stopped loading is not a pack to step from in its place.
+        assert_eq!(listing.neighbour("c", Direction::Next), Some("a"));
     }
 }

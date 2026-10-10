@@ -6,12 +6,12 @@
 # been checked against the new English.
 
 [next-value]
-source = "9627d8e36496"
-text = "Następna wartość"
+source = "d24d19d9dd8c"
+text = "Wpisz następną wartość"
 
 [previous-value]
-source = "bdd8b3ba67c1"
-text = "Poprzednia wartość"
+source = "d52ea14b0759"
+text = "Wpisz poprzednią wartość"
 
 [repeat-last]
 source = "b073f0d0e298"
@@ -44,3 +44,19 @@ text = "Znajdź wartość"
 [toggle-visibility]
 source = "90c7f938332a"
 text = "Zwiń albo rozwiń paletę"
+
+[skip-value]
+source = "0a020dae9186"
+text = "Pomiń wartość"
+
+[back-one-value]
+source = "7b383be19eaa"
+text = "Cofnij o jedną wartość"
+
+[next-pack]
+source = "a83f0639a1db"
+text = "Następna paczka"
+
+[previous-pack]
+source = "8b87bd2f8a77"
+text = "Poprzednia paczka"

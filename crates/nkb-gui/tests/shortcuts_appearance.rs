@@ -105,7 +105,7 @@ fn lines(lines: &[&str]) -> ModelRc<SharedString> {
 fn fill(window: &ShortcutsWindow) {
     window.set_window_title("Naughty Keyboard - shortcuts".into());
     window.set_heading("Shortcuts".into());
-    window.set_summary("changed: 1 of 10".into());
+    window.set_summary("changed: 1 of 14".into());
     window.set_intro(
         "The palette answers these in every application. They are paused while this window \
          is open."

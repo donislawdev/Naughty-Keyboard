@@ -109,6 +109,16 @@ pub fn label_switches(palette: &Palette) {
     ));
 }
 
+/// Puts the words of the two arrows beside the next value on the palette
+/// (`D120`), which never change while it runs. On the MAIN thread, once, at
+/// start, beside the switches.
+pub fn label_arrows(palette: &Palette) {
+    palette.set_back_label(i18n::label(PaletteLabel::Back).into());
+    palette.set_back_action(i18n::label(PaletteLabel::BackAction).into());
+    palette.set_skip_label(i18n::label(PaletteLabel::Skip).into());
+    palette.set_skip_action(i18n::label(PaletteLabel::SkipAction).into());
+}
+
 /// Puts the way of clearing in effect on its switch. On the MAIN thread - at
 /// start, before the worker's first view, and from every view that carries
 /// one, so the switch cannot be set two ways.
@@ -160,6 +170,9 @@ pub(super) struct NextView {
     pub(super) heading: String,
     /// `None` at the end of a pack, where the press only says so.
     pub(super) value: Option<NextValueView>,
+    /// Whether the arrow that steps back moves anything (`D120`) - the core's
+    /// answer, `Sequence::steps_back`, not a rule of this file's own.
+    pub(super) can_go_back: bool,
 }
 
 pub(super) struct NextValueView {
@@ -243,7 +256,10 @@ pub(super) fn view_between(
     View {
         pack: shown(sequence, pack),
         counter: counter_of(sequence),
-        next: next_view(sequence.upcoming().as_ref()),
+        next: next_view(
+            sequence.upcoming().as_ref(),
+            sequence.sequence().steps_back(),
+        ),
         value,
         messages: with_standing(messages, standing),
         clipboard_bar: clipboard_bar(
@@ -283,7 +299,7 @@ pub(super) fn view_of(
             .sequence
             .counter()
             .map_or_else(String::new, |(done, total)| i18n::counter(done, total)),
-        next: next_view(outcome.upcoming.as_ref()),
+        next: next_view(outcome.upcoming.as_ref(), outcome.sequence.steps_back()),
         value: outcome.sent.as_ref().map_or(ValueBand::Keep, |sent| {
             ValueBand::Show(Box::new(value_view(sent)))
         }),
@@ -304,11 +320,12 @@ pub(super) fn view_of(
 }
 
 /// The band of the next value, every line finished (`UX-GUI-001`).
-pub(super) fn next_view(upcoming: Option<&UpcomingValue>) -> Option<NextView> {
+pub(super) fn next_view(upcoming: Option<&UpcomingValue>, can_go_back: bool) -> Option<NextView> {
     match upcoming? {
         UpcomingValue::EndOfPack { total } => Some(NextView {
             heading: i18n::next_end_of_pack(*total),
             value: None,
+            can_go_back,
         }),
         UpcomingValue::Value {
             index,
@@ -332,6 +349,7 @@ pub(super) fn next_view(upcoming: Option<&UpcomingValue>) -> Option<NextView> {
                     Vec::new()
                 },
             }),
+            can_go_back,
         }),
     }
 }
@@ -583,6 +601,7 @@ pub(super) fn show_next(palette: &Palette, next: Option<NextView>) {
         return;
     };
     palette.set_next_heading(next.heading.into());
+    palette.set_can_go_back(next.can_go_back);
     match next.value {
         Some(value) => {
             palette.set_next_key(shown_key(&value.key));

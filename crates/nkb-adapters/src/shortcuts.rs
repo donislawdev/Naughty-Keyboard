@@ -434,10 +434,13 @@ mod tests {
     fn a_fired_id_is_its_position_in_the_table_and_a_stray_id_presses_nothing() {
         let actions: Vec<HotkeyAction> = DEFAULT_BINDINGS.iter().map(|(a, _)| *a).collect();
         for (index, action) in actions.iter().enumerate() {
-            let id = HotkeyId(u32::try_from(index).expect("ten fits"));
+            let id = HotkeyId(u32::try_from(index).expect("an index of the table fits"));
             assert_eq!(pressed(&actions, id), Wait::Pressed(*action));
         }
-        assert_eq!(pressed(&actions, HotkeyId(10)), Wait::Nothing);
+        // One past the table, whatever its size: a fixed number here went
+        // stale the day the table grew (`D120`).
+        let past = u32::try_from(actions.len()).expect("the table's length fits");
+        assert_eq!(pressed(&actions, HotkeyId(past)), Wait::Nothing);
         assert_eq!(pressed(&actions, HotkeyId(u32::MAX)), Wait::Nothing);
     }
 
