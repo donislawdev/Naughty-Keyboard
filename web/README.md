@@ -64,5 +64,8 @@ names the new digest, to be written once the translation has been checked agains
 
 ## Publishing
 
-Not yet. The site is built and checked on every pull request, and published by nobody. When the
-address and GitHub Pages are set up, publishing will run after CI has passed on `main`.
+`.github/workflows/site.yml` builds and checks the site on every pull request and publishes nothing
+there. It publishes after CI has passed on `main`, for the commit CI passed on, so a page never goes
+up while the tests that compare its facts with the program are red. Starting the workflow by hand
+from `main` publishes `main` again. GitHub Pages serves the site from the address in its settings,
+and `static/CNAME` holds the same address.
