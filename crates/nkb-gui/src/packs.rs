@@ -413,6 +413,7 @@ impl Packs {
             Chosen::InUse => self.close(),
             Chosen::Pack(pack) => self.hand_over(Command::Choose(pack)),
             Chosen::Value { pack, value } => self.hand_over(Command::ChooseValue { pack, value }),
+            Chosen::Restart { pack, value } => self.hand_over(Command::Restart { pack, value }),
         }
     }
 

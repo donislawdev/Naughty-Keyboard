@@ -27,7 +27,7 @@ A window running with higher privileges than the palette, such as a program star
 
 ## How do I find a value?
 
-Press {{< kbd "Alt+Shift+Space" >}}. The window that opens shows every pack as a list you can open, and searches the values of all of them at once as you type. Choosing a value makes its pack the one in use and that value the next one, so the next press types it. The values you used most recently from other packs are at the top.
+Press {{< kbd "Alt+Shift+Space" >}}. The window that opens shows every pack as a list you can open, and searches the values of all of them at once as you type. Choosing a value makes its pack the one in use and that value the next one, so the next press types it. The values you chose there most recently, from any pack, are at the top.
 
 ## Can I make it smaller?
 

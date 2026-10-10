@@ -28,7 +28,7 @@ Okno działające z wyższymi uprawnieniami niż paleta, na przykład program ur
 
 ## Jak znaleźć wartość?
 
-Naciśnij {{< kbd "Alt+Shift+Space" >}}. Okno, które się otworzy, pokazuje każdą paczkę jako listę do rozwinięcia i w trakcie pisania przeszukuje naraz wartości wszystkich paczek. Wybranie wartości ustawia jej paczkę jako używaną, a tę wartość jako następną, więc następne naciśnięcie ją wpisze. Na górze stoją ostatnio używane wartości z innych paczek.
+Naciśnij {{< kbd "Alt+Shift+Space" >}}. Okno, które się otworzy, pokazuje każdą paczkę jako listę do rozwinięcia i w trakcie pisania przeszukuje naraz wartości wszystkich paczek. Wybranie wartości ustawia jej paczkę jako używaną, a tę wartość jako następną, więc następne naciśnięcie ją wpisze. Na górze stoją wartości ostatnio wybrane w tym oknie, z każdej paczki.
 
 ## Czy mogę ją zmniejszyć?
 
