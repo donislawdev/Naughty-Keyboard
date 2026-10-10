@@ -62,27 +62,27 @@ jobs:
     name: build and check the website
     # CI that failed, CI on a pull request, and CI on a fork's branch called
     # main all end here, before anything is checked out.
+    #
+    # The checkout below takes the default one, which on workflow_run is the
+    # newest commit on main and never a commit named by the run that triggered
+    # this. The last condition makes that the commit CI passed on. When main
+    # has already moved on, this run publishes nothing, and the run for the
+    # newer commit publishes once its CI has passed.
     if: >-
       github.event_name != 'workflow_run' ||
       (github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_repository.full_name == github.repository)
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_sha == github.sha)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
       publish: ${{ env.PUBLISH }}
     steps:
-      # The rule is right about the shape and the job condition above is the
-      # answer to it: on workflow_run this job runs only for a push to this
-      # repository, so the commit it checks out cannot come from a fork.
-      # nosemgrep: yaml.github-actions.security.workflow-run-target-code-checkout.workflow-run-target-code-checkout
       - name: checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # The commit CI passed on, not whatever main is by now. Every other
-          # event has no such commit and takes its usual one.
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: install Hugo, held to its digest
         run: |

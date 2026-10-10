@@ -74,10 +74,11 @@ class Publishing(unittest.TestCase):
         for part in ("github.event_name != 'workflow_run'",
                      "github.event.workflow_run.conclusion == 'success'",
                      "github.event.workflow_run.event == 'push'",
-                     "github.event.workflow_run.head_repository.full_name == github.repository"):
+                     "github.event.workflow_run.head_repository.full_name == github.repository",
+                     "github.event.workflow_run.head_sha == github.sha"):
             with self.subTest(part=part):
                 self.assertIn(part, guard)
-        self.assertEqual(guard.count("&&"), 2)
+        self.assertEqual(guard.count("&&"), 3)
         self.assertEqual(guard.count("||"), 1)
 
     def test_a_pull_request_or_another_branch_publishes_nothing(self):
@@ -88,10 +89,15 @@ class Publishing(unittest.TestCase):
         self.assertEqual(condition(self.publish), "needs.build.outputs.publish == 'true'")
         self.assertIn("needs: build", self.publish)
 
-    def test_the_checkout_is_the_commit_ci_passed_on_and_forgets_its_token(self):
+    def test_the_checkout_never_takes_a_commit_the_triggering_run_names(self):
+        # On workflow_run the default checkout is the newest commit on main. A
+        # ref taken from the run that triggered this would be code that run
+        # chose, executed with this repository's permissions and its cache, and
+        # the job condition is what makes the default the commit CI passed on.
         checkout = step_named(self.build, "checkout")
-        self.assertIn("ref: ${{ github.event.workflow_run.head_sha || github.ref }}", checkout)
+        self.assertNotIn("ref:", checkout)
         self.assertIn("persist-credentials: false", checkout)
+        self.assertNotIn("workflow_run.head_", block(self.build, "steps:", 4))
 
     def test_the_pages_handed_over_are_the_ones_just_built_and_checked(self):
         names = [re.search(r"name: (.*)", step).group(1).strip() for step in steps(self.build)]
