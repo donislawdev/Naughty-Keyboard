@@ -122,6 +122,17 @@ pub enum PaletteLabel {
     CopyNext,
     /// The same, for the Copy button beside the value that went out last.
     CopyLast,
+    /// What a Copy button says for two seconds after its copy went through
+    /// (`D121`, the owner's point 7). The button is as wide as the longer of
+    /// the two words, so the change moves nothing.
+    Copied,
+    /// The heading of the report block at the end of the opened band of the
+    /// value sent last (`D121`, the owner's point 8).
+    ReportBlock,
+    /// What a click on that heading does, for UI Automation.
+    ReportBlockAction,
+    /// What the Copy button beside the report block does, for UI Automation.
+    CopyReport,
     /// The button beside the next value that steps it back without typing
     /// (`D120`) - its word, after the drawn arrow.
     Back,
@@ -214,6 +225,10 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::Copy => "Copy",
         PaletteLabel::CopyNext => "Copy the next value",
         PaletteLabel::CopyLast => "Copy the last sent value",
+        PaletteLabel::Copied => "Copied",
+        PaletteLabel::ReportBlock => "Report block",
+        PaletteLabel::ReportBlockAction => "Show or hide the report block",
+        PaletteLabel::CopyReport => "Copy the report block",
         PaletteLabel::Back => "Back",
         PaletteLabel::BackAction => "Back one value, without typing it",
         PaletteLabel::Skip => "Skip",

@@ -196,21 +196,13 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // The value band's heading: since UX-GUI-001 the band of the next value
     // stands above it, and two values on screen need telling apart.
     palette.set_last_sent_label(i18n::label(PaletteLabel::LastSent).into());
-    // Folded at every start, opened by a click on the heading (point 7).
+    // Folded at every start, opened by a click on the heading (point 7) -
+    // and the report block under it the same way (`D121`).
     palette.set_last_sent_action(i18n::label(PaletteLabel::LastSentAction).into());
-    palette.on_toggle_last_sent({
-        let palette = palette.as_weak();
-        move || {
-            if let Some(palette) = palette.upgrade() {
-                live::set_last_sent_open(&palette, !palette.get_last_sent_open());
-            }
-        }
-    });
-    // The Copy buttons beside the next value and the last one sent (`D98`):
-    // one word on both, and what each does in UI Automation's words.
-    palette.set_copy_label(i18n::label(PaletteLabel::Copy).into());
-    palette.set_copy_next_action(i18n::label(PaletteLabel::CopyNext).into());
-    palette.set_copy_last_action(i18n::label(PaletteLabel::CopyLast).into());
+    live::wire_folds(&palette);
+    // The Copy buttons beside the next value, the last one sent and its
+    // report block (`D98`, `D121`), and the word each says after a copy.
+    live::label_copies(&palette);
     // The two switches under the hint bar (point 2), and the way out of
     // clipboard mode on the standing bar (`D99`).
     live::label_switches(&palette);
@@ -252,8 +244,20 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         Arc::clone(&in_use),
         say_in(&palette),
     );
-    palette.on_copy_next(copy_on_click(&palette, &choose, Palette::get_next_key));
-    palette.on_copy_last(copy_on_click(&palette, &choose, Palette::get_last_key));
+    palette.on_copy_next(copy_on_click(
+        &palette,
+        &choose,
+        Palette::get_next_key,
+        live::CopyButton::Next,
+    ));
+    palette.on_copy_last(copy_on_click(
+        &palette,
+        &choose,
+        Palette::get_last_key,
+        live::CopyButton::Last,
+    ));
+    // The report block's Copy is the report shortcut's action (`D121`).
+    palette.on_copy_report(ask_on_click(&choose, live::Command::CopyReport));
     // The arrows that walk the pack without typing (`D120`): the worker holds the
     // sequence, so the click only asks - the same way the shortcuts go.
     palette.on_back_one_value(ask_on_click(&choose, live::Command::Back));
@@ -406,18 +410,20 @@ fn show_palette(
 
 /// What a click on a Copy button does: reads the key the palette holds beside
 /// that button's band and asks the worker, which holds the pack and the
-/// clipboard (`D98`).
+/// clipboard (`D98`) - naming the button, which says "Copied" if the copy
+/// goes through (`D121`).
 fn copy_on_click(
     palette: &Palette,
     asks: &std::sync::mpsc::Sender<live::Command>,
     key: fn(&Palette) -> nkb_gui::ValueKey,
+    button: live::CopyButton,
 ) -> impl Fn() + 'static {
     let palette = palette.as_weak();
     let asks = asks.clone();
     move || {
         if let Some(command) = palette
             .upgrade()
-            .and_then(|palette| live::copy_command(&key(&palette)))
+            .and_then(|palette| live::copy_command(&key(&palette), button))
         {
             // A send that fails is a palette already closing - nobody is left
             // to tell.

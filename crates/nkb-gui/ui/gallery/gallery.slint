@@ -48,6 +48,7 @@ import {
     Chevron,
     NextBand,
     LastSentBand,
+    SwitchesBand,
 } from "../components.slint";
 
 export component Gallery inherits Window {
@@ -354,6 +355,15 @@ export component Gallery inherits Window {
             SmallButton { text: "Skip"; action: "Skip this value"; arrow: ButtonArrow.forward; }
             SmallButton { text: "Back"; action: "Back one value"; arrow: ButtonArrow.back; enabled: false; }
         }
+        // The moment after a copy went through (D121): the word changes and the
+        // frame does not - the same button at rest and saying it, side by side.
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            TextSmallMuted { text: "done"; }
+            Spacer { }
+            SmallButton { text: "Copy"; action: "Copy the last sent value"; done-text: "Copied"; }
+            SmallButton { text: "Copy"; action: "Copy the last sent value"; done-text: "Copied"; done: true; }
+        }
 
         // The switch: every way on screen, the one in effect filled - as the
         // palette's two rows carry it, the second faded as in clipboard mode -
@@ -477,12 +487,34 @@ export component Gallery inherits Window {
             markers: [{ text: "offensive", risky: true }, { text: "cleared first", risky: false }];
             copy-label: "Copy";
             copy-action: "Copy the last sent value";
+            copied-label: "Copied";
+            report-label: "Report block";
+            report-action: "Show or hide the report block";
+            copy-report-action: "Copy the report block";
+            report-open: true;
+            has-report: true;
+            report-copied: true;
+            report: "Value:    whitespace/trailing-space @ pack 1.0\nName:     Trailing space\nTyped:    Kowalski \nSize:     9 graphemes, 9 code points, 9 bytes\nBreaks:   Trimming on save.\nExpected: not given in the pack\nTarget:   notepad.exe, text field\nSession:  not recorded - this version does not save sessions";
         }
         LastSentBand {
             label: "Last sent";
             action: "Show or hide the whole value";
             copy-label: "Copy";
             copy-action: "Copy the last sent value";
+        }
+
+        // The two switches and the link under them, as the palette carries
+        // them in clipboard mode: the second switch faded in place.
+        SwitchesBand {
+            route-label: "Send by";
+            route-options: ["Keyboard", "Clipboard"];
+            route-selected: 1;
+            route-enabled: true;
+            clearing-label: "Each value";
+            clearing-options: ["Clear line first", "Insert at cursor"];
+            clearing-selected: 0;
+            clearing-enabled: false;
+            shortcuts-link: "Change shortcuts";
         }
 
         Hairline {}

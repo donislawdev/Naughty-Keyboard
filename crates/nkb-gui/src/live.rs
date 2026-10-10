@@ -113,17 +113,20 @@ use crate::typeface::SHIPPED;
 // The view's own copy of a key: the same two identifiers, as Slint holds them.
 use crate::{HintRow, Marker, Palette, ValueKey as ShownKey};
 
+mod copy;
 mod presses;
 mod recent;
 mod view;
 
+use copy::show_copied;
+pub use copy::{CopyButton, copy_command, label_copies};
 use presses::{PaletteShortcuts, between_presses};
 use recent::{after_press, carry_out_noting, keep_recent};
 pub(crate) use view::preview_line;
 use view::*;
 pub use view::{
-    View, clearing_command, copy_command, label_arrows, label_switches, route_command, set_compact,
-    set_last_sent_open, show_clearing, starts_clearing,
+    View, clearing_command, label_arrows, label_switches, route_command, set_compact,
+    set_last_sent_open, show_clearing, starts_clearing, wire_folds,
 };
 
 /// How long one wait for a press lasts before the stop flag is read again.
@@ -191,8 +194,12 @@ pub enum Command {
     },
     /// Put this value on the clipboard for the tester to paste - a Copy button
     /// (`UX-GUI-003`, `D98`). By identifiers, looked up in the pack the worker
-    /// holds, so the value copied is the one drawn where the tester clicked.
-    Copy(ValueKey),
+    /// holds, so the value copied is the one drawn where the tester clicked -
+    /// and which button it was, which says "Copied" when it went (`D121`).
+    Copy(ValueKey, CopyButton),
+    /// Put the report block of the value sent last on the clipboard - the
+    /// block's Copy (`D121`), the action the report shortcut is.
+    CopyReport,
     /// Turn clipboard mode on - the route switch under the hint bar
     /// (`UX-GUI-010`, `D99`).
     UseClipboard,
@@ -758,15 +765,8 @@ impl Worker<'_> {
             // Here, on the thread that holds the pack and the clipboard: the
             // value is built from the pack in memory (`W5`), and on Linux the
             // process that set the clipboard is the one serving it.
-            Command::Copy(key) => {
-                let said = self.sequence.copy_value(&key.pack, &key.value, self.ports);
-                let line = i18n::message(&said, &key.pack, &self.memory.bindings.get());
-                Carried {
-                    view: Some(self.view(vec![line], ValueBand::Keep, None)),
-                    told: None,
-                    toggled: None,
-                }
-            }
+            Command::Copy(key, button) => self.copy(&key, button),
+            Command::CopyReport => self.copy_report(),
             // The tester's clicks (`D99`), between presses like every command,
             // so the route never changes under a value in flight. On is the
             // request `--clipboard` makes at start, with the same warning that
@@ -1271,8 +1271,8 @@ mod tests {
     use nkb_app::{AdvanceSequence, KeptSettings};
 
     use super::{
-        Command, Delivery, Duration, HotkeyAction, InFlight, LiveShortcuts, Memory, Outcome,
-        Palette, Progress, ShortcutRegistration, ShownKey, Standing, ValueBand, ValueKey,
+        Command, CopyButton, Delivery, Duration, HotkeyAction, InFlight, LiveShortcuts, Memory,
+        Outcome, Palette, Progress, ShortcutRegistration, ShownKey, Standing, ValueBand, ValueKey,
         ValuePreview, Wait, apply, apply_in_flight, choose, clipboard_bar, copy_command,
         in_flight_view, markers_in_flight, markers_of, set_compact, share, view_between, view_of,
         with_standing,
@@ -1280,7 +1280,7 @@ mod tests {
 
     /// No standing sentence: the ordinary case, and the one the field-by-field
     /// test is about.
-    fn quiet() -> Standing {
+    pub(super) fn quiet() -> Standing {
         crate::focus::standing()
     }
 
@@ -1294,19 +1294,25 @@ mod tests {
         }
     }
 
-    /// One platform per process, so every test that needs a window shares this.
-    fn a_palette() -> Palette {
-        use std::sync::Once;
-        static ONCE: Once = Once::new();
-        ONCE.call_once(|| {
+    /// A palette on the headless platform. Slint keeps the platform per THREAD
+    /// and each test runs on a thread of its own, so the platform goes in on
+    /// the first call on each. Until 2026-10-10 a global `Once` put it on one
+    /// thread only: the others fell to the system's backend, and the second of
+    /// them failed to build a palette - measured when two more tests came in.
+    pub(super) fn a_palette() -> Palette {
+        thread_local! {
+            static INSTALLED: Cell<bool> = const { Cell::new(false) };
+        }
+        if !INSTALLED.get() {
             let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
             slint::platform::set_platform(Box::new(Headless { window }))
-                .expect("no other platform may be installed in this process");
-        });
+                .expect("no other platform may be installed on this thread");
+            INSTALLED.set(true);
+        }
         Palette::new().expect("the palette must build")
     }
 
-    fn a_sent() -> Sent {
+    pub(super) fn a_sent() -> Sent {
         Sent {
             key: ValueKey {
                 pack: String::from("unicode-text"),
@@ -1337,10 +1343,11 @@ mod tests {
                 program: Some(String::from("notepad.exe")),
                 field: ControlKind::TextField,
             }),
+            report: Some(String::from("Value:    unicode-text/zero-width @ pack 1.0")),
         }
     }
 
-    fn an_outcome(sent: Option<Sent>, messages: Vec<Message>) -> Outcome {
+    pub(super) fn an_outcome(sent: Option<Sent>, messages: Vec<Message>) -> Outcome {
         Outcome {
             sequence: Sequence {
                 position: Position::Running { done: 7, total: 34 },
@@ -1456,18 +1463,18 @@ mod tests {
         // asks for the value drawn there - the next one beside the next band,
         // the one sent beside the value band, never the other way round.
         assert_eq!(
-            copy_command(&palette.get_next_key()),
-            Some(Command::Copy(ValueKey {
-                pack: String::from("unicode-text"),
-                value: String::from("trailing-nbsp"),
-            }))
+            copy_command(&palette.get_next_key(), CopyButton::Next),
+            Some(Command::Copy(
+                value_key("unicode-text", "trailing-nbsp"),
+                CopyButton::Next
+            ))
         );
         assert_eq!(
-            copy_command(&palette.get_last_key()),
-            Some(Command::Copy(ValueKey {
-                pack: String::from("unicode-text"),
-                value: String::from("zero-width"),
-            }))
+            copy_command(&palette.get_last_key(), CopyButton::Last),
+            Some(Command::Copy(
+                value_key("unicode-text", "zero-width"),
+                CopyButton::Last
+            ))
         );
 
         // ---- the next press only says the pack is finished ----------------
@@ -1857,28 +1864,6 @@ mod tests {
     }
 
     #[test]
-    fn a_click_on_a_copy_button_asks_for_the_key_it_holds_and_an_empty_one_asks_nothing() {
-        assert_eq!(copy_command(&ShownKey::default()), None);
-        assert_eq!(
-            copy_command(&ShownKey {
-                pack: "whitespace".into(),
-                value: "".into(),
-            }),
-            None
-        );
-        assert_eq!(
-            copy_command(&ShownKey {
-                pack: "whitespace".into(),
-                value: "nbsp".into(),
-            }),
-            Some(Command::Copy(ValueKey {
-                pack: String::from("whitespace"),
-                value: String::from("nbsp"),
-            }))
-        );
-    }
-
-    #[test]
     fn the_share_of_a_send_is_clamped_and_a_value_on_its_way_earns_only_its_own_markers() {
         assert!((share(1, 4) - 0.25).abs() < f32::EPSILON);
         assert!(share(0, 0).abs() < f32::EPSILON, "no total, no share");
@@ -1928,7 +1913,7 @@ mod tests {
         }
     }
 
-    fn a_store(fail: bool) -> Remembered {
+    pub(super) fn a_store(fail: bool) -> Remembered {
         Remembered {
             saved: RefCell::new(Vec::new()),
             fail,
@@ -2240,7 +2225,7 @@ mod tests {
     }
 
     /// A settings store that keeps every save and fails when told to.
-    struct Remembered {
+    pub(super) struct Remembered {
         saved: std::cell::RefCell<Vec<nkb_app::ports::SettingChange>>,
         fail: bool,
     }
@@ -2368,7 +2353,7 @@ mod tests {
     /// registered at all. It keeps every set it was asked for and counts the
     /// handles alive - how many were alive when each set was asked for, too.
     #[derive(Default)]
-    struct Registrar {
+    pub(super) struct Registrar {
         taken: RefCell<Vec<HotkeyChord>>,
         unavailable: Cell<bool>,
         asked: RefCell<Vec<Vec<(HotkeyAction, HotkeyChord)>>>,
@@ -2436,7 +2421,7 @@ mod tests {
 
     /// A worker on `whitespace` over `store` and `registrar`, holding the
     /// shortcuts of the defaults when `held`, handed to `test`.
-    fn with_worker<R>(
+    pub(super) fn with_worker<R>(
         store: &Remembered,
         registrar: &Registrar,
         held: bool,
@@ -2506,36 +2491,6 @@ mod tests {
                         .collect(),
                 }))
             );
-        });
-    }
-
-    /// `D98`: a Copy reaches the sequence, and its answer reaches the message
-    /// band with the value band kept and nothing moved. Through a value this
-    /// pack does not hold, and that is the point of the choice: the ports here
-    /// carry the REAL clipboard, which no test may write while the owner works
-    /// on this machine. The copy that writes is tested with fakes in `nkb-app`
-    /// and on the live palette by `tools/petla-palety.ps1`.
-    #[test]
-    fn a_copy_is_answered_in_the_message_band_and_moves_nothing() {
-        let store = a_store(false);
-        let registrar = Registrar::default();
-        with_worker(&store, &registrar, false, |worker, _| {
-            let before = worker.sequence.sequence();
-            let carried = worker.carry_out(Command::Copy(ValueKey {
-                pack: String::from("unicode-text"),
-                value: String::from("nbsp"),
-            }));
-            let view = carried.view.expect("a copy is answered");
-            assert_eq!(
-                view.messages,
-                vec![String::from(
-                    "unicode-text/nbsp is not in the pack in use any more, so nothing was copied. \
-                     Click Copy beside the value on screen now."
-                )]
-            );
-            assert!(matches!(view.value, ValueBand::Keep));
-            assert!(carried.told.is_none());
-            assert_eq!(worker.sequence.sequence(), before);
         });
     }
 

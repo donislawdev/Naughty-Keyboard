@@ -4,6 +4,8 @@
 //! the loop and the drawing are found apart - and no file grows past the
 //! ceiling of `D113`. The public names are still `nkb_gui::live::<name>`.
 
+use slint::ComponentHandle;
+
 use super::*;
 
 /// One turn of the loop, as plain data that can cross a thread boundary.
@@ -37,6 +39,9 @@ pub struct View {
     /// The words naming the shortcuts, when the table in effect changed with
     /// this view - `None` leaves the ones on screen.
     pub(super) legend: Option<Legend>,
+    /// The Copy button whose copy went through with this view, which says
+    /// "Copied" for two seconds - `None` takes the word back (`D121`).
+    pub(super) copied: Option<CopyButton>,
 }
 
 /// The ways a typed value meets the field, in the order the switch under the
@@ -208,6 +213,10 @@ pub(super) struct ValueView {
     /// Text and whether it is a risk. The COLOUR is the palette's business -
     /// document 13 section 2.1 - so it is not decided here.
     pub(super) markers: Vec<(String, bool)>,
+    /// The report block of a value that went out (`D121`), word for word what
+    /// the report shortcut copies - empty for a value on its way, whose block
+    /// does not exist yet.
+    pub(super) report: String,
 }
 
 /// The name the palette shows for the pack: its own name when it opened, the
@@ -269,6 +278,7 @@ pub(super) fn view_between(
         clipboard_mode_on: sequence.sequence().delivery == Delivery::ClipboardMode,
         clearing: Some(sequence.clearing()),
         legend: None,
+        copied: None,
     }
 }
 
@@ -316,6 +326,7 @@ pub(super) fn view_of(
         // A press never changes how values meet the field, nor the table.
         clearing: None,
         legend: None,
+        copied: None,
     }
 }
 
@@ -381,6 +392,7 @@ pub(super) fn value_view(sent: &Sent) -> ValueView {
     ValueView {
         key: Some(sent.key.clone()),
         sent_to: sent.target.as_ref().map(i18n::sent_to).unwrap_or_default(),
+        report: sent.report.clone().unwrap_or_default(),
         ..facts_view(&sent.facts, sent.utf16_units, markers_of(sent))
     }
 }
@@ -409,6 +421,7 @@ pub(super) fn facts_view(
         not_guaranteed,
         shape: i18n::shape_line(&facts.shape),
         markers,
+        report: String::new(),
     }
 }
 
@@ -466,6 +479,8 @@ pub(super) fn share(arrived: usize, total: usize) -> f32 {
 
 /// Runs on the MAIN thread: the value on its way and the send band.
 pub(super) fn apply_in_flight(palette: &Palette, view: InFlightView) {
+    // A send is what the palette is about now, not a copy before it.
+    show_copied(palette, None);
     show_value(palette, view.value);
     palette.set_messages(ModelRc::new(VecModel::from(
         view.messages
@@ -563,10 +578,13 @@ pub(super) fn apply(palette: &Palette, view: View) {
         ValueBand::Show(value) => show_value(palette, *value),
     }
 
-    // 🔴 No timer and no state change here, and that is `D83`: until then every
-    // view woke the palette and a timer put it back to rest four seconds later,
-    // taking the value with it. Whether the palette is compact is the tester's
-    // choice alone - see `Collapse`.
+    // 🔴 No state change here, and that is `D83`: until then every view woke
+    // the palette and a timer put it back to rest four seconds later, taking
+    // the value with it. Whether the palette is compact is the tester's choice
+    // alone - see `Collapse`. The one clock left is the word "Copied" on the
+    // button whose copy went through (`D121`): it changes nothing the tester
+    // chose and moves nothing.
+    show_copied(palette, view.copied);
 }
 
 /// The value band, on the main thread.
@@ -591,6 +609,9 @@ pub(super) fn show_value(palette: &Palette, value: ValueView) {
     palette.set_value_not_guaranteed(value.not_guaranteed.into());
     palette.set_value_shape(value.shape.into());
     palette.set_markers(markers_model(value.markers));
+    // The switch is read BEFORE the string moves into its property.
+    palette.set_has_report(!value.report.is_empty());
+    palette.set_report(value.report.into());
     palette.set_has_value(true);
 }
 
@@ -629,23 +650,6 @@ pub(super) fn shown_key(key: &ValueKey) -> ShownKey {
         pack: key.pack.as_str().into(),
         value: key.value.as_str().into(),
     }
-}
-
-/// What a click on a Copy button asks the worker for, from the key the
-/// palette holds beside the band it stands in (`D98`). On the MAIN thread.
-///
-/// `None` for a key never set - the button stands only beside a value, so it
-/// cannot be reached then, and an empty identifier is said as nothing rather
-/// than sent to be refused.
-#[must_use]
-pub fn copy_command(shown: &ShownKey) -> Option<Command> {
-    if shown.pack.is_empty() || shown.value.is_empty() {
-        return None;
-    }
-    Some(Command::Copy(ValueKey {
-        pack: shown.pack.to_string(),
-        value: shown.value.to_string(),
-    }))
 }
 
 /// Markers as the palette's model - text, and whether it is a risk.
@@ -687,4 +691,63 @@ pub fn set_compact(palette: &Palette, compact: bool) {
 /// and a key in the file would be a new public name (`settings-format.md`).
 pub fn set_last_sent_open(palette: &Palette, open: bool) {
     palette.set_last_sent_open(open);
+}
+
+/// Opens the report block at the end of the opened band, or folds it
+/// (`D121`, the owner's point 8). On the MAIN thread, and a switch of the
+/// window alone for the reason [`set_last_sent_open`] gives: folded at every
+/// start.
+fn set_report_open(palette: &Palette, open: bool) {
+    palette.set_report_open(open);
+}
+
+/// The two folds of the band of the value sent last - the band and its
+/// report block (the owner's points 7 and 8): switches of the window alone,
+/// so a click flips them here, on the MAIN thread, and nothing else hears of
+/// it.
+pub fn wire_folds(palette: &Palette) {
+    palette.on_toggle_last_sent({
+        let palette = palette.as_weak();
+        move || {
+            if let Some(palette) = palette.upgrade() {
+                set_last_sent_open(&palette, !palette.get_last_sent_open());
+            }
+        }
+    });
+    palette.on_toggle_report({
+        let palette = palette.as_weak();
+        move || {
+            if let Some(palette) = palette.upgrade() {
+                set_report_open(&palette, !palette.get_report_open());
+            }
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::live::tests::{a_palette, a_sent};
+
+    /// `D121`: the report block arrives with the value it describes, and a
+    /// value on its way has none - its block does not exist yet.
+    #[test]
+    fn the_report_block_arrives_with_its_value_and_not_before() {
+        let palette = a_palette();
+        let sent = a_sent();
+        show_value(&palette, value_view(&sent));
+        assert!(palette.get_has_report());
+        assert_eq!(
+            palette.get_report(),
+            "Value:    unicode-text/zero-width @ pack 1.0"
+        );
+        show_value(
+            &palette,
+            facts_view(&sent.facts, sent.utf16_units, Vec::new()),
+        );
+        assert!(
+            !palette.get_has_report(),
+            "a value on its way showed a block"
+        );
+    }
 }

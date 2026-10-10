@@ -302,6 +302,12 @@ pub struct Sent {
     /// gives. `None` when it went to the clipboard: it is wherever the tester
     /// pastes it.
     pub target: Option<Target>,
+    /// The report block of this value, word for word what the report shortcut
+    /// copies while it is the last value sent (`D121`, the owner's point 8):
+    /// built at the press from the same block and the same text port, so the
+    /// block the palette shows is the block a ticket gets. `None` only where
+    /// the block cannot be built, which a value that just went out never is.
+    pub report: Option<String>,
 }
 
 /// A thing the palette must say. A key with its numbers - untouchable rule 9
@@ -954,15 +960,26 @@ impl AdvanceSequence {
         // The `D72` detour above went to the clipboard: the window that was read
         // received nothing.
         let target = if on_clipboard { None } else { inspected };
-        if let Some(arrival) = arrival_of(&outcome, on_clipboard) {
+        let arrival = arrival_of(&outcome, on_clipboard);
+        if let Some(arrival) = arrival {
             self.last = Some(LastSent {
                 index,
                 arrival,
                 target: target.clone(),
             });
         }
+        // Only when THIS value became the last one: otherwise the block would
+        // describe the value before it.
+        let report = arrival
+            .and_then(|_| self.last_block())
+            .and_then(Result::ok)
+            .map(|block| ports.report_text.report_text(&block));
         let (event, sent, classified) = classify(outcome, offensive, on_clipboard, &key);
-        let sent = sent.map(|sent| Sent { target, ..sent });
+        let sent = sent.map(|sent| Sent {
+            target,
+            report,
+            ..sent
+        });
         messages.extend(classified);
         let step = self.sequence.apply(event);
         self.sequence = step.sequence;
@@ -1140,8 +1157,10 @@ fn classify(
                 offensive,
                 cleared: clearing == ClearingOutcome::Done,
                 arrival: arrival.unwrap_or(Arrival::Whole),
-                // Filled by `attempt`, which read it at the press.
+                // Filled by `attempt`, which read it at the press - and the
+                // block, which it builds once the value is the last one.
                 target: None,
+                report: None,
             }),
             // `D95`: a value typed without following the application may be
             // missing characters - the worse news, so first. Then `D76`,
@@ -1175,6 +1194,7 @@ fn classify(
                     units_expected,
                 }),
                 target: None,
+                report: None,
             }),
             std::iter::once(Message::Interrupted {
                 units_sent,
@@ -2120,9 +2140,11 @@ mod tests {
     #[test]
     fn a_report_after_a_send_copies_the_block_of_that_value_once() {
         let mut advance = chosen(Risk::Normal);
+        // The sends on their own kit: each builds its block for the palette
+        // (`D121`), and this test counts the report's.
+        let _ = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
+        let _ = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
         let kit = Kit::ready();
-        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
-        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
 
         let outcome = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
 
@@ -2147,6 +2169,34 @@ mod tests {
             "the palette keeps the value it shows"
         );
         assert_eq!(advance.counter(), Some((2, 3)), "a report moves nothing");
+    }
+
+    /// `D121`: the block the palette shows with a value is the block the
+    /// report shortcut copies while that value is the last one - the same
+    /// block, through the same text port.
+    #[test]
+    fn the_block_shown_with_a_value_is_the_block_the_report_copies() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        let sent = advance
+            .on_action(HotkeyAction::NextValue, &kit.ports())
+            .sent
+            .expect("value two went out");
+        let _ = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+
+        assert_eq!(sent.report.as_deref(), Some("report of sample/two"));
+        assert_eq!(*kit.clipboard.puts.borrow(), vec!["report of sample/two"]);
+        let blocks = kit.text.blocks.borrow();
+        assert_eq!(
+            blocks.len(),
+            3,
+            "one block per value sent, and the report's"
+        );
+        assert_eq!(
+            blocks[1], blocks[2],
+            "the report copied the block shown with value two"
+        );
     }
 
     #[test]
@@ -2320,8 +2370,9 @@ mod tests {
         let _ = advance.on_action(HotkeyAction::PreviousValue, &kit.ports());
         let _ = advance.on_action(HotkeyAction::RestartPack, &kit.ports());
 
+        // The blocks ARE built - one per value that went out, for the palette
+        // to show (`D121`) - and none of them reaches the clipboard.
         assert!(kit.clipboard.puts.borrow().is_empty());
-        assert!(kit.text.blocks.borrow().is_empty());
         assert!(
             kit.by_clipboard.handed.borrow().is_empty(),
             "in direct mode the clipboard route is never taken for a window that takes typing (D71, D72)"

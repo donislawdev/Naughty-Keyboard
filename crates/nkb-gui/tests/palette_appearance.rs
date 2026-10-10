@@ -34,8 +34,13 @@ const WIDTH: u32 = 420;
 /// measured the buffer's floor instead of the palette's, and "the counters wrap"
 /// failed on a palette that wrapped them fine. A buffer that clips is a check
 /// that cannot see. 720 until `D120`, whose four shortcuts made the hint bar
-/// four rows taller and the same thing happened again.
-const HEIGHT: u32 = 900;
+/// four rows taller and the same thing happened again. 900 until the report
+/// block (`D121`), which opened reaches the floor of that buffer.
+const HEIGHT: u32 = 1100;
+
+/// A report block of the length a shipped value gives (`D121`): ten lines, the
+/// last of them long enough to wrap.
+const REPORT: &str = "Value:    unicode-text/zero-width-spaces @ pack 1.0\nName:     Three zero-width spaces\nTyped:    ab\\u200B\\u200B\\u200Bcd\nShape:    zero-width x 3\nSize:     7 graphemes, 7 code points, 13 bytes\nBreaks:   Counters disagree.\nExpected: not given in the pack\nTarget:   notepad.exe, text field\nSession:  not recorded - this version does not save sessions\nTool:     Naughty Keyboard 0.1.0";
 
 /// `text-muted`, the one role the resting state may not show. Written here
 /// rather than read from the dictionary on purpose: two independent copies of a
@@ -794,5 +799,45 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
         resting_path.display(),
         showing_path.display(),
         clipboard_path.display()
+    );
+}
+
+/// The report block (`D121`, the owner's point 8), folded and then opened.
+/// Folded it adds its heading row and no text. Opened, every line of the
+/// block, and the palette grows to hold it - nothing below its surface. Each
+/// a difference of two edges, never the presence of a colour (GUI rule 10).
+#[test]
+fn the_report_block_folds_and_opens_inside_the_palette() {
+    let window = offscreen::start(WIDTH, HEIGHT);
+    let palette = Palette::new().expect("the palette must build");
+    fill(&palette);
+    palette.set_compact(false);
+    palette.show().expect("the palette must show");
+    palette.set_report_label("Report block".into());
+    palette.set_copied_label("Copied".into());
+    palette.set_report(REPORT.into());
+    palette.set_has_report(false);
+    let edge_without_report = bottom_edge(&render(&window));
+    palette.set_has_report(true);
+    palette.set_report_open(false);
+    let edge_folded = bottom_edge(&render(&window));
+    palette.set_report_open(true);
+    let opened = render(&window);
+    let edge_opened = bottom_edge(&opened);
+    let report_path = offscreen::save_cropped(&opened, WIDTH, HEIGHT, "palette-report.png");
+    assert_nothing_escapes_the_surface(
+        &opened,
+        "with the report block open",
+        &report_path.display().to_string(),
+    );
+    assert!(
+        edge_folded > edge_without_report,
+        "the folded report block added no row ({edge_without_report} -> {edge_folded}). Look at {}",
+        report_path.display()
+    );
+    assert!(
+        edge_opened > edge_folded + 100,
+        "the opened report block did not draw its ten lines ({edge_folded} -> {edge_opened}). Look at {}",
+        report_path.display()
     );
 }

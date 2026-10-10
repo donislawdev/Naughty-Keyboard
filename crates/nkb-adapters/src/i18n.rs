@@ -2077,6 +2077,10 @@ mod tests {
             PaletteLabel::Copy,
             PaletteLabel::CopyNext,
             PaletteLabel::CopyLast,
+            PaletteLabel::Copied,
+            PaletteLabel::ReportBlock,
+            PaletteLabel::ReportBlockAction,
+            PaletteLabel::CopyReport,
             PaletteLabel::SendBy,
             PaletteLabel::RouteKeyboard,
             PaletteLabel::RouteClipboard,
@@ -2131,6 +2135,10 @@ mod tests {
                 | PaletteLabel::Copy
                 | PaletteLabel::CopyNext
                 | PaletteLabel::CopyLast
+                | PaletteLabel::Copied
+                | PaletteLabel::ReportBlock
+                | PaletteLabel::ReportBlockAction
+                | PaletteLabel::CopyReport
                 | PaletteLabel::SendBy
                 | PaletteLabel::RouteKeyboard
                 | PaletteLabel::RouteClipboard
