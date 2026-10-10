@@ -35,6 +35,7 @@ examples = [
   "whitespace/zwsp-only",
   "length-bombs/len-65535",
 ]
+link = { page = "/test-cases-for-a-text-field", text = "Przypadki testowe pola tekstowego, wartość po wartości" }
 
 [steps]
 eyebrow = "Jak to działa"

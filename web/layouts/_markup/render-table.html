@@ -1,0 +1,21 @@
+{{- /*
+  A table in the text of a page, drawn like the tables the templates draw: in
+  a frame that scrolls sideways on a narrow screen, so a wide table never
+  makes the whole page wider than the screen. Alignment comes from the
+  stylesheet, so a column aligned in Markdown stops the build rather than
+  being dropped without a word.
+*/ -}}
+{{- range .THead }}{{ range . }}{{ with .Alignment }}{{ errorf "%s aligns a table column, and the stylesheet sets the alignment of every table" $.Page.File.Path }}{{ end }}{{ end }}{{ end }}
+{{- range .TBody }}{{ range . }}{{ with .Alignment }}{{ errorf "%s aligns a table column, and the stylesheet sets the alignment of every table" $.Page.File.Path }}{{ end }}{{ end }}{{ end -}}
+<div class="table-wrap"><table>
+  <thead>
+    {{- range .THead }}
+    <tr>{{ range . }}<th>{{ .Text }}</th>{{ end }}</tr>
+    {{- end }}
+  </thead>
+  <tbody>
+    {{- range .TBody }}
+    <tr>{{ range . }}<td>{{ .Text }}</td>{{ end }}</tr>
+    {{- end }}
+  </tbody>
+</table></div>

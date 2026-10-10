@@ -8,7 +8,7 @@ faq:
   - question: Czym jest Naughty Keyboard?
     answer: "Narzędziem dla testerów i programistów, które jednym skrótem wpisuje następną kłopotliwą wartość w pole, w którym stoi kursor: spację na końcu, spację o zerowej szerokości, `30.02.2026`, `=1+1`, imię długości 65 535 znaków. Każda wartość mówi, co zwykle psuje i co robi poprawna aplikacja. To okno, paleta, i wiersz poleceń, `nkb`, nad jednym silnikiem."
   - question: Czym różni się od Big List of Naughty Strings?
-    answer: "Tamta lista to zwykły plik z napisami pod nagłówkami, i to dobry plik. Naughty Keyboard robi resztę pracy: wpisuje wartość w pole za Ciebie, po jednej na naciśnięcie i w stałej kolejności, mówi, co każda wartość zwykle psuje i co robi poprawna aplikacja, pokazuje niewidoczny znak jako znacznik, liczy wartość na cztery sposoby i zamienia znalezisko w blok do zgłoszenia. Jeśli potrzebujesz listy, `nkb emit` wypisze w tej postaci każdą paczkę."
+    answer: "Tamta lista to zwykły plik z napisami pod nagłówkami, i to dobry plik. Naughty Keyboard robi resztę pracy: wpisuje wartość w pole za Ciebie, po jednej na naciśnięcie i w stałej kolejności, mówi, co każda wartość zwykle psuje i co robi poprawna aplikacja, pokazuje niewidoczny znak jako znacznik, liczy wartość na cztery sposoby i zamienia znalezisko w blok do zgłoszenia. Jeśli potrzebujesz listy, `nkb emit` wypisze w tej postaci każdą paczkę. Więcej mówi [porównanie](/big-list-of-naughty-strings/)."
   - question: Czy jest darmowy?
     answer: "Tak. Program jest na licencji GPL-3.0-only, a wbudowane paczki na CC BY 4.0, co każda paczka podaje we własnym polu licencji. Nie ma konta ani płatnej wersji."
   - question: Czy jest po polsku?

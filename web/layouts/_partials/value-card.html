@@ -1,0 +1,13 @@
+{{- /*
+  A value of the catalogue as a card that leads to it on the page of its pack:
+  the value drawn the way the palette draws it, what it breaks in the language
+  being built, and its reference. Takes the reference, `pack/value`. A
+  reference the catalogue does not have stops the build (find-value.html).
+*/ -}}
+{{- $value := partial "find-value.html" . }}
+{{- $pack := partial "find-page.html" (printf "/packs/%s" (index (split . "/") 0)) }}
+<a class="card example" href="{{ $pack.RelPermalink }}#{{ $value.id }}">
+  {{ partial "value.html" $value }}
+  <p class="what">{{ partial "value-text.html" (dict "value" $value "field" "breaks") }}</p>
+  <span class="from">{{ $value.ref }}</span>
+</a>

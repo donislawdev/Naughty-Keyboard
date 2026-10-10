@@ -61,6 +61,9 @@ other = "Product"
 [footer_docs]
 other = "Documentation"
 
+[footer_guides]
+other = "Guides"
+
 [footer_project]
 other = "Project"
 
@@ -84,6 +87,9 @@ other = "Command line"
 
 [side_packs]
 other = "Packs"
+
+[side_guides]
+other = "Guides"
 
 [side_trust]
 other = "Trust"

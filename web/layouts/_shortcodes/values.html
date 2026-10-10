@@ -1,0 +1,10 @@
+{{- /*
+  Values of the catalogue in the text of a page, as cards that lead to them:
+  values "whitespace/trailing-space" "dates-impossible/feb-30". What each one
+  breaks comes from the catalogue, in the language being built.
+*/ -}}
+<div class="grid two">
+  {{- range .Params }}
+  {{ partial "value-card.html" . }}
+  {{- end }}
+</div>

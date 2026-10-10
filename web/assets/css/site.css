@@ -420,7 +420,11 @@ a.chip:hover {
   border-radius: var(--radius-panel);
 }
 
+/* A card is a block, and a kind of card later in this file (.example,
+   .pack-card) lays out its own content. Setting the display on a.card would
+   outrank them, so it is set here. */
 .card {
+  display: block;
   background: var(--surface-raised);
   border: var(--line) solid var(--border);
   border-radius: var(--radius-card);
@@ -428,7 +432,6 @@ a.chip:hover {
 }
 
 a.card {
-  display: block;
   color: inherit;
   text-decoration: none;
 }
@@ -633,6 +636,7 @@ a.card:hover {
 .pack-card {
   display: grid;
   gap: var(--space-2);
+  align-content: start;
 }
 
 .pack-card .name {
@@ -869,9 +873,13 @@ pre .stderr {
   gap: var(--space-5);
 }
 
+/* The brand takes two shares and every group of links one, however many
+   groups data/menus.toml has. */
 @media (min-width: 52rem) {
   .site-footer .container {
-    grid-template-columns: 2fr 1fr 1fr 1fr;
+    grid-template-columns: 2fr;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
   }
 }
 
@@ -1067,6 +1075,11 @@ pre .stderr {
 .prose h3 {
   font-size: var(--size-h3);
   margin-top: var(--space-6);
+}
+
+/* A heading inside a card sits at the top of the card, not a section away. */
+.prose .card h3 {
+  margin-top: 0;
 }
 
 .prose .lead {
