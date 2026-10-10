@@ -1,0 +1,326 @@
+name: Test build
+
+# The programs of one commit, built the way a release builds them, for a person
+# who reported a problem to try the fix on before it is released.
+#
+# Started by hand from the branch with the fix:
+#
+#     gh workflow run test-build.yml --ref <branch> -f system=windows
+#
+# or from the Actions tab: Test build, Run workflow, the branch chosen under "Use
+# workflow from". GitHub offers that only for a workflow that is on main, and
+# then runs the copy on the branch, so a branch made before this file reached
+# main has to take main in first.
+#
+# WHAT IT IS NOT. Nothing signs these programs, nothing attests them, and
+# nothing puts them on the release page: an unsigned program on a release page
+# is a program anybody downloads. They stay artifacts of this run, behind links
+# that need a GitHub account, for thirty days. Any signed-in GitHub user who
+# finds the run can download them too, so a test build is shared and not
+# private.
+#
+# The links are written once CI passed on the commit. The build runs beside CI
+# and not after it, so the wait is for CI and not for the two in turn. Until CI
+# answers, the build is kept for a day under a name that says it is unchecked,
+# and the summary of the run lists only what was shared after the answer.
+#
+# Every decision is in .github/scripts/build_for_testing.py. Building, packing,
+# unpacking and running are the steps of release.py that a release takes, and
+# test_build_for_testing.py holds them to the steps of release.yml, so the two
+# cannot build differently.
+
+on:
+  workflow_dispatch:
+    inputs:
+      system:
+        description: The system of the person who reported the problem
+        type: choice
+        options: [all, windows, macos, linux]
+        default: all
+  # Only the pull requests that change this workflow, so that a change to it is
+  # proved on its own pull request. Not a required check, so the paths filter
+  # cannot leave a merge waiting for a run that never started.
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/test-build.yml"
+      - ".github/scripts/build_for_testing.py"
+
+permissions:
+  contents: read
+
+# A newer push to a pull request replaces its run in progress. Two runs started
+# by hand never wait for each other, because each names its files by its own
+# run number.
+concurrency:
+  group: test-build-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: "10"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  plan:
+    name: what this run builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.plan.outputs.tag }}
+      platforms: ${{ steps.plan.outputs.platforms }}
+      archives: ${{ steps.plan.outputs.archives }}
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # The choice reaches the script through the environment, never through the
+      # text of the script. A pull request has no inputs and builds every system.
+      - name: Decide what this run builds
+        id: plan
+        env:
+          SYSTEM: ${{ inputs.system || 'all' }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: python .github/scripts/build_for_testing.py plan --run-number "$RUN_NUMBER" --system "$SYSTEM"
+
+  tested:
+    name: CI passed on the commit
+    runs-on: ubuntu-latest
+    # Most of it is waiting for CI, which a branch pushed a moment ago starts at
+    # the same time as this run.
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read # to read the runs of CI on this commit
+    outputs:
+      ci-run: ${{ steps.ci.outputs.ci-run }}
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # On a pull request this run builds the branch merged into main, and CI
+      # files its run of that pull request under the commit of the branch.
+      - name: Wait for CI on this commit
+        id: ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          REF_NAME: ${{ github.head_ref || github.ref_name }}
+        run: python .github/scripts/build_for_testing.py tested --sha "$SHA" --ref "$REF_NAME"
+
+  contents:
+    name: the notices
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # No cache in any job of this workflow, for the reason release.yml gives:
+      # a cache is shared with every other run in the repository, and a program
+      # built from what somebody else's run left behind is a program nobody
+      # built. A person runs it on their own machine all the same.
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          system-libraries: "false"
+          cache: "false"
+
+      # The notices go into every archive, as they do in a release, because a
+      # program given to somebody is a program distributed.
+      - name: Describe every archive
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: |
+          cargo fetch --locked
+          python .github/scripts/release.py contents --tag "$TAG" --out described
+
+      - name: Keep the notices
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: notices
+          path: described/notices/
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+  build:
+    name: build on ${{ matrix.os }}
+    needs: [plan, contents]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      # One system failing must not throw away the build of the others.
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.platforms) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: "false"
+
+      - name: Fetch the notices
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: notices
+          path: notices
+
+      # From here to the run of what was built, every command is the command of
+      # release.yml, word for word.
+      - name: Build each program on its own
+        env:
+          OS: ${{ matrix.os }}
+        run: python .github/scripts/release.py build --os "$OS"
+
+      - name: Pack
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
+          OS: ${{ matrix.os }}
+        run: python .github/scripts/release.py pack --tag "$TAG" --os "$OS" --notices notices --out dist
+
+      - name: Unpack with the system's own tools
+        run: |
+          mkdir unpacked
+          for archive in dist/*
+          do
+            name="$(basename "$archive")"
+            mkdir "unpacked/$name"
+            if [[ "$name" == *.zip ]]
+            then
+              ARCHIVE="$archive" UNPACKED="unpacked/$name" pwsh -NoProfile -Command \
+                "Expand-Archive -LiteralPath \$env:ARCHIVE -DestinationPath \$env:UNPACKED"
+            elif [[ "$name" == *.tar.gz ]]
+            then
+              tar -xzf "$archive" -C "unpacked/$name"
+            else
+              echo "::error::$name is neither a zip nor a tar.gz"
+              exit 1
+            fi
+          done
+
+      - name: Run what was built, from the unpacked archives
+        env:
+          TAG: ${{ needs.plan.outputs.tag }}
+          OS: ${{ matrix.os }}
+        run: python .github/scripts/release.py try --tag "$TAG" --os "$OS" --unpacked unpacked
+
+      # Unchecked: CI may not have answered yet. Kept for a day, for the jobs
+      # below, and never in the summary.
+      - name: Keep the archives until CI answers
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unchecked-build-${{ matrix.os }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 1
+          overwrite: true
+
+  share:
+    name: share ${{ matrix.name }}
+    needs: [plan, tested, build]
+    # Each archive is shared on its own once CI passed, so a system whose build
+    # failed does not hold back the others. The archive of that system is not
+    # there to fetch, and its job fails here.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.tested.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.archives) }}
+    steps:
+      - name: Fetch the build of ${{ matrix.os }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: unchecked-build-${{ matrix.os }}
+          path: dist
+
+      - name: Its checksum, for the log
+        working-directory: dist
+        env:
+          NAME: ${{ matrix.name }}
+        run: sha256sum -- "$NAME"
+
+      # One file and not a zip of it: a person downloads the archive itself, not
+      # a zip with the archive inside. The artifact takes the name of the file.
+      - name: Share it on its own
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: dist/${{ matrix.name }}
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: true
+
+  links:
+    name: the links to send
+    needs: [plan, tested, share]
+    # Written also when one archive could not be shared, so that the others
+    # still have their links. The job then fails and names the missing one.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.tested.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read # to list the files of this run
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Write the links and the words to send
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.plan.outputs.tag }}
+          SYSTEM: ${{ inputs.system || 'all' }}
+          RUN_ID: ${{ github.run_id }}
+          SHA: ${{ github.sha }}
+          CI_RUN: ${{ needs.tested.outputs.ci-run }}
+          EVENT: ${{ github.event_name }}
+        run: >
+          python .github/scripts/build_for_testing.py links
+          --tag "$TAG" --system "$SYSTEM" --run-id "$RUN_ID" --sha "$SHA" --ci-run "$CI_RUN" --event "$EVENT"

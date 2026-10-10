@@ -1,19 +1,20 @@
 # Settings for zizmor, read by .github/workflows/workflow-lint.yml.
 #
-# One rule is switched off for two files, and the reason is written here so that
-# it can be switched back on.
+# One rule is switched off for three files, and the reason is written here so
+# that it can be switched back on.
 #
 # self-repository asks for GitHub's newer way of naming an action that lives in
 # the same repository, a leading $/ in place of ./ (GitHub added it on 2026-07-30).
 # The reason it prefers it is sound: ./ reads from the files on the runner, so an
 # earlier step that wrote a file there could replace the action. Nothing in
-# ci.yml or release.yml writes into .github before the action runs, and every
-# job checks the repository out first. The other linter we run, actionlint, rejects the new form
+# ci.yml, release.yml or test-build.yml writes into .github before the action
+# runs, and every job checks the repository out first. The other linter we run, actionlint, rejects the new form
 # at version 1.7.12 as "ref is missing", so using it would turn that job red.
 # Switch this back on when actionlint accepts $/ and change the references in
-# both files together.
+# every file listed here together.
 rules:
   self-repository:
     ignore:
       - ci.yml
       - release.yml
+      - test-build.yml
