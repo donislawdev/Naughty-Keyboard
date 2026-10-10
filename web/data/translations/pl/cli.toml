@@ -1,0 +1,162 @@
+# Polish translations of what nkb says about its commands, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[general.options.--help]
+source = "9014c4c690f2"
+text = "Pokazuje tę pomoc i kończy kodem 0"
+
+[general.options.--version]
+source = "5e16d6169137"
+text = "Wypisuje wersję i kończy kodem 0"
+
+[packs.summary]
+source = "163c5e31f303"
+text = "wypisuje paczki, które ta wersja programu może zaoferować"
+
+[packs.options.--help]
+source = "9014c4c690f2"
+text = "Pokazuje tę pomoc i kończy kodem 0"
+
+[show.summary]
+source = "8fa998df61fc"
+text = "wypisuje jedną paczkę w całości"
+
+[show.options.--help]
+source = "9014c4c690f2"
+text = "Pokazuje tę pomoc i kończy kodem 0"
+
+[emit.summary]
+source = "bd9b1ae52e45"
+text = "wypisuje wartości paczki dla skryptu albo pliku"
+
+[emit.options.--escaped]
+source = "993fb60c19f4"
+text = "Wypisuje wartości tak, jak zapisuje je plik paczki"
+
+[emit.options.--raw]
+source = "31a07ce3a71a"
+text = "Wypisuje wartości dosłownie"
+
+[emit.options.--base64]
+source = "ca742413c92f"
+text = "Koduje wartości dla kanałów, które psują tekst"
+
+[emit.options.--help]
+source = "9014c4c690f2"
+text = "Pokazuje tę pomoc i kończy kodem 0"
+
+[emit.formats.json]
+source = "0518bd7981d1"
+text = "Obie postacie każdej wartości i każde pole. Domyślny, bo tylko on niesie cały katalog"
+
+[emit.formats.csv]
+source = "2da5474a2987"
+text = "Jeden wiersz na wartość. Domyślnie w postaci escapowanej, bo ten katalog zawiera wartości, które niszczą pliki CSV"
+
+[emit.formats.lines]
+source = "0790ecc25541"
+text = "Jedna wartość na wiersz. Wartość z podziałem wiersza odrzuca i nazywa, zamiast po cichu ją rozdzielić"
+
+[send.summary]
+source = "d12d3637abc8"
+text = "wpisuje jedną wartość w pole z fokusem"
+
+[send.options.--index]
+source = "052577110735"
+text = "która wartość, licząc od 1 w kolejności paczki (domyślnie: 1). Kolejność wartości to kolejność testowania."
+
+[send.options.--delay]
+source = "859f9a80980b"
+text = "ile sekund najpierw czekać, żeby zdążyć kliknąć w cel (domyślnie: 3). Podaj 0, gdy fokus ustawia coś innego."
+
+[send.options.--clear]
+source = "cdf4aa7e6729"
+text = "najpierw naciska Home, Shift+End, Delete i czyści bieżący wiersz pola. Nigdy nie zaznacza poza wierszem, więc pole wielowierszowe zachowuje pozostałe wiersze. Bez tego przełącznika jedyne wysyłane klawisze to znaki samej wartości."
+
+[send.options.--help]
+source = "9014c4c690f2"
+text = "Pokazuje tę pomoc i kończy kodem 0"
+
+[lint.summary]
+source = "1e86d09d7664"
+text = "sprawdza plik paczki według reguł formatu"
+
+[lint.options.--json]
+source = "97eaaa86a0d3"
+text = "Zapisuje werdykt jako JSON i nic poza nim"
+
+[lint.options.--explain]
+source = "5fbb0732c6c0"
+text = "Wypisuje każdą regułę i to, czy ta wersja programu ją sprawdza"
+
+[lint.options.--help]
+source = "9014c4c690f2"
+text = "Pokazuje tę pomoc i kończy kodem 0"
+
+[lint.exit_codes.0]
+source = "32bc75185890"
+text = "paczka przeszła każdą regułę, którą sprawdza ta wersja programu"
+
+[lint.exit_codes.1]
+source = "fa810ef9c869"
+text = "paczka złamała co najmniej jedną regułę blokującą"
+
+[lint.exit_codes.2]
+source = "34f9b6d7f072"
+text = "polecenie wywołano niepoprawnie"
+
+[lint.exit_codes.3]
+source = "24895f9c38c6"
+text = "pod tą ścieżką nie ma pliku paczki do odczytania"
+
+[lint.exit_codes.5]
+source = "925afdd916b1"
+text = "plik istnieje, ale nie dało się go odczytać, albo nie dało się zapisać werdyktu na standardowe wyjście"
+
+[fmt.summary]
+source = "4142178e972d"
+text = "przepisuje plik paczki do postaci kanonicznej"
+
+[fmt.options.--dry-run]
+source = "fe448d4bb1f6"
+text = "Mówi, co by się zmieniło, i niczego nie zapisuje"
+
+[fmt.options.--help]
+source = "9014c4c690f2"
+text = "Pokazuje tę pomoc i kończy kodem 0"
+
+[fmt.exit_codes.0]
+source = "f12af5de2948"
+text = "plik ma właściwą postać albo został do niej doprowadzony"
+
+[fmt.exit_codes.1]
+source = "8f83a558bdf8"
+text = "plik nie jest TOML-em, więc nie było czego porządkować"
+
+[fmt.exit_codes.2]
+source = "34f9b6d7f072"
+text = "polecenie wywołano niepoprawnie"
+
+[fmt.exit_codes.3]
+source = "24895f9c38c6"
+text = "pod tą ścieżką nie ma pliku paczki do odczytania"
+
+[fmt.exit_codes.4]
+source = "07cfbdac29e5"
+text = "formatowanie zmieniłoby wartość, więc nic nie zostało zapisane"
+
+[fmt.exit_codes.5]
+source = "cb86abae7a32"
+text = "nie dało się odczytać albo zapisać pliku albo zapisać standardowego wyjścia"
+
+[new-pack.summary]
+source = "2055363558ca"
+text = "zapisuje szkielet nowej paczki"
+
+[new-pack.options.--help]
+source = "9014c4c690f2"
+text = "Pokazuje tę pomoc i kończy kodem 0"

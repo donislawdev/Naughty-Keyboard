@@ -1,0 +1,324 @@
+# The words of the website's own interface, in Polish.
+#
+# The same keys as en.toml, and nothing else. A key the English file has and
+# this one lacks stops the build (--printI18nWarnings with --panicOnWarning).
+#
+# Polish counts in four plural forms (CLDR): one for 1, few for 2 to 4 and 22
+# to 24 and so on, many for 0, 5 to 21, 25 and so on, other for a fraction. A
+# word that takes a count has all four, and the number reaches it as an
+# integer, never as the float JSON gives, which would always pick other.
+
+# ---- the frame of every page ------------------------------------------------
+
+[skip_to_content]
+other = "Przejdź do treści"
+
+[nav_label]
+other = "Nawigacja główna"
+
+[nav_docs]
+other = "Dokumentacja"
+
+[nav_packs]
+other = "Paczki"
+
+[nav_cli]
+other = "CLI"
+
+[nav_download]
+other = "Pobierz"
+
+[link_github]
+other = "GitHub"
+
+[menu]
+other = "Menu"
+
+[language]
+other = "Język"
+
+[home]
+other = "Strona główna"
+
+[pager_label]
+other = "Poprzednia i następna strona"
+
+[previous]
+other = "Poprzednia"
+
+[next]
+other = "Następna"
+
+[on_this_page]
+other = "Na tej stronie"
+
+[footer_note]
+other = "Dane testowe, które psują formularze, pod jednym skrótem. Program jest na licencji GPL-3.0, a paczki na CC BY 4.0. Ta strona nie ustawia ciasteczek i nie ładuje niczego z innych serwerów."
+
+[footer_product]
+other = "Produkt"
+
+[footer_docs]
+other = "Dokumentacja"
+
+[footer_project]
+other = "Projekt"
+
+[link_releases]
+other = "Wydania"
+
+[link_suggest]
+other = "Zaproponuj wartość"
+
+[link_report_security]
+other = "Zgłoś problem z bezpieczeństwem"
+
+[side_start]
+other = "Start"
+
+[side_palette]
+other = "Paleta"
+
+[side_cli]
+other = "Wiersz poleceń"
+
+[side_packs]
+other = "Paczki"
+
+[side_trust]
+other = "Zaufanie"
+
+[picture_alt]
+other = "Naughty Keyboard: formularz działa, dopóki ktoś nie wpisze tego. Wartości takie jak null, =1+1, 30.02.2026 i spacja na końcu, i to, co każda z nich robi z formularzem."
+
+[not_found_title]
+other = "Tu nie ma strony"
+
+[not_found_text]
+other = "Adres mógł się zmienić albo ma o jeden znak za dużo. Zacznij od strony głównej."
+
+# ---- the home page -----------------------------------------------------------
+
+[get_it]
+other = "Pobierz"
+
+[read_the_docs]
+other = "Przeczytaj dokumentację"
+
+[view_on_github]
+other = "Zobacz na GitHubie"
+
+[honest_limits]
+other = "Uczciwe ograniczenia"
+
+# ---- a value, the way the palette shows it ----------------------------------
+
+[invisible_character]
+other = "niewidoczny znak"
+
+[elided]
+one = "{{ .total }} punkt kodowy w całości, środek wycięty"
+few = "{{ .total }} punkty kodowe w całości, środek wycięty"
+many = "{{ .total }} punktów kodowych w całości, środek wycięty"
+other = "{{ .total }} punktu kodowego w całości, środek wycięty"
+
+[graphemes]
+one = "grafem"
+few = "grafemy"
+many = "grafemów"
+other = "grafemu"
+
+[code_points]
+one = "punkt kodowy"
+few = "punkty kodowe"
+many = "punktów kodowych"
+other = "punktu kodowego"
+
+[bytes]
+one = "bajt"
+few = "bajty"
+many = "bajtów"
+other = "bajta"
+
+[utf16_units]
+one = "jednostka UTF-16"
+few = "jednostki UTF-16"
+many = "jednostek UTF-16"
+other = "jednostki UTF-16"
+
+[what_it_breaks]
+other = "Co psuje"
+
+[what_to_expect]
+other = "Co robi poprawna aplikacja"
+
+[shape_zero_width]
+one = "{{ .count }} znak o zerowej szerokości"
+few = "{{ .count }} znaki o zerowej szerokości"
+many = "{{ .count }} znaków o zerowej szerokości"
+other = "{{ .count }} znaku o zerowej szerokości"
+
+[shape_bidi_control]
+one = "{{ .count }} znak, który zmienia kierunek tekstu"
+few = "{{ .count }} znaki, które zmieniają kierunek tekstu"
+many = "{{ .count }} znaków, które zmieniają kierunek tekstu"
+other = "{{ .count }} znaku, który zmienia kierunek tekstu"
+
+[shape_soft_hyphen]
+one = "{{ .count }} miękki łącznik"
+few = "{{ .count }} miękkie łączniki"
+many = "{{ .count }} miękkich łączników"
+other = "{{ .count }} miękkiego łącznika"
+
+[shape_unusual_space]
+one = "{{ .count }} spacja, która nie jest zwykłą spacją"
+few = "{{ .count }} spacje, które nie są zwykłymi spacjami"
+many = "{{ .count }} spacji, które nie są zwykłymi spacjami"
+other = "{{ .count }} spacji, która nie jest zwykłą spacją"
+
+[shape_tab]
+one = "{{ .count }} tabulator"
+few = "{{ .count }} tabulatory"
+many = "{{ .count }} tabulatorów"
+other = "{{ .count }} tabulatora"
+
+[shape_line_break]
+one = "{{ .count }} podział wiersza"
+few = "{{ .count }} podziały wiersza"
+many = "{{ .count }} podziałów wiersza"
+other = "{{ .count }} podziału wiersza"
+
+[shape_other_control]
+one = "{{ .count }} inny znak sterujący"
+few = "{{ .count }} inne znaki sterujące"
+many = "{{ .count }} innych znaków sterujących"
+other = "{{ .count }} innego znaku sterującego"
+
+[shape_leading_space]
+other = "zaczyna się spacją"
+
+[shape_trailing_space]
+other = "kończy się spacją"
+
+# ---- the catalogue -----------------------------------------------------------
+
+[values_count]
+one = "{{ .count }} wartość"
+few = "{{ .count }} wartości"
+many = "{{ .count }} wartości"
+other = "{{ .count }} wartości"
+
+[pack_title]
+other = "{{ .name }} - wartości testowe"
+
+[pack_description]
+one = "{{ .about }} {{ .count }} wartość testowa i to, co psuje."
+few = "{{ .about }} {{ .count }} wartości testowe i to, co psuje każda z nich."
+many = "{{ .about }} {{ .count }} wartości testowych i to, co psuje każda z nich."
+other = "{{ .about }} {{ .count }} wartości testowej i to, co psuje."
+
+[pack_lead]
+one = "{{ .count }} wartość, z tym, co psuje, i z tym, co zamiast tego robi poprawna aplikacja."
+few = "{{ .count }} wartości, każda z tym, co psuje, i z tym, co zamiast tego robi poprawna aplikacja."
+many = "{{ .count }} wartości, każda z tym, co psuje, i z tym, co zamiast tego robi poprawna aplikacja."
+other = "{{ .count }} wartości, każda z tym, co psuje, i z tym, co zamiast tego robi poprawna aplikacja."
+
+[pack_version]
+other = "wersja {{ .version }}, aktualizacja {{ .updated }}"
+
+[pack_how]
+other = "Wpisuj je po jednej skrótem {{ .chord }} w palecie albo weź wszystkie do skryptu poleceniem <code>{{ .command }}</code>."
+
+# ---- a command of nkb --------------------------------------------------------
+
+[commands]
+other = "Polecenia"
+
+[options]
+other = "Opcje"
+
+[formats]
+other = "Formaty"
+
+[exit_codes]
+other = "Kody wyjścia"
+
+[option_one_of]
+other = "Jedno z: {{ .values }}. Co zapisuje każdy z nich, mówią formaty niżej."
+
+[code]
+other = "Kod"
+
+[meaning]
+other = "Znaczenie"
+
+[exit_codes_shared]
+other = "Pomoc tego polecenia nie wymienia własnych kodów wyjścia. Liczby znaczą to samo w każdym poleceniu:"
+
+[the_help]
+other = "Pomoc, tak jak wypisuje ją program"
+
+[the_help_says]
+other = "Co wypisuje {{ .command }} ({{ .version }})."
+
+[exit_ok]
+other = "Polecenie zrobiło to, co obiecało."
+
+[exit_validation_failed]
+other = "Paczka nie przeszła walidacji. Znalezisko dotyczy paczki, nie narzędzia."
+
+[exit_usage]
+other = "Polecenie wywołano niepoprawnie: nieznane polecenie, nieznana opcja albo opcja bez wartości."
+
+[exit_not_found]
+other = "Wskazana paczka, wartość albo plik nie istnieje."
+
+[exit_insert_failed]
+other = "Nie udało się wpisać wartości w pole. `nkb send` odmówiło albo przerwało, a jego komunikat mówi dlaczego."
+
+[exit_io_failed]
+other = "Nie udało się odczytać albo zapisać pliku albo zapisać standardowego wyjścia."
+
+# ---- shortcuts and downloads --------------------------------------------------
+
+[chord]
+other = "Skrót"
+
+[action]
+other = "Co robi"
+
+[today]
+other = "Dziś"
+
+[settings_name]
+other = "W settings.toml"
+
+[works]
+other = "Działa"
+
+[not_yet]
+other = "Jeszcze niedostępne"
+
+[system]
+other = "System"
+
+[fingerprint]
+other = "SHA-256 certyfikatu"
+
+[expires]
+other = "Wygasa"
+
+[certificate_windows]
+other = "Windows, Authenticode"
+
+[certificate_macos]
+other = "macOS, Developer ID Application"
+
+[system_windows]
+other = "Windows 10 lub 11, x64"
+
+[system_macos]
+other = "macOS {{ .minimum }} lub nowszy, Apple silicon"
+
+[system_linux]
+other = "Linux x64 z glibc 2.35 lub nowszą"

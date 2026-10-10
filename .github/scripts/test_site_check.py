@@ -100,6 +100,20 @@ class TheCheck(Fixture):
         self.write("docs/index.html", page("docs/", alternates=[("en", url), ("pl", BASE + "pl/"), ("x-default", url)], body='<h2 id="part">x</h2>'))
         self.assert_named("does not name it back")
 
+    def test_a_page_missing_from_one_language_is_named(self) -> None:
+        both = [("en", BASE), ("pl", BASE + "pl/"), ("x-default", BASE)]
+        self.write("index.html", page("", alternates=both, body='<a href="/docs/">d</a><a href="/docs/#part">p</a>'))
+        self.write("pl/index.html", page("pl/", lang="pl", alternates=both))
+        self.assert_named("docs/: there is no pl version of it")
+
+    def test_a_sitemap_that_gives_a_priority_is_named(self) -> None:
+        self.write(
+            "sitemap.xml",
+            '<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+            f"<url><loc>{BASE}</loc></url><url><loc>{BASE}docs/</loc><priority>0</priority></url></urlset>",
+        )
+        self.assert_named("gives a page a priority")
+
     def test_a_link_to_no_page_is_named(self) -> None:
         self.write("index.html", page("", body='<a href="/docs/">d</a><a href="/gone/">g</a><a href="/docs/#part">p</a>'))
         self.assert_named("links to '/gone/', which is not a page")
@@ -107,6 +121,11 @@ class TheCheck(Fixture):
     def test_a_link_to_a_missing_fragment_is_named(self) -> None:
         self.write("index.html", page("", body='<a href="/docs/">d</a><a href="/docs/#nowhere">p</a>'))
         self.assert_named("has no element 'nowhere'")
+
+    def test_a_fragment_written_with_percent_escapes_finds_its_element(self) -> None:
+        self.write("index.html", page("", body='<a href="/docs/">d</a><a href="/docs/#co-pami%c4%99ta">p</a>'))
+        self.write("docs/index.html", page("docs/", body='<h2 id="co-pamięta">x</h2>'))
+        self.assertEqual(self.problems(), [])
 
     def test_a_script_from_another_host_is_named(self) -> None:
         self.write("docs/index.html", page("docs/", head='<script src="https://cdn.test/a.js"></script>', body='<h2 id="part">x</h2>'))

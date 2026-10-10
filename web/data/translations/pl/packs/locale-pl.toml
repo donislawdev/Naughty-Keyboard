@@ -1,0 +1,86 @@
+# Polish translations of the pack locale-pl, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "1f3c0bfb2552"
+text = "Polska lokalizacja"
+
+[pack.description]
+source = "b11c07950849"
+text = "Polskie identyfikatory, formaty i znaki, których globalne produkty komercyjne nie obsługują."
+
+[pesel-valid.name]
+source = "05afce7b9bf9"
+text = "PESEL z poprawną sumą kontrolną"
+
+[pesel-valid.breaks]
+source = "ad54c45326d1"
+text = "Numer identyfikacyjny, który przechodzi sumę kontrolną, ale koduje niemożliwą datę urodzenia. Przyjmują go kontrole długości, odrzuca prawdziwa walidacja."
+
+[pesel-valid.expect]
+source = "c6775ec44433"
+text = "Przyjęty albo odrzucony zgodnie z tym, jaką walidację pole deklaruje - konsekwentnie."
+
+[pesel-bad-checksum.name]
+source = "d6d938d12b1b"
+text = "PESEL z błędną sumą kontrolną"
+
+[pesel-bad-checksum.breaks]
+source = "e1fc20fbddad"
+text = "Różni się od poprawnego jedną cyfrą. Pole, które sprawdza tylko długość, nie odróżni ich od siebie."
+
+[pesel-bad-checksum.expect]
+source = "531610b452de"
+text = "Odrzucony z komunikatem, że nie zgadza się suma kontrolna, a nie że długość jest zła."
+
+[diacritics-full.name]
+source = "365d4bdbac65"
+text = "Wszystkie polskie znaki diakrytyczne"
+
+[diacritics-full.breaks]
+source = "5d8a5b53bbdd"
+text = "Kodowanie węższe niż pełny zestaw znaków zamienia je na znaki zapytania i nazwisko psuje się przy zapisie."
+
+[diacritics-full.expect]
+source = "cb2a247b4ade"
+text = "Zapisane i zwrócone bez zmian w każdej warstwie, także w eksportach i wydrukach."
+
+[surname-hyphenated.name]
+source = "42d451db137b"
+text = "Nazwisko dwuczłonowe"
+
+[surname-hyphenated.breaks]
+source = "8357d809b922"
+text = "Nazwiska dwuczłonowe psują dzielenie imienia i nazwiska, sortowanie i założenie, że nazwisko to jedno słowo."
+
+[surname-hyphenated.expect]
+source = "9516185bd976"
+text = "Zapisane jako jedno nazwisko. Sortowanie i wyszukiwanie traktują je tak, jak zostało zapisane."
+
+[postal-code.name]
+source = "623120cd8e75"
+text = "Polski kod pocztowy"
+
+[postal-code.breaks]
+source = "853ab5d156fd"
+text = "Krajowy format kodu pocztowego. Pole, które oczekuje pięciu cyfr bez separatora, odrzuca każdy prawdziwy kod."
+
+[postal-code.expect]
+source = "bba16fd4f3b9"
+text = "Oczekiwany format pokazany przy polu, a separator obsłużony w obu wariantach."
+
+[street-with-slash.name]
+source = "76ae1d4b8ee1"
+text = "Ulica z numerem domu i mieszkania"
+
+[street-with-slash.breaks]
+source = "1bda81dcdf96"
+text = "Numer domu i mieszkania zapisany z ukośnikiem. Pole, które dzieli tekst na ukośniku, robi z jednego wiersza adresu dwa."
+
+[street-with-slash.expect]
+source = "2ea4c6c05bec"
+text = "Zapisana jako jeden wiersz i eksportowana bez dzielenia."

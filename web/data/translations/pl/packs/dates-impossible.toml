@@ -1,0 +1,158 @@
+# Polish translations of the pack dates-impossible, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "b8c86449c224"
+text = "Daty niemożliwe"
+
+[pack.description]
+source = "45be03cebc21"
+text = "Daty, które nie istnieją, są niejednoznaczne albo zapisane inaczej, niż zakłada pole."
+
+[feb-30.name]
+source = "0195b0d9c450"
+text = "30 lutego"
+
+[feb-30.breaks]
+source = "38ec28b72401"
+text = "Data, która nie może istnieć. Naiwne parsery przesuwają ją na drugiego marca, zamiast ją odrzucić."
+
+[feb-30.expect]
+source = "b470602b7c12"
+text = "Odrzucona z komunikatem - nigdy po cichu przeniesiona na inny dzień."
+
+[feb-29-non-leap.name]
+source = "d81b31faeea0"
+text = "29 lutego w roku nieprzestępnym"
+
+[feb-29-non-leap.breaks]
+source = "2dd2f441e265"
+text = "Poprawna w jednych latach, a w innych nie, więc te same dane są poprawne albo błędne zależnie od pola roku obok."
+
+[feb-29-non-leap.expect]
+source = "f4e6bff33f34"
+text = "Odrzucona dla lat nieprzestępnych, z podaną przyczyną."
+
+[nov-31.name]
+source = "d461fdf43a3f"
+text = "31 listopada"
+
+[nov-31.breaks]
+source = "3122fb57f24d"
+text = "Sprawdzenie długości miesiąca, które pomija większość ręcznie pisanych walidatorów."
+
+[nov-31.expect]
+source = "698e5c5a1adb"
+text = "Odrzucona, a nie przeniesiona na grudzień."
+
+[ambiguous-day-month.name]
+source = "e113a11dd08b"
+text = "Dzień i miesiąc w niejednoznacznej kolejności"
+
+[ambiguous-day-month.breaks]
+source = "c9e54bf876e5"
+text = "Ten sam tekst oznacza marzec albo kwiecień zależnie od konwencji, a nic na ekranie nie mówi, którą przyjęto."
+
+[ambiguous-day-month.expect]
+source = "69d683865b21"
+text = "Oczekiwana kolejność podana przy polu albo wymuszony jednoznaczny format."
+
+[iso-format.name]
+source = "b99e06d4d1a8"
+text = "Data ISO 8601"
+
+[iso-format.breaks]
+source = "73e4cd56092f"
+text = "Pole oczekujące formatu lokalnego dostaje międzynarodowy i odwrotnie, a oba to prawidłowe dane od użytkownika."
+
+[iso-format.expect]
+source = "e52e40d847c1"
+text = "Oba przyjęte albo jeden wymuszony z widocznym przykładem."
+
+[year-9999.name]
+source = "85c89825b682"
+text = "Rok 9999"
+
+[year-9999.breaks]
+source = "a5400d32c993"
+text = "Górna granica większości typów dat. Często przyjmuje go interfejs, a odrzuca baza."
+
+[year-9999.expect]
+source = "6a1f7bfef06e"
+text = "Ten sam zakres wymuszony po obu stronach."
+
+[year-0000.name]
+source = "271a48123c46"
+text = "Rok 0000"
+
+[year-0000.breaks]
+source = "2ec9ddcfbee8"
+text = "Poniżej zakresu kilku typów dat, a roku zerowego w powszechnym kalendarzu nie ma."
+
+[year-0000.expect]
+source = "d34b97f95be1"
+text = "Odrzucony z podanym zakresem."
+
+[year-10000.name]
+source = "297649002ae0"
+text = "Rok pięciocyfrowy"
+
+[year-10000.breaks]
+source = "14b1233869b2"
+text = "Lata pięciocyfrowe psują parsowanie o stałej szerokości i formaty kolumn, nie dając oczywistego błędu."
+
+[year-10000.expect]
+source = "d34b97f95be1"
+text = "Odrzucony z podanym zakresem."
+
+[epoch-zero.name]
+source = "639e80aedf42"
+text = "Epoka Uniksa"
+
+[epoch-zero.breaks]
+source = "ba075ab83acb"
+text = "Punkt zerowy najczęstszego zapisu znaczników czasu. Często nie da się go odróżnić od „daty nieustawionej”."
+
+[epoch-zero.expect]
+source = "472476f58c37"
+text = "Zapisana i wyświetlana jako prawdziwa data, odróżnialna od pustego pola."
+
+[negative-timestamp.name]
+source = "ac4e12159cc5"
+text = "Ujemny znacznik czasu"
+
+[negative-timestamp.breaks]
+source = "9050e8c3b651"
+text = "Daty sprzed epoki są w wielu zapisach ujemne i bywają po cichu odrzucane albo przekręcane."
+
+[negative-timestamp.expect]
+source = "5d26bd250339"
+text = "Obsłużony jak zwykła data z przeszłości albo odrzucony z podanym obsługiwanym zakresem."
+
+[date-in-words.name]
+source = "eba399a4beb2"
+text = "Data słownie"
+
+[date-in-words.breaks]
+source = "6d6233d67b25"
+text = "Tekst w polu daty: przyjmują go pobłażliwe parsery, które potem każdego dnia dają inną datę."
+
+[date-in-words.expect]
+source = "e87c168604b5"
+text = "Odrzucona - daty w języku naturalnym to zadanie dla świadomie zaprojektowanej funkcji, nie dla pobłażliwości parsera."
+
+[dots-vs-slashes.name]
+source = "9cad774cfa52"
+text = "Ukośniki zamiast kropek"
+
+[dots-vs-slashes.breaks]
+source = "d94cae47de9a"
+text = "Ta sama data z innym separatorem. Formularze często przyjmują jeden, a zapisują drugi, nic o tym nie mówiąc."
+
+[dots-vs-slashes.expect]
+source = "1fb3a57b004a"
+text = "Oba zapisy przyjęte, znormalizowane raz i pokazywane w jednej spójnej postaci."

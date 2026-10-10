@@ -62,6 +62,18 @@ Each translation of a sentence of the program carries `source`, the first twelve
 SHA-256 of the English it was made from. When the program changes that sentence, the build stops and
 names the new digest, to be written once the translation has been checked against the new English.
 
+The site is in English and Polish. A new language takes:
+
+1. an entry under `[languages]` in `hugo.toml`, with `disableKinds` naming `404` as well as the
+   site's own three kinds, because GitHub Pages serves one 404 page, at the root,
+2. its three places above, with the same file names under `content/<language>/` as under
+   `content/en/` (that is how Hugo pairs a page with its translations) and a `slug` where the path
+   is translated,
+3. a build and `site_check.py`, which names every page the new language does not have.
+
+The words of the program, its help and its output stay English on every page, because that is what
+the program prints.
+
 ## Publishing
 
 `.github/workflows/site.yml` builds and checks the site on every pull request and publishes nothing

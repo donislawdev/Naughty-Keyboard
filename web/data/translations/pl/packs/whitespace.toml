@@ -1,0 +1,158 @@
+# Polish translations of the pack whitespace, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "ca82e2b90df6"
+text = "Białe znaki"
+
+[pack.description]
+source = "78c9305d7f54"
+text = "Znaki, które zajmują miejsce albo tylko udają, że je zajmują, i których w formularzu nie da się zobaczyć."
+
+[trailing-space.name]
+source = "25800135f7da"
+text = "Spacja na końcu"
+
+[trailing-space.breaks]
+source = "ab0844a7bb18"
+text = "Przeglądarka i serwer różnie porównują login i adres e-mail. Konto zostaje założone, ale nie da się go znaleźć."
+
+[trailing-space.expect]
+source = "ce89144b3d22"
+text = "Przycinana wszędzie albo wszędzie zachowywana - nigdy jedno przy rejestracji, a drugie przy logowaniu."
+
+[leading-space.name]
+source = "38399fdc24e5"
+text = "Spacja na początku"
+
+[leading-space.breaks]
+source = "76439fa059e5"
+text = "Sortowanie stawia rekord na początku każdej listy, a wyszukiwanie dokładnego dopasowania nigdy go nie znajduje."
+
+[leading-space.expect]
+source = "e9bd5cab86df"
+text = "Ta sama zasada przycinania co w całej reszcie aplikacji."
+
+[space-only.name]
+source = "b486890ea718"
+text = "Jedna spacja"
+
+[space-only.breaks]
+source = "d054db65fd5b"
+text = "Przeglądarka uznaje pole za wypełnione, a serwer za puste, albo odwrotnie."
+
+[space-only.expect]
+source = "8318c2e3c518"
+text = "Jeden spójny werdykt po obu stronach co do tego, czy pole jest puste."
+
+[zero-width-space-x3.name]
+source = "09f1c6a3098a"
+text = "Trzy spacje o zerowej szerokości"
+
+[zero-width-space-x3.breaks]
+source = "d410a99a3e7b"
+text = "Liczniki znaków, porównywanie i usuwanie duplikatów widzą inną wartość niż człowiek."
+
+[zero-width-space-x3.expect]
+source = "16dae26cdf6d"
+text = "Zapisane i zwrócone bez zmian albo odrzucone z komunikatem, który nazywa te znaki."
+
+[nbsp-between-words.name]
+source = "19e9cf008f0d"
+text = "Twarda spacja między słowami"
+
+[nbsp-between-words.breaks]
+source = "99ebe878a7bc"
+text = "Wyszukiwanie pisowni ze zwykłą spacją nigdy nie znajduje rekordu, a eksporty i korespondencja seryjna na zawsze zachowują niewidoczną różnicę."
+
+[nbsp-between-words.expect]
+source = "d7b1f490f23b"
+text = "Traktowana przez wyszukiwanie jak zwykła spacja albo normalizowana przy zapisie - konsekwentnie."
+
+[newline-in-single-line.name]
+source = "35e3829c1cb7"
+text = "Znak nowego wiersza w polu jednowierszowym"
+
+[newline-in-single-line.breaks]
+source = "4b8a6276efac"
+text = "Pole jednowierszowe, które przyjmuje podział wiersza, psuje eksport CSV, wiersze logów i każdy widok listy pod nim."
+
+[newline-in-single-line.expect]
+source = "6792b5f74e2b"
+text = "Odrzucony albo zapisany z zachowanym podziałem i escapowany przy eksporcie."
+
+[tab-inside.name]
+source = "83893b86228a"
+text = "Tabulator w wartości"
+
+[tab-inside.breaks]
+source = "2f5b1e2cae26"
+text = "Eksport rozdzielany tabulatorami dzieli jeden rekord na dwie kolumny, a wyrównanie kolumn w raportach się rozsypuje."
+
+[tab-inside.expect]
+source = "e5640f7ae2f8"
+text = "Odrzucony albo escapowany przy eksporcie - nigdy nie trafia bez zmian do formatu z separatorami."
+
+[crlf-in-value.name]
+source = "e49a456ef251"
+text = "Powrót karetki i nowy wiersz w wartości"
+
+[crlf-in-value.breaks]
+source = "174fb9d35d94"
+text = "Dwie konwencje końca wiersza w jednym polu sprawiają, że ten sam tekst na różnych systemach porównuje się jako różny."
+
+[crlf-in-value.expect]
+source = "00236c045b65"
+text = "Ujednolicone do jednej konwencji przy zapisie albo zachowane i konsekwentnie escapowane."
+
+[zwsp-only.name]
+source = "291f5b746515"
+text = "Pojedyncza spacja o zerowej szerokości"
+
+[zwsp-only.breaks]
+source = "82e8e5e7fc0f"
+text = "Pole wygląda na puste, ale nie jest: walidacja pola wymaganego przechodzi, a rekord nie ma użytecznej nazwy."
+
+[zwsp-only.expect]
+source = "6aed7dfab87d"
+text = "Traktowana przez walidację jak puste pole albo pokazana tak, żeby było widać, że pole nie jest puste."
+
+[ogham-space.name]
+source = "4f229d12df11"
+text = "Spacja pisma ogamicznego"
+
+[ogham-space.breaks]
+source = "669c2665bb00"
+text = "Znak z kategorii spacji, który wyświetla się jako widoczna kreska. Psuje i przycinanie, i założenia o układzie."
+
+[ogham-space.expect]
+source = "644e6061c771"
+text = "Obsłużona jak każdy inny biały znak albo odrzucona z komunikatem."
+
+[many-spaces-between.name]
+source = "dc4013734b42"
+text = "Trzy spacje między słowami"
+
+[many-spaces-between.breaks]
+source = "3ba989cfdd0f"
+text = "Wyszukiwanie, usuwanie duplikatów i wydruki w różnych warstwach różnie traktują ciągi spacji."
+
+[many-spaces-between.expect]
+source = "8def475aa6a7"
+text = "Scalane przy zapisie albo zachowywane przy zapisie - jedna zasada, stosowana wszędzie."
+
+[len-1000-spaces.name]
+source = "e2344dfbc958"
+text = "Tysiąc spacji"
+
+[len-1000-spaces.breaks]
+source = "5e81567db248"
+text = "Przycinanie znak po znaku i układy, które nie zawijają tekstu. Licząc w znakach, tysiąc spacji to wciąż krótka wartość."
+
+[len-1000-spaces.expect]
+source = "cd97428fcd18"
+text = "Odrzucone albo przycięte - nigdy przyjęte i zapisane w całości."

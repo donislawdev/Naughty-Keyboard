@@ -1,0 +1,158 @@
+# Polish translations of the pack length-bombs, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "2424fe888aca"
+text = "Bomby długości"
+
+[pack.description]
+source = "397bf526e3d8"
+text = "Wartości dobrane do typowych limitów i do różnicy między znakiem a bajtem."
+
+[len-0.name]
+source = "19ad22deba9c"
+text = "Pusta wartość"
+
+[len-0.breaks]
+source = "ccf883af0f0c"
+text = "Pusta wartość sprawdza granicę między polem niewypełnionym a wypełnionym niczym."
+
+[len-0.expect]
+source = "c724dcade795"
+text = "Pola wymagane odrzucają ją z jasnym komunikatem, a pola opcjonalne zapisują jako pustą."
+
+[len-255.name]
+source = "495ce96821cc"
+text = "255 znaków"
+
+[len-255.breaks]
+source = "aa100ef3fb26"
+text = "Klasyczna szerokość kolumny: jeden znak poniżej limitu, dokładnie na limicie i jeden ponad to trzy różne ścieżki w kodzie."
+
+[len-255.expect]
+source = "ce2d4f1fc682"
+text = "Przyjęte na limicie i odrzucone powyżej, z limitem podanym w komunikacie."
+
+[len-256.name]
+source = "925c6e0dacfa"
+text = "256 znaków"
+
+[len-256.breaks]
+source = "1e2558945f5e"
+text = "Jeden znak ponad klasyczny limit, czyli miejsce, w którym zwykle dochodzi do cichego obcięcia."
+
+[len-256.expect]
+source = "01b84af9762d"
+text = "Odrzucone z komunikatem, nigdy po cichu obcięte do 255."
+
+[len-254.name]
+source = "e9ffcebb4b22"
+text = "254 znaki"
+
+[len-254.breaks]
+source = "21485546ba81"
+text = "Wartość tuż pod limitem, która pokazuje, czy limit nie jest przesunięty o jeden w którąkolwiek stronę."
+
+[len-254.expect]
+source = "7e8b886631c1"
+text = "Przyjęte bez zastrzeżeń."
+
+[len-1000.name]
+source = "5ea12a1fa765"
+text = "1000 znaków"
+
+[len-1000.breaks]
+source = "0e837bbd2bf4"
+text = "Pola komentarza i opisu zaprojektowane na jedno zdanie, a używane do wypracowań."
+
+[len-1000.expect]
+source = "8ee0b62f2721"
+text = "Przyjęte albo odrzucone z podanym limitem - nie przyjęte i obcięte."
+
+[len-4000.name]
+source = "67d1aaec08b1"
+text = "4000 znaków"
+
+[len-4000.breaks]
+source = "b5c8a04f1edb"
+text = "Limit częsty w starszych kolumnach baz danych i pierwszy rozmiar, przy którym pola tekstowe zaczynają po cichu zawodzić."
+
+[len-4000.expect]
+source = "65499cd258fb"
+text = "Ta sama zasada co wyżej, stosowana spójnie w interfejsie i w bazie."
+
+[len-65535.name]
+source = "82dc1f49536e"
+text = "65535 znaków"
+
+[len-65535.breaks]
+source = "8438d5cbfe6c"
+text = "Limit najczęstszego typu kolumny tekstowej. Jego przekroczenie zwykle kończy się surowym błędem bazy danych."
+
+[len-65535.expect]
+source = "5d72c6d27b3a"
+text = "Czytelny komunikat zamiast strony z błędem bazy danych."
+
+[len-100000.name]
+source = "0fc9ccc5b241"
+text = "100000 znaków"
+
+[len-100000.breaks]
+source = "753d1a362375"
+text = "Liczniki znaków, układ, logi i każdy dalszy eksport, wszystko naraz."
+
+[len-100000.expect]
+source = "1314290f7df8"
+text = "Odrzucone wcześnie, zanim wartość przejdzie przez cały system."
+
+[bytes-vs-chars.name]
+source = "10b88a252325"
+text = "128 znaków, 256 bajtów"
+
+[bytes-vs-chars.breaks]
+source = "73c1a94b37c6"
+text = "128 znaków, ale 256 bajtów: pole z limitem w bajtach odrzuca wartość, którą interfejs uznał za poprawną."
+
+[bytes-vs-chars.expect]
+source = "2397266ed106"
+text = "Ta sama jednostka limitu po obu stronach, podana w komunikacie."
+
+[emoji-truncation.name]
+source = "4ff6028a18dd"
+text = "64 emoji"
+
+[emoji-truncation.breaks]
+source = "fd55d68419ad"
+text = "Obcinanie po bajtach przecina ostatni znak na pół i daje wartość, która nie jest już poprawnym tekstem."
+
+[emoji-truncation.expect]
+source = "7bd70c11d60c"
+text = "Obcinanie, jeśli w ogóle następuje, zachodzi na granicach znaków - nigdy w połowie znaku."
+
+[one-word-200.name]
+source = "6fb646a4d092"
+text = "200 znaków bez spacji"
+
+[one-word-200.breaks]
+source = "09c1874b2032"
+text = "200 znaków bez spacji: układy, które zawijają tekst na spacjach, wypychają wartość poza jej kontener."
+
+[one-word-200.expect]
+source = "cabd3d29a80a"
+text = "Zawinięte albo przycięte w obrębie kontenera, bez wychodzenia na otaczający interfejs."
+
+[len-1.name]
+source = "ca8f45057bff"
+text = "Jeden znak"
+
+[len-1.breaks]
+source = "7880c3767348"
+text = "Najkrótsza niepusta wartość, przeciw rzadko testowanym regułom długości minimalnej."
+
+[len-1.expect]
+source = "f88f3453bf33"
+text = "Przyjęty albo odrzucony zgodnie z podanym minimum, a nie przyjmowany po cichu tam, gdzie minimum istnieje."

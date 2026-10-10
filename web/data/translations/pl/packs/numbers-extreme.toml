@@ -1,0 +1,158 @@
+# Polish translations of the pack numbers-extreme, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "15e1e4de053a"
+text = "Liczby skrajne"
+
+[pack.description]
+source = "8e4797bc6c58"
+text = "Liczby na granicach swoich typów, w obcych zapisach i tam, gdzie kończy się precyzja."
+
+[js-safe-plus-one.name]
+source = "bfa75d5e19e2"
+text = "Największa bezpieczna liczba całkowita JavaScriptu plus jeden"
+
+[js-safe-plus-one.breaks]
+source = "40af135170a7"
+text = "Powyżej tej wartości przeglądarki i wiele interfejsów przestaje dokładnie przedstawiać liczby całkowite, więc identyfikator zwrócony przez serwer nie zgadza się z tym, co widzi użytkownik."
+
+[js-safe-plus-one.expect]
+source = "3c3a00c29c21"
+text = "Obsługiwana jako tekst tam, gdzie liczy się dokładność, albo odrzucana z podanym limitem."
+
+[int32-max-plus-one.name]
+source = "81ba4ca57855"
+text = "Maksimum liczby 32-bitowej plus jeden"
+
+[int32-max-plus-one.breaks]
+source = "c136284450de"
+text = "Jeden ponad najczęstszy limit liczb całkowitych - tu liczniki, identyfikatory i ilości przekręcają się na liczbę ujemną."
+
+[int32-max-plus-one.expect]
+source = "6b5ba2dc205f"
+text = "Odrzucone z komunikatem albo konsekwentnie obsłużone szerszym typem."
+
+[int32-max.name]
+source = "4d298c2b473a"
+text = "Maksimum liczby 32-bitowej"
+
+[int32-max.breaks]
+source = "ef1b663fd9fa"
+text = "Sama granica: przyjęcie tutaj i błąd o jeden wyżej to różnica między poprawnym limitem a przypadkiem."
+
+[int32-max.expect]
+source = "282b1f67d3bf"
+text = "Przyjęte tam, gdzie limit na to pozwala."
+
+[minus-one.name]
+source = "641441189728"
+text = "Minus jeden"
+
+[minus-one.breaks]
+source = "2ab57739760f"
+text = "Pola ilości, ceny i liczby sztuk, które nigdy nie spodziewały się wartości ujemnej. Często ją przyjmują, a wychodzi to dopiero przy fakturowaniu."
+
+[minus-one.expect]
+source = "186cfbe169e1"
+text = "Odrzucony wszędzie tam, gdzie wartość ujemna nie ma sensu, z komunikatem, który to mówi."
+
+[zero.name]
+source = "973d0c649aa9"
+text = "Zero"
+
+[zero.breaks]
+source = "2f5b8801986a"
+text = "Odróżnienie „zera” od „niewypełnionego” to jedna z najczęściej mylonych granic w formularzach."
+
+[zero.expect]
+source = "0907ec6c4a42"
+text = "Zapisane jako zero i wyświetlane jako zero, nigdy jako puste pole."
+
+[comma-decimal.name]
+source = "d9ce10311520"
+text = "Przecinek jako separator dziesiętny"
+
+[comma-decimal.breaks]
+source = "95af161580ad"
+text = "Separator dziesiętny używany w większości Europy. Parsery oczekujące kropki czytają go jako separator tysięcy albo go odrzucają."
+
+[comma-decimal.expect]
+source = "e8007d5b0ddb"
+text = "Przyjęty w ustawieniach regionalnych, które go używają, albo odrzucony z komunikatem, który podaje oczekiwany format."
+
+[thousands-space.name]
+source = "9fac4266ce20"
+text = "Spacje między tysiącami"
+
+[thousands-space.breaks]
+source = "b69664df4973"
+text = "Liczba skopiowana z raportu przynosi ze sobą separatory grup cyfr, a większość parserów liczb jej odmawia."
+
+[thousands-space.expect]
+source = "c78597431995"
+text = "Separatory usunięte przed parsowaniem albo komunikat, który wyjaśnia oczekiwany format."
+
+[exp-notation.name]
+source = "0e600a1d822c"
+text = "Zapis wykładniczy"
+
+[exp-notation.breaks]
+source = "47b43d4112cb"
+text = "Eksporty z arkuszy kalkulacyjnych zapisują tak duże liczby, więc ta postać trafia do pól, które się jej nie spodziewały."
+
+[exp-notation.expect]
+source = "9c48c36bbfa0"
+text = "Przyjęty i rozwinięty albo odrzucony - nigdy nie odczytany jako cyfra 1."
+
+[leading-zeros.name]
+source = "cf43ab8b9ddc"
+text = "Zera wiodące"
+
+[leading-zeros.breaks]
+source = "ef98c59d6018"
+text = "Kody, numery pokoi i numery artykułów tracą zera wiodące w chwili, gdy ktoś potraktuje je jako liczby."
+
+[leading-zeros.expect]
+source = "776b19a7dbfe"
+text = "Zachowane tam, gdzie wartość jest kodem, a nie ilością."
+
+[minus-typographic.name]
+source = "6507db4adc1d"
+text = "Typograficzny znak minus"
+
+[minus-typographic.breaks]
+source = "b06a85cc3265"
+text = "Typograficzny znak minus wygląda identycznie jak minus z ASCII i odrzuca go każdy parser liczb."
+
+[minus-typographic.expect]
+source = "5a9c8609d1cc"
+text = "Ujednolicony przed parsowaniem albo odrzucony z komunikatem, który nazywa ten znak."
+
+[fifty-digits.name]
+source = "cfbf80e5e5c0"
+text = "50 cyfr"
+
+[fifty-digits.breaks]
+source = "73e573e78c72"
+text = "Liczba szersza niż jakikolwiek typ liczbowy. Zwykle kończy się przepełnieniem albo surowym błędem zamiast komunikatu."
+
+[fifty-digits.expect]
+source = "7b1d1890bf90"
+text = "Czytelny komunikat zamiast strony z błędem."
+
+[plus-prefixed.name]
+source = "474f8c392509"
+text = "Znak plus przed liczbą"
+
+[plus-prefixed.breaks]
+source = "833c93614220"
+text = "Jawnie dodatnia liczba, poprawna w większości zapisów i odrzucana przez wiele prostych walidatorów."
+
+[plus-prefixed.expect]
+source = "82e105f08db9"
+text = "Przyjęty i znormalizowany albo odrzucony z podanym formatem."

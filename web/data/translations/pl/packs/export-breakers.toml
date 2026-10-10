@@ -1,0 +1,158 @@
+# Polish translations of the pack export-breakers, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "5126c86e7937"
+text = "Pułapki eksportu"
+
+[pack.description]
+source = "da597eb2108e"
+text = "Wartości, które przechodzą walidację i psują się dopiero w wyeksportowanym pliku."
+
+[formula-equals.name]
+source = "cace9ac0d617"
+text = "Wartość zaczynająca się od ="
+
+[formula-equals.breaks]
+source = "be1a97716c51"
+text = "Wartość zaczynającą się od znaku równości arkusz kalkulacyjny traktuje jak formułę. Wyeksportowany plik pokazuje wynik obliczenia zamiast danych."
+
+[formula-equals.expect]
+source = "fd5d1e53a3a2"
+text = "Escapowana przy eksporcie, żeby arkusz pokazał tekst tak, jak został wpisany."
+
+[sheet-date-mar1.name]
+source = "653338cd8d3a"
+text = "Kod, który wygląda jak data"
+
+[sheet-date-mar1.breaks]
+source = "c5461a9a6b29"
+text = "Arkusze kalkulacyjne zamieniają krótkie kody podobne do dat na daty, a pierwotnej wartości nie da się odzyskać z pliku."
+
+[sheet-date-mar1.expect]
+source = "ae00e1a980a9"
+text = "Wyeksportowany jako tekst, w kolumnie o typie, który wyklucza konwersję."
+
+[csv-comma.name]
+source = "3ec1172dfeeb"
+text = "Przecinek w wartości"
+
+[csv-comma.breaks]
+source = "3ef3b6851837"
+text = "Przecinek w wartości dzieli jedną kolumnę na dwie, chyba że na każdym etapie eksportu wartość jest poprawnie ujęta w cudzysłów."
+
+[csv-comma.expect]
+source = "53f34f80a9d3"
+text = "Wartość ujęta w cudzysłów przy eksporcie. Plik wczytuje się z powrotem z tą samą liczbą kolumn."
+
+[csv-quote.name]
+source = "77071dbbf0fc"
+text = "Cudzysłowy w wartości"
+
+[csv-quote.breaks]
+source = "e59b650990ea"
+text = "Cudzysłowy w wartości ujętej w cudzysłów trzeba podwoić. Błąd przesuwa każdą następną kolumnę."
+
+[csv-quote.expect]
+source = "cc9d3adcd7cc"
+text = "Wartość ujęta w cudzysłów i escapowana tak, że zapis i odczyt zwracają pierwotny tekst."
+
+[csv-newline.name]
+source = "880acd06c425"
+text = "Podział wiersza w wartości"
+
+[csv-newline.breaks]
+source = "e20ede6ff0b8"
+text = "Podział wiersza w wartości zamienia jeden wiersz w dwa dla każdego parsera, który dzieli tekst na wiersze przed parsowaniem."
+
+[csv-newline.expect]
+source = "bac2e492e259"
+text = "Wartość ujęta w cudzysłów, żeby rekord został jednym wierszem, albo odrzucona przy wprowadzaniu."
+
+[sheet-precision.name]
+source = "2c385b04c7ff"
+text = "Dziewiętnastocyfrowy identyfikator"
+
+[sheet-precision.breaks]
+source = "04c111aab8d3"
+text = "Arkusze kalkulacyjne zachowują około piętnastu cyfr znaczących, więc długie identyfikatory wracają zaokrąglone i w zapisie wykładniczym."
+
+[sheet-precision.expect]
+source = "b2f5f77c9bba"
+text = "Wyeksportowany jako tekst. Identyfikator przeżywa otwarcie i zapisanie pliku."
+
+[leading-zero-code.name]
+source = "678c9f853042"
+text = "Kod z zerami wiodącymi"
+
+[leading-zero-code.breaks]
+source = "f27c570e9541"
+text = "Kody tracą zera wiodące w chwili, gdy arkusz uzna kolumnę za liczbową."
+
+[leading-zero-code.expect]
+source = "bcf383cfabb0"
+text = "Wyeksportowany jako tekst, żeby kod został taki, jak go nadano."
+
+[formula-plus.name]
+source = "631bae8e62b8"
+text = "Numer telefonu zaczynający się od +"
+
+[formula-plus.breaks]
+source = "878c2c155fa0"
+text = "Numer telefonu zapisany z prefiksem kraju zostaje odczytany jako formuła, a komórka pokazuje błąd zamiast numeru."
+
+[formula-plus.expect]
+source = "6ae69dd4cd6d"
+text = "Escapowany przy eksporcie albo w kolumnie o typie tekstowym."
+
+[formula-minus.name]
+source = "7ebf39c083a1"
+text = "Wartość zaczynająca się od -"
+
+[formula-minus.breaks]
+source = "583e1397064f"
+text = "To samo co znak równości, w postaci, która wygląda też jak zwykła liczba ujemna."
+
+[formula-minus.expect]
+source = "52cf59d3162f"
+text = "Escapowana przy eksporcie."
+
+[formula-at.name]
+source = "6ab9b3b4bc79"
+text = "Wartość zaczynająca się od @"
+
+[formula-at.breaks]
+source = "43fbeb04931a"
+text = "Nazwa konta w serwisie społecznościowym albo wzmianka staje się w niektórych arkuszach wywołaniem funkcji."
+
+[formula-at.expect]
+source = "52cf59d3162f"
+text = "Escapowana przy eksporcie."
+
+[csv-semicolon.name]
+source = "31a9d566c3a6"
+text = "Średnik w wartości"
+
+[csv-semicolon.breaks]
+source = "8470a23a5167"
+text = "Drugi separator kolumn, używany w wielu krajach, także w Polsce. Plik poprawny w jednych ustawieniach regionalnych psuje się w innych."
+
+[csv-semicolon.expect]
+source = "5dfebf07a8ea"
+text = "Separator zadeklarowany w pliku, a wartości ujęte w cudzysłów niezależnie od tego, który jest używany."
+
+[sheet-date-3-4.name]
+source = "7a06f245c52d"
+text = "Ułamek, który wygląda jak data"
+
+[sheet-date-3-4.breaks]
+source = "9fde9804300d"
+text = "Ułamek, proporcja albo numer domu, zamieniony na datę przy otwarciu pliku."
+
+[sheet-date-3-4.expect]
+source = "bf804184cdfc"
+text = "Wyeksportowany jako tekst. Otwarcie i zapisanie pliku nie zmienia wartości."
