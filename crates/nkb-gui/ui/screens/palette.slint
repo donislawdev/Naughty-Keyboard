@@ -91,7 +91,6 @@
 import {
     Tokens,
     TextBody,
-    TextSmallMuted,
     TextCounter,
     Spacer,
     Pill,
@@ -103,12 +102,11 @@ import {
     WindowHeader,
     WindowFooter,
     WindowStatus,
-    PickerOpener,
     ProgressBar,
     SmallButton,
-    Segmented,
     NextBand,
     LastSentBand,
+    SwitchesBand,
 } from "../components.slint";
 
 // Which value a Copy button copies: the pack's identifier and the value's.
@@ -120,6 +118,9 @@ export struct ValueKey {
     pack: string,
     value: string,
 }
+
+// Which Copy button says "Copied" now, if any (`D121`).
+export enum CopiedButton { none, next, last, report }
 
 export component Palette inherits Window {
     // ---- what the window is ------------------------------------------------
@@ -162,6 +163,19 @@ export component Palette inherits Window {
     // What a click on the heading does, for UI Automation.
     in property <string> last-sent-action;
     callback toggle-last-sent();
+    // The report block at the end of the opened band (the owner's point 8,
+    // D121): the text the report shortcut copies, from the same function,
+    // and its words. Folded at every start - Rust holds this switch too.
+    in property <string> report-label;
+    in property <string> report-action;
+    in property <string> copy-report-action;
+    in property <string> report;
+    in property <bool> has-report;
+    in property <bool> report-open;
+    // ⚠️ Declared, not aliases: the block stands in a band behind `if`.
+    // Each click only hands on to its callback - one call, no logic.
+    callback toggle-report();
+    callback copy-report();
     in property <string> value-name;
     // Where the value was typed, read at the press (UX8, `D104`): the program
     // and the kind of control. Never for a value put on the clipboard.
@@ -200,6 +214,12 @@ export component Palette inherits Window {
     in property <string> copy-label;
     in property <string> copy-next-action;
     in property <string> copy-last-action;
+    // The word a button says for a moment after its copy went through, and
+    // which button says it (`D121`, the owner's point 7). Rust sets it from
+    // the worker's answer and takes it back two seconds later: the palette's
+    // one clock, and it changes nothing the tester chose (`D83`).
+    in property <string> copied-label;
+    in property <CopiedButton> copied;
     // Which value each copies - set with the band it stands in, from the same
     // view, so a click copies the value on screen. Rust reads them back on the
     // click: the view holds no logic.
@@ -387,6 +407,8 @@ export component Palette inherits Window {
             markers: root.next-markers;
             copy-label: root.copy-label;
             copy-action: root.copy-next-action;
+            copied-label: root.copied-label;
+            copied: root.copied == CopiedButton.next;
             sending: root.sending;
             back-label: root.back-label;
             back-action: root.back-action;
@@ -424,6 +446,15 @@ export component Palette inherits Window {
             markers: root.markers;
             copy-label: root.copy-label;
             copy-action: root.copy-last-action;
+            copied-label: root.copied-label;
+            copied: root.copied == CopiedButton.last;
+            report-label: root.report-label;
+            report-action: root.report-action;
+            report-open: root.report-open;
+            report: root.report;
+            has-report: root.has-report;
+            copy-report-action: root.copy-report-action;
+            report-copied: root.copied == CopiedButton.report;
             sending: root.sending;
             toggle => {
                 root.toggle-last-sent();
@@ -431,73 +462,35 @@ export component Palette inherits Window {
             copy => {
                 root.copy-last();
             }
+            toggle-report => {
+                root.toggle-report();
+            }
+            copy-report => {
+                root.copy-report();
+            }
         }
 
-        // The two switches (the owner's point 2): a label column and the ways
-        // beside it, the shape of a form (GUI rule 13). How values travel
-        // first, because the second row only means something for typed values
-        // - in clipboard mode it stays in place, faded, rather than leaving a
-        // hole that moves the link below it (GUI rule 3). Said before the first
-        // value, so the tester knows the line is cleared before it happens, not
-        // from the marker after (D101). Faded while a value goes: the worker
-        // answers a click between presses, so it would land after it.
-        //
-        // Above the footer and the status line, so whatever a click here makes
-        // the tool say appears BELOW the control clicked (the owner's point 1).
-        if !root.compact: Zone {
-            GridLayout {
-                spacing: Tokens.space-2;
-                Row {
-                    TextSmallMuted {
-                        text: root.route-label;
-                        horizontal-stretch: 0;
-                    }
-                    HorizontalLayout {
-                        alignment: start;
-                        horizontal-stretch: 1;
-                        Segmented {
-                            label: root.route-label;
-                            options: root.route-options;
-                            selected: root.route-selected;
-                            enabled: !root.sending;
-                            chosen(index) => {
-                                root.choose-route(index);
-                            }
-                        }
-                    }
-                }
-                Row {
-                    TextSmallMuted {
-                        text: root.clearing-label;
-                        horizontal-stretch: 0;
-                    }
-                    HorizontalLayout {
-                        alignment: start;
-                        horizontal-stretch: 1;
-                        Segmented {
-                            label: root.clearing-label;
-                            options: root.clearing-options;
-                            selected: root.clearing-selected;
-                            enabled: !root.sending && !root.clipboard-mode-on;
-                            chosen(index) => {
-                                root.choose-clearing(index);
-                            }
-                        }
-                    }
-                }
+        // The two switches and the link to the shortcuts window
+        // (`components/switches.slint`, where the reasons for their shape
+        // stand). Faded while a value goes, the second also in clipboard mode.
+        if !root.compact: SwitchesBand {
+            route-label: root.route-label;
+            route-options: root.route-options;
+            route-selected: root.route-selected;
+            route-enabled: !root.sending;
+            clearing-label: root.clearing-label;
+            clearing-options: root.clearing-options;
+            clearing-selected: root.clearing-selected;
+            clearing-enabled: !root.sending && !root.clipboard-mode-on;
+            shortcuts-link: root.shortcuts-link;
+            choose-route(index) => {
+                root.choose-route(index);
             }
-            // Under the shortcuts' switches, and in the same component as the
-            // pack's name above: a link in the palette looks and answers the
-            // pointer one way (GUI rule 2).
-            HorizontalLayout {
-                alignment: start;
-                PickerOpener {
-                    text: root.shortcuts-link;
-                    action: root.shortcuts-link;
-                    clicked => {
-                        root.open-shortcuts();
-                    }
-                }
+            choose-clearing(index) => {
+                root.choose-clearing(index);
+            }
+            open-shortcuts => {
+                root.open-shortcuts();
             }
         }
 

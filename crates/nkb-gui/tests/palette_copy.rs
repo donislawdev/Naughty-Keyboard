@@ -23,7 +23,7 @@ mod offscreen;
 use std::cell::Cell;
 use std::rc::Rc;
 
-use nkb_gui::Palette;
+use nkb_gui::{CopiedButton, Palette};
 use offscreen::{Ink, added, click, point};
 use slint::platform::software_renderer::MinimalSoftwareWindow;
 use slint::{ComponentHandle, LogicalPosition};
@@ -322,5 +322,114 @@ fn each_arrow_asks_for_its_own_step_and_back_rests_on_the_first_value() {
         (back.get(), skip.get()),
         (1, 1),
         "an arrow answered while a value was going"
+    );
+}
+
+/// `D121`, the owner's point 7: after a copy the button says "Copied" and
+/// nothing moves. MEASURED on the render: Skip beside the next band's Copy
+/// stands where it stood, and the palette with the button saying "Copied" is
+/// the same picture as one whose Copy word IS "Copied" - so the word is drawn
+/// whole, not cut to the narrower word's frame.
+#[test]
+fn copied_changes_the_word_and_moves_nothing_beside_it() {
+    let surface = offscreen::start(WIDTH, HEIGHT);
+    let palette = Palette::new().expect("the palette must build");
+    palette.set_pack("whitespace".into());
+    palette.set_counter("3 / 12".into());
+    palette.set_last_sent_label("Last sent".into());
+    palette.set_next_heading("Next: value 4 of 12".into());
+    palette.set_next_name("Leading space".into());
+    palette.set_back_label("Back".into());
+    palette.set_skip_label("Skip".into());
+    palette.set_copy_label("Copy".into());
+    palette.set_copied_label("Copied".into());
+    palette.set_has_next(true);
+    palette.set_next_has_value(true);
+    palette.set_can_go_back(true);
+    palette.show().expect("the palette must show");
+
+    // Skip, found by its word, in one state and the other.
+    let skip_at = |palette: &Palette| {
+        palette.set_skip_label("".into());
+        let without = offscreen::draw(&surface, WIDTH, HEIGHT);
+        palette.set_skip_label("Skip".into());
+        let with = offscreen::draw(&surface, WIDTH, HEIGHT);
+        let found = added(&without, &with, WIDTH, HEIGHT).expect("the word Skip is drawn");
+        (found.left, found.right, found.top, found.bottom)
+    };
+    let at_rest = skip_at(&palette);
+    let rest = offscreen::draw(&surface, WIDTH, HEIGHT);
+    palette.set_copied(CopiedButton::Next);
+    let saying = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let path = offscreen::save(&saying, WIDTH, HEIGHT, "palette-copied.png");
+    assert!(
+        added(&rest, &saying, WIDTH, HEIGHT).is_some(),
+        "the button said nothing new. Look at {}",
+        path.display()
+    );
+    assert_eq!(
+        skip_at(&palette),
+        at_rest,
+        "Skip moved when Copy said Copied - the button changed its width. Look at {}",
+        path.display()
+    );
+
+    // The row of the next band's buttons only: the Copy of the band below
+    // takes the same word, and its picture changes with it.
+    palette.set_copied(CopiedButton::None);
+    palette.set_copy_label("Copied".into());
+    let word = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let (_, _, top, bottom) = at_rest;
+    let row = (top.saturating_sub(8) * WIDTH) as usize..((bottom + 8) * WIDTH) as usize;
+    assert!(
+        word[row.clone()] == saying[row],
+        "a button saying Copied is not the picture of one whose word is Copied: cut word or other frame. Look at {}",
+        path.display()
+    );
+}
+
+/// `D121`: the report block's Copy, beside the block's heading in the opened
+/// band, asks for the report and not for the value above it - and, like every
+/// Copy, it is deaf while a value goes.
+#[test]
+fn the_report_block_copy_asks_for_the_report_and_nothing_else() {
+    let surface = offscreen::start(WIDTH, HEIGHT);
+    let palette = Palette::new().expect("the palette must build");
+    palette.set_pack("whitespace".into());
+    palette.set_counter("3 / 12".into());
+    palette.set_last_sent_label("Last sent".into());
+    palette.set_value_name("Trailing space".into());
+    palette.set_report_label("Report block".into());
+    palette.set_report("Value:    whitespace/trailing-space @ pack 1.0".into());
+    palette.set_has_report(true);
+    palette.set_has_value(true);
+    palette.set_has_next(false);
+    palette.set_last_sent_open(true);
+    let last = Rc::new(Cell::new(0));
+    let report = Rc::new(Cell::new(0));
+    let count = Rc::clone(&last);
+    palette.on_copy_last(move || count.set(count.get() + 1));
+    let count = Rc::clone(&report);
+    palette.on_copy_report(move || count.set(count.get() + 1));
+    palette.show().expect("the palette must show");
+
+    let both = find_buttons(&palette, &surface);
+    assert_eq!(
+        both.len(),
+        2,
+        "the value's Copy and the block's, one under the other: {both:?}"
+    );
+    click(palette.window(), both[1].centre());
+    assert_eq!(
+        (last.get(), report.get()),
+        (0, 1),
+        "a click on the block's Copy must ask for the report, once, and nothing else"
+    );
+    palette.set_sending(true);
+    click(palette.window(), both[1].centre());
+    assert_eq!(
+        report.get(),
+        1,
+        "the block's Copy answered while a value was going"
     );
 }

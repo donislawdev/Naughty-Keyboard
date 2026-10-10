@@ -48,6 +48,14 @@
 // after it for `forward`. Drawn by `Chevron` rather than written as a character,
 // because the interface's typeface is the system's and `◀` is not promised in
 // it - and in the word's own colour, so the two answer the pointer as one.
+//
+// ⊕ `done-text` and `done` - the word the button says for a moment after it
+// did its thing: "Copied" for two seconds after a copy went through (the
+// owner's point 7 of 2026-10-10, `D121`). The button is as wide as the longer
+// of its two words at all times, so the word changing moves nothing beside
+// it - the two words are laid one on the other and the box takes the wider,
+// as the layout measures them. Rust decides when it is done and for how
+// long, and the button only draws it.
 import { Tokens } from "../tokens.slint";
 import { TextSmall } from "typography.slint";
 import { Chevron } from "chrome.slint";
@@ -65,6 +73,10 @@ export component SmallButton inherits Rectangle {
     in property <bool> primary;
     // A triangle beside the word - see the header.
     in property <ButtonArrow> arrow: ButtonArrow.none;
+    // What the button says while `done` - see the header. Empty for a
+    // button with no such moment, which is then as wide as its word.
+    in property <string> done-text;
+    in property <bool> done;
     callback clicked();
 
     // The word's colour, which the arrow wears too.
@@ -91,7 +103,7 @@ export component SmallButton inherits Rectangle {
     opacity: root.enabled ? 1 : Tokens.alpha-disabled;
 
     accessible-role: button;
-    accessible-label: root.text;
+    accessible-label: root.done ? root.done-text : root.text;
     accessible-description: root.action;
     accessible-enabled: root.enabled;
     accessible-action-default => {
@@ -126,9 +138,29 @@ export component SmallButton inherits Rectangle {
                 ink: root.ink;
             }
         }
-        TextSmall {
-            text: root.text;
-            color: root.ink;
+        // Both words, one on the other, in a box as wide and as tall as the
+        // larger: the frame stays put when the word changes.
+        Rectangle {
+            min-width: max(word.preferred-width, done-word.preferred-width);
+            preferred-width: self.min-width;
+            min-height: max(word.preferred-height, done-word.preferred-height);
+            preferred-height: self.min-height;
+            word := TextSmall {
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: center;
+                text: root.text;
+                color: root.ink;
+                visible: !root.done;
+            }
+            done-word := TextSmall {
+                width: parent.width;
+                height: parent.height;
+                horizontal-alignment: center;
+                text: root.done-text;
+                color: root.ink;
+                visible: root.done;
+            }
         }
         if root.arrow == ButtonArrow.forward: VerticalLayout {
             alignment: center;

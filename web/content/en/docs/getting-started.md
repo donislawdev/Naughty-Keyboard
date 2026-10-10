@@ -20,7 +20,7 @@ The palette never takes the keyboard focus, so the cursor stays in the field the
 
 ## What do I do when a value breaks something?
 
-Press {{< kbd "Alt+Shift+B" >}}. The palette copies a report block for the last value it typed: which value, from which version of the pack, typed as what, how large, and whether all of it arrived. Paste it into the ticket. The value is written in a form someone else can type back, never as the marker the palette draws for an invisible character.
+Press {{< kbd "Alt+Shift+B" >}}. The palette copies a report block for the last value it typed: which value, from which version of the pack, typed as what, how large, and whether all of it arrived. Paste it into the ticket. The value is written in a form someone else can type back, never as the marker the palette draws for an invisible character. The same block stands under **Report block** when you open **Last sent** in the palette, with a **Copy** button beside it.
 
 ## Can I pick another pack?
 

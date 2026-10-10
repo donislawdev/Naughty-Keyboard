@@ -43,6 +43,11 @@ export component NextBand inherits Zone {
     // The Copy button's word and what it does in UI Automation's words.
     in property <string> copy-label;
     in property <string> copy-action;
+    // The word Copy says for a moment after a copy went through, and whether
+    // it says it now (`D121`): the worker knows whether the clipboard took
+    // the value, the band only draws it.
+    in property <string> copied-label;
+    in property <bool> copied;
     in property <bool> sending;
     callback copy();
     // The two arrows that walk the pack without typing (`D120`), their words
@@ -102,6 +107,8 @@ export component NextBand inherits Zone {
         SmallButton {
             text: root.copy-label;
             action: root.copy-action;
+            done-text: root.copied-label;
+            done: root.copied;
             visible: root.has-value;
             enabled: root.has-value && !root.sending;
             clicked => {
@@ -184,8 +191,26 @@ export component LastSentBand inherits Zone {
     in property <[Marker]> markers;
     in property <string> copy-label;
     in property <string> copy-action;
+    // As in the next band (`D121`).
+    in property <string> copied-label;
+    in property <bool> copied;
     in property <bool> sending;
     callback copy();
+    // The report block (the owner's point 8, `D121`): the text the report
+    // shortcut copies, word for word, under a heading of its own that folds -
+    // folded at every start, the switch held by Rust like the band's own.
+    // Absent while a value goes, because the block describes the value that
+    // went before it. Its Copy asks the worker for the action the shortcut
+    // is, so the block reaches the clipboard through one door.
+    in property <string> report-label;
+    in property <string> report-action;
+    in property <bool> report-open;
+    in property <string> report;
+    in property <bool> has-report;
+    in property <string> copy-report-action;
+    in property <bool> report-copied;
+    callback toggle-report();
+    callback copy-report();
 
     // While a value goes, this band shows THAT value, not the last one sent,
     // and the button's key still names the last one. So it cannot be used then
@@ -211,6 +236,8 @@ export component LastSentBand inherits Zone {
         SmallButton {
             text: root.copy-label;
             action: root.copy-action;
+            done-text: root.copied-label;
+            done: root.copied;
             enabled: root.has-value && !root.sending;
             clicked => {
                 root.copy();
@@ -271,5 +298,40 @@ export component LastSentBand inherits Zone {
     }
     if root.open && root.has-value: MarkerRow {
         markers: root.markers;
+    }
+    // The report block, last: what goes into a ticket once the value above
+    // is understood. Its heading folds like the band's, and its Copy stands
+    // in the column of the band's other one (D98), so it is reached without
+    // opening the block.
+    if root.open && root.has-value && root.has-report: HorizontalLayout {
+        spacing: Tokens.space-2;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Disclosure {
+                text: root.report-label;
+                open: root.report-open;
+                action: root.report-action;
+                clicked => {
+                    root.toggle-report();
+                }
+            }
+        }
+        SmallButton {
+            text: root.copy-label;
+            action: root.copy-report-action;
+            done-text: root.copied-label;
+            done: root.report-copied;
+            enabled: !root.sending;
+            clicked => {
+                root.copy-report();
+            }
+        }
+    }
+    // Monospaced, because the block lines its values up after the labels,
+    // and broken anywhere, because a value written out may hold no space.
+    if root.open && root.has-value && root.has-report && root.report-open: TextMono {
+        text: root.report;
+        wrap: char-wrap;
     }
 }

@@ -23,7 +23,7 @@ Okna programu mówią dziś po angielsku, więc nazwy przycisków i okien podaje
 
 ## Co zrobić, gdy wartość coś zepsuje?
 
-Naciśnij {{< kbd "Alt+Shift+B" >}}. Paleta kopiuje blok do zgłoszenia dla ostatniej wpisanej wartości: która wartość, z której wersji paczki, wpisana jako co, jak duża i czy dotarła w całości. Wklej go do zgłoszenia. Wartość jest w nim zapisana tak, żeby ktoś inny mógł ją wpisać z powrotem, a nigdy jako znacznik, którym paleta rysuje niewidoczny znak. Blok jest zawsze po angielsku.
+Naciśnij {{< kbd "Alt+Shift+B" >}}. Paleta kopiuje blok do zgłoszenia dla ostatniej wpisanej wartości: która wartość, z której wersji paczki, wpisana jako co, jak duża i czy dotarła w całości. Wklej go do zgłoszenia. Wartość jest w nim zapisana tak, żeby ktoś inny mógł ją wpisać z powrotem, a nigdy jako znacznik, którym paleta rysuje niewidoczny znak. Blok jest zawsze po angielsku. Ten sam blok stoi pod **Report block**, gdy rozwiniesz w palecie **Last sent**, a obok niego jest przycisk **Copy**.
 
 ## Czy mogę wybrać inną paczkę?
 

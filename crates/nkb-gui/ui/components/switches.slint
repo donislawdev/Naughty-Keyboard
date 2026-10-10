@@ -1,0 +1,98 @@
+// The two switches under the value bands and the link to the shortcuts
+// window: a section with its own controls, so a component of its own (GUI
+// rule 9). It stood inside `screens/palette.slint` until 2026-10-10, when that
+// file reached the ceiling of `D113` with the report block on its way
+// (`D121`). Moved word for word - the renders of the palette came out the same
+// to the byte.
+//
+// The two switches (the owner's point 2): a label column and the ways
+// beside it, the shape of a form (GUI rule 13). How values travel
+// first, because the second row only means something for typed values
+// - in clipboard mode it stays in place, faded, rather than leaving a
+// hole that moves the link below it (GUI rule 3). Said before the first
+// value, so the tester knows the line is cleared before it happens, not
+// from the marker after (D101). Faded while a value goes: the worker
+// answers a click between presses, so it would land after it.
+//
+// Above the footer and the status line, so whatever a click here makes
+// the tool say appears BELOW the control clicked (the owner's point 1).
+
+import { Tokens } from "../tokens.slint";
+import { TextSmallMuted } from "typography.slint";
+import { Zone } from "chrome.slint";
+import { PickerOpener } from "list.slint";
+import { Segmented } from "button.slint";
+
+export component SwitchesBand inherits Zone {
+    // How values travel (D99): the label, the ways, the way in effect, and
+    // whether a click may change it now.
+    in property <string> route-label;
+    in property <[string]> route-options;
+    in property <int> route-selected;
+    in property <bool> route-enabled;
+    callback choose-route(int);
+    // How a typed value meets the field (D101), the same four.
+    in property <string> clearing-label;
+    in property <[string]> clearing-options;
+    in property <int> clearing-selected;
+    in property <bool> clearing-enabled;
+    callback choose-clearing(int);
+    // The link to the shortcuts window, whose words say what it does.
+    in property <string> shortcuts-link;
+    callback open-shortcuts();
+
+    GridLayout {
+        spacing: Tokens.space-2;
+        Row {
+            TextSmallMuted {
+                text: root.route-label;
+                horizontal-stretch: 0;
+            }
+            HorizontalLayout {
+                alignment: start;
+                horizontal-stretch: 1;
+                Segmented {
+                    label: root.route-label;
+                    options: root.route-options;
+                    selected: root.route-selected;
+                    enabled: root.route-enabled;
+                    chosen(index) => {
+                        root.choose-route(index);
+                    }
+                }
+            }
+        }
+        Row {
+            TextSmallMuted {
+                text: root.clearing-label;
+                horizontal-stretch: 0;
+            }
+            HorizontalLayout {
+                alignment: start;
+                horizontal-stretch: 1;
+                Segmented {
+                    label: root.clearing-label;
+                    options: root.clearing-options;
+                    selected: root.clearing-selected;
+                    enabled: root.clearing-enabled;
+                    chosen(index) => {
+                        root.choose-clearing(index);
+                    }
+                }
+            }
+        }
+    }
+    // Under the shortcuts' switches, and in the same component as the
+    // pack's name above: a link in the palette looks and answers the
+    // pointer one way (GUI rule 2).
+    HorizontalLayout {
+        alignment: start;
+        PickerOpener {
+            text: root.shortcuts-link;
+            action: root.shortcuts-link;
+            clicked => {
+                root.open-shortcuts();
+            }
+        }
+    }
+}
