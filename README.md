@@ -5,6 +5,7 @@
 ![CLI: Windows, macOS, Linux](https://img.shields.io/badge/CLI-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 ![Status: early development](https://img.shields.io/badge/status-early%20development-orange)
 [![CI](https://github.com/donislawdev/Naughty-Keyboard/actions/workflows/ci.yml/badge.svg)](https://github.com/donislawdev/Naughty-Keyboard/actions/workflows/ci.yml)
+[![Website](https://img.shields.io/badge/website-naughtykeyboard.donislawdev.com-e4573f)](https://naughtykeyboard.donislawdev.com/)
 
 <!--
   Badges to switch on when the thing they point at exists. Move a line out of
@@ -13,9 +14,6 @@
   Latest release and downloads, once the first release is published:
   [![Latest release](https://img.shields.io/github/v/release/donislawdev/Naughty-Keyboard?sort=semver)](https://github.com/donislawdev/Naughty-Keyboard/releases/latest)
   [![Downloads](https://img.shields.io/github/downloads/donislawdev/Naughty-Keyboard/total)](https://github.com/donislawdev/Naughty-Keyboard/releases)
-
-  Website, once there is one (put its address in place of the dots):
-  [![Website](https://img.shields.io/badge/website-...-e4573f)](https://...)
 -->
 
 **Naughty Keyboard** is a tool for testers and developers. One shortcut types the next awkward value

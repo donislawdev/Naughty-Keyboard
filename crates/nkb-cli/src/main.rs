@@ -1438,7 +1438,7 @@ fn print_fmt_help() {
     outln!("  3  there is no pack file to read at that path");
     outln!("  4  formatting would have changed a value, so nothing was written");
     outln!("  5  the file could not be read or written, or standard output");
-    outln!("     could not be");
+    outln!("     could not be written");
 }
 
 #[cfg(test)]

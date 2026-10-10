@@ -314,10 +314,10 @@
         },
         {
           "name": "5",
-          "help": "the file could not be read or written, or standard output could not be"
+          "help": "the file could not be read or written, or standard output could not be written"
         }
       ],
-      "help": "nkb fmt - rewrite a pack file in canonical shape\n\nUsage:\n  nkb fmt <file.toml> [--dry-run]\n\nPuts the fields of each table in the order the format defines and lines\nup the equals signs. Comments, blank lines and the order of the values\nthemselves are left exactly as they are - the order of the values is the\norder a tester meets them.\n\nOptions:\n      --dry-run  Say what would change and write nothing\n  -h, --help     Show this help and exit with 0\n\nExit codes:\n  0  the file is in shape, or was put in shape\n  1  the file is not TOML, so there was nothing to put in order\n  2  the command was called wrongly\n  3  there is no pack file to read at that path\n  4  formatting would have changed a value, so nothing was written\n  5  the file could not be read or written, or standard output\n     could not be\n"
+      "help": "nkb fmt - rewrite a pack file in canonical shape\n\nUsage:\n  nkb fmt <file.toml> [--dry-run]\n\nPuts the fields of each table in the order the format defines and lines\nup the equals signs. Comments, blank lines and the order of the values\nthemselves are left exactly as they are - the order of the values is the\norder a tester meets them.\n\nOptions:\n      --dry-run  Say what would change and write nothing\n  -h, --help     Show this help and exit with 0\n\nExit codes:\n  0  the file is in shape, or was put in shape\n  1  the file is not TOML, so there was nothing to put in order\n  2  the command was called wrongly\n  3  there is no pack file to read at that path\n  4  formatting would have changed a value, so nothing was written\n  5  the file could not be read or written, or standard output\n     could not be written\n"
     },
     {
       "name": "new-pack",
