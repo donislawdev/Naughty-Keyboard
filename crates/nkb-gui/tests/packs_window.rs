@@ -315,6 +315,24 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     in_use_slot.lock().expect("the slot").next = None;
     let _ = calls(&keyboard);
 
+    // ---- the restart row: value one next, but no value chosen (D106) ------
+    // Its own command, so the worker does not note value one as recent.
+    packs.open();
+    let _ = calls(&keyboard);
+    tap(window, RIGHT);
+    tap(window, RIGHT);
+    assert_eq!(selected_title(window), "Restart pack");
+    tap(window, RETURN);
+    assert_eq!(
+        commands.try_recv(),
+        Ok(Command::Restart {
+            pack: String::from("whitespace"),
+            value: String::from("trailing-space"),
+        })
+    );
+    assert!(!packs.is_open());
+    assert_eq!(calls(&keyboard), vec!["give back"]);
+
     // ---- Escape closes and chooses nothing ---------------------------------
     packs.open();
     assert_eq!(

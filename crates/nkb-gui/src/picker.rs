@@ -184,7 +184,7 @@ fn words_of(query: &str) -> Vec<String> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Item {
     Heading(Section),
-    /// The fold of the values used last.
+    /// The fold of the values chosen last.
     RecentFold,
     Pack(usize),
     /// A value under its open pack, or found by a query.
@@ -192,7 +192,7 @@ enum Item {
         pack: usize,
         value: usize,
     },
-    /// A value under the open fold of the values used last - the same value
+    /// A value under the open fold of the values chosen last - the same value
     /// may stand under its own open pack too, so it is a row of its own kind.
     Recent {
         pack: usize,
@@ -273,6 +273,10 @@ pub enum Chosen {
     /// value becomes the one the next press sends. By identifiers, because the
     /// palette sends from the pack it holds and looks the value up there.
     Value { pack: String, value: String },
+    /// The restart row: the pack in use from its first value, where a value
+    /// chosen would put it - but no value the tester chose, so it does not
+    /// become recent (`D106`).
+    Restart { pack: String, value: String },
     /// A fold opened or closed: the list changed shape, and the window stays.
     Folded,
     /// No row can be chosen - nothing matches, or nothing loads. The window
@@ -361,7 +365,7 @@ impl PackPicker {
         picker
     }
 
-    /// The same picker with the values the tester used last in a fold above
+    /// The same picker with the values the tester chose last in a fold above
     /// the packs, the most recent first (`UX-GUI-016`). Opening still selects
     /// the pack in use - the recent values are a way back, not where the
     /// tester is.
@@ -446,7 +450,7 @@ impl PackPicker {
                 self.packs[pack]
                     .values
                     .first()
-                    .map_or(Chosen::Nothing, |first| Chosen::Value {
+                    .map_or(Chosen::Nothing, |first| Chosen::Restart {
                         pack: self.packs[pack].id.clone(),
                         value: first.id.clone(),
                     })
@@ -761,8 +765,7 @@ impl PackPicker {
             Item::Value { pack, value } => {
                 let owner = &self.packs[pack];
                 let choice = &owner.values[value];
-                let is_next = self.in_use.as_deref() == Some(owner.id.as_str())
-                    && self.next.as_deref() == Some(choice.id.as_str());
+                let is_next = self.is_next(owner, choice);
                 Row {
                     kind: RowKind::Value,
                     title: choice.name.clone(),
@@ -786,8 +789,9 @@ impl PackPicker {
                     title: choice.name.clone(),
                     detail: choice.preview.clone(),
                     aside: Some(i18n::value_aside(&owner.title, &[])),
-                    // Never the next one: the fold holds other packs' values.
-                    badge: value_badge(choice, false),
+                    // The pack in use has its values here too (`D106`), so
+                    // the next one says so, as it does under its pack.
+                    badge: value_badge(choice, self.is_next(owner, choice)),
                     enabled: true,
                     tree,
                     child: true,
@@ -809,9 +813,10 @@ impl PackPicker {
     }
 
     /// The recent values as rows: each that the catalogue still has, in a pack
-    /// that loads and is not the one in use, in the order used.
+    /// that loads, in the order chosen. The pack in use is no exception
+    /// (`D106`): a value of it stands here and under its open pack, two rows
+    /// that choose the same value.
     fn recent_items(&self) -> Vec<Item> {
-        let in_use = self.in_use_index();
         self.recent
             .iter()
             .filter_map(|key| {
@@ -819,9 +824,6 @@ impl PackPicker {
                     .packs
                     .iter()
                     .position(|pack| pack.enabled && pack.id == key.pack)?;
-                if Some(pack) == in_use {
-                    return None;
-                }
                 let value = self.packs[pack]
                     .values
                     .iter()
@@ -841,6 +843,12 @@ impl PackPicker {
 
     fn first_enabled(&self) -> Option<usize> {
         (0..self.visible.len()).find(|&at| self.enabled_at(at))
+    }
+
+    /// Whether `choice` of `owner` is the value the next press sends.
+    fn is_next(&self, owner: &PackChoice, choice: &ValueChoice) -> bool {
+        self.in_use.as_deref() == Some(owner.id.as_str())
+            && self.next.as_deref() == Some(choice.id.as_str())
     }
 
     fn in_use_index(&self) -> Option<usize> {
@@ -1254,10 +1262,11 @@ mod tests {
         );
         assert_eq!(
             picker.click(at + 1),
-            Chosen::Value {
+            Chosen::Restart {
                 pack: String::from("whitespace"),
                 value: value_id("whitespace", 1)
-            }
+            },
+            "value one, as a restart rather than a value chosen (D106)"
         );
 
         // Another pack, opened, has no restart row: it belongs to the pack in
@@ -1476,11 +1485,12 @@ mod tests {
         }
     }
 
-    /// `UX-GUI-016` and the owner's choice of 2026-10-07: the values used last
-    /// stand in a fold above the packs, closed, with how many it holds. Enter
-    /// or a click opens it, and each value there names its pack.
+    /// `UX-GUI-016` and the owner's choices of 2026-10-07 and 2026-10-10: the
+    /// values chosen last stand in a fold above the packs, closed, with how
+    /// many it holds - from every pack, the one in use too. Enter or a click
+    /// opens it, and each value there names its pack.
     #[test]
-    fn the_values_used_last_stand_in_a_closed_fold_on_top() {
+    fn the_values_chosen_last_stand_in_a_closed_fold_on_top() {
         let next = value_id("whitespace", 3);
         let mut picker = PackPicker::new(Ok(listing()), Some("whitespace"), Some(&next))
             .with_recent(&[
@@ -1491,8 +1501,8 @@ mod tests {
         let rows = picker.rows();
         assert_eq!(rows[0].kind, RowKind::Fold);
         assert_eq!(
-            rows[0].title, "Recent (2)",
-            "a value of the pack in use is under its own pack, not here"
+            rows[0].title, "Recent (3)",
+            "a value of the pack in use is here too"
         );
         assert_eq!(rows[0].fold, Some(false));
         assert_eq!(
@@ -1515,7 +1525,10 @@ mod tests {
         assert_eq!(rows[1].title, "PESEL with a valid checksum");
         assert_eq!(rows[1].aside.as_deref(), Some("Polish locale"));
         assert!(rows[1].child);
-        assert_eq!(rows[2].aside.as_deref(), Some("Unicode and text"));
+        assert_eq!(rows[2].title, "Trailing space");
+        assert_eq!(rows[2].aside.as_deref(), Some("Whitespace"));
+        assert_eq!(rows[2].badge, None, "value one, and value three is next");
+        assert_eq!(rows[3].aside.as_deref(), Some("Unicode and text"));
         assert_eq!(
             picker.click(1),
             Chosen::Value {
@@ -1529,6 +1542,21 @@ mod tests {
         assert_eq!(picker.selected(), Some(0));
         assert_eq!(picker.enter(), Chosen::Folded);
         assert_eq!(picker.rows()[1].title, "Packs");
+
+        // A recent value that is the next one wears the pill, as it does
+        // under its own pack.
+        let first = value_id("whitespace", 1);
+        let mut on_first = PackPicker::new(Ok(listing()), Some("whitespace"), Some(&first))
+            .with_recent(&[recent_key("whitespace", &first)]);
+        on_first.click(0);
+        assert_eq!(
+            on_first.rows()[1].badge,
+            Some(Badge {
+                text: String::from("next"),
+                risky: false,
+                current: true
+            })
+        );
 
         // The same value may stand under its own opened pack too - two rows,
         // each choosing it.
@@ -1574,7 +1602,7 @@ mod tests {
         assert_eq!(
             picker.rows()[0].title,
             "Recent (1)",
-            "nothing is in use in this list, so Whitespace's value is a recent one"
+            "the one value the catalogue still has"
         );
 
         let picker = mixed().with_recent(&gone[..3]);

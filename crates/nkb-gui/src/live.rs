@@ -114,9 +114,11 @@ use crate::typeface::SHIPPED;
 use crate::{HintRow, Marker, Palette, ValueKey as ShownKey};
 
 mod presses;
+mod recent;
 mod view;
 
 use presses::{PaletteShortcuts, between_presses};
+use recent::{after_press, carry_out_noting, keep_recent};
 pub(crate) use view::preview_line;
 use view::*;
 pub use view::{
@@ -169,6 +171,11 @@ pub enum Command {
     /// when that is another one - the value window (UX2). By identifiers: the
     /// value is looked up in the pack the worker holds.
     ChooseValue { pack: String, value: String },
+    /// Start `pack` again from `value`, its first value - the restart row of
+    /// the value window. Carried out as [`Command::ChooseValue`] is, but the
+    /// value does not become recent: the tester chose a place in the pack,
+    /// not that value (`D106`).
+    Restart { pack: String, value: String },
     /// Give the palette's shortcuts back to the system - the shortcuts window
     /// is opening, and a press there must reach it rather than send a value.
     /// Answered with [`Told::Paused`].
@@ -344,9 +351,10 @@ pub struct InUseNow {
     /// row names at its end (`UX-GUI-007`). Here because the table lives with
     /// the worker and changes when the shortcuts window closes.
     pub restart: Option<HotkeyChord>,
-    /// The values sent or chosen last, the most recent first (`UX-GUI-016`) -
-    /// the list itself, not a copy: the worker keeps it here, for the window
-    /// to read when it opens, and saves it from here when the palette closes.
+    /// The values chosen last in the value window, from any pack, the most
+    /// recent first (`UX-GUI-016`, `D106`) - the list itself, not a copy:
+    /// the worker keeps it here, for the window to read when it opens, and
+    /// saves it from here when the palette closes.
     pub recent: Vec<ValueKey>,
 }
 
@@ -370,49 +378,6 @@ fn publish(in_use: &InUse, sequence: &AdvanceSequence, bindings: &Bindings) {
         held.next = next_id(sequence.upcoming().as_ref());
         held.restart = Some(bindings.chord(HotkeyAction::RestartPack));
     }
-}
-
-/// What a press changes in the slot: the next value moves, and a value that
-/// went out is recent - whole or cut short, typed or put on the clipboard,
-/// the tester used it either way (`UX-GUI-016`).
-fn after_press(in_use: &InUse, outcome: &Outcome) {
-    publish_next(in_use, outcome.upcoming.as_ref());
-    if let (Some(sent), Ok(mut held)) = (&outcome.sent, in_use.lock()) {
-        note_used(&mut held.recent, sent.key.clone());
-    }
-}
-
-/// Carries out `command`, and notes a value chosen in the value window as
-/// recent once it IS the next one - a pack that would not open, or a value
-/// it no longer holds, left the sequence where it was and was not used.
-fn carry_out_noting(worker: &mut Worker<'_>, in_use: &InUse, command: Command) -> Carried {
-    let chosen = match &command {
-        Command::ChooseValue { pack, value } => Some(ValueKey {
-            pack: pack.clone(),
-            value: value.clone(),
-        }),
-        _ => None,
-    };
-    let carried = worker.carry_out(command);
-    if let Some(chosen) = chosen {
-        let sequence = &worker.sequence;
-        let is_next = sequence.pack_id() == Some(chosen.pack.as_str())
-            && next_id(sequence.upcoming().as_ref()).as_deref() == Some(chosen.value.as_str());
-        if let (true, Ok(mut held)) = (is_next, in_use.lock()) {
-            note_used(&mut held.recent, chosen);
-        }
-    }
-    carried
-}
-
-/// Saves the recent values, once, as the palette closes - not after every
-/// press, where a write between two presses could cost the next one (`W1`)
-/// and the file would be rewritten all day (`settings-format.md` 4). A
-/// process that is killed keeps the list it started with, as it keeps the
-/// palette's place.
-fn keep_recent(memory: &Memory, in_use: &InUse) {
-    // The palette is closing: a line about a failed save has nowhere to go.
-    let _ = memory.keep(SettingChange::Recent(in_use_now(in_use).recent));
 }
 
 /// After a press: the pack is the same, the next value may have moved.
@@ -748,7 +713,7 @@ impl Worker<'_> {
                 told: None,
                 toggled: None,
             },
-            Command::ChooseValue { pack, value } => Carried {
+            Command::ChooseValue { pack, value } | Command::Restart { pack, value } => Carried {
                 view: Some(choose_value(
                     &mut self.sequence,
                     self.memory,
@@ -784,15 +749,15 @@ impl Worker<'_> {
                 told: None,
                 toggled: None,
             },
-            // Here, on the thread that holds the pack and the clipboard: the
-            // value is built from the pack in memory (`W5`), and on Linux the
-            // process that set the clipboard is the one serving it.
             // The arrows beside the next value (`D120`): through the sequence,
             // as the shortcuts go, so a click and a press cannot walk the pack
             // two ways. Nothing is sent, so the value band keeps what it shows.
             Command::Skip => self.step(HotkeyAction::SkipValue),
             Command::Back => self.step(HotkeyAction::BackOneValue),
             Command::Pack(direction) => self.step_pack(direction),
+            // Here, on the thread that holds the pack and the clipboard: the
+            // value is built from the pack in memory (`W5`), and on Linux the
+            // process that set the clipboard is the one serving it.
             Command::Copy(key) => {
                 let said = self.sequence.copy_value(&key.pack, &key.value, self.ports);
                 let line = i18n::message(&said, &key.pack, &self.memory.bindings.get());
@@ -2753,18 +2718,25 @@ mod tests {
         }
     }
 
-    /// `UX-GUI-016`: a value that went out is recent, and a press that sent
-    /// nothing changes nothing - and a publish after a command keeps the list,
-    /// which only the worker's notes change.
+    /// `D106`: a value that went out is not recent - a press moves the next
+    /// value and leaves the list as the window left it - and a publish after
+    /// a command keeps the list, which only the worker's notes change.
     #[test]
-    fn a_value_that_went_out_is_recent_and_a_publish_keeps_the_list() {
+    fn a_value_that_went_out_is_not_recent_and_a_publish_keeps_the_list() {
         let slot = super::in_use();
-        super::after_press(&slot, &an_outcome(None, Vec::new()));
-        assert!(super::in_use_now(&slot).recent.is_empty());
+        let chosen = value_key("locale-pl", "pesel-valid");
+        slot.lock()
+            .expect("the slot is not poisoned")
+            .recent
+            .push(chosen.clone());
 
         super::after_press(&slot, &an_outcome(Some(a_sent()), Vec::new()));
         let now = super::in_use_now(&slot);
-        assert_eq!(now.recent, vec![a_sent().key]);
+        assert_eq!(
+            now.recent,
+            vec![chosen.clone()],
+            "a press made the value it sent recent"
+        );
         assert_eq!(
             now.next,
             super::next_id(Some(&an_upcoming())),
@@ -2773,11 +2745,12 @@ mod tests {
         assert!(now.next.is_some());
 
         super::publish(&slot, &on("whitespace"), &nkb_adapters::default_bindings());
-        assert_eq!(super::in_use_now(&slot).recent, vec![a_sent().key]);
+        assert_eq!(super::in_use_now(&slot).recent, vec![chosen]);
     }
 
     /// A value chosen in the window is recent once it is the next one, and a
-    /// choice that did not happen is not.
+    /// choice that did not happen is not - nor the restart row, which puts
+    /// the first value next without the tester choosing it.
     #[test]
     fn a_value_chosen_in_the_window_is_recent_only_when_it_became_the_next() {
         let store = a_store(false);
@@ -2801,6 +2774,19 @@ mod tests {
             choose(worker, "whitespace", "leading-space");
             choose(worker, "locale-pl", "pesel-valid");
             let _ = super::carry_out_noting(worker, &slot, Command::ToggleCompact);
+            let _ = super::carry_out_noting(
+                worker,
+                &slot,
+                Command::Restart {
+                    pack: String::from("whitespace"),
+                    value: String::from("trailing-space"),
+                },
+            );
+            assert_eq!(
+                super::next_id(worker.sequence.upcoming().as_ref()).as_deref(),
+                Some("trailing-space"),
+                "the restart row put the first value next"
+            );
             assert_eq!(
                 super::in_use_now(&slot).recent,
                 vec![
@@ -2825,11 +2811,15 @@ mod tests {
             "the list it started with"
         );
 
-        super::after_press(&slot, &an_outcome(Some(a_sent()), Vec::new()));
+        let chosen = value_key("locale-pl", "pesel-valid");
+        slot.lock()
+            .expect("the slot is not poisoned")
+            .recent
+            .push(chosen.clone());
         super::keep_recent(&memory, &slot);
         assert_eq!(
             *store.saved.borrow(),
-            vec![SettingChange::Recent(vec![a_sent().key])]
+            vec![SettingChange::Recent(vec![chosen])]
         );
     }
 

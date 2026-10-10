@@ -48,9 +48,9 @@ near = 1
 # A whole Rust file, its tests included. nkb-gui/src/live.rs, then
 # nkb-adapters/src/i18n.rs at 2065.
 [files.rust-whole]
-ceiling = 2408
+ceiling = 2407
 # 5 since 2026-10-10, the owner's choice twice that day: the ceiling came down
-# from 2907 to 2481 and then to 2408 as live.rs moved code into modules, the
+# from 2907 to 2481, 2408 and 2407 as live.rs moved code into modules, the
 # band came down with it, and it reached advance_sequence.rs, settings_file.rs
 # and nkb-cli's main.rs, none of which had grown.
 near = 5
