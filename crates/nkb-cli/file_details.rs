@@ -77,6 +77,10 @@ pub fn describe(program: &Program, script: Option<&Path>) {
 }
 
 /// The resource script of the version block, from the manifest's words.
+///
+/// ⚠️ It names its code page, which holds when the block is compiled on its
+/// own, as for `nkb`. A script that includes it has to name the code page
+/// itself, before the include - see `crates/nkb-gui/assets/nkb-gui.rc`.
 fn version_block(program: &Program) -> String {
     let version = manifest("CARGO_PKG_VERSION");
     let author = manifest("CARGO_PKG_AUTHORS").replace(':', ", ");

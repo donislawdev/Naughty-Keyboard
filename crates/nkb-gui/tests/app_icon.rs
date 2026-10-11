@@ -370,10 +370,15 @@ fn the_executable_embeds_the_icon_that_ships() {
         .filter(|line| !line.is_empty() && !line.starts_with("//"))
         .collect();
     // The version block the build writes (`file_details.rs`, read back from the
-    // built file by tests/file_details.rs) and the icon - nothing else.
+    // built file by tests/file_details.rs) and the icon - nothing else. The code
+    // page comes first, because an included script cannot set its own.
     assert_eq!(
         statements,
-        ["#include \"details.rc\"", "1 ICON \"edamame.ico\""],
+        [
+            "#pragma code_page(65001)",
+            "#include \"details.rc\"",
+            "1 ICON \"edamame.ico\""
+        ],
         "the resource script adds the file's details and the icon, and nothing else"
     );
     assert!(
