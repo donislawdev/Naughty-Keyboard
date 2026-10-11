@@ -97,3 +97,8 @@ own = true
 file = "crates/nkb-core/src/lint.rs"
 reference = "lint.rs"
 reason = "read by a unit test inside `mod tests`, to compare the rule register with the enum it describes"
+
+[[not-compiled-in]]
+file = "crates/nkb-gui/assets/nkb-gui.rc"
+reference = "details.rc"
+reason = "not a file of the repository: the version block crates/nkb-cli/file_details.rs writes into the build's output directory, from the package manifest, so it is this project's own work and carries no other licence"

@@ -7,7 +7,7 @@
 //! stand a step further apart (`Tokens.space-3`), and this holds it.
 //!
 //! Rendered in the shortcuts window, whose footer is a hint bar and nothing
-//! else. The action's box is the ink its words add; the key's right edge is the
+//! else. The action's box is the ink its words add, and the key's right edge is the
 //! last ink before it on the same rows.
 
 #![allow(clippy::panic, clippy::expect_used)]
