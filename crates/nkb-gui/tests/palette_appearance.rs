@@ -166,6 +166,7 @@ fn fill(palette: &Palette) {
     palette.set_collapse_label("Collapse".into());
     palette.set_expand_label("Expand".into());
     palette.set_shortcuts_link("Change shortcuts".into());
+    palette.set_about_link("About".into());
     // The two switches under the hint bar (the owner's point 2): values typed,
     // the line cleared first.
     palette.set_route_label("Send by".into());

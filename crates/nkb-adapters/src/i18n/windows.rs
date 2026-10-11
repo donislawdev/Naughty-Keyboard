@@ -1,5 +1,6 @@
-//! The words of the three windows besides the palette: the value window, the
-//! shortcuts window and the welcome window. A part of the `i18n` module, kept
+//! The words of the four windows besides the palette: the value window, the
+//! shortcuts window, the welcome window and the About window. A part of the
+//! `i18n` module, kept
 //! in a file of its own so that a window's words are found in one place - see
 //! the module above for why every one of them is a key.
 
@@ -548,6 +549,84 @@ pub fn welcome_ready(pack: Option<&str>, open_packs: HotkeyChord) -> String {
     }
 }
 
+/// The words of the About window (`ux-spec.md` 6 O, the owner's point 4 of
+/// 2026-10-10): what the program is, and the labels of its facts. The facts
+/// themselves - the version, the author, the licence, the addresses - are the
+/// package manifest's, and the window fills them in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AboutLabel {
+    /// The window's title, which the system shows in the task switcher.
+    Title,
+    /// The heading in the window's header.
+    Heading,
+    /// What the program does, in one sentence.
+    Summary,
+    /// The label of the version.
+    Version,
+    /// The label of the author.
+    Author,
+    /// The label of the licence.
+    Licence,
+    /// The label of the website's address.
+    Website,
+    /// The label of the source code's address.
+    Source,
+    /// The copyright, with the year it names and the author.
+    Copyright,
+    /// What GPL-3.0 section 0 asks an interactive interface to say: no
+    /// warranty, and that the program may be shared under the licence.
+    Warranty,
+    /// Where the licence's full text is read - the last part of what GPL-3.0
+    /// section 0 asks for.
+    LicenceText,
+    /// The window's main action.
+    Close,
+    /// What it does, for UI Automation.
+    CloseAction,
+}
+
+fn pattern_about_label(label: AboutLabel) -> &'static str {
+    match label {
+        AboutLabel::Title => "Naughty Keyboard - about",
+        AboutLabel::Heading => "About Naughty Keyboard",
+        AboutLabel::Summary => {
+            "Types the values that break your forms into the field you are in, with one shortcut."
+        }
+        AboutLabel::Version => "Version",
+        AboutLabel::Author => "Author",
+        AboutLabel::Licence => "Licence",
+        AboutLabel::Website => "Website",
+        AboutLabel::Source => "Source code",
+        AboutLabel::Copyright => "Copyright © {year} {author}",
+        AboutLabel::Warranty => {
+            "It comes with absolutely no warranty. It is free software, and you may share it and change it under the GNU General Public License, version 3."
+        }
+        AboutLabel::LicenceText => {
+            "The licence's full text is in the LICENSE file that comes with the program."
+        }
+        AboutLabel::Close => "Close",
+        AboutLabel::CloseAction => "Close the About window",
+    }
+}
+
+/// An About window label that carries nothing, ready to show. The one pattern
+/// with placeholders has a typed function below, and a test in the module
+/// above holds that it is the only one.
+#[must_use]
+pub fn about_label(label: AboutLabel) -> &'static str {
+    pattern_about_label(label)
+}
+
+/// The copyright line: the year the program was first published and its
+/// author, both from the build - the same two the file's details carry.
+#[must_use]
+pub fn about_copyright(year: &str, author: &str) -> String {
+    fill(
+        pattern_about_label(AboutLabel::Copyright),
+        &[("year", year), ("author", author)],
+    )
+}
+
 pub(super) fn pattern_shortcuts_label(label: ShortcutsLabel) -> &'static str {
     match label {
         ShortcutsLabel::Title => "Naughty Keyboard - shortcuts",
@@ -723,5 +802,39 @@ pub fn shortcut_answer(
             pattern_shortcuts_label(ShortcutsLabel::NotRegisteredCode),
             &[("shortcut", &chord(*held)), ("code", &code.to_string())],
         )],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The About window's one pattern with placeholders goes through its typed
+    /// function, which fills both - and no other pattern there has one.
+    #[test]
+    fn the_about_window_fills_its_one_pattern_and_shows_the_rest_as_they_are() {
+        use AboutLabel as A;
+        for label in [
+            A::Title,
+            A::Heading,
+            A::Summary,
+            A::Version,
+            A::Author,
+            A::Licence,
+            A::Website,
+            A::Source,
+            A::Copyright,
+            A::Warranty,
+            A::LicenceText,
+            A::Close,
+            A::CloseAction,
+        ] {
+            let filled = matches!(label, A::Copyright);
+            assert_eq!(about_label(label).contains('{'), filled, "{label:?}");
+        }
+        assert_eq!(
+            about_copyright("2026", "DonislawDev"),
+            "Copyright © 2026 DonislawDev"
+        );
     }
 }

@@ -917,7 +917,16 @@ const ALLOWED_DEPENDENCIES: &[(&str, &[&str])] = &[
         "nkb-adapters",
         &["nkb-core", "nkb-app", "nkb-sys", "toml_edit"],
     ),
-    ("nkb-cli", &["nkb-core", "nkb-app", "nkb-adapters"]),
+    (
+        "nkb-cli",
+        &[
+            "nkb-core",
+            "nkb-app",
+            "nkb-adapters",
+            // Build only: the file's details in `nkb.exe`.
+            "embed-resource",
+        ],
+    ),
     (
         "nkb-gui",
         &[
@@ -927,7 +936,8 @@ const ALLOWED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "slint",
             "raw-window-handle",
             "arboard",
-            // Build only: the compiler of the views and the icon resource.
+            // Build only: the compiler of the views, and the resource with the
+            // icon and the file's details.
             "slint-build",
             "embed-resource",
         ],

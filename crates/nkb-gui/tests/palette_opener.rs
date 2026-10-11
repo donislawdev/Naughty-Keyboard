@@ -313,6 +313,39 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
         (1, 1),
         "a click on the hint bar above the link asked for a window"
     );
+
+    // ---- the About link: the other end of the same row, its own callback ----
+    // Found the same way, as the ink its word adds, so the pointer goes where
+    // it IS - and it must stand on the row of the link beside it, so the
+    // palette grew by nothing for it.
+    let about_asked = Rc::new(Cell::new(0));
+    let about_count = Rc::clone(&about_asked);
+    palette.on_open_about(move || about_count.set(about_count.get() + 1));
+    let before_about = offscreen::draw(&surface, WIDTH, HEIGHT);
+    palette.set_about_link("About".into());
+    let with_about = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let about = added(&before_about, &with_about);
+    let about_path = offscreen::save(&with_about, WIDTH, HEIGHT, "palette-about-link.png");
+    assert!(
+        about.left > WIDTH / 2 && about.top.abs_diff(link.top) < 6,
+        "the About link is not at the right end of the shortcuts link's row: {about:?} beside \
+         {link:?}. Look at {}",
+        about_path.display()
+    );
+    press(
+        &palette,
+        LogicalPosition::new(
+            ((about.left + about.right) / 2) as f32,
+            ((about.top + about.bottom) / 2) as f32,
+        ),
+    );
+    assert_eq!(
+        (about_asked.get(), asked.get(), opened.get()),
+        (1, 1, 1),
+        "a click on the About link did not ask for the About window once, or asked for \
+         another window. Look at {}",
+        about_path.display()
+    );
 }
 
 /// The box of the pixels that differ between two renders of the same palette.

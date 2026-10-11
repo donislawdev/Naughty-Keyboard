@@ -1,0 +1,133 @@
+// The About window: what the program is, which version, whose, under which
+// licence, and where to find it (the owner's point 4 of 2026-10-10).
+//
+// # Chrome, content, chrome (PORADNIK-GUI 4)
+//
+//     header    the window's heading
+//     content   what the program does, in one sentence
+//               the facts in a column: version, author, licence, website,
+//               source code - the shape of a form (GUI rule 13)
+//               the copyright and what the licence lets the tester do, which
+//               GPL-3.0 asks an interactive interface to say (section 0,
+//               "Appropriate Legal Notices")
+//     footer    the one main action, Close, in the accent
+//
+// The frame every window stands in (`components/frame.slint`, `D110`).
+//
+// # The addresses are words, not links
+//
+// A click that opened the website would start a program - the browser - and
+// the tool starts none (`nothing_reaches_the_network.rs` refuses it in the
+// source, `links_nothing_off_the_machine.rs` in the built file). A button that
+// copied an address would be a fourth way into the clipboard, where the tool
+// promises three (untouchable rule 17). So the tester reads the address, and
+// the window shows it whole, without the scheme a browser adds by itself.
+//
+// # Nothing is decided here
+//
+// Every word is a property filled from `nkb-adapters::i18n`, every fact from
+// the package manifest (untouchable rule 9), what a key does is Rust's, and
+// the callbacks are aliases (GUI rule 11).
+
+import {
+    Tokens,
+    TextBody,
+    TextSmallMuted,
+    Spacer,
+    Fact,
+    FactGrid,
+    Zone,
+    WindowFrame,
+    WindowHeader,
+    WindowFooter,
+    KeyScope,
+    SmallButton,
+} from "../components.slint";
+
+export component AboutWindow inherits Window {
+    in property <string> window-title;
+    in property <string> heading;
+    in property <string> summary;
+    in property <[Fact]> facts;
+    in property <string> copyright;
+    in property <string> warranty;
+    in property <string> licence-text;
+    // The main action.
+    in property <string> close-label;
+    in property <string> close-action;
+
+    // Esc closes, and Rust says so - see `about.rs`.
+    callback pressed <=> keys.pressed;
+    callback deactivated <=> keys.window-left;
+    callback activated <=> keys.window-entered;
+    callback close-clicked();
+
+    // The keyboard goes to the window as it opens, so Esc closes it.
+    public function focus-keys() {
+        keys.focus();
+    }
+
+    title: root.window-title;
+    icon: Tokens.app-icon;
+    background: Tokens.surface;
+    // BOUND, for the shortcuts window's reason (`slint.md` 2.38): the backend
+    // creates every window when the event loop starts and keeps that size.
+    width: Tokens.about-width;
+    height: body.preferred-height;
+    always-on-top: true;
+
+    keys := KeyScope {
+        body := WindowFrame {
+            packed: true;
+
+            WindowHeader {
+                title: root.heading;
+            }
+
+            Zone {
+                divided: false;
+                TextBody {
+                    text: root.summary;
+                    wrap: word-wrap;
+                }
+            }
+
+            Zone {
+                FactGrid {
+                    rows: root.facts;
+                }
+            }
+
+            // The licence's notices: the quiet role, because they are read
+            // once, and the facts above are what the window is opened for.
+            Zone {
+                TextSmallMuted {
+                    text: root.copyright;
+                    wrap: word-wrap;
+                }
+                TextSmallMuted {
+                    text: root.warranty;
+                    wrap: word-wrap;
+                }
+                TextSmallMuted {
+                    text: root.licence-text;
+                    wrap: word-wrap;
+                }
+            }
+
+            WindowFooter {
+                HorizontalLayout {
+                    Spacer { }
+                    SmallButton {
+                        text: root.close-label;
+                        action: root.close-action;
+                        primary: true;
+                        clicked => {
+                            root.close-clicked();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

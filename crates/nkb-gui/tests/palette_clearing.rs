@@ -79,6 +79,7 @@ fn both_ways_of_meeting_the_field_stand_on_one_switch_and_the_one_in_effect_is_f
     palette.set_pack("whitespace".into());
     palette.set_counter("3 / 12".into());
     palette.set_shortcuts_link("Change shortcuts".into());
+    palette.set_about_link("About".into());
     palette.set_route_label("Send by".into());
     palette.set_route_options(ways(&ROUTE));
     palette.set_clearing_label("Each value".into());

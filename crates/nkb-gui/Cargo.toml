@@ -6,6 +6,8 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
 
 # The binary is named `nkb-gui`. That name is a public contract: it goes into
 # installation instructions and into other people's scripts, and D25 froze both

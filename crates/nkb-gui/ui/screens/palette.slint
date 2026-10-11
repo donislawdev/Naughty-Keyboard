@@ -335,6 +335,10 @@ export component Palette inherits Window {
     callback open-shortcuts();
     // The link's words, which are also what the click does.
     in property <string> shortcuts-link;
+    // Asks for the About window, the link at the other end of that row - a
+    // callback declared for the same reason.
+    callback open-about();
+    in property <string> about-link;
 
     title: root.window-title;
     icon: Tokens.app-icon;
@@ -483,6 +487,7 @@ export component Palette inherits Window {
             clearing-selected: root.clearing-selected;
             clearing-enabled: !root.sending && !root.clipboard-mode-on;
             shortcuts-link: root.shortcuts-link;
+            about-link: root.about-link;
             choose-route(index) => {
                 root.choose-route(index);
             }
@@ -491,6 +496,9 @@ export component Palette inherits Window {
             }
             open-shortcuts => {
                 root.open-shortcuts();
+            }
+            open-about => {
+                root.open-about();
             }
         }
 

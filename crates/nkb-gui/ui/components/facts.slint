@@ -1,0 +1,41 @@
+// Facts in a column - a label and its value per row, the About window's
+// version, author, licence and addresses. A file of its own rather than one
+// more part of `chrome.slint`, which stood at the edge of the band of `D113`
+// when this arrived (2026-10-10).
+
+import { Tokens } from "../tokens.slint";
+import { TextSmallMuted, TextBody } from "typography.slint";
+
+// One fact about something: what it is called, and what it is - the About
+// window's version, author, licence. A struct for `HintRow`'s reason.
+export struct Fact {
+    label: string,
+    value: string,
+}
+
+// Facts read down a column: the labels muted in one column, each as wide as
+// the longest, and the values in the body role beside them - the shape of a
+// form (GUI rule 13), for the About window's version, author and addresses.
+//
+// `HintBar`'s grid, for its reason (`slint.md` 2.20), and its stretch: the
+// value column takes the room, so the label column is as wide as its longest
+// word and no wider (`slint.md` 2.45). A value too long for its line wraps
+// where the text allows a break: an address, which has no space, breaks after
+// a slash or a hyphen (seen on the gallery's render, 2026-10-10).
+export component FactGrid inherits GridLayout {
+    in property <[Fact]> rows;
+    spacing-vertical: Tokens.space-1;
+    spacing-horizontal: Tokens.space-3;
+
+    for fact in root.rows: Row {
+        TextSmallMuted {
+            text: fact.label;
+            horizontal-stretch: 0;
+        }
+        TextBody {
+            text: fact.value;
+            wrap: word-wrap;
+            horizontal-stretch: 1;
+        }
+    }
+}

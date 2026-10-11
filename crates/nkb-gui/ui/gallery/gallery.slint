@@ -29,6 +29,7 @@ import {
     SampleSurface,
     HintRow,
     HintBar,
+    FactGrid,
     Marker,
     MarkerRow,
     Zone,
@@ -138,6 +139,19 @@ export component Gallery inherits Window {
                 { key: "Alt+Shift+N", action: "Next value" },
                 { key: "Alt+Shift+P", action: "Previous value" },
                 { key: "Alt+Shift+B", action: "An action name long enough to be a translation" },
+            ];
+        }
+
+        Hairline {}
+
+        // Facts in a column: the labels as wide as the longest, the values
+        // beside them - and an address with no space in it, longer than its
+        // line, which must break inside itself rather than run off the edge.
+        FactGrid {
+            rows: [
+                { label: "Version", value: "0.1.0" },
+                { label: "A label in a long translation", value: "DonislawDev" },
+                { label: "Source code", value: "github.com/an-organisation-with-a-long-name/a-repository-with-a-long-name" },
             ];
         }
 

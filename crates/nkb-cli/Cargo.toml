@@ -6,6 +6,8 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
 
 # The binary is named `nkb`, not `nkb-cli`. That name is a public contract:
 # it goes into other people's scripts and pipelines.
@@ -17,6 +19,13 @@ path = "src/main.rs"
 nkb-core.workspace = true
 nkb-app.workspace = true
 nkb-adapters.workspace = true
+
+# Puts the file's details - version, author, licence - into `nkb.exe` on
+# Windows, so a file manager can say what the program is. Build only: nothing
+# of it is linked into `nkb`, which keeps no graphical toolkit for that reason
+# alone (D25). Why this crate, and why that version: the workspace manifest.
+[build-dependencies]
+embed-resource.workspace = true
 
 # Test-only: the import table of the built `nkb`, read by
 # tests/links_nothing_off_the_machine.rs. Why this crate and that version: the

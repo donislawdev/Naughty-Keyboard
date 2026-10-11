@@ -80,3 +80,7 @@ pub mod trial;
 // The welcome window itself, on the main thread: opened once at the first run,
 // the keyboard taken for the box, closing remembered through the worker.
 pub mod welcome;
+// The About window, on the main thread: what the program is, which version,
+// whose, under which licence - opened by the palette's link (the owner's
+// point 4 of 2026-10-10).
+pub mod about;

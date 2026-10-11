@@ -175,6 +175,10 @@ export global Tokens {
     // on two lines. No height, for the shortcuts window's reason: it is as tall
     // as its three steps, and the size is bound (`slint.md` 2.38).
     out property <length> welcome-width: 480px;
+    // The About window (the owner's point 4, 2026-10-10): the same family's
+    // width, which holds the source code's address on one line beside its
+    // label. As tall as its content, bound, for the same reason.
+    out property <length> about-width: 480px;
     // The thumb that says a list scrolls. Thin, because it is a sign rather
     // than a control - the list scrolls with the wheel and the arrow keys.
     out property <length> scroll-thumb: 4px;

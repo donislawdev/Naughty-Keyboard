@@ -1,7 +1,21 @@
-// The program's icon, as a resource script for `build.rs` to compile into
-// nkb-gui.exe. Nothing else goes in: no version block, no manifest - the point of
-// the crate that compiles this is that it adds exactly what this file says.
+// The resources of nkb-gui.exe, as a script for `build.rs` to compile: the
+// program's icon, and the file's details - version, author, licence. Nothing
+// else goes in, no manifest - the point of the crate that compiles this is that
+// it adds exactly what this file says.
 //
+// The details are written at build time from the package manifest, by
+// crates/nkb-cli/file_details.rs, into the build's output directory, which the
+// build script hands the compiler as a place to look for includes.
+//
+// The block is UTF-8 and says so, but the compiler honours a code page only in
+// the script it was asked to compile, never in an included one - Microsoft's
+// documentation of the pragma says so, and the compiler of an older Windows
+// SDK, which the build picks when it finds one first, does what it says: the
+// copyright sign came out as two letters. So the code page is named here,
+// before the include.
+#pragma code_page(65001)
+#include "details.rc"
+
 // The path is relative to this file. Resource 1 is the first icon group, and
 // the first one is the icon Windows shows for the file.
 1 ICON "edamame.ico"

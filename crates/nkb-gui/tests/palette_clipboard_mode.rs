@@ -85,6 +85,7 @@ fn the_route_switch_turns_clipboard_mode_on_and_off_and_its_bar_turns_it_off() {
     palette.set_pack("whitespace".into());
     palette.set_counter("3 / 12".into());
     palette.set_shortcuts_link("Change shortcuts".into());
+    palette.set_about_link("About".into());
     palette.set_clipboard_mode_label("clipboard mode".into());
     palette.set_route_label("Send by".into());
     palette.set_route_options(ways(&ROUTE));

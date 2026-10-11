@@ -60,13 +60,17 @@ use nkb_adapters::{
     KeptFocus, SettingsFile, altgr_character, default_bindings, i18n, report_window_failure,
     screens,
 };
+use nkb_app::ports::Settings;
 use nkb_app::{KeptSettings, RouteRequest};
-use nkb_core::hotkeys::HotkeyAction;
+use nkb_core::hotkeys::{Bindings, HotkeyAction};
 use nkb_core::screens::Point;
+use nkb_gui::about::About;
 use nkb_gui::packs::{Packs, SystemKeyboard};
 use nkb_gui::shortcuts::{Shortcuts, System};
 use nkb_gui::welcome::Welcome;
-use nkb_gui::{Gallery, PacksWindow, Palette, ShortcutsWindow, WelcomeWindow, focus, live};
+use nkb_gui::{
+    AboutWindow, Gallery, PacksWindow, Palette, ShortcutsWindow, WelcomeWindow, focus, live,
+};
 use slint::ComponentHandle;
 
 /// The pack the palette opens on when the command line names none and the
@@ -182,45 +186,7 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
             .window()
             .set_position(slint::PhysicalPosition::new(at.x, at.y));
     }
-    palette.set_window_title(i18n::label(PaletteLabel::Title).into());
-    // The clipboard bar's words come with each view, because two conditions
-    // share the bar and say different things (`D72`) - see `live::View`. The
-    // words naming the shortcuts come from the table of this run, by the same
-    // function the worker uses when the table changes.
-    live::show_legend(&palette, live::legend(&bindings));
-    // The pack's name opens the pack window when clicked, and UI Automation
-    // names that click with the words the hint bar gives the shortcut.
-    palette.set_open_packs_label(i18n::action_name(HotkeyAction::OpenPacks).into());
-    // The link under the hint bar opens the shortcuts window (K5.5).
-    palette.set_shortcuts_link(i18n::label(PaletteLabel::ShortcutsLink).into());
-    // The value band's heading: since UX-GUI-001 the band of the next value
-    // stands above it, and two values on screen need telling apart.
-    palette.set_last_sent_label(i18n::label(PaletteLabel::LastSent).into());
-    // Folded at every start, opened by a click on the heading (point 7) -
-    // and the report block under it the same way (`D121`).
-    palette.set_last_sent_action(i18n::label(PaletteLabel::LastSentAction).into());
-    live::wire_folds(&palette);
-    // The Copy buttons beside the next value, the last one sent and its
-    // report block (`D98`, `D121`), and the word each says after a copy.
-    live::label_copies(&palette);
-    // The two switches under the hint bar (point 2), and the way out of
-    // clipboard mode on the standing bar (`D99`).
-    live::label_switches(&palette);
-    live::label_arrows(&palette);
-    palette.set_turn_off_label(i18n::label(PaletteLabel::TurnOff).into());
-    palette.set_turn_off_action(i18n::label(PaletteLabel::TurnOffClipboard).into());
-    // The button at the end of the pack band, in both states (`UX-GUI-004`).
-    palette.set_collapse_label(i18n::label(PaletteLabel::Collapse).into());
-    palette.set_expand_label(i18n::label(PaletteLabel::Expand).into());
-    // Expanded at first run, with the hints up and nothing sent yet -
-    // `ux-spec.md` 5.1 - and as the tester left it on every run after that.
-    // The worker fills the pack and the counter, because the sequence that
-    // knows them lives over there.
-    palette.set_compact(compact);
-    palette.set_has_value(false);
-    // How a typed value meets the field, from the first frame (`D101`): the
-    // worker starts from the same answer and says it again with its first view.
-    live::show_clearing(&palette, live::starts_clearing(settings.settings()));
+    label_palette(&palette, &bindings, compact, settings.settings());
 
     // The two threads meet here. `focus` runs on this one and may produce a
     // sentence saying the palette could not refuse the focus. The worker rebuilds
@@ -285,6 +251,16 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         let shortcuts = std::rc::Rc::clone(&shortcuts);
         move || shortcuts.open()
     });
+    // The About window (the owner's point 4): created once, shown on request.
+    let about = About::new(
+        AboutWindow::new()?,
+        Box::new(SystemKeyboard::default()),
+        say_in(&palette),
+    );
+    palette.on_open_about({
+        let about = Rc::clone(&about);
+        move || about.open()
+    });
     palette.on_open_packs({
         let packs = std::rc::Rc::clone(&packs);
         move || packs.open()
@@ -332,6 +308,7 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     palette.window().on_close_requested({
         let packs = std::rc::Rc::clone(&packs);
         let shortcuts = std::rc::Rc::clone(&shortcuts);
+        let about = Rc::clone(&about);
         let closed_at = std::rc::Rc::clone(&closed_at);
         let palette = palette.as_weak();
         let welcome = welcome.clone();
@@ -342,6 +319,7 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
             }
             packs.close();
             shortcuts.close();
+            about.close();
             if let Some(welcome) = &welcome {
                 welcome.dismiss();
             }
@@ -392,6 +370,52 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         let _ = kept.keep_position(&remembers, &layout, at);
     }
     ran
+}
+
+/// Every word of the palette that does not come with a view, and the state it
+/// starts in - set once, before the window is shown.
+fn label_palette(palette: &Palette, bindings: &Bindings, compact: bool, settings: &Settings) {
+    palette.set_window_title(i18n::label(PaletteLabel::Title).into());
+    // The clipboard bar's words come with each view, because two conditions
+    // share the bar and say different things (`D72`) - see `live::View`. The
+    // words naming the shortcuts come from the table of this run, by the same
+    // function the worker uses when the table changes.
+    live::show_legend(palette, live::legend(bindings));
+    // The pack's name opens the pack window when clicked, and UI Automation
+    // names that click with the words the hint bar gives the shortcut.
+    palette.set_open_packs_label(i18n::action_name(HotkeyAction::OpenPacks).into());
+    // The link under the hint bar opens the shortcuts window (K5.5), and the
+    // one at the other end of its row the About window (point 4).
+    palette.set_shortcuts_link(i18n::label(PaletteLabel::ShortcutsLink).into());
+    palette.set_about_link(i18n::label(PaletteLabel::AboutLink).into());
+    // The value band's heading: since UX-GUI-001 the band of the next value
+    // stands above it, and two values on screen need telling apart.
+    palette.set_last_sent_label(i18n::label(PaletteLabel::LastSent).into());
+    // Folded at every start, opened by a click on the heading (point 7) -
+    // and the report block under it the same way (`D121`).
+    palette.set_last_sent_action(i18n::label(PaletteLabel::LastSentAction).into());
+    live::wire_folds(palette);
+    // The Copy buttons beside the next value, the last one sent and its
+    // report block (`D98`, `D121`), and the word each says after a copy.
+    live::label_copies(palette);
+    // The two switches under the hint bar (point 2), and the way out of
+    // clipboard mode on the standing bar (`D99`).
+    live::label_switches(palette);
+    live::label_arrows(palette);
+    palette.set_turn_off_label(i18n::label(PaletteLabel::TurnOff).into());
+    palette.set_turn_off_action(i18n::label(PaletteLabel::TurnOffClipboard).into());
+    // The button at the end of the pack band, in both states (`UX-GUI-004`).
+    palette.set_collapse_label(i18n::label(PaletteLabel::Collapse).into());
+    palette.set_expand_label(i18n::label(PaletteLabel::Expand).into());
+    // Expanded at first run, with the hints up and nothing sent yet -
+    // `ux-spec.md` 5.1 - and as the tester left it on every run after that.
+    // The worker fills the pack and the counter, because the sequence that
+    // knows them lives over there.
+    palette.set_compact(compact);
+    palette.set_has_value(false);
+    // How a typed value meets the field, from the first frame (`D101`): the
+    // worker starts from the same answer and says it again with its first view.
+    live::show_clearing(palette, live::starts_clearing(settings));
 }
 
 /// Shows the palette and makes it refuse the keyboard - the two belong
