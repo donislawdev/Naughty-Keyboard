@@ -1,7 +1,13 @@
-// The program's icon, as a resource script for `build.rs` to compile into
-// nkb-gui.exe. Nothing else goes in: no version block, no manifest - the point of
-// the crate that compiles this is that it adds exactly what this file says.
+// The resources of nkb-gui.exe, as a script for `build.rs` to compile: the
+// program's icon, and the file's details - version, author, licence. Nothing
+// else goes in, no manifest - the point of the crate that compiles this is that
+// it adds exactly what this file says.
 //
+// The details are written at build time from the package manifest, by
+// crates/nkb-cli/file_details.rs, into the build's output directory, which the
+// build script hands the compiler as a place to look for includes.
+#include "details.rc"
+
 // The path is relative to this file. Resource 1 is the first icon group, and
 // the first one is the icon Windows shows for the file.
 1 ICON "edamame.ico"

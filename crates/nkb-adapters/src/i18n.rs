@@ -89,10 +89,11 @@ pub use palette::{
     typing_counter, warnings,
 };
 pub use windows::{
-    MatchPlace, PacksLabel, ShortcutsLabel, WelcomeLabel, found_in, no_match, not_read,
-    pack_problems, pack_refused, pack_unreadable, packs_label, packs_summary,
-    packs_summary_filtered, recent_heading, shortcut_answer, shortcut_invite, shortcuts_label,
-    shortcuts_summary, value_aside, value_gone, welcome_label, welcome_ready, welcome_try_it,
+    AboutLabel, MatchPlace, PacksLabel, ShortcutsLabel, WelcomeLabel, about_copyright, about_label,
+    found_in, no_match, not_read, pack_problems, pack_refused, pack_unreadable, packs_label,
+    packs_summary, packs_summary_filtered, recent_heading, shortcut_answer, shortcut_invite,
+    shortcuts_label, shortcuts_summary, value_aside, value_gone, welcome_label, welcome_ready,
+    welcome_try_it,
 };
 
 /// Substitutes `{name}` placeholders in one pass over the pattern.
@@ -790,6 +791,9 @@ pub enum Environment {
     /// else - the first value would go to the window in front, not the box
     /// (UX7, `D105`).
     WelcomeFocusNotTaken,
+    /// The About window opened, and the system kept the keyboard somewhere
+    /// else - Esc would go to the application under test, not close it.
+    AboutFocusNotTaken,
 }
 
 /// The pattern for an environment limit. `ux-spec.md` 6, section B.
@@ -819,6 +823,9 @@ fn pattern_environment(limit: Environment) -> &'static str {
         }
         Environment::WelcomeFocusNotTaken => {
             "The welcome window could not take the keyboard focus: {reason}. Click the box in the welcome window before pressing the shortcut."
+        }
+        Environment::AboutFocusNotTaken => {
+            "The About window could not take the keyboard focus: {reason}. Close it with its Close button."
         }
     }
 }
@@ -2068,6 +2075,7 @@ mod tests {
             PaletteLabel::NoValueYet,
             PaletteLabel::ShortcutsPaused,
             PaletteLabel::ShortcutsLink,
+            PaletteLabel::AboutLink,
             PaletteLabel::Typing,
             PaletteLabel::TypingCounter,
             PaletteLabel::StopTyping,
@@ -2129,6 +2137,7 @@ mod tests {
                 | PaletteLabel::ClipboardForWindow
                 | PaletteLabel::ShortcutsPaused
                 | PaletteLabel::ShortcutsLink
+                | PaletteLabel::AboutLink
                 | PaletteLabel::Typing
                 | PaletteLabel::StopTyping
                 | PaletteLabel::LastSent

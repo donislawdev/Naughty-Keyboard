@@ -107,7 +107,12 @@ export struct HintRow {
 // same x, so the eye reads a column instead of hunting.
 export component HintBar inherits GridLayout {
     in property <[HintRow]> rows;
-    spacing: Tokens.space-1;
+    // Tight between the rows, so the list reads as one block - and a step
+    // wider between the columns. One value for both left the longest key,
+    // `Alt+Shift+Space`, four pixels from its action, close enough to read as
+    // one word (seen on the palette's render, 2026-10-10).
+    spacing-vertical: Tokens.space-1;
+    spacing-horizontal: Tokens.space-3;
 
     // The key in the secondary colour and the action muted: one size since the
     // scale lost its 11 px step (2026-10-07), so the column the eye hunts in

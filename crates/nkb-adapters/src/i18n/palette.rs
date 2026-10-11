@@ -94,6 +94,9 @@ pub enum PaletteLabel {
     /// The link under the hint bar that opens the shortcuts window - its words,
     /// and what a click does (`ux-spec.md` 5.4).
     ShortcutsLink,
+    /// The link beside it that opens the About window - its words, and what a
+    /// click does (the owner's point 4 of 2026-10-10).
+    AboutLink,
     /// The band of a send in progress, its first word (`OBS-160`). Until that
     /// band a send of minutes left the palette showing the value before.
     Typing,
@@ -216,6 +219,7 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         }
         PaletteLabel::ShortcutsPaused => "Shortcuts are paused while the Shortcuts window is open.",
         PaletteLabel::ShortcutsLink => "Change shortcuts",
+        PaletteLabel::AboutLink => "About",
         PaletteLabel::Typing => "Typing",
         PaletteLabel::TypingCounter => "{arrived} / {total} units",
         PaletteLabel::StopTyping => "Press Esc to stop.",

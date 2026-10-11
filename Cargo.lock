@@ -2767,6 +2767,7 @@ dependencies = [
 name = "nkb-cli"
 version = "0.1.0"
 dependencies = [
+ "embed-resource",
  "nkb-adapters",
  "nkb-app",
  "nkb-core",

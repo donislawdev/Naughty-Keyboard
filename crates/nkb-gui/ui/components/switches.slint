@@ -19,7 +19,7 @@
 
 import { Tokens } from "../tokens.slint";
 import { TextSmallMuted } from "typography.slint";
-import { Zone } from "chrome.slint";
+import { Zone, Spacer } from "chrome.slint";
 import { PickerOpener } from "list.slint";
 import { Segmented } from "button.slint";
 
@@ -40,6 +40,9 @@ export component SwitchesBand inherits Zone {
     // The link to the shortcuts window, whose words say what it does.
     in property <string> shortcuts-link;
     callback open-shortcuts();
+    // The link to the About window, at the other end of the same row.
+    in property <string> about-link;
+    callback open-about();
 
     GridLayout {
         spacing: Tokens.space-2;
@@ -84,14 +87,22 @@ export component SwitchesBand inherits Zone {
     }
     // Under the shortcuts' switches, and in the same component as the
     // pack's name above: a link in the palette looks and answers the
-    // pointer one way (GUI rule 2).
+    // pointer one way (GUI rule 2). The About link shares the row, at its
+    // right end, so the palette grows by nothing for it.
     HorizontalLayout {
-        alignment: start;
         PickerOpener {
             text: root.shortcuts-link;
             action: root.shortcuts-link;
             clicked => {
                 root.open-shortcuts();
+            }
+        }
+        Spacer { }
+        PickerOpener {
+            text: root.about-link;
+            action: root.about-link;
+            clicked => {
+                root.open-about();
             }
         }
     }

@@ -46,7 +46,7 @@ ceiling = 1133
 near = 1
 
 # A whole Rust file, its tests included. nkb-gui/src/live.rs, then
-# nkb-adapters/src/i18n.rs at 2073.
+# nkb-adapters/src/i18n.rs at 2080.
 [files.rust-whole]
 ceiling = 2363
 # 5 since 2026-10-10, the owner's choice twice that day: the ceiling came down
@@ -56,8 +56,9 @@ ceiling = 2363
 near = 5
 
 # A Slint file, the gallery excepted. ui/components/list.slint, then
-# ui/screens/palette.slint at 292 since its value bands and switches became
-# components.
+# ui/screens/palette.slint at 298 since its value bands and switches became
+# components. The About window's facts went to a file of their own rather than
+# take ui/components/chrome.slint into the band.
 [files.slint]
 ceiling = 312
 near = 2

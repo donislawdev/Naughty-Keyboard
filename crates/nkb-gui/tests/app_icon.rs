@@ -369,10 +369,12 @@ fn the_executable_embeds_the_icon_that_ships() {
         .map(str::trim)
         .filter(|line| !line.is_empty() && !line.starts_with("//"))
         .collect();
+    // The version block the build writes (`file_details.rs`, read back from the
+    // built file by tests/file_details.rs) and the icon - nothing else.
     assert_eq!(
         statements,
-        ["1 ICON \"edamame.ico\""],
-        "the resource script adds the icon and nothing else"
+        ["#include \"details.rc\"", "1 ICON \"edamame.ico\""],
+        "the resource script adds the file's details and the icon, and nothing else"
     );
     assert!(
         crate_dir().join("assets/edamame.ico").is_file(),

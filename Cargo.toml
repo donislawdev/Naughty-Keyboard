@@ -37,6 +37,12 @@ edition = "2024"
 license = "GPL-3.0-only"
 repository = "https://github.com/donislawdev/Naughty-Keyboard"
 rust-version = "1.98"
+# Said by the two programs about themselves: in the details a file manager
+# shows for `nkb.exe` and `nkb-gui.exe`, and in the palette's About window.
+# Read from here, so the version, the author and the address change in one
+# place - see crates/nkb-cli/file_details.rs.
+authors = ["DonislawDev"]
+homepage = "https://naughtykeyboard.donislawdev.com/"
 
 [workspace.dependencies]
 nkb-core = { path = "crates/nkb-core" }
@@ -111,10 +117,11 @@ raw-window-handle = "0.6.2"
 # client into the CLI on any workspace-wide build.
 arboard = { version = "3.6.1", default-features = false }
 
-# The program's icon, put into `nkb-gui.exe` on Windows. The icon lives in the
-# executable and nowhere beside it - the file manager, a desktop shortcut and the
-# taskbar all read it from there - so something has to compile a resource script
-# into the binary. Nothing happens on any other target.
+# The program's icon, put into `nkb-gui.exe` on Windows, and since 2026-10-10 the
+# file's details - version, author, licence - put into both programs. Both live
+# in the executable and nowhere beside it - the file manager, a desktop shortcut
+# and the taskbar all read them from there - so something has to compile a
+# resource script into the binary. Nothing happens on any other target.
 #
 # Version checked against the registry on 2026-10-07 - not recalled. 3.0.11 and
 # not 3.0.12, which was the newest that day: it had been out for one day, and
@@ -126,15 +133,17 @@ arboard = { version = "3.6.1", default-features = false }
 # always writes a version block of its own as well, filled in from the package
 # manifest - and the manifest's description would then be the name the task
 # manager shows for the program. This one compiles exactly the resource script
-# it is given, which is an icon and nothing else.
+# it is given, and the version block is ours: written by
+# crates/nkb-cli/file_details.rs, with the words a tester reads.
 #
 # Licence sieve, both questions:
 #   (a) MIT - compatible with GPL-3.0, and nothing of it is linked into the
 #       product: it runs in the build script and leaves only the resource.
 #   (b) not applicable - a build tool, not a reference dataset.
 #
-# 🔴 Only nkb-gui's build script depends on this, and the reason is the layer:
-# `nkb` has no window, so nothing in it asks for an icon - D25.
+# 🔴 Only the build scripts of nkb-gui and nkb-cli depend on this, and nothing
+# of it reaches either program but the resource: `nkb` stays free of any
+# graphical toolkit, which is D25, and has no icon, because it has no window.
 embed-resource = "=3.0.11"
 
 # Test-only: reads the import table of the two built programs, for the guard
