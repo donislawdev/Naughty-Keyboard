@@ -144,7 +144,7 @@ arboard = { version = "3.6.1", default-features = false }
 # 🔴 Only the build scripts of nkb-gui and nkb-cli depend on this, and nothing
 # of it reaches either program but the resource: `nkb` stays free of any
 # graphical toolkit, which is D25, and has no icon, because it has no window.
-embed-resource = "=3.0.11"
+embed-resource = "=3.0.12"
 
 # Test-only: reads the import table of the two built programs, for the guard
 # that the tool opens no network connection. That guard reads our source, and
