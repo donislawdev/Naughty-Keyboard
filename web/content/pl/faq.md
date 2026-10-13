@@ -29,6 +29,8 @@ faq:
     answer: "Nie. Jest zbudowane do testowania oprogramowania, za które odpowiadasz, i mówi to okno powitalne: używaj go tylko na systemach, które wolno Ci testować. Wbudowane paczki zawierają wartości, które produkują prawdziwi użytkownicy i prawdziwe dane, a nie gotowe exploity."
   - question: Dlaczego wpisuje, a nie wkleja?
     answer: "Bo pole spotyka większość wartości z klawiatury, a niektóre aplikacje traktują wpisywanie i wklejanie inaczej, co warto przetestować osobno. Gdy chcesz drugiej drogi, [tryb schowka](/docs/clipboard-mode/) kładzie każdą wartość w schowku."
+  - question: Dlaczego w Firefoksie wiersz nie jest czyszczony?
+    answer: "Najczęściej dlatego, że Firefox nie wpuszcza usług dostępności. Gdy w jego ustawieniach prywatności i bezpieczeństwa włączone jest **Uniemożliwiaj usługom dostępności dostęp do przeglądarki**, system nie widzi niczego wewnątrz okna, a paleta nie naciska klawiszy czyszczenia, których nie umie wycelować. Wartość i tak trafia do pola, na to, co w nim było, a paleta nazywa to ustawienie. Wyłącz je i uruchom Firefoksa ponownie, a wiersz będzie czyszczony."
   - question: Skąd nazwa Naughty?
     answer: "Od Big List of Naughty Strings, od której zaczyna się pomysł tego katalogu i którą zna większość testerów. To ich słowo."
 ---

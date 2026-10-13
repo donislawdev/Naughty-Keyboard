@@ -198,6 +198,8 @@ pub enum PaletteLabel {
     ControlTerminal,
     ControlUnconfirmed,
     ControlNotTextField,
+    /// `D125`: Firefox keeping accessibility services out.
+    ControlClosedToAccessibility,
 }
 
 pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
@@ -263,6 +265,7 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::ControlTerminal => "a terminal",
         PaletteLabel::ControlUnconfirmed => "a control not confirmed as a field",
         PaletteLabel::ControlNotTextField => "not a text field",
+        PaletteLabel::ControlClosedToAccessibility => "a window closed to accessibility",
     }
 }
 
@@ -285,6 +288,7 @@ pub fn sent_to(target: &Target) -> String {
         ControlKind::Terminal => PaletteLabel::ControlTerminal,
         ControlKind::Unconfirmed => PaletteLabel::ControlUnconfirmed,
         ControlKind::NotTextField => PaletteLabel::ControlNotTextField,
+        ControlKind::ClosedToAccessibility => PaletteLabel::ControlClosedToAccessibility,
     });
     match &target.program {
         Some(program) => {

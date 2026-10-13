@@ -96,6 +96,11 @@ pub enum ControlKind {
     /// The system did not say what it is - a value is sent there, the line is
     /// not cleared (`D76`).
     Unconfirmed,
+    /// A window that shows the system nothing inside it, its own frame holding
+    /// the focus - Firefox while it keeps accessibility services out (`D125`).
+    /// Treated as [`ControlKind::Unconfirmed`], and named apart because its
+    /// cause is known and the tester can change it.
+    ClosedToAccessibility,
     /// Not a text field. The direct route refuses to type there, so a value
     /// that reached it means the focus moved between the look and the send.
     NotTextField,

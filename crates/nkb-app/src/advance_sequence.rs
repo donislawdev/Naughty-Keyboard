@@ -379,6 +379,12 @@ pub enum Message {
     /// from [`Message::ClearingSkipped`], because here the system DOES report a
     /// field - saying it does not would be false.
     ClearingSkippedInTerminal,
+    /// The value went in, but the field was NOT cleared first, because the
+    /// window shows the system nothing inside it - Firefox while it keeps
+    /// accessibility services out (`D125`). A separate sentence from
+    /// [`Message::ClearingSkipped`], because this cause is known and the
+    /// tester can change it: the sentence names the setting.
+    ClearingSkippedClosedToAccessibility,
     /// Clipboard mode is on because the tester asked for it: values go to the
     /// clipboard, replacing what was there. Once, at the start, and again each
     /// time the tester turns the mode on in the palette (`D99`).
@@ -1335,11 +1341,14 @@ fn classify(
 }
 
 /// The sentence a value that went in UNCLEARED carries, if it did (`D76`,
-/// `OBS-141`) - whole or cut short, the field held something before it.
+/// `OBS-141`, `D125`) - whole or cut short, the field held something before it.
 fn skipped_clearing(clearing: ClearingOutcome) -> Option<Message> {
     match clearing {
         ClearingOutcome::Skipped(SkipReason::Unconfirmed) => Some(Message::ClearingSkipped),
         ClearingOutcome::Skipped(SkipReason::Terminal) => Some(Message::ClearingSkippedInTerminal),
+        ClearingOutcome::Skipped(SkipReason::ClosedToAccessibility) => {
+            Some(Message::ClearingSkippedClosedToAccessibility)
+        }
         ClearingOutcome::Done | ClearingOutcome::NotAsked => None,
     }
 }
@@ -1379,7 +1388,9 @@ fn after_clearing(error: KeystrokeError) -> (Event, Message) {
         // `deliver_value` treats this one as a skip and sends the value, so it
         // does not arrive here. If that ever stops, nothing was pressed and
         // nothing was sent - the careful sentence, which asks to check the field.
-        KeystrokeError::FieldUnconfirmed | KeystrokeError::InTerminal => {
+        KeystrokeError::FieldUnconfirmed
+        | KeystrokeError::InTerminal
+        | KeystrokeError::ClosedToAccessibility => {
             (Event::InsertionRefused, Message::ClearingFailed)
         }
     }
@@ -2732,6 +2743,29 @@ mod tests {
         assert_eq!(*kit.direct.handed.borrow(), vec!["alpha"]);
         assert!(kit.by_clipboard.handed.borrow().is_empty());
         assert_eq!(outcome.messages, vec![Message::ClearingSkippedInTerminal]);
+        let sent = outcome.sent.expect("the value went in");
+        assert!(!sent.cleared);
+        assert_eq!(advance.counter(), Some((1, 3)));
+    }
+
+    // ---- `D125`: a window closed to accessibility ----------------------------------
+
+    #[test]
+    fn a_window_closed_to_accessibility_gets_the_value_uncleared_and_its_setting_is_named() {
+        // The door pressed nothing, for the reason of an unconfirmed field: the
+        // window shows nothing inside it. The value lands as it does there, and
+        // the sentence is the one that names the setting - not the general one,
+        // which a tester took for a fault of the tool (`OBS-175`).
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_keys(FakeKeys::failing(KeystrokeError::ClosedToAccessibility));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+
+        assert_eq!(*kit.direct.handed.borrow(), vec!["alpha"]);
+        assert!(kit.by_clipboard.handed.borrow().is_empty());
+        assert_eq!(
+            outcome.messages,
+            vec![Message::ClearingSkippedClosedToAccessibility]
+        );
         let sent = outcome.sent.expect("the value went in");
         assert!(!sent.cleared);
         assert_eq!(advance.counter(), Some((1, 3)));
