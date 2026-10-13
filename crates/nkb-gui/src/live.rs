@@ -114,12 +114,15 @@ use crate::typeface::SHIPPED;
 use crate::{HintRow, Marker, Palette, ValueKey as ShownKey};
 
 mod copy;
+mod folds;
 mod presses;
 mod recent;
 mod view;
 
 use copy::show_copied;
 pub use copy::{CopyButton, copy_command, label_copies};
+use folds::Collapse;
+pub use folds::{label_shortcut_list, starts_with_shortcut_list, wire_shortcut_list};
 use presses::{PaletteShortcuts, between_presses};
 use recent::{after_press, carry_out_noting, keep_recent};
 pub(crate) use view::preview_line;
@@ -210,6 +213,11 @@ pub enum Command {
     /// band (`UX-GUI-004`). What `ToggleVisibility` does, through the same
     /// switch, so a click and a press cannot disagree about the state.
     ToggleCompact,
+    /// Remember whether the list of shortcuts at the foot of the palette
+    /// stands open - the state the window already drew after a click on its
+    /// heading (`D123`). Only remembered here, see
+    /// [`folds::wire_shortcut_list`].
+    ShortcutList(bool),
     /// Type values this way from the next press: the line cleared first, or
     /// the value at the cursor - the clearing switch under the hint bar
     /// (`UX-GUI-005`, `D101`). The way itself rather than "the other one",
@@ -804,6 +812,7 @@ impl Worker<'_> {
                 told: None,
                 toggled: Some(self.collapse.toggle()),
             },
+            Command::ShortcutList(open) => self.remember_list(open),
             // `D101`: the way asked for, in effect from the next press and kept
             // for the next run. Between presses like every command, so a value
             // in flight keeps the way it started with. The band is rebuilt as
@@ -1139,37 +1148,6 @@ fn open_pack(
             )
         }
         Err(error) => PackOpening::Failed(i18n::choose_error(&error, asked)),
-    }
-}
-
-/// The compact switch and the memory of it, both owned by the worker.
-///
-/// # Why the worker and not the window
-///
-/// Until `D84` the main thread flipped the window's own property. With the
-/// state remembered, two owners would mean two answers to "is it collapsed":
-/// the one drawn and the one saved. So the worker holds the switch from the
-/// start, tells the window what to draw, and saves the same value - on this
-/// thread, where a slow settings folder costs a press nothing.
-struct Collapse<'a> {
-    compact: Cell<bool>,
-    memory: &'a Memory<'a>,
-}
-
-impl<'a> Collapse<'a> {
-    fn new(memory: &'a Memory<'a>) -> Self {
-        Self {
-            compact: Cell::new(starts_compact(memory.kept.borrow().settings())),
-            memory,
-        }
-    }
-
-    /// Flips the switch and remembers it. The new state, and a line to say
-    /// when saving failed for a reason not said before.
-    fn toggle(&self) -> (bool, Option<String>) {
-        let compact = !self.compact.get();
-        self.compact.set(compact);
-        (compact, self.memory.keep(SettingChange::Compact(compact)))
     }
 }
 
@@ -2226,7 +2204,7 @@ mod tests {
 
     /// A settings store that keeps every save and fails when told to.
     pub(super) struct Remembered {
-        saved: std::cell::RefCell<Vec<nkb_app::ports::SettingChange>>,
+        pub(super) saved: std::cell::RefCell<Vec<nkb_app::ports::SettingChange>>,
         fail: bool,
     }
 

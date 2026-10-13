@@ -780,6 +780,9 @@ pub struct Settings {
     /// Whether the palette clears the line before each typed value or sends it
     /// at the cursor, as the tester last chose (`UX-GUI-005`, `D101`).
     pub clearing: Option<Clearing>,
+    /// Whether the palette shows its list of shortcuts or folds it to its
+    /// heading, as the tester last left it (`D123`).
+    pub shortcut_list: Option<bool>,
     /// The shortcuts the tester wrote (`K4`), in the order the file holds them.
     /// Only chords that READ arrive here - whether each can be used is
     /// [`nkb_core::hotkeys::Bindings::with`]'s question, because the answer
@@ -807,6 +810,8 @@ pub enum SettingChange {
     Compact(bool),
     /// How typed values meet what the field holds (`D101`).
     Clearing(Clearing),
+    /// Whether the palette's list of shortcuts stands open (`D123`).
+    ShortcutList(bool),
     /// One action's shortcut (K5): `Some` is the chord the tester recorded,
     /// `None` gives the action its default back - by REMOVING the key, so the
     /// action follows the default table of whatever version reads the file

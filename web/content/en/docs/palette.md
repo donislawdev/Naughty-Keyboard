@@ -15,7 +15,7 @@ The palette is `nkb-gui`, a window that stays beside the application you are tes
 - **The next value**, the one the next press types, drawn so you can see it. A character nobody can see is drawn as a marker, a box open at the top, instead of as nothing.
 - **The last value it typed**, folded until you open it, with four counts: graphemes, code points, bytes and UTF-16 units. The four differ exactly for the values most likely to break a field.
 - **How each value goes in**: typed from the keyboard, or put on the clipboard for you to paste, and whether the line is cleared first or the value goes in at the cursor.
-- **The keys** of every shortcut that works, along the bottom.
+- **The keys** of every shortcut that works, along the bottom, under a heading that folds them away.
 
 ## How does a value reach the field?
 
@@ -31,8 +31,8 @@ Press {{< kbd "Alt+Shift+Space" >}}. The window that opens shows every pack as a
 
 ## Can I make it smaller?
 
-{{< kbd "Alt+Shift+H" >}} collapses the palette to its header and expands it again. The palette never hides and never moves on its own. It is exactly as tall as what it shows.
+{{< kbd "Alt+Shift+H" >}} collapses the palette to its header and expands it again. Once you know the shortcuts, click **Shortcuts** at the bottom to fold their list under its heading, and click it again to open it. The shortcuts keep working while their list is folded. The palette never hides and never moves on its own. It is exactly as tall as what it shows.
 
 ## What does it remember?
 
-The pack you chose, whether it is collapsed, where it stood on each arrangement of screens, and your shortcuts, in `settings.toml`. On Windows the file is `%APPDATA%\Naughty Keyboard\settings.toml`. A file it cannot use is left as it is and never overwritten.
+The pack you chose, whether it is collapsed, whether the list of shortcuts is folded, where it stood on each arrangement of screens, and your shortcuts, in `settings.toml`. On Windows the file is `%APPDATA%\Naughty Keyboard\settings.toml`. A file it cannot use is left as it is and never overwritten.

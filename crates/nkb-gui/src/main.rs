@@ -235,6 +235,9 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     // Collapse and expand: the worker owns the switch and remembers it (`D84`),
     // so the click asks, as the shortcut does.
     palette.on_toggle_compact(ask_on_click(&choose, live::Command::ToggleCompact));
+    // The list of shortcuts folds in the window at once, and the worker only
+    // remembers it (`D123`).
+    live::wire_shortcut_list(&palette, &choose);
     // The way of meeting the field (`D101`) - the worker holds the choice, and
     // its view brings back the way in effect.
     palette.on_choose_clearing(ask_for_way(&choose, live::clearing_command));
@@ -381,6 +384,8 @@ fn label_palette(palette: &Palette, bindings: &Bindings, compact: bool, settings
     // words naming the shortcuts come from the table of this run, by the same
     // function the worker uses when the table changes.
     live::show_legend(palette, live::legend(bindings));
+    // Under a heading that folds them, open on a first run (`D123`).
+    live::label_shortcut_list(palette, settings);
     // The pack's name opens the pack window when clicked, and UI Automation
     // names that click with the words the hint bar gives the shortcut.
     palette.set_open_packs_label(i18n::action_name(HotkeyAction::OpenPacks).into());

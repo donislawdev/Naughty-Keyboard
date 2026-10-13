@@ -288,30 +288,19 @@ fn settings_of(document: &DocumentMut) -> (Settings, Vec<SettingsNote>) {
                             key: String::from("palette.compact"),
                         }),
                     },
+                    "shortcut-list" => match item.as_bool() {
+                        Some(open) => settings.shortcut_list = Some(open),
+                        None => notes.push(SettingsNote::NotTrueOrFalse {
+                            key: String::from("palette.shortcut-list"),
+                        }),
+                    },
                     "clearing" => match item.as_str().and_then(clearing_named) {
                         Some(clearing) => settings.clearing = Some(clearing),
                         None => notes.push(SettingsNote::NotAClearing {
                             key: String::from("palette.clearing"),
                         }),
                     },
-                    "position" => match item.as_table_like() {
-                        Some(positions) => {
-                            for (layout, place) in positions.iter() {
-                                match position_of(layout, place) {
-                                    Some(read) => settings.positions.push(read),
-                                    None => notes.push(SettingsNote::NotAPosition {
-                                        key: format!(
-                                            "palette.position.\"{}\"",
-                                            layout.escape_debug()
-                                        ),
-                                    }),
-                                }
-                            }
-                        }
-                        None => notes.push(SettingsNote::NotATable {
-                            key: String::from("palette.position"),
-                        }),
-                    },
+                    "position" => positions_of(item, &mut settings.positions, &mut notes),
                     other => unknown.push(format!("palette.{other}")),
                 }
             }
@@ -346,6 +335,27 @@ fn settings_of(document: &DocumentMut) -> (Settings, Vec<SettingsNote>) {
         notes.push(SettingsNote::UnknownKeys { keys: unknown });
     }
     (settings, notes)
+}
+
+/// The places in `[palette.position]` (`D103`): each one that reads is kept,
+/// and each one that does not is named, so one bad place costs only itself.
+/// Out of [`settings_of`] since the fold of the list of shortcuts brought
+/// `[palette]` a fifth key (`D123`), under the ceiling of `D113`.
+fn positions_of(item: &Item, positions: &mut Vec<(Layout, Point)>, notes: &mut Vec<SettingsNote>) {
+    let Some(table) = item.as_table_like() else {
+        notes.push(SettingsNote::NotATable {
+            key: String::from("palette.position"),
+        });
+        return;
+    };
+    for (layout, place) in table.iter() {
+        match position_of(layout, place) {
+            Some(read) => positions.push(read),
+            None => notes.push(SettingsNote::NotAPosition {
+                key: format!("palette.position.\"{}\"", layout.escape_debug()),
+            }),
+        }
+    }
 }
 
 /// The recent values in `[find] recent` (`UX-GUI-016`): an array whose every
@@ -497,6 +507,10 @@ fn set_key(document: &mut DocumentMut, change: &SettingChange) -> bool {
             current.and_then(Item::as_bool) == Some(*compact),
             Some(Value::from(*compact)),
         ),
+        SettingChange::ShortcutList(open) => (
+            current.and_then(Item::as_bool) == Some(*open),
+            Some(Value::from(*open)),
+        ),
         SettingChange::Clearing(clearing) => (
             current.and_then(Item::as_str).and_then(clearing_named) == Some(*clearing),
             Some(Value::from(clearing_word(*clearing))),
@@ -574,6 +588,7 @@ fn place_of(change: &SettingChange) -> Option<(&'static str, &'static str)> {
         SettingChange::Pack(_) => Some(("palette", "pack")),
         SettingChange::Compact(_) => Some(("palette", "compact")),
         SettingChange::Clearing(_) => Some(("palette", "clearing")),
+        SettingChange::ShortcutList(_) => Some(("palette", "shortcut-list")),
         SettingChange::Shortcut { action, .. } => Some(("shortcuts", action.id())),
         SettingChange::WelcomeDone => Some(("welcome", "done")),
         SettingChange::Recent(_) => Some(("find", "recent")),
@@ -1176,6 +1191,35 @@ mod tests {
             store.save(&SettingChange::Clearing(Clearing::Line)),
             Err(SaveError::Unwritable)
         );
+    }
+
+    /// `D123`: the fold of the palette's list of shortcuts is `true` or
+    /// `false` both ways, and anything else is named and left to the default.
+    #[test]
+    fn the_shortcut_list_is_true_or_false_both_ways_and_anything_else_is_named() {
+        let scratch = Scratch::new("shortcut-list");
+        let store = scratch.store();
+        assert_eq!(store.save(&SettingChange::ShortcutList(false)), Ok(()));
+        assert_eq!(
+            scratch.text(),
+            "schema = 1\n\n[palette]\nshortcut-list = false\n"
+        );
+        assert_eq!(read(&store).0.shortcut_list, Some(false));
+        assert_eq!(store.save(&SettingChange::ShortcutList(true)), Ok(()));
+        assert_eq!(read(&store).0.shortcut_list, Some(true));
+
+        for wrong in ["\"false\"", "0", "\"open\""] {
+            scratch.write(&format!("schema = 1\n[palette]\nshortcut-list = {wrong}\n"));
+            let (settings, notes) = read(&store);
+            assert_eq!(settings.shortcut_list, None, "{wrong}");
+            assert_eq!(
+                notes,
+                vec![SettingsNote::NotTrueOrFalse {
+                    key: String::from("palette.shortcut-list")
+                }],
+                "{wrong}"
+            );
+        }
     }
 
     #[test]

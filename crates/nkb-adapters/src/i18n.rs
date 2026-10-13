@@ -2076,6 +2076,8 @@ mod tests {
             PaletteLabel::ShortcutsPaused,
             PaletteLabel::ShortcutsLink,
             PaletteLabel::AboutLink,
+            PaletteLabel::ShortcutList,
+            PaletteLabel::ShortcutListAction,
             PaletteLabel::Typing,
             PaletteLabel::TypingCounter,
             PaletteLabel::StopTyping,
@@ -2138,6 +2140,8 @@ mod tests {
                 | PaletteLabel::ShortcutsPaused
                 | PaletteLabel::ShortcutsLink
                 | PaletteLabel::AboutLink
+                | PaletteLabel::ShortcutList
+                | PaletteLabel::ShortcutListAction
                 | PaletteLabel::Typing
                 | PaletteLabel::StopTyping
                 | PaletteLabel::LastSent
