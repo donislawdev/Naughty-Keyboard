@@ -66,9 +66,10 @@ pub enum ClearingOutcome {
     Skipped(SkipReason),
 }
 
-/// Why clearing was left out. Two reasons, because the tester is told a
-/// different true sentence for each: one focus the system does not describe as
-/// a field, the other it does, and the tool still keeps the keys out.
+/// Why clearing was left out. A reason each, because the tester is told a
+/// different true sentence for each: a focus the system does not describe as a
+/// field, one it does while the tool still keeps the keys out, and a window
+/// that shows nothing inside it for a cause the tester can change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkipReason {
     /// The focus could not be confirmed as a text field (`D76`).
@@ -76,6 +77,9 @@ pub enum SkipReason {
     /// The focus is a terminal, where the clearing keys go to the program
     /// running in it (`OBS-141`).
     Terminal,
+    /// The focus is a window closed to accessibility - Firefox with its
+    /// accessibility services kept out (`D125`).
+    ClosedToAccessibility,
 }
 
 /// What to send: which value of which pack, and whether to clear first.
@@ -200,8 +204,9 @@ pub enum SendOutcome {
     /// There is no delivery route on this system.
     RouteUnavailable { reason: String },
     /// Clearing was asked for and did not go through. The value was NOT sent.
-    /// Never [`KeystrokeError::FieldUnconfirmed`] or
-    /// [`KeystrokeError::InTerminal`]: those are skips, and the value goes on
+    /// Never [`KeystrokeError::FieldUnconfirmed`],
+    /// [`KeystrokeError::InTerminal`] or
+    /// [`KeystrokeError::ClosedToAccessibility`]: those are skips, and the value goes on
     /// ([`ClearingOutcome::Skipped`]).
     NotCleared { error: KeystrokeError },
     /// There is a route, and none of the value arrived - refused before a key,
@@ -375,6 +380,9 @@ pub fn deliver_value(
                 ClearingOutcome::Skipped(SkipReason::Unconfirmed)
             }
             Err(KeystrokeError::InTerminal) => ClearingOutcome::Skipped(SkipReason::Terminal),
+            Err(KeystrokeError::ClosedToAccessibility) => {
+                ClearingOutcome::Skipped(SkipReason::ClosedToAccessibility)
+            }
             Err(error) => return SendOutcome::NotCleared { error },
         },
     };
@@ -734,6 +742,38 @@ mod tests {
             panic!("a terminal is a skip, not a refusal, got {outcome:?}");
         };
         assert_eq!(clearing, ClearingOutcome::Skipped(SkipReason::Terminal));
+        assert_eq!(
+            log.borrow().as_slice(),
+            ["keys:Home,Shift+End,Delete", "text:ab"]
+        );
+    }
+
+    #[test]
+    fn a_window_closed_to_accessibility_gets_the_value_uncleared_and_the_outcome_names_it() {
+        // `D125`: the door pressed nothing, because the window shows nothing
+        // inside it. The value goes, and the reason is the window, so the
+        // tester is told which setting causes it.
+        let log = log();
+        let spy = Spy::ready(&log);
+        let keys = KeySpy {
+            fail_with: Some(KeystrokeError::ClosedToAccessibility),
+            log: Rc::clone(&log),
+        };
+        let outcome = send_value(
+            &Shelf,
+            &Scripted::two(),
+            &spy,
+            &keys,
+            &request(1, Clearing::Line),
+            &mut |_| {},
+        );
+        let SendOutcome::Sent { clearing, .. } = outcome else {
+            panic!("a window closed to accessibility is a skip, not a refusal, got {outcome:?}");
+        };
+        assert_eq!(
+            clearing,
+            ClearingOutcome::Skipped(SkipReason::ClosedToAccessibility)
+        );
         assert_eq!(
             log.borrow().as_slice(),
             ["keys:Home,Shift+End,Delete", "text:ab"]

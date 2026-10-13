@@ -27,6 +27,8 @@ faq:
     answer: "No. It is built for testing software you are responsible for, and the welcome window says so: use it only on systems you are allowed to test. The built-in packs hold values that real users and real data produce, and no exploit payloads."
   - question: Why does it type rather than paste?
     answer: "Because a field meets most values from a keyboard, and some applications treat typing and pasting differently, which is worth testing on its own. When you want the other way, [clipboard mode](/docs/clipboard-mode/) puts each value on the clipboard instead."
+  - question: Why is the line not cleared in Firefox?
+    answer: "Most often because Firefox keeps accessibility services out. With **Prevent accessibility services from accessing your browser** on in its Privacy & Security settings, the system sees nothing inside the window, and the palette will not press clearing keys it cannot aim. The value still goes in, on top of what the field held, and the palette names the setting. Turn it off and restart Firefox to have the line cleared."
   - question: Why is it called Naughty?
     answer: "After the Big List of Naughty Strings, which is where the idea of this catalogue starts and which most testers already know. The word is theirs."
 ---

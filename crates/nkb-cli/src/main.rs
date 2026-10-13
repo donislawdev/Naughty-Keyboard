@@ -11,6 +11,7 @@
 #![forbid(unsafe_code)]
 
 mod browse_report;
+mod clearing;
 mod emit_output;
 mod english;
 mod exit;
@@ -19,6 +20,7 @@ mod lint_json;
 mod lint_report;
 mod output;
 
+use clearing::{not_cleared, say_clearing_before_failure};
 use emit_output::{EmitFormat, Form};
 use exit::ExitCode;
 use nkb_adapters::{
@@ -28,8 +30,8 @@ use nkb_adapters::{
 use nkb_app::{
     Availability, Clearing, ClearingOutcome, DeliveryError, EmitOutcome, FormatOutcome,
     KeystrokeError, LintOutcome, NewPackOutcome, Progress, SendOutcome, SendRequest, Sending,
-    ShowOutcome, SkipReason, StopReason, TargetInspector, ValueDelivery, ValueFacts, emit_values,
-    format_pack, lint_pack, list_packs, new_pack, send_value, show_pack,
+    ShowOutcome, StopReason, TargetInspector, ValueDelivery, ValueFacts, emit_values, format_pack,
+    lint_pack, list_packs, new_pack, send_value, show_pack,
 };
 use nkb_core::report::{ControlKind, Target};
 use output::{out, outln};
@@ -767,11 +769,8 @@ fn report_send(err: &mut impl Write, wanted: &str, outcome: SendOutcome) -> Exit
                 ClearingOutcome::Done => {
                     let _ = writeln!(err, "nkb send: cleared the line (Home, Shift+End, Delete)");
                 }
-                ClearingOutcome::Skipped(SkipReason::Unconfirmed) => {
-                    let _ = writeln!(err, "{CLEARING_SKIPPED}");
-                }
-                ClearingOutcome::Skipped(SkipReason::Terminal) => {
-                    let _ = writeln!(err, "{CLEARING_SKIPPED_IN_TERMINAL}");
+                ClearingOutcome::Skipped(reason) => {
+                    let _ = writeln!(err, "{}", not_cleared(reason));
                 }
                 ClearingOutcome::NotAsked => {}
             }
@@ -936,6 +935,11 @@ fn say_not_cleared(err: &mut impl Write, error: &KeystrokeError) {
             err,
             "nkb send: the focus is a terminal, so it was not cleared and nothing was sent."
         ),
+        // And for a window closed to accessibility (`D125`).
+        KeystrokeError::ClosedToAccessibility => writeln!(
+            err,
+            "nkb send: the window shows the system nothing inside it, so it was not cleared and nothing was sent."
+        ),
     };
 }
 
@@ -1052,23 +1056,6 @@ fn stop_reason(reason: StopReason) -> &'static str {
     }
 }
 
-/// What became of the clearing, said before the news that the value did not
-/// arrive whole - the tester needs to know what the field held before it.
-fn say_clearing_before_failure(err: &mut impl Write, clearing: ClearingOutcome) {
-    match clearing {
-        ClearingOutcome::Done => {
-            let _ = writeln!(err, "nkb send: the line was cleared before this happened.");
-        }
-        ClearingOutcome::Skipped(SkipReason::Unconfirmed) => {
-            let _ = writeln!(err, "{CLEARING_SKIPPED}");
-        }
-        ClearingOutcome::Skipped(SkipReason::Terminal) => {
-            let _ = writeln!(err, "{CLEARING_SKIPPED_IN_TERMINAL}");
-        }
-        ClearingOutcome::NotAsked => {}
-    }
-}
-
 /// What `nkb send` says when the window in front runs with higher privileges.
 ///
 /// One sentence for both places it can come from - the clearing, which goes
@@ -1090,23 +1077,6 @@ const HIGHER_PRIVILEGES: &str = "nkb send: the window in front runs with higher 
 /// while, although the focus is in a field, until the focus moves (`OBS-140`).
 /// Clicking into the field again is what ends that, so it is what is asked for.
 const NO_TEXT_FIELD: &str = "nkb send: the system reports the keyboard focus outside a text field, so nothing was sent - keys there could press buttons or act on list items. Click into the field and run this again.";
-
-/// What `nkb send --clear` says when it sent the value without clearing.
-///
-/// The clearing keys go out only where the focus is confirmed as a text field
-/// (`D76`): measured in a spreadsheet, which does not say what holds its focus,
-/// they emptied a whole row. So the value went on top of whatever was there,
-/// and the command says that rather than let `--clear` read as done.
-const CLEARING_SKIPPED: &str = "nkb send: not cleared first - the system does not report this focus as a text field, and the clearing keys could reach beyond one. The value went in on top of what was there.";
-
-/// What `nkb send --clear` says when the focus is a terminal (`OBS-141`).
-///
-/// A terminal answers the same with a prompt and with a full-screen program
-/// running in it, and the clearing keys there go to that program - a file
-/// manager may select to the last file and delete. The system does report a
-/// text field here, so the sentence above would be false, and this one names
-/// the terminal instead.
-const CLEARING_SKIPPED_IN_TERMINAL: &str = "nkb send: not cleared first - this is a terminal, where the clearing keys go to the program running in it and could act beyond the line. The value went in on top of what was there.";
 
 /// Counts down on standard error so the person can put the focus where they mean.
 /// How much text `nkb send` sent, in the four units that differ.
@@ -1136,6 +1106,7 @@ fn where_it_goes(target: &Target) -> String {
         ControlKind::Terminal => "a terminal",
         ControlKind::Unconfirmed => "a control not confirmed as a field",
         ControlKind::NotTextField => "not a text field",
+        ControlKind::ClosedToAccessibility => "a window closed to accessibility",
     };
     match &target.program {
         Some(program) => format!("{}, {control}", program.escape_debug()),
@@ -2126,6 +2097,10 @@ mod tests {
         assert_eq!(
             where_it_goes(&at(Some("x.exe"), ControlKind::NotTextField)),
             "x.exe, not a text field"
+        );
+        assert_eq!(
+            where_it_goes(&at(Some("firefox.exe"), ControlKind::ClosedToAccessibility)),
+            "firefox.exe, a window closed to accessibility"
         );
     }
 }

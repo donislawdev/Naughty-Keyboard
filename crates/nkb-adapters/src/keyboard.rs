@@ -122,6 +122,7 @@ fn control_kind(focus: nkb_sys::field::FocusedInput) -> ControlKind {
         nkb_sys::field::FocusedInput::Terminal => ControlKind::Terminal,
         nkb_sys::field::FocusedInput::Unknown => ControlKind::Unconfirmed,
         nkb_sys::field::FocusedInput::NotTextField => ControlKind::NotTextField,
+        nkb_sys::field::FocusedInput::ClosedToAccessibility => ControlKind::ClosedToAccessibility,
     }
 }
 
@@ -177,6 +178,11 @@ fn clearing_verdict(focus: nkb_sys::field::FocusedInput) -> Result<(), Keystroke
         // `OBS-141`: a terminal is a field for the value, and never for the
         // recipe - what the keys do there is the program's choice, not ours.
         nkb_sys::field::FocusedInput::Terminal => Err(KeystrokeError::InTerminal),
+        // `D125`: no view of the field, for `Unknown`'s reason - and a known
+        // cause, which the caller names.
+        nkb_sys::field::FocusedInput::ClosedToAccessibility => {
+            Err(KeystrokeError::ClosedToAccessibility)
+        }
     }
 }
 
@@ -386,6 +392,11 @@ mod tests {
             clearing_verdict(FocusedInput::Terminal),
             Err(KeystrokeError::InTerminal)
         );
+        // `D125`: Firefox keeping accessibility services out shows no field.
+        assert_eq!(
+            clearing_verdict(FocusedInput::ClosedToAccessibility),
+            Err(KeystrokeError::ClosedToAccessibility)
+        );
     }
 
     #[test]
@@ -405,6 +416,10 @@ mod tests {
         assert_eq!(
             control_kind(FocusedInput::NotTextField),
             ControlKind::NotTextField
+        );
+        assert_eq!(
+            control_kind(FocusedInput::ClosedToAccessibility),
+            ControlKind::ClosedToAccessibility
         );
     }
 

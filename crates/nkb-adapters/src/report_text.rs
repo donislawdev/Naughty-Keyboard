@@ -123,6 +123,8 @@ pub enum ReportPhrase {
     ControlTerminal,
     ControlUnconfirmed,
     ControlNotTextField,
+    /// `D125`: Firefox keeping accessibility services out.
+    ControlClosedToAccessibility,
     /// Sessions are not saved yet - `W4`, `session-format.md`.
     SessionNotRecorded,
     /// The value arrived in part.
@@ -153,6 +155,7 @@ fn pattern_report_phrase(phrase: ReportPhrase) -> &'static str {
         ReportPhrase::ControlTerminal => "terminal",
         ReportPhrase::ControlUnconfirmed => "control not confirmed as a field",
         ReportPhrase::ControlNotTextField => "not a text field",
+        ReportPhrase::ControlClosedToAccessibility => "window closed to accessibility",
         ReportPhrase::SessionNotRecorded => "not recorded - this version does not save sessions",
         ReportPhrase::Interrupted => {
             "interrupted after {sent} of {expected} UTF-16 units - the field holds a fragment"
@@ -369,6 +372,7 @@ fn target(block: &ReportBlock) -> String {
                 ControlKind::Terminal => ReportPhrase::ControlTerminal,
                 ControlKind::Unconfirmed => ReportPhrase::ControlUnconfirmed,
                 ControlKind::NotTextField => ReportPhrase::ControlNotTextField,
+                ControlKind::ClosedToAccessibility => ReportPhrase::ControlClosedToAccessibility,
             });
             match program {
                 Some(program) => fill(
@@ -691,6 +695,13 @@ mod tests {
         assert_eq!(
             target_line(&with(None, ControlKind::NotTextField)),
             "Target:   a program that did not give its name · not a text field"
+        );
+        assert_eq!(
+            target_line(&with(
+                Some("firefox.exe"),
+                ControlKind::ClosedToAccessibility
+            )),
+            "Target:   firefox.exe · window closed to accessibility"
         );
         let pasted = ReportBlock {
             target: None,

@@ -66,7 +66,22 @@
 //! (`OBS-139`), so it stays `Unknown` - and its row, `Document` with the Text
 //! pattern alone, is `Unknown` too, never a field.
 //!
-//! # Four answers, and the unknown is never folded into another
+//! # A window that shows nothing inside it
+//!
+//! Measured 2026-10-11 (`OBS-175`, `tools/sondy/firefox-pola.ps1`): Firefox
+//! with "Prevent accessibility services from accessing your browser" on in its
+//! settings shows UI Automation its frame and nothing else - the focused
+//! element is the window itself, a `Window` of the class `MozillaWindowClass`.
+//! With the setting off, every field measured answered as a field. Nothing
+//! there tells a field from the bookmarks library, so the clearing recipe stays
+//! out as for any focus nobody recognised. But the cause is known and the
+//! tester can change it, so it is its own answer,
+//! [`FocusedInput::ClosedToAccessibility`], recognised by the type AND by a
+//! closed list of measured classes ([`CLOSED_TO_ACCESSIBILITY_CLASSES`]) - the
+//! sentence it brings names the setting (`D125`). It only narrows `Unknown`: a
+//! `Window` had no other answer.
+//!
+//! # Five answers, and the unknown is never folded into another
 //!
 //! [`FocusedInput::NotTextField`] is claimed only for control types that take no
 //! text by definition, and it is the only answer that stops a send. Everything
@@ -74,7 +89,8 @@
 //! element that belongs to another process than the window in front is
 //! [`FocusedInput::Unknown`] - and `Unknown` presses exactly as before this
 //! module existed. Guessing a cause the tool did not recognise is what
-//! `product-spec.md` 9.3 forbids.
+//! `product-spec.md` 9.3 forbids. A window closed to accessibility presses as
+//! `Unknown` does, and is named apart only so the tester is told why.
 //!
 //! # What this reads, and what it does not
 //!
@@ -82,8 +98,9 @@
 //! control type, whether it has the Value pattern and whether that is
 //! read-only, whether it has the Text pattern, whether it is a window of its
 //! own (only compared with zero, for the second look above), and its class
-//! name - compared with [`TERMINAL_CLASSES`] where it is read and dropped
-//! there, so nothing past that comparison ever holds it. A class name is set
+//! name - compared with [`TERMINAL_CLASSES`] and
+//! [`CLOSED_TO_ACCESSIBILITY_CLASSES`] where it is read and dropped there, so
+//! nothing past that comparison ever holds it. A class name is set
 //! by whoever wrote the control, not by what the tester typed. Never its name,
 //! never its value, never its text, never any other element.
 //! `tests/field_reads_only_kinds.rs` holds the list and goes red when a
@@ -117,6 +134,10 @@ pub enum FocusedInput {
     /// Not recognised, not readable, not answered in time, or not in the window
     /// in front. The send goes ahead exactly as before.
     Unknown,
+    /// A window that shows the system nothing inside it - Firefox while it
+    /// keeps accessibility services out (`OBS-175`, `D125`). Pressed as
+    /// `Unknown` is: the value is sent, the clearing recipe never.
+    ClosedToAccessibility,
 }
 
 /// How long one UI Automation request may take before the answer is `Unknown`.
@@ -167,9 +188,9 @@ struct Facts {
     /// Whether the element is a native window of its own. Chromium's elements
     /// and Slint's are not, classic controls are.
     windowed: bool,
-    /// Whether the element's class name is one of [`TERMINAL_CLASSES`]. The
-    /// name itself is not kept.
-    terminal: bool,
+    /// Which closed list the element's class name is on, if any. The name
+    /// itself is not kept.
+    class: KnownClass,
 }
 
 /// Class names of the focused element that mean a terminal, each measured
@@ -187,14 +208,53 @@ struct Facts {
 /// should not be, which is why a new entry needs a measurement, not a guess.
 pub const TERMINAL_CLASSES: &[&str] = &["TermControl", "xterm-helper-textarea"];
 
-/// Whether a class name, as the UTF-16 units UI Automation hands over, is one
-/// of [`TERMINAL_CLASSES`]. Compared unit by unit, so the name is never turned
-/// into a string that could outlive the comparison. Called by the Windows
-/// reading only - elsewhere there is no focus to ask about - and by the tests.
+/// Class names of a focused `Window` that shows the system nothing inside it,
+/// each measured (`tools/sondy/firefox-pola.ps1 -BezDostepnosci`, 2026-10-11,
+/// `OBS-175`).
+///
+/// - `MozillaWindowClass` - Firefox with "Prevent accessibility services from
+///   accessing your browser" on (`accessibility.force_disabled = 1`). Every
+///   application built on its engine names its windows so, and none of them
+///   was measured beyond Firefox.
+///
+/// 🔴 Deliberately NOT here: `SALFRAME`, the frame of LibreOffice, which gives
+/// the same frame-only answer before UI Automation first asks inside it
+/// (`OBS-177`). Its cause is not a setting the tester can change, and the
+/// sentence of this answer names one. Compared whole and with case, as
+/// [`TERMINAL_CLASSES`] is, and a new entry needs a measurement too.
+pub const CLOSED_TO_ACCESSIBILITY_CLASSES: &[&str] = &["MozillaWindowClass"];
+
+/// Which closed list a class name is on - each list is a different answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(not(windows), allow(dead_code))]
-fn is_terminal_class(units: &[u16]) -> bool {
-    TERMINAL_CLASSES
-        .iter()
+enum KnownClass {
+    /// On no list: the element is decided by its type and patterns.
+    Other,
+    /// One of [`TERMINAL_CLASSES`].
+    Terminal,
+    /// One of [`CLOSED_TO_ACCESSIBILITY_CLASSES`].
+    ClosedToAccessibility,
+}
+
+/// Which closed list a class name, as the UTF-16 units UI Automation hands
+/// over, is on. Compared unit by unit, so the name is never turned into a
+/// string that could outlive the comparison. Called by the Windows reading
+/// only - elsewhere there is no focus to ask about - and by the tests.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn known_class(units: &[u16]) -> KnownClass {
+    if on_list(TERMINAL_CLASSES, units) {
+        KnownClass::Terminal
+    } else if on_list(CLOSED_TO_ACCESSIBILITY_CLASSES, units) {
+        KnownClass::ClosedToAccessibility
+    } else {
+        KnownClass::Other
+    }
+}
+
+/// Whether `units` spell one of the names on `list`, whole and with case.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn on_list(list: &[&str], units: &[u16]) -> bool {
+    list.iter()
         .any(|name| name.encode_utf16().eq(units.iter().copied()))
 }
 
@@ -257,6 +317,10 @@ mod control {
     pub const THUMB: i32 = 50027;
     pub const DOCUMENT: i32 = 50030;
     pub const SPLIT_BUTTON: i32 = 50031;
+    // A window itself holds the focus where the application shows nothing
+    // inside it (`D125`), and the rule decides that by the class as well -
+    // every top-level window is a `Window`.
+    pub const WINDOW: i32 = 50032;
     // Named for the tests, which pin that it stays `Unknown`: the rule itself
     // never mentions it, and that silence is the point.
     #[cfg_attr(not(test), allow(dead_code))]
@@ -312,8 +376,14 @@ const NOT_TEXT: &[i32] = &[
 fn classify(facts: &Facts) -> FocusedInput {
     // Before the type: the VS Code terminal is an `Edit`, and an `Edit` is a
     // field everywhere else.
-    if facts.terminal {
+    if facts.class == KnownClass::Terminal {
         return FocusedInput::Terminal;
+    }
+    // The window itself holding the focus, of a class measured to show nothing
+    // inside it (`D125`). The type alone says nothing - every top-level window
+    // is a `Window` - and the class alone could be any element's, so both.
+    if facts.class == KnownClass::ClosedToAccessibility && facts.control_type == control::WINDOW {
+        return FocusedInput::ClosedToAccessibility;
     }
     match facts.control_type {
         control::EDIT => FocusedInput::TextField,
@@ -344,7 +414,7 @@ fn classify(facts: &Facts) -> FocusedInput {
 
 #[cfg(windows)]
 mod platform {
-    use super::{Facts, TIMEOUT_MS, is_terminal_class};
+    use super::{Facts, KnownClass, TIMEOUT_MS, known_class};
     use crate::WindowRef;
     use core::ffi::c_void;
     use core::ptr::{null, null_mut};
@@ -497,39 +567,39 @@ mod platform {
             let text = bool_property(&element, PROPERTY_IS_TEXT_PATTERN_AVAILABLE)?;
             // Compared with zero and dropped - the handle itself is not kept.
             let windowed = int_property(&element, PROPERTY_NATIVE_WINDOW_HANDLE)? != 0;
-            let terminal = class_is_terminal(&element);
+            let class = class_of(&element);
             Some(Facts {
                 control_type,
                 value,
                 text,
                 windowed,
-                terminal,
+                class,
             })
         }
     }
 
-    /// Whether the element's class name is a terminal's. Read, compared and
+    /// Which closed list the element's class name is on. Read, compared and
     /// released here - the name goes nowhere else. A class that cannot be read
-    /// is not a terminal: the element is then decided by its type, as it was
-    /// before classes were asked.
-    fn class_is_terminal(element: &Com) -> bool {
+    /// is on no list: the element is then decided by its type, as it was before
+    /// classes were asked.
+    fn class_of(element: &Com) -> KnownClass {
         let Some(value) = property(element, PROPERTY_CLASS_NAME) else {
-            return false;
+            return KnownClass::Other;
         };
         let inner = unsafe { &value.0.Anonymous.Anonymous };
         if inner.vt != VT_BSTR {
-            return false;
+            return KnownClass::Other;
         }
         let name = unsafe { inner.Anonymous.bstrVal };
         if name.is_null() {
-            return false;
+            return KnownClass::Other;
         }
         // The length the string says it has, not a search for a zero: a BSTR
         // may carry one inside. The units live as long as `value`, which is
         // cleared when this function returns.
         let length = unsafe { SysStringLen(name) } as usize;
         let units = unsafe { core::slice::from_raw_parts(name, length) };
-        is_terminal_class(units)
+        known_class(units)
     }
 
     /// A `VARIANT` this module received, cleared on every path out - a
@@ -615,7 +685,7 @@ mod tests {
             value,
             text,
             windowed: false,
-            terminal: false,
+            class: KnownClass::Other,
         }
     }
 
@@ -628,7 +698,14 @@ mod tests {
 
     fn of_a_terminal_class(facts: Facts) -> Facts {
         Facts {
-            terminal: true,
+            class: KnownClass::Terminal,
+            ..facts
+        }
+    }
+
+    fn of_a_class_closed_to_accessibility(facts: Facts) -> Facts {
+        Facts {
+            class: KnownClass::ClosedToAccessibility,
             ..facts
         }
     }
@@ -645,7 +722,7 @@ mod tests {
     /// rule that turns any of these around is a change to what was MEASURED.
     #[test]
     fn every_measured_focus_is_answered_as_it_was() {
-        use FocusedInput::{NotTextField, Terminal, TextField, Unknown};
+        use FocusedInput::{ClosedToAccessibility, NotTextField, Terminal, TextField, Unknown};
         let rows: &[(&str, Facts, FocusedInput)] = &[
             // Classic Win32 controls, through WinForms.
             ("edit box", facts(control::EDIT, RW, true), TextField),
@@ -775,6 +852,16 @@ mod tests {
                 facts(control::DOCUMENT, None, true),
                 Unknown,
             ),
+            // `OBS-175`, 2026-10-11: Firefox with "Prevent accessibility
+            // services from accessing your browser" on, the focus in a text
+            // input of the page - and the window itself is all UI Automation
+            // shows. Its patterns and its native handle were not recorded,
+            // and neither decides.
+            (
+                "firefox closed to accessibility, text input",
+                of_a_class_closed_to_accessibility(facts(control::WINDOW, None, false)),
+                ClosedToAccessibility,
+            ),
         ];
         for (what, reading, expected) in rows {
             assert_eq!(classify(reading), *expected, "{what}: {reading:?}");
@@ -784,7 +871,11 @@ mod tests {
     #[test]
     fn a_terminal_class_is_matched_whole_and_with_case() {
         for measured in TERMINAL_CLASSES {
-            assert!(is_terminal_class(&units(measured)), "{measured}");
+            assert_eq!(
+                known_class(&units(measured)),
+                KnownClass::Terminal,
+                "{measured}"
+            );
         }
         for not_one in [
             "",
@@ -797,8 +888,77 @@ mod tests {
             "native-edit-context",
             "Edit",
         ] {
-            assert!(!is_terminal_class(&units(not_one)), "{not_one:?}");
+            assert_eq!(
+                known_class(&units(not_one)),
+                KnownClass::Other,
+                "{not_one:?}"
+            );
         }
+    }
+
+    #[test]
+    fn a_class_closed_to_accessibility_is_matched_whole_and_with_case() {
+        for measured in CLOSED_TO_ACCESSIBILITY_CLASSES {
+            assert_eq!(
+                known_class(&units(measured)),
+                KnownClass::ClosedToAccessibility,
+                "{measured}"
+            );
+        }
+        for not_one in [
+            "mozillawindowclass",
+            "MozillaWindowClass ",
+            // Firefox's pop-ups and menus have classes of their own, and none
+            // was measured as a window closed to accessibility.
+            "MozillaDropShadowWindowClass",
+            "MozillaDialogClass",
+            // `OBS-177`: LibreOffice shows its frame alone too, for a cause
+            // that is not a setting - so it stays on no list.
+            "SALFRAME",
+        ] {
+            assert_eq!(
+                known_class(&units(not_one)),
+                KnownClass::Other,
+                "{not_one:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_class_closed_to_accessibility_counts_only_on_the_window_itself() {
+        // Any element can carry a class name - a web page sets them on its
+        // own elements - so the class decides only where the window itself
+        // holds the focus. Elsewhere the type decides, as it always did.
+        assert_eq!(
+            classify(&of_a_class_closed_to_accessibility(facts(
+                control::WINDOW,
+                None,
+                false
+            ))),
+            FocusedInput::ClosedToAccessibility,
+            "decided by the type and the class, not by being a window of its own"
+        );
+        for (control_type, value, text, expected) in [
+            (control::EDIT, RW, true, FocusedInput::TextField),
+            (control::BUTTON, None, false, FocusedInput::NotTextField),
+            (control::DOCUMENT, None, true, FocusedInput::Unknown),
+            (control::PANE, None, false, FocusedInput::Unknown),
+        ] {
+            assert_eq!(
+                classify(&of_a_class_closed_to_accessibility(facts(
+                    control_type,
+                    value,
+                    text
+                ))),
+                expected,
+                "control type {control_type}"
+            );
+        }
+        // And a window of any other class is a window nobody recognised.
+        assert_eq!(
+            classify(&windowed(facts(control::WINDOW, None, false))),
+            FocusedInput::Unknown
+        );
     }
 
     #[test]
@@ -1005,6 +1165,7 @@ mod tests {
             (control::THUMB, uia::UIA_ThumbControlTypeId),
             (control::DOCUMENT, uia::UIA_DocumentControlTypeId),
             (control::SPLIT_BUTTON, uia::UIA_SplitButtonControlTypeId),
+            (control::WINDOW, uia::UIA_WindowControlTypeId),
             (control::PANE, uia::UIA_PaneControlTypeId),
             (control::HEADER, uia::UIA_HeaderControlTypeId),
             (control::HEADER_ITEM, uia::UIA_HeaderItemControlTypeId),
@@ -1053,7 +1214,7 @@ mod tests {
     #[test]
     fn the_client_answers_where_the_route_exists() {
         // The whole COM path on this machine, against whatever is in front:
-        // any of the four answers is fine, a crash or a hang is not. Asked
+        // any of the five answers is fine, a crash or a hang is not. Asked
         // twice, so the kept client is exercised as well as the new one.
         if !crate::can_send() {
             return;

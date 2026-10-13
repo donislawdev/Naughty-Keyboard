@@ -237,6 +237,10 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::ClearingSkippedInTerminal => {
             "Not cleared first: this is a terminal, where the clearing keys go to the program running in it and could act beyond the line. The value went in on top of what was there."
         }
+        // `D125`, ux-spec.md 6 A. The setting's words are Firefox's own.
+        Message::ClearingSkippedClosedToAccessibility => {
+            "Not cleared first: this window shows the system nothing inside it, so the clearing keys could reach beyond the field, and the value went in on top of what was there. Firefox does this while \"Prevent accessibility services from accessing your browser\" is on in its settings - turn it off and restart Firefox to have the line cleared."
+        }
         Message::ClipboardBusy => {
             "Another application is holding the clipboard, so the value was not placed on it. Press the shortcut again in a moment."
         }
@@ -326,6 +330,7 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
         | Message::NoTextField
         | Message::ClearingSkipped
         | Message::ClearingSkippedInTerminal
+        | Message::ClearingSkippedClosedToAccessibility
         | Message::ClipboardBusy
         | Message::NoTarget
         | Message::ClearingFailed
@@ -1227,6 +1232,7 @@ mod tests {
             Message::NoTextField,
             Message::ClearingSkipped,
             Message::ClearingSkippedInTerminal,
+            Message::ClearingSkippedClosedToAccessibility,
             Message::ClipboardBusy,
             Message::ClipboardFailed {
                 detail: "the display went away".to_owned(),
@@ -1572,10 +1578,11 @@ mod tests {
             Message::CopyGone { .. } => 29,
             Message::ClipboardModeOff => 30,
             Message::AtFirstValue { .. } => 31,
+            Message::ClearingSkippedClosedToAccessibility => 32,
         }
     }
 
-    const SLOTS: usize = 32;
+    const SLOTS: usize = 33;
 
     #[test]
     fn every_message_variant_is_listed_here() {
@@ -2108,6 +2115,7 @@ mod tests {
             PaletteLabel::ControlTerminal,
             PaletteLabel::ControlUnconfirmed,
             PaletteLabel::ControlNotTextField,
+            PaletteLabel::ControlClosedToAccessibility,
             PaletteLabel::Back,
             PaletteLabel::BackAction,
             PaletteLabel::Skip,
@@ -2167,6 +2175,7 @@ mod tests {
                 | PaletteLabel::ControlTerminal
                 | PaletteLabel::ControlUnconfirmed
                 | PaletteLabel::ControlNotTextField
+                | PaletteLabel::ControlClosedToAccessibility
                 | PaletteLabel::Back
                 | PaletteLabel::BackAction
                 | PaletteLabel::Skip
@@ -2648,6 +2657,10 @@ mod tests {
         assert_eq!(
             sent_to(&at(Some("x.exe"), ControlKind::NotTextField)),
             "to x.exe, not a text field"
+        );
+        assert_eq!(
+            sent_to(&at(Some("firefox.exe"), ControlKind::ClosedToAccessibility)),
+            "to firefox.exe, a window closed to accessibility"
         );
     }
 

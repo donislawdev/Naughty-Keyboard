@@ -317,6 +317,12 @@ pub enum KeystrokeError {
     /// a refusal of the value - the caller sends it without clearing and says
     /// why.
     InTerminal,
+    /// The focus is a window that shows the system nothing inside it - Firefox
+    /// while it keeps accessibility services out (`D125`) - so no key was
+    /// pressed, for [`KeystrokeError::FieldUnconfirmed`]'s reason. Named apart
+    /// because its cause is known: the caller sends the value without clearing
+    /// and names the setting.
+    ClosedToAccessibility,
 }
 
 impl fmt::Display for KeystrokeError {
@@ -335,6 +341,7 @@ impl fmt::Display for KeystrokeError {
             Self::NoTextField => f.write_str("no-text-field"),
             Self::FieldUnconfirmed => f.write_str("field-unconfirmed"),
             Self::InTerminal => f.write_str("in-terminal"),
+            Self::ClosedToAccessibility => f.write_str("closed-to-accessibility"),
         }
     }
 }
