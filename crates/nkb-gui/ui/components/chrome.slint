@@ -304,12 +304,17 @@ export component Chevron inherits Rectangle {
     in property <bool> backward;
     in property <color> ink: Tokens.text-secondary;
 
-    width: root.open ? Tokens.chevron-width : Tokens.chevron-height;
-    height: root.open ? Tokens.chevron-height : Tokens.chevron-width;
+    // One square box in every state, the triangle centred in it at its own
+    // size - an element with a size and no position is centred. Until
+    // 2026-10-11 the box was the triangle's, wide when open and tall when
+    // folded, so the words beside a fold jumped four pixels across and one
+    // down at every click (measured by palette_shortcut_list.rs).
+    width: Tokens.chevron-width;
+    height: Tokens.chevron-width;
 
     if root.open: Path {
-        width: parent.width;
-        height: parent.height;
+        width: Tokens.chevron-width;
+        height: Tokens.chevron-height;
         viewbox-width: 2;
         viewbox-height: 1;
         fill: root.ink;
@@ -328,8 +333,8 @@ export component Chevron inherits Rectangle {
         Close { }
     }
     if !root.open && root.backward: Path {
-        width: parent.width;
-        height: parent.height;
+        width: Tokens.chevron-height;
+        height: Tokens.chevron-width;
         viewbox-width: 1;
         viewbox-height: 2;
         fill: root.ink;
@@ -348,8 +353,8 @@ export component Chevron inherits Rectangle {
         Close { }
     }
     if !root.open && !root.backward: Path {
-        width: parent.width;
-        height: parent.height;
+        width: Tokens.chevron-height;
+        height: Tokens.chevron-width;
         viewbox-width: 1;
         viewbox-height: 2;
         fill: root.ink;

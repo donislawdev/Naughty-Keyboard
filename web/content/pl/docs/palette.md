@@ -16,7 +16,7 @@ Paleta to `nkb-gui`, okno, które stoi obok testowanej aplikacji i jest sterowan
 - **Następną wartość**, tę, którą wpisze następne naciśnięcie, narysowaną tak, żeby ją było widać. Znak, którego nikt nie zobaczy, jest rysowany jako znacznik, prostokąt otwarty od góry, a nie jako nic.
 - **Ostatnią wpisaną wartość**, zwiniętą, dopóki jej nie rozwiniesz, z czterema licznikami: grafemy, punkty kodowe, bajty i jednostki UTF-16. Te cztery liczby różnią się właśnie przy wartościach, które najczęściej psują pola.
 - **Sposób wpisania każdej wartości**: z klawiatury albo przez schowek, z którego ją wklejasz, i to, czy wiersz jest najpierw czyszczony, czy wartość trafia w miejsce kursora.
-- **Klawisze** każdego działającego skrótu, na dole.
+- **Klawisze** każdego działającego skrótu, na dole, pod nagłówkiem, który je zwija.
 
 ## Jak wartość trafia do pola?
 
@@ -32,8 +32,8 @@ Naciśnij {{< kbd "Alt+Shift+Space" >}}. Okno, które się otworzy, pokazuje ka�
 
 ## Czy mogę ją zmniejszyć?
 
-{{< kbd "Alt+Shift+H" >}} zwija paletę do samego nagłówka i rozwija ją z powrotem. Paleta nigdy się nie chowa i nigdy sama się nie przesuwa. Jest dokładnie tak wysoka, jak to, co pokazuje.
+{{< kbd "Alt+Shift+H" >}} zwija paletę do samego nagłówka i rozwija ją z powrotem. Gdy znasz już skróty, kliknij **Shortcuts** na dole, a ich lista zwinie się pod nagłówkiem. Kolejne kliknięcie ją rozwija. Skróty działają także przy zwiniętej liście. Paleta nigdy się nie chowa i nigdy sama się nie przesuwa. Jest dokładnie tak wysoka, jak to, co pokazuje.
 
 ## Co pamięta?
 
-Wybraną paczkę, to, czy jest zwinięta, gdzie stała przy każdym układzie ekranów, i Twoje skróty, w `settings.toml`. Na Windows ten plik to `%APPDATA%\Naughty Keyboard\settings.toml`. Pliku, którego nie potrafi użyć, nie rusza i nigdy go nie nadpisuje.
+Wybraną paczkę, to, czy jest zwinięta i czy zwinięta jest lista skrótów, gdzie stała przy każdym układzie ekranów, i Twoje skróty, w `settings.toml`. Na Windows ten plik to `%APPDATA%\Naughty Keyboard\settings.toml`. Pliku, którego nie potrafi użyć, nie rusza i nigdy go nie nadpisuje.

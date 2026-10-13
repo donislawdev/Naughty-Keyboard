@@ -97,6 +97,12 @@ pub enum PaletteLabel {
     /// The link beside it that opens the About window - its words, and what a
     /// click does (the owner's point 4 of 2026-10-10).
     AboutLink,
+    /// The heading of the list of shortcuts at the foot of the palette, which
+    /// folds the list away and opens it again (`D123`, the owner's choice on
+    /// a palette that had grown to ~916 px).
+    ShortcutList,
+    /// What a click on that heading does, as UI Automation reads it.
+    ShortcutListAction,
     /// The band of a send in progress, its first word (`OBS-160`). Until that
     /// band a send of minutes left the palette showing the value before.
     Typing,
@@ -220,6 +226,8 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::ShortcutsPaused => "Shortcuts are paused while the Shortcuts window is open.",
         PaletteLabel::ShortcutsLink => "Change shortcuts",
         PaletteLabel::AboutLink => "About",
+        PaletteLabel::ShortcutList => "Shortcuts",
+        PaletteLabel::ShortcutListAction => "Show or hide the list of shortcuts",
         PaletteLabel::Typing => "Typing",
         PaletteLabel::TypingCounter => "{arrived} / {total} units",
         PaletteLabel::StopTyping => "Press Esc to stop.",

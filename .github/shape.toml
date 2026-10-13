@@ -11,16 +11,18 @@
 band = 0.7
 
 # The code the two programs are made of: libraries and binaries, without tests
-# and examples. Measured 2026-10-08 on Windows with clippy 0.1.99.
+# and examples. Measured 2026-10-08 on Windows with clippy 0.1.99. Complexity
+# 23 since 2026-10-11, when the reading of the remembered places left the
+# settings file's settings_of, its holder.
 [clippy.product]
 too-many-lines-threshold = 163
-cognitive-complexity-threshold = 25
+cognitive-complexity-threshold = 23
 excessive-nesting-threshold = 6
 too-many-arguments-threshold = 7
 
 # How many stand near each ceiling, per scope.
 [clippy.near.product]
-too-many-lines-threshold = 8
+too-many-lines-threshold = 7
 cognitive-complexity-threshold = 1
 excessive-nesting-threshold = 1
 too-many-arguments-threshold = 3
@@ -46,19 +48,22 @@ ceiling = 1133
 near = 1
 
 # A whole Rust file, its tests included. nkb-gui/src/live.rs, then
-# nkb-adapters/src/i18n.rs at 2080.
+# nkb-adapters/src/i18n.rs at 2084.
 [files.rust-whole]
-ceiling = 2363
+ceiling = 2351
 # 5 since 2026-10-10, the owner's choice twice that day: the ceiling came down
 # from 2907 to 2481, 2408, 2407 and 2363 as live.rs moved code into modules, the
 # band came down with it, and it reached advance_sequence.rs, settings_file.rs
-# and nkb-cli's main.rs, none of which had grown.
+# and nkb-cli's main.rs, none of which had grown. 2351 on 2026-10-11, when the
+# compact switch went to live/folds.rs with the fold of the shortcut list. Below
+# 2348 the band would reach toml_pack.rs at 1643.
 near = 5
 
-# A Slint file, the gallery excepted. ui/components/list.slint, then
-# ui/screens/palette.slint at 298 since its value bands and switches became
-# components. The About window's facts went to a file of their own rather than
-# take ui/components/chrome.slint into the band.
+# A Slint file, the gallery excepted. ui/screens/palette.slint since the fold
+# of its shortcut list (2026-10-11), then ui/components/list.slint at 260 once
+# the fold's heading went to a file of its own. The About window's facts went
+# to a file of their own rather than take ui/components/chrome.slint into the
+# band.
 [files.slint]
-ceiling = 312
+ceiling = 310
 near = 2

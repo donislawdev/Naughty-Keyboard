@@ -458,6 +458,7 @@ impl KeptSettings {
             SettingChange::Pack(pack) => self.settings.pack.as_deref() == Some(pack.as_str()),
             SettingChange::Compact(compact) => self.settings.compact == Some(*compact),
             SettingChange::Clearing(clearing) => self.settings.clearing == Some(*clearing),
+            SettingChange::ShortcutList(open) => self.settings.shortcut_list == Some(*open),
             SettingChange::Shortcut { .. } => false,
             // The same place, and already the most recent - the store moves a
             // layout to the end when it is used again, so the oldest one is
@@ -475,6 +476,7 @@ impl KeptSettings {
             SettingChange::Pack(pack) => self.settings.pack = Some(pack),
             SettingChange::Compact(compact) => self.settings.compact = Some(compact),
             SettingChange::Clearing(clearing) => self.settings.clearing = Some(clearing),
+            SettingChange::ShortcutList(open) => self.settings.shortcut_list = Some(open),
             SettingChange::Shortcut { action, chord } => {
                 wish(&mut self.settings.shortcuts, action, chord);
             }
@@ -764,6 +766,32 @@ mod tests {
                 SettingChange::Clearing(Clearing::Line)
             ],
             "the same choice twice went to disk twice"
+        );
+    }
+
+    /// `D123`: the fold of the palette's list of shortcuts is kept like any
+    /// other choice - each fold and unfold goes to disk once, and a click that
+    /// asks for the state in effect writes nothing.
+    #[test]
+    fn the_fold_of_the_shortcut_list_is_kept_and_saved_once_per_change() {
+        let store = FakeStore::loading(SettingsLoad::Absent);
+        let (mut kept, _) = KeptSettings::open(&store);
+        assert_eq!(
+            kept.settings().shortcut_list,
+            None,
+            "the file says nothing yet"
+        );
+        assert_eq!(kept.keep(&store, SettingChange::ShortcutList(false)), None);
+        assert_eq!(kept.settings().shortcut_list, Some(false));
+        assert_eq!(kept.keep(&store, SettingChange::ShortcutList(false)), None);
+        assert_eq!(kept.keep(&store, SettingChange::ShortcutList(true)), None);
+        assert_eq!(
+            store.saves(),
+            vec![
+                SettingChange::ShortcutList(false),
+                SettingChange::ShortcutList(true)
+            ],
+            "the same fold twice went to disk twice"
         );
     }
 

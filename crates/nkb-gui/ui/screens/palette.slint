@@ -107,6 +107,7 @@ import {
     NextBand,
     LastSentBand,
     SwitchesBand,
+    Disclosure,
 } from "../components.slint";
 
 // Which value a Copy button copies: the pack's identifier and the value's.
@@ -294,6 +295,15 @@ export component Palette inherits Window {
 
     // ---- the hint bar ------------------------------------------------------
     in property <[HintRow]> hints;
+    // Its heading folds the list away and opens it again (`D123`). The view
+    // draws the state it is given: the click asks, the main thread flips the
+    // state, and the worker remembers it for the next run - so the list opens
+    // on a first run and as the tester left it after that.
+    in property <bool> hints-open: true;
+    in property <string> hints-label;
+    // What a click on the heading does, as UI Automation reads it.
+    in property <string> hints-action;
+    callback toggle-hints();
 
     // ---- state -------------------------------------------------------------
     // The tester's choice, made with a shortcut or the button in the pack band
@@ -313,7 +323,6 @@ export component Palette inherits Window {
     // the glossary (`ClipboardMode`), never "degraded": `ux-spec.md` 8 forbids
     // presenting this mode as a failure, in words or otherwise.
     in property <bool> clipboard-mode;
-    in property <bool> hints-visible: true;
     // Whether the system permits translucency at all (D53). Separate from
     // `showing` because it is the system's answer, not the palette's state.
     in property <bool> translucency-allowed: true;
@@ -504,9 +513,20 @@ export component Palette inherits Window {
 
         // The keys, in the footer as every window of the product lists them.
         // Hidden in the compact state, which is meant to take little room and
-        // no attention - and the keys are muted (D53).
-        if root.hints-visible && !root.compact: WindowFooter {
-            HintBar {
+        // no attention - and the keys are muted (D53). Under a heading that
+        // folds them (`D123`): a tester who knows them takes back the list's
+        // height, and the heading stays where it was, so folding moves only
+        // what stands below it.
+        if !root.compact: WindowFooter {
+            Disclosure {
+                text: root.hints-label;
+                open: root.hints-open;
+                action: root.hints-action;
+                clicked => {
+                    root.toggle-hints();
+                }
+            }
+            if root.hints-open: HintBar {
                 rows: root.hints;
             }
         }
