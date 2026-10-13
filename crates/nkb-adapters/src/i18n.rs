@@ -81,6 +81,7 @@ use crate::settings_file::SCHEMA;
 // in one file - and no file grows past the ceiling of `D113`. The paths stay
 // what they were: every name below is still `nkb_adapters::i18n::<name>`.
 mod palette;
+mod registration;
 mod windows;
 
 use palette::pattern_palette_label;
@@ -88,6 +89,7 @@ pub use palette::{
     PaletteLabel, counter, counts, label, next_end_of_pack, next_value, no_value_yet, sent_to,
     typing_counter, warnings,
 };
+pub use registration::{ended, registration, registrations, shortcuts_unavailable};
 pub use windows::{
     AboutLabel, MatchPlace, PacksLabel, ShortcutsLabel, WelcomeLabel, about_copyright, about_label,
     found_in, no_match, not_read, pack_problems, pack_refused, pack_unreadable, packs_label,
@@ -468,111 +470,6 @@ pub fn choose_error(error: &ChooseError, pack: &str) -> String {
             fill(pattern, &[("pack", pack), ("errors", &errors.to_string())])
         }
     }
-}
-
-// ---------------------------------------------------------------------------
-// Shortcuts - registration, absence, and the listener going away
-// ---------------------------------------------------------------------------
-
-/// The pattern for a registration outcome that has something to say.
-///
-/// ⚠️ `Registered` is absent and that is not an oversight: a shortcut that took
-/// is the normal case, and the tool does not report what worked. The return type
-/// says so, rather than a caller having to know.
-///
-/// 🔴 The `Taken` sentence changed on 2026-09-22 for the same reason as
-/// `Degraded`. It used to end "Pick a different shortcut in Settings." - and
-/// there was no settings screen. It changed again on 2026-09-29 (`K4`): it said
-/// "This build cannot change it", and since the settings file holds shortcuts
-/// that was no longer true. It does not send the tester to the file either -
-/// a hand-edited file is not the place a sentence may point at for this. The
-/// shortcuts tab (`K5`) will be.
-fn pattern_registration(outcome: &ShortcutRegistration) -> Option<&'static str> {
-    match outcome {
-        ShortcutRegistration::Registered => None,
-        ShortcutRegistration::Taken => Some(
-            "{shortcut} is already taken by another application, so \"{action}\" will not respond. Close the other application or choose another combination under \"{link}\".",
-        ),
-        ShortcutRegistration::Failed { .. } => Some(
-            "{shortcut} could not be registered, so \"{action}\" will not respond. The system returned code {code}.",
-        ),
-    }
-}
-
-/// What the palette says about one shortcut registration, or nothing when it
-/// simply worked. `chord` is the one that was registered for `action`.
-#[must_use]
-pub fn registration(
-    outcome: &ShortcutRegistration,
-    action: HotkeyAction,
-    registered: HotkeyChord,
-) -> Option<String> {
-    let pattern = pattern_registration(outcome)?;
-    let shortcut = chord(registered);
-    // ⚠️ This match supplies ARGUMENTS and decides nothing about whether there is
-    // a sentence at all - that decision belongs to `pattern_registration` and to
-    // nowhere else. The first version repeated it here with an early `return
-    // None` for `Registered`, and a mutation proved the cost immediately:
-    // changing `pattern_registration` to speak for a successful registration did
-    // not change what this function returned, so the guard could not see it. Two
-    // places holding one decision is the shape that drifts.
-    let code = match outcome {
-        ShortcutRegistration::Registered | ShortcutRegistration::Taken => String::new(),
-        ShortcutRegistration::Failed { code } => code.to_string(),
-    };
-    Some(fill(
-        pattern,
-        &[
-            ("shortcut", &shortcut),
-            ("action", action_name(action)),
-            ("code", &code),
-            // The link's own words, so the sentence and the link it sends the
-            // tester to cannot drift apart.
-            ("link", pattern_palette_label(PaletteLabel::ShortcutsLink)),
-        ],
-    ))
-}
-
-/// The pattern for having no shortcuts at all. `ux-spec.md` 6, section E.
-fn pattern_unavailable(reason: &ShortcutsUnavailable) -> &'static str {
-    match reason {
-        ShortcutsUnavailable::Unsupported { .. } => {
-            "This build has no way to register global shortcuts on {system}, so the palette cannot be driven from the keyboard here."
-        }
-        ShortcutsUnavailable::CouldNotStart => {
-            "The shortcut listener could not start, so no shortcut will respond. Restart the palette to try again."
-        }
-    }
-}
-
-/// What the palette says when no shortcut could be registered at all.
-#[must_use]
-pub fn shortcuts_unavailable(reason: &ShortcutsUnavailable) -> String {
-    let pattern = pattern_unavailable(reason);
-    match reason {
-        ShortcutsUnavailable::Unsupported { system } => fill(pattern, &[("system", system)]),
-        ShortcutsUnavailable::CouldNotStart => pattern.to_owned(),
-    }
-}
-
-/// The pattern for the loop ending, when the ending is worth saying.
-///
-/// `Stopped` is absent for the same reason `Registered` is: closing on request
-/// is not an event anybody needs told. `ShortcutsGone` is the opposite - the
-/// window would sit there looking alive while no press can ever arrive again.
-fn pattern_ended(ended: Ended) -> Option<&'static str> {
-    match ended {
-        Ended::Stopped => None,
-        Ended::ShortcutsGone => Some(
-            "The shortcut listener has stopped, so no shortcut will respond. Restart the palette.",
-        ),
-    }
-}
-
-/// What the palette says when the loop ends, or nothing for an ordinary close.
-#[must_use]
-pub fn ended(ended: Ended) -> Option<String> {
-    pattern_ended(ended).map(ToOwned::to_owned)
 }
 
 // ---------------------------------------------------------------------------
@@ -1321,6 +1218,9 @@ mod tests {
                 .expect("both of these outcomes have a sentence"),
             );
         }
+        out.extend(registrations(&registered_as(|_| {
+            ShortcutRegistration::Taken
+        })));
         out.push(shortcuts_unavailable(&ShortcutsUnavailable::Unsupported {
             system: "macOS".to_owned(),
         }));
@@ -1663,6 +1563,62 @@ mod tests {
             ended(Ended::Stopped).is_none(),
             "closing on request is not an event"
         );
+    }
+
+    /// Every action with its default chord and the outcome `of` gives it, as
+    /// the palette keeps a registration.
+    fn registered_as(
+        of: impl Fn(HotkeyAction) -> ShortcutRegistration,
+    ) -> Vec<(HotkeyAction, HotkeyChord, ShortcutRegistration)> {
+        HotkeyAction::ALL
+            .iter()
+            .map(|action| (*action, defaults().chord(*action), of(*action)))
+            .collect()
+    }
+
+    /// `OBS-176`: every shortcut taken is one sentence naming the likely
+    /// holder and the link, never one for each. Some taken, or one refused
+    /// for another reason, keeps a sentence each, and a set that took or an
+    /// empty one says nothing.
+    #[test]
+    fn every_shortcut_taken_is_one_sentence_and_anything_less_is_one_each() {
+        let all = registrations(&registered_as(|_| ShortcutRegistration::Taken));
+        assert_eq!(all.len(), 1, "{all:?}");
+        assert!(
+            all[0].starts_with("Every shortcut is already taken"),
+            "{all:?}"
+        );
+        assert!(
+            all[0].contains("another Naughty Keyboard palette"),
+            "{all:?}"
+        );
+        assert!(all[0].ends_with("under \"Change shortcuts\"."), "{all:?}");
+
+        for odd in [
+            ShortcutRegistration::Registered,
+            ShortcutRegistration::Failed { code: 1409 },
+        ] {
+            let one_each = registrations(&registered_as(|action| {
+                if action == HotkeyAction::PreviousValue {
+                    odd
+                } else {
+                    ShortcutRegistration::Taken
+                }
+            }));
+            let said = usize::from(odd != ShortcutRegistration::Registered);
+            assert_eq!(
+                one_each.len(),
+                HotkeyAction::ALL.len() - 1 + said,
+                "{odd:?}"
+            );
+            assert!(
+                one_each.iter().all(|line| !line.starts_with("Every")),
+                "{one_each:?}"
+            );
+        }
+
+        assert!(registrations(&registered_as(|_| ShortcutRegistration::Registered)).is_empty());
+        assert!(registrations(&[]).is_empty());
     }
 
     #[test]
