@@ -47,7 +47,8 @@ pub struct Program {
 }
 
 /// Describes `program` in its file: writes the version block and compiles
-/// `script`, which includes it, or the block alone when there is no script.
+/// `script`, which includes it and names the program's icon. Both programs
+/// have such a script since `nkb` took the palette's icon (2026-10-14).
 ///
 /// The year of the copyright goes to the package's code on every target, for
 /// the About window. The rest happens on Windows only.
@@ -55,7 +56,7 @@ pub struct Program {
 /// ⚠️ A Windows build that cannot compile the resource fails, rather than
 /// building a program that says nothing about itself - the reason
 /// `crates/nkb-gui/build.rs` gives for its icon.
-pub fn describe(program: &Program, script: Option<&Path>) {
+pub fn describe(program: &Program, script: &Path) {
     println!("cargo:rustc-env=NKB_FIRST_YEAR={FIRST_YEAR}");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
@@ -63,23 +64,19 @@ pub fn describe(program: &Program, script: Option<&Path>) {
     let out = PathBuf::from(std::env::var("OUT_DIR").expect("Cargo names the output directory"));
     let block = out.join(BLOCK);
     std::fs::write(&block, version_block(program)).expect("the version block must be written");
-    let compiled = match script {
-        Some(script) => embed_resource::compile_for(
-            script,
-            [program.name],
-            embed_resource::ParamsIncludeDirs([&out]),
-        ),
-        None => embed_resource::compile_for(&block, [program.name], embed_resource::NONE),
-    };
-    compiled
-        .manifest_required()
-        .expect("the file's details must be embedded in the program");
+    embed_resource::compile_for(
+        script,
+        [program.name],
+        embed_resource::ParamsIncludeDirs([&out]),
+    )
+    .manifest_required()
+    .expect("the file's details must be embedded in the program");
 }
 
 /// The resource script of the version block, from the manifest's words.
 ///
-/// ⚠️ It names its code page, which holds when the block is compiled on its
-/// own, as for `nkb`. A script that includes it has to name the code page
+/// ⚠️ It names its code page, which would hold only if the block were compiled
+/// on its own. Both programs' scripts include it, so each names the code page
 /// itself, before the include - see `crates/nkb-gui/assets/nkb-gui.rc`.
 fn version_block(program: &Program) -> String {
     let version = manifest("CARGO_PKG_VERSION");

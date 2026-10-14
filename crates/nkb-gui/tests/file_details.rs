@@ -30,6 +30,14 @@ fn nkb_gui_says_what_it_is_in_its_file() {
     );
 }
 
+/// The icon a file manager and the taskbar show, read back from the built
+/// file. `app_icon.rs` follows the chain of scripts, this measures where it
+/// ends.
+#[test]
+fn nkb_gui_wears_the_icon_that_ships() {
+    details::assert_wears_the_icon(env!("CARGO_BIN_EXE_nkb-gui"));
+}
+
 #[test]
 fn the_about_window_says_what_the_file_says() {
     let read = details::read(env!("CARGO_BIN_EXE_nkb-gui"));

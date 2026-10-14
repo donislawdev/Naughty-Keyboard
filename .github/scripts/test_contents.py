@@ -27,6 +27,14 @@ ALLOWED = {"MIT": 0, "Apache-2.0": 1, "Apache-2.0 WITH LLVM-exception": 2, "Unic
            "GPL-3.0-only": 4}
 
 
+@dataclasses.dataclass(frozen=True)
+class Archive:
+    """The three parts of an archive `contents.in_archive` reads."""
+    program: str
+    os: str
+    packaged: tuple
+
+
 def choices(*sets):
     return [frozenset(s) for s in sets]
 
@@ -352,6 +360,37 @@ class Register(Tree):
         with self.assertRaises(contents.Refused):
             contents.load_register(register, root=self.root, programs={"cli"})
 
+    def data_limited_to(self, systems_line):
+        self.build()
+        text = (self.REGISTER % contents.sha256_of(os.path.join(self.root, "crates/gui/ui/fonts/font.ttf"))).replace(
+            'files = [{ path = "data/" }]', 'files = [{ path = "data/" }]\n' + systems_line)
+        return self.put(".github/release/components.toml", text)
+
+    def test_a_component_limited_to_a_system_no_archive_has_is_refused(self):
+        register = self.data_limited_to('systems = ["plan9"]')
+        with self.assertRaises(contents.Refused) as caught:
+            contents.load_register(register, root=self.root, programs={"gui"}, systems={"windows", "linux"})
+        self.assertTrue(any("plan9" in p for p in caught.exception.problems), caught.exception.problems)
+
+    def test_an_empty_list_of_systems_is_refused_rather_than_read_as_every_system(self):
+        register = self.data_limited_to("systems = []")
+        with self.assertRaises(contents.Refused) as caught:
+            contents.load_register(register, root=self.root, programs={"gui"}, systems={"windows"})
+        self.assertTrue(any("names no systems" in p for p in caught.exception.problems), caught.exception.problems)
+
+    def test_a_component_limited_to_a_system_is_in_that_systems_archive_only(self):
+        register = self.data_limited_to('systems = ["windows"]')
+        components, _ = contents.load_register(register, root=self.root, programs={"gui"}, systems={"windows", "linux"})
+        data = next(c for c in components if c.name == "Data")
+        font = next(c for c in components if c.name == "Font")
+        def on(system):
+            return Archive(program="gui", os=system, packaged=())
+
+        self.assertEqual(data.systems, ("windows",))
+        self.assertTrue(contents.in_archive(data, on("windows")))
+        self.assertFalse(contents.in_archive(data, on("linux")))
+        self.assertTrue(contents.in_archive(font, on("linux")), "a component with no systems is on every one")
+
     def test_a_file_packed_beside_a_program_counts_as_its_use(self):
         self.build()
         self.put("crates/gui/assets/icon.icns", "icon bytes")
@@ -564,6 +603,17 @@ class RealTree(unittest.TestCase):
         holding = sorted(a.name("0.1.0") for a in archives if contents.in_archive(icon, a))
         self.assertEqual(holding, ["nkb-gui_0.1.0_linux_amd64.tar.gz", "nkb-gui_0.1.0_macos_arm64.tar.gz",
                                    "nkb-gui_0.1.0_windows_amd64.zip", "nkb_0.1.0_macos_arm64.tar.gz"])
+
+    def test_the_command_lines_compiled_icon_is_in_its_windows_archive_only(self):
+        # nkb.exe wears the palette's icon through a resource script, which is
+        # compiled on Windows alone. On macOS the bundle's .icns is the other
+        # component, and on Linux the command line tool carries no icon.
+        archives = contents.load_archives()
+        components, _ = contents.load_register(programs={a.program for a in archives},
+                                               systems={a.os for a in archives})
+        icon = next(c for c in components if c.name == "Naughty Keyboard application icon, in the command line tool")
+        holding = sorted(a.name("0.1.0") for a in archives if contents.in_archive(icon, a))
+        self.assertEqual(holding, ["nkb_0.1.0_windows_amd64.zip"])
 
     def test_the_standard_texts_are_the_published_bytes(self):
         problems, listed = contents.check_standard_texts()

@@ -1,0 +1,21 @@
+// The resources of nkb.exe, as a script for `build.rs` to compile: the
+// program's icon, and the file's details - version, author, licence. Nothing
+// else goes in, no manifest, the same two things nkb-gui.exe carries.
+//
+// The command line tool has no window, but its file is still seen: in the
+// file manager, in a terminal's tab and in the task manager. It wears the
+// palette's icon so the two files read as one product.
+//
+// The details are written at build time from the package manifest, by
+// file_details.rs, into the build's output directory, which the build script
+// hands the compiler as a place to look for includes. The code page is named
+// here, before the include, because the compiler honours it only in the
+// script it was asked to compile - crates/nkb-gui/assets/nkb-gui.rc says how
+// that was found.
+#pragma code_page(65001)
+#include "details.rc"
+
+// The path is relative to this file. ONE icon file for both programs, kept with
+// the drawings it is made from and the tests that hold it to them - a copy here
+// would drift. Only the build reads it, so nkb links nothing of the interface.
+1 ICON "../../nkb-gui/assets/edamame.ico"

@@ -264,9 +264,12 @@ class Component:
     files: tuple       # (path, sha256 or None)
     derived: tuple
     own: bool
+    # The systems on which it is compiled into its programs - empty for all of
+    # them. A resource script is compiled on Windows only.
+    systems: tuple = ()
 
 
-def load_register(path=os.path.join(RELEASE, "components.toml"), root=ROOT, programs=None):
+def load_register(path=os.path.join(RELEASE, "components.toml"), root=ROOT, programs=None, systems=None):
     data = read_toml(path)
     problems = []
     if data.get("schema") != 1:
@@ -290,6 +293,11 @@ def load_register(path=os.path.join(RELEASE, "components.toml"), root=ROOT, prog
         for program in entry.get("programs", []):
             if programs is not None and program not in programs:
                 problems.append("component %r is in program %r, which archives.toml does not list" % (name, program))
+        if "systems" in entry and not entry["systems"]:
+            problems.append("component %r names no systems - leave the field out to mean every system" % name)
+        for system in entry.get("systems", []):
+            if systems is not None and system not in systems:
+                problems.append("component %r is limited to system %r, which archives.toml does not list" % (name, system))
         files = []
         for item in entry.get("files", []):
             where = item.get("path", "")
@@ -310,7 +318,7 @@ def load_register(path=os.path.join(RELEASE, "components.toml"), root=ROOT, prog
         components.append(Component(
             name, entry.get("version", ""), licence, text, entry.get("source", ""),
             tuple(entry.get("programs", [])), tuple(files), tuple(entry.get("derived", [])),
-            bool(entry.get("own", False))))
+            bool(entry.get("own", False)), tuple(entry.get("systems", []))))
     allowances = [(a.get("file", ""), a.get("reference", ""), a.get("reason", ""))
                   for a in data.get("not-compiled-in", [])]
     for file, reference, reason in allowances:
@@ -799,8 +807,9 @@ def gather(archives, components, crates, allowed, root=ROOT):
 
 
 def in_archive(component, archive):
-    """Compiled into the program, or packed beside it in this one archive."""
-    if archive.program in component.programs:
+    """Compiled into the program on this archive's system, or packed beside it
+    in this one archive."""
+    if archive.program in component.programs and (not component.systems or archive.os in component.systems):
         return True
     return any(where in archive.packaged for where, _ in component.files)
 
@@ -1082,7 +1091,8 @@ def prepare(root=ROOT):
     problems = []
     workspace = load_workspace(root)
     archives = load_archives()
-    components, allowances = load_register(programs={a.program for a in archives}, root=root)
+    components, allowances = load_register(programs={a.program for a in archives},
+                                           systems={a.os for a in archives}, root=root)
     packaged = [where for archive in archives for where in archive.packaged]
     problems.extend(check_register_against_source(components, allowances, root, packaged))
     text_problems, licence_list = check_standard_texts()

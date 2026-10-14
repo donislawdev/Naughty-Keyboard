@@ -23,6 +23,8 @@
 #                     document carries for a LicenseRef-
 #   source            where it comes from
 #   programs          the programs it is compiled into
+#   systems           the systems on which it is, when not all of them: a file
+#                     a resource script compiles in is there on Windows alone
 #   files             files compiled in, or packed into an archive beside the
 #                     program by archives.toml, with the sha256 of each one that
 #                     is somebody else's bytes, kept as its authors wrote them.
@@ -90,6 +92,18 @@ files = [
 ]
 own = true
 
+[[components]]
+name = "Naughty Keyboard application icon, in the command line tool"
+licence = "GPL-3.0-only"
+source = "https://github.com/donislawdev/Naughty-Keyboard/tree/main/crates/nkb-gui/assets"
+programs = ["nkb"]
+# The same .ico, compiled into nkb.exe by crates/nkb-cli/assets/nkb.rc - a
+# resource script, so on Windows alone. On macOS the command line tool's
+# bundle carries the .icns of the entry above, and on Linux it has no icon.
+systems = ["windows"]
+files = [{ path = "crates/nkb-gui/assets/edamame.ico" }]
+own = true
+
 # A reference the source check finds that does not reach a program. Each says
 # where it is and why, and an entry that matches nothing is itself refused, so
 # none outlives its reason.
@@ -97,6 +111,11 @@ own = true
 file = "crates/nkb-core/src/lint.rs"
 reference = "lint.rs"
 reason = "read by a unit test inside `mod tests`, to compare the rule register with the enum it describes"
+
+[[not-compiled-in]]
+file = "crates/nkb-cli/assets/nkb.rc"
+reference = "details.rc"
+reason = "not a file of the repository: the version block crates/nkb-cli/file_details.rs writes into the build's output directory, from the package manifest, so it is this project's own work and carries no other licence"
 
 [[not-compiled-in]]
 file = "crates/nkb-gui/assets/nkb-gui.rc"
