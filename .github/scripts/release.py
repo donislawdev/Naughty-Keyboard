@@ -136,6 +136,17 @@ def sbom_name(version):
     return "%s_%s.spdx.json" % (SBOM_STEM, version)
 
 
+def is_candidate(tag):
+    """A tag with a hyphen is a release candidate.
+
+    The one rule, in every place that asks it: release.yml opens such a release
+    as a pre-release, build_msi.py builds it no installer, phase B neither builds
+    one nor uploads one, and phases C and D expect none on its page. Windows
+    Installer reads only the three numbers of a version, so a candidate's
+    installer would carry the release's own version."""
+    return "-" in tag
+
+
 def plan_of(event, ref_type, ref_name, run_number, workspace):
     """A pushed tag is a release. Anything else builds the same files under a
     version no release can carry."""
@@ -147,7 +158,7 @@ def plan_of(event, ref_type, ref_name, run_number, workspace):
             raise Refused(["the run number %r is not a number" % run_number])
         tag = "v%s-dev.%s" % (workspace.version, run_number)
     version = contents.version_of_tag(tag, workspace)
-    return Plan(release, tag, version, workspace.version, "-" in version)
+    return Plan(release, tag, version, workspace.version, is_candidate(tag))
 
 
 def platforms_of(archives):
@@ -174,9 +185,20 @@ def write_outputs(values, path):
         handle.write("\n".join(lines) + "\n")
 
 
+def installer_platform(archives, installer):
+    """The platform the installer is built for, as platforms_of gives it: the
+    job that tries the installer runs where that platform's archives are built."""
+    found = [p for p in platforms_of(archives) if (p["os"], p["arch"]) == (installer.os, installer.arch)]
+    if len(found) != 1:
+        raise Refused(["the installer is for %s %s, and archives.toml has %d such platforms"
+                       % (installer.os, installer.arch, len(found))])
+    return found[0]
+
+
 def command_plan(args):
     plan = plan_of(args.event, args.ref_type, args.ref_name, args.run_number, contents.load_workspace())
     archives = contents.load_archives()
+    installer = installer_platform(archives, contents.load_installer())
     outputs = {
         "release": "true" if plan.release else "false",
         "tag": plan.tag,
@@ -185,6 +207,8 @@ def command_plan(args):
         "prerelease": "true" if plan.prerelease else "false",
         "sbom": plan.sbom(),
         "platforms": json.dumps(platforms_of(archives), separators=(",", ":")),
+        "installer-os": installer["os"],
+        "installer-runner": installer["runner"],
     }
     for key, value in outputs.items():
         say("%s = %s" % (key, value))
@@ -826,7 +850,7 @@ def open_draft(tag, notes, run=subprocess.run):
     if state == "draft":
         say("the draft of %s is already open and is left as it is" % tag)
         return state
-    done = gh(draft_command(tag, notes, "-" in tag), run)
+    done = gh(draft_command(tag, notes, is_candidate(tag)), run)
     if done.returncode != 0:
         raise Refused(["gh could not open the draft of %s:\n%s" % (tag, done.stderr.strip())])
     say("opened %s as an empty draft" % tag)
@@ -853,11 +877,20 @@ def sbom_bundle_name(version):
     return "%s_%s.sbom.sigstore.json" % (SBOM_STEM, version)
 
 
-def published_files(tag):
-    """What phase B puts on the draft: the signed build, the statement of the
-    unsigned one under a name a person can use, and the checksums."""
+def installer_name(tag):
+    """The Windows installer a release carries, or None for a release candidate,
+    which carries none."""
     version = contents.version_of_tag(tag, contents.load_workspace())
-    return sorted(handover_names(tag) + [provenance_bundle_name(version), SUMS])
+    return None if is_candidate(tag) else contents.load_installer().file_name(version)
+
+
+def published_files(tag):
+    """What phase B puts on the draft: the signed build, the installer built
+    from it unless the tag is a candidate, the statement of the unsigned build
+    under a name a person can use, and the checksums."""
+    version = contents.version_of_tag(tag, contents.load_workspace())
+    installer = installer_name(tag)
+    return sorted(handover_names(tag) + [provenance_bundle_name(version), SUMS] + ([installer] if installer else []))
 
 
 def page_files(tag):

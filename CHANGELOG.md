@@ -25,6 +25,10 @@ Changes wait under Unreleased until then.
   and URLs, names, time zones, money and separators, and pseudolocalisation.
 - Archives for Windows, macOS and Linux. Each carries the licence notices of everything compiled into
   the program, and a bill of materials in SPDX describes all of them.
+- A Windows installer, `nkb-setup_VERSION_windows_amd64.msi`, with both programs for every account on
+  the machine: the palette in the Start menu and `nkb` on the system `PATH`. It is signed like the
+  programs, and a newer version replaces an older one without closing anything that runs. A release
+  candidate has none.
 - Signed downloads. The Windows programs carry an Authenticode signature with a timestamp, the macOS
   bundles are signed and notarised by Apple, and every release carries signed statements of how it was
   built and of what each archive holds, which `gh attestation verify` checks. The README shows the

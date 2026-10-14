@@ -23,10 +23,11 @@ it was made.
 What it does, in order, and what it refuses
 -------------------------------------------
  0. before anything is downloaded: the pinned Windows certificate is in this
-    machine's store and has not expired, signtool is here, and the Mac answers
+    machine's store and has not expired, signtool is here, the Mac answers
     with a Python that can run its half and holds the pinned certificate with
-    its key. A missing piece found after the card has signed would leave half a
-    release;
+    its key, and build_msi.py from the tree of the tag says this machine can
+    build the installer. A missing piece found after the card has signed would
+    leave half a release;
  1. downloads the build phase A handed over;
  2. verifies the statement phase A made about every file of it before touching
     any: built by release.yml in this repository, from this tag, on a runner
@@ -34,29 +35,35 @@ What it does, in order, and what it refuses
     signature on it;
  3. signs the two Windows programs with an RFC 3161 timestamp, and reads the
     certificate back out of each signed file. A second code signing
-    certificate on this machine signs just as willingly;
- 4. hands the two macOS bundles to the Mac, which signs, notarises and staples
-    them (sign_macos.py);
- 5. puts every signed program back into its archive with release.py, so the
-    archive is written by the same code that wrote it in phase A, and only the
-    signed files differ;
- 6. writes verify-SHA256SUMS.txt over everything that will be on the page,
-    uploads to the DRAFT and checks the draft holds what was signed;
- 7. starts phase C (attest-release.yml) from the code of the tag, with the
+    certificate on this machine signs just as willingly. Each signed program
+    goes back into its archive with release.py, so the archive is written by
+    the same code that wrote it in phase A, and only the signed file differs;
+ 4. builds the Windows installer from those signed archives, with
+    build_msi.py as the tag has it, and signs it the same way, under the name
+    of the product, which Windows shows when the installer asks to be run as
+    an administrator. A release candidate gets no installer;
+ 5. hands the two macOS bundles to the Mac, which signs, notarises and staples
+    them (sign_macos.py), and puts them back into their archives;
+ 6. writes verify-SHA256SUMS.txt over everything that will be on the page;
+ 7. uploads to the DRAFT and checks the draft holds what was signed;
+ 8. starts phase C (attest-release.yml) from the code of the tag, with the
     digest of the checksums, to make the statement about the signed files;
- 8. waits for it, stopping at once if that run fails, then checks the draft is
+ 9. waits for it, stopping at once if that run fails, then checks the draft is
     the whole release: every file and no other, each the one signed here, the
     statement describing every archive by the command README.md gives, and
     still a draft. A draft missing one file looks almost exactly like a
     finished one.
 
 --rehearse signs the build of a run started by hand on main and stops before
-step 6, so the whole ritual can be tried without a tag. --attest-only runs
-steps 7 and 8 again for a draft that holds the signed files already, without
-signing anything again. Nothing here publishes: the release stays a draft until
-a person reads it and presses the button.
+step 7, so the whole ritual can be tried without a tag. It also builds and signs
+an installer, under the version of the workspace and a name no release carries,
+from the commit that run built, into a folder beside the files for the page.
+--attest-only runs steps 8 and 9 again for a draft that holds the signed files
+already, without signing anything again. Nothing here publishes: the release
+stays a draft until a person reads it and presses the button.
 """
 import argparse
+import contextlib
 import dataclasses
 import datetime
 import hashlib
@@ -269,9 +276,14 @@ def find_signtool(kits=r"C:\Program Files (x86)\Windows Kits\10\bin"):
     return os.path.join(kits, ".".join(str(n) for n in max(versions)), "x64", "signtool.exe")
 
 
-def sign_command(signtool, thumbprint, timestamp_url, path):
-    return [signtool, "sign", "/sha1", thumbprint, "/fd", "sha256", "/tr", timestamp_url,
-            "/td", "sha256", path]
+def sign_command(signtool, thumbprint, timestamp_url, path, description=None):
+    """signtool, by the derived thumbprint, with a timestamp. The description is
+    what Windows shows as the name of an installer that asks to be run as an
+    administrator, and a string of digits without it - measured in a sibling
+    project of this author."""
+    named = ["/d", description] if description else []
+    return [signtool, "sign", "/sha1", thumbprint, "/fd", "sha256"] + named + [
+        "/tr", timestamp_url, "/td", "sha256", path]
 
 
 # --------------------------------------------------------------------------- #
@@ -420,6 +432,147 @@ def sign_windows(directory, tag, pins, thumbprint, signtool, dry_run):
             raise Refused(["%s came back holding %s, and held %s" % (archive.name(version), names, before)])
         shutil.rmtree(work)
         say("  %s: %s signed by the pinned certificate, timestamped, repacked" % (archive.name(version), program))
+
+
+# --------------------------------------------------------------------------- #
+# the Windows installer
+# --------------------------------------------------------------------------- #
+
+@dataclasses.dataclass(frozen=True)
+class InstallerPlan:
+    """Which installer this run builds: from the tree of which commit, under
+    which trial version (none for a release), into which folder."""
+    ref: str
+    trial: str
+    out: str
+
+
+def installer_plan(tag, rehearsal_commit, directory):
+    """A release gets its installer, built from the tree of its tag, into the
+    folder of files for the page. A rehearsal gets one under the version of the
+    workspace, from the commit its run built, beside that folder, because it is
+    never uploaded. A release candidate gets none."""
+    if rehearsal_commit:
+        return InstallerPlan(rehearsal_commit, contents.load_workspace().version, directory + ".installer")
+    if release.is_candidate(tag):
+        return None
+    return InstallerPlan("refs/tags/%s" % tag, None, directory)
+
+
+def safe_member(name):
+    """Whether a name inside an archive stays inside the folder it goes into."""
+    parts = name.split("/")
+    return (bool(name) and not name.startswith("/") and "\\" not in name and ":" not in name
+            and all(part not in ("", ".", "..") for part in parts))
+
+
+def export_tree(ref, into, run_=subprocess.run):
+    """The tree of a commit, exactly as committed, in a folder of its own.
+
+    The installer is built from what was tagged. Nothing in this script knows
+    which commit the checkout stands on, and a template changed on main after
+    the tag would otherwise go into a release that never carried it. Every name
+    is checked before it is written, and anything but a file or a folder is
+    refused: the repository holds neither links nor anything else."""
+    if os.path.isdir(into):
+        shutil.rmtree(into)
+    found = run_(["git", "rev-parse", "--verify", "--quiet", ref + "^{commit}"], cwd=ROOT,
+                 capture_output=True, text=True)
+    if found.returncode != 0:
+        raise Refused(["this clone has no %s, so there is no tree to build the installer from. Fetch it "
+                       "first:\n    git fetch --tags origin" % ref])
+    archive = run_(["git", "archive", "--format=tar", ref], cwd=ROOT, capture_output=True)
+    if archive.returncode != 0:
+        raise Refused(["git archive %s failed:\n%s" % (ref, archive.stderr.decode(errors="replace").strip())])
+    os.makedirs(into)
+    with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as packed:
+        for member in packed.getmembers():
+            if not safe_member(member.name.rstrip("/")):
+                raise Refused(["the tree of %s holds %r, a name that leads out of its folder" % (ref, member.name)])
+            target = os.path.join(into, *member.name.rstrip("/").split("/"))
+            if member.isdir():
+                os.makedirs(target, exist_ok=True)
+            elif member.isreg():
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with open(target, "wb") as handle:
+                    handle.write(packed.extractfile(member).read())
+            else:
+                raise Refused(["the tree of %s holds %s, which is neither a file nor a folder" % (ref, member.name)])
+    say("  the tree of %s, in %s" % (ref, into))
+
+
+@contextlib.contextmanager
+def exported_tree(ref, into):
+    """The tree for as long as it is needed, and gone afterwards whatever
+    happened. Exported once for the check and once for the build, rather than
+    kept between them, because the steps in between are the card and the Mac,
+    and either can stop the run."""
+    export_tree(ref, into)
+    try:
+        yield into
+    finally:
+        shutil.rmtree(into, ignore_errors=True)
+
+
+def installer_command(tree, tag, plan, *more):
+    """build_msi.py as the tree has it, refused for a tree from before it."""
+    script = os.path.join(tree, ".github", "scripts", "build_msi.py")
+    if not os.path.isfile(script):
+        raise Refused(["the tree of %s has no .github/scripts/build_msi.py. It was made before the installer "
+                       "existed, and its release cannot carry one" % plan.ref])
+    return [sys.executable, script, "--tag", tag] + (["--trial", plan.trial] if plan.trial else []) + list(more)
+
+
+def product_name(tree, tag, plan, run_=subprocess.run):
+    """The name the installer carries, as build_msi.py from the same tree says
+    it, so the signature and the package cannot name two products."""
+    done = run_(installer_command(tree, tag, plan, "--product-name"), capture_output=True,
+                encoding="utf-8", env={**os.environ, "PYTHONUTF8": "1"})
+    name = done.stdout.strip()
+    if done.returncode != 0 or not name or "\n" in name:
+        raise Refused(["build_msi.py of %s named no product (exit %d):\n%s" % (plan.ref, done.returncode,
+                                                                               done.stderr.strip())])
+    return name
+
+
+def check_installer(tag, plan, tree):
+    """Refused here when the installer cannot be built, before the card signs
+    anything: stopping after the programs are signed would leave a draft
+    without its installer, and the next run signs them all again."""
+    run(installer_command(tree, tag, plan, "--check"))
+    name = product_name(tree, tag, plan)
+    say("  its signature will name it %r" % name)
+    return name
+
+
+def build_installer(tag, plan, tree, directory, signing, dry_run):
+    """The installer, built from the signed archives in directory and signed by
+    the card. Its certificate is read back out of the file and held to the pin,
+    because the installer is what an administrator runs with the highest
+    rights the machine has. Returns its path."""
+    signtool, thumbprint, pins = signing
+    name = product_name(tree, tag, plan)
+    if plan.out != directory and os.path.isdir(plan.out):
+        shutil.rmtree(plan.out)
+    os.makedirs(plan.out, exist_ok=True)
+    before = set(os.listdir(plan.out))
+    run(installer_command(tree, tag, plan, "--archives", directory, "--out-dir", plan.out))
+    built = sorted(set(os.listdir(plan.out)) - before)
+    if len(built) != 1 or not built[0].endswith(".msi"):
+        raise Refused(["build_msi.py left %s in %s, and one installer was asked for" % (built, plan.out)])
+    path = os.path.join(plan.out, built[0])
+    command = sign_command(signtool, thumbprint, pins.timestamp_url, path, description=name)
+    if dry_run:
+        say("  DRY RUN, would run: " + " ".join(command))
+        return path
+    run(command)
+    run([signtool, "verify", "/pa", path])
+    result = json.loads(powershell(SIGNATURE_SCRIPT, {"NKB_SIGNED_FILE": path}) or "{}")
+    problems = signature_problems(result, pins.windows.sha256, built[0])
+    if problems:
+        raise Refused(problems + ["Nothing has been uploaded."])
+    say("  %s: built from the tree of %s, signed by the pinned certificate, timestamped" % (built[0], plan.ref))
+    return path
 
 
 def sign_macos(directory, tag, pins, host, python, dry_run):
@@ -643,9 +796,10 @@ def confirm_draft(view, tag, directory, repository, run_=None):
 # --------------------------------------------------------------------------- #
 
 def rehearsal_tag(run_id, repository):
-    """The build of a run started by hand on main, and the label it carries."""
+    """The label the build of a run started by hand on main carries, and the
+    commit it was built from."""
     done = subprocess.run(["gh", "run", "view", str(run_id), "--repo", repository, "--json",
-                           "event,headBranch,conclusion,workflowName"], capture_output=True, text=True)
+                           "event,headBranch,conclusion,workflowName,headSha"], capture_output=True, text=True)
     if done.returncode != 0:
         raise Refused(["gh cannot read run %s:\n%s" % (run_id, done.stderr.strip())])
     view = json.loads(done.stdout)
@@ -657,7 +811,10 @@ def rehearsal_tag(run_id, repository):
     builds = [n for n in names if n.startswith("unsigned-build-")]
     if len(builds) != 1:
         raise Refused(["run %s hands over %s, and phase B needs one build" % (run_id, builds)])
-    return builds[0][len("unsigned-build-"):]
+    commit = view.get("headSha", "")
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise Refused(["run %s names no commit it was built from: %r" % (run_id, commit)])
+    return builds[0][len("unsigned-build-"):], commit
 
 
 def fetch(directory, tag, run_id, repository):
@@ -673,13 +830,18 @@ def fetch(directory, tag, run_id, repository):
 # the command line
 # --------------------------------------------------------------------------- #
 
+def rehearsed(directory, installer):
+    say("\nRehearsal: signed, and stopped before uploading. The files are in %s, and the installer, which "
+        "no release carries, is %s." % (directory, installer))
+
+
 def attest(tag, directory, repository, wait):
     """Steps 7 and 8: phase C makes its statement, and the draft is checked to be
     the whole release."""
-    say("\n[7/8] asking %s for the statement about the signed files" % ATTEST_WORKFLOW)
+    say("\n[8/9] asking %s for the statement about the signed files" % ATTEST_WORKFLOW)
     earlier_id = statement_id(draft_view(tag, repository), tag)
     earlier_runs = ask_for_the_statement(tag, sha256_of(os.path.join(directory, SUMS)), repository)
-    say("\n[8/8] waiting for it, then checking the draft is the whole release")
+    say("\n[9/9] waiting for it, then checking the draft is the whole release")
     view = wait_for_the_statement(tag, repository, earlier_runs, earlier_id, limit=wait)
     confirm_draft(view, tag, directory, repository)
     say("\nDone. %s is a complete draft, and nothing is published. Read it, then publish it on the "
@@ -722,12 +884,17 @@ def main(argv=None):
             raise Refused(["no Mac to sign the macOS bundles on: pass --macos-host user@host or set "
                            "NKB_MACOS_HOST. Without the bundles signed and stapled, macOS refuses "
                            "the two archives a person downloads."])
-        tag = args.tag or rehearsal_tag(args.rehearse, repository)
+        tag, commit = (args.tag, None) if args.tag else rehearsal_tag(args.rehearse, repository)
         contents.version_of_tag(tag, contents.load_workspace())
         pins = load_pins()
         today = datetime.date.today()
+        directory = os.path.join(ROOT, "target", "signing", tag)
+        # Beside the folder of files for the page, never inside it: everything
+        # in there gets a checksum and goes on the page.
+        tree = directory + ".tree"
+        plan = installer_plan(tag, commit, directory)
 
-        say("\n[0/8] before anything is downloaded")
+        say("\n[0/9] before anything is downloaded")
         say("  Windows: " + expiry_notice(pins.windows.expires, today))
         say("  macOS:   " + expiry_notice(pins.macos.expires, today))
         thumbprint = thumbprint_for(json.loads(powershell(STORE_SCRIPT, {"NKB_OID": CODE_SIGNING_OID}) or "[]"),
@@ -739,26 +906,37 @@ def main(argv=None):
         with open(MAC_SCRIPT, "rb") as handle:
             run(["ssh", "-o", "BatchMode=yes", args.macos_host, "%s - --check %s" % (
                 shlex.quote(args.macos_python), pins.macos.sha256)], stdin=handle)
+        if plan is None:
+            say("  %s is a release candidate, so it gets no installer" % tag)
+        else:
+            with exported_tree(plan.ref, tree):
+                check_installer(tag, plan, tree)
 
-        directory = os.path.join(ROOT, "target", "signing", tag)
-        say("\n[1/8] fetching the build of %s" % tag)
+        say("\n[1/9] fetching the build of %s" % tag)
         fetch(directory, tag, args.rehearse, repository)
-        say("\n[2/8] checking it before touching it")
+        say("\n[2/9] checking it before touching it")
         check_build(directory, tag, bool(args.rehearse), repository)
-        say("\n[3/8] signing the Windows programs with the card")
+        say("\n[3/9] signing the Windows programs with the card")
         sign_windows(directory, tag, pins, thumbprint, signtool, args.dry_run)
-        say("\n[4/8] signing, notarising and stapling the macOS bundles on %s" % args.macos_host)
+        say("\n[4/9] the Windows installer, built from the signed archives and signed with the card")
+        installer = None
+        if plan is None:
+            say("  none for a release candidate")
+        else:
+            with exported_tree(plan.ref, tree):
+                installer = build_installer(tag, plan, tree, directory, (signtool, thumbprint, pins), args.dry_run)
+        say("\n[5/9] signing, notarising and stapling the macOS bundles on %s" % args.macos_host)
         sign_macos(directory, tag, pins, args.macos_host, args.macos_python, args.dry_run)
         if args.dry_run:
             say("\nDry run: nothing was signed, notarised or uploaded.")
             return 0
-        say("\n[5/8] the files for the page")
+        say("\n[6/9] the files for the page")
         name_for_publication(directory, tag)
         write_checksums(directory, tag)
         if args.rehearse:
-            say("\nRehearsal: signed, and stopped before uploading. The files are in %s." % directory)
+            rehearsed(directory, installer)
             return 0
-        say("\n[6/8] uploading to the draft")
+        say("\n[7/9] uploading to the draft")
         upload(directory, tag, repository)
         attest(tag, directory, repository, args.wait)
         return 0

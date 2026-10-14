@@ -539,6 +539,154 @@ class Mac(Folder):
             self.assertEqual(next(e for e in entries if e.name.endswith("MacOS/nkb")).mode, 0o755)
 
 
+class Installer(Folder):
+    """Step 4: the Windows installer, built from the tree of the tag out of the
+    signed archives, and signed by the card under the name of the product."""
+
+    def test_a_release_builds_from_its_tag_a_rehearsal_from_its_commit_and_a_candidate_not_at_all(self):
+        self.assertEqual(sign_release.installer_plan("v0.1.0", None, "d"),
+                         sign_release.InstallerPlan("refs/tags/v0.1.0", None, "d"))
+        self.assertIsNone(sign_release.installer_plan("v0.1.0-rc.1", None, "d"))
+        # A rehearsal's installer is never uploaded, so it goes beside the files
+        # for the page and not among them.
+        self.assertEqual(sign_release.installer_plan("v0.1.0-dev.2", "a" * 40, "d"),
+                         sign_release.InstallerPlan("a" * 40, contents.load_workspace().version, "d.installer"))
+
+    def test_the_installer_is_signed_under_the_name_of_the_product_and_a_program_without_one(self):
+        self.assertEqual(sign_release.sign_command("st", "T", "http://ts", "p.msi", description="Naughty Keyboard"),
+                         ["st", "sign", "/sha1", "T", "/fd", "sha256", "/d", "Naughty Keyboard", "/tr", "http://ts",
+                          "/td", "sha256", "p.msi"])
+        self.assertNotIn("/d", sign_release.sign_command("st", "T", "http://ts", "nkb.exe"))
+
+    def git(self, data, found=0):
+        """git, answering rev-parse with `found` and archive with `data`."""
+        def run_(command, **kw):
+            if command[1] == "rev-parse":
+                return subprocess.CompletedProcess(command, found, "", "")
+            return subprocess.CompletedProcess(command, 0, data, b"")
+        return run_
+
+    def tar(self, *members):
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w") as out:
+            for name, kind, data in members:
+                info = tarfile.TarInfo(name)
+                info.type = kind
+                if kind == tarfile.SYMTYPE:
+                    info.linkname = "../../outside"
+                if kind == tarfile.REGTYPE:
+                    info.size = len(data)
+                out.addfile(info, io.BytesIO(data) if kind == tarfile.REGTYPE else None)
+        return buffer.getvalue()
+
+    def test_the_tree_is_written_name_by_name_and_a_name_out_of_it_or_a_link_is_refused(self):
+        into = os.path.join(self.root, "box", "tree")
+        good = self.tar(("a", tarfile.DIRTYPE, b""), ("a/b.txt", tarfile.REGTYPE, b"bytes"))
+        sign_release.export_tree("refs/tags/v0.1.0", into, self.git(good))
+        with open(os.path.join(into, "a", "b.txt"), "rb") as handle:
+            self.assertEqual(handle.read(), b"bytes")
+        for bad in (self.tar(("../escaped.txt", tarfile.REGTYPE, b"x")),
+                    self.tar(("/escaped.txt", tarfile.REGTYPE, b"x")),
+                    self.tar(("a/../../escaped.txt", tarfile.REGTYPE, b"x")),
+                    self.tar(("link", tarfile.SYMTYPE, b""))):
+            with self.subTest(bad=bad[:20]):
+                with self.assertRaises(contents.Refused):
+                    sign_release.export_tree("refs/tags/v0.1.0", into, self.git(bad))
+        self.assertEqual(sorted(os.listdir(self.root)), ["box"])
+        self.assertEqual(sorted(os.listdir(os.path.join(self.root, "box"))), ["tree"])
+
+    def test_a_ref_this_clone_does_not_have_is_refused_with_how_to_fetch_it(self):
+        with self.assertRaises(contents.Refused) as refusal:
+            sign_release.export_tree("refs/tags/v9.9.9", os.path.join(self.root, "t"), self.git(b"", found=1))
+        self.assertIn("git fetch --tags", refusal.exception.problems[0])
+        self.assertFalse(os.path.exists(os.path.join(self.root, "t")))
+
+    def test_a_tree_from_before_the_installer_is_refused(self):
+        plan = sign_release.InstallerPlan("refs/tags/v0.1.0", None, self.root)
+        with self.assertRaises(contents.Refused):
+            sign_release.installer_command(self.root, "v0.1.0", plan, "--check")
+
+    def tree_with_a_script(self):
+        scripts = os.path.join(self.root, "tree", ".github", "scripts")
+        os.makedirs(scripts)
+        self.put(os.path.join("tree", ".github", "scripts", "build_msi.py"), b"")
+        return os.path.join(self.root, "tree")
+
+    def test_the_name_is_one_line_from_build_msi_of_the_same_tree(self):
+        tree = self.tree_with_a_script()
+        plan = sign_release.InstallerPlan("a" * 40, "0.1.0", self.root)
+        asked = []
+
+        def said(out, code=0):
+            def run_(command, **kw):
+                asked.append(command)
+                return subprocess.CompletedProcess(command, code, out, "")
+            return run_
+
+        self.assertEqual(sign_release.product_name(tree, "v0.1.0-dev.2", plan, said("Naughty Keyboard\n")),
+                         "Naughty Keyboard")
+        self.assertEqual(asked[0][1:], [os.path.join(tree, ".github", "scripts", "build_msi.py"), "--tag",
+                                        "v0.1.0-dev.2", "--trial", "0.1.0", "--product-name"])
+        for out, code in (("", 0), ("Two\nLines\n", 0), ("Naughty Keyboard\n", 1)):
+            with self.subTest(out=out, code=code):
+                with self.assertRaises(contents.Refused):
+                    sign_release.product_name(tree, "v0.1.0", plan, said(out, code))
+
+    def build(self, made=("nkb-setup_0.1.0_windows_amd64.msi",), signer=PIN, dry_run=False):
+        tree = self.tree_with_a_script()
+        directory = os.path.join(self.root, "page")
+        os.makedirs(directory)
+        plan = sign_release.InstallerPlan("refs/tags/v0.1.0", None, directory)
+        asked = []
+
+        def run(command, **kw):
+            asked.append(command)
+            if "--out-dir" in command:
+                for name in made:
+                    self.put(os.path.join("page", name), b"msi")
+
+        signed = json.dumps({"status": "Valid", "sha256": signer, "timestamped": True})
+        with unittest.mock.patch.object(sign_release, "run", run), \
+                unittest.mock.patch.object(sign_release, "product_name", lambda *a: "Naughty Keyboard"), \
+                unittest.mock.patch.object(sign_release, "powershell", lambda *a, **k: signed):
+            path = sign_release.build_installer("v0.1.0", plan, tree, directory,
+                                                ("st", "T", sign_release.load_pins()), dry_run)
+        return path, asked, directory
+
+    def test_the_installer_is_built_from_the_signed_archives_signed_and_held_to_the_pin(self):
+        path, asked, directory = self.build()
+        self.assertEqual(os.path.basename(path), "nkb-setup_0.1.0_windows_amd64.msi")
+        built = asked[0]
+        self.assertEqual(built[built.index("--archives") + 1], directory)
+        self.assertEqual(built[built.index("--out-dir") + 1], directory)
+        self.assertEqual(asked[1][:2], ["st", "sign"])
+        self.assertEqual(asked[1][asked[1].index("/d") + 1], "Naughty Keyboard")
+        self.assertEqual(asked[2], ["st", "verify", "/pa", path])
+        with self.assertRaises(contents.Refused) as refusal:
+            self.setUp()
+            self.build(signer="b" * 64)
+        self.assertTrue(any("DIFFERENT" in p for p in refusal.exception.problems))
+
+    def test_a_dry_run_builds_and_signs_nothing_and_a_build_of_not_one_installer_is_refused(self):
+        _, asked, _ = self.build(dry_run=True)
+        self.assertEqual(len(asked), 1)
+        for made in ((), ("a.msi", "b.msi"), ("a.txt",)):
+            with self.subTest(made=made):
+                self.setUp()
+                with self.assertRaises(contents.Refused):
+                    self.build(made=made)
+
+    def test_the_installer_is_asked_for_before_the_card_and_built_after_the_windows_programs(self):
+        code = code_of("sign_release.py")
+        main = code[code.index("def main("):]
+        order = [main.index(marker) for marker in (
+            "check_installer(tag, plan, tree)", "fetch(directory, tag", "sign_windows(directory",
+            "build_installer(tag, plan, tree, directory", "sign_macos(directory", "write_checksums(directory, tag)")]
+        self.assertEqual(order, sorted(order))
+        # Beside the folder of files for the page, whose every file goes on the page.
+        self.assertIn('tree = directory + ".tree"', main)
+
+
 class WhatTheScriptsNeverDo(unittest.TestCase):
     def test_nothing_publishes(self):
         for name in ("sign_release.py", "sign_macos.py"):

@@ -89,7 +89,9 @@ pub enum Syntax {
     Toml,
     Git,
     Markdown,
-    Svg,
+    /// A drawing, and the source of the Windows installer: XML, whose
+    /// comments are prose and whose markup is not.
+    Xml,
     Resource,
     Yaml,
     Python,
@@ -548,10 +550,12 @@ fn lex_markdown(source: &str) -> Lexed {
     }
 }
 
-/// An SVG drawing: a comment is what stands between `<!--` and `-->`, and
-/// nothing else in it is prose. An attribute value is markup, so a semicolon in
-/// a style is not a finding.
-fn lex_svg(source: &str) -> Lexed {
+/// An SVG drawing or the WiX source of the installer: a comment is what stands
+/// between `<!--` and `-->`, and nothing else in it is prose. An attribute value
+/// is markup, so a semicolon in a style is not a finding. The two sentences the
+/// installer shows a person stand in attributes, and the tests of build_msi.py
+/// hold them to the same rule.
+fn lex_xml(source: &str) -> Lexed {
     let s: Vec<char> = source.chars().collect();
     let mut out = Lexed::default();
     let mut line = 1;
@@ -726,7 +730,7 @@ pub fn lex(syntax: Syntax, source: &str) -> Lexed {
         Syntax::Shell => lex_shell(source),
         Syntax::Git => lex_git(source),
         Syntax::Markdown => lex_markdown(source),
-        Syntax::Svg => lex_svg(source),
+        Syntax::Xml => lex_xml(source),
         Syntax::Yaml => lex_markdown(source),
         Syntax::Html => lex_html(source),
         // A stylesheet has the block comments and the quoted strings of a
@@ -776,7 +780,7 @@ pub fn syntax_of(path: &Path) -> Option<Syntax> {
         "slint" => Some(Syntax::Slint),
         "toml" => Some(Syntax::Toml),
         "md" => Some(Syntax::Markdown),
-        "svg" => Some(Syntax::Svg),
+        "svg" | "wxs" => Some(Syntax::Xml),
         "yml" | "yaml" => Some(Syntax::Yaml),
         "py" => Some(Syntax::Python),
         "sh" => Some(Syntax::Shell),

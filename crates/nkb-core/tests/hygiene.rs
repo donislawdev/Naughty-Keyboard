@@ -566,6 +566,96 @@ fn names_in(syntax: Syntax, source: &str) -> Vec<(usize, String)> {
     names
 }
 
+/// The identifiers the shipped packs give themselves, their values and their
+/// pairs: every `id = "..."` in `packs/*.toml`.
+///
+/// In a pack they stand in strings, which this scan never judges, and they
+/// are published once and never renamed (`pack-format.md` 7). The website's
+/// translation of a pack's page names the same values by the same identifiers,
+/// as table keys, and a key is code to the lexer - so without this the scan
+/// judged, in a translation, a name it never judges in the pack (`nfc-lodz`,
+/// a value that spells a Polish city's name in two ways).
+fn shipped_ids(root: &Path) -> BTreeSet<String> {
+    let mut ids = BTreeSet::new();
+    for entry in std::fs::read_dir(root.join("packs")).expect("the shipped packs are there") {
+        let path = entry.expect("a directory entry").path();
+        if !path.extension().is_some_and(|e| e == "toml") {
+            continue;
+        }
+        for line in read(&path).lines() {
+            let Some(rest) = line.trim_start().strip_prefix("id") else {
+                continue;
+            };
+            let Some(value) = rest.trim_start().strip_prefix('=') else {
+                continue;
+            };
+            if let Some(id) = value
+                .trim()
+                .strip_prefix('"')
+                .and_then(|v| v.strip_suffix('"'))
+            {
+                ids.insert(id.to_string());
+            }
+        }
+    }
+    ids
+}
+
+/// Whether a file is the website's translation of a pack's page, whose table
+/// keys are the identifiers of that pack.
+fn translates_a_pack(relative_path: &str) -> bool {
+    relative_path.starts_with("web/data/translations/") && relative_path.contains("/packs/")
+}
+
+/// A translation of a pack's page with the identifier of every table header
+/// that names a shipped value blanked, line for line, so that the names left
+/// are the ones this repository wrote. A key that is no shipped identifier
+/// stays, and is judged like any other name.
+fn without_shipped_ids(source: &str, ids: &BTreeSet<String>) -> String {
+    let mut out = String::with_capacity(source.len());
+    for line in source.split_inclusive('\n') {
+        let key = line
+            .strip_prefix('[')
+            .and_then(|inner| inner.split_once('.'))
+            .map(|(key, _)| key);
+        match key {
+            Some(key) if ids.contains(key) => {
+                out.push('[');
+                out.push_str(&" ".repeat(key.len()));
+                out.push_str(&line[1 + key.len()..]);
+            }
+            _ => out.push_str(line),
+        }
+    }
+    out
+}
+
+#[test]
+fn a_translation_key_is_spared_only_when_it_names_a_shipped_value() {
+    let ids: BTreeSet<String> = ["nfc-lodz".to_string()].into();
+    let vocabulary: BTreeSet<String> = ["lodz".to_string(), "nazwa".to_string()].into();
+    let source = "[nfc-lodz.name]\ntext = \"x\"\n[nazwa-pola.name]\n[pack.name]\n";
+    let found: Vec<String> = names_in(Syntax::Toml, &without_shipped_ids(source, &ids))
+        .into_iter()
+        .filter(|(_, name)| polish_in_name(name, &vocabulary).is_some())
+        .map(|(line, name)| format!("{line}:{name}"))
+        .collect();
+    // The shipped value is spared, and a key nobody shipped is still judged, on
+    // the line it stands on.
+    assert_eq!(found, ["3:nazwa"]);
+    // Without the identifiers, the same key is a Polish name.
+    assert!(
+        names_in(Syntax::Toml, source)
+            .iter()
+            .any(|(_, name)| name == "lodz")
+    );
+    assert!(translates_a_pack(
+        "web/data/translations/pl/packs/look-alike-pairs.toml"
+    ));
+    assert!(!translates_a_pack("web/data/translations/pl/cli.toml"));
+    assert!(!translates_a_pack("packs/look-alike-pairs.toml"));
+}
+
 /// The kinds of file whose code holds names.
 fn holds_names(syntax: Syntax) -> bool {
     matches!(
@@ -607,13 +697,30 @@ fn every_name_in_the_code_is_english() {
         }
     }
 
+    let ids = shipped_ids(&root);
+    // Canaries: a reader that found no identifiers would spare nothing, and one
+    // that read the wrong files would spare the wrong ones.
+    assert!(
+        ids.len() >= 200,
+        "read only {} shipped identifiers",
+        ids.len()
+    );
+    for id in ["look-alike-pairs", "nfc-lodz", "latin-vs-cyrillic-a"] {
+        assert!(ids.contains(id), "the shipped identifiers do not hold {id}");
+    }
+
     let mut offenders = BTreeSet::new();
     let mut names = 0usize;
     for (path, syntax) in every_text_file(&root) {
         let Some(syntax) = syntax.filter(|s| holds_names(*s)) else {
             continue;
         };
-        let found = names_in(syntax, &read(&path));
+        let source = read(&path);
+        let found = if translates_a_pack(&relative(&root, &path)) {
+            names_in(syntax, &without_shipped_ids(&source, &ids))
+        } else {
+            names_in(syntax, &source)
+        };
         names += found.len();
         for (line, name) in found {
             if let Some(why) = polish_in_name(&name, words) {

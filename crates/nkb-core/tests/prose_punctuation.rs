@@ -554,14 +554,19 @@ fn control_the_icon_files_are_read() {
     // A drawing's comments are prose, its markup is not.
     assert_eq!(
         found(
-            Syntax::Svg,
+            Syntax::Xml,
             "<svg style=\"a:bSEMI c:d\">\n<!-- aSEMI b -->\n<!--\n  cSEMI d\n-->\n</svg>\n"
         ),
         [(2, Semicolon), (4, Semicolon)]
     );
-    assert_eq!(found(Syntax::Svg, "<!-- one EMDASH two -->\n"), [(1, Dash)]);
+    assert_eq!(found(Syntax::Xml, "<!-- one EMDASH two -->\n"), [(1, Dash)]);
+    // The source of the installer is read the same way.
+    assert_eq!(
+        repo_text::syntax_of(std::path::Path::new("nkb-setup.wxs")),
+        Some(Syntax::Xml)
+    );
     // A comment that never closes is read to the end and stops there.
-    assert_eq!(found(Syntax::Svg, "<g/>\n<!-- aSEMI b"), [(2, Semicolon)]);
+    assert_eq!(found(Syntax::Xml, "<g/>\n<!-- aSEMI b"), [(2, Semicolon)]);
     // The resource script has the comments of C.
     assert_eq!(
         found(Syntax::Resource, "// aSEMI b\n1 ICON \"edamame.ico\"\n"),

@@ -155,7 +155,10 @@ would and checks every one of the things below.
 **What is signed.**
 
 - **Windows.** `nkb.exe` and `nkb-gui.exe` carry an Authenticode signature with an RFC 3161 timestamp,
-  so the signature stays valid after the certificate expires. The certificate is issued by Certum.
+  so the signature stays valid after the certificate expires. The certificate is issued by Certum. The
+  installer, `nkb-setup_VERSION_windows_amd64.msi`, is built from the signed programs on the same
+  machine and signed with the same certificate, in the name of Naughty Keyboard, which Windows shows
+  when it asks whether to let the installer make changes.
 - **macOS.** `nkb.app` and `nkb-gui.app` are signed with an Apple Developer ID Application certificate,
   with the hardened runtime and a timestamp, and notarised by Apple. The ticket is stapled into the
   bundle, so macOS checks it without asking the network.
@@ -168,7 +171,7 @@ To compare a file with the pin yourself, in PowerShell 7
 `codesign -d --extract-certificates nkb.app` followed by `shasum -a 256 codesign0`.
 
 **What every release carries for checking.** The four files whose names start with `verify-`:
-`verify-SHA256SUMS.txt` with the SHA-256 of every archive, the bill of materials in SPDX
+`verify-SHA256SUMS.txt` with the SHA-256 of every archive and of the installer, the bill of materials in SPDX
 (`.spdx.json`), the statement of how the unsigned build was made (`.provenance.sigstore.json`), and the
 statement of what the signed archives hold (`.sbom.sigstore.json`). The two statements are Sigstore
 bundles, so they can be checked offline.

@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Windows installer: both programs, for every account on the machine.
+
+  Not a file WiX can read as it stands. .github/scripts/build_msi.py fills every
+  doubled-brace placeholder from the one place its value lives - the [installer]
+  table of archives.toml, the workspace Cargo.toml and the tag - and hands WiX
+  two paths: $(PayloadDir), the two signed archives of the platform laid out the
+  way the installer puts them down, and $(IconFile), the programs' icon.
+
+  No extension, no custom action and no dialogs of WiX's own, so nothing goes
+  into the package but our files and Windows Installer's own tables. The tests
+  of build_msi.py hold the rendered source to that, and build_msi.py reads the
+  built database back and refuses one that carries anything else.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+      Name="{{PRODUCT}}"
+      Manufacturer="{{PUBLISHER}}"
+      Version="{{VERSION}}"
+      UpgradeCode="{{UPGRADE_CODE}}"
+      Language="1033"
+      Scope="perMachine">
+
+    <!--
+      The UpgradeCode is the product, not a build, and it never changes. Every
+      machine finds the version it has through it, so a new one would leave the
+      old install beside the new one for good. Pinned twice, in build_msi.py and
+      in its tests.
+
+      AllowSameVersionUpgrades, because a version rebuilt under the same number
+      must replace the first build rather than stand beside it as a second
+      entry in Programs and Features.
+
+      afterInstallInitialize, because that rebuild's files must actually land.
+      Windows Installer replaces a file only when it is missing or older, and
+      both programs carry the product version in their file details. With the
+      old version still in place while the new files go down, an install whose
+      programs carry the same file version kept both old programs and reported
+      success - measured with try_installer.py, whose kit is exactly that case.
+      A rebuild under the same number is that case too. Here the old version
+      goes first, inside the same transaction, so a failed install puts it
+      back. The cost is that every file is copied again.
+    -->
+    <MajorUpgrade
+        Schedule="afterInstallInitialize"
+        AllowSameVersionUpgrades="yes"
+        DowngradeErrorMessage="A newer version of [ProductName] is already installed. Uninstall it first to install this one." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!--
+      Nothing that is running gets closed. The palette may be typing a value
+      into somebody's field, and nkb may be a step of a build that a pipeline
+      is waiting for. Measured with try_installer.py on Windows 11, run quietly
+      as a deployment runs it: with the Restart Manager on, Windows Installer
+      closed the palette that was open during the upgrade. With it off the
+      palette and a running nkb both kept running, a file in use was set aside,
+      the new one was in place at once, and the old copy goes at the next
+      restart. The cost is time - without the Restart Manager, Windows
+      Installer looks for what holds a file its own slower way, and an upgrade
+      while nkb ran took about a minute on one machine and four seconds on
+      another.
+
+      It has to be here from the first installer on. An upgrade removes the old
+      version under the OLD package's properties, so a package published
+      without it cannot be fixed afterwards.
+    -->
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable" />
+
+    <!-- What Programs and Features shows. One feature and no choices, so there
+         is nothing to repair or to change. -->
+    <Property Id="ARPURLINFOABOUT" Value="{{PROJECT_URL}}" />
+    <Property Id="ARPHELPLINK" Value="{{ISSUES_URL}}" />
+    <Property Id="ARPURLUPDATEINFO" Value="{{RELEASE_URL}}" />
+    <Property Id="ARPPRODUCTICON" Value="ProgramIcon" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <Icon Id="ProgramIcon" SourceFile="$(IconFile)" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="{{PRODUCT}}" />
+    </StandardDirectory>
+
+    <!--
+      The two archives in one folder: both programs, LICENSE and README.md once,
+      because the two archives hold the same bytes, and the licence notices of
+      each program under a name that says which program they belong to,
+      because each archive's notices list what is compiled into its program.
+    -->
+    <ComponentGroup Id="Programs" Directory="INSTALLFOLDER">
+      <Files Include="$(PayloadDir)\**" />
+    </ComponentGroup>
+
+    <!--
+      The folder on the machine's PATH, once, so that nkb answers in every
+      terminal of every account and for a build agent that runs as a service.
+      After everything already there, so it never shadows another program.
+      Permanent="no" takes the entry off again at uninstall.
+    -->
+    <ComponentGroup Id="OnThePath" Directory="INSTALLFOLDER">
+      <Component Id="MachinePath">
+        <Environment Id="MachinePath" Name="PATH" Value="[INSTALLFOLDER]"
+                     Part="last" Action="set" System="yes" Permanent="no" />
+        <RegistryValue Root="HKLM" Key="Software\{{PUBLISHER}}\{{PRODUCT}}"
+                       Name="Path" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <!--
+      The palette in the Start menu of every account. It keeps its settings in
+      the profile of whoever runs it, never beside the program, so the folder
+      it starts in is only where it starts.
+    -->
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut">
+        <Shortcut Id="Palette"
+                  Name="{{PRODUCT}}"
+                  Description="The palette that types test values into the field you are in"
+                  Target="[INSTALLFOLDER]{{SHORTCUT_PROGRAM}}"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="ProgramIcon" />
+        <RegistryValue Root="HKLM" Key="Software\{{PUBLISHER}}\{{PRODUCT}}"
+                       Name="Shortcut" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <Feature Id="Everything">
+      <ComponentGroupRef Id="Programs" />
+      <ComponentGroupRef Id="OnThePath" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+  </Package>
+</Wix>

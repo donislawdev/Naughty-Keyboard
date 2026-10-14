@@ -76,6 +76,7 @@ class Page(unittest.TestCase):
         self.build = {n: (contents.sha256_of(self.path(n)) if "_linux_" in n or n.endswith(".spdx.json")
                           else "f" * 64) for n in archives + [release.sbom_name(VERSION)]}
         self.put(release.provenance_bundle_name(VERSION), statement(self.build).encode())
+        self.put(release.installer_name(TAG), b"the installer")
         listed = [n for n in release.published_files(TAG) if n != release.SUMS]
         self.put(release.SUMS, "".join("%s  %s\n" % (contents.sha256_of(self.path(n)), n) for n in listed).encode())
 
@@ -99,9 +100,19 @@ class TheRelease(Page):
     def test_a_draft_a_mutable_release_and_an_unmarked_candidate_are_each_named(self):
         self.assertEqual(len(verify_release.release_problems(self.view(isDraft=True, isImmutable=False), TAG)), 2)
         candidate = self.view(assets=[dict(a, name=a["name"].replace(VERSION, "0.1.0-rc.1"))
-                                      for a in self.view()["assets"]])
+                                      for a in self.view()["assets"] if not a["name"].endswith(".msi")])
         self.assertEqual(len(verify_release.release_problems(candidate, "v0.1.0-rc.1")), 1)
         self.assertEqual(verify_release.release_problems(dict(candidate, isPrerelease=True), "v0.1.0-rc.1"), [])
+
+    def test_a_release_without_its_installer_and_a_candidate_with_one_are_each_named(self):
+        view = self.view()
+        without = dict(view, assets=[a for a in view["assets"] if not a["name"].endswith(".msi")])
+        self.assertEqual(len(verify_release.release_problems(without, TAG)), 1)
+        candidate = dict(self.view(assets=[dict(a, name=a["name"].replace(VERSION, "0.1.0-rc.1"))
+                                           for a in view["assets"]]), isPrerelease=True)
+        problems = verify_release.release_problems(candidate, "v0.1.0-rc.1")
+        self.assertEqual(len(problems), 1)
+        self.assertIn("nkb-setup_0.1.0-rc.1_windows_amd64.msi", problems[0])
 
     def test_a_file_missing_from_the_page_or_one_too_many_is_named(self):
         view = self.view()
@@ -230,8 +241,8 @@ class Fetching(unittest.TestCase):
         self.root = tempfile.mkdtemp(prefix="verify-fetch-")
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
 
-    def gh(self, changed=None):
-        names = [a.name(VERSION) for a in release.archives_for("windows")]
+    def gh(self, changed=None, names=None):
+        names = names or [a.name(VERSION) for a in release.archives_for("windows")] + [release.installer_name(TAG)]
 
         def run(command, **_):
             run.asked.append(command)
@@ -257,7 +268,22 @@ class Fetching(unittest.TestCase):
         self.assertEqual(verify_release.command_fetch(args, run), 0)
         patterns = [w for i, w in enumerate(run.asked[0]) if i and run.asked[0][i - 1] == "--pattern"]
         self.assertEqual(sorted(patterns), sorted([a.name(VERSION) for a in release.archives_for("windows")]
-                                                  + [release.SUMS]))
+                                                  + [release.installer_name(TAG), release.SUMS]))
+
+    def test_the_installer_is_fetched_for_its_system_of_a_release_and_for_no_other(self):
+        for tag, system in (("v0.1.0", "linux"), ("v0.1.0-rc.1", "windows")):
+            with self.subTest(tag=tag, system=system):
+                names = [a.name(tag[1:]) for a in release.archives_for(system)]
+                run = self.gh(names=names)
+                args = types.SimpleNamespace(tag=tag, os=system, dir=os.path.join(self.root, tag + system))
+                self.assertEqual(verify_release.command_fetch(args, run), 0)
+                patterns = [w for i, w in enumerate(run.asked[0]) if i and run.asked[0][i - 1] == "--pattern"]
+                self.assertFalse([p for p in patterns if p.endswith(".msi")])
+
+    def test_an_installer_that_is_not_the_one_listed_is_refused(self):
+        args = types.SimpleNamespace(tag=TAG, os="windows", dir=os.path.join(self.root, "p"))
+        with self.assertRaises(contents.Refused):
+            verify_release.command_fetch(args, self.gh(release.installer_name(TAG)))
 
     def test_an_archive_that_is_not_the_one_listed_is_refused(self):
         args = types.SimpleNamespace(tag=TAG, os="windows", dir=os.path.join(self.root, "p"))
@@ -340,16 +366,50 @@ class Signatures(unittest.TestCase):
                 unittest.mock.patch.object(verify_release, "macos_problems",
                                            lambda p, pin, run: asked.append(("macos", os.path.basename(p))) or []), \
                 unittest.mock.patch.object(verify_release, "glibc_problems",
-                                           lambda p, run: asked.append(("linux", os.path.basename(p))) or []):
+                                           lambda p, run: asked.append(("linux", os.path.basename(p))) or []), \
+                unittest.mock.patch.object(verify_release, "installer_problems",
+                                           lambda p, tag, pin, run: asked.append(("installer", p)) or []):
             for system in ("windows", "macos", "linux"):
-                args = types.SimpleNamespace(tag=TAG, os=system, unpacked="unpacked")
+                args = types.SimpleNamespace(tag=TAG, os=system, unpacked="unpacked", published="published")
                 self.assertEqual(verify_release.command_programs(args, answering()), 0)
         self.assertEqual(sorted(a for a in asked if a[0] == "tried"),
                          sorted(("tried", s, p, s != "linux") for s in ("windows", "macos", "linux")
                                 for p in ("nkb", "nkb-gui")))
         self.assertEqual(sorted(a for a in asked if a[0] != "tried"),
                          sorted([("windows", "nkb.exe"), ("windows", "nkb-gui.exe"), ("macos", "nkb.app"),
-                                 ("macos", "nkb-gui.app"), ("linux", "nkb"), ("linux", "nkb-gui")]))
+                                 ("macos", "nkb-gui.app"), ("linux", "nkb"), ("linux", "nkb-gui"),
+                                 ("installer", os.path.join("published", "nkb-setup_0.1.0_windows_amd64.msi"))]))
+
+    def test_the_installer_of_a_release_has_to_be_found_and_a_candidate_has_none_to_check(self):
+        with unittest.mock.patch.object(release, "tried_programs", lambda *a, **k: []), \
+                unittest.mock.patch.object(verify_release, "windows_problems", lambda p, pin, run: []):
+            with self.assertRaises(contents.Refused) as refusal:
+                verify_release.command_programs(types.SimpleNamespace(tag=TAG, os="windows", unpacked="u",
+                                                                      published=None), answering())
+            self.assertTrue(any("nkb-setup_0.1.0_windows_amd64.msi" in p for p in refusal.exception.problems))
+            with unittest.mock.patch.object(verify_release, "installer_problems", lambda *a: ["never asked"]):
+                args = types.SimpleNamespace(tag="v0.1.0-rc.1", os="windows", unpacked="u", published="p")
+                self.assertEqual(verify_release.command_programs(args, answering()), 0)
+
+    def test_the_installer_is_held_to_the_pin_its_version_its_product_and_the_upgrade_code(self):
+        good = {"ProductVersion": VERSION, "UpgradeCode": "{%s}" % verify_release.build_msi.UPGRADE_CODE,
+                "ProductName": "Naughty Keyboard", "ProductCode": "{X}"}
+        signed = json.dumps({"status": "Valid", "sha256": PIN, "timestamped": True})
+
+        def rows(properties):
+            return lambda query, fields, table: sorted(properties.items())
+
+        self.assertEqual(verify_release.installer_problems("p/x.msi", TAG, PIN, answering(0, signed, ""), rows(good)), [])
+        for key, value in (("ProductVersion", "0.0.1"), ("UpgradeCode", "{00000000-0000-0000-0000-000000000000}"),
+                           ("ProductName", "Something Else")):
+            with self.subTest(key=key):
+                problems = verify_release.installer_problems("p/x.msi", TAG, PIN, answering(0, signed, ""),
+                                                             rows(dict(good, **{key: value})))
+                self.assertEqual(len(problems), 1)
+                self.assertIn(key, problems[0])
+        unsigned = json.dumps({"status": "NotSigned", "sha256": "", "timestamped": False})
+        self.assertEqual(len(verify_release.installer_problems("p/x.msi", TAG, PIN, answering(0, unsigned, ""),
+                                                               rows(good))), 3)
 
     def test_a_problem_of_one_program_is_named_with_its_archive_and_refuses(self):
         with unittest.mock.patch.object(release, "tried_programs", lambda *a, **k: []), \

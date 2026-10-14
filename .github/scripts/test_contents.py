@@ -12,6 +12,7 @@ tree is asked by `contents.py check` in the supply chain workflow.
 import dataclasses
 import json
 import os
+import re
 import shutil
 import tempfile
 import textwrap
@@ -469,6 +470,37 @@ class Archives(Tree):
                     self.load(broken)
                 self.assertTrue(any(says in p for p in caught.exception.problems), caught.exception.problems)
 
+    INSTALLER = textwrap.dedent('''\
+
+        [installer]
+        name = "cli-setup"
+        os = "windows"
+        arch = "amd64"
+        product = "The Tool"
+        shortcut = "cli"
+        ''')
+
+    def installer(self, text):
+        self.put("assets/icon.icns", "icon bytes")
+        return contents.load_installer(self.put(".github/release/archives.toml", text), root=self.root)
+
+    def test_the_installer_is_named_like_an_archive_and_ends_in_msi(self):
+        installer = self.installer(self.ARCHIVES + self.INSTALLER)
+        self.assertEqual(installer.file_name("1.2.3"), "cli-setup_1.2.3_windows_amd64.msi")
+        self.assertEqual((installer.product, installer.shortcut), ("The Tool", "cli"))
+
+    def test_an_installer_for_no_platform_or_a_shortcut_to_no_program_is_refused(self):
+        for broken, says in (
+                (self.INSTALLER.replace('os = "windows"', 'os = "plan9"'), "no platform is"),
+                (self.INSTALLER.replace('shortcut = "cli"', 'shortcut = "gui"'), "is not a program"),
+                (self.INSTALLER.replace('name = "cli-setup"', 'name = "Cli Setup"'), "lower case"),
+                (self.INSTALLER.replace('product = "The Tool"\n', ""), "has no product"),
+                ("", "has no name")):
+            with self.subTest(says=says):
+                with self.assertRaises(contents.Refused) as caught:
+                    self.installer(self.ARCHIVES + broken)
+                self.assertTrue(any(says in p for p in caught.exception.problems), caught.exception.problems)
+
 
 class StandardTexts(Tree):
     def test_an_edited_text_and_an_unlisted_text_are_refused(self):
@@ -614,6 +646,23 @@ class RealTree(unittest.TestCase):
         icon = next(c for c in components if c.name == "Naughty Keyboard application icon, in the command line tool")
         holding = sorted(a.name("0.1.0") for a in archives if contents.in_archive(icon, a))
         self.assertEqual(holding, ["nkb_0.1.0_windows_amd64.zip"])
+
+    def test_the_installer_carries_both_windows_programs_and_starts_the_palette(self):
+        installer = contents.load_installer()
+        self.assertEqual(installer.file_name("0.1.0"), "nkb-setup_0.1.0_windows_amd64.msi")
+        on_its_platform = sorted(a.program for a in contents.load_archives()
+                                 if (a.os, a.arch) == (installer.os, installer.arch))
+        self.assertEqual(on_its_platform, ["nkb", "nkb-gui"])
+        self.assertEqual(installer.shortcut, "nkb-gui")
+
+    def test_the_installer_names_the_product_the_programs_name_themselves(self):
+        # The programs say their product name in their file details, from a
+        # constant the build helper of both programs reads. Two copies, held
+        # together here.
+        with open(os.path.join(contents.ROOT, "crates", "nkb-cli", "file_details.rs"), encoding="utf-8") as handle:
+            said = re.search(r'^const PRODUCT: &str = "([^"]+)";$', handle.read(), re.MULTILINE)
+        self.assertIsNotNone(said)
+        self.assertEqual(contents.load_installer().product, said.group(1))
 
     def test_the_standard_texts_are_the_published_bytes(self):
         problems, listed = contents.check_standard_texts()

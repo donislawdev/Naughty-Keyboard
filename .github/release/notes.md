@@ -4,7 +4,10 @@
 Apple silicon and Linux x64. What each needs, and how to start it, is under
 [Get it](https://github.com/donislawdev/Naughty-Keyboard#get-it).
 
-The Windows programs are signed, with a timestamp. The macOS bundles are signed and notarised by Apple,
+Every release but a release candidate also has a Windows installer with both programs, the `.msi`, for
+every account on the machine: it puts the palette in the Start menu and `nkb` on the system `PATH`.
+
+The Windows programs, and the installer where there is one, are signed, with a timestamp. The macOS bundles are signed and notarised by Apple,
 with the ticket stapled inside, so keep each `.app` and the link next to it together. The Linux programs
 are not signed.
 

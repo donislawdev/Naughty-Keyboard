@@ -116,7 +116,7 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Download the archives of this system
+      - name: Download the archives of this system, and its installer
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -146,12 +146,14 @@ jobs:
           done
 
       # The names, the link beside a macOS bundle, the programs run, and the
-      # signature read the way this system reads it.
+      # signature read the way this system reads it. On Windows also the
+      # installer of a release: its signature, and the version and the product
+      # its database carries.
       - name: Check and run what they hold
         env:
           TAG: ${{ needs.which.outputs.tag }}
           OS: ${{ matrix.os }}
-        run: python .github/scripts/verify_release.py programs --tag "$TAG" --os "$OS" --unpacked "$RUNNER_TEMP/unpacked"
+        run: python .github/scripts/verify_release.py programs --tag "$TAG" --os "$OS" --unpacked "$RUNNER_TEMP/unpacked" --published "$RUNNER_TEMP/published"
 
   verdict:
     name: one verdict

@@ -114,6 +114,16 @@ archive into a folder of its own. Nothing is installed and nothing else is neede
 
 Typing into other windows works on Windows only for now, see [Honest limits](#honest-limits).
 
+**On Windows there is also an installer**, `nkb-setup_VERSION_windows_amd64.msi`, with both programs in
+it. It asks for administrator rights, because it installs for every account on the machine: both programs
+into `C:\Program Files\Naughty Keyboard`, the palette into the Start menu as Naughty Keyboard, and that
+folder onto the system `PATH`, so `nkb` works in every new terminal and for a build agent that runs as a
+service. It is signed like the programs. A newer version installs over an older one, and nothing that is
+running is closed: the old copy is removed at the next restart. Uninstalling it from Settings, Apps,
+removes all of that and leaves your settings, which the palette keeps in `%APPDATA%\Naughty Keyboard`. A
+release candidate has no installer, because Windows Installer would take its version for the release
+itself.
+
 ### Checking a download
 
 The four files whose names start with `verify-` are for checking a download, and they sit together at the

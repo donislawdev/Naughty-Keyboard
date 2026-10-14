@@ -4,7 +4,7 @@
     python3 .github/scripts/verify_release.py plan --tag v0.1.0
     python3 .github/scripts/verify_release.py page --tag v0.1.0 --dir published
     python3 .github/scripts/verify_release.py fetch --tag v0.1.0 --os windows --dir published
-    python3 .github/scripts/verify_release.py programs --tag v0.1.0 --os windows --unpacked unpacked
+    python3 .github/scripts/verify_release.py programs --tag v0.1.0 --os windows --unpacked unpacked --published published
 
 Run by .github/workflows/verify-release.yml when a release is published, and by
 hand with a tag to ask whether an older release still verifies.
@@ -28,6 +28,7 @@ import shlex
 import subprocess
 import sys
 
+import build_msi
 import contents
 import release
 import sign_macos
@@ -227,10 +228,18 @@ def command_page(args, run=subprocess.run):
 # the programs of one system
 # --------------------------------------------------------------------------- #
 
+def installer_of(tag, os_name):
+    """The installer a release carries for this system, or None: a release
+    candidate carries none, and the installer is for one system."""
+    name = release.installer_name(tag)
+    return name if name and contents.load_installer().os == os_name else None
+
+
 def command_fetch(args, run=subprocess.run):
-    """The archives of one system and the checksums, by their exact names."""
+    """The archives of one system, its installer and the checksums, by their exact names."""
     version = contents.version_of_tag(args.tag, contents.load_workspace())
-    names = sorted(a.name(version) for a in release.archives_for(args.os))
+    installer = installer_of(args.tag, args.os)
+    names = sorted([a.name(version) for a in release.archives_for(args.os)] + ([installer] if installer else []))
     patterns = [word for name in names + [release.SUMS] for word in ("--pattern", name)]
     done = release.gh(["release", "download", args.tag, "--dir", args.dir] + patterns, run)
     if done.returncode != 0:
@@ -277,6 +286,21 @@ def macos_problems(app, pin, run):
     return problems
 
 
+def installer_problems(path, tag, pin, run, rows=None):
+    """The installer a person downloads: signed like the programs, and carrying
+    the version of its tag, the product's UpgradeCode and the product's name,
+    read out of its database the way Windows Installer reads them."""
+    name = os.path.basename(path)
+    problems = windows_problems(path, pin, run)
+    read = rows or (lambda query, fields, table: build_msi.database_rows(path, query, fields, table))
+    properties = dict(read("SELECT `Property`, `Value` FROM `Property`", 2, "Property"))
+    for key, wanted in (("ProductVersion", tag[1:]), ("UpgradeCode", "{%s}" % build_msi.UPGRADE_CODE),
+                        ("ProductName", contents.load_installer().product)):
+        if properties.get(key) != wanted:
+            problems.append("%s says %s = %r, and it has to say %r" % (name, key, properties.get(key), wanted))
+    return problems
+
+
 def glibc_problems(program, run):
     needed = release.glibc_needed(program, run)
     if needed is None:
@@ -310,6 +334,15 @@ def command_programs(args, run=subprocess.run):
                     contents.MACOS: "signed by the pinned certificate, notarised and stapled"}.get(
                         archive.os, "needs glibc %s or older" % GLIBC)
             say("%s: %s, %s" % (archive.name(version), done, more))
+    installer = installer_of(args.tag, args.os)
+    if installer:
+        if not args.published:
+            problems.append("%s carries %s, and no --published folder was given to find it in" % (args.tag, installer))
+        else:
+            found = installer_problems(os.path.join(args.published, installer), args.tag, pins.windows.sha256, run)
+            problems += ["%s: %s" % (installer, p) for p in found]
+            if not found:
+                say("%s: signed by the pinned certificate, with a timestamp, carrying %s" % (installer, args.tag[1:]))
     return verdict("the %s programs of %s" % (args.os, args.tag), problems)
 
 
@@ -350,6 +383,7 @@ def main(argv=None):
     programs.add_argument("--tag", required=True)
     programs.add_argument("--os", required=True)
     programs.add_argument("--unpacked", required=True)
+    programs.add_argument("--published", help="the folder fetch downloaded into, which holds the installer")
     args = parser.parse_args(argv)
     try:
         return {"plan": command_plan, "page": command_page, "fetch": command_fetch,
