@@ -93,6 +93,10 @@ pub const BUILT_IN_PACKS: &[(&str, &str)] = &[
         include_str!("../../../packs/names-identity.toml"),
     ),
     ("time-zones", include_str!("../../../packs/time-zones.toml")),
+    (
+        "currency-separators",
+        include_str!("../../../packs/currency-separators.toml"),
+    ),
 ];
 
 #[cfg(test)]
