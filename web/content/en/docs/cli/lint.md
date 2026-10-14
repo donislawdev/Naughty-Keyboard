@@ -19,7 +19,7 @@ A file that passes:
 $ nkb lint my-pack.toml
 0 errors, 0 warnings.
 Checked 39 of 45 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.
-The pack format is not frozen yet: it freezes with the first public release that ships packs.
+The pack format is not frozen yet: a later release may still change it.
 ```
 
 A value that says nothing about what it breaks:
@@ -36,7 +36,7 @@ The same verdict for a pipeline, with `--json`, and nothing else on standard out
 $ nkb lint my-pack.toml --json
 {
   "schema": 1,
-  "tool_version": "0.1.0",
+  "tool_version": "0.2.0",
   "pack_format": 1,
   "format_frozen": false,
   "accepted": false,
@@ -44,4 +44,4 @@ $ nkb lint my-pack.toml --json
 
 ## Is the format final?
 
-Not yet. It freezes with the first public release that ships packs, and `nkb lint` says so on every run, so that a file passing today is not read as a promise about tomorrow.
+Not yet. A later release may still change it, and its notes will say how. `nkb lint` says so on every run, so that a file passing today is not read as a promise about tomorrow.

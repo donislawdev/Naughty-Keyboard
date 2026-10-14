@@ -25,8 +25,10 @@ import release
 import sign_release
 import verify_release
 
-TAG = "v0.1.0"
-VERSION = "0.1.0"
+# The version of the workspace, as every release names its files: written out,
+# it would turn these tests red on each version bump.
+VERSION = contents.load_workspace().version
+TAG = "v" + VERSION
 REPOSITORY = "donislawdev/Naughty-Keyboard"
 PIN = "a" * 64
 MAC_PIN = hashlib.sha256(b"the certificate").hexdigest()
@@ -99,20 +101,20 @@ class TheRelease(Page):
 
     def test_a_draft_a_mutable_release_and_an_unmarked_candidate_are_each_named(self):
         self.assertEqual(len(verify_release.release_problems(self.view(isDraft=True, isImmutable=False), TAG)), 2)
-        candidate = self.view(assets=[dict(a, name=a["name"].replace(VERSION, "0.1.0-rc.1"))
+        candidate = self.view(assets=[dict(a, name=a["name"].replace(VERSION, f"{VERSION}-rc.1"))
                                       for a in self.view()["assets"] if not a["name"].endswith(".msi")])
-        self.assertEqual(len(verify_release.release_problems(candidate, "v0.1.0-rc.1")), 1)
-        self.assertEqual(verify_release.release_problems(dict(candidate, isPrerelease=True), "v0.1.0-rc.1"), [])
+        self.assertEqual(len(verify_release.release_problems(candidate, f"v{VERSION}-rc.1")), 1)
+        self.assertEqual(verify_release.release_problems(dict(candidate, isPrerelease=True), f"v{VERSION}-rc.1"), [])
 
     def test_a_release_without_its_installer_and_a_candidate_with_one_are_each_named(self):
         view = self.view()
         without = dict(view, assets=[a for a in view["assets"] if not a["name"].endswith(".msi")])
         self.assertEqual(len(verify_release.release_problems(without, TAG)), 1)
-        candidate = dict(self.view(assets=[dict(a, name=a["name"].replace(VERSION, "0.1.0-rc.1"))
+        candidate = dict(self.view(assets=[dict(a, name=a["name"].replace(VERSION, f"{VERSION}-rc.1"))
                                            for a in view["assets"]]), isPrerelease=True)
-        problems = verify_release.release_problems(candidate, "v0.1.0-rc.1")
+        problems = verify_release.release_problems(candidate, f"v{VERSION}-rc.1")
         self.assertEqual(len(problems), 1)
-        self.assertIn("nkb-setup_0.1.0-rc.1_windows_amd64.msi", problems[0])
+        self.assertIn(f"nkb-setup_{VERSION}-rc.1_windows_amd64.msi", problems[0])
 
     def test_a_file_missing_from_the_page_or_one_too_many_is_named(self):
         view = self.view()
@@ -122,9 +124,9 @@ class TheRelease(Page):
             self.assertTrue(verify_release.release_problems(changed, TAG))
 
     def test_a_download_that_is_not_what_github_lists_or_the_checksums_list_is_named(self):
-        self.put("nkb_0.1.0_linux_amd64.tar.gz", b"other bytes")
+        self.put(f"nkb_{VERSION}_linux_amd64.tar.gz", b"other bytes")
         problems = verify_release.files_problems(self.view(), self.root, TAG)
-        self.assertEqual(problems, ["nkb_0.1.0_linux_amd64.tar.gz is not the file verify-SHA256SUMS.txt lists"])
+        self.assertEqual(problems, [f"nkb_{VERSION}_linux_amd64.tar.gz is not the file verify-SHA256SUMS.txt lists"])
         view = self.view()
         view["assets"][0]["digest"] = "sha256:" + "0" * 64
         self.assertTrue(any("GitHub lists" in p for p in verify_release.files_problems(view, self.root, TAG)))
@@ -133,7 +135,7 @@ class TheRelease(Page):
         page = {n: contents.sha256_of(self.path(n)) for n in release.page_files(TAG)}
         answer = json.loads(statement(page))
         answer = {"verificationResult": {"statement": json.loads(base64.b64decode(answer["dsseEnvelope"]["payload"]))}}
-        answer["verificationResult"]["statement"]["subject"].append({"uri": "pkg:github/x@v0.1.0",
+        answer["verificationResult"]["statement"]["subject"].append({"uri": f"pkg:github/x@v{VERSION}",
                                                                      "digest": {"sha1": "0" * 40}})
         self.assertEqual(verify_release.immutable_problems(answer, self.root, TAG), [])
         answer["verificationResult"]["statement"]["subject"].pop(0)
@@ -145,14 +147,14 @@ class Provenance(Page):
         self.assertEqual(verify_release.provenance_problems(self.root, TAG), [])
 
     def test_a_signed_archive_it_still_describes_was_never_signed(self):
-        name = "nkb-gui_0.1.0_windows_amd64.zip"
+        name = f"nkb-gui_{VERSION}_windows_amd64.zip"
         self.put(release.provenance_bundle_name(VERSION),
                  statement(dict(self.build, **{name: contents.sha256_of(self.path(name))})).encode())
         self.assertEqual(verify_release.provenance_problems(self.root, TAG),
                          ["%s is the file the build made, so it was never signed" % name])
 
     def test_a_linux_archive_or_a_bill_of_materials_it_does_not_describe_is_named(self):
-        for name in ("nkb_0.1.0_linux_amd64.tar.gz", release.sbom_name(VERSION)):
+        for name in (f"nkb_{VERSION}_linux_amd64.tar.gz", release.sbom_name(VERSION)):
             with self.subTest(name=name):
                 self.put(release.provenance_bundle_name(VERSION), statement(dict(self.build, **{name: "0" * 64})).encode())
                 self.assertEqual(len(verify_release.provenance_problems(self.root, TAG)), 1)
@@ -168,14 +170,14 @@ class Statements(Page):
         for name in archives:
             mine = [c for c in commands if c[3] == name and "--predicate-type" in c]
             self.assertEqual(len(mine), 2, name)
-            self.assertIn("verify-naughty-keyboard_0.1.0.sbom.sigstore.json", mine[0])
+            self.assertIn(f"verify-naughty-keyboard_{VERSION}.sbom.sigstore.json", mine[0])
             self.assertEqual(mine[1][mine[1].index("--signer-workflow") + 1],
                              REPOSITORY + "/.github/workflows/attest-release.yml")
         built = [c for c in commands if "--predicate-type" not in c]
         self.assertEqual(sorted(c[3] for c in built), verify_release.unsigned_files(TAG))
         for command in built:
             self.assertEqual(command[command.index("--signer-workflow") + 1], REPOSITORY + "/.github/workflows/release.yml")
-            self.assertEqual(command[command.index("--source-ref") + 1], "refs/tags/v0.1.0")
+            self.assertEqual(command[command.index("--source-ref") + 1], f"refs/tags/v{VERSION}")
             self.assertIn("--deny-self-hosted-runners", command)
         self.assertTrue(all(kw.get("cwd") == self.root for _, kw in run.asked))
 
@@ -222,7 +224,7 @@ class Notes(unittest.TestCase):
         api = next(l for l in lines if "--predicate-type" in l and "--bundle" not in l)
         cut = self.notes.replace(api + "\n", "")
         self.assertEqual(verify_release.notes_problems(cut, TAG, self.promise),
-                         ["the notes of v0.1.0 do not say: " + api])
+                         [f"the notes of v{VERSION} do not say: " + api])
         self.assertTrue(verify_release.notes_problems(self.notes.replace(release.SUMS, "the sums"), TAG, self.promise))
         self.assertEqual(len(verify_release.notes_problems("", TAG, self.promise)), len(lines) + 1)
 
@@ -271,7 +273,7 @@ class Fetching(unittest.TestCase):
                                                   + [release.installer_name(TAG), release.SUMS]))
 
     def test_the_installer_is_fetched_for_its_system_of_a_release_and_for_no_other(self):
-        for tag, system in (("v0.1.0", "linux"), ("v0.1.0-rc.1", "windows")):
+        for tag, system in ((f"v{VERSION}", "linux"), (f"v{VERSION}-rc.1", "windows")):
             with self.subTest(tag=tag, system=system):
                 names = [a.name(tag[1:]) for a in release.archives_for(system)]
                 run = self.gh(names=names)
@@ -288,7 +290,7 @@ class Fetching(unittest.TestCase):
     def test_an_archive_that_is_not_the_one_listed_is_refused(self):
         args = types.SimpleNamespace(tag=TAG, os="windows", dir=os.path.join(self.root, "p"))
         with self.assertRaises(contents.Refused):
-            verify_release.command_fetch(args, self.gh("nkb_0.1.0_windows_amd64.zip"))
+            verify_release.command_fetch(args, self.gh(f"nkb_{VERSION}_windows_amd64.zip"))
 
 
 class Signatures(unittest.TestCase):
@@ -378,7 +380,7 @@ class Signatures(unittest.TestCase):
         self.assertEqual(sorted(a for a in asked if a[0] != "tried"),
                          sorted([("windows", "nkb.exe"), ("windows", "nkb-gui.exe"), ("macos", "nkb.app"),
                                  ("macos", "nkb-gui.app"), ("linux", "nkb"), ("linux", "nkb-gui"),
-                                 ("installer", os.path.join("published", "nkb-setup_0.1.0_windows_amd64.msi"))]))
+                                 ("installer", os.path.join("published", f"nkb-setup_{VERSION}_windows_amd64.msi"))]))
 
     def test_the_installer_of_a_release_has_to_be_found_and_a_candidate_has_none_to_check(self):
         with unittest.mock.patch.object(release, "tried_programs", lambda *a, **k: []), \
@@ -386,9 +388,9 @@ class Signatures(unittest.TestCase):
             with self.assertRaises(contents.Refused) as refusal:
                 verify_release.command_programs(types.SimpleNamespace(tag=TAG, os="windows", unpacked="u",
                                                                       published=None), answering())
-            self.assertTrue(any("nkb-setup_0.1.0_windows_amd64.msi" in p for p in refusal.exception.problems))
+            self.assertTrue(any(f"nkb-setup_{VERSION}_windows_amd64.msi" in p for p in refusal.exception.problems))
             with unittest.mock.patch.object(verify_release, "installer_problems", lambda *a: ["never asked"]):
-                args = types.SimpleNamespace(tag="v0.1.0-rc.1", os="windows", unpacked="u", published="p")
+                args = types.SimpleNamespace(tag=f"v{VERSION}-rc.1", os="windows", unpacked="u", published="p")
                 self.assertEqual(verify_release.command_programs(args, answering()), 0)
 
     def test_the_installer_is_held_to_the_pin_its_version_its_product_and_the_upgrade_code(self):
@@ -416,7 +418,7 @@ class Signatures(unittest.TestCase):
                 unittest.mock.patch.object(verify_release, "glibc_problems", lambda p, run: ["needs glibc 2.39"]):
             with self.assertRaises(contents.Refused) as refusal:
                 verify_release.command_programs(types.SimpleNamespace(tag=TAG, os="linux", unpacked="u"), answering())
-        self.assertIn("nkb_0.1.0_linux_amd64.tar.gz: needs glibc 2.39", refusal.exception.problems)
+        self.assertIn(f"nkb_{VERSION}_linux_amd64.tar.gz: needs glibc 2.39", refusal.exception.problems)
 
     def test_a_linux_program_may_not_need_a_newer_glibc_than_readme_promises(self):
         table = "0000 DF *UND* 0000 (GLIBC_%s) f\n"

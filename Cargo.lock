@@ -2748,7 +2748,7 @@ dependencies = [
 
 [[package]]
 name = "nkb-adapters"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "nkb-app",
  "nkb-core",
@@ -2758,14 +2758,14 @@ dependencies = [
 
 [[package]]
 name = "nkb-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "nkb-core",
 ]
 
 [[package]]
 name = "nkb-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "embed-resource",
  "nkb-adapters",
@@ -2776,11 +2776,11 @@ dependencies = [
 
 [[package]]
 name = "nkb-core"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "nkb-gui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "arboard",
  "embed-resource",
@@ -2798,7 +2798,7 @@ dependencies = [
 
 [[package]]
 name = "nkb-sys"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "windows-sys 0.61.2",
 ]

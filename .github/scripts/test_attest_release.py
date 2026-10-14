@@ -23,8 +23,10 @@ import attest_release
 import contents
 import release
 
-TAG = "v0.1.0"
-VERSION = "0.1.0"
+# The version of the workspace, as every release names its files: written out,
+# it would turn these tests red on each version bump.
+VERSION = contents.load_workspace().version
+TAG = "v" + VERSION
 ON_TAG = {"GITHUB_REF": "refs/tags/" + TAG}
 SPDX = "https://spdx.dev/Document/v2.3"
 
@@ -108,7 +110,7 @@ class Fetching(Draft):
             self.assertEqual(handle.read().strip(), "sbom=" + os.path.join(self.root, "signed", release.sbom_name(VERSION)))
 
     def test_a_run_not_on_the_tag_it_attests_is_refused_before_anything_is_fetched(self):
-        for ref in ({"GITHUB_REF": "refs/heads/main"}, {}, {"GITHUB_REF": "refs/tags/v0.1.0-rc.1"}):
+        for ref in ({"GITHUB_REF": "refs/heads/main"}, {}, {"GITHUB_REF": f"refs/tags/v{VERSION}-rc.1"}):
             with self.subTest(ref=ref):
                 gh = Gh(self.draft)
                 with self.assertRaises(contents.Refused):
@@ -126,7 +128,7 @@ class Fetching(Draft):
 
     def test_checksums_other_than_the_ones_signed_are_refused(self):
         signed = self.sums()
-        self.put("nkb_0.1.0_linux_amd64.tar.gz", b"changed on the way")
+        self.put(f"nkb_{VERSION}_linux_amd64.tar.gz", b"changed on the way")
         self.sums()
         with self.assertRaises(contents.Refused) as refusal:
             self.fetch(Gh(self.draft), digest=signed)
@@ -134,13 +136,13 @@ class Fetching(Draft):
 
     def test_a_file_that_is_not_the_one_listed_is_refused(self):
         digest = self.sums()
-        self.put("nkb_0.1.0_linux_amd64.tar.gz", b"changed after the list")
+        self.put(f"nkb_{VERSION}_linux_amd64.tar.gz", b"changed after the list")
         with self.assertRaises(contents.Refused) as refusal:
             self.fetch(Gh(self.draft), digest=digest)
         self.assertIn("not the file", refusal.exception.problems[0])
 
     def test_a_list_that_leaves_a_file_out_is_refused(self):
-        names = [n for n in release.published_files(TAG) if n not in (release.SUMS, "nkb_0.1.0_linux_amd64.tar.gz")]
+        names = [n for n in release.published_files(TAG) if n not in (release.SUMS, f"nkb_{VERSION}_linux_amd64.tar.gz")]
         digest = self.sums(names)
         with self.assertRaises(contents.Refused) as refusal:
             self.fetch(Gh(self.draft), digest=digest)
@@ -153,7 +155,7 @@ class Fetching(Draft):
             self.fetch(Gh(self.draft), digest=digest)
         self.assertIn("stray.zip", refusal.exception.problems[0])
         os.remove(os.path.join(self.draft, "stray.zip"))
-        os.remove(os.path.join(self.draft, "nkb_0.1.0_linux_amd64.tar.gz"))
+        os.remove(os.path.join(self.draft, f"nkb_{VERSION}_linux_amd64.tar.gz"))
         with self.assertRaises(contents.Refused) as refusal:
             self.fetch(Gh(self.draft), digest=digest)
         self.assertIn("phase B uploads", refusal.exception.problems[0])
@@ -189,7 +191,7 @@ class Publishing(Draft):
             self.assertIn("--bundle", check)
         upload = gh.uploads()
         self.assertEqual(len(upload), 1)
-        self.assertEqual(os.path.basename(upload[0][4]), "verify-naughty-keyboard_0.1.0.sbom.sigstore.json")
+        self.assertEqual(os.path.basename(upload[0][4]), f"verify-naughty-keyboard_{VERSION}.sbom.sigstore.json")
         self.assertIn("--clobber", upload[0])
         self.assertLess(gh.asked.index(checks[-1]), gh.asked.index(upload[0]))
 
@@ -201,7 +203,7 @@ class Publishing(Draft):
         self.assertEqual(gh.uploads(), [])
 
     def test_a_statement_about_other_bytes_or_other_files_is_never_uploaded(self):
-        other = dict(self.archives, **{"nkb_0.1.0_linux_amd64.tar.gz": "0" * 64})
+        other = dict(self.archives, **{f"nkb_{VERSION}_linux_amd64.tar.gz": "0" * 64})
         fewer = {n: d for n, d in self.archives.items() if "linux" not in n}
         more = dict(self.archives, **{release.SUMS: "0" * 64})
         for subjects in (other, fewer, more):

@@ -7,15 +7,19 @@ lead: "Two programs for three systems. Unpack the archive and run it: nothing is
 
 ## Is there a release yet?
 
-The project is in early development. If [the releases page](https://github.com/donislawdev/Naughty-Keyboard/releases) is still empty, there is no release yet, and you build it from source as shown at the end of this page. The pack format is not frozen yet either: it freezes with the first public release that ships packs.
+Yes. Every release, with its files, is on [the releases page](https://github.com/donislawdev/Naughty-Keyboard/releases), and the newest one is always [the latest release](https://github.com/donislawdev/Naughty-Keyboard/releases/latest). The project is still in early development, and the pack format is not frozen yet: a later release may still change it, and its notes will say how.
 
 ## Which file do I need?
 
-`nkb-gui` is the palette, the window that types a value into the field you are in. `nkb` is the command line. Every release has one archive for each program and system, and `VERSION` below stands for the version, such as `0.1.0`:
+`nkb-gui` is the palette, the window that types a value into the field you are in. `nkb` is the command line. Every release has one archive for each program and system, and `VERSION` below stands for the version, such as `0.2.0`:
 
 {{< downloads >}}
 
 Typing into other windows works on Windows. On macOS and Linux the command line works in full and the palette puts values on the clipboard. [Honest limits](/docs/limits/) says more.
+
+## Is there an installer for Windows?
+
+Yes, {{< installer >}}, with both programs in it. It asks for administrator rights, because it installs for every account on the machine: the palette goes into the Start menu as Naughty Keyboard and `nkb` onto the system `PATH`, so it works in every new terminal. A newer version installs over an older one, and uninstalling it from Settings, Apps, leaves your settings where they are.
 
 ## What is in an archive?
 

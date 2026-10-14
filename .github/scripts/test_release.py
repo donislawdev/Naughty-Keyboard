@@ -25,7 +25,10 @@ import zipfile
 import contents
 import release
 
-WORKSPACE = contents.Workspace("0.1.0", "https://github.com/example/project", "GPL-3.0-only")
+# The version of the workspace, as every release names its files: written out,
+# it would turn these tests red on each version bump.
+VERSION = contents.load_workspace().version
+WORKSPACE = contents.Workspace(VERSION, "https://github.com/example/project", "GPL-3.0-only")
 
 
 def setUpModule():
@@ -63,28 +66,28 @@ class Folder(unittest.TestCase):
 
 class Plans(unittest.TestCase):
     def test_a_pushed_tag_is_a_release(self):
-        plan = release.plan_of("push", "tag", "v0.1.0", "7", WORKSPACE)
+        plan = release.plan_of("push", "tag", f"v{VERSION}", "7", WORKSPACE)
         self.assertEqual((plan.release, plan.tag, plan.version, plan.base, plan.prerelease),
-                         (True, "v0.1.0", "0.1.0", "0.1.0", False))
-        self.assertEqual(plan.sbom(), "verify-naughty-keyboard_0.1.0.spdx.json")
+                         (True, f"v{VERSION}", VERSION, VERSION, False))
+        self.assertEqual(plan.sbom(), f"verify-naughty-keyboard_{VERSION}.spdx.json")
 
     def test_a_candidate_is_a_prerelease_of_the_same_version(self):
-        plan = release.plan_of("push", "tag", "v0.1.0-rc.1", "7", WORKSPACE)
+        plan = release.plan_of("push", "tag", f"v{VERSION}-rc.1", "7", WORKSPACE)
         self.assertEqual((plan.release, plan.version, plan.base, plan.prerelease),
-                         (True, "0.1.0-rc.1", "0.1.0", True))
+                         (True, f"{VERSION}-rc.1", VERSION, True))
 
     def test_anything_but_a_pushed_tag_builds_under_a_version_no_release_carries(self):
         for event, ref_type, ref_name in (("workflow_dispatch", "branch", "main"),
-                                          ("workflow_dispatch", "tag", "v0.1.0"),
+                                          ("workflow_dispatch", "tag", f"v{VERSION}"),
                                           ("pull_request", "branch", "12/merge"),
                                           ("push", "branch", "main")):
             with self.subTest(event=event, ref=ref_name):
                 plan = release.plan_of(event, ref_type, ref_name, "42", WORKSPACE)
                 self.assertFalse(plan.release)
-                self.assertEqual(plan.tag, "v0.1.0-dev.42")
+                self.assertEqual(plan.tag, f"v{VERSION}-dev.42")
 
     def test_a_tag_of_another_version_is_refused(self):
-        for tag in ("v0.2.0", "v0.1", "0.1.0", "v0.1.0+build"):
+        for tag in ("v9.9.9", "v0.1", VERSION, f"v{VERSION}+build"):
             with self.subTest(tag=tag):
                 with self.assertRaises(contents.Refused):
                     release.plan_of("push", "tag", tag, "7", WORKSPACE)
@@ -106,11 +109,11 @@ class Plans(unittest.TestCase):
     def test_an_output_with_a_line_break_is_refused_and_the_rest_are_written(self):
         with tempfile.TemporaryDirectory() as folder:
             path = os.path.join(folder, "output")
-            release.write_outputs({"tag": "v0.1.0", "platforms": "[]"}, path)
+            release.write_outputs({"tag": f"v{VERSION}", "platforms": "[]"}, path)
             with open(path, encoding="utf-8") as handle:
-                self.assertEqual(handle.read(), "tag=v0.1.0\nplatforms=[]\n")
+                self.assertEqual(handle.read(), f"tag=v{VERSION}\nplatforms=[]\n")
             with self.assertRaises(contents.Refused):
-                release.write_outputs({"tag": "v0.1.0\nrelease=true"}, path)
+                release.write_outputs({"tag": f"v{VERSION}\nrelease=true"}, path)
 
 
 class Verdicts(unittest.TestCase):
@@ -196,36 +199,36 @@ class Waiting(unittest.TestCase):
 
 
 class Changelogs(unittest.TestCase):
-    CLOSED = "# Changelog\n\n## [Unreleased]\n\n## [0.1.0] - 2026-10-10\n\n### Added\n\n- A thing.\n"
+    CLOSED = f"# Changelog\n\n## [Unreleased]\n\n## [{VERSION}] - 2026-10-10\n\n### Added\n\n- A thing.\n"
 
     def test_a_closed_changelog_gives_its_section_as_the_notes(self):
-        problems, section = release.changelog_section(self.CLOSED, "0.1.0")
+        problems, section = release.changelog_section(self.CLOSED, VERSION)
         self.assertEqual(problems, [])
         self.assertEqual(section, "### Added\n\n- A thing.")
 
     def test_a_candidate_has_its_own_section(self):
-        text = self.CLOSED.replace("[0.1.0]", "[0.1.0-rc.1]")
-        self.assertEqual(release.changelog_section(text, "0.1.0-rc.1")[0], [])
-        self.assertTrue(release.changelog_section(text, "0.1.0")[0])
+        text = self.CLOSED.replace(f"[{VERSION}]", f"[{VERSION}-rc.1]")
+        self.assertEqual(release.changelog_section(text, f"{VERSION}-rc.1")[0], [])
+        self.assertTrue(release.changelog_section(text, VERSION)[0])
 
     def test_what_keeps_a_changelog_open_is_refused(self):
         for text, says in (
                 (self.CLOSED.replace("## [Unreleased]\n", "## [Unreleased]\n\n- Not moved.\n"), "under [Unreleased]"),
-                (self.CLOSED.replace("## [0.1.0] - 2026-10-10", "## [0.1.0]"), "no date"),
-                (self.CLOSED.replace("## [0.1.0] - 2026-10-10", "## [0.1.0] - soon"), "no date"),
-                (self.CLOSED.replace("[0.1.0]", "[0.0.9]"), "no section for 0.1.0"),
+                (self.CLOSED.replace(f"## [{VERSION}] - 2026-10-10", f"## [{VERSION}]"), "no date"),
+                (self.CLOSED.replace(f"## [{VERSION}] - 2026-10-10", f"## [{VERSION}] - soon"), "no date"),
+                (self.CLOSED.replace(f"[{VERSION}]", "[0.0.9]"), f"no section for {VERSION}"),
                 (self.CLOSED.replace("## [Unreleased]\n", ""), "exactly one"),
                 (self.CLOSED + "\n## [Unreleased]\n", "exactly one"),
-                (self.CLOSED + "\n## [0.1.0] - 2026-10-11\n\n- Again.\n", "2 sections"),
+                (self.CLOSED + f"\n## [{VERSION}] - 2026-10-11\n\n- Again.\n", "2 sections"),
                 (self.CLOSED.replace("### Added\n\n- A thing.\n", ""), "is empty")):
             with self.subTest(says=says):
-                problems, _ = release.changelog_section(text, "0.1.0")
+                problems, _ = release.changelog_section(text, VERSION)
                 self.assertTrue(any(says in p for p in problems), problems)
 
     def test_link_definitions_are_not_entries(self):
-        text = (self.CLOSED + "\n[Unreleased]: https://example.org/compare/v0.1.0...HEAD\n"
-                "[0.1.0]: https://example.org/releases/tag/v0.1.0\n")
-        problems, section = release.changelog_section(text, "0.1.0")
+        text = (self.CLOSED + f"\n[Unreleased]: https://example.org/compare/v{VERSION}...HEAD\n"
+                f"[{VERSION}]: https://example.org/releases/tag/v{VERSION}\n")
+        problems, section = release.changelog_section(text, VERSION)
         self.assertEqual(problems, [])
         self.assertNotIn("https://", section)
 
@@ -312,7 +315,7 @@ class Packing(Folder):
     def pack(self, archive, name="out"):
         path = os.path.join(self.root, name + "." + archive.format)
         release.write_archive(path, archive.format, release.entries_of(
-            archive, "0.1.0", self.PROGRAM, self.NOTICES), self.EPOCH)
+            archive, VERSION, self.PROGRAM, self.NOTICES), self.EPOCH)
         return path
 
     def test_a_macos_archive_holds_a_bundle_and_a_link_into_it(self):
@@ -335,12 +338,12 @@ class Packing(Folder):
         self.assertEqual(plist["CFBundleExecutable"], "nkb")
         self.assertEqual(plist["CFBundleIconFile"], "edamame")
         self.assertEqual(plist["LSMinimumSystemVersion"], "11.0")
-        self.assertEqual((plist["CFBundleShortVersionString"], plist["CFBundleVersion"]), ("0.1.0", "0.1.0"))
+        self.assertEqual((plist["CFBundleShortVersionString"], plist["CFBundleVersion"]), (VERSION, VERSION))
 
     def test_the_bundle_says_the_version_of_the_workspace_and_never_a_suffix(self):
         archive = archive_for("macos", "nkb-gui")
-        plist = plistlib.loads(release.info_plist(archive, "0.1.0", archive.packaged[0]))
-        self.assertEqual(plist["CFBundleShortVersionString"], "0.1.0")
+        plist = plistlib.loads(release.info_plist(archive, VERSION, archive.packaged[0]))
+        self.assertEqual(plist["CFBundleShortVersionString"], VERSION)
         self.assertEqual(plist["CFBundleIdentifier"], "com.donislawdev.nkb-gui")
 
     def test_a_linux_archive_holds_the_program_executable_and_no_bundle(self):
@@ -518,7 +521,7 @@ class Imports(Folder):
 
 class Trying(Folder):
     def lay_out(self, archive, extra=None):
-        directory = os.path.join(self.root, archive.name("0.1.0"))
+        directory = os.path.join(self.root, archive.name(VERSION))
         for name in release.expected_names(archive) + ([extra] if extra else []):
             path = os.path.join(directory, *name.split("/"))
             os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -527,7 +530,7 @@ class Trying(Folder):
             os.chmod(path, 0o755)
         return directory
 
-    def nkb(self, version="nkb 0.1.0\n"):
+    def nkb(self, version=f"nkb {VERSION}\n"):
         def run(command, **_):
             if command[1:] == ["--version"]:
                 return subprocess.CompletedProcess(command, 0, version, "")
@@ -538,18 +541,18 @@ class Trying(Folder):
 
     def test_the_command_line_from_its_archive_answers_as_documented(self):
         archive = archive_for("linux")
-        problems = release.tried_programs(archive, "0.1.0", self.lay_out(archive), ["packs/whitespace.toml"],
+        problems = release.tried_programs(archive, VERSION, self.lay_out(archive), ["packs/whitespace.toml"],
                                           self.nkb())
         self.assertEqual(problems, [])
 
     def test_a_wrong_version_line_is_a_problem(self):
         archive = archive_for("linux")
-        problems = release.tried_programs(archive, "0.1.0", self.lay_out(archive), [], self.nkb("nkb 0.0.9\n"))
+        problems = release.tried_programs(archive, VERSION, self.lay_out(archive), [], self.nkb("nkb 0.0.9\n"))
         self.assertTrue(any("--version" in p for p in problems), problems)
 
     def test_a_file_the_layout_does_not_name_is_a_problem(self):
         archive = archive_for("linux", "nkb-gui")
-        problems = release.tried_programs(archive, "0.1.0", self.lay_out(archive, "stray.txt"), [], self.nkb())
+        problems = release.tried_programs(archive, VERSION, self.lay_out(archive, "stray.txt"), [], self.nkb())
         self.assertTrue(any("should hold" in p for p in problems), problems)
 
     def test_a_windows_program_that_needs_the_c_runtime_is_a_problem(self):
@@ -558,11 +561,11 @@ class Trying(Folder):
         program = os.path.join(directory, "nkb-gui.exe")
         with open(program, "wb") as handle:
             handle.write(portable_executable(["KERNEL32.dll", "VCRUNTIME140.dll"], []))
-        problems = release.tried_programs(archive, "0.1.0", directory, [], self.nkb())
+        problems = release.tried_programs(archive, VERSION, directory, [], self.nkb())
         self.assertTrue(any("VCRUNTIME140.dll" in p for p in problems), problems)
         with open(program, "wb") as handle:
             handle.write(portable_executable(["KERNEL32.dll"], []))
-        self.assertEqual(release.tried_programs(archive, "0.1.0", directory, [], self.nkb()), [])
+        self.assertEqual(release.tried_programs(archive, VERSION, directory, [], self.nkb()), [])
 
     def test_a_program_that_cannot_be_started_is_a_problem_and_not_a_crash(self):
         archive = archive_for("linux")
@@ -571,7 +574,7 @@ class Trying(Folder):
         def run(command, **_):
             raise FileNotFoundError(command[0])
 
-        problems = release.tried_programs(archive, "0.1.0", directory, [], run)
+        problems = release.tried_programs(archive, VERSION, directory, [], run)
         self.assertTrue(any("--version" in p for p in problems), problems)
 
 
@@ -589,20 +592,20 @@ class Glibc(unittest.TestCase):
 
 class Handover(Folder):
     def test_the_build_is_the_six_archives_and_the_bill_of_materials(self):
-        names = release.handover_names("v0.1.0")
+        names = release.handover_names(f"v{VERSION}")
         self.assertEqual(len(names), 7)
-        self.assertIn("verify-naughty-keyboard_0.1.0.spdx.json", names)
-        self.assertIn("nkb-gui_0.1.0_macos_arm64.tar.gz", names)
+        self.assertIn(f"verify-naughty-keyboard_{VERSION}.spdx.json", names)
+        self.assertIn(f"nkb-gui_{VERSION}_macos_arm64.tar.gz", names)
 
     def test_a_missing_file_and_a_stray_one_are_refused(self):
-        for name in release.handover_names("v0.1.0"):
+        for name in release.handover_names(f"v{VERSION}"):
             open(os.path.join(self.root, name), "w").close()
-        args = type("Args", (), {"tag": "v0.1.0", "dir": self.root})
+        args = type("Args", (), {"tag": f"v{VERSION}", "dir": self.root})
         self.assertEqual(release.command_handover(args), 0)
-        os.remove(os.path.join(self.root, "nkb_0.1.0_linux_amd64.tar.gz"))
+        os.remove(os.path.join(self.root, f"nkb_{VERSION}_linux_amd64.tar.gz"))
         with self.assertRaises(contents.Refused):
             release.command_handover(args)
-        open(os.path.join(self.root, "nkb_0.1.0_linux_amd64.tar.gz"), "w").close()
+        open(os.path.join(self.root, f"nkb_{VERSION}_linux_amd64.tar.gz"), "w").close()
         open(os.path.join(self.root, "build.sha256"), "w").close()
         with self.assertRaises(contents.Refused):
             release.command_handover(args)
@@ -647,9 +650,9 @@ class Promises(unittest.TestCase):
                     release.promise_of(text, "example/project")
 
     def test_the_version_goes_into_every_word_that_carries_it(self):
-        lines = release.promise_of(README_BLOCK, "example/project").rendered("v0.1.0-rc.1")
-        self.assertTrue(lines[0].startswith("gh release verify-asset v0.1.0-rc.1 nkb_0.1.0-rc.1_linux_amd64.tar.gz"))
-        self.assertIn("verify-naughty-keyboard_0.1.0-rc.1.sbom.sigstore.json", lines[1])
+        lines = release.promise_of(README_BLOCK, "example/project").rendered(f"v{VERSION}-rc.1")
+        self.assertTrue(lines[0].startswith(f"gh release verify-asset v{VERSION}-rc.1 nkb_{VERSION}-rc.1_linux_amd64.tar.gz"))
+        self.assertIn(f"verify-naughty-keyboard_{VERSION}-rc.1.sbom.sigstore.json", lines[1])
         self.assertFalse(any(release.VERSION_SLOT in line for line in lines))
 
     def test_a_command_naming_a_file_no_release_holds_is_refused(self):
@@ -658,7 +661,7 @@ class Promises(unittest.TestCase):
                 text = README_BLOCK.replace("nkb_VERSION_linux_amd64.tar.gz -R example/project\n```",
                                             wrong + " -R example/project\n```")
                 with self.assertRaises(contents.Refused):
-                    release.promise_of(text, "example/project").rendered("v0.1.0")
+                    release.promise_of(text, "example/project").rendered(f"v{VERSION}")
 
 
 class TheReadme(unittest.TestCase):
@@ -670,7 +673,7 @@ class TheReadme(unittest.TestCase):
 
     def test_it_asks_for_the_bill_of_materials_and_names_only_files_a_release_holds(self):
         self.assertEqual(self.promise.predicate, "https://spdx.dev/Document/v2.3")
-        self.assertEqual(len(self.promise.rendered("v0.1.0")), 5)
+        self.assertEqual(len(self.promise.rendered(f"v{VERSION}")), 5)
 
     def test_both_statements_are_asked_for_through_github_and_offline(self):
         words = [line.split() for line in self.promise.lines]
@@ -694,11 +697,11 @@ class Notes(unittest.TestCase):
 
     def test_the_notes_are_the_section_then_the_footer_with_the_commands_of_this_version(self):
         promise = release.promise_of(README_BLOCK, "example/project")
-        notes = release.release_notes("### Added\n\n- A thing.\n", "v0.1.0", promise, self.FOOTER)
+        notes = release.release_notes("### Added\n\n- A thing.\n", f"v{VERSION}", promise, self.FOOTER)
         self.assertTrue(notes.startswith("### Added\n\n- A thing.\n\n## Check\n"))
-        for line in promise.rendered("v0.1.0"):
+        for line in promise.rendered(f"v{VERSION}"):
             self.assertIn("\n" + line + "\n", notes)
-        self.assertIn("verify-naughty-keyboard_0.1.0.spdx.json", notes)
+        self.assertIn(f"verify-naughty-keyboard_{VERSION}.spdx.json", notes)
         self.assertNotIn("VERSION", notes)
         self.assertNotIn("<!--", notes)
 
@@ -707,7 +710,7 @@ class Notes(unittest.TestCase):
         for footer in ("## Check\n", self.FOOTER + "<!-- verify-commands -->\n"):
             with self.subTest(footer=footer):
                 with self.assertRaises(contents.Refused):
-                    release.release_notes("- A thing.", "v0.1.0", promise, footer)
+                    release.release_notes("- A thing.", f"v{VERSION}", promise, footer)
 
     def test_the_changelog_command_writes_the_whole_notes_and_not_only_the_section(self):
         folder = tempfile.mkdtemp(prefix="notes-test-")
@@ -716,40 +719,40 @@ class Notes(unittest.TestCase):
         with open(changelog, "w", encoding="utf-8") as handle:
             handle.write(Changelogs.CLOSED)
         notes = os.path.join(folder, "notes.md")
-        args = type("Args", (), {"changelog": changelog, "version": "0.1.0", "notes": notes})
+        args = type("Args", (), {"changelog": changelog, "version": VERSION, "notes": notes})
         self.assertEqual(release.command_changelog(args), 0)
         with open(notes, encoding="utf-8") as handle:
             written = handle.read()
         self.assertTrue(written.startswith("### Added\n\n- A thing.\n"))
-        for line in release.load_promise().rendered("v0.1.0"):
+        for line in release.load_promise().rendered(f"v{VERSION}"):
             self.assertIn(line, written)
 
     def test_the_real_footer_renders_with_the_real_readme(self):
         with open(release.NOTES_FOOTER, encoding="utf-8") as handle:
-            notes = release.release_notes("- A thing.", "v0.1.0", release.load_promise(), handle.read())
+            notes = release.release_notes("- A thing.", f"v{VERSION}", release.load_promise(), handle.read())
         self.assertNotIn("VERSION", notes)
         self.assertIn(release.SUMS, notes)
-        self.assertIn("gh release verify-asset v0.1.0 ", notes)
+        self.assertIn(f"gh release verify-asset v{VERSION} ", notes)
 
 
 class Pages(unittest.TestCase):
     def test_phase_b_uploads_ten_files_and_a_finished_release_holds_eleven(self):
-        published = release.published_files("v0.1.0")
-        page = release.page_files("v0.1.0")
+        published = release.published_files(f"v{VERSION}")
+        page = release.page_files(f"v{VERSION}")
         self.assertEqual(len(published), 10)
-        self.assertEqual(sorted(set(page) - set(published)), ["verify-naughty-keyboard_0.1.0.sbom.sigstore.json"])
+        self.assertEqual(sorted(set(page) - set(published)), [f"verify-naughty-keyboard_{VERSION}.sbom.sigstore.json"])
         self.assertIn("verify-SHA256SUMS.txt", published)
-        self.assertIn("verify-naughty-keyboard_0.1.0.provenance.sigstore.json", published)
-        self.assertIn("nkb-setup_0.1.0_windows_amd64.msi", published)
+        self.assertIn(f"verify-naughty-keyboard_{VERSION}.provenance.sigstore.json", published)
+        self.assertIn(f"nkb-setup_{VERSION}_windows_amd64.msi", published)
         # verify- keeps the files for checking together at the end of the page.
         self.assertTrue(all(n.startswith("verify-") for n in page if not n.endswith((".zip", ".tar.gz", ".msi"))))
 
     def test_a_candidate_carries_no_installer_and_one_rule_says_which_tag_is_a_candidate(self):
-        self.assertEqual(len(release.published_files("v0.1.0-rc.1")), 9)
-        self.assertFalse([n for n in release.page_files("v0.1.0-rc.1") if n.endswith(".msi")])
-        self.assertIsNone(release.installer_name("v0.1.0-rc.1"))
-        self.assertEqual(release.installer_name("v0.1.0"), "nkb-setup_0.1.0_windows_amd64.msi")
-        for tag, candidate in (("v0.1.0", False), ("v0.1.0-rc.1", True), ("v0.1.0-dev.7", True)):
+        self.assertEqual(len(release.published_files(f"v{VERSION}-rc.1")), 9)
+        self.assertFalse([n for n in release.page_files(f"v{VERSION}-rc.1") if n.endswith(".msi")])
+        self.assertIsNone(release.installer_name(f"v{VERSION}-rc.1"))
+        self.assertEqual(release.installer_name(f"v{VERSION}"), f"nkb-setup_{VERSION}_windows_amd64.msi")
+        for tag, candidate in ((f"v{VERSION}", False), (f"v{VERSION}-rc.1", True), (f"v{VERSION}-dev.7", True)):
             with self.subTest(tag=tag):
                 self.assertEqual(release.is_candidate(tag), candidate)
                 self.assertEqual(release.plan_of("push", "tag", tag, 1, contents.load_workspace()).prerelease,
@@ -787,19 +790,19 @@ class Pages(unittest.TestCase):
 
 class Drafts(unittest.TestCase):
     def test_the_draft_is_empty_and_its_notes_are_the_changelog(self):
-        self.assertEqual(release.draft_command("v0.1.0", "notes.md", False),
-                         ["release", "create", "v0.1.0", "--draft", "--verify-tag", "--title", "v0.1.0",
+        self.assertEqual(release.draft_command(f"v{VERSION}", "notes.md", False),
+                         ["release", "create", f"v{VERSION}", "--draft", "--verify-tag", "--title", f"v{VERSION}",
                           "--notes-file", "notes.md"])
-        self.assertEqual(release.draft_command("v0.1.0-rc.1", "notes.md", True)[-1], "--prerelease")
+        self.assertEqual(release.draft_command(f"v{VERSION}-rc.1", "notes.md", True)[-1], "--prerelease")
 
     def test_a_missing_release_is_opened_as_a_draft(self):
         run = answered((1, "", "release not found\n"), (0, "", ""))
-        self.assertEqual(release.open_draft("v0.1.0-rc.1", "n.md", run), "missing")
-        self.assertEqual(run.asked[1], ["gh"] + release.draft_command("v0.1.0-rc.1", "n.md", True))
+        self.assertEqual(release.open_draft(f"v{VERSION}-rc.1", "n.md", run), "missing")
+        self.assertEqual(run.asked[1], ["gh"] + release.draft_command(f"v{VERSION}-rc.1", "n.md", True))
 
     def test_an_open_draft_is_left_as_it_is(self):
         run = answered((0, "true\n", ""))
-        self.assertEqual(release.open_draft("v0.1.0", "n.md", run), "draft")
+        self.assertEqual(release.open_draft(f"v{VERSION}", "n.md", run), "draft")
         self.assertEqual(len(run.asked), 1)
 
     def test_a_published_release_and_a_question_gh_cannot_answer_are_refused(self):
@@ -807,7 +810,7 @@ class Drafts(unittest.TestCase):
             with self.subTest(answer=answer):
                 run = answered(answer)
                 with self.assertRaises(contents.Refused):
-                    release.open_draft("v0.1.0", "n.md", run)
+                    release.open_draft(f"v{VERSION}", "n.md", run)
                 self.assertEqual(len(run.asked), 1)
 
 

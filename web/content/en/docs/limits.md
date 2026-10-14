@@ -15,7 +15,7 @@ You can write them and check them, but not load them yet. `nkb new-pack`, `nkb f
 
 ## Is the pack format stable?
 
-Not yet. It freezes with the first public release that ships packs, and until then a field may still change. `nkb lint` says so every time it runs, and `nkb lint --explain` lists every rule of the format and which ones this build checks.
+Not yet. A later release may still change a field, and its notes will say how. `nkb lint` says so every time it runs, and `nkb lint --explain` lists every rule of the format and which ones this build checks.
 
 ## Does it tell me whether my application coped?
 

@@ -4,7 +4,7 @@
 
 Naughty Keyboard is in early development, with a single line of development, and security fixes are
 made against the `main` branch. Please confirm you can reproduce a problem on the latest release, or on
-`main` while there is no release yet, before reporting it.
+`main`, before reporting it.
 
 The supported versions are the **latest release** and `main`. The release before it stops being
 supported the day a new one is published: no security updates, no backports, no patched builds. There

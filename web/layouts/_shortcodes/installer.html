@@ -1,0 +1,8 @@
+{{- /*
+  The name of the Windows installer, from the [installer] table of
+  .github/release/archives.toml, the one file the release builds it from.
+  `VERSION` stands for the version, as it does in the README.
+*/ -}}
+{{- with hugo.Data.release.archives.installer -}}
+<code>{{ .name }}_VERSION_{{ .os }}_{{ .arch }}.msi</code>
+{{- end -}}

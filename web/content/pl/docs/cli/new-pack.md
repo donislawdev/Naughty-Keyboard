@@ -17,7 +17,7 @@ Nazwa staje się i nazwą pliku, i identyfikatorem paczki, więc składa się z 
 $ nkb new-pack my-pack
 Wrote my-pack.toml.
 Edit it, then run `nkb lint my-pack.toml` - it reports everything in one pass.
-The pack format is not frozen yet: it freezes with the first public release that ships packs.
+The pack format is not frozen yet: a later release may still change it.
 ```
 
 Własne paczki można dziś napisać i sprawdzić, ale jeszcze nie wczytać do palety. Więcej mówią [Uczciwe ograniczenia](/docs/limits/).
