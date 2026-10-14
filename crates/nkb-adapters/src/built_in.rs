@@ -92,6 +92,7 @@ pub const BUILT_IN_PACKS: &[(&str, &str)] = &[
         "names-identity",
         include_str!("../../../packs/names-identity.toml"),
     ),
+    ("time-zones", include_str!("../../../packs/time-zones.toml")),
 ];
 
 #[cfg(test)]
