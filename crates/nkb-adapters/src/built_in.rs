@@ -68,6 +68,10 @@ pub const BUILT_IN_PACKS: &[(&str, &str)] = &[
         "filenames-paths",
         include_str!("../../../packs/filenames-paths.toml"),
     ),
+    (
+        "look-alike-pairs",
+        include_str!("../../../packs/look-alike-pairs.toml"),
+    ),
 ];
 
 #[cfg(test)]

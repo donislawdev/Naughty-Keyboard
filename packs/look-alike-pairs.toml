@@ -1,0 +1,160 @@
+format = 1
+
+[pack]
+id          = "look-alike-pairs"
+name        = "Look-alike pairs"
+description = "Pairs of values that are identical on screen and different in storage."
+version     = "1.0"
+updated     = 2026-10-14
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["uniqueness", "deduplication", "search", "normalisation"]
+fields      = ["name", "username", "email", "text"]
+risk        = "normal"
+
+[[values]]
+id     = "latin-small-a"
+name   = "Name with a Latin a"
+value  = "pawel"
+breaks = "The control half of a pair - only meaningful next to its counterpart."
+expect = "Stored as typed."
+since  = "1.0"
+
+[[values]]
+id     = "cyrillic-small-a"
+name   = "Name with a Cyrillic a"
+value  = "p\u0430wel"
+breaks = "A Cyrillic letter identical in shape to the Latin one; two accounts that look the same to every human."
+expect = "Either both accepted as distinct and shown as distinct, or the second rejected as a duplicate."
+since  = "1.0"
+
+[[values]]
+id     = "latin-small-o"
+name   = "Word with a Latin o"
+value  = "robot"
+breaks = "The control half of a pair - only meaningful next to the Greek omicron below it."
+expect = "Stored as typed."
+since  = "1.0"
+
+[[values]]
+id     = "greek-omicron"
+name   = "Word with a Greek omicron"
+value  = "r\u03BFbot"
+breaks = "The same shape from a third script; catches uniqueness checks that only handle Cyrillic."
+expect = "Same as above."
+since  = "1.0"
+
+[[values]]
+id     = "nfc-lodz"
+name   = "Accented word, composed"
+value  = "\u0141\u00F3d\u017A"
+breaks = "Control half: the accented letters written as single characters."
+expect = "Stored as typed."
+since  = "1.0"
+
+[[values]]
+id     = "nfd-lodz"
+name   = "Accented word, decomposed"
+value  = "\u0141o\u0301dz\u0301"
+breaks = "The same word with combining marks; identical on screen, different in storage and in every comparison."
+expect = "Normalised on save, or compared in a normalisation-aware way."
+since  = "1.0"
+
+[[values]]
+id     = "plain-space-name"
+name   = "Name with an ordinary space"
+value  = "Jan Kowalski"
+breaks = "The control half of a pair - an ordinary space, so that the non-breaking one has something to fail against."
+expect = "Stored as typed."
+since  = "1.0"
+
+[[values]]
+id     = "nbsp-name"
+name   = "Name with a non-breaking space"
+value  = "Jan\u00A0Kowalski"
+breaks = "A non-breaking space where an ordinary one is expected; search never matches."
+expect = "Normalised, or treated as distinct consistently."
+since  = "1.0"
+
+[[values]]
+id     = "hyphen-minus"
+name   = "Range with a hyphen"
+value  = "2020-2026"
+breaks = "The control half of a pair, with the ASCII hyphen - it parses everywhere the dash below it does not."
+expect = "Stored as typed."
+since  = "1.0"
+
+[[values]]
+id     = "en-dash"
+name   = "Range with an en dash"
+value  = "2020\u20132026"
+breaks = "The typographic dash that arrives with every copy from a document; breaks parsing of ranges."
+expect = "Normalised before parsing, or accepted as an equivalent separator."
+since  = "1.0"
+
+[[values]]
+id     = "capital-i"
+name   = "Capital i, lowercase L and one"
+value  = "Ill1"
+breaks = "Capital i, lowercase L and the digit one in one value: indistinguishable in many typefaces."
+expect = "Displayed in a typeface where the characters can be told apart, wherever the value must be read back."
+since  = "1.0"
+
+[[values]]
+id     = "digit-zero-letter-o"
+name   = "Letter O and digit zero"
+value  = "O0"
+breaks = "The same problem for the letter O and the digit zero, in codes people retype by hand."
+expect = "Same as above, or the ambiguous characters excluded from generated codes."
+since  = "1.0"
+
+[[pairs]]
+id       = "latin-vs-cyrillic-a"
+name     = "Latin a against Cyrillic a"
+relation = "look-alike"
+a        = "latin-small-a"
+b        = "cyrillic-small-a"
+breaks   = "Two visually identical usernames become two accounts, and support cannot tell which is which."
+expect   = "Either both accepted as distinct and shown as distinct, or the second rejected as a duplicate."
+since    = "1.0"
+
+[[pairs]]
+id       = "latin-vs-greek-o"
+name     = "Latin o against Greek omicron"
+relation = "look-alike"
+a        = "latin-small-o"
+b        = "greek-omicron"
+breaks   = "Uniqueness checks that special-case one script miss the next one."
+expect   = "Either both accepted as distinct and shown as distinct, or the second rejected as a duplicate."
+since    = "1.0"
+
+[[pairs]]
+id       = "nfc-vs-nfd"
+name     = "Composed against decomposed accents"
+relation = "look-alike"
+a        = "nfc-lodz"
+b        = "nfd-lodz"
+breaks   = "The same name saved twice from two devices produces two records."
+expect   = "Normalised on save, so both spellings end up as one record."
+since    = "1.0"
+
+[[pairs]]
+id       = "space-vs-nbsp"
+name     = "Ordinary space against non-breaking space"
+relation = "look-alike"
+a        = "plain-space-name"
+b        = "nbsp-name"
+breaks   = "Search finds one and not the other, and nobody can see why."
+expect   = "Both found by the same search, either because the space is normalised on save or because search treats both as a space."
+since    = "1.0"
+
+[[pairs]]
+id       = "hyphen-vs-endash"
+name     = "Hyphen against en dash"
+relation = "look-alike"
+a        = "hyphen-minus"
+b        = "en-dash"
+breaks   = "A range pasted from a document stops parsing, with no visible difference."
+expect   = "Both forms parse as the same range, or the dash is normalised before parsing."
+since    = "1.0"

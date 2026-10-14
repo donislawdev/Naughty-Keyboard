@@ -1,0 +1,158 @@
+# Polish translations of the pack look-alike-pairs, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "94ef8b2d0675"
+text = "Pary nie do odróżnienia"
+
+[pack.description]
+source = "341221c56362"
+text = "Pary wartości identycznych na ekranie i różnych w zapisie."
+
+[latin-small-a.name]
+source = "660760083e33"
+text = "Imię z łacińskim a"
+
+[latin-small-a.breaks]
+source = "47aebff37b8b"
+text = "Połowa kontrolna pary - ma sens tylko obok swojego odpowiednika."
+
+[latin-small-a.expect]
+source = "573e87a980ee"
+text = "Zapisane tak, jak wpisane."
+
+[cyrillic-small-a.name]
+source = "6645c4cb27a2"
+text = "Imię z cyrylickim a"
+
+[cyrillic-small-a.breaks]
+source = "02dedbb8aa6f"
+text = "Cyrylicka litera o kształcie identycznym z łacińską. Dwa konta, które dla każdego człowieka wyglądają tak samo."
+
+[cyrillic-small-a.expect]
+source = "bc7a17e2721f"
+text = "Albo oba przyjęte jako różne i pokazane jako różne, albo drugie odrzucone jako duplikat."
+
+[latin-small-o.name]
+source = "e88f0b9b1a82"
+text = "Słowo z łacińskim o"
+
+[latin-small-o.breaks]
+source = "f6d09b39296a"
+text = "Połowa kontrolna pary - ma sens tylko obok greckiego omikronu pod nią."
+
+[latin-small-o.expect]
+source = "573e87a980ee"
+text = "Zapisane tak, jak wpisane."
+
+[greek-omicron.name]
+source = "d03594cb5a51"
+text = "Słowo z greckim omikronem"
+
+[greek-omicron.breaks]
+source = "cfc32766a7e1"
+text = "Ten sam kształt z trzeciego pisma. Łapie sprawdzanie unikalności, które obsługuje tylko cyrylicę."
+
+[greek-omicron.expect]
+source = "db7a40274cbe"
+text = "Tak samo jak wyżej."
+
+[nfc-lodz.name]
+source = "a2624ba8b13c"
+text = "Słowo z akcentami, złożone"
+
+[nfc-lodz.breaks]
+source = "4c267773501c"
+text = "Połowa kontrolna: litery z akcentami zapisane jako pojedyncze znaki."
+
+[nfc-lodz.expect]
+source = "573e87a980ee"
+text = "Zapisane tak, jak wpisane."
+
+[nfd-lodz.name]
+source = "02fdd7e1fbe7"
+text = "Słowo z akcentami, rozłożone"
+
+[nfd-lodz.breaks]
+source = "dd0ecd706fc0"
+text = "To samo słowo ze znakami łączącymi. Identyczne na ekranie, różne w zapisie i w każdym porównaniu."
+
+[nfd-lodz.expect]
+source = "da217090f12c"
+text = "Normalizowane przy zapisie albo porównywane z uwzględnieniem normalizacji."
+
+[plain-space-name.name]
+source = "7e1f15dacdc4"
+text = "Imię i nazwisko ze zwykłą spacją"
+
+[plain-space-name.breaks]
+source = "4c23bd83accb"
+text = "Połowa kontrolna pary - zwykła spacja, żeby twarda spacja miała z czym przegrać."
+
+[plain-space-name.expect]
+source = "573e87a980ee"
+text = "Zapisane tak, jak wpisane."
+
+[nbsp-name.name]
+source = "e83c0d3add08"
+text = "Imię i nazwisko z twardą spacją"
+
+[nbsp-name.breaks]
+source = "02c4898f40cc"
+text = "Twarda spacja tam, gdzie oczekiwana jest zwykła. Wyszukiwanie nigdy jej nie dopasuje."
+
+[nbsp-name.expect]
+source = "01b63df844ec"
+text = "Normalizowane albo konsekwentnie traktowane jako inna wartość."
+
+[hyphen-minus.name]
+source = "9abcdcb170e7"
+text = "Zakres z łącznikiem"
+
+[hyphen-minus.breaks]
+source = "f98c24a412f2"
+text = "Połowa kontrolna pary, z łącznikiem ASCII. Parser odczyta go wszędzie tam, gdzie nie odczyta półpauzy z wartości poniżej."
+
+[hyphen-minus.expect]
+source = "573e87a980ee"
+text = "Zapisane tak, jak wpisane."
+
+[en-dash.name]
+source = "807ec7683d02"
+text = "Zakres z półpauzą"
+
+[en-dash.breaks]
+source = "ad16869dde24"
+text = "Typograficzna kreska, która przychodzi z każdym kopiowaniem z dokumentu. Psuje odczyt zakresów."
+
+[en-dash.expect]
+source = "85f7946915ca"
+text = "Normalizowana przed odczytem albo przyjmowana jako równoważny separator."
+
+[capital-i.name]
+source = "cadfff15baf4"
+text = "Wielkie i, małe L i jedynka"
+
+[capital-i.breaks]
+source = "ae4dd9c7ff9d"
+text = "Wielkie i, małe L i cyfra jeden w jednej wartości: w wielu krojach pisma nie do odróżnienia."
+
+[capital-i.expect]
+source = "83a823dc8f16"
+text = "Wyświetlane krojem, w którym te znaki da się odróżnić, wszędzie tam, gdzie wartość trzeba odczytać."
+
+[digit-zero-letter-o.name]
+source = "511c233854cb"
+text = "Litera O i cyfra zero"
+
+[digit-zero-letter-o.breaks]
+source = "1167a8f7a7b1"
+text = "Ten sam problem z literą O i cyfrą zero, w kodach przepisywanych ręcznie."
+
+[digit-zero-letter-o.expect]
+source = "3e143afb3bd5"
+text = "Tak samo jak wyżej albo niejednoznaczne znaki wykluczone z generowanych kodów."
