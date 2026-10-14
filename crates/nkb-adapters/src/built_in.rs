@@ -76,6 +76,10 @@ pub const BUILT_IN_PACKS: &[(&str, &str)] = &[
         "emoji-complex",
         include_str!("../../../packs/emoji-complex.toml"),
     ),
+    (
+        "encoding-mojibake",
+        include_str!("../../../packs/encoding-mojibake.toml"),
+    ),
 ];
 
 #[cfg(test)]
