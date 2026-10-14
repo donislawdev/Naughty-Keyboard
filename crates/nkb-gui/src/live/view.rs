@@ -189,6 +189,8 @@ pub(super) struct NextValueView {
     pub(super) markers: Vec<(String, bool)>,
 }
 
+/// Empty by default - the band with nothing sent, which `clear_value` draws.
+#[derive(Default)]
 pub(super) struct ValueView {
     /// What the Copy button beside it copies (`D98`) - `None` for a value
     /// still on its way, which leaves the key of the last value sent in place
@@ -574,7 +576,7 @@ pub(super) fn apply(palette: &Palette, view: View) {
         ValueBand::Keep => {}
         // The band goes back to what it said before anything was sent, which
         // is true again: nothing has gone out of this pack yet.
-        ValueBand::Clear => palette.set_has_value(false),
+        ValueBand::Clear => clear_value(palette),
         ValueBand::Show(value) => show_value(palette, *value),
     }
 
@@ -589,6 +591,24 @@ pub(super) fn apply(palette: &Palette, view: View) {
 
 /// The value band, on the main thread.
 pub(super) fn show_value(palette: &Palette, value: ValueView) {
+    fill_value(palette, value);
+    palette.set_has_value(true);
+}
+
+/// The value band back at its first frame, on the main thread: another pack
+/// is in use and nothing has gone out of it yet. Every line goes, not only the
+/// switch, because not every line stands behind the switch - the folded
+/// band's heading names the value even while it is faded (`D107`), so a name
+/// left in its property stood under the new pack's name (measured on the live
+/// window, 2026-10-14).
+fn clear_value(palette: &Palette) {
+    fill_value(palette, ValueView::default());
+    palette.set_has_value(false);
+}
+
+/// Every line of the value band. The one place that writes them, so the band
+/// shown and the band cleared cannot drift apart by a line.
+fn fill_value(palette: &Palette, value: ValueView) {
     // With the band it names, in the same turn of the event loop: a click
     // reads the key of the value drawn, never one a view later.
     if let Some(key) = &value.key {
@@ -612,7 +632,6 @@ pub(super) fn show_value(palette: &Palette, value: ValueView) {
     // The switch is read BEFORE the string moves into its property.
     palette.set_has_report(!value.report.is_empty());
     palette.set_report(value.report.into());
-    palette.set_has_value(true);
 }
 
 /// The band of the next value, on the main thread (`UX-GUI-001`).
@@ -727,7 +746,51 @@ pub fn wire_folds(palette: &Palette) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::live::tests::{a_palette, a_sent};
+    use crate::live::tests::{a_palette, a_sent, an_outcome, quiet};
+
+    /// Another pack in use (`ValueBand::Clear`): the band goes back to its
+    /// first frame on the WINDOW, line by line, not only behind its switch -
+    /// the folded band's heading names the value while faded (`D107`), and a
+    /// name left there stood under the new pack's name (measured on the live
+    /// window, 2026-10-14). That choosing a pack gives `Clear` is
+    /// `choosing_another_pack_opens_it_remembers_it_and_clears_the_value`.
+    #[test]
+    fn another_pack_takes_every_line_of_the_old_value_off_the_window() {
+        let palette = a_palette();
+        show_value(&palette, value_view(&a_sent()));
+        assert!(!palette.get_value_name().is_empty());
+        assert!(!palette.get_value_preview().is_empty());
+        assert!(palette.get_has_report());
+
+        let mut view = view_of(
+            &an_outcome(None, Vec::new()),
+            "Whitespace",
+            "whitespace",
+            &quiet(),
+            &nkb_adapters::default_bindings(),
+        );
+        view.value = ValueBand::Clear;
+        apply(&palette, view);
+
+        assert!(!palette.get_has_value());
+        for (line, what) in [
+            (palette.get_value_name(), "name"),
+            (palette.get_value_sent_to(), "where it went"),
+            (palette.get_value_reference(), "reference"),
+            (palette.get_value_counts(), "counts"),
+            (palette.get_value_preview(), "preview"),
+            (palette.get_value_elided(), "elision"),
+            (palette.get_value_not_guaranteed(), "typeface note"),
+            (palette.get_value_shape(), "shape"),
+            (palette.get_report(), "report block"),
+        ] {
+            assert!(line.is_empty(), "the old pack's {what} stayed: {line:?}");
+        }
+        assert!(!palette.get_has_sent_to());
+        assert!(!palette.get_has_shape());
+        assert!(!palette.get_has_report(), "the old pack's block stayed");
+        assert_eq!(slint::Model::row_count(&palette.get_markers()), 0);
+    }
 
     /// `D121`: the report block arrives with the value it describes, and a
     /// value on its way has none - its block does not exist yet.
