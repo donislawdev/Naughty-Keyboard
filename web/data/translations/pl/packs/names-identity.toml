@@ -1,0 +1,158 @@
+# Polish translations of the pack names-identity, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "49ea03387ba9"
+text = "Imiona, nazwiska i tożsamość"
+
+[pack.description]
+source = "a0aa80903106"
+text = "Imiona i nazwiska, które łamią założenia o tym, jak wygląda „normalne” nazwisko."
+
+[surname-null.name]
+source = "5e93b171a611"
+text = "Nazwisko Null"
+
+[surname-null.breaks]
+source = "056e6245dac7"
+text = "Prawdziwe nazwisko, które każda warstwa luźno traktująca tekst zamienia w brak wartości. Rekord traci nazwisko przy zapisie."
+
+[surname-null.expect]
+source = "1a5f517076bf"
+text = "Zapisane i wyświetlane jako czteroliterowe nazwisko, różne od pustego pola."
+
+[single-name.name]
+source = "ce1a312efb99"
+text = "Tylko jedno imię"
+
+[single-name.breaks]
+source = "1f3c721df22d"
+text = "Istnieją ludzie z jednym imieniem. Formularz wymagający obu części w ogóle nie umie ich zapisać."
+
+[single-name.expect]
+source = "e3f32e4e8788"
+text = "Przyjęte z jedną wypełnioną częścią, bez wymyślania zastępstwa dla drugiej."
+
+[apostrophe-surname.name]
+source = "3f5101b0c34e"
+text = "Nazwisko z apostrofem"
+
+[apostrophe-surname.breaks]
+source = "9ee75758bb22"
+text = "Apostrof psuje składanie zapytań, dzielenie imienia i nazwiska oraz sortowanie. Najczęstsze prawdziwe nazwisko, które psuje formularze."
+
+[apostrophe-surname.expect]
+source = "f0f3e12b387f"
+text = "Zapisane, wyświetlane, wyszukiwane i sortowane dokładnie tak, jak napisane."
+
+[two-surnames.name]
+source = "9d9df7e17095"
+text = "Dwa nazwiska bez łącznika"
+
+[two-surnames.breaks]
+source = "208beafdd2e0"
+text = "Dwa nazwiska bez łącznika. Dzielenie po spacji daje błędne imię."
+
+[two-surnames.expect]
+source = "e52ee508b520"
+text = "Zachowane jako jedno nazwisko. Jeśli coś je dzieli, to świadoma funkcja, a nie zgadywanie."
+
+[particle-prefix.name]
+source = "6b28528b762b"
+text = "Nazwisko z przedrostkiem małymi literami"
+
+[particle-prefix.breaks]
+source = "be32619b82b3"
+text = "Przedrostki pisane małą literą psują wielkie litery, sortowanie i każdą regułę zakładającą, że nazwisko zaczyna się wielką literą."
+
+[particle-prefix.expect]
+source = "9c12f181a2f6"
+text = "Zapisane tak, jak napisane. Reguły sortowania są podane, a nie zakładane."
+
+[single-letter-name.name]
+source = "e20062277f02"
+text = "Jednoliterowe imię"
+
+[single-letter-name.breaks]
+source = "1b8a99086d9f"
+text = "Jednoliterowe imię jest dozwolone w kilku krajach, a odrzuca je prawie każda reguła minimalnej długości."
+
+[single-letter-name.expect]
+source = "ffe973c220ea"
+text = "Przyjęte albo minimum podane razem z powodem."
+
+[all-caps-surname.name]
+source = "afbcf0b9161e"
+text = "Nazwisko wielkimi literami"
+
+[all-caps-surname.breaks]
+source = "9ab8734b74ec"
+text = "Nazwiska pisane wielkimi literami są częste w dokumentach. Automatyczna zmiana wielkości liter zamienia je w coś innego."
+
+[all-caps-surname.expect]
+source = "83360718b5ee"
+text = "Zapisane tak, jak wpisane. Automatyczna zmiana wielkości liter, jeśli jest, jest widoczna i odwracalna."
+
+[digits-in-name.name]
+source = "25064d1cd71e"
+text = "Cyfra w imieniu"
+
+[digits-in-name.breaks]
+source = "c449ddf39bf6"
+text = "Cyfry w imieniu psują walidatory, które przyjmują tylko litery, a te walidatory odrzucają prawdziwych użytkowników."
+
+[digits-in-name.expect]
+source = "a1fbc48317ea"
+text = "Przyjęte albo podana reguła, która wyjaśnia ograniczenie."
+
+[very-long-name.name]
+source = "2e041381091b"
+text = "Nazwisko ze 120 znaków"
+
+[very-long-name.breaks]
+source = "3d0f3d41d469"
+text = "Długie nazwiska trafiają w limity kolumn i w układy zaprojektowane pod typowe nazwisko."
+
+[very-long-name.expect]
+source = "b7d7802c7fd0"
+text = "Przyjęte do podanego limitu i wyświetlane bez psucia układu."
+
+[title-inside.name]
+source = "e140335cf5d7"
+text = "Tytuł wpisany w imię i nazwisko"
+
+[title-inside.breaks]
+source = "aebc2d6b677d"
+text = "Tytuły wpisane w pole imienia i nazwiska psują zwroty grzecznościowe i wykrywanie duplikatów."
+
+[title-inside.expect]
+source = "85cee7bb2c42"
+text = "Zapisane tak, jak napisane. Zwrot grzecznościowy składany bez założenia, że pole zawiera wyłącznie imię i nazwisko."
+
+[hyphen-first-name.name]
+source = "bc29d3d7dc8e"
+text = "Imię z łącznikiem"
+
+[hyphen-first-name.breaks]
+source = "ac58c637ef7f"
+text = "Imię z łącznikiem rozpada się na dwa w systemach, które zakładają jedno słowo na pole."
+
+[hyphen-first-name.expect]
+source = "d562ed7d3fb2"
+text = "Zachowane jako jedno imię."
+
+[surname-true.name]
+source = "18ef55df17be"
+text = "Nazwisko True"
+
+[surname-true.breaks]
+source = "3282c5a79d18"
+text = "Ta sama awaria co przy Null, tylko w innej postaci, i do tego psuje pliki konfiguracyjne."
+
+[surname-true.expect]
+source = "875f62cedf9e"
+text = "Zapisane i wyświetlane tak, jak napisane."

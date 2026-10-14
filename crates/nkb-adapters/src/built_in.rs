@@ -88,6 +88,10 @@ pub const BUILT_IN_PACKS: &[(&str, &str)] = &[
         "emails-urls",
         include_str!("../../../packs/emails-urls.toml"),
     ),
+    (
+        "names-identity",
+        include_str!("../../../packs/names-identity.toml"),
+    ),
 ];
 
 #[cfg(test)]
