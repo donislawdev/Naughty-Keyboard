@@ -50,6 +50,8 @@ import {
     NextBand,
     LastSentBand,
     SwitchesBand,
+    Heart,
+    HeaderActions,
 } from "../components.slint";
 
 export component Gallery inherits Window {
@@ -365,9 +367,9 @@ export component Gallery inherits Window {
             spacing: Tokens.space-2;
             TextSmallMuted { text: "arrow"; }
             Spacer { }
-            SmallButton { text: "Back"; action: "Back one value"; arrow: ButtonArrow.back; }
-            SmallButton { text: "Skip"; action: "Skip this value"; arrow: ButtonArrow.forward; }
-            SmallButton { text: "Back"; action: "Back one value"; arrow: ButtonArrow.back; enabled: false; }
+            SmallButton { text: "3"; action: "Back one value"; arrow: ButtonArrow.back; }
+            SmallButton { text: "5"; action: "Skip this value"; arrow: ButtonArrow.forward; }
+            SmallButton { text: ""; action: "Back one value"; arrow: ButtonArrow.back; enabled: false; }
         }
         // The moment after a copy went through (D121): the word changes and the
         // frame does not - the same button at rest and saying it, side by side.
@@ -442,6 +444,31 @@ export component Gallery inherits Window {
             Spacer { }
             Chevron { open: false; }
             Chevron { open: true; ink: Tokens.accent; }
+            Heart { }
+            Heart { ink: Tokens.accent; }
+        }
+
+        // The right end of the palette's header, expanded and compact: the
+        // links to the support page and the About window stand only in the
+        // first.
+        HorizontalLayout {
+            Spacer { }
+            HeaderActions {
+                counter: "3 / 12";
+                toggle-label: "Collapse";
+                about-link: "About";
+                donate-link: "Donate";
+            }
+        }
+        HorizontalLayout {
+            Spacer { }
+            HeaderActions {
+                counter: "3 / 12";
+                compact: true;
+                toggle-label: "Expand";
+                about-link: "About";
+                donate-link: "Donate";
+            }
         }
 
         Hairline {}
@@ -451,34 +478,36 @@ export component Gallery inherits Window {
         // goes, then the last value sent opened with every line it can carry,
         // and folded before the first value.
         NextBand {
-            heading: "Next: value 8 of 34";
+            heading: "Alt+Shift+N types: value 8 of 34";
             has-value: true;
             name: "Trailing no-break space";
             preview: "Kowalski_";
             markers: [{ text: "offensive", risky: true }];
             copy-label: "Copy";
             copy-action: "Copy the next value";
-            back-label: "Back";
-            skip-label: "Skip";
+            back-label: "7";
+            skip-label: "9";
             can-go-back: true;
+            previous-line: "Alt+Shift+P goes back and types value 6";
         }
         NextBand {
-            heading: "Next: end of pack (34 of 34)";
+            heading: "Alt+Shift+N: end of pack (34/34)";
             copy-label: "Copy";
             copy-action: "Copy the next value";
-            back-label: "Back";
-            skip-label: "Skip";
+            back-label: "34";
+            skip-label: "1";
             can-go-back: true;
+            previous-line: "Alt+Shift+P goes back and types value 33";
         }
         NextBand {
-            heading: "Next: value 9 of 34";
+            heading: "Alt+Shift+N types: value 1 of 34";
             has-value: true;
-            name: "Faded while a value goes";
+            name: "Faded while a value goes, nothing behind";
             preview: "abc";
             copy-label: "Copy";
             copy-action: "Copy the next value";
-            back-label: "Back";
-            skip-label: "Skip";
+            back-label: "";
+            skip-label: "2";
             sending: true;
         }
         LastSentBand {

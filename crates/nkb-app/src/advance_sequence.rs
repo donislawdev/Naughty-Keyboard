@@ -321,6 +321,9 @@ pub enum Message {
     AtFirstValue { total: usize },
     /// The target moved but the counter did not, quoting both numbers.
     CounterKept { done: usize, total: usize },
+    /// A step back that types found nothing behind: nothing typed yet, or
+    /// only the first value (the owner's point 6, 2026-10-14).
+    NothingBefore,
     /// No pack has been chosen yet.
     NoPack,
     /// Nothing holds the keyboard focus, so nothing was sent.
@@ -1117,6 +1120,7 @@ fn announce(effect: &Effect) -> Option<Message> {
             done: *done,
             total: *total,
         }),
+        Effect::AnnounceNothingBefore => Some(Message::NothingBefore),
         Effect::AnnounceNoPack => Some(Message::NoPack),
         Effect::AnnounceNoTarget => Some(Message::NoTarget),
         // These arise only while sending, and the send path builds a richer

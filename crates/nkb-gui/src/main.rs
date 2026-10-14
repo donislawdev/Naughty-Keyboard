@@ -264,6 +264,15 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         let about = Rc::clone(&about);
         move || about.open()
     });
+    // Donate (the owner's point 5): the support page in the browser.
+    palette.on_donate({
+        let palette = palette.as_weak();
+        move || {
+            if let Some(palette) = palette.upgrade() {
+                nkb_gui::donate::on_click(&palette);
+            }
+        }
+    });
     palette.on_open_packs({
         let packs = std::rc::Rc::clone(&packs);
         move || packs.open()
@@ -390,9 +399,10 @@ fn label_palette(palette: &Palette, bindings: &Bindings, compact: bool, settings
     // names that click with the words the hint bar gives the shortcut.
     palette.set_open_packs_label(i18n::action_name(HotkeyAction::OpenPacks).into());
     // The link under the hint bar opens the shortcuts window (K5.5), and the
-    // one at the other end of its row the About window (point 4).
+    // two in the header the About window and the support page (points 2, 5).
     palette.set_shortcuts_link(i18n::label(PaletteLabel::ShortcutsLink).into());
     palette.set_about_link(i18n::label(PaletteLabel::AboutLink).into());
+    palette.set_donate_link(i18n::label(PaletteLabel::DonateLink).into());
     // The value band's heading: since UX-GUI-001 the band of the next value
     // stands above it, and two values on screen need telling apart.
     palette.set_last_sent_label(i18n::label(PaletteLabel::LastSent).into());

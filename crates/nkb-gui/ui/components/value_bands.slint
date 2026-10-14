@@ -50,8 +50,12 @@ export component NextBand inherits Zone {
     in property <bool> copied;
     in property <bool> sending;
     callback copy();
-    // The two arrows that walk the pack without typing (`D120`), their words
-    // and what each does. Back stands faded on the first value, where it would
+    // Under the value: which value the shortcut that steps back types (the
+    // owner's point 6, 2026-10-14). Empty with nothing behind, and drawn
+    // anyway, so the band keeps its height.
+    in property <string> previous-line;
+    // The two arrows that walk the pack without typing (`D120`), the number of
+    // the value each steps to (the owner's point 1) and what each does. Back stands faded on the first value, where it would
     // move nothing. Skip always moves - from the end of the pack to its first
     // value.
     in property <string> back-label;
@@ -65,10 +69,8 @@ export component NextBand inherits Zone {
     divided: false;
     opacity: root.sending ? Tokens.alpha-disabled : 1;
 
-    // Copy at the other end of the heading's row, where the band below has its
-    // own: the two buttons stand in one column, each at the top of the value it
-    // copies (D98). Not at the end of a pack - there is no value to copy then -
-    // and its place kept.
+    // The heading, which names the shortcut that types the value (the owner's
+    // point 4, 2026-10-14), and at the other end the arrows that walk the pack.
     HorizontalLayout {
         spacing: Tokens.space-2;
         // Centred on the button's row: the heading's height is its own text,
@@ -104,17 +106,6 @@ export component NextBand inherits Zone {
                 root.skip-value();
             }
         }
-        SmallButton {
-            text: root.copy-label;
-            action: root.copy-action;
-            done-text: root.copied-label;
-            done: root.copied;
-            visible: root.has-value;
-            enabled: root.has-value && !root.sending;
-            clicked => {
-                root.copy();
-            }
-        }
     }
     // The risk beside the name rather than on a row of its own: the palette
     // stays on top of the application under test, and a row spent on one pill
@@ -135,11 +126,30 @@ export component NextBand inherits Zone {
             markers: root.has-value ? root.markers : [];
             keeps-height: true;
         }
+        // Copy beside the value it copies, not among the arrows that walk the
+        // pack, where it read as copying something else (the owner's point 3,
+        // 2026-10-14). Still the right-hand column the band below has its own
+        // in (D98). Not at the end of a pack - and its place kept.
+        SmallButton {
+            text: root.copy-label;
+            action: root.copy-action;
+            done-text: root.copied-label;
+            done: root.copied;
+            visible: root.has-value;
+            enabled: root.has-value && !root.sending;
+            clicked => {
+                root.copy();
+            }
+        }
     }
     TextPreview {
         text: root.preview;
         overflow: elide;
         visible: root.has-value;
+    }
+    TextSmallMuted {
+        text: root.previous-line;
+        overflow: elide;
     }
 }
 

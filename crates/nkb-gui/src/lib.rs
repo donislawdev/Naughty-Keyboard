@@ -84,3 +84,8 @@ pub mod welcome;
 // whose, under which licence - opened by the palette's link (the owner's
 // point 4 of 2026-10-10).
 pub mod about;
+
+// The support page, opened in the browser by the Donate link in the palette's
+// header (the owner's point 5, 2026-10-14) - the one place that hands an
+// address to anything, and why: the module's own header.
+pub mod donate;

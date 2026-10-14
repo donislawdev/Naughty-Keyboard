@@ -1,13 +1,13 @@
 [
   {
     "id": "next-value",
-    "name": "Type next value",
+    "name": "Type the value shown",
     "chord": "Alt+Shift+N",
     "works": true
   },
   {
     "id": "previous-value",
-    "name": "Type previous value",
+    "name": "Go back one value and type it",
     "chord": "Alt+Shift+P",
     "works": true
   },

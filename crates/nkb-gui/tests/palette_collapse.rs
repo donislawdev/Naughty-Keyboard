@@ -70,6 +70,18 @@ fn expand(palette: &Palette, surface: &Rc<MinimalSoftwareWindow>) -> Option<Ink>
 
 /// Pixels clearly brighter than the palette's ground inside `columns` of the
 /// rows `rows` - letters or a mark, whatever their colour.
+/// Where to click a button found by its words: just inside its right end. The
+/// words change the button's width, so whatever stands to its left in the
+/// header moves with them and lands in the box of what changed - the counter
+/// once, the heart of Donate since 2026-10-14 - and the box's centre can fall
+/// between the two. The button is always the box's right end.
+fn inside_end(button: Ink) -> slint::LogicalPosition {
+    slint::LogicalPosition::new(
+        button.right.saturating_sub(6) as f32,
+        ((button.top + button.bottom) / 2) as f32,
+    )
+}
+
 fn ink_in(
     buffer: &[offscreen::Pixel],
     columns: std::ops::Range<u32>,
@@ -118,7 +130,7 @@ fn the_pack_band_has_a_way_back_from_compact_and_its_name_says_it_opens_a_list()
         expand(&palette, &surface).is_none(),
         "Expand stands in the expanded palette"
     );
-    click(palette.window(), button.centre());
+    click(palette.window(), inside_end(button));
     assert_eq!(
         clicks(),
         (1, 0),
@@ -139,13 +151,13 @@ fn the_pack_band_has_a_way_back_from_compact_and_its_name_says_it_opens_a_list()
         collapse(&palette, &surface).is_none(),
         "Collapse stands in the compact palette"
     );
-    click(palette.window(), way_back.centre());
+    click(palette.window(), inside_end(way_back));
     assert_eq!(clicks(), (2, 0), "a click on Expand did not ask to expand");
 
     // ---- while a value goes: in place, faded, and deaf -------------------------
     palette.set_sending(true);
     let faded = expand(&palette, &surface).expect("the button vanished while a value goes");
-    click(palette.window(), faded.centre());
+    click(palette.window(), inside_end(faded));
     assert_eq!(
         clicks(),
         (2, 0),
