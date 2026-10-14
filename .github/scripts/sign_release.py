@@ -656,14 +656,14 @@ def upload(directory, tag, repository):
     state = release.release_state(tag)
     if state != "draft":
         raise Refused(["%s is %s, and phase B uploads only to the draft phase A opened" % (tag, state)])
-    files = [os.path.join(directory, n) for n in published_files(tag)]
+    files = [os.path.join(directory, n) for n in release.published_files(tag)]
     run(["gh", "release", "upload", tag, "--repo", repository, "--clobber"] + files)
     view = json.loads(subprocess.run(["gh", "release", "view", tag, "--repo", repository, "--json",
                                       "assets,isDraft"], capture_output=True, text=True).stdout or "{}")
     back = os.path.join(directory, "confirm")
     run(["gh", "release", "download", tag, "--repo", repository, "--pattern", SUMS, "--dir", back, "--clobber"])
     with open(os.path.join(back, SUMS), "rb") as one, open(os.path.join(directory, SUMS), "rb") as two:
-        problems = draft_problems(view, published_files(tag), one.read(), two.read())
+        problems = draft_problems(view, release.published_files(tag), one.read(), two.read())
     shutil.rmtree(back)
     if problems:
         raise Refused(problems)
