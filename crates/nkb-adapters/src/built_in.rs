@@ -68,6 +68,40 @@ pub const BUILT_IN_PACKS: &[(&str, &str)] = &[
         "filenames-paths",
         include_str!("../../../packs/filenames-paths.toml"),
     ),
+    (
+        "look-alike-pairs",
+        include_str!("../../../packs/look-alike-pairs.toml"),
+    ),
+    (
+        "emoji-complex",
+        include_str!("../../../packs/emoji-complex.toml"),
+    ),
+    (
+        "encoding-mojibake",
+        include_str!("../../../packs/encoding-mojibake.toml"),
+    ),
+    (
+        "pasted-from-word",
+        include_str!("../../../packs/pasted-from-word.toml"),
+    ),
+    (
+        "emails-urls",
+        include_str!("../../../packs/emails-urls.toml"),
+    ),
+    (
+        "names-identity",
+        include_str!("../../../packs/names-identity.toml"),
+    ),
+    ("time-zones", include_str!("../../../packs/time-zones.toml")),
+    (
+        "currency-separators",
+        include_str!("../../../packs/currency-separators.toml"),
+    ),
+    // `size-endurance` comes here in the catalogue's order, when it ships.
+    (
+        "pseudolocalization",
+        include_str!("../../../packs/pseudolocalization.toml"),
+    ),
 ];
 
 #[cfg(test)]

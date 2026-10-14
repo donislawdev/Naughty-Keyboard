@@ -1,0 +1,158 @@
+# Polish translations of the pack time-zones, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "925a860475a7"
+text = "Czas i strefy czasowe"
+
+[pack.description]
+source = "13b75ccebf17"
+text = "Godziny, które nie istnieją, występują dwa razy albo są zapisane bez strefy."
+
+[dst-nonexistent.name]
+source = "3307ceeffc62"
+text = "Godzina pominięta przy wiosennej zmianie czasu"
+
+[dst-nonexistent.breaks]
+source = "cb97af0ee699"
+text = "W dniu, w którym Europa Środkowa przestawia zegary do przodu, ta godzina lokalnie nie istnieje. Parsery albo po cichu ją przesuwają, albo padają z surowym błędem."
+
+[dst-nonexistent.expect]
+source = "1cec611ed1ed"
+text = "Odrzucona z wyjaśnieniem albo przesunięta, a przesunięcie pokazane użytkownikowi."
+
+[dst-ambiguous.name]
+source = "33103950ecd6"
+text = "Godzina powtórzona przy jesiennej zmianie czasu"
+
+[dst-ambiguous.breaks]
+source = "5497bff144a8"
+text = "W dniu, w którym Europa Środkowa cofa zegary, ta godzina występuje dwa razy. Bez strefy nie da się ustalić, o którą chwilę chodzi."
+
+[dst-ambiguous.expect]
+source = "2e2812f5e7f0"
+text = "Prośba o strefę albo wybrana i podana jedna interpretacja."
+
+[no-offset.name]
+source = "763ab9deae3b"
+text = "Znacznik czasu bez strefy"
+
+[no-offset.breaks]
+source = "88438362e65f"
+text = "Znacznik czasu bez strefy traci sens w chwili, gdy opuszcza jedną maszynę, a zawsze ją opuszcza."
+
+[no-offset.expect]
+source = "ba902ae20fc9"
+text = "Odrzucony albo odczytany z założoną strefą podaną obok wartości."
+
+[with-offset.name]
+source = "9cd2995c7231"
+text = "Znacznik czasu z przesunięciem"
+
+[with-offset.breaks]
+source = "039fa69c9a50"
+text = "Poprawna postać. Pole, które ją odrzuca, przyjmuje tylko tę niejednoznaczną."
+
+[with-offset.expect]
+source = "e2ef9b03fa45"
+text = "Przyjęty i zachowany razem z przesunięciem."
+
+[utc-z.name]
+source = "589aa0c31957"
+text = "Znacznik czasu w UTC"
+
+[utc-z.breaks]
+source = "3df02e62f77e"
+text = "Ta sama chwila zapisana w postaci uniwersalnej. Zapisanie jej jako czasu lokalnego gubi gdzieś dwie godziny."
+
+[utc-z.expect]
+source = "5e11719d5910"
+text = "Przyjęty i przeliczany do wyświetlania, a nie zapisany jak czas lokalny."
+
+[local-format.name]
+source = "f816ae42cac1"
+text = "Data i godzina tak, jak wpisują je ludzie"
+
+[local-format.breaks]
+source = "9470b01de374"
+text = "Postać, którą ludzie naprawdę wpisują. Pole przyjmujące tylko międzynarodową odrzuca każdego człowieka."
+
+[local-format.expect]
+source = "6dbc172c577b"
+text = "Przyjęta z pokazaną oczekiwaną postacią albo przyjmowane obie."
+
+[midnight-24.name]
+source = "6b5ae9dc97b9"
+text = "Północ zapisana jako 24:00"
+
+[midnight-24.breaks]
+source = "e79d6aed87ce"
+text = "Północ na końcu dnia: poprawna w zapisie międzynarodowym i odrzucana przez większość parserów."
+
+[midnight-24.expect]
+source = "f6259071368d"
+text = "Przyjęta i zamieniona na godzinę zero następnego dnia albo odrzucona z komunikatem."
+
+[leap-second.name]
+source = "e394dfaa03f6"
+text = "Sekunda przestępna"
+
+[leap-second.breaks]
+source = "9746a2cb96d2"
+text = "Sześćdziesiąta pierwsza sekunda istnieje w standardzie i w żadnym popularnym typie daty."
+
+[leap-second.expect]
+source = "d5fe4e4929ce"
+text = "Odrzucona z komunikatem albo widocznie przycięta, a nie przyjęta i po cichu przesunięta."
+
+[epoch-zero-time.name]
+source = "88e83933db23"
+text = "Początek epoki Uniksa"
+
+[epoch-zero-time.breaks]
+source = "9eddc19d3d25"
+text = "Punkt zerowy najczęstszego zapisu znaczników czasu. W wielu interfejsach nie do odróżnienia od „czasu nieustawionego”."
+
+[epoch-zero-time.expect]
+source = "27e550f81e4f"
+text = "Wyświetlany jako prawdziwa chwila, różna od pustego pola."
+
+[far-future.name]
+source = "d7e4123be44f"
+text = "Ostatnia sekunda 2099 roku"
+
+[far-future.breaks]
+source = "016190c1b185"
+text = "Odległe daty psują reguły przechowywania, harmonogramy i kolumny o węższym zakresie niż interfejs."
+
+[far-future.expect]
+source = "73f70cd50d0a"
+text = "Przyjęta w podanym zakresie, pilnowanym po obu stronach."
+
+[negative-offset.name]
+source = "ec88ecf9c712"
+text = "Znacznik czasu jedenaście godzin za UTC"
+
+[negative-offset.breaks]
+source = "0ce84b441ee4"
+text = "Przesunięcie dalekie od przesunięcia serwera. Sortowanie po czasie lokalnym daje inną kolejność niż sortowanie po chwili."
+
+[negative-offset.expect]
+source = "472129556779"
+text = "Sortowany i porównywany po chwili, a nie po tekście znacznika czasu."
+
+[time-only.name]
+source = "6e9e835b4e2b"
+text = "Godzina bez daty"
+
+[time-only.breaks]
+source = "d56c41650828"
+text = "Godzina bez daty. Zapisana z dzisiejszą datą jutro znaczy co innego."
+
+[time-only.expect]
+source = "386e56c7bc9b"
+text = "Zapisana jako pora dnia albo z wyraźną prośbą o datę."

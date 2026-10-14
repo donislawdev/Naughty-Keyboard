@@ -1,0 +1,110 @@
+format = 1
+
+[pack]
+id          = "currency-separators"
+name        = "Money and separators"
+description = "Amounts written the way people and spreadsheets write them, and where precision ends."
+version     = "1.0"
+updated     = 2026-10-14
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["money", "locale", "rounding", "precision"]
+fields      = ["money", "number"]
+risk        = "normal"
+
+[[values]]
+id     = "rounding-2675"
+name   = "Rounding trap 2,675"
+value  = "2,675"
+breaks = "Rounded to two places this value goes down where a human expects it to go up, because the binary representation is slightly below the decimal one."
+expect = "Rounded by a rule stated in the specification, applied identically in the interface and in storage."
+since  = "1.0"
+
+[[values]]
+id     = "rounding-1005"
+name   = "Rounding trap 1,005"
+value  = "1,005"
+breaks = "The same failure at a different magnitude; one of the two catches almost every naive rounding implementation."
+expect = "Same as above."
+since  = "1.0"
+
+[[values]]
+id     = "comma-decimal-money"
+name   = "Comma as the decimal separator"
+value  = "1234,56"
+breaks = "The decimal separator used locally; a parser expecting a dot reads it as a thousands separator and multiplies the amount by a hundred."
+expect = "Accepted in locales that use it, with the expected format shown."
+since  = "1.0"
+
+[[values]]
+id     = "nbsp-thousands"
+name   = "Non-breaking spaces between thousands"
+value  = "1\u00A0000\u00A0000,00"
+breaks = "Amounts copied from a report carry non-breaking spaces as group separators, which no numeric parser accepts."
+expect = "Separators stripped before parsing, including the invisible ones."
+since  = "1.0"
+
+[[values]]
+id     = "space-thousands"
+name   = "Spaces between thousands"
+value  = "1 000 000,00"
+breaks = "The same with ordinary spaces - the form produced by most local formatting."
+expect = "Accepted and normalised."
+since  = "1.0"
+
+[[values]]
+id     = "negative-parens"
+name   = "Negative amount in brackets"
+value  = "(1234,56)"
+breaks = "Accounting notation for negative amounts; read as text it becomes a positive number in brackets."
+expect = "Interpreted as negative, or rejected with the expected form shown."
+since  = "1.0"
+
+[[values]]
+id     = "three-decimals"
+name   = "Three decimal places"
+value  = "1234,567"
+breaks = "More decimal places than the currency has; silently rounding here changes an invoice total."
+expect = "Rejected, or rounded with the rounding shown before saving."
+since  = "1.0"
+
+[[values]]
+id     = "negative-zero"
+name   = "Negative zero"
+value  = "-0,00"
+breaks = "A negative zero displays as a negative amount and compares equal to zero; reports show a minus sign on nothing."
+expect = "Normalised to zero on save."
+since  = "1.0"
+
+[[values]]
+id     = "zero-amount"
+name   = "Zero amount"
+value  = "0,00"
+breaks = "Zero is a legitimate amount and is frequently confused with an empty field."
+expect = "Stored and displayed as zero, distinct from empty."
+since  = "1.0"
+
+[[values]]
+id     = "symbol-appended"
+name   = "Amount with the currency symbol"
+value  = "1234,56 z\u0142"
+breaks = "The amount as it appears in a document, with the currency symbol; a numeric field rejects it whole."
+expect = "The symbol stripped on input, or the expected form shown."
+since  = "1.0"
+
+[[values]]
+id     = "apostrophe-thousands"
+name   = "Apostrophe between thousands"
+value  = "1'234.56"
+breaks = "The group separator used in some locales; unfamiliar and perfectly legitimate."
+expect = "Accepted where that locale is supported, or rejected with the expected form."
+since  = "1.0"
+
+[[values]]
+id     = "huge-amount"
+name   = "Amount wider than the money type"
+value  = "999999999999,99"
+breaks = "An amount wider than the type used for money; overflow here produces a negative total."
+expect = "Rejected with a stated limit, before it reaches any total."
+since  = "1.0"

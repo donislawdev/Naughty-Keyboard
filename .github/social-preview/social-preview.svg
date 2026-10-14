@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1280 640" width="1280" height="640" font-family="Inter, sans-serif">
   <title>Naughty Keyboard</title>
-  <desc>Social preview: "Your form works. Until someone types this." beside the nine packs and a card of values that break a form.</desc>
+  <desc>Social preview: "Your form works. Until someone types this." beside nine of the eighteen packs and a card of values that break a form.</desc>
   <!--
     The social preview of the repository, 1280 by 640 pixels, the size GitHub
     shows best. This is the drawing. social-preview.png is rendered from it,
@@ -69,9 +69,9 @@
     <text x="60" y="590">Windows · macOS · Linux</text>
   </g>
 
-  <!-- right column, top card: the packs, in the order nkb packs lists them -->
+  <!-- right column, top card: how many packs and values, then the first nine packs in the order nkb packs lists them -->
   <rect x="690" y="64" width="530" height="172" rx="16" fill="#1C1F26" stroke="#2A2F3A" stroke-width="1.5"/>
-  <text x="712" y="94" font-family="'DejaVu Sans Mono', monospace" font-size="15" fill="#7E8797">9 packs · 102 values</text>
+  <text x="712" y="94" font-family="'DejaVu Sans Mono', monospace" font-size="15" fill="#7E8797">18 packs · 207 values</text>
   <g stroke="#2A2F3A" stroke-width="1.5" fill="#14161A">
     <rect x="712" y="108" width="112.3" height="32" rx="9"/>
     <rect x="832.3" y="108" width="130.4" height="32" rx="9"/>

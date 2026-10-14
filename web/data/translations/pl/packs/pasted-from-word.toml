@@ -1,0 +1,158 @@
+# Polish translations of the pack pasted-from-word, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "9e727b4f9073"
+text = "Wklejone z dokumentu"
+
+[pack.description]
+source = "d805145e4acb"
+text = "Znaki, które przychodzą razem z tekstem skopiowanym z edytora tekstu albo ze strony internetowej."
+
+[smart-apostrophe.name]
+source = "536f88400cca"
+text = "Apostrof typograficzny"
+
+[smart-apostrophe.breaks]
+source = "bcc26fc261da"
+text = "Apostrof typograficzny przychodzi z każdym wklejeniem i jest innym znakiem niż ten z klawiatury. Wyszukiwanie nigdy go nie dopasuje."
+
+[smart-apostrophe.expect]
+source = "56760452e052"
+text = "Normalizowany przy zapisie albo obie postaci traktowane przez wyszukiwanie jako równoważne."
+
+[smart-quotes.name]
+source = "337c135f868e"
+text = "Cudzysłów drukarski"
+
+[smart-quotes.breaks]
+source = "c630faba4926"
+text = "Cudzysłów drukarski psuje parsery, składanie poleceń i każde porównanie z prostą postacią."
+
+[smart-quotes.expect]
+source = "469ad79202b8"
+text = "Przyjęty i zapisany, a normalizowany, zanim cokolwiek zacznie wartość parsować."
+
+[em-dash.name]
+source = "7e14a2d5c6a0"
+text = "Pauza między słowami"
+
+[em-dash.breaks]
+source = "59ffd26e1089"
+text = "Długa kreska wklejona z dokumentu tam, gdzie oczekiwany był łącznik. Przestaje działać odczyt zakresów i dopasowywanie kodów."
+
+[em-dash.expect]
+source = "85f7946915ca"
+text = "Normalizowana przed odczytem albo przyjmowana jako równoważny separator."
+
+[en-dash-range.name]
+source = "807ec7683d02"
+text = "Zakres z półpauzą"
+
+[en-dash-range.breaks]
+source = "451c9b0eb636"
+text = "Zakres, który wygląda poprawnie, a parser odczytuje go jako jeden nieznany element."
+
+[en-dash-range.expect]
+source = "db7a40274cbe"
+text = "Tak samo jak wyżej."
+
+[nbsp-from-word.name]
+source = "ee16f77e82bf"
+text = "Twarda spacja z dokumentu"
+
+[nbsp-from-word.breaks]
+source = "6a721a63b35e"
+text = "Edytory tekstu same wstawiają twarde spacje. Wartość wygląda normalnie i nigdy nie pasuje do dokładnego wyszukiwania."
+
+[nbsp-from-word.expect]
+source = "757d8cd583c2"
+text = "Zamieniana na zwykłą spację albo i tak znajdowana przez wyszukiwanie."
+
+[soft-hyphen-pasted.name]
+source = "4005b067ee28"
+text = "Miękki łącznik w środku słowa"
+
+[soft-hyphen-pasted.breaks]
+source = "e63bb6bf242e"
+text = "Miękkie łączniki przeżywają kopiowanie i niewidocznie dzielą słowo w zapisie."
+
+[soft-hyphen-pasted.expect]
+source = "1a0765c34d2a"
+text = "Usuwany przy zapisie albo zachowany i pokazany w interfejsie."
+
+[ellipsis-char.name]
+source = "6cb7c42dd1e0"
+text = "Znak wielokropka"
+
+[ellipsis-char.breaks]
+source = "2199c4bd131c"
+text = "Jeden znak, który wygląda jak trzy kropki. Limity długości i porównania nie zgadzają się z tym, co widzi użytkownik."
+
+[ellipsis-char.expect]
+source = "cc489bddfa30"
+text = "Liczony jako jeden znak albo konsekwentnie zamieniany na trzy kropki."
+
+[bullet-char.name]
+source = "144c6af1cd23"
+text = "Punktor z listy"
+
+[bullet-char.breaks]
+source = "67e9aa2f007f"
+text = "Punktor wklejony z listy zamienia wartość w coś, co gdzie indziej rysuje się jak element listy."
+
+[bullet-char.expect]
+source = "44c149d065ab"
+text = "Zapisany jako tekst, bez odczytywania go jako formatowania."
+
+[nonbreaking-hyphen.name]
+source = "cc63052051f0"
+text = "Łącznik nierozdzielający w kodzie"
+
+[nonbreaking-hyphen.breaks]
+source = "eabed0f6ad3d"
+text = "Łącznik nierozdzielający w środku kodu. Wygląda tak samo jak zwykły, a wszędzie indziej jest inny."
+
+[nonbreaking-hyphen.expect]
+source = "69bfaef6edaf"
+text = "Normalizowany przed walidacją kodu."
+
+[zero-width-from-web.name]
+source = "f7adb3dbfddd"
+text = "Spacja o zerowej szerokości ze strony internetowej"
+
+[zero-width-from-web.breaks]
+source = "c06f4e2ab46b"
+text = "Strony internetowe wstawiają znaki o zerowej szerokości dla układu. Przychodzą razem ze skopiowanym tekstem i zostają na zawsze."
+
+[zero-width-from-web.expect]
+source = "af8f2319900a"
+text = "Usuwane przy zapisie albo pokazane w interfejsie."
+
+[multiple-typographic.name]
+source = "e4a28b623960"
+text = "Wszystko, co wkleja dokument"
+
+[multiple-typographic.breaks]
+source = "f5399c7034f0"
+text = "Wszystko naraz, tak jak naprawdę przychodzi z dokumentu."
+
+[multiple-typographic.expect]
+source = "3eaa7e8dfb8f"
+text = "Przechodzi zapis i odczyt bez zmian i jest znajdowane przez wyszukiwanie wpisane z klawiatury."
+
+[trailing-nbsp.name]
+source = "c11f6879d667"
+text = "Twarda spacja na końcu"
+
+[trailing-nbsp.breaks]
+source = "41487db537ad"
+text = "Twarda spacja na końcu: niewidoczna, nieusuwana przez zwykłe przycinanie i wystarczająca, żeby zepsuć porównanie."
+
+[trailing-nbsp.expect]
+source = "ab5c543d4531"
+text = "Przycinana razem ze zwykłymi białymi znakami."

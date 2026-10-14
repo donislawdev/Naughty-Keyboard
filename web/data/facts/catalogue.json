@@ -1,6 +1,6 @@
 {
-  "pack_count": 9,
-  "value_count": 102,
+  "pack_count": 18,
+  "value_count": 207,
   "packs": [
     {
       "id": "whitespace",
@@ -3322,6 +3322,3397 @@
             "code_points": 13,
             "bytes": 13,
             "utf16_units": 13
+          }
+        }
+      ]
+    },
+    {
+      "id": "look-alike-pairs",
+      "name": "Look-alike pairs",
+      "description": "Pairs of values that are identical on screen and different in storage.",
+      "version": "1.0",
+      "updated": "2026-10-14",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "name",
+        "username",
+        "email",
+        "text"
+      ],
+      "tags": [
+        "uniqueness",
+        "deduplication",
+        "search",
+        "normalisation"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "latin-small-a",
+          "ref": "look-alike-pairs/latin-small-a",
+          "name": "Name with a Latin a",
+          "escaped": "pawel",
+          "breaks": "The control half of a pair - only meaningful next to its counterpart.",
+          "expect": "Stored as typed.",
+          "fields": [
+            "name",
+            "username",
+            "email",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "pawel",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 5,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "cyrillic-small-a",
+          "ref": "look-alike-pairs/cyrillic-small-a",
+          "name": "Name with a Cyrillic a",
+          "escaped": "p\u0430wel",
+          "breaks": "A Cyrillic letter identical in shape to the Latin one; two accounts that look the same to every human.",
+          "expect": "Either both accepted as distinct and shown as distinct, or the second rejected as a duplicate.",
+          "fields": [
+            "name",
+            "username",
+            "email",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "p\u0430wel",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 6,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "latin-small-o",
+          "ref": "look-alike-pairs/latin-small-o",
+          "name": "Word with a Latin o",
+          "escaped": "robot",
+          "breaks": "The control half of a pair - only meaningful next to the Greek omicron below it.",
+          "expect": "Stored as typed.",
+          "fields": [
+            "name",
+            "username",
+            "email",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "robot",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 5,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "greek-omicron",
+          "ref": "look-alike-pairs/greek-omicron",
+          "name": "Word with a Greek omicron",
+          "escaped": "r\u03bfbot",
+          "breaks": "The same shape from a third script; catches uniqueness checks that only handle Cyrillic.",
+          "expect": "Same as above.",
+          "fields": [
+            "name",
+            "username",
+            "email",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "r\u03bfbot",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 6,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "nfc-lodz",
+          "ref": "look-alike-pairs/nfc-lodz",
+          "name": "Accented word, composed",
+          "escaped": "\u0141\u00f3d\u017a",
+          "breaks": "Control half: the accented letters written as single characters.",
+          "expect": "Stored as typed.",
+          "fields": [
+            "name",
+            "username",
+            "email",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u0141\u00f3d\u017a",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 7,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "nfd-lodz",
+          "ref": "look-alike-pairs/nfd-lodz",
+          "name": "Accented word, decomposed",
+          "escaped": "\u0141o\u0301dz\u0301",
+          "breaks": "The same word with combining marks; identical on screen, different in storage and in every comparison.",
+          "expect": "Normalised on save, or compared in a normalisation-aware way.",
+          "fields": [
+            "name",
+            "username",
+            "email",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u0141o\u0301dz\u0301",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 6,
+            "bytes": 9,
+            "utf16_units": 6
+          }
+        },
+        {
+          "id": "plain-space-name",
+          "ref": "look-alike-pairs/plain-space-name",
+          "name": "Name with an ordinary space",
+          "escaped": "Jan Kowalski",
+          "breaks": "The control half of a pair - an ordinary space, so that the non-breaking one has something to fail against.",
+          "expect": "Stored as typed.",
+          "fields": [
+            "name",
+            "username",
+            "email",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 12,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "nbsp-name",
+          "ref": "look-alike-pairs/nbsp-name",
+          "name": "Name with a non-breaking space",
+          "escaped": "Jan\\u00A0Kowalski",
+          "breaks": "A non-breaking space where an ordinary one is expected; search never matches.",
+          "expect": "Normalised, or treated as distinct consistently.",
+          "fields": [
+            "name",
+            "username",
+            "email",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "unusual-space",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 13,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "hyphen-minus",
+          "ref": "look-alike-pairs/hyphen-minus",
+          "name": "Range with a hyphen",
+          "escaped": "2020-2026",
+          "breaks": "The control half of a pair, with the ASCII hyphen - it parses everywhere the dash below it does not.",
+          "expect": "Stored as typed.",
+          "fields": [
+            "name",
+            "username",
+            "email",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "2020-2026",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 9,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "en-dash",
+          "ref": "look-alike-pairs/en-dash",
+          "name": "Range with an en dash",
+          "escaped": "2020\u20132026",
+          "breaks": "The typographic dash that arrives with every copy from a document; breaks parsing of ranges.",
+          "expect": "Normalised before parsing, or accepted as an equivalent separator.",
+          "fields": [
+            "name",
+            "username",
+            "email",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "2020\u20132026",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 11,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "capital-i",
+          "ref": "look-alike-pairs/capital-i",
+          "name": "Capital i, lowercase L and one",
+          "escaped": "Ill1",
+          "breaks": "Capital i, lowercase L and the digit one in one value: indistinguishable in many typefaces.",
+          "expect": "Displayed in a typeface where the characters can be told apart, wherever the value must be read back.",
+          "fields": [
+            "name",
+            "username",
+            "email",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Ill1",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "digit-zero-letter-o",
+          "ref": "look-alike-pairs/digit-zero-letter-o",
+          "name": "Letter O and digit zero",
+          "escaped": "O0",
+          "breaks": "The same problem for the letter O and the digit zero, in codes people retype by hand.",
+          "expect": "Same as above, or the ambiguous characters excluded from generated codes.",
+          "fields": [
+            "name",
+            "username",
+            "email",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "O0",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 2,
+            "code_points": 2,
+            "bytes": 2,
+            "utf16_units": 2
+          }
+        }
+      ]
+    },
+    {
+      "id": "emoji-complex",
+      "name": "Complex emoji",
+      "description": "Characters beyond the basic plane and composed sequences that break counting and truncation.",
+      "version": "1.0",
+      "updated": "2026-10-14",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "text",
+        "name",
+        "multiline"
+      ],
+      "tags": [
+        "unicode",
+        "truncation",
+        "counting"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "emoji-family-zwj",
+          "ref": "emoji-complex/emoji-family-zwj",
+          "name": "Family emoji built with joiners",
+          "escaped": "\ud83d\udc68\\u200D\ud83d\udc69\\u200D\ud83d\udc67",
+          "breaks": "One image to the user, three characters plus two invisible joiners to the software; truncation cuts it into unrelated pictures.",
+          "expect": "Counted and truncated as one unit, or rejected - never split between the joiners.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\ud83d\udc68\u2423\ud83d\udc69\u2423\ud83d\udc67",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "zero-width",
+              "count": 2
+            }
+          ],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 5,
+            "bytes": 18,
+            "utf16_units": 8
+          }
+        },
+        {
+          "id": "emoji-skin-tone",
+          "ref": "emoji-complex/emoji-skin-tone",
+          "name": "Emoji with a skin tone",
+          "escaped": "\ud83d\udc4d\ud83c\udffd",
+          "breaks": "A base character plus a modifier: cutting between them changes the meaning of the value.",
+          "expect": "Kept together by any truncation.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\ud83d\udc4d\ud83c\udffd",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 2,
+            "bytes": 8,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "emoji-keycap",
+          "ref": "emoji-complex/emoji-keycap",
+          "name": "Keycap digit one",
+          "escaped": "1\\uFE0F\u20e3",
+          "breaks": "A digit, a variation selector and a combining mark that together render as one key; the digit alone is a number.",
+          "expect": "Preserved as a unit; not parsed as the number one.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "1\u2423\u20e3",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "zero-width",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 3,
+            "bytes": 7,
+            "utf16_units": 3
+          }
+        },
+        {
+          "id": "emoji-variation",
+          "ref": "emoji-complex/emoji-variation",
+          "name": "Heart with a variation selector",
+          "escaped": "\u2764\\uFE0F",
+          "breaks": "The variation selector decides whether this renders as a picture or as text; stripping it silently changes the display.",
+          "expect": "Preserved on save so the value looks the same after a round trip.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u2764\u2423",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "zero-width",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 2,
+            "bytes": 6,
+            "utf16_units": 2
+          }
+        },
+        {
+          "id": "flag-country",
+          "ref": "emoji-complex/flag-country",
+          "name": "Country flag",
+          "escaped": "\ud83c\uddf5\ud83c\uddf1",
+          "breaks": "A flag is two regional indicator characters; a field limited to two characters accepts it and one limited to one splits it.",
+          "expect": "Treated as one unit for length limits.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\ud83c\uddf5\ud83c\uddf1",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 2,
+            "bytes": 8,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "emoji-in-middle",
+          "ref": "emoji-complex/emoji-in-middle",
+          "name": "Emoji inside a name",
+          "escaped": "Jan\ud83d\ude00Kowalski",
+          "breaks": "A character outside the basic plane inside a name breaks storage configured for narrow encodings, often with a raw error.",
+          "expect": "Stored intact, or rejected with a readable message.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\ud83d\ude00Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 15,
+            "utf16_units": 13
+          }
+        },
+        {
+          "id": "astral-cjk",
+          "ref": "emoji-complex/astral-cjk",
+          "name": "Ideograph beyond the basic plane",
+          "escaped": "\ud842\udfb7",
+          "breaks": "A rare ideograph outside the basic plane: the same storage problem without looking like an emoji.",
+          "expect": "Handled exactly like any other character.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\ud842\udfb7",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 1,
+            "bytes": 4,
+            "utf16_units": 2
+          }
+        },
+        {
+          "id": "emoji-50",
+          "ref": "emoji-complex/emoji-50",
+          "name": "Fifty emoji",
+          "escaped": null,
+          "breaks": "Fifty characters to the user, two hundred bytes to storage; the mismatch between limits shows up here first.",
+          "expect": "Limits stated in the same unit on both sides.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "\ud83d\ude00",
+            "count": 50
+          },
+          "shape": [],
+          "counts": {
+            "graphemes": 50,
+            "code_points": 50,
+            "bytes": 200,
+            "utf16_units": 100
+          }
+        },
+        {
+          "id": "emoji-only",
+          "ref": "emoji-complex/emoji-only",
+          "name": "A single emoji",
+          "escaped": "\ud83d\ude00",
+          "breaks": "A name or title consisting solely of a picture; sorting, initials and search all have to do something with it.",
+          "expect": "Accepted and displayed, with sorting and initials behaving predictably.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\ud83d\ude00",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 1,
+            "bytes": 4,
+            "utf16_units": 2
+          }
+        },
+        {
+          "id": "zwj-orphan",
+          "ref": "emoji-complex/zwj-orphan",
+          "name": "Joiner with nothing to join",
+          "escaped": "Jan\\u200DKowalski",
+          "breaks": "A joiner with nothing to join: invisible, meaningless, and enough to make two identical names different.",
+          "expect": "Stripped on save, or preserved and revealed in the interface.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "zero-width",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 11,
+            "code_points": 12,
+            "bytes": 14,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "emoji-in-filename",
+          "ref": "emoji-complex/emoji-in-filename",
+          "name": "Emoji in a file name",
+          "escaped": "report\ud83d\ude00.txt",
+          "breaks": "Archives, transfers and older file systems handle these names inconsistently.",
+          "expect": "Stored and downloaded with the name intact, or rejected before the file is created.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "report\ud83d\ude00.txt",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 11,
+            "code_points": 11,
+            "bytes": 14,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "emoji-1000",
+          "ref": "emoji-complex/emoji-1000",
+          "name": "A thousand emoji",
+          "escaped": null,
+          "breaks": "A thousand pictures: rendering, scrolling and every length counter at once.",
+          "expect": "Accepted and clipped in the layout, or rejected with a stated limit.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "\ud83d\ude00",
+            "count": 1000
+          },
+          "shape": [],
+          "counts": {
+            "graphemes": 1000,
+            "code_points": 1000,
+            "bytes": 4000,
+            "utf16_units": 2000
+          }
+        }
+      ]
+    },
+    {
+      "id": "encoding-mojibake",
+      "name": "Encoding and mojibake",
+      "description": "Text that went through the wrong encoding and never came back.",
+      "version": "1.0",
+      "updated": "2026-10-14",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "text",
+        "name"
+      ],
+      "tags": [
+        "encoding",
+        "corruption",
+        "round-trip"
+      ],
+      "value_count": 11,
+      "values": [
+        {
+          "id": "double-encoded",
+          "ref": "encoding-mojibake/double-encoded",
+          "name": "Text encoded twice",
+          "escaped": "\u00c5\u00bb\u00c3\u00b3\u00c5\u201a\u00c4\u2021",
+          "breaks": "Text encoded twice: it displays as nonsense and, once saved in this state, the original cannot be recovered.",
+          "expect": "Never produced - and if received, stored verbatim rather than \"fixed\" by guessing.",
+          "fields": [
+            "text",
+            "name"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u00c5\u00bb\u00c3\u00b3\u00c5\u201a\u00c4\u2021",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 8,
+            "code_points": 8,
+            "bytes": 18,
+            "utf16_units": 8
+          }
+        },
+        {
+          "id": "bom-leading",
+          "ref": "encoding-mojibake/bom-leading",
+          "name": "Byte-order mark before a name",
+          "escaped": "\\uFEFFJan",
+          "breaks": "A byte-order mark at the start of a value makes exact comparison fail and sorts the record before everything else.",
+          "expect": "Stripped on input, consistently in every layer that reads files.",
+          "fields": [
+            "text",
+            "name"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u2423Jan",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "zero-width",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 6,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "replacement-char",
+          "ref": "encoding-mojibake/replacement-char",
+          "name": "Replacement character in a name",
+          "escaped": "Jan\ufffdKowalski",
+          "breaks": "The character that appears where decoding already failed; its presence means data was lost earlier.",
+          "expect": "Detected and reported rather than stored as if it were ordinary text.",
+          "fields": [
+            "text",
+            "name"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\ufffdKowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 14,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "question-mark-fallback",
+          "ref": "encoding-mojibake/question-mark-fallback",
+          "name": "Question marks for lost letters",
+          "escaped": "Jan ????????",
+          "breaks": "What narrow encodings produce instead of characters they cannot represent - indistinguishable from a user typing question marks.",
+          "expect": "Never produced: the full character set supported end to end.",
+          "fields": [
+            "text",
+            "name"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423????????",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 12,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "latin1-tail",
+          "ref": "encoding-mojibake/latin1-tail",
+          "name": "Accented letter at the end",
+          "escaped": "caf\u00e9",
+          "breaks": "A common accented word that survives or breaks depending on the encoding of each layer it passes through.",
+          "expect": "Identical before and after a save-and-reload round trip.",
+          "fields": [
+            "text",
+            "name"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "caf\u00e9",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 5,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "cp-specific-letters",
+          "ref": "encoding-mojibake/cp-specific-letters",
+          "name": "Letters from regional encodings",
+          "escaped": "\u017a\u017c\u0107\u0144\u00f3",
+          "breaks": "Letters present in regional encodings and absent from others; the first thing to break in an export.",
+          "expect": "Preserved in exports, printouts and file names.",
+          "fields": [
+            "text",
+            "name"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u017a\u017c\u0107\u0144\u00f3",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 10,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "mixed-scripts",
+          "ref": "encoding-mojibake/mixed-scripts",
+          "name": "One Cyrillic letter in a Latin name",
+          "escaped": "Jan \u041aowalski",
+          "breaks": "One Cyrillic letter inside a Latin word - the value looks correct and never matches a search.",
+          "expect": "Either normalised or flagged; not silently accepted as if identical.",
+          "fields": [
+            "text",
+            "name"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423\u041aowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 13,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "high-codepoint",
+          "ref": "encoding-mojibake/high-codepoint",
+          "name": "Emoji, ideograph and Arabic together",
+          "escaped": "\ud83d\ude00\u4e2d\u0627\u0644",
+          "breaks": "Emoji, an ideograph and an Arabic letter in one value: three different storage assumptions at once.",
+          "expect": "Stored and returned unchanged.",
+          "fields": [
+            "text",
+            "name"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\ud83d\ude00\u4e2d\u0627\u0644",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 11,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "overlong-space",
+          "ref": "encoding-mojibake/overlong-space",
+          "name": "Ideographic space in a name",
+          "escaped": "Jan\\u3000Kowalski",
+          "breaks": "An ideographic space: a real space character that most trimming routines do not know about.",
+          "expect": "Trimmed like any other whitespace, or preserved consistently.",
+          "fields": [
+            "text",
+            "name"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "unusual-space",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 14,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "combining-overflow",
+          "ref": "encoding-mojibake/combining-overflow",
+          "name": "Letter with five combining accents",
+          "escaped": "a\u0301\u0301\u0301\u0301\u0301",
+          "breaks": "Many combining marks on one letter: normalisation and length limits disagree about how many characters this is.",
+          "expect": "Counted consistently, and rendered without covering neighbouring interface.",
+          "fields": [
+            "text",
+            "name"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "a\u0301\u0301\u0301\u0301\u0301",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 6,
+            "bytes": 11,
+            "utf16_units": 6
+          }
+        },
+        {
+          "id": "roundtrip-check",
+          "ref": "encoding-mojibake/roundtrip-check",
+          "name": "Every risky class in one value",
+          "escaped": "\u017b\u00f3\u0142\u0107 \ud83d\ude00 \u4e2d \u0105",
+          "breaks": "A single value combining every risky class, for a quick save-and-reload check.",
+          "expect": "Returned byte-for-byte identical after a full round trip.",
+          "fields": [
+            "text",
+            "name"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u017b\u00f3\u0142\u0107\u2423\ud83d\ude00\u2423\u4e2d\u2423\u0105",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 20,
+            "utf16_units": 11
+          }
+        }
+      ]
+    },
+    {
+      "id": "pasted-from-word",
+      "name": "Pasted from a document",
+      "description": "Characters that arrive with text copied out of a word processor or a web page.",
+      "version": "1.0",
+      "updated": "2026-10-14",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "text",
+        "multiline",
+        "name",
+        "address"
+      ],
+      "tags": [
+        "typography",
+        "paste",
+        "normalisation"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "smart-apostrophe",
+          "ref": "pasted-from-word/smart-apostrophe",
+          "name": "Typographic apostrophe",
+          "escaped": "O\u2019Brien",
+          "breaks": "The typographic apostrophe arrives with every paste and is a different character from the one on the keyboard; search never matches.",
+          "expect": "Normalised on save, or both forms treated as equivalent by search.",
+          "fields": [
+            "text",
+            "multiline",
+            "name",
+            "address"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "O\u2019Brien",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 7,
+            "code_points": 7,
+            "bytes": 9,
+            "utf16_units": 7
+          }
+        },
+        {
+          "id": "smart-quotes",
+          "ref": "pasted-from-word/smart-quotes",
+          "name": "Curly quotation marks",
+          "escaped": "\u201cJan\u201d",
+          "breaks": "Curly quotation marks break parsers, command construction and any comparison against the straight form.",
+          "expect": "Accepted and stored; normalised before anything parses the value.",
+          "fields": [
+            "text",
+            "multiline",
+            "name",
+            "address"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u201cJan\u201d",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 9,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "em-dash",
+          "ref": "pasted-from-word/em-dash",
+          "name": "Em dash between words",
+          "escaped": "Jan \u2014 Kowalski",
+          "breaks": "The long dash pasted from a document where a hyphen was expected; range parsing and code matching stop working.",
+          "expect": "Normalised before parsing, or accepted as an equivalent separator.",
+          "fields": [
+            "text",
+            "multiline",
+            "name",
+            "address"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423\u2014\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 14,
+            "code_points": 14,
+            "bytes": 16,
+            "utf16_units": 14
+          }
+        },
+        {
+          "id": "en-dash-range",
+          "ref": "pasted-from-word/en-dash-range",
+          "name": "Range with an en dash",
+          "escaped": "2020\u20132026",
+          "breaks": "A range that looks correct and parses as a single unknown token.",
+          "expect": "Same as above.",
+          "fields": [
+            "text",
+            "multiline",
+            "name",
+            "address"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "2020\u20132026",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 11,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "nbsp-from-word",
+          "ref": "pasted-from-word/nbsp-from-word",
+          "name": "Non-breaking space from a document",
+          "escaped": "Jan\\u00A0Kowalski",
+          "breaks": "Text editors insert non-breaking spaces automatically; the value looks normal and never matches an exact search.",
+          "expect": "Normalised to an ordinary space, or found by search regardless.",
+          "fields": [
+            "text",
+            "multiline",
+            "name",
+            "address"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "unusual-space",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 13,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "soft-hyphen-pasted",
+          "ref": "pasted-from-word/soft-hyphen-pasted",
+          "name": "Soft hyphen inside a word",
+          "escaped": "Kowal\\u00ADski",
+          "breaks": "Optional hyphens survive copying and split a word invisibly in storage.",
+          "expect": "Stripped on save, or preserved and revealed in the interface.",
+          "fields": [
+            "text",
+            "multiline",
+            "name",
+            "address"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Kowal\u2423ski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "soft-hyphen",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 10,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "ellipsis-char",
+          "ref": "pasted-from-word/ellipsis-char",
+          "name": "Ellipsis character",
+          "escaped": "Jan\u2026",
+          "breaks": "One character that looks like three dots; length limits and comparisons disagree with what the user sees.",
+          "expect": "Counted as one character, or normalised to three dots consistently.",
+          "fields": [
+            "text",
+            "multiline",
+            "name",
+            "address"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2026",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 6,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "bullet-char",
+          "ref": "pasted-from-word/bullet-char",
+          "name": "Bullet from a list",
+          "escaped": "\u2022 punkt",
+          "breaks": "A bullet pasted from a list turns a value into something that renders as a list item elsewhere.",
+          "expect": "Stored as text, without being interpreted as formatting.",
+          "fields": [
+            "text",
+            "multiline",
+            "name",
+            "address"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u2022\u2423punkt",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 7,
+            "code_points": 7,
+            "bytes": 9,
+            "utf16_units": 7
+          }
+        },
+        {
+          "id": "nonbreaking-hyphen",
+          "ref": "pasted-from-word/nonbreaking-hyphen",
+          "name": "Non-breaking hyphen in a code",
+          "escaped": "123\u2011456",
+          "breaks": "A non-breaking hyphen inside a code; visually identical to the ordinary one, different everywhere else.",
+          "expect": "Normalised before validation of the code.",
+          "fields": [
+            "text",
+            "multiline",
+            "name",
+            "address"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "123\u2011456",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 7,
+            "code_points": 7,
+            "bytes": 9,
+            "utf16_units": 7
+          }
+        },
+        {
+          "id": "zero-width-from-web",
+          "ref": "pasted-from-word/zero-width-from-web",
+          "name": "Zero-width space from a web page",
+          "escaped": "Jan\\u200BKowalski",
+          "breaks": "Web pages insert zero-width characters for layout; they arrive with the copied text and stay forever.",
+          "expect": "Stripped on save, or revealed in the interface.",
+          "fields": [
+            "text",
+            "multiline",
+            "name",
+            "address"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Jan\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "zero-width",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 14,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "multiple-typographic",
+          "ref": "pasted-from-word/multiple-typographic",
+          "name": "Everything a document pastes",
+          "escaped": "\u201cJan\u201d \u2014 O\u2019Brien\u2026",
+          "breaks": "Everything at once, as it actually arrives from a document.",
+          "expect": "Round-trips unchanged, and is found by a search typed on a keyboard.",
+          "fields": [
+            "text",
+            "multiline",
+            "name",
+            "address"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u201cJan\u201d\u2423\u2014\u2423O\u2019Brien\u2026",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 16,
+            "code_points": 16,
+            "bytes": 26,
+            "utf16_units": 16
+          }
+        },
+        {
+          "id": "trailing-nbsp",
+          "ref": "pasted-from-word/trailing-nbsp",
+          "name": "Trailing non-breaking space",
+          "escaped": "Kowalski\\u00A0",
+          "breaks": "A non-breaking space at the end: invisible, not removed by ordinary trimming, and enough to break a comparison.",
+          "expect": "Trimmed together with ordinary whitespace.",
+          "fields": [
+            "text",
+            "multiline",
+            "name",
+            "address"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Kowalski\u2423",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "unusual-space",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 10,
+            "utf16_units": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "emails-urls",
+      "name": "E-mail addresses and URLs",
+      "description": "Addresses that are formally valid but extreme, and ones that only look valid.",
+      "version": "1.0",
+      "updated": "2026-10-14",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "email",
+        "url"
+      ],
+      "tags": [
+        "validation",
+        "parsing",
+        "internationalisation"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "plus-tag",
+          "ref": "emails-urls/plus-tag",
+          "name": "Plus tag in the local part",
+          "escaped": "jan+test@example.com",
+          "breaks": "A perfectly valid address rejected by a surprising number of forms, which breaks the tagging people rely on.",
+          "expect": "Accepted; the plus sign is a legal character in the local part.",
+          "fields": [
+            "email"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "jan+test@example.com",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 20,
+            "code_points": 20,
+            "bytes": 20,
+            "utf16_units": 20
+          }
+        },
+        {
+          "id": "uppercase-local",
+          "ref": "emails-urls/uppercase-local",
+          "name": "Uppercase local part",
+          "escaped": "JAN@example.com",
+          "breaks": "The local part is case-sensitive in principle and treated as case-insensitive in practice; uniqueness checks disagree between layers.",
+          "expect": "One consistent rule, applied at sign-up and at sign-in alike.",
+          "fields": [
+            "email"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "JAN@example.com",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 15,
+            "code_points": 15,
+            "bytes": 15,
+            "utf16_units": 15
+          }
+        },
+        {
+          "id": "unicode-domain",
+          "ref": "emails-urls/unicode-domain",
+          "name": "Internationalised domain",
+          "escaped": "jan@za\u017c\u00f3\u0142\u0107.example",
+          "breaks": "Internationalised domains must be converted before use; a form that skips this rejects legitimate addresses.",
+          "expect": "Accepted and converted, or rejected with a message that says why.",
+          "fields": [
+            "email"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "jan@za\u017c\u00f3\u0142\u0107.example",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 18,
+            "code_points": 18,
+            "bytes": 22,
+            "utf16_units": 18
+          }
+        },
+        {
+          "id": "double-at",
+          "ref": "emails-urls/double-at",
+          "name": "Two at signs",
+          "escaped": "jan@@example.com",
+          "breaks": "The shortest invalid address that many simple validators accept.",
+          "expect": "Rejected.",
+          "fields": [
+            "email"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "jan@@example.com",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 16,
+            "code_points": 16,
+            "bytes": 16,
+            "utf16_units": 16
+          }
+        },
+        {
+          "id": "no-at",
+          "ref": "emails-urls/no-at",
+          "name": "Address without an at sign",
+          "escaped": "jan.example.com",
+          "breaks": "A domain typed into an e-mail field; accepted by validators that only check for a dot.",
+          "expect": "Rejected.",
+          "fields": [
+            "email"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "jan.example.com",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 15,
+            "code_points": 15,
+            "bytes": 15,
+            "utf16_units": 15
+          }
+        },
+        {
+          "id": "trailing-dot-domain",
+          "ref": "emails-urls/trailing-dot-domain",
+          "name": "Trailing dot after the domain",
+          "escaped": "jan@example.com.",
+          "breaks": "A trailing dot is technically valid in a domain name and rejected by nearly every form.",
+          "expect": "Accepted and normalised, or rejected consistently.",
+          "fields": [
+            "email"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "jan@example.com.",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 16,
+            "code_points": 16,
+            "bytes": 16,
+            "utf16_units": 16
+          }
+        },
+        {
+          "id": "very-long-local",
+          "ref": "emails-urls/very-long-local",
+          "name": "Local part of 64 characters",
+          "escaped": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@example.com",
+          "breaks": "The boundary of the local part length; one character more must be rejected.",
+          "expect": "The limit enforced with a message, not by truncation.",
+          "fields": [
+            "email"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@example.com",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 76,
+            "code_points": 76,
+            "bytes": 76,
+            "utf16_units": 76
+          }
+        },
+        {
+          "id": "quoted-local",
+          "ref": "emails-urls/quoted-local",
+          "name": "Quoted local part with a space",
+          "escaped": "\"jan kowalski\"@example.com",
+          "breaks": "A quoted local part containing a space is legal and almost never handled.",
+          "expect": "Accepted, or rejected with a message stating the supported subset.",
+          "fields": [
+            "email"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\"jan\u2423kowalski\"@example.com",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 26,
+            "code_points": 26,
+            "bytes": 26,
+            "utf16_units": 26
+          }
+        },
+        {
+          "id": "url-no-scheme",
+          "ref": "emails-urls/url-no-scheme",
+          "name": "Link without a scheme",
+          "escaped": "example.com",
+          "breaks": "A link typed the way people type links; storing it without a scheme produces a broken link everywhere it is used.",
+          "expect": "Normalised with a scheme, or rejected with an example of the expected form.",
+          "fields": [
+            "url"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "example.com",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 11,
+            "code_points": 11,
+            "bytes": 11,
+            "utf16_units": 11
+          }
+        },
+        {
+          "id": "url-with-credentials",
+          "ref": "emails-urls/url-with-credentials",
+          "name": "Link with credentials",
+          "escaped": "https://user:pass@example.com",
+          "breaks": "A URL carrying credentials; displaying it anywhere reveals them, and storing it keeps them.",
+          "expect": "Rejected, or stored with the credentials stripped and the user told.",
+          "fields": [
+            "url"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "https://user:pass@example.com",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 29,
+            "code_points": 29,
+            "bytes": 29,
+            "utf16_units": 29
+          }
+        },
+        {
+          "id": "url-very-long",
+          "ref": "emails-urls/url-very-long",
+          "name": "Link of 2000 characters",
+          "escaped": "https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "breaks": "Long links break storage limits, logs and every column that displays them.",
+          "expect": "Accepted up to a stated limit, and truncated for display only.",
+          "fields": [
+            "url"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "elided_total": 2000
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 2000,
+            "code_points": 2000,
+            "bytes": 2000,
+            "utf16_units": 2000
+          }
+        },
+        {
+          "id": "url-unicode-path",
+          "ref": "emails-urls/url-unicode-path",
+          "name": "Link with a non-ASCII path",
+          "escaped": "https://example.com/za\u017c\u00f3\u0142\u0107",
+          "breaks": "Non-ASCII paths must be encoded; a layer that skips it produces links that work in one place and not another.",
+          "expect": "Encoded once and consistently; the link works after a round trip.",
+          "fields": [
+            "url"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "https://example.com/za\u017c\u00f3\u0142\u0107",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 26,
+            "code_points": 26,
+            "bytes": 30,
+            "utf16_units": 26
+          }
+        }
+      ]
+    },
+    {
+      "id": "names-identity",
+      "name": "Names and identity",
+      "description": "Names that break assumptions about what a \"normal\" name looks like.",
+      "version": "1.0",
+      "updated": "2026-10-14",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "name",
+        "username",
+        "text"
+      ],
+      "tags": [
+        "identity",
+        "parsing",
+        "sorting"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "surname-null",
+          "ref": "names-identity/surname-null",
+          "name": "Surname Null",
+          "escaped": "Null",
+          "breaks": "A real surname that every layer treating text loosely turns into an absent value; the record loses its name on save.",
+          "expect": "Stored and displayed as a four-letter surname, distinct from an empty field.",
+          "fields": [
+            "name",
+            "username",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Null",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "single-name",
+          "ref": "names-identity/single-name",
+          "name": "Single name only",
+          "escaped": "Suharto",
+          "breaks": "People with one name exist; a form requiring both parts cannot represent them at all.",
+          "expect": "Accepted with one name filled in, without inventing a placeholder for the other.",
+          "fields": [
+            "name",
+            "username",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Suharto",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 7,
+            "code_points": 7,
+            "bytes": 7,
+            "utf16_units": 7
+          }
+        },
+        {
+          "id": "apostrophe-surname",
+          "ref": "names-identity/apostrophe-surname",
+          "name": "Surname with an apostrophe",
+          "escaped": "O'Brien",
+          "breaks": "The apostrophe breaks query construction, name splitting and sorting; the most common real surname that breaks forms.",
+          "expect": "Stored, displayed, searched and sorted exactly as written.",
+          "fields": [
+            "name",
+            "username",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "O'Brien",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 7,
+            "code_points": 7,
+            "bytes": 7,
+            "utf16_units": 7
+          }
+        },
+        {
+          "id": "two-surnames",
+          "ref": "names-identity/two-surnames",
+          "name": "Two surnames without a hyphen",
+          "escaped": "Garc\u00eda M\u00e1rquez",
+          "breaks": "Two surnames without a hyphen; splitting on the space produces a wrong first name.",
+          "expect": "Kept as one surname; splitting, if any, is a deliberate feature rather than a guess.",
+          "fields": [
+            "name",
+            "username",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Garc\u00eda\u2423M\u00e1rquez",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 14,
+            "code_points": 14,
+            "bytes": 16,
+            "utf16_units": 14
+          }
+        },
+        {
+          "id": "particle-prefix",
+          "ref": "names-identity/particle-prefix",
+          "name": "Surname with lowercase particles",
+          "escaped": "van der Berg",
+          "breaks": "Lowercase particles break capitalisation, sorting and any rule assuming a surname starts with a capital letter.",
+          "expect": "Stored as written; sorting rules stated rather than assumed.",
+          "fields": [
+            "name",
+            "username",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "van\u2423der\u2423Berg",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 12,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "single-letter-name",
+          "ref": "names-identity/single-letter-name",
+          "name": "One-letter name",
+          "escaped": "X",
+          "breaks": "A one-letter name is legal in several countries and rejected by nearly every minimum-length rule.",
+          "expect": "Accepted, or the minimum stated with a reason.",
+          "fields": [
+            "name",
+            "username",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "X",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 1,
+            "bytes": 1,
+            "utf16_units": 1
+          }
+        },
+        {
+          "id": "all-caps-surname",
+          "ref": "names-identity/all-caps-surname",
+          "name": "Surname in capitals",
+          "escaped": "KOWALSKI",
+          "breaks": "Names written in capitals, common on documents; auto-capitalisation turns them into something else.",
+          "expect": "Stored as entered; automatic capitalisation, if any, is visible and reversible.",
+          "fields": [
+            "name",
+            "username",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "KOWALSKI",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 8,
+            "code_points": 8,
+            "bytes": 8,
+            "utf16_units": 8
+          }
+        },
+        {
+          "id": "digits-in-name",
+          "ref": "names-identity/digits-in-name",
+          "name": "Digit in a name",
+          "escaped": "John3",
+          "breaks": "Digits in a name break validators that allow letters only, and those validators reject legitimate users.",
+          "expect": "Accepted, or a stated rule explaining the restriction.",
+          "fields": [
+            "name",
+            "username",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "John3",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 5,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "very-long-name",
+          "ref": "names-identity/very-long-name",
+          "name": "Name of 120 characters",
+          "escaped": null,
+          "breaks": "Long names hit column limits and layouts sized for a typical name.",
+          "expect": "Accepted up to a stated limit and displayed without breaking the layout.",
+          "fields": [
+            "name",
+            "username",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "a",
+            "count": 120
+          },
+          "shape": [],
+          "counts": {
+            "graphemes": 120,
+            "code_points": 120,
+            "bytes": 120,
+            "utf16_units": 120
+          }
+        },
+        {
+          "id": "title-inside",
+          "ref": "names-identity/title-inside",
+          "name": "Title typed into the name",
+          "escaped": "Dr Jan Kowalski",
+          "breaks": "Titles typed into a name field break salutations and duplicate detection.",
+          "expect": "Stored as written; the salutation composed without assuming the field contains only a name.",
+          "fields": [
+            "name",
+            "username",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Dr\u2423Jan\u2423Kowalski",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 15,
+            "code_points": 15,
+            "bytes": 15,
+            "utf16_units": 15
+          }
+        },
+        {
+          "id": "hyphen-first-name",
+          "ref": "names-identity/hyphen-first-name",
+          "name": "Hyphenated given name",
+          "escaped": "Anna-Maria",
+          "breaks": "A hyphenated given name splits into two in systems assuming one word per field.",
+          "expect": "Kept as one given name.",
+          "fields": [
+            "name",
+            "username",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Anna-Maria",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "surname-true",
+          "ref": "names-identity/surname-true",
+          "name": "Surname True",
+          "escaped": "True",
+          "breaks": "The same failure as Null in a different form, and one that also breaks configuration files.",
+          "expect": "Stored and displayed as written.",
+          "fields": [
+            "name",
+            "username",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "True",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        }
+      ]
+    },
+    {
+      "id": "time-zones",
+      "name": "Time and time zones",
+      "description": "Hours that do not exist, happen twice, or are written without a zone.",
+      "version": "1.0",
+      "updated": "2026-10-14",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "datetime",
+        "time",
+        "text"
+      ],
+      "tags": [
+        "time",
+        "dst",
+        "parsing"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "dst-nonexistent",
+          "ref": "time-zones/dst-nonexistent",
+          "name": "Hour skipped by the spring clock change",
+          "escaped": "2027-03-28 02:30",
+          "breaks": "On the day clocks go forward in central Europe this hour does not exist locally; parsers either shift it silently or fail with a raw error.",
+          "expect": "Rejected with an explanation, or shifted with the shift shown to the user.",
+          "fields": [
+            "datetime",
+            "time",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "2027-03-28\u242302:30",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 16,
+            "code_points": 16,
+            "bytes": 16,
+            "utf16_units": 16
+          }
+        },
+        {
+          "id": "dst-ambiguous",
+          "ref": "time-zones/dst-ambiguous",
+          "name": "Hour repeated by the autumn clock change",
+          "escaped": "2027-10-31 02:30",
+          "breaks": "On the day clocks go back in central Europe this hour happens twice; without a zone the value cannot be resolved to a moment.",
+          "expect": "The zone requested, or one interpretation chosen and stated.",
+          "fields": [
+            "datetime",
+            "time",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "2027-10-31\u242302:30",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 16,
+            "code_points": 16,
+            "bytes": 16,
+            "utf16_units": 16
+          }
+        },
+        {
+          "id": "no-offset",
+          "ref": "time-zones/no-offset",
+          "name": "Timestamp without a zone",
+          "escaped": "2026-09-06T14:32:07",
+          "breaks": "A timestamp without a zone is meaningless the moment it crosses a machine boundary, and it always does.",
+          "expect": "Rejected, or interpreted with the assumed zone stated next to the value.",
+          "fields": [
+            "datetime",
+            "time",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "2026-09-06T14:32:07",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 19,
+            "code_points": 19,
+            "bytes": 19,
+            "utf16_units": 19
+          }
+        },
+        {
+          "id": "with-offset",
+          "ref": "time-zones/with-offset",
+          "name": "Timestamp with an offset",
+          "escaped": "2026-09-06T14:32:07+02:00",
+          "breaks": "The correct form; a field rejecting it accepts only the ambiguous one.",
+          "expect": "Accepted and preserved, including the offset.",
+          "fields": [
+            "datetime",
+            "time",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "2026-09-06T14:32:07+02:00",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 25,
+            "code_points": 25,
+            "bytes": 25,
+            "utf16_units": 25
+          }
+        },
+        {
+          "id": "utc-z",
+          "ref": "time-zones/utc-z",
+          "name": "Timestamp in UTC",
+          "escaped": "2026-09-06T12:32:07Z",
+          "breaks": "The same moment written in the universal form; storing it as local time loses two hours somewhere.",
+          "expect": "Accepted and converted for display, not stored as if it were local.",
+          "fields": [
+            "datetime",
+            "time",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "2026-09-06T12:32:07Z",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 20,
+            "code_points": 20,
+            "bytes": 20,
+            "utf16_units": 20
+          }
+        },
+        {
+          "id": "local-format",
+          "ref": "time-zones/local-format",
+          "name": "Date and time as people type them",
+          "escaped": "06.09.2026 14:32",
+          "breaks": "The format people actually type; a field accepting only the international one rejects every human.",
+          "expect": "Accepted with the expected format shown, or both accepted.",
+          "fields": [
+            "datetime",
+            "time",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "06.09.2026\u242314:32",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 16,
+            "code_points": 16,
+            "bytes": 16,
+            "utf16_units": 16
+          }
+        },
+        {
+          "id": "midnight-24",
+          "ref": "time-zones/midnight-24",
+          "name": "Midnight written as 24:00",
+          "escaped": "24:00",
+          "breaks": "Midnight at the end of the day: valid in the international notation and rejected by most parsers.",
+          "expect": "Accepted and normalised to the next day's zero hour, or rejected with a message.",
+          "fields": [
+            "datetime",
+            "time",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "24:00",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 5,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "leap-second",
+          "ref": "time-zones/leap-second",
+          "name": "Leap second",
+          "escaped": "2026-06-30T23:59:60Z",
+          "breaks": "The sixty-first second exists in the standard and in no common date type.",
+          "expect": "Rejected with a message, or clamped visibly - not accepted and silently shifted.",
+          "fields": [
+            "datetime",
+            "time",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "2026-06-30T23:59:60Z",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 20,
+            "code_points": 20,
+            "bytes": 20,
+            "utf16_units": 20
+          }
+        },
+        {
+          "id": "epoch-zero-time",
+          "ref": "time-zones/epoch-zero-time",
+          "name": "Start of the Unix epoch",
+          "escaped": "1970-01-01T00:00:00Z",
+          "breaks": "The zero point of the most common timestamp; indistinguishable from \"no time set\" in many interfaces.",
+          "expect": "Displayed as a real moment, distinct from an empty field.",
+          "fields": [
+            "datetime",
+            "time",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "1970-01-01T00:00:00Z",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 20,
+            "code_points": 20,
+            "bytes": 20,
+            "utf16_units": 20
+          }
+        },
+        {
+          "id": "far-future",
+          "ref": "time-zones/far-future",
+          "name": "Last second of 2099",
+          "escaped": "2099-12-31T23:59:59Z",
+          "breaks": "Far dates break retention rules, schedulers and columns with a narrower range than the interface.",
+          "expect": "Accepted up to a stated range, enforced on both sides.",
+          "fields": [
+            "datetime",
+            "time",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "2099-12-31T23:59:59Z",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 20,
+            "code_points": 20,
+            "bytes": 20,
+            "utf16_units": 20
+          }
+        },
+        {
+          "id": "negative-offset",
+          "ref": "time-zones/negative-offset",
+          "name": "Timestamp eleven hours behind UTC",
+          "escaped": "2026-09-06T14:32:07-11:00",
+          "breaks": "An offset far from the server's own; sorting by local time produces a different order than sorting by moment.",
+          "expect": "Sorted and compared by moment, not by the text of the timestamp.",
+          "fields": [
+            "datetime",
+            "time",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "2026-09-06T14:32:07-11:00",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 25,
+            "code_points": 25,
+            "bytes": 25,
+            "utf16_units": 25
+          }
+        },
+        {
+          "id": "time-only",
+          "ref": "time-zones/time-only",
+          "name": "Time without a date",
+          "escaped": "14:32",
+          "breaks": "A time without a date; storing it against today's date changes its meaning tomorrow.",
+          "expect": "Stored as a time of day, or the date requested explicitly.",
+          "fields": [
+            "datetime",
+            "time",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "14:32",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 5,
+            "utf16_units": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "currency-separators",
+      "name": "Money and separators",
+      "description": "Amounts written the way people and spreadsheets write them, and where precision ends.",
+      "version": "1.0",
+      "updated": "2026-10-14",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "money",
+        "number"
+      ],
+      "tags": [
+        "money",
+        "locale",
+        "rounding",
+        "precision"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "rounding-2675",
+          "ref": "currency-separators/rounding-2675",
+          "name": "Rounding trap 2,675",
+          "escaped": "2,675",
+          "breaks": "Rounded to two places this value goes down where a human expects it to go up, because the binary representation is slightly below the decimal one.",
+          "expect": "Rounded by a rule stated in the specification, applied identically in the interface and in storage.",
+          "fields": [
+            "money",
+            "number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "2,675",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 5,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "rounding-1005",
+          "ref": "currency-separators/rounding-1005",
+          "name": "Rounding trap 1,005",
+          "escaped": "1,005",
+          "breaks": "The same failure at a different magnitude; one of the two catches almost every naive rounding implementation.",
+          "expect": "Same as above.",
+          "fields": [
+            "money",
+            "number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "1,005",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 5,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "comma-decimal-money",
+          "ref": "currency-separators/comma-decimal-money",
+          "name": "Comma as the decimal separator",
+          "escaped": "1234,56",
+          "breaks": "The decimal separator used locally; a parser expecting a dot reads it as a thousands separator and multiplies the amount by a hundred.",
+          "expect": "Accepted in locales that use it, with the expected format shown.",
+          "fields": [
+            "money",
+            "number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "1234,56",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 7,
+            "code_points": 7,
+            "bytes": 7,
+            "utf16_units": 7
+          }
+        },
+        {
+          "id": "nbsp-thousands",
+          "ref": "currency-separators/nbsp-thousands",
+          "name": "Non-breaking spaces between thousands",
+          "escaped": "1\\u00A0000\\u00A0000,00",
+          "breaks": "Amounts copied from a report carry non-breaking spaces as group separators, which no numeric parser accepts.",
+          "expect": "Separators stripped before parsing, including the invisible ones.",
+          "fields": [
+            "money",
+            "number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "1\u2423000\u2423000,00",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "unusual-space",
+              "count": 2
+            }
+          ],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 14,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "space-thousands",
+          "ref": "currency-separators/space-thousands",
+          "name": "Spaces between thousands",
+          "escaped": "1 000 000,00",
+          "breaks": "The same with ordinary spaces - the form produced by most local formatting.",
+          "expect": "Accepted and normalised.",
+          "fields": [
+            "money",
+            "number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "1\u2423000\u2423000,00",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 12,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "negative-parens",
+          "ref": "currency-separators/negative-parens",
+          "name": "Negative amount in brackets",
+          "escaped": "(1234,56)",
+          "breaks": "Accounting notation for negative amounts; read as text it becomes a positive number in brackets.",
+          "expect": "Interpreted as negative, or rejected with the expected form shown.",
+          "fields": [
+            "money",
+            "number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "(1234,56)",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 9,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "three-decimals",
+          "ref": "currency-separators/three-decimals",
+          "name": "Three decimal places",
+          "escaped": "1234,567",
+          "breaks": "More decimal places than the currency has; silently rounding here changes an invoice total.",
+          "expect": "Rejected, or rounded with the rounding shown before saving.",
+          "fields": [
+            "money",
+            "number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "1234,567",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 8,
+            "code_points": 8,
+            "bytes": 8,
+            "utf16_units": 8
+          }
+        },
+        {
+          "id": "negative-zero",
+          "ref": "currency-separators/negative-zero",
+          "name": "Negative zero",
+          "escaped": "-0,00",
+          "breaks": "A negative zero displays as a negative amount and compares equal to zero; reports show a minus sign on nothing.",
+          "expect": "Normalised to zero on save.",
+          "fields": [
+            "money",
+            "number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "-0,00",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 5,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "zero-amount",
+          "ref": "currency-separators/zero-amount",
+          "name": "Zero amount",
+          "escaped": "0,00",
+          "breaks": "Zero is a legitimate amount and is frequently confused with an empty field.",
+          "expect": "Stored and displayed as zero, distinct from empty.",
+          "fields": [
+            "money",
+            "number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "0,00",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "symbol-appended",
+          "ref": "currency-separators/symbol-appended",
+          "name": "Amount with the currency symbol",
+          "escaped": "1234,56 z\u0142",
+          "breaks": "The amount as it appears in a document, with the currency symbol; a numeric field rejects it whole.",
+          "expect": "The symbol stripped on input, or the expected form shown.",
+          "fields": [
+            "money",
+            "number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "1234,56\u2423z\u0142",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 11,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "apostrophe-thousands",
+          "ref": "currency-separators/apostrophe-thousands",
+          "name": "Apostrophe between thousands",
+          "escaped": "1'234.56",
+          "breaks": "The group separator used in some locales; unfamiliar and perfectly legitimate.",
+          "expect": "Accepted where that locale is supported, or rejected with the expected form.",
+          "fields": [
+            "money",
+            "number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "1'234.56",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 8,
+            "code_points": 8,
+            "bytes": 8,
+            "utf16_units": 8
+          }
+        },
+        {
+          "id": "huge-amount",
+          "ref": "currency-separators/huge-amount",
+          "name": "Amount wider than the money type",
+          "escaped": "999999999999,99",
+          "breaks": "An amount wider than the type used for money; overflow here produces a negative total.",
+          "expect": "Rejected with a stated limit, before it reaches any total.",
+          "fields": [
+            "money",
+            "number"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "999999999999,99",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 15,
+            "code_points": 15,
+            "bytes": 15,
+            "utf16_units": 15
+          }
+        }
+      ]
+    },
+    {
+      "id": "pseudolocalization",
+      "name": "Pseudolocalisation",
+      "description": "The standard internationalisation-testing technique, reduced to values you can paste into a field.",
+      "version": "1.0",
+      "updated": "2026-10-14",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "text",
+        "name",
+        "multiline"
+      ],
+      "tags": [
+        "i18n",
+        "layout",
+        "encoding"
+      ],
+      "value_count": 10,
+      "values": [
+        {
+          "id": "pseudo-bracketed",
+          "ref": "pseudolocalization/pseudo-bracketed",
+          "name": "Pseudolocalised text in brackets",
+          "escaped": "[!!! \u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161 !!!]",
+          "breaks": "The brackets reveal truncation instantly: if either is missing on screen, the text was cut.",
+          "expect": "Both brackets visible wherever the value is displayed.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "[!!!\u2423\u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161\u2423!!!]",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 19,
+            "code_points": 19,
+            "bytes": 28,
+            "utf16_units": 19
+          }
+        },
+        {
+          "id": "pseudo-accented",
+          "ref": "pseudolocalization/pseudo-accented",
+          "name": "Accented pseudolocalised word",
+          "escaped": "\u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161",
+          "breaks": "Still readable as English, so a tester spots it in a screen where a string was never translated.",
+          "expect": "Displayed with every accent intact, in every layer.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 18,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "pseudo-expanded-30",
+          "ref": "pseudolocalization/pseudo-expanded-30",
+          "name": "Pseudolocalised text, 30 per cent longer",
+          "escaped": "[!!! \u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161 \u00e9\u00e9\u00e9\u00e9\u00e9 !!!]",
+          "breaks": "Thirty per cent longer, the typical growth when English is translated into German.",
+          "expect": "The layout holds without clipping or overlapping.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "[!!!\u2423\u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161\u2423\u00e9\u00e9\u00e9\u00e9\u00e9\u2423!!!]",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 25,
+            "code_points": 25,
+            "bytes": 39,
+            "utf16_units": 25
+          }
+        },
+        {
+          "id": "pseudo-expanded-100",
+          "ref": "pseudolocalization/pseudo-expanded-100",
+          "name": "Pseudolocalised text, twice as long",
+          "escaped": "[!!! \u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161 \u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9 !!!]",
+          "breaks": "Twice the length, for labels and buttons sized to the English word.",
+          "expect": "Wrapped or resized rather than clipped.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "[!!!\u2423\u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161\u2423\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u2423!!!]",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 38,
+            "code_points": 38,
+            "bytes": 65,
+            "utf16_units": 38
+          }
+        },
+        {
+          "id": "pseudo-short",
+          "ref": "pseudolocalization/pseudo-short",
+          "name": "Very short pseudolocalised text",
+          "escaped": "[!\u0154!]",
+          "breaks": "The opposite case: a very short translation leaves a layout built around a long one looking broken.",
+          "expect": "The layout holds when the value is short.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "[!\u0154!]",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 5,
+            "code_points": 5,
+            "bytes": 6,
+            "utf16_units": 5
+          }
+        },
+        {
+          "id": "pseudo-rtl",
+          "ref": "pseudolocalization/pseudo-rtl",
+          "name": "Pseudolocalised text with direction marks",
+          "escaped": "[!!! \\u200F\u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161\\u200F !!!]",
+          "breaks": "Pseudolocalisation with direction marks, for checking mirrored layouts without knowing a right-to-left language.",
+          "expect": "The interface mirrors correctly and the brackets stay in the right places.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "[!!!\u2423\u2423\u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161\u2423\u2423!!!]",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [
+            {
+              "fact": "bidi-control",
+              "count": 2
+            }
+          ],
+          "counts": {
+            "graphemes": 21,
+            "code_points": 21,
+            "bytes": 34,
+            "utf16_units": 21
+          }
+        },
+        {
+          "id": "pseudo-numbers",
+          "ref": "pseudolocalization/pseudo-numbers",
+          "name": "Number inside pseudolocalised text",
+          "escaped": "[!!! 1234,56 !!!]",
+          "breaks": "Numbers inside a pseudolocalised string reveal formatting that was hard-coded next to the text.",
+          "expect": "Numbers formatted by locale, not concatenated.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "[!!!\u24231234,56\u2423!!!]",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 17,
+            "code_points": 17,
+            "bytes": 17,
+            "utf16_units": 17
+          }
+        },
+        {
+          "id": "pseudo-with-placeholder",
+          "ref": "pseudolocalization/pseudo-with-placeholder",
+          "name": "Placeholder inside pseudolocalised text",
+          "escaped": "[!!! \u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161 {0} !!!]",
+          "breaks": "A placeholder that must survive translation; losing it produces a message with a hole in it.",
+          "expect": "The placeholder preserved and filled.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "[!!!\u2423\u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161\u2423{0}\u2423!!!]",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 23,
+            "code_points": 23,
+            "bytes": 32,
+            "utf16_units": 23
+          }
+        },
+        {
+          "id": "pseudo-html",
+          "ref": "pseudolocalization/pseudo-html",
+          "name": "Markup inside pseudolocalised text",
+          "escaped": "[!!! <b>\u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161</b> !!!]",
+          "breaks": "Markup inside a translated string is either escaped or rendered, and both are wrong in different places.",
+          "expect": "Handled the same way as any other user-provided markup in that field.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "[!!!\u2423<b>\u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161</b>\u2423!!!]",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 26,
+            "code_points": 26,
+            "bytes": 35,
+            "utf16_units": 26
+          }
+        },
+        {
+          "id": "pseudo-mixed-scripts",
+          "ref": "pseudolocalization/pseudo-mixed-scripts",
+          "name": "Three scripts in one string",
+          "escaped": "[!!! \u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161 \u4e2d\u6587 \u0627\u0644\u0639\u0631\u0628\u064a\u0629 !!!]",
+          "breaks": "Three scripts in one string: font fallback, line breaking and direction all at once.",
+          "expect": "Every script rendered, with no missing-glyph boxes.",
+          "fields": [
+            "text",
+            "name",
+            "multiline"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "[!!!\u2423\u0154\u00e9\u0161\u00f6\u00fb\u0155\u010d\u00e9\u0161\u2423\u4e2d\u6587\u2423\u0627\u0644\u0639\u0631\u0628\u064a\u0629\u2423!!!]",
+            "elided_total": null
+          },
+          "recipe": null,
+          "shape": [],
+          "counts": {
+            "graphemes": 30,
+            "code_points": 30,
+            "bytes": 50,
+            "utf16_units": 30
           }
         }
       ]

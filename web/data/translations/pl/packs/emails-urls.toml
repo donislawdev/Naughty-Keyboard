@@ -1,0 +1,158 @@
+# Polish translations of the pack emails-urls, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "e1b938bafb16"
+text = "Adresy e-mail i URL"
+
+[pack.description]
+source = "fa8066c79a44"
+text = "Adresy formalnie poprawne, ale skrajne, i takie, które tylko wyglądają na poprawne."
+
+[plus-tag.name]
+source = "b3562bf3ddf7"
+text = "Znacznik z plusem w części lokalnej"
+
+[plus-tag.breaks]
+source = "8495d6f390b0"
+text = "W pełni poprawny adres, który zaskakująco wiele formularzy odrzuca. To psuje oznaczanie adresów, na którym ludzie polegają."
+
+[plus-tag.expect]
+source = "5c658cf3ee91"
+text = "Przyjęty, bo plus jest dozwolonym znakiem w części lokalnej."
+
+[uppercase-local.name]
+source = "b5f0582b1b8c"
+text = "Część lokalna wielkimi literami"
+
+[uppercase-local.breaks]
+source = "a5b92919647f"
+text = "Część lokalna w zasadzie rozróżnia wielkość liter, a w praktyce jest traktowana tak, jakby nie rozróżniała. Kontrole unikalności w różnych warstwach się nie zgadzają."
+
+[uppercase-local.expect]
+source = "d8601f2756aa"
+text = "Jedna spójna reguła, stosowana tak samo przy rejestracji i przy logowaniu."
+
+[unicode-domain.name]
+source = "7f1e6a9e731b"
+text = "Domena ze znakami spoza ASCII"
+
+[unicode-domain.breaks]
+source = "fecbccd4b05b"
+text = "Domeny ze znakami spoza ASCII trzeba przed użyciem przekształcić. Formularz, który to pomija, odrzuca prawdziwe adresy."
+
+[unicode-domain.expect]
+source = "10b7cb2ca35a"
+text = "Przyjęta i przekształcona albo odrzucona z komunikatem, który mówi dlaczego."
+
+[double-at.name]
+source = "d5db73520b83"
+text = "Dwie małpy"
+
+[double-at.breaks]
+source = "b66e866eb0bf"
+text = "Najkrótszy niepoprawny adres, który przyjmuje wiele prostych walidatorów."
+
+[double-at.expect]
+source = "ac7b5115d2fb"
+text = "Odrzucony."
+
+[no-at.name]
+source = "f7b70d35cb87"
+text = "Adres bez małpy"
+
+[no-at.breaks]
+source = "14d9770739f8"
+text = "Domena wpisana w pole e-mail. Przyjmują ją walidatory, które sprawdzają tylko kropkę."
+
+[no-at.expect]
+source = "ac7b5115d2fb"
+text = "Odrzucony."
+
+[trailing-dot-domain.name]
+source = "4e9f07c7f2a1"
+text = "Kropka na końcu domeny"
+
+[trailing-dot-domain.breaks]
+source = "c52f53ce6a81"
+text = "Kropka na końcu jest technicznie poprawna w nazwie domeny, a odrzuca ją prawie każdy formularz."
+
+[trailing-dot-domain.expect]
+source = "e5941e917e3a"
+text = "Przyjęty i znormalizowany albo konsekwentnie odrzucany."
+
+[very-long-local.name]
+source = "45ec99bc019e"
+text = "Część lokalna z 64 znaków"
+
+[very-long-local.breaks]
+source = "ccf6e475a302"
+text = "Granica długości części lokalnej. Jeden znak więcej musi zostać odrzucony."
+
+[very-long-local.expect]
+source = "78cae34dce4d"
+text = "Limit pilnowany komunikatem, a nie obcinaniem."
+
+[quoted-local.name]
+source = "724c9ca4468a"
+text = "Część lokalna w cudzysłowie, ze spacją"
+
+[quoted-local.breaks]
+source = "aabf73512eea"
+text = "Część lokalna w cudzysłowie ze spacją w środku jest dozwolona i prawie nigdy nie jest obsługiwana."
+
+[quoted-local.expect]
+source = "be29c206bb43"
+text = "Przyjęty albo odrzucony z komunikatem, który podaje obsługiwany podzbiór."
+
+[url-no-scheme.name]
+source = "06265526a8c8"
+text = "Link bez schematu"
+
+[url-no-scheme.breaks]
+source = "79e1df4e46c7"
+text = "Link wpisany tak, jak ludzie wpisują linki. Zapisany bez schematu daje zepsuty link wszędzie, gdzie zostanie użyty."
+
+[url-no-scheme.expect]
+source = "326ff0206dd1"
+text = "Uzupełniony o schemat albo odrzucony z przykładem oczekiwanej postaci."
+
+[url-with-credentials.name]
+source = "d0497b673509"
+text = "Link z danymi logowania"
+
+[url-with-credentials.breaks]
+source = "848b1e893ef9"
+text = "Adres URL z danymi logowania. Wyświetlenie go gdziekolwiek je ujawnia, a zapisanie je przechowuje."
+
+[url-with-credentials.expect]
+source = "63f512b11e6a"
+text = "Odrzucony albo zapisany bez danych logowania, z informacją dla użytkownika."
+
+[url-very-long.name]
+source = "5b9afa354be7"
+text = "Link z 2000 znaków"
+
+[url-very-long.breaks]
+source = "b32cb53cfe6f"
+text = "Długie linki przekraczają limity zapisu i psują logi oraz każdą kolumnę, która je wyświetla."
+
+[url-very-long.expect]
+source = "dfe706fec185"
+text = "Przyjęty do podanego limitu i obcinany wyłącznie przy wyświetlaniu."
+
+[url-unicode-path.name]
+source = "f5c310f39c59"
+text = "Link ze ścieżką spoza ASCII"
+
+[url-unicode-path.breaks]
+source = "033470d8000e"
+text = "Ścieżki ze znakami spoza ASCII trzeba zakodować. Warstwa, która to pomija, tworzy linki działające w jednym miejscu, a w innym nie."
+
+[url-unicode-path.expect]
+source = "12bb20a684db"
+text = "Ścieżka zakodowana raz i konsekwentnie, a link działa po zapisie i odczycie."

@@ -1,0 +1,112 @@
+format = 1
+
+[pack]
+id          = "names-identity"
+name        = "Names and identity"
+description = "Names that break assumptions about what a \"normal\" name looks like."
+version     = "1.0"
+updated     = 2026-10-14
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["identity", "parsing", "sorting"]
+fields      = ["name", "username", "text"]
+risk        = "normal"
+
+[[values]]
+id     = "surname-null"
+name   = "Surname Null"
+value  = "Null"
+breaks = "A real surname that every layer treating text loosely turns into an absent value; the record loses its name on save."
+expect = "Stored and displayed as a four-letter surname, distinct from an empty field."
+since  = "1.0"
+
+[[values]]
+id     = "single-name"
+name   = "Single name only"
+value  = "Suharto"
+breaks = "People with one name exist; a form requiring both parts cannot represent them at all."
+expect = "Accepted with one name filled in, without inventing a placeholder for the other."
+since  = "1.0"
+
+[[values]]
+id     = "apostrophe-surname"
+name   = "Surname with an apostrophe"
+value  = "O'Brien"
+breaks = "The apostrophe breaks query construction, name splitting and sorting; the most common real surname that breaks forms."
+expect = "Stored, displayed, searched and sorted exactly as written."
+since  = "1.0"
+
+[[values]]
+id     = "two-surnames"
+name   = "Two surnames without a hyphen"
+value  = "Garc\u00EDa M\u00E1rquez"
+breaks = "Two surnames without a hyphen; splitting on the space produces a wrong first name."
+expect = "Kept as one surname; splitting, if any, is a deliberate feature rather than a guess."
+since  = "1.0"
+
+[[values]]
+id     = "particle-prefix"
+name   = "Surname with lowercase particles"
+value  = "van der Berg"
+breaks = "Lowercase particles break capitalisation, sorting and any rule assuming a surname starts with a capital letter."
+expect = "Stored as written; sorting rules stated rather than assumed."
+since  = "1.0"
+
+[[values]]
+id     = "single-letter-name"
+name   = "One-letter name"
+value  = "X"
+breaks = "A one-letter name is legal in several countries and rejected by nearly every minimum-length rule."
+expect = "Accepted, or the minimum stated with a reason."
+since  = "1.0"
+
+[[values]]
+id     = "all-caps-surname"
+name   = "Surname in capitals"
+value  = "KOWALSKI"
+breaks = "Names written in capitals, common on documents; auto-capitalisation turns them into something else."
+expect = "Stored as entered; automatic capitalisation, if any, is visible and reversible."
+since  = "1.0"
+
+[[values]]
+id     = "digits-in-name"
+name   = "Digit in a name"
+value  = "John3"
+breaks = "Digits in a name break validators that allow letters only, and those validators reject legitimate users."
+expect = "Accepted, or a stated rule explaining the restriction."
+since  = "1.0"
+
+[[values]]
+id     = "very-long-name"
+name   = "Name of 120 characters"
+type   = "repeat"
+unit   = "a"
+count  = 120
+breaks = "Long names hit column limits and layouts sized for a typical name."
+expect = "Accepted up to a stated limit and displayed without breaking the layout."
+since  = "1.0"
+
+[[values]]
+id     = "title-inside"
+name   = "Title typed into the name"
+value  = "Dr Jan Kowalski"
+breaks = "Titles typed into a name field break salutations and duplicate detection."
+expect = "Stored as written; the salutation composed without assuming the field contains only a name."
+since  = "1.0"
+
+[[values]]
+id     = "hyphen-first-name"
+name   = "Hyphenated given name"
+value  = "Anna-Maria"
+breaks = "A hyphenated given name splits into two in systems assuming one word per field."
+expect = "Kept as one given name."
+since  = "1.0"
+
+[[values]]
+id     = "surname-true"
+name   = "Surname True"
+value  = "True"
+breaks = "The same failure as Null in a different form, and one that also breaks configuration files."
+expect = "Stored and displayed as written."
+since  = "1.0"

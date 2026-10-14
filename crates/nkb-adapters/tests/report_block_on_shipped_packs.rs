@@ -68,14 +68,22 @@ impl KeystrokeSender for NoKeys {
 ///
 /// 🔴 Pinned from outside this code. On 2026-09-23 Python's `unicodedata`
 /// (Unicode 16.0) normalized the `Typed:` text of every shipped value to NFC
-/// and to NFKC, and these four came back different - these four and no other.
-/// A different implementation, so a mistake in `nkb_core::normalization` cannot
-/// stand on both sides of the comparison (`D70`).
-const REWRITTEN_BY_NORMALIZATION: [&str; 4] = [
+/// and to NFKC, and four came back different - those four and no other. On
+/// 2026-10-14, with nine more packs shipped, the same question asked through
+/// Python 3.15 (`unicodedata` 17.0.0) gave these ten and no other. A different
+/// implementation, so a mistake in `nkb_core::normalization` cannot stand on
+/// both sides of the comparison (`D70`).
+const REWRITTEN_BY_NORMALIZATION: [&str; 10] = [
     "unicode-text/combining-acute",
     "unicode-text/zalgo",
     "unicode-text/fullwidth-latin",
     "unicode-text/math-bold",
+    "look-alike-pairs/nfd-lodz",
+    "encoding-mojibake/double-encoded",
+    "encoding-mojibake/combining-overflow",
+    "pasted-from-word/ellipsis-char",
+    "pasted-from-word/nonbreaking-hyphen",
+    "pasted-from-word/multiple-typographic",
 ];
 
 fn shipped_packs() -> Vec<Pack> {

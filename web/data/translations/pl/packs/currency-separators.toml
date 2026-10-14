@@ -1,0 +1,158 @@
+# Polish translations of the pack currency-separators, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "a82d8db152e4"
+text = "Kwoty i separatory"
+
+[pack.description]
+source = "e43311536cbe"
+text = "Kwoty zapisane tak, jak zapisują je ludzie i arkusze, i tam, gdzie kończy się precyzja."
+
+[rounding-2675.name]
+source = "e47fb0a76f0f"
+text = "Pułapka zaokrąglenia 2,675"
+
+[rounding-2675.breaks]
+source = "ca9bff44c658"
+text = "Zaokrąglona do dwóch miejsc ta wartość idzie w dół, choć człowiek spodziewa się, że pójdzie w górę, bo jej zapis dwójkowy jest odrobinę mniejszy od dziesiętnego."
+
+[rounding-2675.expect]
+source = "afba785761d2"
+text = "Zaokrąglana według reguły podanej w specyfikacji, stosowanej identycznie w interfejsie i w zapisie."
+
+[rounding-1005.name]
+source = "06779c901d5e"
+text = "Pułapka zaokrąglenia 1,005"
+
+[rounding-1005.breaks]
+source = "2538ac435b08"
+text = "Ta sama awaria przy innym rzędzie wielkości. Jedna z tych dwóch wartości łapie prawie każdą naiwną implementację zaokrąglania."
+
+[rounding-1005.expect]
+source = "db7a40274cbe"
+text = "Tak samo jak wyżej."
+
+[comma-decimal-money.name]
+source = "d9ce10311520"
+text = "Przecinek jako separator dziesiętny"
+
+[comma-decimal-money.breaks]
+source = "226c647ccb68"
+text = "Separator dziesiętny używany lokalnie. Parser oczekujący kropki czyta go jako separator tysięcy i mnoży kwotę przez sto."
+
+[comma-decimal-money.expect]
+source = "4614c87f1abf"
+text = "Przyjmowany w ustawieniach regionalnych, które go używają, z pokazaną oczekiwaną postacią."
+
+[nbsp-thousands.name]
+source = "964b7a6e030f"
+text = "Twarde spacje między tysiącami"
+
+[nbsp-thousands.breaks]
+source = "f9cbbb755db1"
+text = "Kwoty skopiowane z raportu niosą twarde spacje jako separatory grup, których nie przyjmuje żaden parser liczb."
+
+[nbsp-thousands.expect]
+source = "a8cd253a1dad"
+text = "Separatory usuwane przed odczytem, także te niewidoczne."
+
+[space-thousands.name]
+source = "9fac4266ce20"
+text = "Spacje między tysiącami"
+
+[space-thousands.breaks]
+source = "752e2658effc"
+text = "To samo ze zwykłymi spacjami. Taką postać daje większość lokalnego formatowania."
+
+[space-thousands.expect]
+source = "ef9efbc059d4"
+text = "Przyjęte i znormalizowane."
+
+[negative-parens.name]
+source = "38d49d395e87"
+text = "Kwota ujemna w nawiasach"
+
+[negative-parens.breaks]
+source = "cf1d6d2b7f9b"
+text = "Księgowy zapis kwot ujemnych. Odczytany jako tekst staje się dodatnią liczbą w nawiasach."
+
+[negative-parens.expect]
+source = "f6688af34a63"
+text = "Odczytana jako ujemna albo odrzucona z pokazaną oczekiwaną postacią."
+
+[three-decimals.name]
+source = "5a81c91fbc5a"
+text = "Trzy miejsca po przecinku"
+
+[three-decimals.breaks]
+source = "27275030e223"
+text = "Więcej miejsc po przecinku, niż ma waluta. Ciche zaokrąglenie zmienia tu sumę faktury."
+
+[three-decimals.expect]
+source = "adbec5c67d56"
+text = "Odrzucona albo zaokrąglona, a zaokrąglenie pokazane przed zapisem."
+
+[negative-zero.name]
+source = "82fe59dcea0e"
+text = "Ujemne zero"
+
+[negative-zero.breaks]
+source = "beec4413124b"
+text = "Ujemne zero wyświetla się jak kwota ujemna, a w porównaniu równa się zeru. Raporty pokazują minus przy niczym."
+
+[negative-zero.expect]
+source = "03e09e87a1ae"
+text = "Zamieniane na zero przy zapisie."
+
+[zero-amount.name]
+source = "25e2b005cae1"
+text = "Kwota zero"
+
+[zero-amount.breaks]
+source = "b3769e114c68"
+text = "Zero to prawdziwa kwota, często mylona z pustym polem."
+
+[zero-amount.expect]
+source = "d881b238e087"
+text = "Zapisana i wyświetlana jako zero, różna od pustego pola."
+
+[symbol-appended.name]
+source = "89132327932b"
+text = "Kwota z symbolem waluty"
+
+[symbol-appended.breaks]
+source = "031c79c64648"
+text = "Kwota tak, jak wygląda w dokumencie, z symbolem waluty. Pole liczbowe odrzuca ją w całości."
+
+[symbol-appended.expect]
+source = "22b1c95ed4f9"
+text = "Symbol usuwany przy wprowadzaniu albo pokazana oczekiwana postać."
+
+[apostrophe-thousands.name]
+source = "64516d88a9d6"
+text = "Apostrof między tysiącami"
+
+[apostrophe-thousands.breaks]
+source = "b10699fe5346"
+text = "Separator grup używany w niektórych ustawieniach regionalnych. Nieznajomy, a całkowicie poprawny."
+
+[apostrophe-thousands.expect]
+source = "d2b67391d5e2"
+text = "Przyjmowany tam, gdzie te ustawienia regionalne są obsługiwane, albo odrzucany z oczekiwaną postacią."
+
+[huge-amount.name]
+source = "9daf122420a4"
+text = "Kwota szersza niż typ pieniężny"
+
+[huge-amount.breaks]
+source = "f8927be77c46"
+text = "Kwota szersza niż typ używany dla pieniędzy. Przepełnienie daje tu ujemną sumę."
+
+[huge-amount.expect]
+source = "578a5ad1e4b4"
+text = "Odrzucona z podanym limitem, zanim trafi do jakiejkolwiek sumy."

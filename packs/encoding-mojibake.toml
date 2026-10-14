@@ -1,0 +1,102 @@
+format = 1
+
+[pack]
+id          = "encoding-mojibake"
+name        = "Encoding and mojibake"
+description = "Text that went through the wrong encoding and never came back."
+version     = "1.0"
+updated     = 2026-10-14
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["encoding", "corruption", "round-trip"]
+fields      = ["text", "name"]
+risk        = "normal"
+
+[[values]]
+id     = "double-encoded"
+name   = "Text encoded twice"
+value  = "\u00C5\u00BB\u00C3\u00B3\u00C5\u201A\u00C4\u2021"
+breaks = "Text encoded twice: it displays as nonsense and, once saved in this state, the original cannot be recovered."
+expect = "Never produced - and if received, stored verbatim rather than \"fixed\" by guessing."
+since  = "1.0"
+
+[[values]]
+id     = "bom-leading"
+name   = "Byte-order mark before a name"
+value  = "\uFEFFJan"
+breaks = "A byte-order mark at the start of a value makes exact comparison fail and sorts the record before everything else."
+expect = "Stripped on input, consistently in every layer that reads files."
+since  = "1.0"
+
+[[values]]
+id     = "replacement-char"
+name   = "Replacement character in a name"
+value  = "Jan\uFFFDKowalski"
+breaks = "The character that appears where decoding already failed; its presence means data was lost earlier."
+expect = "Detected and reported rather than stored as if it were ordinary text."
+since  = "1.0"
+
+[[values]]
+id     = "question-mark-fallback"
+name   = "Question marks for lost letters"
+value  = "Jan ????????"
+breaks = "What narrow encodings produce instead of characters they cannot represent - indistinguishable from a user typing question marks."
+expect = "Never produced: the full character set supported end to end."
+since  = "1.0"
+
+[[values]]
+id     = "latin1-tail"
+name   = "Accented letter at the end"
+value  = "caf\u00E9"
+breaks = "A common accented word that survives or breaks depending on the encoding of each layer it passes through."
+expect = "Identical before and after a save-and-reload round trip."
+since  = "1.0"
+
+[[values]]
+id     = "cp-specific-letters"
+name   = "Letters from regional encodings"
+value  = "\u017A\u017C\u0107\u0144\u00F3"
+breaks = "Letters present in regional encodings and absent from others; the first thing to break in an export."
+expect = "Preserved in exports, printouts and file names."
+since  = "1.0"
+
+[[values]]
+id     = "mixed-scripts"
+name   = "One Cyrillic letter in a Latin name"
+value  = "Jan \u041Aowalski"
+breaks = "One Cyrillic letter inside a Latin word - the value looks correct and never matches a search."
+expect = "Either normalised or flagged; not silently accepted as if identical."
+since  = "1.0"
+
+[[values]]
+id     = "high-codepoint"
+name   = "Emoji, ideograph and Arabic together"
+value  = "\U0001F600\u4E2D\u0627\u0644"
+breaks = "Emoji, an ideograph and an Arabic letter in one value: three different storage assumptions at once."
+expect = "Stored and returned unchanged."
+since  = "1.0"
+
+[[values]]
+id     = "overlong-space"
+name   = "Ideographic space in a name"
+value  = "Jan\u3000Kowalski"
+breaks = "An ideographic space: a real space character that most trimming routines do not know about."
+expect = "Trimmed like any other whitespace, or preserved consistently."
+since  = "1.0"
+
+[[values]]
+id     = "combining-overflow"
+name   = "Letter with five combining accents"
+value  = "a\u0301\u0301\u0301\u0301\u0301"
+breaks = "Many combining marks on one letter: normalisation and length limits disagree about how many characters this is."
+expect = "Counted consistently, and rendered without covering neighbouring interface."
+since  = "1.0"
+
+[[values]]
+id     = "roundtrip-check"
+name   = "Every risky class in one value"
+value  = "\u017B\u00F3\u0142\u0107 \U0001F600 \u4E2D \u0105"
+breaks = "A single value combining every risky class, for a quick save-and-reload check."
+expect = "Returned byte-for-byte identical after a full round trip."
+since  = "1.0"

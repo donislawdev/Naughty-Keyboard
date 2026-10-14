@@ -37,7 +37,7 @@ body:
     id: pack
     attributes:
       label: Which pack does it fit?
-      description: The nine packs are listed by `nkb packs`.
+      description: The packs are listed by `nkb packs`.
       options:
         - whitespace
         - unicode-text

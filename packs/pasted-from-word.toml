@@ -1,0 +1,110 @@
+format = 1
+
+[pack]
+id          = "pasted-from-word"
+name        = "Pasted from a document"
+description = "Characters that arrive with text copied out of a word processor or a web page."
+version     = "1.0"
+updated     = 2026-10-14
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["typography", "paste", "normalisation"]
+fields      = ["text", "multiline", "name", "address"]
+risk        = "normal"
+
+[[values]]
+id     = "smart-apostrophe"
+name   = "Typographic apostrophe"
+value  = "O\u2019Brien"
+breaks = "The typographic apostrophe arrives with every paste and is a different character from the one on the keyboard; search never matches."
+expect = "Normalised on save, or both forms treated as equivalent by search."
+since  = "1.0"
+
+[[values]]
+id     = "smart-quotes"
+name   = "Curly quotation marks"
+value  = "\u201CJan\u201D"
+breaks = "Curly quotation marks break parsers, command construction and any comparison against the straight form."
+expect = "Accepted and stored; normalised before anything parses the value."
+since  = "1.0"
+
+[[values]]
+id     = "em-dash"
+name   = "Em dash between words"
+value  = "Jan \u2014 Kowalski"
+breaks = "The long dash pasted from a document where a hyphen was expected; range parsing and code matching stop working."
+expect = "Normalised before parsing, or accepted as an equivalent separator."
+since  = "1.0"
+
+[[values]]
+id     = "en-dash-range"
+name   = "Range with an en dash"
+value  = "2020\u20132026"
+breaks = "A range that looks correct and parses as a single unknown token."
+expect = "Same as above."
+since  = "1.0"
+
+[[values]]
+id     = "nbsp-from-word"
+name   = "Non-breaking space from a document"
+value  = "Jan\u00A0Kowalski"
+breaks = "Text editors insert non-breaking spaces automatically; the value looks normal and never matches an exact search."
+expect = "Normalised to an ordinary space, or found by search regardless."
+since  = "1.0"
+
+[[values]]
+id     = "soft-hyphen-pasted"
+name   = "Soft hyphen inside a word"
+value  = "Kowal\u00ADski"
+breaks = "Optional hyphens survive copying and split a word invisibly in storage."
+expect = "Stripped on save, or preserved and revealed in the interface."
+since  = "1.0"
+
+[[values]]
+id     = "ellipsis-char"
+name   = "Ellipsis character"
+value  = "Jan\u2026"
+breaks = "One character that looks like three dots; length limits and comparisons disagree with what the user sees."
+expect = "Counted as one character, or normalised to three dots consistently."
+since  = "1.0"
+
+[[values]]
+id     = "bullet-char"
+name   = "Bullet from a list"
+value  = "\u2022 punkt"
+breaks = "A bullet pasted from a list turns a value into something that renders as a list item elsewhere."
+expect = "Stored as text, without being interpreted as formatting."
+since  = "1.0"
+
+[[values]]
+id     = "nonbreaking-hyphen"
+name   = "Non-breaking hyphen in a code"
+value  = "123\u2011456"
+breaks = "A non-breaking hyphen inside a code; visually identical to the ordinary one, different everywhere else."
+expect = "Normalised before validation of the code."
+since  = "1.0"
+
+[[values]]
+id     = "zero-width-from-web"
+name   = "Zero-width space from a web page"
+value  = "Jan\u200BKowalski"
+breaks = "Web pages insert zero-width characters for layout; they arrive with the copied text and stay forever."
+expect = "Stripped on save, or revealed in the interface."
+since  = "1.0"
+
+[[values]]
+id     = "multiple-typographic"
+name   = "Everything a document pastes"
+value  = "\u201CJan\u201D \u2014 O\u2019Brien\u2026"
+breaks = "Everything at once, as it actually arrives from a document."
+expect = "Round-trips unchanged, and is found by a search typed on a keyboard."
+since  = "1.0"
+
+[[values]]
+id     = "trailing-nbsp"
+name   = "Trailing non-breaking space"
+value  = "Kowalski\u00A0"
+breaks = "A non-breaking space at the end: invisible, not removed by ordinary trimming, and enough to break a comparison."
+expect = "Trimmed together with ordinary whitespace."
+since  = "1.0"

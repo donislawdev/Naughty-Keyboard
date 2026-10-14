@@ -1,0 +1,158 @@
+# Polish translations of the pack emoji-complex, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "d31a9675dbf2"
+text = "Złożone emoji"
+
+[pack.description]
+source = "fa80bed7ee04"
+text = "Znaki spoza podstawowej płaszczyzny i złożone sekwencje, które psują liczenie i obcinanie."
+
+[emoji-family-zwj.name]
+source = "f37064a2a215"
+text = "Emoji rodziny złożone łącznikami"
+
+[emoji-family-zwj.breaks]
+source = "af7b6e0e4ca3"
+text = "Dla użytkownika jeden obrazek, dla programu trzy znaki i dwa niewidoczne łączniki. Obcinanie tnie go na niezwiązane ze sobą obrazki."
+
+[emoji-family-zwj.expect]
+source = "f57f070a150c"
+text = "Liczony i obcinany jako jedna całość albo odrzucony - nigdy nie rozcinany między łącznikami."
+
+[emoji-skin-tone.name]
+source = "3faea761e3ee"
+text = "Emoji z odcieniem skóry"
+
+[emoji-skin-tone.breaks]
+source = "f568fee7d03f"
+text = "Znak bazowy i modyfikator: cięcie między nimi zmienia znaczenie wartości."
+
+[emoji-skin-tone.expect]
+source = "d13d2df2817c"
+text = "Każde obcinanie zostawia je razem."
+
+[emoji-keycap.name]
+source = "d377a4c731b5"
+text = "Jedynka na klawiszu"
+
+[emoji-keycap.breaks]
+source = "abd8179b5f38"
+text = "Cyfra, selektor wariantu i znak łączący, które razem rysują się jako jeden klawisz. Sama cyfra to liczba."
+
+[emoji-keycap.expect]
+source = "2996a8badc73"
+text = "Zachowany jako całość, a nie odczytywany jako liczba jeden."
+
+[emoji-variation.name]
+source = "5c32b82e6ceb"
+text = "Serce z selektorem wariantu"
+
+[emoji-variation.breaks]
+source = "342a87a38187"
+text = "Selektor wariantu decyduje, czy znak rysuje się jako obrazek, czy jako tekst. Usunięcie go po cichu zmienia wygląd."
+
+[emoji-variation.expect]
+source = "922087002d5e"
+text = "Zachowany przy zapisie, żeby wartość wyglądała tak samo po zapisie i odczycie."
+
+[flag-country.name]
+source = "5f94654e7c19"
+text = "Flaga kraju"
+
+[flag-country.breaks]
+source = "a6aa8bc79216"
+text = "Flaga to dwa znaki wskaźników regionalnych. Pole ograniczone do dwóch znaków ją przyjmie, a ograniczone do jednego ją rozetnie."
+
+[flag-country.expect]
+source = "ea5c7e0f0811"
+text = "Liczona jako jedna całość przy limitach długości."
+
+[emoji-in-middle.name]
+source = "63249fe132dc"
+text = "Emoji w środku imienia i nazwiska"
+
+[emoji-in-middle.breaks]
+source = "503340b52339"
+text = "Znak spoza podstawowej płaszczyzny w imieniu i nazwisku psuje bazy skonfigurowane na wąskie kodowania, często z surowym komunikatem błędu."
+
+[emoji-in-middle.expect]
+source = "ece6e53cebf3"
+text = "Zapisany bez zmian albo odrzucony z czytelnym komunikatem."
+
+[astral-cjk.name]
+source = "5d728c1263fd"
+text = "Ideogram spoza podstawowej płaszczyzny"
+
+[astral-cjk.breaks]
+source = "2e94b9b2c25d"
+text = "Rzadki ideogram spoza podstawowej płaszczyzny: ten sam problem z zapisem, choć nie wygląda jak emoji."
+
+[astral-cjk.expect]
+source = "606697843f78"
+text = "Obsłużony dokładnie tak jak każdy inny znak."
+
+[emoji-50.name]
+source = "40bddbcbcce6"
+text = "Pięćdziesiąt emoji"
+
+[emoji-50.breaks]
+source = "28c82cc8979b"
+text = "Dla użytkownika pięćdziesiąt znaków, dla bazy dwieście bajtów. Rozjazd między limitami wychodzi tu najwcześniej."
+
+[emoji-50.expect]
+source = "36d8ecd35bf9"
+text = "Limity podane w tej samej jednostce po obu stronach."
+
+[emoji-only.name]
+source = "da9984fbad61"
+text = "Pojedyncze emoji"
+
+[emoji-only.breaks]
+source = "9e8c575385ea"
+text = "Nazwa albo tytuł złożone wyłącznie z obrazka. Sortowanie, inicjały i wyszukiwanie muszą coś z tym zrobić."
+
+[emoji-only.expect]
+source = "c6b92c5f06de"
+text = "Przyjęte i wyświetlone, a sortowanie i inicjały zachowują się przewidywalnie."
+
+[zwj-orphan.name]
+source = "55e3e436ec17"
+text = "Łącznik bez niczego do łączenia"
+
+[zwj-orphan.breaks]
+source = "e64b654487c8"
+text = "Łącznik, który nie ma czego łączyć: niewidoczny, bez znaczenia i wystarczający, żeby dwa identyczne nazwiska były różne."
+
+[zwj-orphan.expect]
+source = "1a0765c34d2a"
+text = "Usuwany przy zapisie albo zachowany i pokazany w interfejsie."
+
+[emoji-in-filename.name]
+source = "e668bfb5f878"
+text = "Emoji w nazwie pliku"
+
+[emoji-in-filename.breaks]
+source = "b9d763f71968"
+text = "Archiwa, przesyłanie plików i starsze systemy plików obsługują takie nazwy niekonsekwentnie."
+
+[emoji-in-filename.expect]
+source = "df5beada1fa5"
+text = "Zapisany i pobierany z nienaruszoną nazwą albo odrzucony, zanim plik powstanie."
+
+[emoji-1000.name]
+source = "fba719478a77"
+text = "Tysiąc emoji"
+
+[emoji-1000.breaks]
+source = "8cc9814edd75"
+text = "Tysiąc obrazków: rysowanie, przewijanie i każdy licznik długości naraz."
+
+[emoji-1000.expect]
+source = "4f9b2843106a"
+text = "Przyjęte i przycięte w układzie albo odrzucone z podanym limitem."

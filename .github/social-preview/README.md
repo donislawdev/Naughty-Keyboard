@@ -32,6 +32,22 @@ is the values, and the product ships it in `crates/nkb-gui/ui/fonts`. Without
 either one the browser substitutes another and the layout moves, so look at the
 result before committing it.
 
+Two more things move the picture, both found when it was rendered again on
+Windows on 2026-10-14:
+
+- Inter 4 as the variable font switches to its display cut at large sizes, and
+  the headline comes out about 30 pixels narrower. Use the static Inter, or turn
+  optical sizing off (`font-optical-sizing: none`).
+- Chromium on Windows draws text with the coloured edges of subpixel smoothing,
+  which do not belong in a picture shown on every kind of screen. Start the
+  browser with `--disable-lcd-text`. The `playwright screenshot` command does not
+  pass browser flags, so a short script with the `playwright` package does it,
+  with `chromium.launch({ args: ['--disable-lcd-text'] })`.
+
+Neither typeface has to be installed for this: a temporary copy of the drawing,
+next to it, with a `<style>` block of `@font-face` rules pointing at the two font
+files renders the same picture. Delete the copy afterwards.
+
 The icon is read from `crates/nkb-gui/assets/edamame.svg` and not copied, so a
 new icon shows up here the next time the picture is rendered.
 
@@ -62,7 +78,7 @@ checked again when its source changes.
 | what each of them does | the `breaks` field of that value |
 | the open box after `Kowalski` | the marker the palette prints for an invisible character, from `crates/nkb-core/src/preview.rs` |
 | Alt, Shift, N, "types the next value" | the default shortcut for the next value |
-| 9 packs, 102 values, and the nine chips | `nkb packs`, which lists the nine packs in that order and ends with "9 of 9 packs loaded, 102 values". Counted on 2026-10-07 |
+| 18 packs, 207 values, and the nine chips | `nkb packs`, which ends with "18 of 18 packs loaded, 207 values". The chips are the first nine packs it lists, in that order. Counted on 2026-10-14 |
 | Types on Windows | typing into another window exists only there, and `send_text` in `nkb-sys` answers `Unsupported` elsewhere |
 | CLI and clipboard on macOS and Linux | the commands other than `send` do not touch the system, and were run on Linux on 2026-10-07 (`packs`, `emit`). Where there is no direct route the palette starts in clipboard mode, which is read from `crates/nkb-gui/src/live.rs` and was not run on macOS or Linux |
 | works offline | nothing in the workspace opens a network connection |

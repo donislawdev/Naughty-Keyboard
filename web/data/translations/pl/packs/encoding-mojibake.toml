@@ -1,0 +1,146 @@
+# Polish translations of the pack encoding-mojibake, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "8228a0d54237"
+text = "Kodowanie i krzaki"
+
+[pack.description]
+source = "708c79bc1259"
+text = "Tekst, który przeszedł przez złe kodowanie i już z niego nie wrócił."
+
+[double-encoded.name]
+source = "65d11080405d"
+text = "Tekst zakodowany dwa razy"
+
+[double-encoded.breaks]
+source = "88ef930ce65f"
+text = "Tekst zakodowany dwa razy wyświetla się jako bełkot, a zapisanego w tym stanie nie da się już przywrócić do oryginału."
+
+[double-encoded.expect]
+source = "62b9c4b0f3d7"
+text = "Nigdy niewytwarzany, a jeśli przyjdzie z zewnątrz, zapisany dosłownie, a nie „naprawiany” zgadywaniem."
+
+[bom-leading.name]
+source = "79e79a64f939"
+text = "Znacznik kolejności bajtów przed imieniem"
+
+[bom-leading.breaks]
+source = "98c38d89e887"
+text = "Znacznik kolejności bajtów na początku wartości psuje dokładne porównanie i ustawia rekord przed wszystkimi innymi."
+
+[bom-leading.expect]
+source = "ced8f45e3317"
+text = "Usuwany przy wprowadzaniu, konsekwentnie w każdej warstwie, która czyta pliki."
+
+[replacement-char.name]
+source = "81102be12afa"
+text = "Znak zastępczy w imieniu i nazwisku"
+
+[replacement-char.breaks]
+source = "6ef99e60bbe7"
+text = "Znak, który pojawia się tam, gdzie dekodowanie już zawiodło. Jego obecność znaczy, że dane zginęły wcześniej."
+
+[replacement-char.expect]
+source = "69d7d86a2410"
+text = "Wykryty i zgłoszony, a nie zapisany jak zwykły tekst."
+
+[question-mark-fallback.name]
+source = "1176c0e6a332"
+text = "Znaki zapytania zamiast utraconych liter"
+
+[question-mark-fallback.breaks]
+source = "735d2dac89ce"
+text = "To, co wąskie kodowania wstawiają zamiast znaków, których nie umieją zapisać. Nie do odróżnienia od znaków zapytania wpisanych przez użytkownika."
+
+[question-mark-fallback.expect]
+source = "349730cda109"
+text = "Nigdy niewytwarzane: pełny zestaw znaków obsługiwany od początku do końca."
+
+[latin1-tail.name]
+source = "b9212e9117bd"
+text = "Litera z akcentem na końcu"
+
+[latin1-tail.breaks]
+source = "5c89ed06c1c3"
+text = "Popularne słowo z akcentem, które przetrwa albo się zepsuje, zależnie od kodowania każdej warstwy, przez którą przechodzi."
+
+[latin1-tail.expect]
+source = "cd6e1461a1d6"
+text = "Identyczne przed zapisem i po ponownym wczytaniu."
+
+[cp-specific-letters.name]
+source = "b091f07d9fb1"
+text = "Litery z regionalnych kodowań"
+
+[cp-specific-letters.breaks]
+source = "5c831af74a9f"
+text = "Litery obecne w regionalnych kodowaniach i nieobecne w innych. Pierwsze, co psuje się w eksporcie."
+
+[cp-specific-letters.expect]
+source = "a8c8a8d4df45"
+text = "Zachowane w eksportach, wydrukach i nazwach plików."
+
+[mixed-scripts.name]
+source = "addfc913bd2f"
+text = "Jedna cyrylicka litera w łacińskim nazwisku"
+
+[mixed-scripts.breaks]
+source = "e508e7a45a7e"
+text = "Jedna cyrylicka litera w łacińskim słowie. Wartość wygląda poprawnie i nigdy nie pasuje do wyszukiwania."
+
+[mixed-scripts.expect]
+source = "2ee1ef8e2b50"
+text = "Albo normalizowana, albo oznaczona, a nie po cichu przyjęta jako identyczna."
+
+[high-codepoint.name]
+source = "99c29e221e9f"
+text = "Emoji, ideogram i arabski naraz"
+
+[high-codepoint.breaks]
+source = "8ac6b5fe7a76"
+text = "Emoji, ideogram i arabska litera w jednej wartości: trzy różne założenia o zapisie naraz."
+
+[high-codepoint.expect]
+source = "a8e9096fc16b"
+text = "Zapisane i zwrócone bez zmian."
+
+[overlong-space.name]
+source = "ac2c82478f31"
+text = "Spacja ideograficzna w imieniu i nazwisku"
+
+[overlong-space.breaks]
+source = "a2527624fdc2"
+text = "Spacja ideograficzna: prawdziwy znak odstępu, o którym większość funkcji przycinających nie wie."
+
+[overlong-space.expect]
+source = "6def6d4d0ef2"
+text = "Przycinana jak każdy inny biały znak albo konsekwentnie zachowywana."
+
+[combining-overflow.name]
+source = "c1e260d9a51f"
+text = "Litera z pięcioma akcentami łączącymi"
+
+[combining-overflow.breaks]
+source = "c90c49efb101"
+text = "Wiele znaków łączących na jednej literze: normalizacja i limity długości nie zgadzają się, ile to jest znaków."
+
+[combining-overflow.expect]
+source = "20ef864690e9"
+text = "Liczona konsekwentnie i rysowana bez zasłaniania sąsiednich elementów interfejsu."
+
+[roundtrip-check.name]
+source = "9a942394b664"
+text = "Każda ryzykowna klasa w jednej wartości"
+
+[roundtrip-check.breaks]
+source = "d63b57071cb6"
+text = "Jedna wartość łącząca każdą ryzykowną klasę znaków, do szybkiej próby zapisu i ponownego wczytania."
+
+[roundtrip-check.expect]
+source = "78ef72763788"
+text = "Zwrócona bajt w bajt identyczna po pełnym obiegu."

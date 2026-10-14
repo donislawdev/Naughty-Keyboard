@@ -1,0 +1,110 @@
+format = 1
+
+[pack]
+id          = "time-zones"
+name        = "Time and time zones"
+description = "Hours that do not exist, happen twice, or are written without a zone."
+version     = "1.0"
+updated     = 2026-10-14
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["time", "dst", "parsing"]
+fields      = ["datetime", "time", "text"]
+risk        = "normal"
+
+[[values]]
+id     = "dst-nonexistent"
+name   = "Hour skipped by the spring clock change"
+value  = "2027-03-28 02:30"
+breaks = "On the day clocks go forward in central Europe this hour does not exist locally; parsers either shift it silently or fail with a raw error."
+expect = "Rejected with an explanation, or shifted with the shift shown to the user."
+since  = "1.0"
+
+[[values]]
+id     = "dst-ambiguous"
+name   = "Hour repeated by the autumn clock change"
+value  = "2027-10-31 02:30"
+breaks = "On the day clocks go back in central Europe this hour happens twice; without a zone the value cannot be resolved to a moment."
+expect = "The zone requested, or one interpretation chosen and stated."
+since  = "1.0"
+
+[[values]]
+id     = "no-offset"
+name   = "Timestamp without a zone"
+value  = "2026-09-06T14:32:07"
+breaks = "A timestamp without a zone is meaningless the moment it crosses a machine boundary, and it always does."
+expect = "Rejected, or interpreted with the assumed zone stated next to the value."
+since  = "1.0"
+
+[[values]]
+id     = "with-offset"
+name   = "Timestamp with an offset"
+value  = "2026-09-06T14:32:07+02:00"
+breaks = "The correct form; a field rejecting it accepts only the ambiguous one."
+expect = "Accepted and preserved, including the offset."
+since  = "1.0"
+
+[[values]]
+id     = "utc-z"
+name   = "Timestamp in UTC"
+value  = "2026-09-06T12:32:07Z"
+breaks = "The same moment written in the universal form; storing it as local time loses two hours somewhere."
+expect = "Accepted and converted for display, not stored as if it were local."
+since  = "1.0"
+
+[[values]]
+id     = "local-format"
+name   = "Date and time as people type them"
+value  = "06.09.2026 14:32"
+breaks = "The format people actually type; a field accepting only the international one rejects every human."
+expect = "Accepted with the expected format shown, or both accepted."
+since  = "1.0"
+
+[[values]]
+id     = "midnight-24"
+name   = "Midnight written as 24:00"
+value  = "24:00"
+breaks = "Midnight at the end of the day: valid in the international notation and rejected by most parsers."
+expect = "Accepted and normalised to the next day's zero hour, or rejected with a message."
+since  = "1.0"
+
+[[values]]
+id     = "leap-second"
+name   = "Leap second"
+value  = "2026-06-30T23:59:60Z"
+breaks = "The sixty-first second exists in the standard and in no common date type."
+expect = "Rejected with a message, or clamped visibly - not accepted and silently shifted."
+since  = "1.0"
+
+[[values]]
+id     = "epoch-zero-time"
+name   = "Start of the Unix epoch"
+value  = "1970-01-01T00:00:00Z"
+breaks = "The zero point of the most common timestamp; indistinguishable from \"no time set\" in many interfaces."
+expect = "Displayed as a real moment, distinct from an empty field."
+since  = "1.0"
+
+[[values]]
+id     = "far-future"
+name   = "Last second of 2099"
+value  = "2099-12-31T23:59:59Z"
+breaks = "Far dates break retention rules, schedulers and columns with a narrower range than the interface."
+expect = "Accepted up to a stated range, enforced on both sides."
+since  = "1.0"
+
+[[values]]
+id     = "negative-offset"
+name   = "Timestamp eleven hours behind UTC"
+value  = "2026-09-06T14:32:07-11:00"
+breaks = "An offset far from the server's own; sorting by local time produces a different order than sorting by moment."
+expect = "Sorted and compared by moment, not by the text of the timestamp."
+since  = "1.0"
+
+[[values]]
+id     = "time-only"
+name   = "Time without a date"
+value  = "14:32"
+breaks = "A time without a date; storing it against today's date changes its meaning tomorrow."
+expect = "Stored as a time of day, or the date requested explicitly."
+since  = "1.0"
