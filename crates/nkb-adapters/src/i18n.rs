@@ -86,8 +86,8 @@ mod windows;
 
 use palette::pattern_palette_label;
 pub use palette::{
-    PaletteLabel, counter, counts, label, next_end_of_pack, next_value, no_value_yet, sent_to,
-    typing_counter, warnings,
+    PaletteLabel, back_to, counter, counts, label, next_end_of_pack, next_value, no_value_yet,
+    previous_types, sent_to, skip_to, typing_counter, warnings,
 };
 pub use registration::{ended, registration, registrations, shortcuts_unavailable};
 pub use windows::{
@@ -158,8 +158,8 @@ pub fn action_name(action: HotkeyAction) -> &'static str {
     match action {
         // A verb, because the press TYPES the value the next band shows: until
         // `D120` the name said "Next value" and the owner read it as moving on.
-        HotkeyAction::NextValue => "Type next value",
-        HotkeyAction::PreviousValue => "Type previous value",
+        HotkeyAction::NextValue => "Type the value shown",
+        HotkeyAction::PreviousValue => "Go back one value and type it",
         HotkeyAction::RepeatLast => "Repeat last value",
         HotkeyAction::RestartPack => "Restart pack",
         HotkeyAction::CopyReport => "Copy report block",
@@ -267,6 +267,7 @@ fn pattern_message(message: &Message) -> &'static str {
         }
         Message::EndOfPack { .. } => "End of pack ({total}/{total}). Press again to start over.",
         Message::AtFirstValue { .. } => "Already at the first value (1/{total}).",
+        Message::NothingBefore => "Nothing to go back to: value 1 is the first of this pack.",
         Message::CounterKept { .. } => {
             "New field - the counter is still at {done}/{total}. Press {shortcut} to start this pack from the beginning."
         }
@@ -337,6 +338,7 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
         | Message::NoTarget
         | Message::ClearingFailed
         | Message::NotPaced
+        | Message::NothingBefore
         | Message::NothingToReport => pattern.to_owned(),
         Message::NoDirectRoute { system } => fill(pattern, &[("system", system)]),
         Message::ClipboardFailed { detail } => fill(pattern, &[("detail", detail)]),
@@ -1153,6 +1155,7 @@ mod tests {
             Message::NotPaced,
             Message::EndOfPack { total: 34 },
             Message::AtFirstValue { total: 34 },
+            Message::NothingBefore,
             Message::CounterKept { done: 7, total: 34 },
             Message::NoPack,
             Message::ModifierHeld {
@@ -1479,10 +1482,11 @@ mod tests {
             Message::ClipboardModeOff => 30,
             Message::AtFirstValue { .. } => 31,
             Message::ClearingSkippedClosedToAccessibility => 32,
+            Message::NothingBefore => 33,
         }
     }
 
-    const SLOTS: usize = 33;
+    const SLOTS: usize = 34;
 
     #[test]
     fn every_message_variant_is_listed_here() {
@@ -2077,6 +2081,9 @@ mod tests {
             PaletteLabel::Skip,
             PaletteLabel::SkipAction,
             PaletteLabel::NoOtherPack,
+            PaletteLabel::PreviousTypes,
+            PaletteLabel::DonateLink,
+            PaletteLabel::DonateFailed,
         ] {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
@@ -2092,6 +2099,9 @@ mod tests {
                 | PaletteLabel::TypingCounter
                 | PaletteLabel::NextValue
                 | PaletteLabel::NextEndOfPack
+                | PaletteLabel::PreviousTypes
+                | PaletteLabel::Back
+                | PaletteLabel::Skip
                 | PaletteLabel::SentTo
                 | PaletteLabel::SentToUnnamed => true,
                 PaletteLabel::Title
@@ -2104,6 +2114,8 @@ mod tests {
                 | PaletteLabel::ShortcutsPaused
                 | PaletteLabel::ShortcutsLink
                 | PaletteLabel::AboutLink
+                | PaletteLabel::DonateLink
+                | PaletteLabel::DonateFailed
                 | PaletteLabel::ShortcutList
                 | PaletteLabel::ShortcutListAction
                 | PaletteLabel::Typing
@@ -2132,9 +2144,7 @@ mod tests {
                 | PaletteLabel::ControlUnconfirmed
                 | PaletteLabel::ControlNotTextField
                 | PaletteLabel::ControlClosedToAccessibility
-                | PaletteLabel::Back
                 | PaletteLabel::BackAction
-                | PaletteLabel::Skip
                 | PaletteLabel::SkipAction
                 | PaletteLabel::NoOtherPack => false,
             };
@@ -2169,6 +2179,11 @@ mod tests {
             recipe(1, "a"),
             recipe(100_000, "\u{2423}"),
             no_value_yet(nkb_core::hotkeys::DEFAULT_BINDINGS[0].1),
+            next_value(4, 12, nkb_core::hotkeys::DEFAULT_BINDINGS[0].1),
+            next_end_of_pack(12, nkb_core::hotkeys::DEFAULT_BINDINGS[0].1),
+            previous_types(2, nkb_core::hotkeys::DEFAULT_BINDINGS[1].1),
+            back_to(3),
+            skip_to(5),
         ] {
             assert!(!text.is_empty(), "a label produced nothing");
             assert!(!text.contains('{'), "a label left a placeholder: {text}");
@@ -2295,7 +2310,7 @@ mod tests {
             ),
             (
                 Refusal::SameAs(HotkeyAction::PreviousValue),
-                "\"Type previous value\"",
+                "\"Go back one value and type it\"",
             ),
             (
                 Refusal::TypesCharacter('\u{105}'),
@@ -2321,7 +2336,7 @@ mod tests {
             .expect("said");
             assert!(!out.contains('{'), "{out}");
             assert!(
-                out.contains("\"Type next value\" the shortcut Shift+M"),
+                out.contains("\"Type the value shown\" the shortcut Shift+M"),
                 "{out}"
             );
             assert!(out.contains(named), "{out}");

@@ -130,8 +130,8 @@ use recent::{after_press, carry_out_noting, keep_recent};
 pub(crate) use view::preview_line;
 use view::*;
 pub use view::{
-    View, clearing_command, label_arrows, label_switches, route_command, set_compact,
-    set_last_sent_open, show_clearing, starts_clearing, wire_folds,
+    Legend, View, clearing_command, label_arrows, label_switches, legend, route_command,
+    set_compact, set_last_sent_open, show_clearing, show_legend, starts_clearing, wire_folds,
 };
 
 /// How long one wait for a press lasts before the stop flag is read again.
@@ -300,52 +300,6 @@ const PALETTE_OWN: [HotkeyAction; 4] = [
 #[must_use]
 pub fn wired(action: HotkeyAction) -> bool {
     AdvanceSequence::handles(action) || PALETTE_OWN.contains(&action)
-}
-
-/// The words on the palette that name a shortcut: the hint bar, and the value
-/// band before anything is sent. Built from the table in effect rather than
-/// written out, so a shortcut the tester changed is the one they show - at
-/// start, and again whenever the table changes (K5.3).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Legend {
-    /// The key and the action of each hinted shortcut, in the table's order.
-    hints: Vec<(String, String)>,
-    no_value: String,
-}
-
-/// The words naming the shortcuts of `bindings`. One function for the start
-/// and for every change, so the two cannot word it differently.
-#[must_use]
-pub fn legend(bindings: &Bindings) -> Legend {
-    Legend {
-        // In the order a person reads them, not the table's (`D120`).
-        hints: HotkeyAction::READING_ORDER
-            .iter()
-            .filter(|action| wired(**action))
-            .map(|action| {
-                (
-                    i18n::chord(bindings.chord(*action)),
-                    i18n::action_name(*action).to_owned(),
-                )
-            })
-            .collect(),
-        no_value: i18n::no_value_yet(bindings.chord(HotkeyAction::NextValue)),
-    }
-}
-
-/// Puts the words naming the shortcuts on the palette. On the MAIN thread.
-pub fn show_legend(palette: &Palette, legend: Legend) {
-    palette.set_hints(ModelRc::new(VecModel::from(
-        legend
-            .hints
-            .into_iter()
-            .map(|(key, action)| HintRow {
-                key: key.into(),
-                action: action.into(),
-            })
-            .collect::<Vec<_>>(),
-    )));
-    palette.set_no_value(legend.no_value.into());
 }
 
 /// The pack in use and the value its next press sends, by identifier,
@@ -1342,9 +1296,11 @@ mod tests {
             "direct delivery is not clipboard mode"
         );
         // The next value (UX-GUI-001) - its own lines, not the value band's.
+        // The heading names the shortcut that types it, whose words
+        // `live::view::tests` hold (the owner's point 4).
         assert!(palette.get_has_next());
         assert!(palette.get_next_has_value());
-        assert_eq!(palette.get_next_heading(), "Next: value 8 of 34");
+        assert!(palette.get_next_heading().contains("value 8 of 34"));
         assert_eq!(palette.get_next_name(), "Trailing no-break space");
         assert_eq!(palette.get_next_preview(), "Kowalski\u{2423}");
         assert_eq!(
@@ -1388,7 +1344,7 @@ mod tests {
             !palette.get_next_has_value(),
             "no value goes out at the end"
         );
-        assert_eq!(palette.get_next_heading(), "Next: end of pack (34/34)");
+        assert!(palette.get_next_heading().contains("pack (34/34)"));
 
         // ---- nothing upcoming: the band goes ------------------------------
         let mut nothing = an_outcome(None, Vec::new());
@@ -2680,7 +2636,8 @@ mod tests {
         let store = a_store(false);
         let registrar = Registrar::default();
         with_worker(&store, &registrar, false, |worker, _| {
-            let heading = |view: &super::View| view.next.as_ref().map(|next| next.heading.clone());
+            let heading =
+                |view: &super::View| view.next.as_ref().map(|next| (next.index, next.total));
 
             let same = worker
                 .carry_out(Command::ChooseValue {
@@ -2689,7 +2646,7 @@ mod tests {
                 })
                 .view
                 .expect("the palette shows the new next value");
-            assert_eq!(heading(&same).as_deref(), Some("Next: value 2 of 12"));
+            assert_eq!(heading(&same), Some((Some(2), 12)));
             assert!(same.messages.is_empty(), "{:?}", same.messages);
             assert!(matches!(same.value, super::ValueBand::Keep));
             assert!(
@@ -2706,7 +2663,7 @@ mod tests {
                 .expect("the palette shows the other pack");
             assert_eq!(worker.sequence.pack_id(), Some("locale-pl"));
             assert!(
-                heading(&other).is_some_and(|line| line.starts_with("Next: value 2 of ")),
+                heading(&other).is_some_and(|(index, _)| index == Some(2)),
                 "{:?}",
                 heading(&other)
             );

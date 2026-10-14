@@ -94,9 +94,17 @@ pub enum PaletteLabel {
     /// The link under the hint bar that opens the shortcuts window - its words,
     /// and what a click does (`ux-spec.md` 5.4).
     ShortcutsLink,
-    /// The link beside it that opens the About window - its words, and what a
-    /// click does (the owner's point 4 of 2026-10-10).
+    /// The link in the header that opens the About window - its words, and
+    /// what a click does (the owner's point 4 of 2026-10-10, moved to the top
+    /// by point 2 of 2026-10-14).
     AboutLink,
+    /// The link beside it that opens the support page in the browser (the
+    /// owner's point 5, 2026-10-14) - its words, after the drawn heart, and
+    /// what a click does.
+    DonateLink,
+    /// Said when the system would not open the browser, naming the page so
+    /// the tester can type it.
+    DonateFailed,
     /// The heading of the list of shortcuts at the foot of the palette, which
     /// folds the list away and opens it again (`D123`, the owner's choice on
     /// a palette that had grown to ~916 px).
@@ -114,11 +122,17 @@ pub enum PaletteLabel {
     /// only key that works for the length of a send and no longer.
     StopTyping,
     /// The heading of the band that shows the value the next press sends,
-    /// before it goes (`UX-GUI-001`) - which one, of how many.
+    /// before it goes (`UX-GUI-001`) - which shortcut types it, which value,
+    /// of how many. The shortcut stands in it since the owner's point 4
+    /// (2026-10-14): "next" alone read as "the one after this".
     NextValue,
     /// The same heading when the next press only says the pack is finished.
     /// The numbers repeat the ones the end-of-pack message quotes.
     NextEndOfPack,
+    /// Under the next value: which value the shortcut that steps back types,
+    /// and by which shortcut (the owner's point 6, 2026-10-14) - it types the
+    /// one before the last value typed, which is not the one above it.
+    PreviousTypes,
     /// The heading of the value band, which shows the value that went out last.
     /// Named, because the band above it shows another value - the next one.
     LastSent,
@@ -143,12 +157,13 @@ pub enum PaletteLabel {
     /// What the Copy button beside the report block does, for UI Automation.
     CopyReport,
     /// The button beside the next value that steps it back without typing
-    /// (`D120`) - its word, after the drawn arrow.
+    /// (`D120`) - the number of the value it steps to, after the drawn arrow
+    /// (the owner's point 1, 2026-10-14: "Back" did not say back to what).
     Back,
     /// What it does, for UI Automation.
     BackAction,
-    /// The button that steps the next value forward without typing - its word,
-    /// before the drawn arrow.
+    /// The button that steps the next value forward without typing - the
+    /// number of the value it steps to, before the drawn arrow.
     Skip,
     /// What it does, for UI Automation.
     SkipAction,
@@ -228,13 +243,18 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::ShortcutsPaused => "Shortcuts are paused while the Shortcuts window is open.",
         PaletteLabel::ShortcutsLink => "Change shortcuts",
         PaletteLabel::AboutLink => "About",
+        PaletteLabel::DonateLink => "Donate",
+        PaletteLabel::DonateFailed => {
+            "The browser did not open. The page is donislawdev.com/support/."
+        }
         PaletteLabel::ShortcutList => "Shortcuts",
         PaletteLabel::ShortcutListAction => "Show or hide the list of shortcuts",
         PaletteLabel::Typing => "Typing",
         PaletteLabel::TypingCounter => "{arrived} / {total} units",
         PaletteLabel::StopTyping => "Press Esc to stop.",
-        PaletteLabel::NextValue => "Next: value {index} of {total}",
-        PaletteLabel::NextEndOfPack => "Next: end of pack ({total}/{total})",
+        PaletteLabel::NextValue => "{shortcut} types: value {index} of {total}",
+        PaletteLabel::NextEndOfPack => "{shortcut}: end of pack ({total}/{total})",
+        PaletteLabel::PreviousTypes => "{shortcut} goes back and types value {index}",
         PaletteLabel::LastSent => "Last sent",
         PaletteLabel::Copy => "Copy",
         PaletteLabel::CopyNext => "Copy the next value",
@@ -243,9 +263,9 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::ReportBlock => "Report block",
         PaletteLabel::ReportBlockAction => "Show or hide the report block",
         PaletteLabel::CopyReport => "Copy the report block",
-        PaletteLabel::Back => "Back",
+        PaletteLabel::Back => "{index}",
         PaletteLabel::BackAction => "Back one value, without typing it",
-        PaletteLabel::Skip => "Skip",
+        PaletteLabel::Skip => "{index}",
         PaletteLabel::SkipAction => "Skip this value, without typing it",
         PaletteLabel::NoOtherPack => "There is no other pack to switch to.",
         PaletteLabel::SendBy => "Send by",
@@ -313,21 +333,60 @@ pub fn sent_to(target: &Target) -> String {
     }
 }
 
-/// The heading over the value the next press sends: `Next: value 4 of 12`.
+/// The heading over the value the next press sends:
+/// `Alt+Shift+N types: value 4 of 12`. Takes the chord the palette registered,
+/// for the reason [`no_value_yet`] gives.
 #[must_use]
-pub fn next_value(index: usize, total: usize) -> String {
+pub fn next_value(index: usize, total: usize, next_value: HotkeyChord) -> String {
     fill(
         pattern_palette_label(PaletteLabel::NextValue),
-        &[("index", &index.to_string()), ("total", &total.to_string())],
+        &[
+            ("shortcut", &chord(next_value)),
+            ("index", &index.to_string()),
+            ("total", &total.to_string()),
+        ],
     )
 }
 
 /// The same heading when the next press only says the pack is finished.
 #[must_use]
-pub fn next_end_of_pack(total: usize) -> String {
+pub fn next_end_of_pack(total: usize, next_value: HotkeyChord) -> String {
     fill(
         pattern_palette_label(PaletteLabel::NextEndOfPack),
-        &[("total", &total.to_string())],
+        &[
+            ("shortcut", &chord(next_value)),
+            ("total", &total.to_string()),
+        ],
+    )
+}
+
+/// Under the next value: `Alt+Shift+P goes back and types value 2`.
+#[must_use]
+pub fn previous_types(index: usize, previous_value: HotkeyChord) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::PreviousTypes),
+        &[
+            ("shortcut", &chord(previous_value)),
+            ("index", &index.to_string()),
+        ],
+    )
+}
+
+/// The number on the arrow that steps the next value back: `3`.
+#[must_use]
+pub fn back_to(index: usize) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::Back),
+        &[("index", &index.to_string())],
+    )
+}
+
+/// The number on the arrow that steps the next value forward: `5`.
+#[must_use]
+pub fn skip_to(index: usize) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::Skip),
+        &[("index", &index.to_string())],
     )
 }
 

@@ -321,6 +321,9 @@ pub enum Message {
     AtFirstValue { total: usize },
     /// The target moved but the counter did not, quoting both numbers.
     CounterKept { done: usize, total: usize },
+    /// A step back that types found nothing behind: nothing typed yet, or
+    /// only the first value (the owner's point 6, 2026-10-14).
+    NothingBefore,
     /// No pack has been chosen yet.
     NoPack,
     /// Nothing holds the keyboard focus, so nothing was sent.
@@ -1117,6 +1120,7 @@ fn announce(effect: &Effect) -> Option<Message> {
             done: *done,
             total: *total,
         }),
+        Effect::AnnounceNothingBefore => Some(Message::NothingBefore),
         Effect::AnnounceNoPack => Some(Message::NoPack),
         Effect::AnnounceNoTarget => Some(Message::NoTarget),
         // These arise only while sending, and the send path builds a richer
@@ -2120,14 +2124,13 @@ mod tests {
         assert!(sent.offensive, "an offensive pack marks its values");
     }
 
+    /// Nothing behind: the press types nothing and says so - not the sentence
+    /// about a new field, which it said until the owner's point 6 (`D127`).
     #[test]
-    fn previous_at_the_start_keeps_the_counter_and_says_so() {
+    fn previous_at_the_start_types_nothing_and_says_there_is_nothing_behind() {
         let mut advance = chosen(Risk::Normal);
         let outcome = advance.on_action(HotkeyAction::PreviousValue, &Kit::ready().ports());
-        assert_eq!(
-            outcome.messages,
-            vec![Message::CounterKept { done: 0, total: 3 }]
-        );
+        assert_eq!(outcome.messages, vec![Message::NothingBefore]);
         assert!(outcome.sent.is_none());
     }
 

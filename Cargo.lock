@@ -2793,6 +2793,7 @@ dependencies = [
  "skrifa",
  "slint",
  "slint-build",
+ "webbrowser",
 ]
 
 [[package]]

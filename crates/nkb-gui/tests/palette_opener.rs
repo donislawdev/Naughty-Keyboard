@@ -29,6 +29,8 @@ use slint::{ComponentHandle, LogicalPosition, ModelRc, VecModel};
 
 const WIDTH: u32 = 420;
 const HEIGHT: u32 = 460;
+/// The header's height, generously: one row of text and a button.
+const HEADER: u32 = 48;
 
 /// How much bluer than red a pixel must be to count as the accent's ink.
 ///
@@ -314,37 +316,74 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
         "a click on the hint bar above the link asked for a window"
     );
 
-    // ---- the About link: the other end of the same row, its own callback ----
-    // Found the same way, as the ink its word adds, so the pointer goes where
-    // it IS - and it must stand on the row of the link beside it, so the
-    // palette grew by nothing for it.
+    // ---- the About and Donate links: in the header, each its own callback ----
+    // At the top since the owner's points 2 and 5 (2026-10-14). Found the same
+    // way, as the ink each word adds, so the pointer goes where it IS. About is
+    // aimed at just inside its right end: its word widens it, Donate to its
+    // left moves with it and lands in the box of what changed.
     let about_asked = Rc::new(Cell::new(0));
     let about_count = Rc::clone(&about_asked);
     palette.on_open_about(move || about_count.set(about_count.get() + 1));
+    let donate_asked = Rc::new(Cell::new(0));
+    let donate_count = Rc::clone(&donate_asked);
+    palette.on_donate(move || donate_count.set(donate_count.get() + 1));
     let before_about = offscreen::draw(&surface, WIDTH, HEIGHT);
     palette.set_about_link("About".into());
     let with_about = offscreen::draw(&surface, WIDTH, HEIGHT);
     let about = added(&before_about, &with_about);
     let about_path = offscreen::save(&with_about, WIDTH, HEIGHT, "palette-about-link.png");
     assert!(
-        about.left > WIDTH / 2 && about.top.abs_diff(link.top) < 6,
-        "the About link is not at the right end of the shortcuts link's row: {about:?} beside \
-         {link:?}. Look at {}",
+        about.left > WIDTH / 2 && about.bottom < HEADER,
+        "the About link is not at the right of the header: {about:?}. Look at {}",
         about_path.display()
     );
     press(
         &palette,
         LogicalPosition::new(
-            ((about.left + about.right) / 2) as f32,
+            about.right.saturating_sub(6) as f32,
             ((about.top + about.bottom) / 2) as f32,
         ),
     );
     assert_eq!(
-        (about_asked.get(), asked.get(), opened.get()),
-        (1, 1, 1),
-        "a click on the About link did not ask for the About window once, or asked for \
-         another window. Look at {}",
+        (
+            about_asked.get(),
+            donate_asked.get(),
+            asked.get(),
+            opened.get()
+        ),
+        (1, 0, 1, 1),
+        "a click on the About link did not ask for the About window once, or asked for          another window. Look at {}",
         about_path.display()
+    );
+    // A fresh picture after the click: the pointer stays over About and lights
+    // it, which a picture from before the click would count as Donate's.
+    let before_donate = offscreen::draw(&surface, WIDTH, HEIGHT);
+    palette.set_donate_link("Donate".into());
+    let with_donate = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let donate = added(&before_donate, &with_donate);
+    let donate_path = offscreen::save(&with_donate, WIDTH, HEIGHT, "palette-donate-link.png");
+    assert!(
+        donate.left < about.left && donate.right < about.right && donate.bottom < HEADER,
+        "the Donate link does not stand before About in the header: {donate:?} beside          {about:?}. Look at {}",
+        donate_path.display()
+    );
+    press(
+        &palette,
+        LogicalPosition::new(
+            ((donate.left + donate.right) / 2) as f32,
+            ((donate.top + donate.bottom) / 2) as f32,
+        ),
+    );
+    assert_eq!(
+        (
+            about_asked.get(),
+            donate_asked.get(),
+            asked.get(),
+            opened.get()
+        ),
+        (1, 1, 1, 1),
+        "a click on Donate did not ask for the support page once, or asked for a window.          Look at {}",
+        donate_path.display()
     );
 }
 

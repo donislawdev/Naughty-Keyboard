@@ -11,6 +11,7 @@
 import { Tokens } from "../tokens.slint";
 import { TextTitle, TextName, TextBody, TextSmallMuted } from "typography.slint";
 import { Pill, Chevron } from "chrome.slint";
+import { Heart } from "heart.slint";
 
 
 // One row, as finished strings and facts.
@@ -426,6 +427,9 @@ export component PickerOpener inherits Rectangle {
     in property <bool> chevron;
     // The window's title - see the header.
     in property <bool> title;
+    // A heart before the words - the link to the support page (the owner's
+    // point 5, 2026-10-14), in the words' own colour.
+    in property <bool> heart;
     callback clicked();
 
     // The words and the mark wear one colour, so the pair reads as one thing.
@@ -459,6 +463,13 @@ export component PickerOpener inherits Rectangle {
     // `space-1` each side put it four pixels right of the value name below.
     content := HorizontalLayout {
         spacing: Tokens.space-1;
+        if root.heart: VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            Heart {
+                ink: root.ink;
+            }
+        }
         if !root.title: TextBody {
             text: root.text;
             overflow: elide;

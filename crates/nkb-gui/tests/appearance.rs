@@ -101,7 +101,7 @@ const WIDTH: u32 = 420;
 /// it the same way - so the test now holds the catalogue to this height and
 /// fails with the height it needs, rather than cutting it off. 3200 until the
 /// switches under the value bands and the report block came in (`D121`).
-const HEIGHT: u32 = 3600;
+const HEIGHT: u32 = 3800;
 
 fn draw(window: &Rc<MinimalSoftwareWindow>) -> Vec<Pixel> {
     let mut buffer = vec![Pixel::default(); (WIDTH * HEIGHT) as usize];

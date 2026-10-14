@@ -45,8 +45,8 @@ fn rows(rows: &[(&str, &str)]) -> ModelRc<HintRow> {
 /// The palette's list of shortcuts, the longest key included.
 fn the_list() -> ModelRc<HintRow> {
     rows(&[
-        ("Alt+Shift+N", "Type next value"),
-        ("Alt+Shift+P", "Type previous value"),
+        ("Alt+Shift+N", "Type the value shown"),
+        ("Alt+Shift+P", "Go back one value and type it"),
         ("Alt+Shift+Space", "Find a value"),
         ("Alt+Shift+H", "Collapse or expand"),
     ])

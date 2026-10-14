@@ -4,6 +4,10 @@
 //! the loop and the drawing are found apart - and no file grows past the
 //! ceiling of `D113`. The public names are still `nkb_gui::live::<name>`.
 
+use std::cell::Cell;
+
+use nkb_core::hotkeys::HotkeyChord;
+use nkb_core::sequence::Sequence;
 use slint::ComponentHandle;
 
 use super::*;
@@ -114,13 +118,12 @@ pub fn label_switches(palette: &Palette) {
     ));
 }
 
-/// Puts the words of the two arrows beside the next value on the palette
-/// (`D120`), which never change while it runs. On the MAIN thread, once, at
-/// start, beside the switches.
+/// Puts what the two arrows beside the next value do on the palette (`D120`),
+/// for UI Automation - words that never change while it runs. On the MAIN
+/// thread, once, at start, beside the switches. The number each arrow carries
+/// changes with every view (`show_next`).
 pub fn label_arrows(palette: &Palette) {
-    palette.set_back_label(i18n::label(PaletteLabel::Back).into());
     palette.set_back_action(i18n::label(PaletteLabel::BackAction).into());
-    palette.set_skip_label(i18n::label(PaletteLabel::Skip).into());
     palette.set_skip_action(i18n::label(PaletteLabel::SkipAction).into());
 }
 
@@ -170,10 +173,18 @@ pub(super) enum ValueBand {
     Show(Box<ValueView>),
 }
 
-/// The band over the value band: what the next press sends.
+/// The band over the value band: what the next press sends. Numbers, not
+/// sentences: the sentences name the shortcuts in effect, which the main thread
+/// knows from the legend (`show_next`).
 pub(super) struct NextView {
-    pub(super) heading: String,
-    /// `None` at the end of a pack, where the press only says so.
+    /// The value the next press types, or `None` at the end of a pack, where
+    /// the press only says so.
+    pub(super) index: Option<usize>,
+    pub(super) total: usize,
+    /// The value the shortcut that steps back types - the core's answer,
+    /// `Sequence::previous_index`, or `None` with nothing behind.
+    pub(super) previous: Option<usize>,
+    /// `None` at the end of a pack.
     pub(super) value: Option<NextValueView>,
     /// Whether the arrow that steps back moves anything (`D120`) - the core's
     /// answer, `Sequence::steps_back`, not a rule of this file's own.
@@ -267,10 +278,7 @@ pub(super) fn view_between(
     View {
         pack: shown(sequence, pack),
         counter: counter_of(sequence),
-        next: next_view(
-            sequence.upcoming().as_ref(),
-            sequence.sequence().steps_back(),
-        ),
+        next: next_view(sequence.upcoming().as_ref(), &sequence.sequence()),
         value,
         messages: with_standing(messages, standing),
         clipboard_bar: clipboard_bar(
@@ -311,7 +319,7 @@ pub(super) fn view_of(
             .sequence
             .counter()
             .map_or_else(String::new, |(done, total)| i18n::counter(done, total)),
-        next: next_view(outcome.upcoming.as_ref(), outcome.sequence.steps_back()),
+        next: next_view(outcome.upcoming.as_ref(), &outcome.sequence),
         value: outcome.sent.as_ref().map_or(ValueBand::Keep, |sent| {
             ValueBand::Show(Box::new(value_view(sent)))
         }),
@@ -333,10 +341,14 @@ pub(super) fn view_of(
 }
 
 /// The band of the next value, every line finished (`UX-GUI-001`).
-pub(super) fn next_view(upcoming: Option<&UpcomingValue>, can_go_back: bool) -> Option<NextView> {
+pub(super) fn next_view(upcoming: Option<&UpcomingValue>, sequence: &Sequence) -> Option<NextView> {
+    let previous = sequence.previous_index();
+    let can_go_back = sequence.steps_back();
     match upcoming? {
         UpcomingValue::EndOfPack { total } => Some(NextView {
-            heading: i18n::next_end_of_pack(*total),
+            index: None,
+            total: *total,
+            previous,
             value: None,
             can_go_back,
         }),
@@ -349,7 +361,9 @@ pub(super) fn next_view(upcoming: Option<&UpcomingValue>, can_go_back: bool) -> 
             offensive,
             ..
         } => Some(NextView {
-            heading: i18n::next_value(*index, *total),
+            index: Some(*index),
+            total: *total,
+            previous,
             value: Some(NextValueView {
                 key: key.clone(),
                 name: name.clone(),
@@ -545,6 +559,10 @@ pub(super) fn apply(palette: &Palette, view: View) {
     palette.set_sending(false);
     palette.set_pack(view.pack.into());
     palette.set_counter(view.counter.into());
+    // The legend first: the band of the next value names its shortcuts.
+    if let Some(legend) = view.legend {
+        show_legend(palette, legend);
+    }
     show_next(palette, view.next);
     palette.set_clipboard_mode(view.clipboard_bar.is_some());
     if let Some(words) = view.clipboard_bar {
@@ -568,9 +586,6 @@ pub(super) fn apply(palette: &Palette, view: View) {
             .map(SharedString::from)
             .collect::<Vec<_>>(),
     )));
-    if let Some(legend) = view.legend {
-        show_legend(palette, legend);
-    }
 
     match view.value {
         ValueBand::Keep => {}
@@ -634,13 +649,52 @@ fn fill_value(palette: &Palette, value: ValueView) {
     palette.set_report(value.report.into());
 }
 
+/// The values the two arrows step to (the owner's point 1, 2026-10-14), or
+/// `None` where an arrow moves nothing or reaches the end of the pack - the
+/// arrow then carries no number. The walk is the core's: back from the end
+/// goes to the last value, forward from the last to the end, forward from the
+/// end to the first (`D120`).
+pub(super) fn arrow_targets(
+    index: Option<usize>,
+    total: usize,
+    can_go_back: bool,
+) -> (Option<usize>, Option<usize>) {
+    match index {
+        Some(index) => (
+            (can_go_back && index > 1).then(|| index - 1),
+            (index < total).then_some(index + 1),
+        ),
+        None => (
+            (can_go_back && total > 0).then_some(total),
+            (total > 0).then_some(1),
+        ),
+    }
+}
+
 /// The band of the next value, on the main thread (`UX-GUI-001`).
 pub(super) fn show_next(palette: &Palette, next: Option<NextView>) {
     let Some(next) = next else {
         palette.set_has_next(false);
         return;
     };
-    palette.set_next_heading(next.heading.into());
+    let (types, steps_back) = named();
+    palette.set_next_heading(
+        match next.index {
+            Some(index) => i18n::next_value(index, next.total, types),
+            None => i18n::next_end_of_pack(next.total, types),
+        }
+        .into(),
+    );
+    // Always a line, empty with nothing behind: the band keeps its height
+    // (`D110`), so the line coming and going moves nothing below it.
+    palette.set_previous_line(
+        next.previous
+            .map_or_else(String::new, |index| i18n::previous_types(index, steps_back))
+            .into(),
+    );
+    let (back, skip) = arrow_targets(next.index, next.total, next.can_go_back);
+    palette.set_back_label(back.map_or_else(String::new, i18n::back_to).into());
+    palette.set_skip_label(skip.map_or_else(String::new, i18n::skip_to).into());
     palette.set_can_go_back(next.can_go_back);
     match next.value {
         Some(value) => {
@@ -743,10 +797,127 @@ pub fn wire_folds(palette: &Palette) {
     });
 }
 
+/// The words on the palette that name a shortcut: the hint bar, the value
+/// band before anything is sent, and the band of the next value. Built from
+/// the table in effect rather than written out, so a shortcut the tester
+/// changed is the one they show - at start, and again whenever the table
+/// changes (K5.3). Kept here, beside the bands that show it, since 2026-10-14:
+/// in `live.rs` it stood at the ceiling of `D113`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Legend {
+    /// The key and the action of each hinted shortcut, in the table's order.
+    pub(super) hints: Vec<(String, String)>,
+    pub(super) no_value: String,
+    /// The two shortcuts the band of the next value names (the owner's points
+    /// 4 and 6, 2026-10-14): the one that types it, and the one that steps
+    /// back and types.
+    pub(super) next: HotkeyChord,
+    pub(super) previous: HotkeyChord,
+}
+
+/// The words naming the shortcuts of `bindings`. One function for the start
+/// and for every change, so the two cannot word it differently.
+#[must_use]
+pub fn legend(bindings: &Bindings) -> Legend {
+    Legend {
+        // In the order a person reads them, not the table's (`D120`).
+        hints: HotkeyAction::READING_ORDER
+            .iter()
+            .filter(|action| wired(**action))
+            .map(|action| {
+                (
+                    i18n::chord(bindings.chord(*action)),
+                    i18n::action_name(*action).to_owned(),
+                )
+            })
+            .collect(),
+        no_value: i18n::no_value_yet(bindings.chord(HotkeyAction::NextValue)),
+        next: bindings.chord(HotkeyAction::NextValue),
+        previous: bindings.chord(HotkeyAction::PreviousValue),
+    }
+}
+
+/// Puts the words naming the shortcuts on the palette. On the MAIN thread.
+pub fn show_legend(palette: &Palette, legend: Legend) {
+    palette.set_hints(ModelRc::new(VecModel::from(
+        legend
+            .hints
+            .into_iter()
+            .map(|(key, action)| HintRow {
+                key: key.into(),
+                action: action.into(),
+            })
+            .collect::<Vec<_>>(),
+    )));
+    palette.set_no_value(legend.no_value.into());
+    NAMED.set(Some((legend.next, legend.previous)));
+}
+
+thread_local! {
+    /// The two chords of the last legend shown, on the MAIN thread, where the
+    /// band of the next value is put into words. `None` until the first
+    /// legend, which comes before the first view (`main.rs`).
+    static NAMED: Cell<Option<(HotkeyChord, HotkeyChord)>> = const { Cell::new(None) };
+}
+
+/// The chords that type the next value and step back to type: the last
+/// legend's, or the defaults before there was one.
+fn named() -> (HotkeyChord, HotkeyChord) {
+    NAMED.get().unwrap_or_else(|| {
+        let defaults = nkb_adapters::default_bindings();
+        (
+            defaults.chord(HotkeyAction::NextValue),
+            defaults.chord(HotkeyAction::PreviousValue),
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::live::tests::{a_palette, a_sent, an_outcome, quiet};
+
+    /// The owner's point 1 (2026-10-14): each arrow carries the number of the
+    /// value it steps to, and none where it moves nothing or reaches the end
+    /// of the pack - the core's walk (`D120`).
+    #[test]
+    fn each_arrow_carries_the_value_it_steps_to() {
+        assert_eq!(arrow_targets(Some(4), 12, true), (Some(3), Some(5)));
+        assert_eq!(arrow_targets(Some(1), 12, false), (None, Some(2)));
+        assert_eq!(arrow_targets(Some(12), 12, true), (Some(11), None));
+        assert_eq!(arrow_targets(None, 12, true), (Some(12), Some(1)));
+        assert_eq!(arrow_targets(None, 0, false), (None, None));
+    }
+
+    /// The owner's points 4 and 6: the band names the shortcut that types the
+    /// value and the one that steps back, with the values each types, and the
+    /// line about the second stands empty with nothing behind.
+    #[test]
+    fn the_next_band_names_both_shortcuts_and_numbers_both_arrows() {
+        let palette = a_palette();
+        let at = |index, previous| NextView {
+            index: Some(index),
+            total: 12,
+            previous,
+            value: None,
+            can_go_back: index > 1,
+        };
+        show_next(&palette, Some(at(4, Some(2))));
+        let (types, steps_back) = named();
+        assert_eq!(
+            palette.get_next_heading(),
+            format!("{} types: value 4 of 12", i18n::chord(types))
+        );
+        assert_eq!(
+            palette.get_previous_line(),
+            format!("{} goes back and types value 2", i18n::chord(steps_back))
+        );
+        assert_eq!(palette.get_back_label(), "3");
+        assert_eq!(palette.get_skip_label(), "5");
+        show_next(&palette, Some(at(1, None)));
+        assert_eq!(palette.get_previous_line(), "", "nothing behind");
+        assert_eq!(palette.get_back_label(), "", "nothing before value 1");
+    }
 
     /// Another pack in use (`ValueBand::Clear`): the band goes back to its
     /// first frame on the WINDOW, line by line, not only behind its switch -

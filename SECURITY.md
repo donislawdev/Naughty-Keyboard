@@ -93,7 +93,10 @@ times its repeat count, so a small file cannot describe an enormous one (rules E
 **It makes no connection off the machine.** No telemetry, no update check, nothing downloaded
 while it runs. The test `nothing_reaches_the_network` reads the source of every package and view,
 and fails on a socket, a name lookup, an HTTP client, a call that hands an address to the shell or
-the browser, or a crate in `Cargo.lock` that `deny.toml` bans as a network client. The test
+the browser, or a crate in `Cargo.lock` that `deny.toml` bans as a network client. One such call is
+granted by name: the Donate link in the palette's header hands your browser one fixed address,
+`https://donislawdev.com/support/`, when you click it, and the test refuses any other address in
+that file and the same call anywhere else. The browser makes that connection, not the tool. The test
 `links_nothing_off_the_machine` reads the import table of both built programs, and fails if either
 links a network library, or a call that starts a program or opens a socket, beyond what its
 register names with a reason. One connection on Linux is not this project's to choose: the palette's

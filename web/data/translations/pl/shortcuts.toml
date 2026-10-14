@@ -6,12 +6,12 @@
 # been checked against the new English.
 
 [next-value]
-source = "d24d19d9dd8c"
-text = "Wpisz następną wartość"
+source = "6530d69a4f09"
+text = "Wpisz pokazaną wartość"
 
 [previous-value]
-source = "d52ea14b0759"
-text = "Wpisz poprzednią wartość"
+source = "0af29627a476"
+text = "Cofnij się o jedną wartość i ją wpisz"
 
 [repeat-last]
 source = "b073f0d0e298"

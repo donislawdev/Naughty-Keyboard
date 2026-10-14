@@ -94,12 +94,12 @@ import {
     TextCounter,
     Spacer,
     Pill,
-    Zone,
     HintRow,
     HintBar,
     Marker,
     WindowFrame,
     WindowHeader,
+    HeaderActions,
     WindowFooter,
     WindowStatus,
     ProgressBar,
@@ -241,6 +241,9 @@ export component Palette inherits Window {
     in property <bool> can-go-back;
     in property <string> skip-label;
     in property <string> skip-action;
+    // Under the next value: what the shortcut that steps back types (the
+    // owner's point 6, 2026-10-14) - empty with nothing behind.
+    in property <string> previous-line;
     // ⚠️ Declared, not aliases: the arrows stand in a band behind `if`. Each
     // click only hands on to its callback - one call, no logic.
     callback back-one-value();
@@ -348,6 +351,11 @@ export component Palette inherits Window {
     // callback declared for the same reason.
     callback open-about();
     in property <string> about-link;
+    // Opens the support page in the browser - the link beside About in the
+    // header, a heart before its word (the owner's point 5, 2026-10-14). The
+    // address lives in Rust, never in a view (`nothing_reaches_the_network`).
+    callback donate();
+    in property <string> donate-link;
 
     title: root.window-title;
     icon: Tokens.app-icon;
@@ -386,25 +394,23 @@ export component Palette inherits Window {
             opens: true;
             action: root.open-packs-label;
             dimmed: root.compact && root.translucency-allowed;
-            VerticalLayout {
-                alignment: center;
-                TextCounter {
-                    text: root.counter;
+            // Donate and About, the counter, and Collapse or Expand - the
+            // reasons for their order and states stand in the component.
+            HeaderActions {
+                counter: root.counter;
+                compact: root.compact;
+                sending: root.sending;
+                toggle-label: root.compact ? root.expand-label : root.collapse-label;
+                about-link: root.about-link;
+                donate-link: root.donate-link;
+                toggle-compact => {
+                    root.toggle-compact();
                 }
-            }
-            // Collapse and expand, in BOTH states and in one place
-            // (`UX-GUI-004`). The word says what a click does now. Faded while
-            // a value goes, like every button here: the worker answers a click
-            // between presses, so it would land after the send.
-            VerticalLayout {
-                alignment: center;
-                SmallButton {
-                    text: root.compact ? root.expand-label : root.collapse-label;
-                    action: root.compact ? root.expand-label : root.collapse-label;
-                    enabled: !root.sending;
-                    clicked => {
-                        root.toggle-compact();
-                    }
+                open-about => {
+                    root.open-about();
+                }
+                donate => {
+                    root.donate();
                 }
             }
         }
@@ -428,6 +434,7 @@ export component Palette inherits Window {
             can-go-back: root.can-go-back;
             skip-label: root.skip-label;
             skip-action: root.skip-action;
+            previous-line: root.previous-line;
             copy => {
                 root.copy-next();
             }
@@ -496,7 +503,6 @@ export component Palette inherits Window {
             clearing-selected: root.clearing-selected;
             clearing-enabled: !root.sending && !root.clipboard-mode-on;
             shortcuts-link: root.shortcuts-link;
-            about-link: root.about-link;
             choose-route(index) => {
                 root.choose-route(index);
             }
@@ -505,9 +511,6 @@ export component Palette inherits Window {
             }
             open-shortcuts => {
                 root.open-shortcuts();
-            }
-            open-about => {
-                root.open-about();
             }
         }
 

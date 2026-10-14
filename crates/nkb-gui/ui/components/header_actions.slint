@@ -1,0 +1,78 @@
+// The right end of the palette's header: the links to the support page and to
+// the About window, the counter, and Collapse or Expand.
+//
+// The two links stand at the top since the owner's points 2 and 5 of
+// 2026-10-14: About had been at the end of the row under the switches, where a
+// tester looking for it did not look, and Donate is new. Both are links, not
+// buttons - each opens something else rather than changing the palette - and
+// both stand only in the expanded state: the compact palette is meant to take
+// little room and no attention.
+//
+// A component of its own for that section's state (GUI rule 9), and because
+// `screens/palette.slint` stands at the Slint ceiling of `D113`: its header
+// names this one element where it held the counter and the button.
+
+import { Tokens } from "../tokens.slint";
+import { TextCounter } from "typography.slint";
+import { SmallButton } from "button.slint";
+import { PickerOpener } from "list.slint";
+
+export component HeaderActions inherits HorizontalLayout {
+    in property <string> counter;
+    // Whether the palette is compact, which hides the two links.
+    in property <bool> compact;
+    // While a value goes the button is faded, like every button of the
+    // palette: the worker answers a click between presses.
+    in property <bool> sending;
+    // What Collapse or Expand says now, which is also what a click does.
+    in property <string> toggle-label;
+    // The two links' words, which are also what each does, as UI Automation
+    // reads it - the way every link of the palette names itself.
+    in property <string> about-link;
+    in property <string> donate-link;
+    callback toggle-compact();
+    callback open-about();
+    callback donate();
+
+    spacing: Tokens.space-3;
+
+    if !root.compact: VerticalLayout {
+        alignment: center;
+        PickerOpener {
+            text: root.donate-link;
+            action: root.donate-link;
+            heart: true;
+            clicked => {
+                root.donate();
+            }
+        }
+    }
+    if !root.compact: VerticalLayout {
+        alignment: center;
+        PickerOpener {
+            text: root.about-link;
+            action: root.about-link;
+            clicked => {
+                root.open-about();
+            }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        TextCounter {
+            text: root.counter;
+        }
+    }
+    // Collapse and expand, in BOTH states and in one place (`UX-GUI-004`).
+    VerticalLayout {
+        alignment: center;
+        SmallButton {
+            text: root.toggle-label;
+            action: root.toggle-label;
+            enabled: !root.sending;
+            clicked => {
+                root.toggle-compact();
+            }
+        }
+    }
+}

@@ -130,11 +130,18 @@ fn fill(palette: &Palette) {
     // picture shows both bands telling two values apart.
     palette.set_has_next(true);
     palette.set_next_has_value(true);
-    palette.set_next_heading("Next: value 8 of 34".into());
-    // The arrows that walk the pack (D120), with their words, and Back able to
-    // move - value 8 is not the first.
+    palette.set_next_heading("Alt+Shift+N types: value 8 of 34".into());
+    // The arrows that walk the pack (D120), each with the value it steps to
+    // (the owner's point 1), and Back able to move - value 8 is not the first.
     nkb_gui::live::label_arrows(palette);
+    palette.set_back_label("7".into());
+    palette.set_skip_label("9".into());
     palette.set_can_go_back(true);
+    // What the shortcut that steps back types (the owner's point 6).
+    palette.set_previous_line("Alt+Shift+P goes back and types value 6".into());
+    // The two links in the header (the owner's points 2 and 5).
+    palette.set_about_link("About".into());
+    palette.set_donate_link("Donate".into());
     palette.set_next_name("Trailing no-break space".into());
     palette.set_next_preview("Kowalski\u{2423}".into());
     palette.set_next_markers(ModelRc::new(VecModel::from(vec![Marker {

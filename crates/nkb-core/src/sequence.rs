@@ -198,6 +198,9 @@ pub enum Effect {
     AnnounceAtFirst { total: usize },
     /// Say the target moved while the counter stayed, quoting both numbers.
     AnnounceCounterKept { done: usize, total: usize },
+    /// Say a step back has nothing behind it: nothing typed yet, or only the
+    /// first value.
+    AnnounceNothingBefore,
     /// Say there is nowhere to send to.
     AnnounceNoTarget,
     /// Say no pack has been chosen yet.
@@ -222,6 +225,7 @@ impl fmt::Display for Effect {
             Self::AnnounceEndOfPack { .. } => f.write_str("end-of-pack"),
             Self::AnnounceAtFirst { .. } => f.write_str("at-first"),
             Self::AnnounceCounterKept { .. } => f.write_str("counter-kept"),
+            Self::AnnounceNothingBefore => f.write_str("nothing-before"),
             Self::AnnounceNoTarget => f.write_str("no-target"),
             Self::AnnounceNoPack => f.write_str("no-pack"),
             Self::AnnounceInterrupted { .. } => f.write_str("interrupted"),
@@ -320,6 +324,21 @@ impl Sequence {
             self.upcoming(),
             Some(Upcoming::EndOfPack { .. } | Upcoming::Value { index: 2.., .. })
         )
+    }
+
+    /// The value a press of "previous value" ([`Event::Previous`]) types: the
+    /// one before the last value typed, so presses walk back 3, 2, 1 - after
+    /// the last value of a pack too. `None` before anything was typed and after
+    /// the first value, where the press only says there is nothing behind. The
+    /// palette names it under the next value (the owner's point 6, 2026-10-14),
+    /// and a test holds it to what the event really sends.
+    #[must_use]
+    pub const fn previous_index(&self) -> Option<usize> {
+        match self.position {
+            Position::Running { done, .. } if done > 1 => Some(done - 1),
+            Position::Exhausted { total, .. } if total > 1 => Some(total - 1),
+            _ => None,
+        }
     }
 
     /// Whether an insertion is in flight.
@@ -518,20 +537,20 @@ impl Sequence {
     fn previous(self) -> Step {
         match self.position {
             Position::NoPack => self.nothing_but(Effect::AnnounceNoPack),
-            // Nothing has been sent, so there is nothing behind. Silence would
-            // leave the tester pressing a key that does nothing and wondering.
-            Position::Ready { total } => {
-                self.nothing_but(Effect::AnnounceCounterKept { done: 0, total })
-            }
-            Position::Running { done, total } if done <= 1 => {
-                self.nothing_but(Effect::AnnounceCounterKept { done, total })
-            }
-            Position::Running { done, total } => self.begin(done - 1, total),
-            Position::Exhausted { total, .. } if total > 0 => self.begin(total, total),
-            Position::Exhausted { total, .. } => {
-                self.nothing_but(Effect::AnnounceEndOfPack { total })
-            }
             Position::Inserting { .. } => self.nothing_but(Effect::AnnounceStillInserting),
+            Position::Exhausted { total: 0, .. } => {
+                self.nothing_but(Effect::AnnounceEndOfPack { total: 0 })
+            }
+            Position::Ready { total }
+            | Position::Running { total, .. }
+            | Position::Exhausted { total, .. } => match self.previous_index() {
+                Some(index) => self.begin(index, total),
+                // Nothing typed yet, or only the first value: nothing stands
+                // behind it. Silence would leave the tester pressing a key
+                // that does nothing - and until 2026-10-14 this said the
+                // sentence about a NEW FIELD, which was not what happened.
+                None => self.nothing_but(Effect::AnnounceNothingBefore),
+            },
         }
     }
 
@@ -1452,6 +1471,41 @@ mod tests {
             "there is nothing before value one"
         );
         assert_eq!(step.sequence, sequence);
+        assert_eq!(step.effects, vec![Effect::AnnounceNothingBefore]);
+    }
+
+    /// The owner's point 6 (2026-10-14): the palette says what the press will
+    /// type, so what it says must be what it types - in every position.
+    #[test]
+    fn previous_index_names_exactly_what_previous_types() {
+        for position in every_position() {
+            for delivery in [Delivery::Direct, Delivery::ClipboardMode] {
+                let sequence = Sequence { position, delivery };
+                let typed = sent_values(&sequence.apply(Event::Previous));
+                let named: Vec<usize> = sequence.previous_index().into_iter().collect();
+                assert_eq!(named, typed, "{position:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn previous_after_the_last_value_walks_back_like_anywhere_else() {
+        let end = Sequence {
+            position: Position::Exhausted {
+                total: 3,
+                warned: false,
+            },
+            delivery: Delivery::Direct,
+        };
+        assert_eq!(sent_values(&end.apply(Event::Previous)), [2]);
+        let one = Sequence {
+            position: Position::Running { done: 1, total: 3 },
+            delivery: Delivery::Direct,
+        };
+        assert_eq!(
+            one.apply(Event::Previous).effects,
+            vec![Effect::AnnounceNothingBefore]
+        );
     }
 
     #[test]
@@ -1685,6 +1739,7 @@ mod tests {
             Effect::AnnounceEndOfPack { total: 1 },
             Effect::AnnounceAtFirst { total: 1 },
             Effect::AnnounceCounterKept { done: 1, total: 2 },
+            Effect::AnnounceNothingBefore,
             Effect::AnnounceNoTarget,
             Effect::AnnounceNoPack,
             Effect::AnnounceInterrupted { index: 1 },
