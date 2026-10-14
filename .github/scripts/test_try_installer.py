@@ -91,6 +91,19 @@ class ThePath(Quiet):
         self.assertEqual(self.report.failed, 0)
         self.assertTrue(self.report.lines[-1].startswith("note"))
 
+    def test_a_path_without_references_written_back_as_plain_text_reads_the_same_and_is_said(self):
+        # Measured on a GitHub runner: expandable before, plain text after the
+        # uninstall, the same text, and not one %reference% in it.
+        plain = r"C:\Windows\system32;C:\Windows;C:\Tools"
+        try_installer.path_came_back(self.report, plain, try_installer.REG_EXPAND_SZ, plain, try_installer.REG_SZ)
+        self.assertEqual(self.report.failed, 0)
+        self.assertTrue(self.report.lines[-1].startswith("note"))
+        self.assertIn("plain text", self.report.lines[-1])
+        # The other way round is not what Windows Installer does, and is not let through.
+        report = try_installer.Report()
+        try_installer.path_came_back(report, plain, try_installer.REG_SZ, plain, try_installer.REG_EXPAND_SZ)
+        self.assertEqual(report.failed, 1)
+
     def test_a_path_that_lost_an_entry_changed_order_or_kind_fails(self):
         # An entry left behind is the case of an installer whose PATH entry is
         # permanent, which no run of the kit can be allowed to leave on a machine.

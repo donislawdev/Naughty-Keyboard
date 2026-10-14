@@ -646,16 +646,34 @@ def kit_only(report, args):
     return 0
 
 
+# The two kinds a PATH is written as, the values winreg gives them.
+REG_SZ, REG_EXPAND_SZ = 1, 2
+
+
+def reads_the_same(kind, after, after_kind):
+    """Whether a PATH written back under another kind reads the same. Windows
+    Installer writes back a PATH that holds no %reference% as plain text -
+    measured on a GitHub runner, whose PATH was expandable before the install
+    and plain after the uninstall, the same text. Without a reference the two
+    kinds expand to the same thing. With one, plain text would leave it
+    unexpanded, and every program found through it would be lost."""
+    return after_kind == kind or (kind == REG_EXPAND_SZ and after_kind == REG_SZ and "%" not in after)
+
+
 def path_came_back(report, before, kind, after, after_kind):
-    """The machine PATH after the uninstall: every entry, in its order, of its
-    kind. An empty entry means nothing to Windows, and Windows Installer drops
-    one where it takes its own entry off - measured on a PATH that ended with a
-    separator - so that alone is said, not failed."""
+    """The machine PATH after the uninstall: every entry, in its order, of a
+    kind that reads them the same. An empty entry means nothing to Windows, and
+    Windows Installer drops one where it takes its own entry off - measured on
+    a PATH that ended with a separator - so that alone is said, not failed."""
     entries_before = [p for p in before.split(";") if p]
     entries_after = [p for p in after.split(";") if p]
-    report.check(entries_after == entries_before and after_kind == kind,
-                 "the machine PATH has the entries it had before, in their order and of their kind "
-                 "(%d entries, kind %s)" % (len(entries_after), after_kind))
+    report.check(entries_after == entries_before and reads_the_same(kind, after, after_kind),
+                 "the machine PATH has the entries it had before, in their order, of a kind that reads them "
+                 "the same (%d entries before and %d after, kind %s before and %s after)"
+                 % (len(entries_before), len(entries_after), kind, after_kind))
+    if after_kind != kind and reads_the_same(kind, after, after_kind):
+        report.note("the machine PATH came back as plain text, not expandable. It holds no %reference%, so "
+                    "it reads the same")
     if after != before and entries_after == entries_before:
         report.note("the machine PATH lost %d empty entry/entries, such as a trailing separator. Before: "
                     "%d characters, after: %d" % (before.count(";") - after.count(";"), len(before), len(after)))
