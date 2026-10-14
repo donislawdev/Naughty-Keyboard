@@ -1097,6 +1097,20 @@ pub trait LiveShortcuts {
     /// stop on its own terms waits in short slices and checks between them.
     /// Nothing here blocks for longer than it was asked to.
     fn next(&self, wait: Duration) -> Wait;
+
+    /// Whether any binding took.
+    ///
+    /// A set in which none did can never be pressed, whatever stands behind
+    /// it, so a caller has nothing to wait on. An implementation may have
+    /// nothing behind it at all then: the Windows listener ends its thread at
+    /// once rather than pump for no shortcut, and waiting on that set answers
+    /// [`Wait::Gone`], which a caller would read as the listener lost while
+    /// the cause is the shortcuts being taken (`OBS-176`).
+    fn holds_any(&self) -> bool {
+        self.outcomes()
+            .iter()
+            .any(|(_, outcome)| *outcome == ShortcutRegistration::Registered)
+    }
 }
 
 /// Registers the tool's global shortcuts with the system.
@@ -1154,5 +1168,34 @@ mod tests {
     fn source_errors_render_as_stable_markers() {
         assert_eq!(SourceError::NotFound.to_string(), "not-found");
         assert_eq!(SourceError::NotUtf8.to_string(), "not-utf8");
+    }
+
+    /// A set answering what it was given, and never pressed.
+    struct Outcomes(Vec<(HotkeyAction, ShortcutRegistration)>);
+
+    impl LiveShortcuts for Outcomes {
+        fn outcomes(&self) -> &[(HotkeyAction, ShortcutRegistration)] {
+            &self.0
+        }
+        fn next(&self, _: Duration) -> Wait {
+            Wait::Nothing
+        }
+    }
+
+    /// One shortcut that took is enough to hold a set, and nothing else is:
+    /// taken, refused, or no binding at all.
+    #[test]
+    fn a_set_holds_something_only_when_a_shortcut_took() {
+        let taken = (HotkeyAction::NextValue, ShortcutRegistration::Taken);
+        let failed = (
+            HotkeyAction::PreviousValue,
+            ShortcutRegistration::Failed { code: 1409 },
+        );
+        let took = (HotkeyAction::RestartPack, ShortcutRegistration::Registered);
+
+        assert!(!Outcomes(Vec::new()).holds_any());
+        assert!(!Outcomes(vec![taken, failed]).holds_any());
+        assert!(Outcomes(vec![taken, failed, took]).holds_any());
+        assert!(Outcomes(vec![took]).holds_any());
     }
 }

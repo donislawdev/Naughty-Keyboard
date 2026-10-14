@@ -93,7 +93,7 @@ use nkb_adapters::{
 use nkb_app::advance_sequence::{InFlight, Ports, RouteRequest, Sent};
 use nkb_app::browse_packs::{Direction, list_packs};
 use nkb_app::ports::{
-    Clearing, HotkeyRegistrar, LiveShortcuts, Progress, SettingChange, Settings, SettingsStore,
+    Clearing, LiveShortcuts, Progress, SettingChange, Settings, SettingsStore,
     ShortcutRegistration, Wait,
 };
 use nkb_app::{
@@ -115,6 +115,7 @@ use crate::{HintRow, Marker, Palette, ValueKey as ShownKey};
 
 mod copy;
 mod folds;
+mod hold;
 mod presses;
 mod recent;
 mod view;
@@ -123,6 +124,7 @@ use copy::show_copied;
 pub use copy::{CopyButton, copy_command, label_copies};
 use folds::Collapse;
 pub use folds::{label_shortcut_list, starts_with_shortcut_list, wire_shortcut_list};
+use hold::Hold;
 use presses::{PaletteShortcuts, between_presses};
 use recent::{after_press, carry_out_noting, keep_recent};
 pub(crate) use view::preview_line;
@@ -959,93 +961,6 @@ impl Worker<'_> {
                 self.standing,
                 self.hold.paused(),
             )
-        }
-    }
-}
-
-/// Whether the palette's shortcuts are held by this process now.
-enum Holding {
-    /// Registered, and driving the sequence.
-    Held(Box<dyn LiveShortcuts + Send>),
-    /// Given back to the system while the shortcuts window is open.
-    Paused,
-    /// Not held, and not because of the window: nothing could be registered,
-    /// or the thread behind them ended. Said when it happened. A
-    /// [`Command::Resume`] tries again.
-    Lost,
-}
-
-/// The palette's shortcuts as this thread holds them, and the registrar that
-/// takes them.
-struct Hold<'a> {
-    registrar: &'a dyn HotkeyRegistrar,
-    holding: Holding,
-    /// What the last registration said, chord by chord - see [`ShortcutsNow`].
-    registered: Vec<(HotkeyAction, HotkeyChord, ShortcutRegistration)>,
-}
-
-impl<'a> Hold<'a> {
-    const fn new(registrar: &'a dyn HotkeyRegistrar) -> Self {
-        Self {
-            registrar,
-            holding: Holding::Lost,
-            registered: Vec::new(),
-        }
-    }
-
-    fn live(&self) -> Option<&dyn LiveShortcuts> {
-        match &self.holding {
-            Holding::Held(live) => Some(live.as_ref()),
-            Holding::Paused | Holding::Lost => None,
-        }
-    }
-
-    const fn paused(&self) -> bool {
-        matches!(self.holding, Holding::Paused)
-    }
-
-    /// Gives the shortcuts back. Dropping the handle is the release, and it
-    /// returns only once the system has let them go.
-    fn pause(&mut self) {
-        self.holding = Holding::Paused;
-    }
-
-    /// The thread behind the shortcuts has ended.
-    fn lose(&mut self) {
-        self.holding = Holding::Lost;
-    }
-
-    /// Registers `bindings` in place of whatever is held, and the lines worth
-    /// saying about it.
-    ///
-    /// 🔴 What is held is released FIRST. The old set holds the very chords the
-    /// new one asks for, so the other order would come back `Taken`, against
-    /// ourselves, for every chord that did not move.
-    ///
-    /// A registration that worked says nothing - `i18n::registration` answers
-    /// `None` for it, so the silence is the dictionary's decision and not this
-    /// module's.
-    fn take(&mut self, bindings: &Bindings) -> Vec<String> {
-        self.holding = Holding::Lost;
-        match self.registrar.register(bindings.as_slice()) {
-            Ok(live) => {
-                self.registered = live
-                    .outcomes()
-                    .iter()
-                    .map(|(action, outcome)| (*action, bindings.chord(*action), *outcome))
-                    .collect();
-                self.holding = Holding::Held(live);
-                self.registered
-                    .iter()
-                    .filter_map(|(action, chord, outcome)| {
-                        i18n::registration(outcome, *action, *chord)
-                    })
-                    .collect()
-            }
-            Err(error) => {
-                self.registered.clear();
-                vec![i18n::shortcuts_unavailable(&error)]
-            }
         }
     }
 }
@@ -2332,8 +2247,8 @@ mod tests {
     /// handles alive - how many were alive when each set was asked for, too.
     #[derive(Default)]
     pub(super) struct Registrar {
-        taken: RefCell<Vec<HotkeyChord>>,
-        unavailable: Cell<bool>,
+        pub(super) taken: RefCell<Vec<HotkeyChord>>,
+        pub(super) unavailable: Cell<bool>,
         asked: RefCell<Vec<Vec<(HotkeyAction, HotkeyChord)>>>,
         alive_when_asked: RefCell<Vec<usize>>,
         alive: Arc<AtomicUsize>,
@@ -3002,40 +2917,6 @@ mod tests {
             assert!(carried.view.is_none() && carried.told.is_none());
             assert_eq!(registrar.asked.borrow().len(), asked);
             assert_eq!(registrar.alive(), 1);
-        });
-    }
-
-    /// Not held because nothing could be registered is a state the worker
-    /// stays in, saying why - and the next resume tries again. Until K5.3 the
-    /// worker ended there.
-    #[test]
-    fn with_nothing_registrable_the_worker_says_why_and_a_resume_tries_again() {
-        let store = a_store(false);
-        let registrar = Registrar::default();
-        registrar.unavailable.set(true);
-        with_worker(&store, &registrar, false, |worker, memory| {
-            let lines = worker.take(memory.bindings.get());
-            assert_eq!(
-                lines,
-                vec![i18n::shortcuts_unavailable(
-                    &ShortcutsUnavailable::CouldNotStart
-                )]
-            );
-            assert!(worker.hold.live().is_none());
-            assert!(
-                !worker.hold.paused(),
-                "lost is not paused, and must not say it is"
-            );
-
-            let chosen = worker
-                .carry_out(Command::Choose(String::from("unicode-text")))
-                .view
-                .expect("a pack is still chosen");
-            assert_eq!(chosen.pack, "Unicode and text");
-
-            registrar.unavailable.set(false);
-            worker.carry_out(Command::Resume);
-            assert!(worker.hold.live().is_some(), "the resume did not try again");
         });
     }
 
