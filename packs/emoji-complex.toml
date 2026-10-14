@@ -1,0 +1,114 @@
+format = 1
+
+[pack]
+id          = "emoji-complex"
+name        = "Complex emoji"
+description = "Characters beyond the basic plane and composed sequences that break counting and truncation."
+version     = "1.0"
+updated     = 2026-10-14
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["unicode", "truncation", "counting"]
+fields      = ["text", "name", "multiline"]
+risk        = "normal"
+
+[[values]]
+id     = "emoji-family-zwj"
+name   = "Family emoji built with joiners"
+value  = "\U0001F468\u200D\U0001F469\u200D\U0001F467"
+breaks = "One image to the user, three characters plus two invisible joiners to the software; truncation cuts it into unrelated pictures."
+expect = "Counted and truncated as one unit, or rejected - never split between the joiners."
+since  = "1.0"
+
+[[values]]
+id     = "emoji-skin-tone"
+name   = "Emoji with a skin tone"
+value  = "\U0001F44D\U0001F3FD"
+breaks = "A base character plus a modifier: cutting between them changes the meaning of the value."
+expect = "Kept together by any truncation."
+since  = "1.0"
+
+[[values]]
+id     = "emoji-keycap"
+name   = "Keycap digit one"
+value  = "1\uFE0F\u20E3"
+breaks = "A digit, a variation selector and a combining mark that together render as one key; the digit alone is a number."
+expect = "Preserved as a unit; not parsed as the number one."
+since  = "1.0"
+
+[[values]]
+id     = "emoji-variation"
+name   = "Heart with a variation selector"
+value  = "\u2764\uFE0F"
+breaks = "The variation selector decides whether this renders as a picture or as text; stripping it silently changes the display."
+expect = "Preserved on save so the value looks the same after a round trip."
+since  = "1.0"
+
+[[values]]
+id     = "flag-country"
+name   = "Country flag"
+value  = "\U0001F1F5\U0001F1F1"
+breaks = "A flag is two regional indicator characters; a field limited to two characters accepts it and one limited to one splits it."
+expect = "Treated as one unit for length limits."
+since  = "1.0"
+
+[[values]]
+id     = "emoji-in-middle"
+name   = "Emoji inside a name"
+value  = "Jan\U0001F600Kowalski"
+breaks = "A character outside the basic plane inside a name breaks storage configured for narrow encodings, often with a raw error."
+expect = "Stored intact, or rejected with a readable message."
+since  = "1.0"
+
+[[values]]
+id     = "astral-cjk"
+name   = "Ideograph beyond the basic plane"
+value  = "\U00020BB7"
+breaks = "A rare ideograph outside the basic plane: the same storage problem without looking like an emoji."
+expect = "Handled exactly like any other character."
+since  = "1.0"
+
+[[values]]
+id     = "emoji-50"
+name   = "Fifty emoji"
+type   = "repeat"
+unit   = "\U0001F600"
+count  = 50
+breaks = "Fifty characters to the user, two hundred bytes to storage; the mismatch between limits shows up here first."
+expect = "Limits stated in the same unit on both sides."
+since  = "1.0"
+
+[[values]]
+id     = "emoji-only"
+name   = "A single emoji"
+value  = "\U0001F600"
+breaks = "A name or title consisting solely of a picture; sorting, initials and search all have to do something with it."
+expect = "Accepted and displayed, with sorting and initials behaving predictably."
+since  = "1.0"
+
+[[values]]
+id     = "zwj-orphan"
+name   = "Joiner with nothing to join"
+value  = "Jan\u200DKowalski"
+breaks = "A joiner with nothing to join: invisible, meaningless, and enough to make two identical names different."
+expect = "Stripped on save, or preserved and revealed in the interface."
+since  = "1.0"
+
+[[values]]
+id     = "emoji-in-filename"
+name   = "Emoji in a file name"
+value  = "report\U0001F600.txt"
+breaks = "Archives, transfers and older file systems handle these names inconsistently."
+expect = "Stored and downloaded with the name intact, or rejected before the file is created."
+since  = "1.0"
+
+[[values]]
+id     = "emoji-1000"
+name   = "A thousand emoji"
+type   = "repeat"
+unit   = "\U0001F600"
+count  = 1000
+breaks = "A thousand pictures: rendering, scrolling and every length counter at once."
+expect = "Accepted and clipped in the layout, or rejected with a stated limit."
+since  = "1.0"
