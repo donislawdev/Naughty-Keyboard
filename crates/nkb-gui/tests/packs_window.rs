@@ -172,7 +172,7 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     );
     assert_eq!(
         titles(window).len(),
-        1 + 9,
+        1 + 18,
         "every shipped pack under one heading, no value spread out: {:?}",
         titles(window)
     );
@@ -201,7 +201,7 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     // table in effect at its end, choosable.
     let whitespace = window.get_selected();
     tap(window, RIGHT);
-    assert_eq!(titles(window).len(), 1 + 9 + 1 + 12);
+    assert_eq!(titles(window).len(), 1 + 18 + 1 + 12);
     assert_eq!(window.get_selected(), whitespace, "the pack stays selected");
     tap(window, RIGHT);
     let restart = window
@@ -226,7 +226,7 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     tap(window, LEFT);
     assert_eq!(window.get_selected(), whitespace);
     tap(window, LEFT);
-    assert_eq!(titles(window).len(), 1 + 9);
+    assert_eq!(titles(window).len(), 1 + 18);
     // A click on a fold mark opens and closes it, and selects the pack.
     let unicode = titles(window)
         .iter()
@@ -236,12 +236,12 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     window.invoke_toggled(unicode);
     assert_eq!(
         titles(window).len(),
-        1 + 9 + 12,
+        1 + 18 + 12,
         "no restart row under another pack"
     );
     assert_eq!(window.get_selected(), unicode);
     window.invoke_toggled(unicode);
-    assert_eq!(titles(window).len(), 1 + 9);
+    assert_eq!(titles(window).len(), 1 + 18);
     assert!(
         packs.is_open(),
         "folding chooses nothing and closes nothing"
