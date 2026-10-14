@@ -1,0 +1,122 @@
+format = 1
+
+[pack]
+id          = "emails-urls"
+name        = "E-mail addresses and URLs"
+description = "Addresses that are formally valid but extreme, and ones that only look valid."
+version     = "1.0"
+updated     = 2026-10-14
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["validation", "parsing", "internationalisation"]
+fields      = ["email", "url"]
+risk        = "normal"
+
+[[values]]
+id     = "plus-tag"
+name   = "Plus tag in the local part"
+value  = "jan+test@example.com"
+breaks = "A perfectly valid address rejected by a surprising number of forms, which breaks the tagging people rely on."
+expect = "Accepted; the plus sign is a legal character in the local part."
+fields = ["email"]
+since  = "1.0"
+
+[[values]]
+id     = "uppercase-local"
+name   = "Uppercase local part"
+value  = "JAN@example.com"
+breaks = "The local part is case-sensitive in principle and treated as case-insensitive in practice; uniqueness checks disagree between layers."
+expect = "One consistent rule, applied at sign-up and at sign-in alike."
+fields = ["email"]
+since  = "1.0"
+
+[[values]]
+id     = "unicode-domain"
+name   = "Internationalised domain"
+value  = "jan@za\u017C\u00F3\u0142\u0107.example"
+breaks = "Internationalised domains must be converted before use; a form that skips this rejects legitimate addresses."
+expect = "Accepted and converted, or rejected with a message that says why."
+fields = ["email"]
+since  = "1.0"
+
+[[values]]
+id     = "double-at"
+name   = "Two at signs"
+value  = "jan@@example.com"
+breaks = "The shortest invalid address that many simple validators accept."
+expect = "Rejected."
+fields = ["email"]
+since  = "1.0"
+
+[[values]]
+id     = "no-at"
+name   = "Address without an at sign"
+value  = "jan.example.com"
+breaks = "A domain typed into an e-mail field; accepted by validators that only check for a dot."
+expect = "Rejected."
+fields = ["email"]
+since  = "1.0"
+
+[[values]]
+id     = "trailing-dot-domain"
+name   = "Trailing dot after the domain"
+value  = "jan@example.com."
+breaks = "A trailing dot is technically valid in a domain name and rejected by nearly every form."
+expect = "Accepted and normalised, or rejected consistently."
+fields = ["email"]
+since  = "1.0"
+
+[[values]]
+id     = "very-long-local"
+name   = "Local part of 64 characters"
+value  = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@example.com"
+breaks = "The boundary of the local part length; one character more must be rejected."
+expect = "The limit enforced with a message, not by truncation."
+fields = ["email"]
+since  = "1.0"
+
+[[values]]
+id     = "quoted-local"
+name   = "Quoted local part with a space"
+value  = "\"jan kowalski\"@example.com"
+breaks = "A quoted local part containing a space is legal and almost never handled."
+expect = "Accepted, or rejected with a message stating the supported subset."
+fields = ["email"]
+since  = "1.0"
+
+[[values]]
+id     = "url-no-scheme"
+name   = "Link without a scheme"
+value  = "example.com"
+breaks = "A link typed the way people type links; storing it without a scheme produces a broken link everywhere it is used."
+expect = "Normalised with a scheme, or rejected with an example of the expected form."
+fields = ["url"]
+since  = "1.0"
+
+[[values]]
+id     = "url-with-credentials"
+name   = "Link with credentials"
+value  = "https://user:pass@example.com"
+breaks = "A URL carrying credentials; displaying it anywhere reveals them, and storing it keeps them."
+expect = "Rejected, or stored with the credentials stripped and the user told."
+fields = ["url"]
+since  = "1.0"
+
+[[values]]
+id     = "url-very-long"
+name   = "Link of 2000 characters"
+value  = "https://example.com/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+breaks = "Long links break storage limits, logs and every column that displays them."
+expect = "Accepted up to a stated limit, and truncated for display only."
+fields = ["url"]
+since  = "1.0"
+
+[[values]]
+id     = "url-unicode-path"
+name   = "Link with a non-ASCII path"
+value  = "https://example.com/za\u017C\u00F3\u0142\u0107"
+breaks = "Non-ASCII paths must be encoded; a layer that skips it produces links that work in one place and not another."
+expect = "Encoded once and consistently; the link works after a round trip."
+fields = ["url"]
+since  = "1.0"

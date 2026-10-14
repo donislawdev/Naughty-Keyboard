@@ -84,6 +84,10 @@ pub const BUILT_IN_PACKS: &[(&str, &str)] = &[
         "pasted-from-word",
         include_str!("../../../packs/pasted-from-word.toml"),
     ),
+    (
+        "emails-urls",
+        include_str!("../../../packs/emails-urls.toml"),
+    ),
 ];
 
 #[cfg(test)]
