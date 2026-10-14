@@ -273,6 +273,31 @@ class Publication(Folder):
                         sign_release.upload(self.root, self.TAG, "owner/repo")
         self.assertEqual(asked, [])
 
+    def test_an_open_draft_gets_every_file_for_the_page_and_its_checksums_are_read_back(self):
+        # The way through a release takes. Until a test walked it, a name this
+        # module no longer had stopped phase B after the card had signed.
+        tag = f"v{VERSION}"
+        for name in release.published_files(tag):
+            self.put(name, name.encode("ascii"))
+        asked = []
+
+        def run(command, **_):
+            asked.append(command)
+            if command[1:3] == ["release", "download"]:
+                into = command[command.index("--dir") + 1]
+                os.makedirs(into, exist_ok=True)
+                shutil.copy(os.path.join(self.root, sign_release.SUMS), into)
+
+        view = json.dumps({"isDraft": True, "assets": [{"name": n} for n in release.published_files(tag)]})
+        answer = subprocess.CompletedProcess([], 0, stdout=view, stderr="")
+        with unittest.mock.patch.object(release, "release_state", lambda _: "draft"), \
+                unittest.mock.patch.object(sign_release, "run", run), \
+                unittest.mock.patch.object(sign_release.subprocess, "run", lambda *_, **__: answer):
+            sign_release.upload(self.root, tag, "owner/repo")
+        sent = asked[0][asked[0].index("--clobber") + 1:]
+        self.assertEqual(sorted(os.path.basename(path) for path in sent), release.published_files(tag))
+        self.assertFalse(os.path.exists(os.path.join(self.root, "confirm")))
+
     def test_a_draft_missing_a_file_or_a_different_list_or_published_is_refused(self):
         expected = release.published_files(self.TAG)
         view = {"isDraft": True, "assets": [{"name": n} for n in expected]}
