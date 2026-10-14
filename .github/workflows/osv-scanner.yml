@@ -1,0 +1,162 @@
+name: OSV-Scanner
+
+# Asks the OSV database (osv.dev) whether a dependency named in a lock file of
+# this repository has a published advisory. Any advisory fails the check, unless
+# osv-scanner.toml names it with the reason it does not apply. That is the rule
+# the advisories job of supply-chain.yml keeps with deny.toml, asked of a second
+# database: OSV carries the RustSec advisories that cargo-deny reads, and the
+# GitHub advisories and others beside them.
+#
+# What is read. Every lock file the walk finds, today two. Cargo.lock is the tree
+# the programs are built from. .github/scripts/requirements.txt pins the Semgrep
+# engine and nothing else, because pip chooses the rest when that job runs.
+# --no-resolve keeps the scanner to what a file pins. Without it the scanner works
+# out that tree by itself, and measured on 2026-10-14 it named versions older
+# than the ones pip installs and eleven advisories against them. The rest of the
+# Semgrep environment is therefore not asked about. It holds no secret and a
+# read-only token, which semgrep.yml says too.
+#
+# Who decides. The scanner writes a report and .github/scripts/osv_gate.py reads
+# it. The exit code is not enough for two reasons: the action turns "no lock file
+# found" into success unless told otherwise, and no exit code says which files
+# were read. The gate is told which files must be read and refuses a report
+# without one of them, so a lock file that moves turns this red, not quiet.
+#
+# The gate is proved before it is trusted, as in semgrep.yml. Its own tests run
+# first. Then a lock file that is bad on purpose is scanned with the same
+# osv-scanner.toml, and the gate has to block it. That file is written during the
+# run, into a directory the scan of the repository leaves out.
+#
+# The Security tab. On main, after each push, every Monday and when started by
+# hand, the result also goes to code scanning, where an advisory stays open until
+# a later run on main no longer reports it. A pull request sends nothing there
+# and is decided by this check alone. A run on main that finds an advisory is red
+# as well, and a failed scheduled run is reported to whoever last edited the
+# schedule below.
+#
+# What leaves the runner. The names and versions of the dependencies go to
+# osv.dev, which is how the question is asked. No usage data and no code.
+#
+# The scanner is the image that google/osv-scanner-action names. The action is
+# pinned to its full commit and that commit names one version, but by a tag and
+# not by a digest, so the pin holds the action and the version it asks for, not
+# the bytes of the image. Dependabot moves the pin.
+#
+# A release waits for this workflow like the other four that run on every push to
+# main (release.py REQUIRED_WORKFLOWS), so no release is built from a commit with
+# a known advisory.
+#
+# There is no paths filter, on purpose. A check that a branch rule requires and
+# that never started blocks the merge for good, and a filter is exactly how that
+# happens.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Advisories arrive with no change here, so the lock files are asked again
+  # every Monday.
+  schedule:
+    - cron: "41 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: osv-scanner-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  osv-scanner:
+    # The name a branch rule requires, so it is written out and never changes.
+    name: osv-scanner
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write # to send the result to code scanning, which only the runs on main do
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test the gate
+        working-directory: .github/scripts
+        run: python3 -m unittest test_osv_gate
+
+      # smallvec 1.6.0 has a published buffer overflow, RUSTSEC-2021-0003. If the
+      # gate lets it through, the scanner, the database or the gate is broken, and
+      # nothing said afterwards is worth reading.
+      - name: Write a lock file that is bad on purpose
+        run: |
+          mkdir .osv-run
+          printf 'version = 4\n\n[[package]]\nname = "smallvec"\nversion = "1.6.0"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n' > .osv-run/Cargo.lock
+
+      - name: Scan it
+        uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+        continue-on-error: true
+        with:
+          scan-args: |-
+            --lockfile=.osv-run/Cargo.lock
+            --allow-no-lockfiles=false
+            --config=osv-scanner.toml
+            --format=json
+            --output-file=.osv-run/canary.json
+
+      - name: Prove the gate can block
+        run: >
+          python3 .github/scripts/osv_gate.py .osv-run/canary.json --canary
+          --root /github/workspace --expect .osv-run/Cargo.lock
+
+      # The scanner exits with 1 when it finds an advisory and with another code
+      # when it fails, so the step goes on either way and the gate decides. A scan
+      # that failed leaves no report, and the gate refuses that.
+      - name: Scan the lock files
+        uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+        continue-on-error: true
+        with:
+          scan-args: |-
+            --recursive
+            --no-resolve
+            --allow-no-lockfiles=false
+            --config=osv-scanner.toml
+            --x-exclude=.osv-run
+            --format=json
+            --all-packages
+            --output-file=.osv-run/osv.json
+            ./
+
+      # The same scan again, in the format code scanning reads. One format per
+      # scan is what the scanner offers.
+      - name: Scan the lock files for the Security tab
+        if: github.event_name != 'pull_request'
+        uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
+        continue-on-error: true
+        with:
+          scan-args: |-
+            --recursive
+            --no-resolve
+            --allow-no-lockfiles=false
+            --config=osv-scanner.toml
+            --x-exclude=.osv-run
+            --format=sarif
+            --output-file=.osv-run/osv.sarif
+            ./
+
+      - name: Send the result to the Security tab
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: .osv-run/osv.sarif
+          category: osv-scanner
+
+      - name: Decide
+        run: >
+          python3 .github/scripts/osv_gate.py .osv-run/osv.json
+          --root /github/workspace
+          --expect Cargo.lock --expect .github/scripts/requirements.txt

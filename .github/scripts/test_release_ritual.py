@@ -356,7 +356,7 @@ class RequiredWorkflows(unittest.TestCase):
         # A workflow that does not run on a push to main never has a run on the
         # commit a tag points at, and a release would wait for it for good.
         self.assertEqual(release.REQUIRED_WORKFLOWS, ("ci.yml", "supply-chain.yml", "semgrep.yml",
-                                                      "workflow-lint.yml"))
+                                                      "workflow-lint.yml", "osv-scanner.yml"))
         for name in release.REQUIRED_WORKFLOWS:
             with self.subTest(workflow=name):
                 on = block(read(os.path.join(WORKFLOWS, name)), "on:", 0)
