@@ -80,6 +80,10 @@ pub const BUILT_IN_PACKS: &[(&str, &str)] = &[
         "encoding-mojibake",
         include_str!("../../../packs/encoding-mojibake.toml"),
     ),
+    (
+        "pasted-from-word",
+        include_str!("../../../packs/pasted-from-word.toml"),
+    ),
 ];
 
 #[cfg(test)]
