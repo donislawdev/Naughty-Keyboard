@@ -341,16 +341,23 @@ fn every_character_the_table_promises_leaves_ink() {
 /// what it draws. This asks about what the catalogue carries, so a new script in
 /// the middle of a long value still has to be acknowledged here.
 ///
-/// ⚠️ Eighteen, not the twenty-nine `D52` gives. That number is the whole
-/// catalogue of `catalog-v0.1.md`. Nine of its twenty packs are shipped today,
-/// and the six added on 2026-09-24 and 2026-09-25 reach outside the guarantee
-/// nowhere.
-const SHIPPED_OUTSIDE: [(char, &str); 18] = [
+/// ⚠️ Twenty-nine, which is also the number `D52` gives for the whole
+/// catalogue of `catalog-v0.1.md` - a coincidence, not the same set. Eighteen
+/// of its twenty packs are shipped today. The nine added on 2026-10-14 brought
+/// eleven: the keycap mark, two ideographs, one ideograph beyond the basic
+/// plane and seven emoji. Their Arabic, Greek and Cyrillic letters, the
+/// replacement character and the heart are all drawn by the typeface.
+const SHIPPED_OUTSIDE: [(char, &str); 29] = [
+    ('\u{20E3}', "emoji-complex/emoji-keycap"),
     ('\u{30B9}', "unicode-text/cjk-mixed"),
     ('\u{30C6}', "unicode-text/cjk-mixed"),
     ('\u{30C8}', "unicode-text/cjk-mixed"),
+    // Also in `encoding-mojibake/roundtrip-check` and
+    // `pseudolocalization/pseudo-mixed-scripts`.
+    ('\u{4E2D}', "encoding-mojibake/high-codepoint"),
     ('\u{524D}', "unicode-text/cjk-mixed"),
     ('\u{540D}', "unicode-text/cjk-mixed"),
+    ('\u{6587}', "pseudolocalization/pseudo-mixed-scripts"),
     ('\u{FF44}', "unicode-text/fullwidth-latin"),
     ('\u{FF46}', "unicode-text/fullwidth-latin"),
     ('\u{FF48}', "unicode-text/fullwidth-latin"),
@@ -363,9 +370,17 @@ const SHIPPED_OUTSIDE: [(char, &str); 18] = [
     ('\u{1D41E}', "unicode-text/math-bold"),
     ('\u{1D425}', "unicode-text/math-bold"),
     ('\u{1D428}', "unicode-text/math-bold"),
-    // Also in `length-bombs/emoji-truncation`. Named by the value the catalogue
-    // lists first.
+    ('\u{1F1F1}', "emoji-complex/flag-country"),
+    ('\u{1F1F5}', "emoji-complex/flag-country"),
+    ('\u{1F3FD}', "emoji-complex/emoji-skin-tone"),
+    ('\u{1F44D}', "emoji-complex/emoji-skin-tone"),
+    ('\u{1F467}', "emoji-complex/emoji-family-zwj"),
+    ('\u{1F468}', "emoji-complex/emoji-family-zwj"),
+    ('\u{1F469}', "emoji-complex/emoji-family-zwj"),
+    // Also in `length-bombs/emoji-truncation` and in seven of the values added
+    // on 2026-10-14. Named by the value the catalogue lists first.
     ('\u{1F600}', "unicode-text/emoji-in-name"),
+    ('\u{20BB7}', "emoji-complex/astral-cjk"),
 ];
 
 #[test]

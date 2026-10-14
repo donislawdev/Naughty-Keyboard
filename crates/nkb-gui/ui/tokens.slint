@@ -147,8 +147,10 @@ export global Tokens {
     // ⊕ 440 x 560 until 2026-10-07, when the owner could not read what a pack
     // is for (point 6): at 440 the description - up to a hundred characters in
     // the shipped catalogue - was cut after half a line. It wraps now, and the
-    // wider default keeps it to two lines for every shipped pack, so the nine
-    // packs still fit with their descriptions above the footer.
+    // wider default keeps it to two lines for every shipped pack (measured
+    // again on 2026-10-14 for the eighteen packs, the longest description has
+    // 98 characters). Nine packs fitted above the footer, eighteen do not, and
+    // the list scrolls, which is what `list.slint` is built for.
     out property <length> packs-width: 520px;
     out property <length> packs-height: 600px;
     out property <length> packs-min-width: 360px;

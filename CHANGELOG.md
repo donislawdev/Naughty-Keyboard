@@ -19,8 +19,10 @@ Changes wait under Unreleased until then.
 - `nkb-gui`, the palette, for Windows. One shortcut types the next value of a pack into whatever window
   has the keyboard, without taking the focus from it. Values can go through the clipboard instead, and
   one more shortcut copies a report block for the last value.
-- Nine built-in packs with 102 values: whitespace, Unicode text, length bombs, magic values, extreme
-  numbers, impossible dates, export breakers, file names and paths, and Polish locale data.
+- Eighteen built-in packs with 207 values: whitespace, Unicode text, length bombs, magic values,
+  extreme numbers, impossible dates, export breakers, Polish locale data, file names and paths,
+  look-alike pairs, complex emoji, encoding and mojibake, text pasted from a document, e-mail addresses
+  and URLs, names, time zones, money and separators, and pseudolocalisation.
 - Archives for Windows, macOS and Linux. Each carries the licence notices of everything compiled into
   the program, and a bill of materials in SPDX describes all of them.
 - Signed downloads. The Windows programs carry an Authenticode signature with a timestamp, the macOS

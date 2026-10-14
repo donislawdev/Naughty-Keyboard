@@ -22,8 +22,17 @@ dates-impossible          12 values  Impossible dates
 export-breakers           12 values  Export breakers
 locale-pl                  6 values  Polish locale
 filenames-paths           12 values  File names and paths
+look-alike-pairs          12 values  Look-alike pairs
+emoji-complex             12 values  Complex emoji
+encoding-mojibake         11 values  Encoding and mojibake
+pasted-from-word          12 values  Pasted from a document
+emails-urls               12 values  E-mail addresses and URLs
+names-identity            12 values  Names and identity
+time-zones                12 values  Time and time zones
+currency-separators       12 values  Money and separators
+pseudolocalization        10 values  Pseudolocalisation
 
-9 of 9 packs loaded, 102 values.
+18 of 18 packs loaded, 207 values.
 Read these pack sources: built-in.
 Not read: team - the settings file has no key for this folder yet, so it cannot be named.
 Not read: own - the settings file has no key for this folder yet, so it cannot be named.
