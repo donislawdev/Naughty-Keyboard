@@ -51,9 +51,8 @@ pub fn for_pack(id: &str, today: Date) -> String {
 # 3. Run `nkb lint {id}.toml` when you are done. It reports everything it finds
 #    in one pass, and it also tells you which rules it could not check.
 #
-# The pack format is not frozen yet: it freezes with the first public release
-# that ships packs. Until then a field may still change, and this file says so
-# rather than letting silence read as stability.
+# The pack format is not frozen yet: a later release may still change a field,
+# and this file says so rather than letting silence read as stability.
 
 format = 1
 

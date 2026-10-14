@@ -16,7 +16,7 @@ Możesz je napisać i sprawdzić, ale jeszcze nie wczytać. `nkb new-pack`, `nkb
 
 ## Czy format paczki jest stabilny?
 
-Jeszcze nie. Zamraża się wraz z pierwszym publicznym wydaniem, które wiezie paczki, a do tego czasu pole może się jeszcze zmienić. `nkb lint` mówi to przy każdym uruchomieniu, a `nkb lint --explain` wypisuje każdą regułę formatu i to, które z nich ta wersja programu sprawdza.
+Jeszcze nie. Kolejne wydanie może jeszcze zmienić pole, a jego notatki powiedzą jak. `nkb lint` mówi to przy każdym uruchomieniu, a `nkb lint --explain` wypisuje każdą regułę formatu i to, które z nich ta wersja programu sprawdza.
 
 ## Czy mówi mi, czy moja aplikacja sobie poradziła?
 

@@ -27,6 +27,9 @@ import release
 import sign_macos
 import sign_release
 
+# The version of the workspace, as every release names its files: written out,
+# it would turn these tests red on each version bump.
+VERSION = contents.load_workspace().version
 PIN = "47b79ad3cfa53ef846cad03a59148f8c981d0b1196891e48b8c8d7982b10c148"
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -150,7 +153,7 @@ class Windows(Folder):
 
 
 class TheBuild(Folder):
-    TAG = "v0.1.0-dev.2"
+    TAG = f"v{VERSION}-dev.2"
 
     def lay_out(self):
         names = release.handover_names(self.TAG)
@@ -175,8 +178,8 @@ class TheBuild(Folder):
             self.assertIn("--deny-self-hosted-runners", command)
 
     def test_a_tag_is_verified_against_the_tag(self):
-        command = sign_release.verify_command("x.zip", "v0.1.0", False, "owner/repo")
-        self.assertEqual(command[command.index("--source-ref") + 1], "refs/tags/v0.1.0")
+        command = sign_release.verify_command("x.zip", f"v{VERSION}", False, "owner/repo")
+        self.assertEqual(command[command.index("--source-ref") + 1], f"refs/tags/v{VERSION}")
 
     def test_a_changed_file_a_missing_one_and_a_stray_one_are_refused_before_verifying(self):
         names = self.lay_out()
@@ -235,7 +238,7 @@ class Bundles(unittest.TestCase):
 
 
 class Publication(Folder):
-    TAG = "v0.1.0-dev.2"
+    TAG = f"v{VERSION}-dev.2"
 
     def test_the_page_gets_the_signed_files_the_statement_and_the_checksums(self):
         for name in release.handover_names(self.TAG):
@@ -245,7 +248,7 @@ class Publication(Folder):
         sign_release.name_for_publication(self.root, self.TAG)
         sign_release.write_checksums(self.root, self.TAG)
         self.assertEqual(sorted(os.listdir(self.root)), release.published_files(self.TAG))
-        self.assertIn("verify-naughty-keyboard_0.1.0-dev.2.provenance.sigstore.json", os.listdir(self.root))
+        self.assertIn(f"verify-naughty-keyboard_{VERSION}-dev.2.provenance.sigstore.json", os.listdir(self.root))
         with open(os.path.join(self.root, sign_release.SUMS), "rb") as handle:
             listed = handle.read()
         self.assertNotIn(b"\r", listed)
@@ -282,8 +285,8 @@ class Publication(Folder):
 class Statement(Folder):
     """Steps 7 and 8: phase C started from the tag, waited for, and the draft
     checked to be the whole release."""
-    TAG = "v0.1.0"
-    NAME = "verify-naughty-keyboard_0.1.0.sbom.sigstore.json"
+    TAG = f"v{VERSION}"
+    NAME = f"verify-naughty-keyboard_{VERSION}.sbom.sigstore.json"
 
     def gh(self, views, runs=()):
         """gh answering the draft with each view in turn and the runs of phase C
@@ -385,7 +388,7 @@ class Statement(Folder):
         self.assertEqual(download[download.index("--pattern") + 1], self.NAME)
         checks = asked[1:]
         self.assertEqual(sorted(os.path.basename(c[3]) for c in checks),
-                         sorted(a.name("0.1.0") for a in contents.load_archives()))
+                         sorted(a.name(VERSION) for a in contents.load_archives()))
         for check in checks:
             self.assertEqual(check[check.index("--predicate-type") + 1], release.load_promise().predicate)
             self.assertTrue(check[check.index("--bundle") + 1].endswith(self.NAME))
@@ -400,7 +403,7 @@ class Statement(Folder):
         self.assertEqual(asked, [])
 
     def test_asking_again_takes_a_tag_and_nothing_to_try_dry(self):
-        for argv in (["--attest-only", "--rehearse", "1"], ["v0.1.0", "--attest-only", "--dry-run"]):
+        for argv in (["--attest-only", "--rehearse", "1"], [f"v{VERSION}", "--attest-only", "--dry-run"]):
             with self.subTest(argv=argv):
                 with unittest.mock.patch("sys.stderr", io.StringIO()):
                     self.assertEqual(sign_release.main(argv), 1)
@@ -544,12 +547,12 @@ class Installer(Folder):
     signed archives, and signed by the card under the name of the product."""
 
     def test_a_release_builds_from_its_tag_a_rehearsal_from_its_commit_and_a_candidate_not_at_all(self):
-        self.assertEqual(sign_release.installer_plan("v0.1.0", None, "d"),
-                         sign_release.InstallerPlan("refs/tags/v0.1.0", None, "d"))
-        self.assertIsNone(sign_release.installer_plan("v0.1.0-rc.1", None, "d"))
+        self.assertEqual(sign_release.installer_plan(f"v{VERSION}", None, "d"),
+                         sign_release.InstallerPlan(f"refs/tags/v{VERSION}", None, "d"))
+        self.assertIsNone(sign_release.installer_plan(f"v{VERSION}-rc.1", None, "d"))
         # A rehearsal's installer is never uploaded, so it goes beside the files
         # for the page and not among them.
-        self.assertEqual(sign_release.installer_plan("v0.1.0-dev.2", "a" * 40, "d"),
+        self.assertEqual(sign_release.installer_plan(f"v{VERSION}-dev.2", "a" * 40, "d"),
                          sign_release.InstallerPlan("a" * 40, contents.load_workspace().version, "d.installer"))
 
     def test_the_installer_is_signed_under_the_name_of_the_product_and_a_program_without_one(self):
@@ -582,7 +585,7 @@ class Installer(Folder):
     def test_the_tree_is_written_name_by_name_and_a_name_out_of_it_or_a_link_is_refused(self):
         into = os.path.join(self.root, "box", "tree")
         good = self.tar(("a", tarfile.DIRTYPE, b""), ("a/b.txt", tarfile.REGTYPE, b"bytes"))
-        sign_release.export_tree("refs/tags/v0.1.0", into, self.git(good))
+        sign_release.export_tree(f"refs/tags/v{VERSION}", into, self.git(good))
         with open(os.path.join(into, "a", "b.txt"), "rb") as handle:
             self.assertEqual(handle.read(), b"bytes")
         for bad in (self.tar(("../escaped.txt", tarfile.REGTYPE, b"x")),
@@ -591,7 +594,7 @@ class Installer(Folder):
                     self.tar(("link", tarfile.SYMTYPE, b""))):
             with self.subTest(bad=bad[:20]):
                 with self.assertRaises(contents.Refused):
-                    sign_release.export_tree("refs/tags/v0.1.0", into, self.git(bad))
+                    sign_release.export_tree(f"refs/tags/v{VERSION}", into, self.git(bad))
         self.assertEqual(sorted(os.listdir(self.root)), ["box"])
         self.assertEqual(sorted(os.listdir(os.path.join(self.root, "box"))), ["tree"])
 
@@ -602,9 +605,9 @@ class Installer(Folder):
         self.assertFalse(os.path.exists(os.path.join(self.root, "t")))
 
     def test_a_tree_from_before_the_installer_is_refused(self):
-        plan = sign_release.InstallerPlan("refs/tags/v0.1.0", None, self.root)
+        plan = sign_release.InstallerPlan(f"refs/tags/v{VERSION}", None, self.root)
         with self.assertRaises(contents.Refused):
-            sign_release.installer_command(self.root, "v0.1.0", plan, "--check")
+            sign_release.installer_command(self.root, f"v{VERSION}", plan, "--check")
 
     def tree_with_a_script(self):
         scripts = os.path.join(self.root, "tree", ".github", "scripts")
@@ -614,7 +617,7 @@ class Installer(Folder):
 
     def test_the_name_is_one_line_from_build_msi_of_the_same_tree(self):
         tree = self.tree_with_a_script()
-        plan = sign_release.InstallerPlan("a" * 40, "0.1.0", self.root)
+        plan = sign_release.InstallerPlan("a" * 40, VERSION, self.root)
         asked = []
 
         def said(out, code=0):
@@ -623,20 +626,20 @@ class Installer(Folder):
                 return subprocess.CompletedProcess(command, code, out, "")
             return run_
 
-        self.assertEqual(sign_release.product_name(tree, "v0.1.0-dev.2", plan, said("Naughty Keyboard\n")),
+        self.assertEqual(sign_release.product_name(tree, f"v{VERSION}-dev.2", plan, said("Naughty Keyboard\n")),
                          "Naughty Keyboard")
         self.assertEqual(asked[0][1:], [os.path.join(tree, ".github", "scripts", "build_msi.py"), "--tag",
-                                        "v0.1.0-dev.2", "--trial", "0.1.0", "--product-name"])
+                                        f"v{VERSION}-dev.2", "--trial", VERSION, "--product-name"])
         for out, code in (("", 0), ("Two\nLines\n", 0), ("Naughty Keyboard\n", 1)):
             with self.subTest(out=out, code=code):
                 with self.assertRaises(contents.Refused):
-                    sign_release.product_name(tree, "v0.1.0", plan, said(out, code))
+                    sign_release.product_name(tree, f"v{VERSION}", plan, said(out, code))
 
-    def build(self, made=("nkb-setup_0.1.0_windows_amd64.msi",), signer=PIN, dry_run=False):
+    def build(self, made=(f"nkb-setup_{VERSION}_windows_amd64.msi",), signer=PIN, dry_run=False):
         tree = self.tree_with_a_script()
         directory = os.path.join(self.root, "page")
         os.makedirs(directory)
-        plan = sign_release.InstallerPlan("refs/tags/v0.1.0", None, directory)
+        plan = sign_release.InstallerPlan(f"refs/tags/v{VERSION}", None, directory)
         asked = []
 
         def run(command, **kw):
@@ -649,13 +652,13 @@ class Installer(Folder):
         with unittest.mock.patch.object(sign_release, "run", run), \
                 unittest.mock.patch.object(sign_release, "product_name", lambda *a: "Naughty Keyboard"), \
                 unittest.mock.patch.object(sign_release, "powershell", lambda *a, **k: signed):
-            path = sign_release.build_installer("v0.1.0", plan, tree, directory,
+            path = sign_release.build_installer(f"v{VERSION}", plan, tree, directory,
                                                 ("st", "T", sign_release.load_pins()), dry_run)
         return path, asked, directory
 
     def test_the_installer_is_built_from_the_signed_archives_signed_and_held_to_the_pin(self):
         path, asked, directory = self.build()
-        self.assertEqual(os.path.basename(path), "nkb-setup_0.1.0_windows_amd64.msi")
+        self.assertEqual(os.path.basename(path), f"nkb-setup_{VERSION}_windows_amd64.msi")
         built = asked[0]
         self.assertEqual(built[built.index("--archives") + 1], directory)
         self.assertEqual(built[built.index("--out-dir") + 1], directory)

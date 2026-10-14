@@ -8,15 +8,19 @@ lead: "Dwa programy na trzy systemy. Rozpakuj archiwum i uruchom: nic się nie i
 
 ## Czy jest już wydanie?
 
-Projekt jest na wczesnym etapie rozwoju. Jeśli [strona wydań](https://github.com/donislawdev/Naughty-Keyboard/releases) jest jeszcze pusta, wydania jeszcze nie ma i program buduje się ze źródeł, tak jak pokazuje koniec tej strony. Format paczki też nie jest jeszcze zamrożony: zamraża się wraz z pierwszym publicznym wydaniem, które wiezie paczki.
+Tak. Każde wydanie, razem z plikami, jest na [stronie wydań](https://github.com/donislawdev/Naughty-Keyboard/releases), a najnowsze zawsze pod adresem [ostatniego wydania](https://github.com/donislawdev/Naughty-Keyboard/releases/latest). Projekt jest wciąż na wczesnym etapie rozwoju, a format paczki nie jest jeszcze zamrożony: kolejne wydanie może go jeszcze zmienić, a jego notatki powiedzą jak.
 
 ## Którego pliku potrzebuję?
 
-`nkb-gui` to paleta, okno, które wpisuje wartość w pole, w którym jesteś. `nkb` to wiersz poleceń. Każde wydanie ma jedno archiwum na każdy program i system, a `VERSION` niżej oznacza wersję, na przykład `0.1.0`:
+`nkb-gui` to paleta, okno, które wpisuje wartość w pole, w którym jesteś. `nkb` to wiersz poleceń. Każde wydanie ma jedno archiwum na każdy program i system, a `VERSION` niżej oznacza wersję, na przykład `0.2.0`:
 
 {{< downloads >}}
 
 Wpisywanie w inne okna działa na Windows. Na macOS i Linuksie wiersz poleceń działa w pełni, a paleta kładzie wartości w schowku. Więcej mówią [Uczciwe ograniczenia](/docs/limits/).
+
+## Czy jest instalator na Windows?
+
+Tak, {{< installer >}}, z oboma programami w środku. Prosi o uprawnienia administratora, bo instaluje dla każdego konta na komputerze: paleta trafia do menu Start jako Naughty Keyboard, a `nkb` do systemowej zmiennej `PATH`, więc działa w każdym nowym terminalu. Nowsza wersja instaluje się na starszą, a odinstalowanie w Ustawieniach, w Aplikacjach, zostawia ustawienia tam, gdzie są.
 
 ## Co jest w archiwum?
 

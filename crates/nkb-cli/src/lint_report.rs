@@ -90,10 +90,8 @@ pub fn summary(report: &LintReport) -> Vec<String> {
 
     // Required by the format specification, which asks the tool to say this out
     // loud rather than let silence read as stability.
-    lines.push(
-        "The pack format is not frozen yet: it freezes with the first public release that ships packs."
-            .to_owned(),
-    );
+    lines
+        .push("The pack format is not frozen yet: a later release may still change it.".to_owned());
     lines
 }
 
@@ -477,7 +475,7 @@ mod tests {
     #[test]
     fn the_summary_says_the_format_is_still_changeable() {
         // Required by the format specification: silence reads as stability, and
-        // this format is not stable until the first public release with packs.
+        // this format is not stable yet, releases included.
         let text = summary(&LintReport::default()).join("\n");
         assert!(text.contains("not frozen yet"), "{text}");
     }

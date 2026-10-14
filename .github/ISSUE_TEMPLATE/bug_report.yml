@@ -26,8 +26,8 @@ body:
       description: >-
         `nkb --version` prints it. For the palette, the report block (`Alt+Shift+B`)
         carries it on its `Tool:` line. If you built from source, add the commit
-        too, because there is no release yet: `git rev-parse --short HEAD`.
-      placeholder: "nkb 0.1.0, commit 84aba19"
+        too: `git rev-parse --short HEAD`.
+      placeholder: "nkb 0.2.0"
     validations:
       required: true
   - type: dropdown

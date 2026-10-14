@@ -340,9 +340,7 @@ fn new_pack_command(args: &[String]) -> ExitCode {
             // verdict is. Nothing else is written there, so nothing is polluted.
             outln!("Wrote {file}.");
             outln!("Edit it, then run `nkb lint {file}` - it reports everything in one pass.");
-            outln!(
-                "The pack format is not frozen yet: it freezes with the first public release that ships packs."
-            );
+            outln!("The pack format is not frozen yet: a later release may still change it.");
             ExitCode::Ok
         }
         NewPackOutcome::NameNotAnIdentifier => {

@@ -21,9 +21,13 @@ import unittest
 import unittest.mock
 
 import build_msi
+import contents
 import release
 import try_installer
 
+# The version of the workspace, as every release names its files: written out,
+# it would turn these tests red on each version bump.
+VERSION = contents.load_workspace().version
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -62,7 +66,7 @@ class TheKit(unittest.TestCase):
         self.assertEqual(files["nkb.exe"], b"cli")
 
     def test_no_installer_of_the_kit_carries_the_name_of_a_release(self):
-        for tag in ("v0.1.0", "v0.1.0-rc.1", "v0.1.0-dev.7"):
+        for tag in (f"v{VERSION}", f"v{VERSION}-rc.1", f"v{VERSION}-dev.7"):
             names = {build_msi.output_name(tag, trial=trial) for _, trial in try_installer.TRIALS}
             self.assertFalse(names & set(release.page_files(tag)))
 
@@ -140,7 +144,7 @@ class TheReport(Quiet):
 
 class TheRun(Quiet):
     def test_it_stops_before_touching_anything_off_windows_or_without_the_rights(self):
-        args = types.SimpleNamespace(cleanup=False, tag="v0.1.0-dev.7", archives="a", work="w", palette=False,
+        args = types.SimpleNamespace(cleanup=False, tag=f"v{VERSION}-dev.7", archives="a", work="w", palette=False,
                                      kit_only=False, kit=None)
         with unittest.mock.patch.object(sys, "platform", "linux"):
             self.assertEqual(try_installer.run(args), 2)
@@ -149,9 +153,9 @@ class TheRun(Quiet):
             self.assertEqual(try_installer.run(args), 2)
 
     def test_a_run_needs_its_three_inputs_or_a_kit_or_cleanup(self):
-        for argv in (["--tag", "v0.1.0-dev.7", "--archives", "a"],
+        for argv in (["--tag", f"v{VERSION}-dev.7", "--archives", "a"],
                      ["--kit", "k"],
-                     ["--kit", "k", "--work", "w", "--tag", "v0.1.0-dev.7"]):
+                     ["--kit", "k", "--work", "w", "--tag", f"v{VERSION}-dev.7"]):
             with self.subTest(argv=argv):
                 with unittest.mock.patch("sys.stderr"):
                     with self.assertRaises(SystemExit):
@@ -172,7 +176,7 @@ class TheRun(Quiet):
         with unittest.mock.patch.object(build_msi, "payload_files", lambda archives, tag: laid), \
                 unittest.mock.patch.object(build_msi, "build", build), \
                 unittest.mock.patch.object(build_msi, "product_code", lambda path: "{C}"):
-            built = try_installer.build_kit("v0.1.0-dev.7", "archives", kit)
+            built = try_installer.build_kit(f"v{VERSION}-dev.7", "archives", kit)
         for label, _ in try_installer.TRIALS:
             self.assertTrue(os.path.isabs(built["installers"][label]["path"]))
             self.assertTrue(os.path.isfile(built["installers"][label]["path"]))
@@ -193,7 +197,7 @@ class TheRun(Quiet):
             with open(os.path.join(folder, label, "x.msi"), "wb") as handle:
                 handle.write(b"msi")
             installers[label] = {"path": os.path.join(label, "x.msi"), "version": trial, "code": "{C}", "files": {}}
-        described = {"product": "P", "publisher": "Q", "programs_version": "0.1.0", "shortcut": "p.exe",
+        described = {"product": "P", "publisher": "Q", "programs_version": VERSION, "shortcut": "p.exe",
                      "installers": installers}
         with open(os.path.join(folder, try_installer.KIT), "w", encoding="utf-8") as handle:
             json.dump(described, handle)

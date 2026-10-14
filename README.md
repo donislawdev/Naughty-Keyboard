@@ -19,15 +19,8 @@
 ![Status: early development](https://img.shields.io/badge/status-early%20development-orange)
 [![CI](https://github.com/donislawdev/Naughty-Keyboard/actions/workflows/ci.yml/badge.svg)](https://github.com/donislawdev/Naughty-Keyboard/actions/workflows/ci.yml)
 [![Website](https://img.shields.io/badge/website-naughtykeyboard.donislawdev.com-e4573f)](https://naughtykeyboard.donislawdev.com/)
-
-<!--
-  Badges to switch on when the thing they point at exists. Move a line out of
-  this comment and it is live.
-
-  Latest release and downloads, once the first release is published:
-  [![Latest release](https://img.shields.io/github/v/release/donislawdev/Naughty-Keyboard?sort=semver)](https://github.com/donislawdev/Naughty-Keyboard/releases/latest)
-  [![Downloads](https://img.shields.io/github/downloads/donislawdev/Naughty-Keyboard/total)](https://github.com/donislawdev/Naughty-Keyboard/releases)
--->
+[![Latest release](https://img.shields.io/github/v/release/donislawdev/Naughty-Keyboard?sort=semver)](https://github.com/donislawdev/Naughty-Keyboard/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/donislawdev/Naughty-Keyboard/total)](https://github.com/donislawdev/Naughty-Keyboard/releases)
 
 **Naughty Keyboard** is a tool for testers and developers. One shortcut types the next awkward value
 into the field in front of you: `null`, a trailing space, a zero-width space, `30.02.2026`, `=1+1`,
@@ -86,12 +79,12 @@ needs it finds out it exists.
 
 ## Get it
 
-> **Early development.** The pack format is not frozen yet - it freezes with the first public release that
-> ships packs. If the [releases page](https://github.com/donislawdev/Naughty-Keyboard/releases) is still
-> empty, there is no release yet, and you build it from source as shown further down.
+> **Early development.** The pack format is not frozen yet: a later release may still change it, and its
+> notes will say how. Every release, with its files, is on the
+> [releases page](https://github.com/donislawdev/Naughty-Keyboard/releases).
 
 Every release has six archives, one for each program and system. `nkb` is the command line and
-`nkb-gui` the palette, and `VERSION` below stands for the version, such as `0.1.0`.
+`nkb-gui` the palette, and `VERSION` below stands for the version, such as `0.2.0`.
 
 | System | Command line | Palette |
 |---|---|---|
@@ -384,8 +377,8 @@ says so.
 - **You can write your own packs, but not load them yet.** `nkb new-pack`, `nkb fmt` and `nkb lint` all
   work on a file of your own. Reading a folder of your own packs into the palette and the command line
   is not wired up: `nkb packs` reports the folders for your own and your team's packs as not read.
-- **The pack format is not frozen.** It freezes with the first public release that ships packs. `nkb lint`
-  checks 39 of its 45 rules today, and `nkb lint --explain` lists every one and why a few wait.
+- **The pack format is not frozen.** A later release may still change it, and its notes will say how.
+  `nkb lint` checks 39 of its 45 rules today, and `nkb lint --explain` lists every one and why a few wait.
 - **It does not look at the result.** It types the value and does not read what the window shows, only
   the name of its program and the kind of control that has the keyboard. Whether the application coped is
   for you to judge. Marking a result on its own chord is not there yet, so the report block is the record.
