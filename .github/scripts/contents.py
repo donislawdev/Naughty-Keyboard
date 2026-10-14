@@ -249,6 +249,43 @@ def load_archives(path=os.path.join(RELEASE, "archives.toml"), root=ROOT):
     ]
 
 
+@dataclasses.dataclass(frozen=True)
+class Installer:
+    """The Windows installer: the programs of one platform in one .msi."""
+    name: str
+    os: str
+    arch: str
+    product: str
+    shortcut: str
+
+    def file_name(self, version):
+        return "%s_%s_%s_%s.msi" % (self.name, version, self.os, self.arch)
+
+
+def load_installer(path=os.path.join(RELEASE, "archives.toml"), root=ROOT):
+    """The [installer] table of archives.toml, held to the archives it is built
+    from: a platform that exists, and a shortcut to a program that is on it."""
+    data = read_toml(path)
+    table = data.get("installer") or {}
+    problems = []
+    for key in ("name", "os", "arch", "product", "shortcut"):
+        if not isinstance(table.get(key), str) or not table.get(key):
+            problems.append("%s: [installer] has no %s" % (relative(path), key))
+    if problems:
+        raise Refused(problems)
+    if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", table["name"]):
+        problems.append("%s: [installer] name %r is not lower case words joined by hyphens"
+                        % (relative(path), table["name"]))
+    archives = [a for a in load_archives(path, root) if (a.os, a.arch) == (table["os"], table["arch"])]
+    if not archives:
+        problems.append("%s: [installer] is for %s %s, and no platform is" % (relative(path), table["os"], table["arch"]))
+    elif table["shortcut"] not in {a.program for a in archives}:
+        problems.append("%s: [installer] shortcut %r is not a program" % (relative(path), table["shortcut"]))
+    if problems:
+        raise Refused(problems)
+    return Installer(table["name"], table["os"], table["arch"], table["product"], table["shortcut"])
+
+
 # --------------------------------------------------------------------------- #
 # the register of what Cargo cannot see
 # --------------------------------------------------------------------------- #
@@ -1091,6 +1128,9 @@ def prepare(root=ROOT):
     problems = []
     workspace = load_workspace(root)
     archives = load_archives()
+    # Read here so that a release that could not name its installer fails the
+    # check every pull request runs, and not phase B.
+    load_installer()
     components, allowances = load_register(programs={a.program for a in archives},
                                            systems={a.os for a in archives}, root=root)
     packaged = [where for archive in archives for where in archive.packaged]

@@ -733,15 +733,35 @@ class Notes(unittest.TestCase):
 
 
 class Pages(unittest.TestCase):
-    def test_phase_b_uploads_nine_files_and_a_finished_release_holds_ten(self):
+    def test_phase_b_uploads_ten_files_and_a_finished_release_holds_eleven(self):
         published = release.published_files("v0.1.0")
         page = release.page_files("v0.1.0")
-        self.assertEqual(len(published), 9)
+        self.assertEqual(len(published), 10)
         self.assertEqual(sorted(set(page) - set(published)), ["verify-naughty-keyboard_0.1.0.sbom.sigstore.json"])
         self.assertIn("verify-SHA256SUMS.txt", published)
         self.assertIn("verify-naughty-keyboard_0.1.0.provenance.sigstore.json", published)
+        self.assertIn("nkb-setup_0.1.0_windows_amd64.msi", published)
         # verify- keeps the files for checking together at the end of the page.
-        self.assertTrue(all(n.startswith("verify-") for n in page if not n.endswith((".zip", ".tar.gz"))))
+        self.assertTrue(all(n.startswith("verify-") for n in page if not n.endswith((".zip", ".tar.gz", ".msi"))))
+
+    def test_a_candidate_carries_no_installer_and_one_rule_says_which_tag_is_a_candidate(self):
+        self.assertEqual(len(release.published_files("v0.1.0-rc.1")), 9)
+        self.assertFalse([n for n in release.page_files("v0.1.0-rc.1") if n.endswith(".msi")])
+        self.assertIsNone(release.installer_name("v0.1.0-rc.1"))
+        self.assertEqual(release.installer_name("v0.1.0"), "nkb-setup_0.1.0_windows_amd64.msi")
+        for tag, candidate in (("v0.1.0", False), ("v0.1.0-rc.1", True), ("v0.1.0-dev.7", True)):
+            with self.subTest(tag=tag):
+                self.assertEqual(release.is_candidate(tag), candidate)
+                self.assertEqual(release.plan_of("push", "tag", tag, 1, contents.load_workspace()).prerelease,
+                                 candidate)
+
+    def test_the_installer_is_tried_where_its_platform_is_built(self):
+        archives = contents.load_archives()
+        installer = contents.load_installer()
+        self.assertEqual(release.installer_platform(archives, installer)["runner"],
+                         next(a.runner for a in archives if a.os == installer.os))
+        with self.assertRaises(contents.Refused):
+            release.installer_platform(archives, contents.Installer("nkb-setup", "plan9", "amd64", "P", "nkb"))
 
     def test_a_list_of_digests_refuses_a_name_twice(self):
         line = "%s  a.zip\n" % ("0" * 64)

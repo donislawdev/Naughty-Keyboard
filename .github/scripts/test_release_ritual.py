@@ -18,6 +18,7 @@ import os
 import re
 import unittest
 
+import build_msi
 import release
 import sign_release
 import verify_release
@@ -349,6 +350,51 @@ class PhaseD(unittest.TestCase):
     def test_the_statements_are_held_to_the_workflows_that_make_them(self):
         self.assertTrue(os.path.isfile(os.path.join(WORKFLOWS, verify_release.BUILT_BY)))
         self.assertTrue(os.path.isfile(os.path.join(WORKFLOWS, verify_release.ATTESTED_BY)))
+
+    def test_the_installer_is_checked_from_where_the_archives_were_downloaded(self):
+        programs = self.jobs["programs"]
+        fetch = next(s for s in steps(programs) if "verify_release.py fetch" in s)
+        check = next(s for s in steps(programs) if "verify_release.py programs" in s)
+        self.assertIn('--dir "$RUNNER_TEMP/published"', fetch)
+        self.assertIn('--published "$RUNNER_TEMP/published"', check)
+
+
+class TheInstaller(unittest.TestCase):
+    """The job of phase A that asks a clean Windows machine what the installer does."""
+
+    def setUp(self):
+        self.text = read(RELEASE)
+        self.jobs = jobs(self.text)
+        self.job = self.jobs["installer"]
+
+    def test_it_runs_after_the_build_where_the_installers_platform_is_built(self):
+        self.assertEqual(re.findall(r"(?m)^    needs: (.*)$", self.job), ["[check, build]"])
+        self.assertIn("runs-on: ${{ needs.check.outputs.installer-runner }}", self.job)
+        fetch = next(s for s in steps(self.job) if "uses: actions/download-artifact@" in s)
+        self.assertIn("name: build-${{ needs.check.outputs.installer-os }}", fetch)
+        for output in ("installer-os", "installer-runner"):
+            self.assertIn("%s: ${{ steps.plan.outputs.%s }}" % (output, output), self.jobs["check"])
+        for runner in ("windows-latest", "macos-latest", "ubuntu-22.04"):
+            self.assertNotIn(runner, self.job)
+
+    def test_it_installs_the_wix_build_msi_builds_with_and_asks_the_machine_with_try_installer(self):
+        shell = "\n".join(runs(self.job))
+        self.assertIn("dotnet tool install --global wix --version %s" % build_msi.WIX_VERSION, shell)
+        self.assertIn("python .github/scripts/try_installer.py --tag", shell)
+        # A run that says FAILED has to fail the job, and nothing may say that it
+        # passed when it did not.
+        for forbidden in ("continue-on-error", "|| true", "$LASTEXITCODE = 0", "permissions:"):
+            self.assertNotIn(forbidden, self.job)
+
+    def test_nothing_is_attested_or_handed_over_before_the_installer_installed(self):
+        self.assertEqual(re.findall(r"(?m)^    needs: (.*)$", self.jobs["handover"]), ["[check, build, installer]"])
+
+    def test_a_change_to_the_installer_runs_the_release_on_its_pull_request(self):
+        pull = block(block(self.text, "on:", 0), "pull_request:", 2)
+        for path in (".github/scripts/build_msi.py", ".github/scripts/try_installer.py", ".github/release/**"):
+            self.assertIn('"%s"' % path, pull)
+        self.assertTrue(os.path.relpath(build_msi.TEMPLATE, release.ROOT).replace(os.sep, "/")
+                        .startswith(".github/release/"))
 
 
 class RequiredWorkflows(unittest.TestCase):

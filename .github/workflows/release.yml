@@ -45,6 +45,8 @@ on:
       - ".github/workflows/release.yml"
       - ".github/scripts/release.py"
       - ".github/scripts/contents.py"
+      - ".github/scripts/build_msi.py"
+      - ".github/scripts/try_installer.py"
       - ".github/release/**"
       - ".github/actions/setup-rust/**"
       - ".cargo/**"
@@ -77,6 +79,8 @@ jobs:
       tag: ${{ steps.plan.outputs.tag }}
       version: ${{ steps.plan.outputs.version }}
       platforms: ${{ steps.plan.outputs.platforms }}
+      installer-os: ${{ steps.plan.outputs.installer-os }}
+      installer-runner: ${{ steps.plan.outputs.installer-runner }}
     steps:
       - name: Check out the code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -283,9 +287,51 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # What the Windows installer DOES, asked of a clean Windows machine rather than
+  # read off its source. Three installers are built from the archives the job
+  # above packed, under trial versions no release can carry, and installed,
+  # upgraded while nkb runs from the installed folder, rebuilt over themselves,
+  # offered an older version and removed, with the machine asked after every
+  # step. Unsigned, because the card signs the installer of a release in phase
+  # B, from the signed archives. On a tag too, a candidate's included, so an
+  # installer that does not install stops the release before the card is used.
+  installer:
+    name: the Windows installer installs and leaves
+    needs: [check, build]
+    runs-on: ${{ needs.check.outputs.installer-runner }}
+    timeout-minutes: 30
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      - name: Fetch the archives of the installer's platform
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build-${{ needs.check.outputs.installer-os }}
+          path: incoming
+
+      # The version build_msi.py builds with. It refuses any other, and finds
+      # this one in the folder dotnet puts global tools in.
+      - name: Install WiX
+        shell: pwsh
+        run: dotnet tool install --global wix --version 5.0.2
+
+      - name: Build three installers and ask the machine what each one does
+        shell: pwsh
+        env:
+          TAG: ${{ needs.check.outputs.tag }}
+        run: python .github/scripts/try_installer.py --tag "$env:TAG" --archives incoming --work "$env:RUNNER_TEMP/installer"
+
   handover:
     name: attest the build and hand it over
-    needs: [check, build]
+    needs: [check, build, installer]
     # A pull request builds and stops here. A statement signed in the name of
     # this repository is made for a tag or for a run the owner started.
     if: github.event_name != 'pull_request'

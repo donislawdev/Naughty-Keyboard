@@ -77,3 +77,24 @@ arch = "amd64"
 target = "x86_64-unknown-linux-gnu"
 format = "tar.gz"
 runner = "ubuntu-22.04"
+
+# The Windows installer: both programs of one platform in one .msi, for every
+# account on the machine. It is built from the SIGNED archives of that platform,
+# so phase B builds it after the card has signed the programs, and it is signed
+# the same way. Its name is a public contract like the archives' names:
+#
+#     <name>_<version>_<os>_<arch>.msi             nkb-setup_0.1.0_windows_amd64.msi
+#
+# A release candidate gets none. Windows Installer reads only the three numbers
+# of a version, so a candidate's installer would carry the release's own version.
+#
+# `product` is the name Programs and Features lists, the folder under Program
+# Files and the name of the Start menu entry, which starts the program named by
+# `shortcut`. The programs say the same name about themselves, and a test holds
+# the two copies together.
+[installer]
+name = "nkb-setup"
+os = "windows"
+arch = "amd64"
+product = "Naughty Keyboard"
+shortcut = "nkb-gui"
