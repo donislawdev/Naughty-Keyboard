@@ -97,6 +97,11 @@ pub const BUILT_IN_PACKS: &[(&str, &str)] = &[
         "currency-separators",
         include_str!("../../../packs/currency-separators.toml"),
     ),
+    // `size-endurance` comes here in the catalogue's order, when it ships.
+    (
+        "pseudolocalization",
+        include_str!("../../../packs/pseudolocalization.toml"),
+    ),
 ];
 
 #[cfg(test)]

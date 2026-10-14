@@ -1,0 +1,134 @@
+# Polish translations of the pack pseudolocalization, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "f512beb52b02"
+text = "Pseudolokalizacja"
+
+[pack.description]
+source = "19febeb54e63"
+text = "Standardowa technika testowania wielojęzyczności, sprowadzona do wartości, które da się wkleić w pole."
+
+[pseudo-bracketed.name]
+source = "0f8e58a97f6d"
+text = "Pseudolokalizowany tekst w nawiasach"
+
+[pseudo-bracketed.breaks]
+source = "3123a6909e04"
+text = "Nawiasy od razu pokazują obcięcie: jeśli na ekranie brakuje któregoś z nich, tekst został ucięty."
+
+[pseudo-bracketed.expect]
+source = "388ace1e7d99"
+text = "Oba nawiasy widoczne wszędzie, gdzie wartość jest wyświetlana."
+
+[pseudo-accented.name]
+source = "717f0e6aa7e2"
+text = "Pseudolokalizowane słowo z akcentami"
+
+[pseudo-accented.breaks]
+source = "7a90d5ca8d61"
+text = "Wciąż czytelne jako angielskie, więc na ekranie, gdzie napisu nigdy nie przetłumaczono, od razu rzuca się w oczy."
+
+[pseudo-accented.expect]
+source = "bfa3f6363a32"
+text = "Wyświetlane ze wszystkimi akcentami, w każdej warstwie."
+
+[pseudo-expanded-30.name]
+source = "3800f534151d"
+text = "Pseudolokalizowany tekst dłuższy o 30 procent"
+
+[pseudo-expanded-30.breaks]
+source = "71566652bdef"
+text = "Dłuższy o trzydzieści procent, czyli tyle, o ile zwykle rośnie tekst przy tłumaczeniu z angielskiego na niemiecki."
+
+[pseudo-expanded-30.expect]
+source = "269be416a5fb"
+text = "Układ się trzyma, bez przycinania i nachodzenia."
+
+[pseudo-expanded-100.name]
+source = "7d6809031618"
+text = "Pseudolokalizowany tekst dwa razy dłuższy"
+
+[pseudo-expanded-100.breaks]
+source = "762bcd9c6fc5"
+text = "Dwa razy dłuższy, dla etykiet i przycisków dopasowanych do angielskiego słowa."
+
+[pseudo-expanded-100.expect]
+source = "8791e9dee567"
+text = "Zawijany albo powiększany, a nie przycinany."
+
+[pseudo-short.name]
+source = "067cef66cdb1"
+text = "Bardzo krótki pseudolokalizowany tekst"
+
+[pseudo-short.breaks]
+source = "ce9a13354c9d"
+text = "Przypadek odwrotny: bardzo krótkie tłumaczenie sprawia, że układ zbudowany wokół długiego wygląda na zepsuty."
+
+[pseudo-short.expect]
+source = "3324e361d66a"
+text = "Układ się trzyma, gdy wartość jest krótka."
+
+[pseudo-rtl.name]
+source = "b2f9f965d652"
+text = "Pseudolokalizowany tekst ze znacznikami kierunku"
+
+[pseudo-rtl.breaks]
+source = "91491b670bd6"
+text = "Pseudolokalizacja ze znacznikami kierunku, do sprawdzania odbitych układów bez znajomości języka pisanego od prawej do lewej."
+
+[pseudo-rtl.expect]
+source = "09cf5585631b"
+text = "Interfejs odbija się poprawnie, a nawiasy zostają na właściwych miejscach."
+
+[pseudo-numbers.name]
+source = "6b5088b0dcc5"
+text = "Liczba w pseudolokalizowanym tekście"
+
+[pseudo-numbers.breaks]
+source = "2287f1c83c9f"
+text = "Liczby w pseudolokalizowanym napisie pokazują formatowanie wpisane na sztywno obok tekstu."
+
+[pseudo-numbers.expect]
+source = "0418828ab753"
+text = "Liczby formatowane według ustawień regionalnych, a nie doklejane."
+
+[pseudo-with-placeholder.name]
+source = "404d649266bb"
+text = "Symbol zastępczy w pseudolokalizowanym tekście"
+
+[pseudo-with-placeholder.breaks]
+source = "a21cf74686c7"
+text = "Symbol zastępczy, który musi przetrwać tłumaczenie. Jego zgubienie daje komunikat z dziurą."
+
+[pseudo-with-placeholder.expect]
+source = "fc4bc1cab4b6"
+text = "Symbol zastępczy zachowany i wypełniony."
+
+[pseudo-html.name]
+source = "f1905c31b55c"
+text = "Znaczniki w pseudolokalizowanym tekście"
+
+[pseudo-html.breaks]
+source = "fbb5efc22937"
+text = "Znaczniki w przetłumaczonym napisie są albo escapowane, albo renderowane, a jedno i drugie jest błędem w innych miejscach."
+
+[pseudo-html.expect]
+source = "932addec70da"
+text = "Obsłużone tak samo jak wszystkie inne znaczniki podane przez użytkownika w tym polu."
+
+[pseudo-mixed-scripts.name]
+source = "5a5f0fe0c255"
+text = "Trzy pisma w jednym napisie"
+
+[pseudo-mixed-scripts.breaks]
+source = "999902310a4b"
+text = "Trzy pisma w jednym napisie: zastępcze kroje pisma, łamanie wierszy i kierunek naraz."
+
+[pseudo-mixed-scripts.expect]
+source = "51e63c13078a"
+text = "Każde pismo narysowane, bez prostokątów w miejscu brakujących znaków."

@@ -1,0 +1,94 @@
+format = 1
+
+[pack]
+id          = "pseudolocalization"
+name        = "Pseudolocalisation"
+description = "The standard internationalisation-testing technique, reduced to values you can paste into a field."
+version     = "1.0"
+updated     = 2026-10-14
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["i18n", "layout", "encoding"]
+fields      = ["text", "name", "multiline"]
+risk        = "normal"
+
+[[values]]
+id     = "pseudo-bracketed"
+name   = "Pseudolocalised text in brackets"
+value  = "[!!! \u0154\u00E9\u0161\u00F6\u00FB\u0155\u010D\u00E9\u0161 !!!]"
+breaks = "The brackets reveal truncation instantly: if either is missing on screen, the text was cut."
+expect = "Both brackets visible wherever the value is displayed."
+since  = "1.0"
+
+[[values]]
+id     = "pseudo-accented"
+name   = "Accented pseudolocalised word"
+value  = "\u0154\u00E9\u0161\u00F6\u00FB\u0155\u010D\u00E9\u0161"
+breaks = "Still readable as English, so a tester spots it in a screen where a string was never translated."
+expect = "Displayed with every accent intact, in every layer."
+since  = "1.0"
+
+[[values]]
+id     = "pseudo-expanded-30"
+name   = "Pseudolocalised text, 30 per cent longer"
+value  = "[!!! \u0154\u00E9\u0161\u00F6\u00FB\u0155\u010D\u00E9\u0161 \u00E9\u00E9\u00E9\u00E9\u00E9 !!!]"
+breaks = "Thirty per cent longer, the typical growth when English is translated into German."
+expect = "The layout holds without clipping or overlapping."
+since  = "1.0"
+
+[[values]]
+id     = "pseudo-expanded-100"
+name   = "Pseudolocalised text, twice as long"
+value  = "[!!! \u0154\u00E9\u0161\u00F6\u00FB\u0155\u010D\u00E9\u0161 \u00E9\u00E9\u00E9\u00E9\u00E9\u00E9\u00E9\u00E9\u00E9\u00E9\u00E9\u00E9\u00E9\u00E9\u00E9\u00E9\u00E9\u00E9 !!!]"
+breaks = "Twice the length, for labels and buttons sized to the English word."
+expect = "Wrapped or resized rather than clipped."
+since  = "1.0"
+
+[[values]]
+id     = "pseudo-short"
+name   = "Very short pseudolocalised text"
+value  = "[!\u0154!]"
+breaks = "The opposite case: a very short translation leaves a layout built around a long one looking broken."
+expect = "The layout holds when the value is short."
+since  = "1.0"
+
+[[values]]
+id     = "pseudo-rtl"
+name   = "Pseudolocalised text with direction marks"
+value  = "[!!! \u200F\u0154\u00E9\u0161\u00F6\u00FB\u0155\u010D\u00E9\u0161\u200F !!!]"
+breaks = "Pseudolocalisation with direction marks, for checking mirrored layouts without knowing a right-to-left language."
+expect = "The interface mirrors correctly and the brackets stay in the right places."
+since  = "1.0"
+
+[[values]]
+id     = "pseudo-numbers"
+name   = "Number inside pseudolocalised text"
+value  = "[!!! 1234,56 !!!]"
+breaks = "Numbers inside a pseudolocalised string reveal formatting that was hard-coded next to the text."
+expect = "Numbers formatted by locale, not concatenated."
+since  = "1.0"
+
+[[values]]
+id     = "pseudo-with-placeholder"
+name   = "Placeholder inside pseudolocalised text"
+value  = "[!!! \u0154\u00E9\u0161\u00F6\u00FB\u0155\u010D\u00E9\u0161 {0} !!!]"
+breaks = "A placeholder that must survive translation; losing it produces a message with a hole in it."
+expect = "The placeholder preserved and filled."
+since  = "1.0"
+
+[[values]]
+id     = "pseudo-html"
+name   = "Markup inside pseudolocalised text"
+value  = "[!!! <b>\u0154\u00E9\u0161\u00F6\u00FB\u0155\u010D\u00E9\u0161</b> !!!]"
+breaks = "Markup inside a translated string is either escaped or rendered, and both are wrong in different places."
+expect = "Handled the same way as any other user-provided markup in that field."
+since  = "1.0"
+
+[[values]]
+id     = "pseudo-mixed-scripts"
+name   = "Three scripts in one string"
+value  = "[!!! \u0154\u00E9\u0161\u00F6\u00FB\u0155\u010D\u00E9\u0161 \u4E2D\u6587 \u0627\u0644\u0639\u0631\u0628\u064A\u0629 !!!]"
+breaks = "Three scripts in one string: font fallback, line breaking and direction all at once."
+expect = "Every script rendered, with no missing-glyph boxes."
+since  = "1.0"
