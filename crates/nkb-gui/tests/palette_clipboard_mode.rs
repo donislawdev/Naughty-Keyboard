@@ -33,7 +33,7 @@ use offscreen::{Ink, added, click};
 use slint::platform::software_renderer::MinimalSoftwareWindow;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-const WIDTH: u32 = 420;
+const WIDTH: u32 = 480;
 const HEIGHT: u32 = 460;
 
 const ROUTE: [&str; 2] = ["Keyboard", "Clipboard"];
@@ -85,7 +85,7 @@ fn the_route_switch_turns_clipboard_mode_on_and_off_and_its_bar_turns_it_off() {
     palette.set_pack("whitespace".into());
     palette.set_counter("3 / 12".into());
     palette.set_shortcuts_link("Change shortcuts".into());
-    palette.set_about_link("About".into());
+    nkb_gui::header_links::show(&palette);
     palette.set_clipboard_mode_label("clipboard mode".into());
     palette.set_route_label("Send by".into());
     palette.set_route_options(ways(&ROUTE));

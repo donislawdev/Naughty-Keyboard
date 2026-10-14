@@ -28,7 +28,7 @@ use offscreen::{Ink, added, click, point};
 use slint::platform::software_renderer::MinimalSoftwareWindow;
 use slint::{ComponentHandle, LogicalPosition};
 
-const WIDTH: u32 = 420;
+const WIDTH: u32 = 480;
 const HEIGHT: u32 = 460;
 
 /// How much bluer than red a pixel must be to count as the accent's ink - the

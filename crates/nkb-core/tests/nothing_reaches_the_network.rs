@@ -12,10 +12,11 @@
 //! **Forbidden** spellings have no legitimate place in this workspace at all:
 //! the standard library's sockets, an HTTP client, a name lookup, handing an
 //! address to the shell or the browser. Their presence is the finding - with
-//! ONE exception, register 3: the palette's Donate link hands the browser the
-//! support page, on the tester's click, from one file, and that file may name
-//! no other address (the owner's decision, 2026-10-14). The program still
-//! opens no connection - the browser does, where the tester asked it to go.
+//! ONE exception, register 3: the palette's GitHub and Donate links hand the
+//! browser the project's repository and the support page, on the tester's
+//! click, from one file, and that file may name no other address (the owner's
+//! decisions, 2026-10-14). The program still opens no connection - the
+//! browser does, where the tester asked it to go.
 //!
 //! **Watched** spellings are legitimate in named test files and nowhere else:
 //! starting a process, and a local socket. Two tests start the `nkb` they were
@@ -242,20 +243,23 @@ const ALLOWED: &[(&str, &str, &str)] = &[
 ];
 
 // ---------------------------------------------------------------------------
-// Register 3: the one address the product hands to the browser
+// Register 3: the two addresses the product hands to the browser
 // ---------------------------------------------------------------------------
 
 /// The one forbidden spelling the PRODUCT may use: the file, the spelling, the
-/// one address the file may name, and why. Every address literal in that file
-/// must be this one, and the spelling anywhere else is forbidden as before -
-/// the canary below watches both refusals.
-const GRANTED_TO_THE_PRODUCT: (&str, &str, &str, &str) = (
-    "crates/nkb-gui/src/donate.rs",
+/// addresses the file may name, and why. Every address literal in that file
+/// must be one of these, and the spelling anywhere else is forbidden as
+/// before - the canary below watches both refusals.
+const GRANTED_TO_THE_PRODUCT: (&str, &str, &[&str], &str) = (
+    "crates/nkb-gui/src/header_links.rs",
     "webbrowser::",
-    "https://donislawdev.com/support/",
-    "the Donate link in the palette's header opens the support page in the default browser, \
-     on the tester's click alone (the owner's point 5, 2026-10-14). The browser makes the \
-     connection, the program makes none",
+    &[
+        "https://github.com/donislawdev/Naughty-Keyboard",
+        "https://donislawdev.com/support/",
+    ],
+    "the GitHub and Donate links in the palette's header open the project's repository and \
+     the support page in the default browser, on the tester's click alone (the owner's \
+     decisions of 2026-10-14). The browser makes the connection, the program makes none",
 );
 
 /// Whether `name` is the spelling granted to the file `rel`.
@@ -374,11 +378,11 @@ fn findings(syntax: Syntax, source: &str, rel: &str) -> Vec<Finding> {
         let (text, lines) = literal_text(literal);
         let line_of = |at: usize| lines.get(at).copied().unwrap_or(literal.first_line);
         out.extend(findings_in(&text, syntax, true, rel, &line_of));
-        // The granted file hands the browser one address: any other is a
-        // finding, so the grant cannot carry a second page in later.
+        // The granted file hands the browser its named addresses: any other
+        // is a finding, so the grant cannot carry another page in later.
         if rel == GRANTED_TO_THE_PRODUCT.0
             && text.contains("://")
-            && text != GRANTED_TO_THE_PRODUCT.2
+            && !GRANTED_TO_THE_PRODUCT.2.contains(&text.as_str())
         {
             out.push(("address", text.clone(), literal.first_line));
         }
@@ -445,36 +449,43 @@ fn nothing_reaches_the_network_outside_the_named_exceptions() {
     );
 }
 
-/// Register 3 opens one address from one file, and the canary sees both
-/// refusals: the granted spelling in any other file, and another address in
-/// the granted one. Then the grant is held to live code, so a file that gave
-/// the call up does not keep the door open.
+/// Register 3 opens its named addresses from one file, and the canary sees
+/// both refusals: the granted spelling in any other file, and another address
+/// in the granted one. Then the grant is held to live code, so a file that gave
+/// a page up does not keep its door open.
 #[test]
-fn the_one_grant_to_the_product_opens_its_one_address_and_nothing_else() {
-    let (file, spelling, address, reason) = GRANTED_TO_THE_PRODUCT;
+fn the_one_grant_to_the_product_opens_its_named_addresses_and_nothing_else() {
+    let (file, spelling, addresses, reason) = GRANTED_TO_THE_PRODUCT;
     assert!(!reason.is_empty());
-    let right = format!(
-        "pub const PAGE: &str = \"{address}\";\nfn open() {{ let _ = {spelling}open(PAGE); }}\n"
-    );
-    assert_eq!(findings(Syntax::Rust, &right, file), Vec::new());
-    assert!(
-        findings(Syntax::Rust, &right, "crates/nkb-gui/src/about.rs")
-            .iter()
-            .any(|finding| finding.0 == "forbidden"),
-        "the grant is for one file, and the same call anywhere else is forbidden"
-    );
-    let other = right.replace(address, "https://example.invalid/");
-    assert!(
-        findings(Syntax::Rust, &other, file)
-            .iter()
-            .any(|finding| finding.0 == "address"),
-        "the granted file named an address other than the one granted"
-    );
     let source = read(&workspace_root().join(file));
     assert!(
-        source.contains(spelling) && source.contains(address),
-        "{file} no longer opens {address} - remove register 3 rather than keep the door open"
+        source.contains(spelling),
+        "{file} no longer opens a page - remove register 3 rather than keep the door open"
     );
+    for address in addresses {
+        let right = format!(
+            "pub const PAGE: &str = \"{address}\";\nfn open() {{ let _ = {spelling}open(PAGE); }}\n"
+        );
+        assert_eq!(findings(Syntax::Rust, &right, file), Vec::new());
+        assert!(
+            findings(Syntax::Rust, &right, "crates/nkb-gui/src/about.rs")
+                .iter()
+                .any(|finding| finding.0 == "forbidden"),
+            "the grant is for one file, and the same call anywhere else is forbidden"
+        );
+        let other = right.replace(address, "https://example.invalid/");
+        assert!(
+            findings(Syntax::Rust, &other, file)
+                .iter()
+                .any(|finding| finding.0 == "address"),
+            "the granted file named an address other than the ones granted"
+        );
+        assert!(
+            source.contains(address),
+            "{file} no longer names {address} - take it out of register 3 rather than keep the \
+             door open"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------

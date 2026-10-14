@@ -936,8 +936,9 @@ const ALLOWED_DEPENDENCIES: &[(&str, &[&str])] = &[
             "slint",
             "raw-window-handle",
             "arboard",
-            // The support page for Donate - already linked by Slint, and named
-            // by one file only (`nothing_reaches_the_network.rs`, register 3).
+            // The two pages of the header's links, GitHub and Donate - already
+            // linked by Slint, and named by one file only
+            // (`nothing_reaches_the_network.rs`, register 3).
             "webbrowser",
             // Build only: the compiler of the views, and the resource with the
             // icon and the file's details.

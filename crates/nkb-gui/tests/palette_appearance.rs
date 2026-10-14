@@ -28,7 +28,7 @@ mod offscreen;
 use nkb_gui::{Marker, Palette};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-const WIDTH: u32 = 420;
+const WIDTH: u32 = 480;
 /// Taller than any state below draws. 460 until the next band (UX-GUI-001): the
 /// palette with both value bands and the longest counters outgrew it, every edge
 /// measured the buffer's floor instead of the palette's, and "the counters wrap"
@@ -139,9 +139,8 @@ fn fill(palette: &Palette) {
     palette.set_can_go_back(true);
     // What the shortcut that steps back types (the owner's point 6).
     palette.set_previous_line("Alt+Shift+P goes back and types value 6".into());
-    // The two links in the header (the owner's points 2 and 5).
-    palette.set_about_link("About".into());
-    palette.set_donate_link("Donate".into());
+    // The links in the header (the owner's points of 2026-10-14).
+    nkb_gui::header_links::show(palette);
     palette.set_next_name("Trailing no-break space".into());
     palette.set_next_preview("Kowalski\u{2423}".into());
     palette.set_next_markers(ModelRc::new(VecModel::from(vec![Marker {
@@ -173,7 +172,7 @@ fn fill(palette: &Palette) {
     palette.set_collapse_label("Collapse".into());
     palette.set_expand_label("Expand".into());
     palette.set_shortcuts_link("Change shortcuts".into());
-    palette.set_about_link("About".into());
+    nkb_gui::header_links::show(palette);
     // The two switches under the hint bar (the owner's point 2): values typed,
     // the line cleared first.
     palette.set_route_label("Send by".into());

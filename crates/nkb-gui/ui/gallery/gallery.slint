@@ -52,6 +52,7 @@ import {
     SwitchesBand,
     Heart,
     HeaderActions,
+    HeaderLinkKind,
 } from "../components.slint";
 
 export component Gallery inherits Window {
@@ -449,15 +450,18 @@ export component Gallery inherits Window {
         }
 
         // The right end of the palette's header, expanded and compact: the
-        // links to the support page and the About window stand only in the
-        // first.
+        // links to GitHub, the support page and the About window stand only in
+        // the first.
         HorizontalLayout {
             Spacer { }
             HeaderActions {
                 counter: "3 / 12";
                 toggle-label: "Collapse";
-                about-link: "About";
-                donate-link: "Donate";
+                links: [
+                    { kind: HeaderLinkKind.source-code, text: "GitHub" },
+                    { kind: HeaderLinkKind.donate, text: "Donate" },
+                    { kind: HeaderLinkKind.about, text: "About" },
+                ];
             }
         }
         HorizontalLayout {
@@ -466,8 +470,11 @@ export component Gallery inherits Window {
                 counter: "3 / 12";
                 compact: true;
                 toggle-label: "Expand";
-                about-link: "About";
-                donate-link: "Donate";
+                links: [
+                    { kind: HeaderLinkKind.source-code, text: "GitHub" },
+                    { kind: HeaderLinkKind.donate, text: "Donate" },
+                    { kind: HeaderLinkKind.about, text: "About" },
+                ];
             }
         }
 

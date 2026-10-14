@@ -100,6 +100,8 @@ import {
     WindowFrame,
     WindowHeader,
     HeaderActions,
+    HeaderLink,
+    HeaderLinkKind,
     WindowFooter,
     WindowStatus,
     ProgressBar,
@@ -347,15 +349,12 @@ export component Palette inherits Window {
     callback open-shortcuts();
     // The link's words, which are also what the click does.
     in property <string> shortcuts-link;
-    // Asks for the About window, the link at the other end of that row - a
-    // callback declared for the same reason.
-    callback open-about();
-    in property <string> about-link;
-    // Opens the support page in the browser - the link beside About in the
-    // header, a heart before its word (the owner's point 5, 2026-10-14). The
-    // address lives in Rust, never in a view (`nothing_reaches_the_network`).
-    callback donate();
-    in property <string> donate-link;
+    // The links in the header - GitHub, Donate and About since the owner's
+    // points of 2026-10-14 - and which one was clicked. What each opens, and
+    // the two addresses, live in Rust, never in a view
+    // (`nothing_reaches_the_network`).
+    in property <[HeaderLink]> header-links;
+    callback open-link(HeaderLinkKind);
 
     title: root.window-title;
     icon: Tokens.app-icon;
@@ -394,29 +393,26 @@ export component Palette inherits Window {
             opens: true;
             action: root.open-packs-label;
             dimmed: root.compact && root.translucency-allowed;
-            // Donate and About, the counter, and Collapse or Expand - the
-            // reasons for their order and states stand in the component.
+            // The links, the counter, and Collapse or Expand - the reasons for
+            // their order and states stand in the component.
             HeaderActions {
                 counter: root.counter;
                 compact: root.compact;
                 sending: root.sending;
                 toggle-label: root.compact ? root.expand-label : root.collapse-label;
-                about-link: root.about-link;
-                donate-link: root.donate-link;
+                links: root.header-links;
                 toggle-compact => {
                     root.toggle-compact();
                 }
-                open-about => {
-                    root.open-about();
-                }
-                donate => {
-                    root.donate();
+                open-link(kind) => {
+                    root.open-link(kind);
                 }
             }
         }
 
         // What the next press sends (UX-GUI-001), and the value that went out
-        // last - each a band of its own (`components/value_bands.slint`), where
+        // last - each a band of its own (`components/next_band.slint` and
+        // `last_sent_band.slint`), where
         // the reasons for their shape stand beside it.
         if !root.compact && root.has-next: NextBand {
             heading: root.next-heading;

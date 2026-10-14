@@ -34,7 +34,7 @@ use offscreen::{Ink, added, click};
 use slint::platform::software_renderer::MinimalSoftwareWindow;
 use slint::{ComponentHandle, SharedString};
 
-const WIDTH: u32 = 420;
+const WIDTH: u32 = 480;
 const HEIGHT: u32 = 460;
 
 const COLLAPSE: &str = "Collapse";

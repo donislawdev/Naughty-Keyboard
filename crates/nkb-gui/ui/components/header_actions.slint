@@ -1,12 +1,20 @@
-// The right end of the palette's header: the links to the support page and to
-// the About window, the counter, and Collapse or Expand.
+// The right end of the palette's header: the links to the project on GitHub,
+// to the support page and to the About window, the counter, and Collapse or
+// Expand.
 //
-// The two links stand at the top since the owner's points 2 and 5 of
-// 2026-10-14: About had been at the end of the row under the switches, where a
-// tester looking for it did not look, and Donate is new. Both are links, not
-// buttons - each opens something else rather than changing the palette - and
-// both stand only in the expanded state: the compact palette is meant to take
-// little room and no attention.
+// The links stand at the top since the owner's points of 2026-10-14: About had
+// been at the end of the row under the switches, where a tester looking for it
+// did not look, and GitHub and Donate are new. All are links, not buttons -
+// each opens something else rather than changing the palette - and all stand
+// only in the expanded state: the compact palette is meant to take little room
+// and no attention.
+//
+// The links are a list the program hands in, in the order they stand (GUI
+// rule 8: three of a kind are data, not three copies), and a click hands back
+// which link it was. What each opens, and the two addresses, live in Rust
+// (`header_links.rs`), never in a view (`nothing_reaches_the_network`). The
+// heart is the view's: it marks the link to the support page, whatever its
+// words.
 //
 // A component of its own for that section's state (GUI rule 9), and because
 // `screens/palette.slint` stands at the Slint ceiling of `D113`: its header
@@ -17,6 +25,18 @@ import { TextCounter } from "typography.slint";
 import { SmallButton } from "button.slint";
 import { PickerOpener } from "list.slint";
 
+// Which link of the header was clicked: what it opens. Matched in Rust, so no
+// word of the view is ever read back (GUI rule 11).
+export enum HeaderLinkKind { source-code, donate, about }
+
+// One link of the header: what it opens, and its words, which are also what a
+// click does, as UI Automation reads it - the way every link of the palette
+// names itself.
+export struct HeaderLink {
+    kind: HeaderLinkKind,
+    text: string,
+}
+
 export component HeaderActions inherits HorizontalLayout {
     in property <string> counter;
     // Whether the palette is compact, which hides the two links.
@@ -26,34 +46,28 @@ export component HeaderActions inherits HorizontalLayout {
     in property <bool> sending;
     // What Collapse or Expand says now, which is also what a click does.
     in property <string> toggle-label;
-    // The two links' words, which are also what each does, as UI Automation
-    // reads it - the way every link of the palette names itself.
-    in property <string> about-link;
-    in property <string> donate-link;
+    // The links, in the order they stand.
+    in property <[HeaderLink]> links;
     callback toggle-compact();
-    callback open-about();
-    callback donate();
+    callback open-link(HeaderLinkKind);
 
     spacing: Tokens.space-3;
 
-    if !root.compact: VerticalLayout {
-        alignment: center;
-        PickerOpener {
-            text: root.donate-link;
-            action: root.donate-link;
-            heart: true;
-            clicked => {
-                root.donate();
-            }
-        }
-    }
-    if !root.compact: VerticalLayout {
-        alignment: center;
-        PickerOpener {
-            text: root.about-link;
-            action: root.about-link;
-            clicked => {
-                root.open-about();
+    if !root.compact: HorizontalLayout {
+        spacing: Tokens.space-3;
+        for link in root.links: VerticalLayout {
+            alignment: center;
+            // Whole, never cut short: the pack's name gives way, not the
+            // links. Without this a long name took room from both, measured
+            // 2026-10-14 (`palette_opener.rs`).
+            min-width: opener.preferred-width;
+            opener := PickerOpener {
+                text: link.text;
+                action: link.text;
+                heart: link.kind == HeaderLinkKind.donate;
+                clicked => {
+                    root.open-link(link.kind);
+                }
             }
         }
     }
