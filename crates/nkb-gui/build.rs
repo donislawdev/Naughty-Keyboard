@@ -52,6 +52,6 @@ fn embed_resources() {
             name: "nkb-gui",
             description: "Naughty Keyboard",
         },
-        Some(std::path::Path::new("assets/nkb-gui.rc")),
+        std::path::Path::new("assets/nkb-gui.rc"),
     );
 }

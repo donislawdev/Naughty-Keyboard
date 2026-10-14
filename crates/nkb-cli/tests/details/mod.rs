@@ -34,6 +34,13 @@ pub const FIRST_YEAR: &str = "2026";
 
 /// The resource type of a version block, `RT_VERSION`.
 const RT_VERSION: u16 = 16;
+/// The resource types of an icon: each image (`RT_ICON`), named by a number,
+/// and the group that lists the images with their sizes (`RT_GROUP_ICON`).
+const RT_ICON: u16 = 3;
+const RT_GROUP_ICON: u16 = 14;
+/// The one icon file both programs carry, kept with the drawings it is made
+/// from. The path is the same from either package's folder.
+const ICON_FILE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../nkb-gui/assets/edamame.ico");
 /// What a `VS_FIXEDFILEINFO` starts with.
 const FIXED_SIGNATURE: u32 = 0xFEEF_04BD;
 
@@ -157,9 +164,76 @@ fn number(text: &str) -> u16 {
         .unwrap_or_else(|_| panic!("a version number over 16 bits: {text}"))
 }
 
-/// The bytes of the first `RT_VERSION` resource, through the three levels of
-/// the resource directory: type, name, language.
+/// Holds the icon of the file at `path` to the icon file that ships, byte for
+/// byte: its group lists the images the `.ico` lists, in the same order and
+/// with the same sizes, and every image it names is the one the `.ico` holds.
+/// Read from the built program, so a resource script that stopped naming the
+/// icon, or named another, is red - the chain of scripts is not trusted.
+pub fn assert_wears_the_icon(path: &str) {
+    let data = std::fs::read(path).unwrap_or_else(|error| panic!("cannot read {path}: {error}"));
+    let group =
+        resource(&data, RT_GROUP_ICON, None).unwrap_or_else(|| panic!("{path} carries no icon"));
+    let ico =
+        std::fs::read(ICON_FILE).unwrap_or_else(|error| panic!("cannot read {ICON_FILE}: {error}"));
+    let count = usize::from(le16(&ico, 4));
+    assert_eq!(
+        (le16(group, 0), le16(group, 2)),
+        (0, 1),
+        "{path}: the group's header is not an icon's"
+    );
+    assert_eq!(
+        usize::from(le16(group, 4)),
+        count,
+        "{path}: the group lists another number of images than {ICON_FILE}"
+    );
+    for i in 0..count {
+        // An entry of the file is 16 bytes and ends in the image's offset, an
+        // entry of the group is 14 and ends in the image's resource number.
+        // The first twelve - size, colours, planes, bits, length - are shared.
+        let in_file = slice(&ico, 6 + 16 * i, 16);
+        let in_group = slice(group, 6 + 14 * i, 14);
+        assert_eq!(
+            slice(in_group, 0, 12),
+            slice(in_file, 0, 12),
+            "{path}: image {i} is described otherwise than in {ICON_FILE}"
+        );
+        let number = le16(in_group, 12);
+        let image = resource(&data, RT_ICON, Some(number))
+            .unwrap_or_else(|| panic!("{path}: image {i} (resource {number}) is not there"));
+        let length = le32(in_file, 8) as usize;
+        let offset = le32(in_file, 12) as usize;
+        assert!(
+            image == slice(&ico, offset, length),
+            "{path}: image {i} is not the one {ICON_FILE} holds"
+        );
+    }
+}
+
+fn slice(bytes: &[u8], at: usize, length: usize) -> &[u8] {
+    bytes
+        .get(at..at + length)
+        .unwrap_or_else(|| panic!("{length} bytes at {at} lie outside {} bytes", bytes.len()))
+}
+
+fn le16(bytes: &[u8], at: usize) -> u16 {
+    let two = slice(bytes, at, 2);
+    u16::from_le_bytes([two[0], two[1]])
+}
+
+fn le32(bytes: &[u8], at: usize) -> u32 {
+    let four = slice(bytes, at, 4);
+    u32::from_le_bytes([four[0], four[1], four[2], four[3]])
+}
+
+/// The bytes of the first `RT_VERSION` resource.
 fn version_block(data: &[u8]) -> Option<&[u8]> {
+    resource(data, RT_VERSION, None)
+}
+
+/// The bytes of the first resource of type `kind` - or of the one numbered
+/// `name` - through the three levels of the resource directory: type, name,
+/// language.
+fn resource(data: &[u8], kind: u16, name: Option<u16>) -> Option<&[u8]> {
     let file = PeFile64::parse(data).ok()?;
     let sections = file.section_table();
     let directory = file
@@ -167,12 +241,19 @@ fn version_block(data: &[u8]) -> Option<&[u8]> {
         .resource_directory(data, &sections)
         .ok()??;
     let mut table = directory.root().ok()?;
-    let mut want_type = true;
+    let mut level = 0;
     loop {
+        let wanted = match level {
+            0 => Some(kind),
+            1 => name,
+            _ => None,
+        };
         let entry = table.entries.iter().find(|entry| {
-            !want_type || matches!(entry.name_or_id(), ResourceNameOrId::Id(RT_VERSION))
+            wanted.is_none_or(
+                |id| matches!(entry.name_or_id(), ResourceNameOrId::Id(found) if found == id),
+            )
         })?;
-        want_type = false;
+        level += 1;
         match entry.data(directory).ok()? {
             ResourceDirectoryEntryData::Table(next) => table = next,
             ResourceDirectoryEntryData::Data(leaf) => {
