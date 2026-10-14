@@ -1,0 +1,27 @@
+# Advisories that OSV-Scanner reports and that do not stop this project, read by
+# .github/workflows/osv-scanner.yml.
+#
+# Every entry names the advisory and says why it does not apply here. An entry
+# is added in a pull request of its own, where the check runs against this file
+# as the pull request changes it, so the reason is reviewed before the advisory
+# stops blocking. Nothing else is switched off: no package, no ecosystem and no
+# severity. The workflow scans a lock file that is bad on purpose with this same
+# file, so an entry that silenced the whole crates.io ecosystem would turn that
+# run red.
+#
+# The twin of this list is the [advisories] ignore list in deny.toml, which
+# cargo-deny reads. The two tools read Cargo.lock differently. cargo-deny looks
+# at the crates a build can use. OSV-Scanner reads the lock file as written, and
+# Cargo writes into it every optional dependency of every crate, also the ones
+# no feature here turns on. So an advisory can appear in this list and not in
+# deny.toml, and each entry says which kind it is. cargo-deny reports an entry
+# of its own list that no longer matches anything, and OSV-Scanner does not, so
+# when deny.toml loses an entry, delete its twin here in the same change.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0192"
+reason = "ttf-parser is unmaintained, and no vulnerability is reported against it. It is reached only through the window decorations that Slint's winit backend draws itself under Wayland on Linux, and it reads a font the toolkit ships, never a file the tester supplies. The twin entry in deny.toml says the same."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2025-0141"
+reason = "bincode is unmaintained, and no vulnerability is reported against it. It is in Cargo.lock only as an optional dependency of typed-index-collections, which Slint's compiler uses without that feature, so nothing is built with it: cargo tree --invert bincode --target all --edges all prints nothing. That is also why cargo-deny does not report it and deny.toml has no twin."

@@ -204,6 +204,13 @@ runs on a pull request, and the check of a published release only reads. The sta
 analysis (Semgrep) fetches its rules from the public registry. The scan itself runs on the CI machine,
 sends no usage data and does not send the code anywhere.
 
+OSV-Scanner checks `Cargo.lock` and the pinned Semgrep engine against the OSV database on every pull
+request, after every push to `main` and every Monday. Any published advisory fails the check, unless
+`osv-scanner.toml` names it with the reason it does not apply, and a release waits for the check to
+pass on the commit it is built from. The runs on `main` also put what they find in this repository's
+Security tab, under code scanning. To ask, the scanner sends the names and versions of the
+dependencies to osv.dev, and nothing else.
+
 ## Code of conduct
 
 Behaviour in this repository is covered by [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).

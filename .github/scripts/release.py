@@ -60,7 +60,8 @@ from contents import ROOT, Refused
 # commit a release is built from. By file, not "every check of the commit": a
 # question about every check is answered by whatever happened to report, so a
 # workflow that never ran reads exactly like one that passed.
-REQUIRED_WORKFLOWS = ("ci.yml", "supply-chain.yml", "semgrep.yml", "workflow-lint.yml")
+REQUIRED_WORKFLOWS = ("ci.yml", "supply-chain.yml", "semgrep.yml", "workflow-lint.yml",
+                      "osv-scanner.yml")
 MAIN = "main"
 # A tag is often pushed right after a merge, while CI on that commit still runs.
 WAIT_SECONDS = 25 * 60
