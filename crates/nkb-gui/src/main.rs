@@ -69,7 +69,8 @@ use nkb_gui::packs::{Packs, SystemKeyboard};
 use nkb_gui::shortcuts::{Shortcuts, System};
 use nkb_gui::welcome::Welcome;
 use nkb_gui::{
-    AboutWindow, Gallery, PacksWindow, Palette, ShortcutsWindow, WelcomeWindow, focus, live,
+    AboutWindow, Gallery, HeaderLinkKind, PacksWindow, Palette, ShortcutsWindow, WelcomeWindow,
+    focus, header_links, live,
 };
 use slint::ComponentHandle;
 
@@ -260,16 +261,17 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         Box::new(SystemKeyboard::default()),
         say_in(&palette),
     );
-    palette.on_open_about({
+    // The links in the header (the owner's points of 2026-10-14): two pages in
+    // the browser, and the About window.
+    palette.on_open_link({
         let about = Rc::clone(&about);
-        move || about.open()
-    });
-    // Donate (the owner's point 5): the support page in the browser.
-    palette.on_donate({
         let palette = palette.as_weak();
-        move || {
-            if let Some(palette) = palette.upgrade() {
-                nkb_gui::donate::on_click(&palette);
+        move |link| match link {
+            HeaderLinkKind::About => about.open(),
+            HeaderLinkKind::SourceCode | HeaderLinkKind::Donate => {
+                if let Some(palette) = palette.upgrade() {
+                    header_links::open_page(&palette, link);
+                }
             }
         }
     });
@@ -399,10 +401,9 @@ fn label_palette(palette: &Palette, bindings: &Bindings, compact: bool, settings
     // names that click with the words the hint bar gives the shortcut.
     palette.set_open_packs_label(i18n::action_name(HotkeyAction::OpenPacks).into());
     // The link under the hint bar opens the shortcuts window (K5.5), and the
-    // two in the header the About window and the support page (points 2, 5).
+    // three in the header two pages and the About window.
     palette.set_shortcuts_link(i18n::label(PaletteLabel::ShortcutsLink).into());
-    palette.set_about_link(i18n::label(PaletteLabel::AboutLink).into());
-    palette.set_donate_link(i18n::label(PaletteLabel::DonateLink).into());
+    header_links::show(palette);
     // The value band's heading: since UX-GUI-001 the band of the next value
     // stands above it, and two values on screen need telling apart.
     palette.set_last_sent_label(i18n::label(PaletteLabel::LastSent).into());

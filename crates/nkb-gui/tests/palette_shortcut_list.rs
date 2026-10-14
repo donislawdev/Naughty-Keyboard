@@ -26,7 +26,7 @@ use offscreen::{Ink, added, click};
 use slint::platform::software_renderer::MinimalSoftwareWindow;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-const WIDTH: u32 = 420;
+const WIDTH: u32 = 480;
 const HEIGHT: u32 = 900;
 
 const HEADING: &str = "Shortcuts";

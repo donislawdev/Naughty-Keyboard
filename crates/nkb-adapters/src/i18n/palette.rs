@@ -98,13 +98,17 @@ pub enum PaletteLabel {
     /// what a click does (the owner's point 4 of 2026-10-10, moved to the top
     /// by point 2 of 2026-10-14).
     AboutLink,
-    /// The link beside it that opens the support page in the browser (the
+    /// The link before it that opens the support page in the browser (the
     /// owner's point 5, 2026-10-14) - its words, after the drawn heart, and
     /// what a click does.
     DonateLink,
-    /// Said when the system would not open the browser, naming the page so
-    /// the tester can type it.
-    DonateFailed,
+    /// The first link of the header, which opens the project's repository on
+    /// GitHub in the browser (the owner's request of 2026-10-14) - its words,
+    /// and what a click does.
+    SourceCodeLink,
+    /// Said when the system would not open the browser for either page,
+    /// naming the page so the tester can type it.
+    BrowserDidNotOpen,
     /// The heading of the list of shortcuts at the foot of the palette, which
     /// folds the list away and opens it again (`D123`, the owner's choice on
     /// a palette that had grown to ~916 px).
@@ -244,9 +248,8 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::ShortcutsLink => "Change shortcuts",
         PaletteLabel::AboutLink => "About",
         PaletteLabel::DonateLink => "Donate",
-        PaletteLabel::DonateFailed => {
-            "The browser did not open. The page is donislawdev.com/support/."
-        }
+        PaletteLabel::SourceCodeLink => "GitHub",
+        PaletteLabel::BrowserDidNotOpen => "The browser did not open. The page is {page}.",
         PaletteLabel::ShortcutList => "Shortcuts",
         PaletteLabel::ShortcutListAction => "Show or hide the list of shortcuts",
         PaletteLabel::Typing => "Typing",
@@ -387,6 +390,17 @@ pub fn skip_to(index: usize) -> String {
     fill(
         pattern_palette_label(PaletteLabel::Skip),
         &[("index", &index.to_string())],
+    )
+}
+
+/// The sentence for a click on a link the browser did not open, with the page
+/// as a tester types it: `The browser did not open. The page is
+/// donislawdev.com/support.`
+#[must_use]
+pub fn browser_did_not_open(page: &str) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::BrowserDidNotOpen),
+        &[("page", page)],
     )
 }
 

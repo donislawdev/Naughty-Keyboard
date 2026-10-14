@@ -285,8 +285,9 @@ const WINDOWS_WINDOW: &[Entry] = &[
 const WINDOWS_WINDOW_GRANTED: &[Entry] = &[(
     "CreateProcessW",
     "the webbrowser crate starts the default browser, and since 2026-10-14 one click makes it: \
-     Donate in the palette's header opens the support page (crates/nkb-gui/src/donate.rs, the one \
-     file nothing_reaches_the_network.rs grants, for that one address). Slint also keeps it \
+     GitHub or Donate in the palette's header opens the repository or the support page \
+     (crates/nkb-gui/src/header_links.rs, the one file nothing_reaches_the_network.rs grants, \
+     for those two addresses). Slint also keeps it \
      linked for `open-url`, which that guard refuses in every view",
 )];
 
@@ -332,8 +333,8 @@ const LINUX_WINDOW_GRANTED: &[Entry] = &[
     (
         "execvp",
         "the standard library's process start, which Slint's dependencies link: the webbrowser \
-         crate, which since 2026-10-14 starts the browser on a click on Donate and on nothing \
-         else, and the session bus client",
+         crate, which since 2026-10-14 starts the browser on a click on GitHub or Donate and \
+         on nothing else, and the session bus client",
     ),
     ("fork", "the same process start"),
     ("posix_spawnp", "the same process start"),

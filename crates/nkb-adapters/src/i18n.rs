@@ -86,8 +86,8 @@ mod windows;
 
 use palette::pattern_palette_label;
 pub use palette::{
-    PaletteLabel, back_to, counter, counts, label, next_end_of_pack, next_value, no_value_yet,
-    previous_types, sent_to, skip_to, typing_counter, warnings,
+    PaletteLabel, back_to, browser_did_not_open, counter, counts, label, next_end_of_pack,
+    next_value, no_value_yet, previous_types, sent_to, skip_to, typing_counter, warnings,
 };
 pub use registration::{ended, registration, registrations, shortcuts_unavailable};
 pub use windows::{
@@ -2083,7 +2083,8 @@ mod tests {
             PaletteLabel::NoOtherPack,
             PaletteLabel::PreviousTypes,
             PaletteLabel::DonateLink,
-            PaletteLabel::DonateFailed,
+            PaletteLabel::SourceCodeLink,
+            PaletteLabel::BrowserDidNotOpen,
         ] {
             // Exhaustive, so a new variant must be put on one side or the other
             // before this file compiles.
@@ -2103,7 +2104,8 @@ mod tests {
                 | PaletteLabel::Back
                 | PaletteLabel::Skip
                 | PaletteLabel::SentTo
-                | PaletteLabel::SentToUnnamed => true,
+                | PaletteLabel::SentToUnnamed
+                | PaletteLabel::BrowserDidNotOpen => true,
                 PaletteLabel::Title
                 | PaletteLabel::Offensive
                 | PaletteLabel::Cleared
@@ -2115,7 +2117,7 @@ mod tests {
                 | PaletteLabel::ShortcutsLink
                 | PaletteLabel::AboutLink
                 | PaletteLabel::DonateLink
-                | PaletteLabel::DonateFailed
+                | PaletteLabel::SourceCodeLink
                 | PaletteLabel::ShortcutList
                 | PaletteLabel::ShortcutListAction
                 | PaletteLabel::Typing
@@ -2184,6 +2186,7 @@ mod tests {
             previous_types(2, nkb_core::hotkeys::DEFAULT_BINDINGS[1].1),
             back_to(3),
             skip_to(5),
+            browser_did_not_open("example.test"),
         ] {
             assert!(!text.is_empty(), "a label produced nothing");
             assert!(!text.contains('{'), "a label left a placeholder: {text}");

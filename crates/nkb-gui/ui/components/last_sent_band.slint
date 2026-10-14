@@ -1,157 +1,23 @@
-// The two bands of the palette that show a value: the one the next press
-// sends, before it goes, and the one that went out last.
+// The band of the palette that shows the value that went out last. The band
+// of the value the next press sends stands in `next_band.slint`.
 //
-// Each is a section with its own state and its own controls, so each is a
-// component from the start rather than a block inside the screen (GUI rule 9).
-// They stood inside `screens/palette.slint` until 2026-10-10, when that file
-// reached the ceiling of `D113` and the next changes to both bands were about
-// to land: the arrows that walk the pack, and the report block under the last
-// value. Moved word for word - the renders of the palette came out the same to
-// the byte.
+// A section with its own state and its own controls, so a component from the
+// start rather than a block inside the screen (GUI rule 9). It stood inside
+// `screens/palette.slint` until 2026-10-10, then in `value_bands.slint` beside
+// the other band that shows a value, until 2026-10-14: the Slint ceiling of
+// `D113` came down when the palette's header links became one list, and that
+// file of two components would have entered the band. Moved word for word both
+// times - the renders of the palette came out the same to the byte.
 //
-// Only the palette uses them, and the door still re-exports them like every
-// other component: a screen sees the vocabulary through one file, and the
-// gallery shows each band in its states.
+// Only the palette uses it, and the door still re-exports it like every other
+// component: a screen sees the vocabulary through one file, and the gallery
+// shows the band in its states.
 
 import { Tokens } from "../tokens.slint";
 import { TextName, TextBody, TextMono, TextPreview, TextSmallMuted } from "typography.slint";
-import { Spacer, Zone, Marker, MarkerRow } from "chrome.slint";
-import { SmallButton, ButtonArrow } from "button.slint";
+import { Zone, Marker, MarkerRow } from "chrome.slint";
+import { SmallButton } from "button.slint";
 import { Disclosure } from "disclosure.slint";
-
-// What the next press sends (UX-GUI-001). One line each, ELIDED rather than
-// wrapped, and every line kept at the end of a pack, where there is no value -
-// drawn empty rather than taken away: the band changes with every press, and a
-// band that grew and shrank would move everything below it. The whole value is
-// drawn in the band below once it is sent. Expanded only - the heading is muted
-// (D53).
-//
-// While a send runs, which value comes next depends on how the one in flight
-// ends, so the band fades in place rather than going away and taking its height
-// with it.
-export component NextBand inherits Zone {
-    // Every string is finished text from `i18n`. Which value it is comes from
-    // the core's `Sequence::upcoming`, which a test holds to what the press
-    // really does.
-    in property <string> heading;
-    // False at the end of a pack, where the next press only says so and the
-    // band is its heading alone.
-    in property <bool> has-value;
-    in property <string> name;
-    in property <string> preview;
-    in property <[Marker]> markers;
-    // The Copy button's word and what it does in UI Automation's words.
-    in property <string> copy-label;
-    in property <string> copy-action;
-    // The word Copy says for a moment after a copy went through, and whether
-    // it says it now (`D121`): the worker knows whether the clipboard took
-    // the value, the band only draws it.
-    in property <string> copied-label;
-    in property <bool> copied;
-    in property <bool> sending;
-    callback copy();
-    // Under the value: which value the shortcut that steps back types (the
-    // owner's point 6, 2026-10-14). Empty with nothing behind, and drawn
-    // anyway, so the band keeps its height.
-    in property <string> previous-line;
-    // The two arrows that walk the pack without typing (`D120`), the number of
-    // the value each steps to (the owner's point 1) and what each does. Back stands faded on the first value, where it would
-    // move nothing. Skip always moves - from the end of the pack to its first
-    // value.
-    in property <string> back-label;
-    in property <string> back-action;
-    in property <bool> can-go-back;
-    in property <string> skip-label;
-    in property <string> skip-action;
-    callback back-one-value();
-    callback skip-value();
-
-    divided: false;
-    opacity: root.sending ? Tokens.alpha-disabled : 1;
-
-    // The heading, which names the shortcut that types the value (the owner's
-    // point 4, 2026-10-14), and at the other end the arrows that walk the pack.
-    HorizontalLayout {
-        spacing: Tokens.space-2;
-        // Centred on the button's row: the heading's height is its own text,
-        // and a layout puts such an element at the top - four pixels above the
-        // word beside it, in the first render.
-        VerticalLayout {
-            alignment: center;
-            TextSmallMuted {
-                text: root.heading;
-                overflow: elide;
-            }
-        }
-        Spacer { }
-        // The arrows before Copy: walking comes before taking a value away, and
-        // Copy keeps its column with the band below (`D98`). Faded while a value
-        // goes, like every button of the palette - the worker answers a click
-        // between presses, so it would land after the send.
-        SmallButton {
-            arrow: ButtonArrow.back;
-            text: root.back-label;
-            action: root.back-action;
-            enabled: root.can-go-back && !root.sending;
-            clicked => {
-                root.back-one-value();
-            }
-        }
-        SmallButton {
-            arrow: ButtonArrow.forward;
-            text: root.skip-label;
-            action: root.skip-action;
-            enabled: !root.sending;
-            clicked => {
-                root.skip-value();
-            }
-        }
-    }
-    // The risk beside the name rather than on a row of its own: the palette
-    // stays on top of the application under test, and a row spent on one pill
-    // is height taken from it. The name gives way, the pill does not, and the
-    // line is a pill's height when there is none, so a value with a risk is as
-    // tall as one without.
-    HorizontalLayout {
-        spacing: Tokens.space-2;
-        TextName {
-            text: root.name;
-            overflow: elide;
-            horizontal-stretch: 1;
-            visible: root.has-value;
-        }
-        // Empty at the end of a pack, where a layout has no `visible` of its
-        // own to hide it by - and as tall as a pill either way.
-        MarkerRow {
-            markers: root.has-value ? root.markers : [];
-            keeps-height: true;
-        }
-        // Copy beside the value it copies, not among the arrows that walk the
-        // pack, where it read as copying something else (the owner's point 3,
-        // 2026-10-14). Still the right-hand column the band below has its own
-        // in (D98). Not at the end of a pack - and its place kept.
-        SmallButton {
-            text: root.copy-label;
-            action: root.copy-action;
-            done-text: root.copied-label;
-            done: root.copied;
-            visible: root.has-value;
-            enabled: root.has-value && !root.sending;
-            clicked => {
-                root.copy();
-            }
-        }
-    }
-    TextPreview {
-        text: root.preview;
-        overflow: elide;
-        visible: root.has-value;
-    }
-    TextSmallMuted {
-        text: root.previous-line;
-        overflow: elide;
-    }
-}
 
 // The value that went out last. It stays until the next one.
 //

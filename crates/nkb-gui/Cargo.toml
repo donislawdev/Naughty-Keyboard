@@ -44,7 +44,8 @@ raw-window-handle.workspace = true
 # no crate to the product: the workspace manifest, beside the version.
 arboard.workspace = true
 
-# The support page, for Donate. Why here and nowhere else, and why it adds no
+# The two pages of the header's links, GitHub and Donate. Why here and nowhere
+# else, and why it adds no
 # crate to the product: the workspace manifest, beside the version.
 webbrowser.workspace = true
 

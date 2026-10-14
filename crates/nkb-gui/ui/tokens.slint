@@ -137,7 +137,14 @@ export global Tokens {
     // geometry out separately: it does not merely drift, it BREAKS at another
     // system scale, another font size and a longer translation - and it breaks
     // on someone else's machine, never on the author's.
-    out property <length> palette-width: 420px;
+    //
+    // 480 since 2026-10-14, 420 before. The header's right end - three links,
+    // the counter and Collapse - measured 297 px on a render with the real
+    // words, and at 420 it cut every link and every pack name short. At 480 the
+    // links stand whole and 12 of the 18 shipped pack names do (10 did at 420
+    // with two links). The longest still give way, as the header means them
+    // to: `palette_opener.rs` holds the links whole beside the longest name.
+    out property <length> palette-width: 480px;
     out property <length> sample-height: 40px;
 
     // The pack window (step 7). An ordinary window the tester resizes, so the

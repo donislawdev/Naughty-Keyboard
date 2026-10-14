@@ -20,14 +20,15 @@
 #[allow(dead_code)]
 mod offscreen;
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use nkb_gui::{HintRow, Palette};
+use nkb_adapters::i18n::{self, PaletteLabel};
+use nkb_gui::{HeaderLinkKind, HintRow, Palette};
 use slint::platform::{PointerEventButton, WindowEvent};
 use slint::{ComponentHandle, LogicalPosition, ModelRc, VecModel};
 
-const WIDTH: u32 = 420;
+const WIDTH: u32 = 480;
 const HEIGHT: u32 = 460;
 /// The header's height, generously: one row of text and a button.
 const HEADER: u32 = 48;
@@ -316,74 +317,141 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
         "a click on the hint bar above the link asked for a window"
     );
 
-    // ---- the About and Donate links: in the header, each its own callback ----
-    // At the top since the owner's points 2 and 5 (2026-10-14). Found the same
-    // way, as the ink each word adds, so the pointer goes where it IS. About is
-    // aimed at just inside its right end: its word widens it, Donate to its
-    // left moves with it and lands in the box of what changed.
-    let about_asked = Rc::new(Cell::new(0));
-    let about_count = Rc::clone(&about_asked);
-    palette.on_open_about(move || about_count.set(about_count.get() + 1));
-    let donate_asked = Rc::new(Cell::new(0));
-    let donate_count = Rc::clone(&donate_asked);
-    palette.on_donate(move || donate_count.set(donate_count.get() + 1));
-    let before_about = offscreen::draw(&surface, WIDTH, HEIGHT);
-    palette.set_about_link("About".into());
-    let with_about = offscreen::draw(&surface, WIDTH, HEIGHT);
-    let about = added(&before_about, &with_about);
-    let about_path = offscreen::save(&with_about, WIDTH, HEIGHT, "palette-about-link.png");
+    // ---- the links in the header: GitHub, Donate and About, one callback ----
+    // At the top since the owner's points of 2026-10-14. The real list, built
+    // up from its right end: the header stands against the right edge, so each
+    // link added stands where it will stand, the ones already there stay put,
+    // and the ink it adds is its own box. Every box is found before the first
+    // click, because the pointer lights the link it stays over.
+    let clicked: Rc<RefCell<Vec<HeaderLinkKind>>> = Rc::default();
+    let record = Rc::clone(&clicked);
+    palette.on_open_link(move |link| record.borrow_mut().push(link));
+    let links = nkb_gui::header_links::links();
+    let mut boxes = Vec::new();
+    for first in (0..links.len()).rev() {
+        let before = offscreen::draw(&surface, WIDTH, HEIGHT);
+        palette.set_header_links(ModelRc::new(VecModel::from(links[first..].to_vec())));
+        let after = offscreen::draw(&surface, WIDTH, HEIGHT);
+        let link = added(&before, &after);
+        let path = offscreen::save(
+            &after,
+            WIDTH,
+            HEIGHT,
+            &format!("palette-header-links-{first}.png"),
+        );
+        // Right of the pack's name, which keeps its place and its words: a
+        // link that pushed the name aside would show up here as a box reaching
+        // into it.
+        assert!(
+            link.left > name.right && link.bottom < HEADER,
+            "{:?} does not stand in the header right of the pack's name {name:?}: {link:?}. \
+             Look at {}",
+            links[first].kind,
+            path.display()
+        );
+        if let Some((next, _)) = boxes.first() {
+            let next: &Ink = next;
+            assert!(
+                link.right < next.left,
+                "{:?} does not stand before {:?}: {link:?} beside {next:?}. Look at {}",
+                links[first].kind,
+                links[first + 1].kind,
+                path.display()
+            );
+        }
+        boxes.insert(0, (link, path));
+    }
+    for (index, (link, path)) in boxes.iter().enumerate() {
+        press(
+            &palette,
+            LogicalPosition::new(
+                ((link.left + link.right) / 2) as f32,
+                ((link.top + link.bottom) / 2) as f32,
+            ),
+        );
+        let wanted: Vec<HeaderLinkKind> = links[..=index].iter().map(|l| l.kind).collect();
+        assert_eq!(
+            (clicked.borrow().clone(), asked.get(), opened.get()),
+            (wanted, 1, 1),
+            "a click on {:?} did not hand back that link once, or asked for another window. \
+             Look at {}",
+            links[index].kind,
+            path.display()
+        );
+    }
+}
+
+/// The shipped pack names, read the way the palette shows them: the `name` of
+/// each pack's own table, which is the first `name` in its file.
+fn shipped_names() -> Vec<String> {
+    nkb_adapters::BUILT_IN_PACKS
+        .iter()
+        .filter_map(|(_, text)| {
+            let line = text.lines().find(|line| line.starts_with("name"))?;
+            let value = line.split_once('=')?.1.trim();
+            Some(value.trim_matches('"').to_owned())
+        })
+        .collect()
+}
+
+/// Whether two renders agree in every pixel of the header right of `from`, or
+/// left of it when `left` is set.
+fn header_agrees(a: &[offscreen::Pixel], b: &[offscreen::Pixel], from: u32, left: bool) -> bool {
+    (0..HEADER).all(|y| {
+        (0..WIDTH).filter(|&x| (x >= from) != left).all(|x| {
+            let (p, q) = (a[(y * WIDTH + x) as usize], b[(y * WIDTH + x) as usize]);
+            (p.r, p.g, p.b) == (q.r, q.g, q.b)
+        })
+    })
+}
+
+/// The header with its real words: the links, a two-digit counter and
+/// Collapse take their whole width, and a pack name gives way to them. At
+/// 420 px they did not fit, and every link and every name was cut short
+/// (2026-10-14, `tokens.slint` beside the palette's width).
+#[test]
+fn a_long_pack_name_gives_way_and_the_links_keep_their_words() {
+    let surface = offscreen::start(WIDTH, HEIGHT);
+    let palette = Palette::new().expect("the palette must build");
+    palette.set_counter("17 / 34".into());
+    palette.set_collapse_label(i18n::label(PaletteLabel::Collapse).into());
+    palette.set_no_value("Nothing sent yet.".into());
+    palette.show().expect("the palette must show");
+    let names = shipped_names();
+    assert!(names.len() >= 18, "read only {} pack names", names.len());
+    let shortest = names
+        .iter()
+        .min_by_key(|name| name.chars().count())
+        .expect("a name");
+    let longest = names
+        .iter()
+        .max_by_key(|name| name.chars().count())
+        .expect("a name");
+
+    palette.set_pack(shortest.as_str().into());
+    let bare = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let name = ink(&bare);
+    nkb_gui::header_links::show(&palette);
+    let short = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let links = added(&bare, &short);
+    let short_path = offscreen::save(&short, WIDTH, HEIGHT, "palette-header-short-name.png");
+    // The name as it stood alone, every pixel of it: links that squeezed it
+    // would change it, and a box of what changed would only reach into it.
     assert!(
-        about.left > WIDTH / 2 && about.bottom < HEADER,
-        "the About link is not at the right of the header: {about:?}. Look at {}",
-        about_path.display()
+        links.left > name.right && header_agrees(&bare, &short, name.right + 1, true),
+        "the links took room from the shortest pack name, {shortest:?}: the header is fuller \
+         than its width. Look at {}",
+        short_path.display()
     );
-    press(
-        &palette,
-        LogicalPosition::new(
-            about.right.saturating_sub(6) as f32,
-            ((about.top + about.bottom) / 2) as f32,
-        ),
-    );
-    assert_eq!(
-        (
-            about_asked.get(),
-            donate_asked.get(),
-            asked.get(),
-            opened.get()
-        ),
-        (1, 0, 1, 1),
-        "a click on the About link did not ask for the About window once, or asked for          another window. Look at {}",
-        about_path.display()
-    );
-    // A fresh picture after the click: the pointer stays over About and lights
-    // it, which a picture from before the click would count as Donate's.
-    let before_donate = offscreen::draw(&surface, WIDTH, HEIGHT);
-    palette.set_donate_link("Donate".into());
-    let with_donate = offscreen::draw(&surface, WIDTH, HEIGHT);
-    let donate = added(&before_donate, &with_donate);
-    let donate_path = offscreen::save(&with_donate, WIDTH, HEIGHT, "palette-donate-link.png");
+
+    palette.set_pack(longest.as_str().into());
+    let long = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let long_path = offscreen::save(&long, WIDTH, HEIGHT, "palette-header-long-name.png");
     assert!(
-        donate.left < about.left && donate.right < about.right && donate.bottom < HEADER,
-        "the Donate link does not stand before About in the header: {donate:?} beside          {about:?}. Look at {}",
-        donate_path.display()
-    );
-    press(
-        &palette,
-        LogicalPosition::new(
-            ((donate.left + donate.right) / 2) as f32,
-            ((donate.top + donate.bottom) / 2) as f32,
-        ),
-    );
-    assert_eq!(
-        (
-            about_asked.get(),
-            donate_asked.get(),
-            asked.get(),
-            opened.get()
-        ),
-        (1, 1, 1, 1),
-        "a click on Donate did not ask for the support page once, or asked for a window.          Look at {}",
-        donate_path.display()
+        header_agrees(&short, &long, links.left, false),
+        "the longest pack name, {longest:?}, moved or cut the links, the counter or Collapse - \
+         the name is the one to give way. Look at {}",
+        long_path.display()
     );
 }
 
