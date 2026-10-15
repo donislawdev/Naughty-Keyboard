@@ -88,7 +88,7 @@ use std::time::{Duration, Instant};
 use nkb_adapters::i18n::PaletteLabel;
 use nkb_adapters::{
     BuiltInCatalogue, ClipboardDelivery, DirectInjection, EnglishReport, GlobalShortcuts,
-    SettingsFile, TomlPackFormat, altgr_character, default_bindings, i18n,
+    SettingsFile, SystemClock, TomlPackFormat, altgr_character, default_bindings, i18n,
 };
 use nkb_app::advance_sequence::{InFlight, Ports, RouteRequest, Sent};
 use nkb_app::browse_packs::{Direction, list_packs};
@@ -401,7 +401,7 @@ pub fn drive(
         .path()
         .map(|path| path.display().to_string())
         .unwrap_or_default();
-    let mut sequence = AdvanceSequence::new();
+    let mut sequence = AdvanceSequence::new(Box::new(SystemClock));
     let mut opening: Vec<String> = said
         .iter()
         .filter_map(|message| i18n::settings_message(message, &file, &bindings))
@@ -1744,7 +1744,7 @@ mod tests {
 
     /// A sequence on a pack that ships, the way the palette opens one.
     fn on(pack: &str) -> AdvanceSequence {
-        let mut sequence = AdvanceSequence::new();
+        let mut sequence = AdvanceSequence::new(Box::new(nkb_adapters::SystemClock));
         sequence
             .choose_pack(&BuiltInCatalogue::new(), &TomlPackFormat, pack)
             .expect("a shipped pack opens");

@@ -10,6 +10,7 @@
 //! blind until the version that introduces the input oracle, and leaving the
 //! capability undeclared means it cannot be reached for by accident.
 
+use nkb_core::calendar::Day;
 use nkb_core::hotkeys::{ChordError, HotkeyAction, HotkeyChord};
 use nkb_core::identity::ValueKey;
 use nkb_core::keys::KeyChord;
@@ -681,21 +682,25 @@ pub trait PackFormat {
     fn same_insertions(&self, before: &str, after: &str) -> bool;
 }
 
-/// A calendar date as year, month and day.
+/// A calendar date as year, month and day, the way a pack file writes one.
 ///
-/// A tuple rather than a type of its own, because nothing in this program does
-/// arithmetic on a date - it writes one into a file and reads one back. A type
-/// with no behaviour is a name for a tuple, and the register of ports is long
-/// enough already.
+/// A tuple rather than a type of its own, because the skeleton only writes it
+/// into a file. The arithmetic a value of type `next-date` needs is done on a
+/// [`Day`], in the core.
 pub type Date = (i32, u32, u32);
 
-/// Today's date, from wherever the running program gets it.
+/// Today's date in UTC, from wherever the running program gets it.
 ///
 /// A port rather than a call to the system clock, so that a use case producing
 /// dated output can be exercised against a fixed one. The core never asks for
 /// the time at all: it receives the answer.
-pub trait Clock {
-    fn today(&self) -> Date;
+///
+/// UTC rather than the machine's own zone, on purpose: a date in UTC needs no
+/// time zone from the system, and `next-date` is built to land ahead of today
+/// in every zone from it (`nkb_core::next_date::DAYS_AHEAD`). `Debug` so that
+/// a use case holding one can say what it holds.
+pub trait Clock: fmt::Debug {
+    fn today(&self) -> Day;
 }
 
 /// Why a new pack file could not be written.

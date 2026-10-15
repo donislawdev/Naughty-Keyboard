@@ -40,6 +40,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "trailing-space",
@@ -73,6 +74,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "leading-space",
@@ -106,6 +108,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "leading-space",
@@ -143,6 +146,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "zero-width",
@@ -176,6 +180,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "unusual-space",
@@ -209,6 +214,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "line-break",
@@ -242,6 +248,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "tab",
@@ -275,6 +282,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "line-break",
@@ -308,6 +316,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "zero-width",
@@ -341,6 +350,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "unusual-space",
@@ -374,6 +384,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 14,
@@ -402,6 +413,7 @@
             "unit": "\u2423",
             "count": 1000
           },
+          "next_date": null,
           "shape": [
             {
               "fact": "leading-space",
@@ -463,6 +475,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "bidi-control",
@@ -498,6 +511,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "soft-hyphen",
@@ -533,6 +547,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -563,6 +578,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -593,6 +609,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "zero-width",
@@ -628,6 +645,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "other-control",
@@ -663,6 +681,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -693,6 +712,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -723,6 +743,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -753,6 +774,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -783,6 +805,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 18,
@@ -813,6 +836,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -861,6 +885,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 0,
@@ -889,6 +914,7 @@
             "unit": "a",
             "count": 255
           },
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 255,
@@ -917,6 +943,7 @@
             "unit": "a",
             "count": 256
           },
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 256,
@@ -945,6 +972,7 @@
             "unit": "a",
             "count": 254
           },
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 254,
@@ -973,6 +1001,7 @@
             "unit": "a",
             "count": 1000
           },
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 1000,
@@ -1001,6 +1030,7 @@
             "unit": "a",
             "count": 4000
           },
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4000,
@@ -1029,6 +1059,7 @@
             "unit": "a",
             "count": 65535
           },
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 65535,
@@ -1057,6 +1088,7 @@
             "unit": "a",
             "count": 100000
           },
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 100000,
@@ -1085,6 +1117,7 @@
             "unit": "\u0105",
             "count": 128
           },
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 128,
@@ -1113,6 +1146,7 @@
             "unit": "\ud83d\ude00",
             "count": 64
           },
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 64,
@@ -1141,6 +1175,7 @@
             "unit": "a",
             "count": 200
           },
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 200,
@@ -1169,6 +1204,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -1221,6 +1257,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 2,
@@ -1251,6 +1288,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -1281,6 +1319,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -1311,6 +1350,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -1341,6 +1381,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 8,
@@ -1371,6 +1412,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -1401,6 +1443,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -1431,6 +1474,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -1461,6 +1505,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -1491,6 +1536,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -1521,6 +1567,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -1551,6 +1598,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -1603,6 +1651,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -1633,6 +1682,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -1663,6 +1713,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -1693,6 +1744,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 2,
@@ -1723,6 +1775,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -1753,6 +1806,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -1783,6 +1837,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -1813,6 +1868,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -1843,6 +1899,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -1873,6 +1930,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -1903,6 +1961,7 @@
             "unit": "9",
             "count": 50
           },
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 50,
@@ -1933,6 +1992,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 2,
@@ -1985,6 +2045,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2015,6 +2076,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2045,6 +2107,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2075,6 +2138,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2105,6 +2169,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2135,6 +2200,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2165,6 +2231,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2195,6 +2262,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 11,
@@ -2225,6 +2293,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2255,6 +2324,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 2,
@@ -2285,6 +2355,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 8,
@@ -2315,6 +2386,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2369,6 +2441,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -2400,6 +2473,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -2431,6 +2505,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 13,
@@ -2462,6 +2537,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 20,
@@ -2493,6 +2569,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "line-break",
@@ -2529,6 +2606,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 19,
@@ -2560,6 +2638,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -2591,6 +2670,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -2622,6 +2702,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -2653,6 +2734,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -2684,6 +2766,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -2715,6 +2798,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -2769,6 +2853,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 11,
@@ -2800,6 +2885,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 11,
@@ -2831,6 +2917,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 19,
@@ -2862,6 +2949,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 14,
@@ -2893,6 +2981,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 6,
@@ -2924,6 +3013,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 19,
@@ -2976,6 +3066,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -3006,6 +3097,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 7,
@@ -3036,6 +3128,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "trailing-space",
@@ -3071,6 +3164,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 15,
@@ -3101,6 +3195,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 14,
@@ -3131,6 +3226,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "bidi-control",
@@ -3166,6 +3262,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -3196,6 +3293,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 2,
@@ -3226,6 +3324,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -3256,6 +3355,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -3286,6 +3386,7 @@
             "unit": "a",
             "count": 260
           },
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 260,
@@ -3316,6 +3417,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 13,
@@ -3371,6 +3473,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -3402,6 +3505,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -3433,6 +3537,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -3464,6 +3569,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -3495,6 +3601,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -3526,6 +3633,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -3557,6 +3665,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -3588,6 +3697,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "unusual-space",
@@ -3624,6 +3734,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -3655,6 +3766,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -3686,6 +3798,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -3717,6 +3830,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 2,
@@ -3769,6 +3883,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "zero-width",
@@ -3804,6 +3919,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -3834,6 +3950,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "zero-width",
@@ -3869,6 +3986,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "zero-width",
@@ -3904,6 +4022,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -3934,6 +4053,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -3964,6 +4084,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -3994,6 +4115,7 @@
             "unit": "\ud83d\ude00",
             "count": 50
           },
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 50,
@@ -4024,6 +4146,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -4054,6 +4177,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "zero-width",
@@ -4089,6 +4213,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 11,
@@ -4119,6 +4244,7 @@
             "unit": "\ud83d\ude00",
             "count": 1000
           },
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 1000,
@@ -4169,6 +4295,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 8,
@@ -4198,6 +4325,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "zero-width",
@@ -4232,6 +4360,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -4261,6 +4390,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -4290,6 +4420,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -4319,6 +4450,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -4348,6 +4480,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -4377,6 +4510,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -4406,6 +4540,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "unusual-space",
@@ -4440,6 +4575,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -4469,6 +4605,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -4523,6 +4660,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 7,
@@ -4554,6 +4692,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -4585,6 +4724,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 14,
@@ -4616,6 +4756,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -4647,6 +4788,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "unusual-space",
@@ -4683,6 +4825,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "soft-hyphen",
@@ -4719,6 +4862,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -4750,6 +4894,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 7,
@@ -4781,6 +4926,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 7,
@@ -4812,6 +4958,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "zero-width",
@@ -4848,6 +4995,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -4879,6 +5027,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "unusual-space",
@@ -4933,6 +5082,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 20,
@@ -4961,6 +5111,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 15,
@@ -4989,6 +5140,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 18,
@@ -5017,6 +5169,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -5045,6 +5198,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 15,
@@ -5073,6 +5227,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -5101,6 +5256,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 76,
@@ -5129,6 +5285,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 26,
@@ -5157,6 +5314,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 11,
@@ -5185,6 +5343,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 29,
@@ -5213,6 +5372,7 @@
             "elided_total": 2000
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 2000,
@@ -5241,6 +5401,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 26,
@@ -5293,6 +5454,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -5323,6 +5485,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 7,
@@ -5353,6 +5516,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 7,
@@ -5383,6 +5547,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 14,
@@ -5413,6 +5578,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -5443,6 +5609,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -5473,6 +5640,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 8,
@@ -5503,6 +5671,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -5533,6 +5702,7 @@
             "unit": "a",
             "count": 120
           },
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 120,
@@ -5563,6 +5733,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 15,
@@ -5593,6 +5764,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -5623,6 +5795,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -5637,8 +5810,8 @@
       "id": "time-zones",
       "name": "Time and time zones",
       "description": "Hours that do not exist, happen twice, or are written without a zone.",
-      "version": "1.0",
-      "updated": "2026-10-14",
+      "version": "2.0",
+      "updated": "2026-10-15",
       "license": "CC-BY-4.0",
       "language": "en",
       "fields": [
@@ -5656,8 +5829,8 @@
         {
           "id": "dst-nonexistent",
           "ref": "time-zones/dst-nonexistent",
-          "name": "Hour skipped by the spring clock change",
-          "escaped": "2027-03-28 02:30",
+          "name": "Hour skipped by the next spring clock change",
+          "escaped": null,
           "breaks": "On the day clocks go forward in central Europe this hour does not exist locally; parsers either shift it silently or fail with a raw error.",
           "expect": "Rejected with an explanation, or shifted with the shift shown to the user.",
           "fields": [
@@ -5669,12 +5842,15 @@
           "risk": "normal",
           "since": "1.0",
           "source": null,
-          "generated": false,
-          "preview": {
-            "shown": "2027-03-28\u242302:30",
-            "elided_total": null
-          },
+          "generated": true,
+          "preview": null,
           "recipe": null,
+          "next_date": {
+            "month": 3,
+            "week": "last",
+            "weekday": "sunday",
+            "time": "02:30"
+          },
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -5686,8 +5862,8 @@
         {
           "id": "dst-ambiguous",
           "ref": "time-zones/dst-ambiguous",
-          "name": "Hour repeated by the autumn clock change",
-          "escaped": "2027-10-31 02:30",
+          "name": "Hour repeated by the next autumn clock change",
+          "escaped": null,
           "breaks": "On the day clocks go back in central Europe this hour happens twice; without a zone the value cannot be resolved to a moment.",
           "expect": "The zone requested, or one interpretation chosen and stated.",
           "fields": [
@@ -5699,12 +5875,15 @@
           "risk": "normal",
           "since": "1.0",
           "source": null,
-          "generated": false,
-          "preview": {
-            "shown": "2027-10-31\u242302:30",
-            "elided_total": null
-          },
+          "generated": true,
+          "preview": null,
           "recipe": null,
+          "next_date": {
+            "month": 10,
+            "week": "last",
+            "weekday": "sunday",
+            "time": "02:30"
+          },
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -5735,6 +5914,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 19,
@@ -5765,6 +5945,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 25,
@@ -5795,6 +5976,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 20,
@@ -5825,6 +6007,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -5855,6 +6038,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -5885,6 +6069,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 20,
@@ -5915,6 +6100,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 20,
@@ -5945,6 +6131,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 20,
@@ -5975,6 +6162,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 25,
@@ -6005,6 +6193,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -6056,6 +6245,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -6085,6 +6275,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -6114,6 +6305,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 7,
@@ -6143,6 +6335,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "unusual-space",
@@ -6177,6 +6370,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -6206,6 +6400,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -6235,6 +6430,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 8,
@@ -6264,6 +6460,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -6293,6 +6490,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -6322,6 +6520,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -6351,6 +6550,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 8,
@@ -6380,6 +6580,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 15,
@@ -6432,6 +6633,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 19,
@@ -6462,6 +6664,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -6492,6 +6695,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 25,
@@ -6522,6 +6726,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 38,
@@ -6552,6 +6757,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -6582,6 +6788,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [
             {
               "fact": "bidi-control",
@@ -6617,6 +6824,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 17,
@@ -6647,6 +6855,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 23,
@@ -6677,6 +6886,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 26,
@@ -6707,6 +6917,7 @@
             "elided_total": null
           },
           "recipe": null,
+          "next_date": null,
           "shape": [],
           "counts": {
             "graphemes": 30,

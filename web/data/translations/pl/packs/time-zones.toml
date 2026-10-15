@@ -14,8 +14,8 @@ source = "13b75ccebf17"
 text = "Godziny, które nie istnieją, występują dwa razy albo są zapisane bez strefy."
 
 [dst-nonexistent.name]
-source = "3307ceeffc62"
-text = "Godzina pominięta przy wiosennej zmianie czasu"
+source = "b2e1ad9bab5a"
+text = "Godzina pominięta przy najbliższej wiosennej zmianie czasu"
 
 [dst-nonexistent.breaks]
 source = "cb97af0ee699"
@@ -26,8 +26,8 @@ source = "1cec611ed1ed"
 text = "Odrzucona z wyjaśnieniem albo przesunięta, a przesunięcie pokazane użytkownikowi."
 
 [dst-ambiguous.name]
-source = "33103950ecd6"
-text = "Godzina powtórzona przy jesiennej zmianie czasu"
+source = "41d7e3c290c3"
+text = "Godzina powtórzona przy najbliższej jesiennej zmianie czasu"
 
 [dst-ambiguous.breaks]
 source = "5497bff144a8"

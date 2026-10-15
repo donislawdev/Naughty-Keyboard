@@ -128,6 +128,122 @@ few = "{{ .total }} punkty kodowe w całości, środek wycięty"
 many = "{{ .total }} punktów kodowych w całości, środek wycięty"
 other = "{{ .total }} punktu kodowego w całości, środek wycięty"
 
+# ---- a date worked out on the day it is inserted (next-date) -------------
+
+# The rule of a value of type next-date, never a date. The weekday's gender
+# picks the form of the ordinal, which agrees with it in Polish.
+
+[next_date]
+other = "Najbliższy dzień: {{ .week }} {{ .weekday }} {{ .month }}{{ with .time }}, godz. {{ . }}{{ end }}"
+
+[weekday_monday]
+other = "poniedziałek"
+
+[weekday_gender_monday]
+other = "m"
+
+[weekday_tuesday]
+other = "wtorek"
+
+[weekday_gender_tuesday]
+other = "m"
+
+[weekday_wednesday]
+other = "środa"
+
+[weekday_gender_wednesday]
+other = "f"
+
+[weekday_thursday]
+other = "czwartek"
+
+[weekday_gender_thursday]
+other = "m"
+
+[weekday_friday]
+other = "piątek"
+
+[weekday_gender_friday]
+other = "m"
+
+[weekday_saturday]
+other = "sobota"
+
+[weekday_gender_saturday]
+other = "f"
+
+[weekday_sunday]
+other = "niedziela"
+
+[weekday_gender_sunday]
+other = "f"
+
+[week_first_m]
+other = "pierwszy"
+
+[week_first_f]
+other = "pierwsza"
+
+[week_second_m]
+other = "drugi"
+
+[week_second_f]
+other = "druga"
+
+[week_third_m]
+other = "trzeci"
+
+[week_third_f]
+other = "trzecia"
+
+[week_fourth_m]
+other = "czwarty"
+
+[week_fourth_f]
+other = "czwarta"
+
+[week_last_m]
+other = "ostatni"
+
+[week_last_f]
+other = "ostatnia"
+
+[month_of_1]
+other = "stycznia"
+
+[month_of_2]
+other = "lutego"
+
+[month_of_3]
+other = "marca"
+
+[month_of_4]
+other = "kwietnia"
+
+[month_of_5]
+other = "maja"
+
+[month_of_6]
+other = "czerwca"
+
+[month_of_7]
+other = "lipca"
+
+[month_of_8]
+other = "sierpnia"
+
+[month_of_9]
+other = "września"
+
+[month_of_10]
+other = "października"
+
+[month_of_11]
+other = "listopada"
+
+[month_of_12]
+other = "grudnia"
+
 [graphemes]
 one = "grafem"
 few = "grafemy"

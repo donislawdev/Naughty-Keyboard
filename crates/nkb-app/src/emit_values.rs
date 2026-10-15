@@ -28,10 +28,11 @@
 //! layer out, beside every other such decision. This hands over the values and
 //! the facts about them.
 
+use nkb_core::calendar::Day;
 use nkb_core::pack::{Pack, Risk};
-use nkb_core::value::{ValueBody, ValueProblem};
+use nkb_core::value::ValueProblem;
 
-use crate::ports::{PackFormat, PackSource, SourceError};
+use crate::ports::{Clock, PackFormat, PackSource, SourceError};
 
 /// One value, materialised, with everything the JSON contract names.
 ///
@@ -120,9 +121,16 @@ pub enum EmitOutcome {
 /// Every value of one pack, materialised.
 ///
 /// Takes a [`PackSource`] rather than a catalogue: this reads one pack by name
-/// and never asks what else exists.
+/// and never asks what else exists. The clock says which day a `next-date`
+/// value is worked out for, so the same pack emits a different date once the
+/// one it named has passed - which is the point of the type.
 #[must_use]
-pub fn emit_values(source: &dyn PackSource, format: &dyn PackFormat, id: &str) -> EmitOutcome {
+pub fn emit_values(
+    source: &dyn PackSource,
+    format: &dyn PackFormat,
+    clock: &dyn Clock,
+    id: &str,
+) -> EmitOutcome {
     let text = match source.read(id) {
         Ok(text) => text,
         Err(SourceError::NotFound) => return EmitOutcome::NotFound,
@@ -133,7 +141,7 @@ pub fn emit_values(source: &dyn PackSource, format: &dyn PackFormat, id: &str) -
     // The order lives in `load_pack` rather than here, so that it is one rule
     // rather than one rule per use case.
     match crate::load_pack::load(format, id, &text) {
-        Ok(loaded) => build(&loaded.pack, loaded.warnings),
+        Ok(loaded) => build(&loaded.pack, loaded.warnings, clock.today()),
         // Reported as a refusal rather than as an empty catalogue, for the same
         // reason the listing does it: a pack must never vanish quietly.
         Err(refused) => EmitOutcome::Refused {
@@ -143,11 +151,11 @@ pub fn emit_values(source: &dyn PackSource, format: &dyn PackFormat, id: &str) -
 }
 
 /// Counts everything from the recipes, then builds. Never the other way round.
-fn build(pack: &Pack, warnings: usize) -> EmitOutcome {
+fn build(pack: &Pack, warnings: usize, today: Day) -> EmitOutcome {
     let mut code_points = 0usize;
     let mut bytes = 0usize;
     for value in &pack.values {
-        let Some(metrics) = value.body.metrics() else {
+        let Some(metrics) = value.definition.metrics() else {
             return EmitOutcome::ValueTooLarge {
                 id: value.id.clone(),
                 code: ValueProblem::RepeatProductUnmeasurable.code(),
@@ -159,7 +167,7 @@ fn build(pack: &Pack, warnings: usize) -> EmitOutcome {
 
     let mut values = Vec::with_capacity(pack.values.len());
     for value in &pack.values {
-        let literal = match value.body.materialise() {
+        let literal = match value.definition.on(today).materialise() {
             Ok(text) => text,
             Err(problem) => {
                 return EmitOutcome::ValueTooLarge {
@@ -190,7 +198,7 @@ fn build(pack: &Pack, warnings: usize) -> EmitOutcome {
             risk: pack.risk_of(value),
             since: value.since.clone(),
             source: pack.source_of(value).map(ToOwned::to_owned),
-            generated: matches!(value.body, ValueBody::Repeat { .. }),
+            generated: value.definition.is_generated(),
         });
     }
 
@@ -211,9 +219,11 @@ fn build(pack: &Pack, warnings: usize) -> EmitOutcome {
 mod tests {
     use super::*;
     use crate::ports::{Date, TranslationCheck, TranslationTarget};
+    use crate::test_support::StoppedClock;
     use nkb_core::lint::{LintProblem, RuleCode};
     use nkb_core::pack::{PackValue, Risk};
     use nkb_core::text::LiteralText;
+    use nkb_core::value::ValueBody;
     use std::collections::BTreeMap;
 
     struct Shelf(BTreeMap<String, Result<String, SourceError>>);
@@ -240,7 +250,7 @@ mod tests {
         PackValue {
             id: id.to_owned(),
             name: format!("Value {id}"),
-            body,
+            definition: body.into(),
             breaks: Some("It breaks something worth a whole sentence about it.".to_owned()),
             expect: None,
             risk: None,
@@ -331,7 +341,12 @@ mod tests {
             "zero-width",
             ValueBody::Literal(LiteralText::new("a\u{200B}b")),
         )]);
-        let emission = emitted(emit_values(&Shelf::of("sample"), &scripted(pack), "sample"));
+        let emission = emitted(emit_values(
+            &Shelf::of("sample"),
+            &scripted(pack),
+            &StoppedClock::default(),
+            "sample",
+        ));
 
         let first = emission.values.first().expect("one value");
         assert_eq!(first.literal, "a\u{200B}b");
@@ -340,6 +355,49 @@ mod tests {
             "the escaped form is what makes an invisible value readable at all"
         );
         assert!(!first.generated);
+    }
+
+    #[test]
+    fn a_next_date_value_comes_out_as_the_date_ahead_and_marked_as_generated() {
+        // The same pack emits another date once the one it named has passed,
+        // which is the point of the type (`D133`). Counted like any value: the
+        // total promised before building is the total built.
+        let rule = nkb_core::next_date::NextDate::new(
+            10,
+            nkb_core::next_date::Week::Last,
+            nkb_core::calendar::Weekday::Sunday,
+            nkb_core::next_date::TimeOfDay::parse("02:30"),
+        )
+        .expect("a month of the year");
+        let pack = a_pack(vec![PackValue {
+            definition: nkb_core::value::Definition::NextDate(rule),
+            ..value("dst-ambiguous", ValueBody::Literal(LiteralText::new("")))
+        }]);
+        let on_day = |year, month, day| {
+            nkb_core::calendar::Day::from_civil(year, month, day).expect("a real day")
+        };
+        let on = |day| {
+            emitted(emit_values(
+                &Shelf::of("sample"),
+                &scripted(pack.clone()),
+                &StoppedClock(day),
+                "sample",
+            ))
+        };
+
+        let october = on(on_day(2026, 10, 15));
+        let first = october.values.first().expect("one value");
+        assert_eq!(first.literal, "2026-10-25 02:30");
+        assert_eq!(first.escaped, "2026-10-25 02:30");
+        assert!(
+            first.generated,
+            "the text came from a rule, not from the file"
+        );
+        assert_eq!(october.code_points, 16);
+        assert_eq!(october.bytes, 16);
+
+        let later = on(on_day(2026, 11, 1));
+        assert_eq!(later.values[0].literal, "2027-10-31 02:30");
     }
 
     #[test]
@@ -352,7 +410,12 @@ mod tests {
                 count: 1000,
             },
         )]);
-        let emission = emitted(emit_values(&Shelf::of("sample"), &scripted(pack), "sample"));
+        let emission = emitted(emit_values(
+            &Shelf::of("sample"),
+            &scripted(pack),
+            &StoppedClock::default(),
+            "sample",
+        ));
 
         let first = emission.values.first().expect("one value");
         assert_eq!(first.literal.chars().count(), 1000);
@@ -375,7 +438,12 @@ mod tests {
                 },
             ),
         ]);
-        let emission = emitted(emit_values(&Shelf::of("sample"), &scripted(pack), "sample"));
+        let emission = emitted(emit_values(
+            &Shelf::of("sample"),
+            &scripted(pack),
+            &StoppedClock::default(),
+            "sample",
+        ));
 
         let built: usize = emission
             .values
@@ -396,7 +464,12 @@ mod tests {
             "trailing-space",
             ValueBody::Literal(LiteralText::new("x")),
         )]);
-        let emission = emitted(emit_values(&Shelf::of("sample"), &scripted(pack), "sample"));
+        let emission = emitted(emit_values(
+            &Shelf::of("sample"),
+            &scripted(pack),
+            &StoppedClock::default(),
+            "sample",
+        ));
         assert_eq!(
             emission.values.first().expect("one value").reference,
             "sample/trailing-space",
@@ -414,7 +487,12 @@ mod tests {
         let inheriting = value("inherited", ValueBody::Literal(LiteralText::new("b")));
         let pack = a_pack(vec![declaring, inheriting]);
 
-        let emission = emitted(emit_values(&Shelf::of("sample"), &scripted(pack), "sample"));
+        let emission = emitted(emit_values(
+            &Shelf::of("sample"),
+            &scripted(pack),
+            &StoppedClock::default(),
+            "sample",
+        ));
         let own = emission.values.first().expect("two values");
         let inherited = emission.values.get(1).expect("two values");
 
@@ -445,7 +523,12 @@ mod tests {
             )])),
         };
         assert_eq!(
-            emit_values(&Shelf::of("sample"), &format, "sample"),
+            emit_values(
+                &Shelf::of("sample"),
+                &format,
+                &StoppedClock::default(),
+                "sample"
+            ),
             EmitOutcome::Refused { errors: 2 }
         );
     }
@@ -460,7 +543,12 @@ mod tests {
                 ValueBody::Literal(LiteralText::new("a")),
             )])),
         };
-        let emission = emitted(emit_values(&Shelf::of("sample"), &format, "sample"));
+        let emission = emitted(emit_values(
+            &Shelf::of("sample"),
+            &format,
+            &StoppedClock::default(),
+            "sample",
+        ));
         assert_eq!(emission.warnings, 3);
         assert_eq!(emission.values.len(), 1);
     }
@@ -469,7 +557,12 @@ mod tests {
     fn an_unknown_pack_says_so_rather_than_printing_an_empty_list() {
         let pack = a_pack(Vec::new());
         assert_eq!(
-            emit_values(&Shelf::of("sample"), &scripted(pack), "no-such-pack"),
+            emit_values(
+                &Shelf::of("sample"),
+                &scripted(pack),
+                &StoppedClock::default(),
+                "no-such-pack"
+            ),
             EmitOutcome::NotFound
         );
     }
@@ -482,7 +575,12 @@ mod tests {
             pack: None,
         };
         assert_eq!(
-            emit_values(&Shelf::of("sample"), &format, "sample"),
+            emit_values(
+                &Shelf::of("sample"),
+                &format,
+                &StoppedClock::default(),
+                "sample"
+            ),
             EmitOutcome::Refused { errors: 1 }
         );
     }
@@ -500,7 +598,12 @@ mod tests {
                 count: 1_000_000,
             },
         )]);
-        match emit_values(&Shelf::of("sample"), &scripted(pack), "sample") {
+        match emit_values(
+            &Shelf::of("sample"),
+            &scripted(pack),
+            &StoppedClock::default(),
+            "sample",
+        ) {
             EmitOutcome::ValueTooLarge { id, code } => {
                 assert_eq!(id, "bomb");
                 assert_eq!(code, "E026");
@@ -516,6 +619,7 @@ mod tests {
         let emission = emitted(emit_values(
             &Shelf::of("sample"),
             &scripted(a_pack(Vec::new())),
+            &StoppedClock::default(),
             "sample",
         ));
         assert!(emission.values.is_empty());

@@ -54,7 +54,7 @@ use FieldKind::{Date, List, Text, TrueOrFalse, WholeNumber};
 /// `format` is absent on purpose: E001 owns it. A file declaring `format = "1"`
 /// is refused by the rule about the format version, which arrives with the
 /// better message, and two codes for one mistake help nobody.
-const FIELDS: [(&str, FieldKind); 26] = [
+const FIELDS: [(&str, FieldKind); 30] = [
     ("id", Text),
     ("name", Text),
     ("description", Text),
@@ -77,6 +77,12 @@ const FIELDS: [(&str, FieldKind); 26] = [
     ("type", Text),
     ("unit", Text),
     ("count", WholeNumber),
+    // The parts of a `next-date` rule. The time is text, `02:30`, rather than
+    // a TOML local time, which needs seconds and would be a second spelling.
+    ("month", WholeNumber),
+    ("week", Text),
+    ("weekday", Text),
+    ("time", Text),
     ("relation", Text),
     ("a", Text),
     ("b", Text),
@@ -125,6 +131,10 @@ mod tests {
             "count",
             "unit",
             "type",
+            "month",
+            "week",
+            "weekday",
+            "time",
             "deprecated",
             "replaced_by",
             "relation",

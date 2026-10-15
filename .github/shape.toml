@@ -20,18 +20,19 @@ cognitive-complexity-threshold = 23
 excessive-nesting-threshold = 6
 too-many-arguments-threshold = 7
 
-# How many stand near each ceiling, per scope.
+# How many stand near each ceiling, per scope. Two at seven arguments since
+# 2026-10-15, when a send started taking the chosen value as one argument.
 [clippy.near.product]
 too-many-lines-threshold = 7
 cognitive-complexity-threshold = 1
 excessive-nesting-threshold = 1
-too-many-arguments-threshold = 3
+too-many-arguments-threshold = 2
 
 [clippy.near.all]
 too-many-lines-threshold = 3
 cognitive-complexity-threshold = 2
 excessive-nesting-threshold = 1
-too-many-arguments-threshold = 3
+too-many-arguments-threshold = 2
 
 # The size of a file, in lines that hold code: a comment or a blank line is
 # free, a line inside a string is code. Clippy has no lint for it, so

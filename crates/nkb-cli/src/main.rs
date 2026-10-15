@@ -28,7 +28,7 @@ use nkb_adapters::{
     TomlPackFormat,
 };
 use nkb_app::{
-    Availability, Clearing, ClearingOutcome, DeliveryError, EmitOutcome, FormatOutcome,
+    Availability, Clearing, ClearingOutcome, Clock, DeliveryError, EmitOutcome, FormatOutcome,
     KeystrokeError, LintOutcome, NewPackOutcome, Progress, SendOutcome, SendRequest, Sending,
     ShowOutcome, StopReason, TargetInspector, ValueDelivery, ValueFacts, emit_values, format_pack,
     lint_pack, list_packs, new_pack, send_value, show_pack,
@@ -565,11 +565,12 @@ fn send(args: &[String]) -> ExitCode {
     }
 
     let catalogue = BuiltInCatalogue::new();
-    let position = usize::try_from(asked.position).unwrap_or(usize::MAX);
     let request = SendRequest {
         pack_id: wanted,
-        position,
+        position: usize::try_from(asked.position).unwrap_or(usize::MAX),
         clearing: asked.clearing,
+        // Today in UTC, for a `next-date` value (`D133`).
+        on: SystemClock.today(),
     };
 
     // `DirectInjection` is both the delivery and the keystroke route: one
@@ -1240,7 +1241,7 @@ fn emit(args: &[String]) -> ExitCode {
 
     let catalogue = BuiltInCatalogue::new();
 
-    match emit_values(&catalogue, &TomlPackFormat, wanted) {
+    match emit_values(&catalogue, &TomlPackFormat, &SystemClock, wanted) {
         EmitOutcome::Emitted(emission) => {
             let rendered = emit_output::render(&emission, format, form, base64);
             let mut err = std::io::stderr();

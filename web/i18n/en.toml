@@ -125,6 +125,124 @@ other = "invisible character"
 [elided]
 other = "{{ .total }} code points in all, cut in the middle"
 
+# ---- a date worked out on the day it is inserted (next-date) -------------
+
+# The rule of a value of type next-date, never a date: the site is built on
+# one day and read on others. Assembled in _partials/next-date.html. The
+# gender keys exist for languages whose ordinal agrees with the weekday,
+# and English needs only one.
+
+[next_date]
+other = "Next date: the {{ .week }} {{ .weekday }} of {{ .month }}{{ with .time }}, {{ . }}{{ end }}"
+
+[weekday_monday]
+other = "Monday"
+
+[weekday_gender_monday]
+other = "m"
+
+[weekday_tuesday]
+other = "Tuesday"
+
+[weekday_gender_tuesday]
+other = "m"
+
+[weekday_wednesday]
+other = "Wednesday"
+
+[weekday_gender_wednesday]
+other = "m"
+
+[weekday_thursday]
+other = "Thursday"
+
+[weekday_gender_thursday]
+other = "m"
+
+[weekday_friday]
+other = "Friday"
+
+[weekday_gender_friday]
+other = "m"
+
+[weekday_saturday]
+other = "Saturday"
+
+[weekday_gender_saturday]
+other = "m"
+
+[weekday_sunday]
+other = "Sunday"
+
+[weekday_gender_sunday]
+other = "m"
+
+[week_first_m]
+other = "first"
+
+[week_first_f]
+other = "first"
+
+[week_second_m]
+other = "second"
+
+[week_second_f]
+other = "second"
+
+[week_third_m]
+other = "third"
+
+[week_third_f]
+other = "third"
+
+[week_fourth_m]
+other = "fourth"
+
+[week_fourth_f]
+other = "fourth"
+
+[week_last_m]
+other = "last"
+
+[week_last_f]
+other = "last"
+
+[month_of_1]
+other = "January"
+
+[month_of_2]
+other = "February"
+
+[month_of_3]
+other = "March"
+
+[month_of_4]
+other = "April"
+
+[month_of_5]
+other = "May"
+
+[month_of_6]
+other = "June"
+
+[month_of_7]
+other = "July"
+
+[month_of_8]
+other = "August"
+
+[month_of_9]
+other = "September"
+
+[month_of_10]
+other = "October"
+
+[month_of_11]
+other = "November"
+
+[month_of_12]
+other = "December"
+
 [graphemes]
 one = "grapheme"
 other = "graphemes"

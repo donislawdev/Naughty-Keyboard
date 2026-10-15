@@ -7,7 +7,11 @@
 //! warning about a length bomb, because by then the bomb has already gone off
 //! inside the tool.
 
+use std::borrow::Cow;
+
+use crate::calendar::Day;
 use crate::metrics::TextMetrics;
+use crate::next_date::NextDate;
 use crate::text::LiteralText;
 
 /// Largest value a pack may describe, in code points.
@@ -27,12 +31,87 @@ pub const MAX_VALUE_CODE_POINTS: usize = 1_000_000;
 pub const MAX_REPEAT_COUNT: u32 = 1_000_000;
 
 /// The body of a value: either text, or a recipe for text.
+///
+/// What goes into a field on a given day. A pack can also define a value that
+/// depends on the day, and that is a [`Definition`] - it becomes a body only
+/// once it is told the date.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueBody {
     /// Text written out in the pack file.
     Literal(LiteralText),
     /// A unit repeated `count` times. Never stored expanded.
     Repeat { unit: LiteralText, count: u32 },
+}
+
+/// What a pack file says a value inserts.
+///
+/// # Two types, so that a date cannot be built without a day
+///
+/// Everything that builds, measures, previews or reports a value works on a
+/// [`ValueBody`]. A value of type `next-date` has no body until somebody says
+/// which day it is inserted on, and keeping it out of [`ValueBody`] makes that
+/// the compiler's business: the only way from a definition to text is
+/// [`Definition::on`], which asks for the day. One type with three variants
+/// would have needed every builder to answer for a date it cannot know.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Definition {
+    /// The same body on every day: a literal or a repeat.
+    Fixed(ValueBody),
+    /// The next day matching a yearly rule, worked out on the day of insertion
+    /// (`pack-format.md` 6).
+    NextDate(NextDate),
+}
+
+impl From<ValueBody> for Definition {
+    fn from(body: ValueBody) -> Self {
+        Self::Fixed(body)
+    }
+}
+
+impl Definition {
+    /// The body this value inserts on `today`, a date in UTC.
+    ///
+    /// Borrowed for a fixed body, which costs nothing, and built for a date,
+    /// which is short.
+    #[must_use]
+    pub fn on(&self, today: Day) -> Cow<'_, ValueBody> {
+        match self {
+            Self::Fixed(body) => Cow::Borrowed(body),
+            Self::NextDate(rule) => Cow::Owned(ValueBody::Literal(rule.on(today))),
+        }
+    }
+
+    /// Size of what this value inserts, from the definition alone.
+    ///
+    /// A date has the same length on every day ([`NextDate::metrics`]), so the
+    /// answer needs no day. `None` only when a repeat overflows, as for
+    /// [`ValueBody::metrics`].
+    #[must_use]
+    pub fn metrics(&self) -> Option<TextMetrics> {
+        match self {
+            Self::Fixed(body) => body.metrics(),
+            Self::NextDate(rule) => Some(rule.metrics()),
+        }
+    }
+
+    /// The size rules, which only a repeat can break.
+    ///
+    /// # Errors
+    ///
+    /// The [`ValueProblem`] of a repeat outside the format's limits.
+    pub fn check_size(&self) -> Result<(), ValueProblem> {
+        match self {
+            Self::Fixed(body) => body.check_size(),
+            Self::NextDate(_) => Ok(()),
+        }
+    }
+
+    /// Whether the text comes from a recipe rather than from the file - the
+    /// `generated` of `nkb emit --json` (`ux-spec.md` 10).
+    #[must_use]
+    pub fn is_generated(&self) -> bool {
+        !matches!(self, Self::Fixed(ValueBody::Literal(_)))
+    }
 }
 
 /// Why a value cannot be accepted. Carries the validator code from the moment
@@ -283,5 +362,52 @@ mod tests {
         // everything would pass every refusal test here and be useless.
         let built = repeat("a", 100_000).materialise().expect("must build");
         assert_eq!(built.len(), 100_000);
+    }
+
+    fn spring_change() -> Definition {
+        use crate::calendar::Weekday;
+        use crate::next_date::{TimeOfDay, Week};
+        let time = TimeOfDay::parse("02:30");
+        Definition::NextDate(
+            NextDate::new(3, Week::Last, Weekday::Sunday, time).expect("a month of the year"),
+        )
+    }
+
+    #[test]
+    fn a_fixed_body_is_the_same_on_every_day_and_is_not_copied() {
+        let fixed = Definition::from(repeat("a", 5));
+        for today in [Day::UNIX_EPOCH, Day::from_days_since_1970(20_741)] {
+            let on = fixed.on(today);
+            assert!(matches!(on, Cow::Borrowed(_)));
+            assert_eq!(*on, repeat("a", 5));
+        }
+    }
+
+    #[test]
+    fn a_date_becomes_written_text_on_the_day_it_is_asked_for() {
+        // 2026-10-15 is day 20 741.
+        let today = Day::from_days_since_1970(20_741);
+        let body = spring_change().on(today).into_owned();
+        assert_eq!(
+            body,
+            ValueBody::Literal(LiteralText::new("2027-03-28 02:30"))
+        );
+        // What metrics() promised without a day is what the day produced.
+        assert_eq!(spring_change().metrics(), body.metrics());
+        assert_eq!(spring_change().check_size(), Ok(()));
+    }
+
+    #[test]
+    fn only_a_written_value_is_not_generated() {
+        assert!(!Definition::from(ValueBody::Literal(LiteralText::new("x"))).is_generated());
+        assert!(Definition::from(repeat("a", 5)).is_generated());
+        assert!(spring_change().is_generated());
+    }
+
+    #[test]
+    fn a_definition_answers_the_size_rules_its_body_answers() {
+        let bomb = Definition::from(repeat("ab", 500_001));
+        assert_eq!(bomb.check_size().map_err(ValueProblem::code), Err("E026"));
+        assert_eq!(bomb.metrics(), repeat("ab", 500_001).metrics());
     }
 }

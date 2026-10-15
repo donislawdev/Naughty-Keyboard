@@ -57,7 +57,7 @@ pub fn new_pack(
     }
 
     let file = format!("{id}.toml");
-    match sink.create(id, &format.skeleton(id, clock.today())) {
+    match sink.create(id, &format.skeleton(id, clock.today().civil())) {
         Ok(()) => NewPackOutcome::Created { file },
         Err(SinkError::AlreadyExists) => NewPackOutcome::AlreadyExists { file },
         Err(SinkError::Unwritable) => NewPackOutcome::Unwritable { file },
@@ -76,10 +76,12 @@ mod tests {
     use nkb_core::lint::LintProblem;
     use std::cell::RefCell;
 
+    #[derive(Debug)]
     struct Fixed(Date);
     impl Clock for Fixed {
-        fn today(&self) -> Date {
-            self.0
+        fn today(&self) -> nkb_core::calendar::Day {
+            let (year, month, day) = self.0;
+            nkb_core::calendar::Day::from_civil(year, month, day).expect("a real day")
         }
     }
 

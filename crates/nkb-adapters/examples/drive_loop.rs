@@ -44,7 +44,7 @@ const TICK: Duration = Duration::from_millis(100);
 fn main() {
     let format = TomlPackFormat;
     let catalogue = BuiltInCatalogue::new();
-    let mut sequence = AdvanceSequence::new();
+    let mut sequence = AdvanceSequence::new(Box::new(nkb_adapters::SystemClock));
     if let Err(error) = sequence.choose_pack(&catalogue, &format, PACK) {
         eprintln!("{}", i18n::choose_error(&error, PACK));
         std::process::exit(1);

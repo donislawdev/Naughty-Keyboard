@@ -72,6 +72,7 @@
 //!   the target ONCE before each send instead, which is what stops a value from
 //!   going into the window the palette was launched from.
 
+use nkb_core::calendar::Day;
 use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::pack::{Pack, PackValue, Risk};
 use nkb_core::preview::{ValuePreview, preview_of};
@@ -80,12 +81,12 @@ use nkb_core::sequence::{Delivery, Effect, Event, Sequence, Upcoming};
 
 use crate::load_pack;
 use crate::ports::{
-    Availability, Clipboard, ClipboardError, DeliveryError, History, KeystrokeError,
+    Availability, Clipboard, ClipboardError, Clock, DeliveryError, History, KeystrokeError,
     KeystrokeSender, PackFormat, PackSource, Progress, ReportText, SourceError, StopReason,
     TargetInspector, TargetRef, ValueDelivery,
 };
 use crate::send_value::{
-    Clearing, ClearingOutcome, SendOutcome, Sending, SkipReason, ValueFacts, deliver_value,
+    Chosen, Clearing, ClearingOutcome, SendOutcome, Sending, SkipReason, ValueFacts, deliver_value,
 };
 
 /// Everything an action may reach outside the sequence, one port each.
@@ -157,18 +158,10 @@ pub struct AdvanceSequence {
     /// needs to put one value in a field at a time. The clipboard route clears
     /// nothing whatever this says: it presses nothing (`D71`).
     clearing: Clearing,
-}
-
-impl Default for AdvanceSequence {
-    fn default() -> Self {
-        Self {
-            sequence: Sequence::default(),
-            loaded: None,
-            last: None,
-            window_on_clipboard: None,
-            clearing: Clearing::Line,
-        }
-    }
+    /// Where today comes from. Asked at every press and every view, never
+    /// once at the start: a palette stays open for days, and a `next-date`
+    /// value has to name the date that is next on the day it is typed.
+    clock: Box<dyn Clock + Send>,
 }
 
 /// Which value a report block would describe, and how much of it arrived.
@@ -185,6 +178,9 @@ struct LastSent {
     /// Where it was typed, read at the press (`D104`) - `None` when it went to
     /// the clipboard.
     target: Option<Target>,
+    /// The day it went out on, so that the block quotes the date that was
+    /// typed even when it is asked for after midnight (`D133`).
+    on: Day,
 }
 
 /// A pack held in memory for the length of the sequence.
@@ -441,9 +437,17 @@ pub enum Message {
 }
 
 impl AdvanceSequence {
+    /// A sequence with no pack yet, reading today from `clock`.
     #[must_use]
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(clock: Box<dyn Clock + Send>) -> Self {
+        Self {
+            sequence: Sequence::default(),
+            loaded: None,
+            last: None,
+            window_on_clipboard: None,
+            clearing: Clearing::Line,
+            clock,
+        }
     }
 
     /// The counter the palette shows, `n / total`, or `None` before a pack.
@@ -559,7 +563,7 @@ impl AdvanceSequence {
                     },
                     name: value.name.clone(),
                     reference: format!("{}/{}", loaded.pack.id, value.id),
-                    preview: preview_of(&value.body),
+                    preview: preview_of(&value.definition.on(self.clock.today())),
                     offensive: offensive(&loaded.pack, value),
                 })
             }
@@ -811,7 +815,8 @@ impl AdvanceSequence {
         // Measured from the recipe before anything is built, as a send measures
         // it. Unreachable for a pack that loaded, and the send's own sentence if
         // it ever is: the same recipe could not be sent either.
-        let built = held.body.metrics().map(|_| held.body.materialise());
+        let body = held.definition.on(self.clock.today());
+        let built = body.metrics().map(|_| body.materialise());
         let Some(Ok(text)) = built else {
             return Message::ValueTooLarge {
                 id: held.id.clone(),
@@ -843,7 +848,7 @@ impl AdvanceSequence {
         let loaded = self.loaded.as_ref()?;
         let value = loaded.pack.values.get(last.index.checked_sub(1)?)?;
         Some(
-            ReportBlock::describe(&loaded.pack, value, last.arrival)
+            ReportBlock::describe(&loaded.pack, value, last.on, last.arrival)
                 .map(|block| ReportBlock {
                     target: last.target.clone(),
                     ..block
@@ -930,15 +935,13 @@ impl AdvanceSequence {
                 progress: sending.progress,
             });
         };
-        let mut outcome = deliver_value(
-            &loaded.pack,
+        let chosen = Chosen {
+            pack: &loaded.pack,
             value,
-            route,
-            ports.keys,
-            clearing,
-            loaded.warnings,
-            &mut tell,
-        );
+            warnings: loaded.warnings,
+            on: self.clock.today(),
+        };
+        let mut outcome = deliver_value(chosen, route, ports.keys, clearing, &mut tell);
 
         // `D72`: the direct route refused a window with higher privileges before
         // pressing a single key. Not a hiccup to retry and not a system without
@@ -952,12 +955,10 @@ impl AdvanceSequence {
             self.window_on_clipboard = window;
             on_clipboard = true;
             outcome = deliver_value(
-                &loaded.pack,
-                value,
+                chosen,
                 ports.by_clipboard,
                 ports.keys,
                 Clearing::Keep,
-                loaded.warnings,
                 &mut tell,
             );
         } else {
@@ -975,6 +976,7 @@ impl AdvanceSequence {
                 index,
                 arrival,
                 target: target.clone(),
+                on: chosen.on,
             });
         }
         // Only when THIS value became the last one: otherwise the block would
@@ -1985,7 +1987,7 @@ mod tests {
             block.messages
         );
         assert!(
-            !AdvanceSequence::new().start_over(),
+            !AdvanceSequence::new(Box::new(StoppedClock::default())).start_over(),
             "no pack, nothing to start over"
         );
     }
@@ -1996,7 +1998,7 @@ mod tests {
         let before = advance.sequence();
         assert!(!advance.choose_next("nope"));
         assert_eq!(advance.sequence(), before);
-        assert!(!AdvanceSequence::new().choose_next("one"));
+        assert!(!AdvanceSequence::new(Box::new(StoppedClock::default())).choose_next("one"));
     }
 
     #[test]
@@ -2017,7 +2019,10 @@ mod tests {
                 ..
             })
         ));
-        assert_eq!(AdvanceSequence::new().upcoming(), None);
+        assert_eq!(
+            AdvanceSequence::new(Box::new(StoppedClock::default())).upcoming(),
+            None
+        );
     }
 
     #[test]
@@ -2096,7 +2101,7 @@ mod tests {
 
     #[test]
     fn next_with_no_pack_chosen_says_no_pack() {
-        let mut advance = AdvanceSequence::new();
+        let mut advance = AdvanceSequence::new(Box::new(StoppedClock::default()));
         let outcome = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
         assert_eq!(outcome.messages, vec![Message::NoPack]);
         assert!(outcome.sent.is_none());
@@ -2104,14 +2109,14 @@ mod tests {
 
     #[test]
     fn a_missing_pack_is_reported_not_panicked() {
-        let mut advance = AdvanceSequence::new();
+        let mut advance = AdvanceSequence::new(Box::new(StoppedClock::default()));
         let result = advance.choose_pack(&MissingSource, &FakeFormat::with_errors(0), "absent");
         assert_eq!(result, Err(ChooseError::NotFound));
     }
 
     #[test]
     fn a_pack_with_errors_is_refused_and_says_how_many() {
-        let mut advance = AdvanceSequence::new();
+        let mut advance = AdvanceSequence::new(Box::new(StoppedClock::default()));
         let result = advance.choose_pack(&FakeSource, &FakeFormat::with_errors(3), "sample");
         assert_eq!(result, Err(ChooseError::Refused { errors: 3 }));
     }
@@ -2479,7 +2484,11 @@ mod tests {
             }
         );
         assert_eq!(
-            AdvanceSequence::new().copy_value("sample", "one", &kit.ports()),
+            AdvanceSequence::new(Box::new(StoppedClock::default())).copy_value(
+                "sample",
+                "one",
+                &kit.ports()
+            ),
             Message::CopyGone {
                 reference: "sample/one".to_owned()
             },
@@ -2939,5 +2948,77 @@ mod tests {
         assert_eq!(sent.target, None);
         let blocks = kit.text.blocks.borrow();
         assert_eq!(blocks.first().and_then(|block| block.target.clone()), None);
+    }
+
+    /// A value of type `next-date`: the last Sunday of October at 02:30, the hour
+    /// the autumn clock change repeats in central Europe.
+    fn a_clock_change(id: &str) -> PackValue {
+        use nkb_core::calendar::Weekday;
+        use nkb_core::next_date::{NextDate, TimeOfDay, Week};
+        let rule = NextDate::new(10, Week::Last, Weekday::Sunday, TimeOfDay::parse("02:30"))
+            .expect("a month of the year");
+        PackValue {
+            definition: nkb_core::value::Definition::NextDate(rule),
+            ..a_value(id, "", None)
+        }
+    }
+
+    /// A calendar day, for a test that names one.
+    fn on_day(year: i32, month: u32, day: u32) -> Day {
+        Day::from_civil(year, month, day).expect("a real day")
+    }
+
+    #[test]
+    fn a_next_date_value_is_the_date_ahead_on_the_day_it_is_typed_and_its_block_keeps_that_day() {
+        // `D133`. The palette stays open for days, so the date is worked out at
+        // every view and every press - and the block quotes the date that was
+        // TYPED, even when it is asked for once the rule has moved on.
+        let clock = MovingClock::on(on_day(2026, 10, 15));
+        let mut advance = AdvanceSequence::new(Box::new(clock.clone()));
+        let pack = a_pack(vec![a_clock_change("dst-ambiguous")], Risk::Normal);
+        advance
+            .choose_pack(&FakeSource, &FakeFormat::of(pack), "sample")
+            .expect("a scripted pack with no errors loads");
+        let kit = Kit::ready();
+        let typed = |text: &str| {
+            nkb_core::value::ValueBody::Literal(nkb_core::text::LiteralText::new(text))
+        };
+        let shown = |advance: &AdvanceSequence| match advance.upcoming() {
+            Some(UpcomingValue::Value { preview, .. }) => preview,
+            other => panic!("expected a value to come, got {other:?}"),
+        };
+
+        assert_eq!(shown(&advance), preview_of(&typed("2026-10-25 02:30")));
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(*kit.direct.handed.borrow(), vec!["2026-10-25 02:30"]);
+
+        // From 24 October in UTC, the change of 2026 is today somewhere, and
+        // the date ahead is next year's.
+        clock.set(on_day(2026, 10, 24));
+        let _ = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+        assert_eq!(
+            kit.text.blocks.borrow()[0].typed,
+            nkb_core::report::typed_of(&typed("2026-10-25 02:30")),
+            "the block quotes what went out, not what would go out now"
+        );
+        assert!(advance.start_over());
+        assert_eq!(shown(&advance), preview_of(&typed("2027-10-31 02:30")));
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(
+            *kit.direct.handed.borrow(),
+            vec!["2026-10-25 02:30", "2027-10-31 02:30"]
+        );
+    }
+
+    #[test]
+    fn a_copied_next_date_value_is_the_date_of_the_day_it_is_copied() {
+        let mut advance = AdvanceSequence::new(Box::new(StoppedClock(on_day(2027, 1, 4))));
+        let pack = a_pack(vec![a_clock_change("dst-ambiguous")], Risk::Normal);
+        advance
+            .choose_pack(&FakeSource, &FakeFormat::of(pack), "sample")
+            .expect("a scripted pack with no errors loads");
+        let kit = Kit::ready();
+        let _ = advance.copy_value("sample", "dst-ambiguous", &kit.ports());
+        assert_eq!(*kit.by_clipboard.handed.borrow(), vec!["2027-10-31 02:30"]);
     }
 }

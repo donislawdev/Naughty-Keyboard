@@ -187,6 +187,24 @@ fn count(n: usize, noun: &str) -> String {
     }
 }
 
+/// The sentences about which kind a value is: a kind this build does not
+/// produce (E023), and a `next-date` rule that names no day (E018). The subject
+/// of E018 is the field's name when it is missing and the field as written when
+/// it is wrong (`toml_pack/next_date.rs`).
+fn kind_sentence(code: RuleCode, owner: &str, subject: &str) -> String {
+    match code {
+        RuleCode::NextDateRuleIncomplete if subject.contains(" = ") => format!(
+            "value `{owner}` is a `next-date` with {subject}, which names no day. Write the month as 1 to 12, the week as first, second, third, fourth or last, the weekday in lower case English and the time as HH:MM."
+        ),
+        RuleCode::NextDateRuleIncomplete => format!(
+            "value `{owner}` is a `next-date` and declares no `{subject}`. A rule needs a month, a week and a weekday to name a day."
+        ),
+        _ => format!(
+            "value `{owner}` declares type `{subject}`. This build produces `literal`, `repeat` and `next-date` - the other names are reserved and not yet defined."
+        ),
+    }
+}
+
 /// The sentence for one problem. Says what happened and what to do next - a
 /// message with only the first half is unfinished.
 pub fn sentence(problem: &LintProblem) -> String {
@@ -256,9 +274,9 @@ pub fn sentence(problem: &LintProblem) -> String {
         RuleCode::LiteralStringForEscapableValue => format!(
             "value `{owner}` needs {subject} escaped, but is written in single quotes where nothing is an escape. Use double quotes and write {subject}."
         ),
-        RuleCode::UnknownValueType => format!(
-            "value `{owner}` declares type `{subject}`. This build produces `literal` and `repeat` - the other names are reserved and not yet defined."
-        ),
+        RuleCode::UnknownValueType | RuleCode::NextDateRuleIncomplete => {
+            kind_sentence(problem.code, owner, subject)
+        }
         RuleCode::RepeatCountOutOfRange if subject.parse::<i64>().is_err() => format!(
             "value `{owner}` repeats and declares no `{subject}`. A recipe needs both a unit and a count to describe anything."
         ),
@@ -589,7 +607,7 @@ mod tests {
             .about("unicode-text"),
         );
         let text = summary(&report).join("\n");
-        assert!(text.contains("Checked 39 of 45 rules"), "{text}");
+        assert!(text.contains("Checked 40 of 46 rules"), "{text}");
         assert!(
             text.contains("1 more rule could not be checked for this file"),
             "{text}"
@@ -603,6 +621,33 @@ mod tests {
             !quiet.contains("could not be checked for this file"),
             "{quiet}"
         );
+    }
+
+    #[test]
+    fn a_date_rule_says_whether_a_part_is_missing_or_names_no_day() {
+        // The subject tells the two apart: a field's name when it is absent, the
+        // field as written when it is wrong (`toml_pack/next_date.rs`).
+        let missing = sentence(
+            &LintProblem::new(RuleCode::NextDateRuleIncomplete)
+                .about("weekday")
+                .owned_by("spring"),
+        );
+        assert!(missing.contains("declares no `weekday`"), "{missing}");
+        let wrong = sentence(
+            &LintProblem::new(RuleCode::NextDateRuleIncomplete)
+                .about("week = \"fifth\"")
+                .owned_by("spring"),
+        );
+        assert!(
+            wrong.contains("with week = \"fifth\", which names no day"),
+            "{wrong}"
+        );
+        let kind = sentence(
+            &LintProblem::new(RuleCode::UnknownValueType)
+                .about("date-offset")
+                .owned_by("spring"),
+        );
+        assert!(kind.contains("declares type `date-offset`"), "{kind}");
     }
 
     #[test]

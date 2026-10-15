@@ -33,7 +33,7 @@
 
 use nkb_core::pack::{Pack, PackPair, PackValue, Risk};
 use nkb_core::text::LiteralText;
-use nkb_core::value::ValueBody;
+use nkb_core::value::{Definition, ValueBody};
 use toml_edit::{Document, Item, Table};
 
 /// Reads one string field, or nothing when it is absent or not a string.
@@ -84,11 +84,18 @@ fn words(table: &Table, key: &str) -> Vec<String> {
 
 /// The recipe a value describes.
 ///
-/// `None` when the file says nothing usable - no `value`, or a `repeat` missing
-/// a part. The caller has already refused such a pack, so this is the branch
-/// that must not guess rather than the branch that must recover.
-fn body_of(table: &Table) -> Option<ValueBody> {
+/// `None` when the file says nothing usable - no `value`, a `repeat` missing a
+/// part, a `next-date` naming no day. The caller has already refused such a
+/// pack, so this is the branch that must not guess rather than the branch that
+/// must recover.
+fn definition_of(table: &Table) -> Option<Definition> {
     let declared = table.get("type").and_then(Item::as_str);
+
+    if declared == Some("next-date") {
+        // Read by the same function E016 compares with, so the day the program
+        // types is the day the validator judged.
+        return crate::toml_pack::rule_of(table).map(Definition::NextDate);
+    }
 
     if declared == Some("repeat") {
         let unit = table.get("unit").and_then(Item::as_str)?;
@@ -96,22 +103,24 @@ fn body_of(table: &Table) -> Option<ValueBody> {
         // A count outside machine range is E024's finding and the pack carrying
         // it never reaches here. Refusing to guess is still the right answer.
         let count = u32::try_from(count).ok()?;
-        return Some(ValueBody::Repeat {
+        return Some(Definition::Fixed(ValueBody::Repeat {
             unit: LiteralText::new(unit),
             count,
-        });
+        }));
     }
 
     // The format's default type is `literal`, so an absent `type` is one.
     let value = table.get("value").and_then(Item::as_str)?;
-    Some(ValueBody::Literal(LiteralText::new(value)))
+    Some(Definition::Fixed(ValueBody::Literal(LiteralText::new(
+        value,
+    ))))
 }
 
 fn value_of(table: &Table) -> Option<PackValue> {
     Some(PackValue {
         id: text(table, "id")?,
         name: text_or_empty(table, "name"),
-        body: body_of(table)?,
+        definition: definition_of(table)?,
         breaks: text(table, "breaks"),
         expect: text(table, "expect"),
         // `None` and `Some(Normal)` are different facts and stay different:
@@ -252,7 +261,7 @@ mod tests {
         let pack = parse(&shipped_whitespace()).expect("the shipped pack must parse");
         let value = pack.value("zwsp-only").expect("zwsp-only is in this pack");
 
-        let ValueBody::Literal(literal) = &value.body else {
+        let Definition::Fixed(ValueBody::Literal(literal)) = &value.definition else {
             panic!("zwsp-only is a literal value");
         };
         assert_eq!(literal.as_str().chars().count(), 1);
@@ -267,15 +276,40 @@ mod tests {
             .value("len-1000-spaces")
             .expect("len-1000-spaces is in this pack");
 
-        let ValueBody::Repeat { unit, count } = &value.body else {
+        let Definition::Fixed(ValueBody::Repeat { unit, count }) = &value.definition else {
             panic!("len-1000-spaces is a generated value");
         };
         assert_eq!(unit.as_str(), " ");
         assert_eq!(*count, 1000);
         // architektura.md 6.1: the size is known from the recipe, and nothing
         // here builds the thousand characters in order to find it out.
-        let metrics = value.body.metrics().expect("a measurable recipe");
+        let metrics = value.definition.metrics().expect("a measurable recipe");
         assert_eq!(metrics.code_points, 1000);
+    }
+
+    #[test]
+    fn a_date_value_stays_a_rule_and_becomes_a_date_only_when_told_the_day() {
+        // `D133`: the reader keeps `time-zones/dst-nonexistent` as the rule the
+        // file names, and nothing here knows what day it is.
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packs/time-zones.toml");
+        let text = std::fs::read_to_string(&path).expect("time-zones.toml is readable");
+        let pack = parse(&text).expect("the shipped pack must parse");
+        let value = pack
+            .value("dst-nonexistent")
+            .expect("dst-nonexistent is in this pack");
+
+        let Definition::NextDate(rule) = &value.definition else {
+            panic!("dst-nonexistent is a date worked out on the day");
+        };
+        assert_eq!(rule.month(), 3);
+        assert_eq!(rule.week().name(), "last");
+        assert_eq!(rule.weekday().name(), "sunday");
+        let october_15 = nkb_core::calendar::Day::from_days_since_1970(20_741);
+        assert_eq!(
+            *value.definition.on(october_15),
+            ValueBody::Literal(LiteralText::new("2027-03-28 02:30"))
+        );
     }
 
     #[test]

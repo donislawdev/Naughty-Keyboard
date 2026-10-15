@@ -4,8 +4,8 @@ format = 1
 id          = "time-zones"
 name        = "Time and time zones"
 description = "Hours that do not exist, happen twice, or are written without a zone."
-version     = "1.0"
-updated     = 2026-10-14
+version     = "2.0"
+updated     = 2026-10-15
 license     = "CC-BY-4.0"
 authors     = ["Naughty Keyboard"]
 language    = "en"
@@ -14,20 +14,28 @@ fields      = ["datetime", "time", "text"]
 risk        = "normal"
 
 [[values]]
-id     = "dst-nonexistent"
-name   = "Hour skipped by the spring clock change"
-value  = "2027-03-28 02:30"
-breaks = "On the day clocks go forward in central Europe this hour does not exist locally; parsers either shift it silently or fail with a raw error."
-expect = "Rejected with an explanation, or shifted with the shift shown to the user."
-since  = "1.0"
+id      = "dst-nonexistent"
+name    = "Hour skipped by the next spring clock change"
+type    = "next-date"
+month   = 3
+week    = "last"
+weekday = "sunday"
+time    = "02:30"
+breaks  = "On the day clocks go forward in central Europe this hour does not exist locally; parsers either shift it silently or fail with a raw error."
+expect  = "Rejected with an explanation, or shifted with the shift shown to the user."
+since   = "1.0"
 
 [[values]]
-id     = "dst-ambiguous"
-name   = "Hour repeated by the autumn clock change"
-value  = "2027-10-31 02:30"
-breaks = "On the day clocks go back in central Europe this hour happens twice; without a zone the value cannot be resolved to a moment."
-expect = "The zone requested, or one interpretation chosen and stated."
-since  = "1.0"
+id      = "dst-ambiguous"
+name    = "Hour repeated by the next autumn clock change"
+type    = "next-date"
+month   = 10
+week    = "last"
+weekday = "sunday"
+time    = "02:30"
+breaks  = "On the day clocks go back in central Europe this hour happens twice; without a zone the value cannot be resolved to a moment."
+expect  = "The zone requested, or one interpretation chosen and stated."
+since   = "1.0"
 
 [[values]]
 id     = "no-offset"
