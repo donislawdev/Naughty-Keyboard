@@ -74,7 +74,7 @@
 
 use nkb_core::calendar::Day;
 use nkb_core::hotkeys::HotkeyAction;
-use nkb_core::pack::{Pack, PackValue, Risk};
+use nkb_core::pack::{Pack, PackValue, PairHalf, Risk};
 use nkb_core::preview::{ValuePreview, preview_of};
 use nkb_core::report::{Arrival, ReportBlock, Target};
 use nkb_core::sequence::{Delivery, Effect, Event, Sequence, Upcoming};
@@ -249,6 +249,10 @@ pub enum UpcomingValue {
         preview: ValuePreview,
         /// The effective risk, as a [`Sent`] carries it.
         offensive: bool,
+        /// Which half of a pair the value is, once for each pair it stands in
+        /// and in the order of the pairs in the file - usually none or one.
+        /// `pack-format.md` 9 has the palette say which half is next.
+        halves: Vec<PairHalf>,
     },
     /// The press only says the pack is finished.
     EndOfPack { total: usize },
@@ -554,6 +558,7 @@ impl AdvanceSequence {
             Upcoming::Value { index, total } => {
                 let loaded = self.loaded.as_ref()?;
                 let value = loaded.pack.values.get(index.checked_sub(1)?)?;
+                let halves = loaded.pack.halves_of(&value.id).map(|(_, half)| half);
                 Some(UpcomingValue::Value {
                     index,
                     total,
@@ -565,6 +570,7 @@ impl AdvanceSequence {
                     reference: format!("{}/{}", loaded.pack.id, value.id),
                     preview: preview_of(&value.definition.on(self.clock.today())),
                     offensive: offensive(&loaded.pack, value),
+                    halves: halves.collect(),
                 })
             }
         }
@@ -2023,6 +2029,43 @@ mod tests {
             AdvanceSequence::new(Box::new(StoppedClock::default())).upcoming(),
             None
         );
+    }
+
+    #[test]
+    fn the_next_value_says_which_half_of_a_pair_it_is_and_a_lone_one_says_nothing() {
+        let mut pack = a_pack(
+            vec![
+                a_value("one", "alpha", None),
+                a_value("two", "beta", None),
+                a_value("three", "gamma", None),
+            ],
+            Risk::Normal,
+        );
+        pack.pairs = vec![nkb_core::pack::PackPair {
+            id: "one-and-two".to_owned(),
+            name: "One against two".to_owned(),
+            relation: "look-alike".to_owned(),
+            a: "one".to_owned(),
+            b: "two".to_owned(),
+            breaks: None,
+            expect: None,
+            since: Some("1.0".to_owned()),
+        }];
+        let mut advance = AdvanceSequence::new(Box::new(StoppedClock::default()));
+        advance
+            .choose_pack(&FakeSource, &FakeFormat::of(pack), "sample")
+            .expect("a scripted pack with no errors loads");
+        let halves = |advance: &AdvanceSequence| {
+            let Some(UpcomingValue::Value { halves, .. }) = advance.upcoming() else {
+                panic!("a value is upcoming: {:?}", advance.upcoming());
+            };
+            halves
+        };
+        assert_eq!(halves(&advance), [PairHalf::First]);
+        assert!(advance.choose_next("two"));
+        assert_eq!(halves(&advance), [PairHalf::Second]);
+        assert!(advance.choose_next("three"));
+        assert!(halves(&advance).is_empty());
     }
 
     #[test]

@@ -156,3 +156,63 @@ text = "Ten sam problem z literą O i cyfrą zero, w kodach przepisywanych ręcz
 [digit-zero-letter-o.expect]
 source = "3e143afb3bd5"
 text = "Tak samo jak wyżej albo niejednoznaczne znaki wykluczone z generowanych kodów."
+
+[latin-vs-cyrillic-a.name]
+source = "6e8d9241c056"
+text = "Łacińskie a wobec cyrylickiego a"
+
+[latin-vs-cyrillic-a.breaks]
+source = "fa9b48c1bee8"
+text = "Dwie nazwy użytkownika wyglądające identycznie stają się dwoma kontami, a pomoc techniczna nie umie ich rozróżnić."
+
+[latin-vs-cyrillic-a.expect]
+source = "bc7a17e2721f"
+text = "Albo oba przyjęte jako różne i pokazane jako różne, albo drugie odrzucone jako duplikat."
+
+[latin-vs-greek-o.name]
+source = "0133c1e3a416"
+text = "Łacińskie o wobec greckiego omikronu"
+
+[latin-vs-greek-o.breaks]
+source = "e2304110cc01"
+text = "Sprawdzanie unikalności, które obsługuje jedno pismo jako wyjątek, przepuszcza następne."
+
+[latin-vs-greek-o.expect]
+source = "bc7a17e2721f"
+text = "Albo oba przyjęte jako różne i pokazane jako różne, albo drugie odrzucone jako duplikat."
+
+[nfc-vs-nfd.name]
+source = "75850059ec35"
+text = "Akcenty złożone wobec rozłożonych"
+
+[nfc-vs-nfd.breaks]
+source = "5f1aae4b24b6"
+text = "To samo imię zapisane z dwóch urządzeń daje dwa rekordy."
+
+[nfc-vs-nfd.expect]
+source = "df77f6212b76"
+text = "Normalizowane przy zapisie, więc oba zapisy stają się jednym rekordem."
+
+[space-vs-nbsp.name]
+source = "be2c4ef52946"
+text = "Zwykła spacja wobec twardej spacji"
+
+[space-vs-nbsp.breaks]
+source = "3d9fdb86b13d"
+text = "Wyszukiwanie znajduje jedno, a drugiego nie, i nikt nie widzi dlaczego."
+
+[space-vs-nbsp.expect]
+source = "c179ab674e87"
+text = "Oba znalezione tym samym wyszukiwaniem, bo spacja jest normalizowana przy zapisie albo wyszukiwanie traktuje obie jak spację."
+
+[hyphen-vs-endash.name]
+source = "261b803fda78"
+text = "Łącznik wobec półpauzy"
+
+[hyphen-vs-endash.breaks]
+source = "4cdf6c0f7490"
+text = "Zakres wklejony z dokumentu przestaje się odczytywać, choć nie widać żadnej różnicy."
+
+[hyphen-vs-endash.expect]
+source = "a995712d9459"
+text = "Obie formy odczytane jako ten sam zakres albo półpauza normalizowana przed odczytem."

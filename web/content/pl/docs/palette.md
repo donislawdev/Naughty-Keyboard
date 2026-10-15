@@ -13,7 +13,7 @@ Paleta to `nkb-gui`, okno, które stoi obok testowanej aplikacji i jest sterowan
 ## Co pokazuje?
 
 - **Paczkę** na górze, z tym, jak daleko w niej jesteś. Kliknięcie jej nazwy otwiera okno szukania wartości.
-- **Następną wartość**, tę, którą wpisze następne naciśnięcie, narysowaną tak, żeby ją było widać. Znak, którego nikt nie zobaczy, jest rysowany jako znacznik, prostokąt otwarty od góry, a nie jako nic.
+- **Następną wartość**, tę, którą wpisze następne naciśnięcie, narysowaną tak, żeby ją było widać. Znak, którego nikt nie zobaczy, jest rysowany jako znacznik, prostokąt otwarty od góry, a nie jako nic. Gdy wartość jest połową pary, obok jej nazwy stoi `pair 1 of 2` albo `pair 2 of 2`.
 - **Ostatnią wpisaną wartość**, zwiniętą, dopóki jej nie rozwiniesz, z czterema licznikami: grafemy, punkty kodowe, bajty i jednostki UTF-16. Te cztery liczby różnią się właśnie przy wartościach, które najczęściej psują pola.
 - **Sposób wpisania każdej wartości**: z klawiatury albo przez schowek, z którego ją wklejasz, i to, czy wiersz jest najpierw czyszczony, czy wartość trafia w miejsce kursora.
 - **Klawisze** każdego działającego skrótu, na dole, pod nagłówkiem, który je zwija.

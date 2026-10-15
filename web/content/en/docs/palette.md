@@ -12,7 +12,7 @@ The palette is `nkb-gui`, a window that stays beside the application you are tes
 ## What does it show?
 
 - **The pack** at the top, with how far through it you are. Clicking its name opens the window for finding a value.
-- **The next value**, the one the next press types, drawn so you can see it. A character nobody can see is drawn as a marker, a box open at the top, instead of as nothing.
+- **The next value**, the one the next press types, drawn so you can see it. A character nobody can see is drawn as a marker, a box open at the top, instead of as nothing. When the value is one half of a pair, `pair 1 of 2` or `pair 2 of 2` stands beside its name.
 - **The last value it typed**, folded until you open it, with four counts: graphemes, code points, bytes and UTF-16 units. The four differ exactly for the values most likely to break a field.
 - **How each value goes in**: typed from the keyboard, or put on the clipboard for you to paste, and whether the line is cleared first or the value goes in at the cursor.
 - **The keys** of every shortcut that works, along the bottom, under a heading that folds them away.

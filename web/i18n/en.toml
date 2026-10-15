@@ -322,6 +322,24 @@ other = "version {{ .version }}, updated {{ .updated }}"
 [pack_how]
 other = "Type them one at a time with {{ .chord }} in the palette, or take them all into a script with <code>{{ .command }}</code>."
 
+[pairs_heading]
+other = "Pairs"
+
+[pairs_lead]
+other = "Each pair is two of the values above, worth typing side by side: into two fields, or into one field twice. {{ .chord }} types them in turn, and the palette says which half of a pair comes next."
+
+[pair_half]
+other = "pair {{ .half }} of 2"
+
+[relation_look-alike]
+other = "look-alike"
+
+[relation_range]
+other = "range"
+
+[relation_identity]
+other = "identity"
+
 # ---- a command of nkb --------------------------------------------------------
 
 [commands]

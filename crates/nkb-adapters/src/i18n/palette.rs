@@ -4,6 +4,7 @@
 //! why every one of them is a key.
 
 use super::*;
+use nkb_core::pack::PairHalf;
 
 // ---------------------------------------------------------------------------
 // The palette's own labels
@@ -55,6 +56,11 @@ pub enum PaletteLabel {
     Interrupted,
     /// The pack loaded, and it loaded with warnings.
     Warnings,
+    /// The next value is the half of a pair the format names `a`, and the one
+    /// after it is meant to be typed beside it (`pack-format.md` 9, `OBS-181`).
+    PairFirst,
+    /// The next value is the half named `b`.
+    PairSecond,
     /// The standing bar of clipboard mode, `ux-spec.md` 2. Until `D71` it read
     /// `direct input refused`, because a bar saying `clipboard mode` while
     /// nothing put a value on the clipboard would have been worse than silence.
@@ -233,6 +239,8 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::OnClipboard => "on the clipboard",
         PaletteLabel::Interrupted => "interrupted",
         PaletteLabel::Warnings => "pack warnings: {count}",
+        PaletteLabel::PairFirst => "pair 1 of 2",
+        PaletteLabel::PairSecond => "pair 2 of 2",
         PaletteLabel::ClipboardMode => "clipboard mode",
         PaletteLabel::ClipboardForWindow => "clipboard mode for this window",
         PaletteLabel::PreviewElided => "showing {shown} of {total} code points",
@@ -475,6 +483,15 @@ pub fn no_value_yet(next_value: HotkeyChord) -> String {
         pattern_palette_label(PaletteLabel::NoValueYet),
         &[("shortcut", &chord(next_value))],
     )
+}
+
+/// Which half of a pair a value is, in the words the palette writes beside it.
+#[must_use]
+pub fn pair_half(half: PairHalf) -> &'static str {
+    pattern_palette_label(match half {
+        PairHalf::First => PaletteLabel::PairFirst,
+        PairHalf::Second => PaletteLabel::PairSecond,
+    })
 }
 
 /// How many warnings the pack carried when it loaded.

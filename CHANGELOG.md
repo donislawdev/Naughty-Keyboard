@@ -17,6 +17,9 @@ Changes wait under Unreleased until then.
   such day, at least two days ahead in UTC so that it lies ahead in every time zone, written like
   `2027-03-28 02:30`. The palette, `nkb send`, `nkb emit` and the report block all use the date of the
   day the value goes out, and `nkb show` and the website show the rule.
+- The palette says which half of a pair the next value is, with `pair 1 of 2` or `pair 2 of 2` beside
+  its name. `nkb show` prints what a correct application does with a pair as well as what it breaks,
+  and a pack's page on the website lists its pairs, each linked with the two values it joins.
 
 ### Changed
 

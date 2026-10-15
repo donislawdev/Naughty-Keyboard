@@ -813,6 +813,47 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
 /// Folded it adds its heading row and no text. Opened, every line of the
 /// block, and the palette grows to hold it - nothing below its surface. Each
 /// a difference of two edges, never the presence of a colour (GUI rule 10).
+/// A half of a pair (`OBS-181`): the pill stands beside the name and the band
+/// keeps its height. The longest name of a paired value in the catalogue, the
+/// words from `i18n` rather than a copy of them, and two pills, which a value
+/// standing in two pairs earns - the most this line ever has to hold beside the
+/// Copy button. A test of its own: the one above is at the length ceiling of
+/// `D113`, and this needs nothing of its states.
+#[test]
+fn a_half_of_a_pair_stands_beside_the_name_and_the_band_keeps_its_height() {
+    let window = offscreen::start(WIDTH, HEIGHT);
+    let palette = Palette::new().expect("the palette must build");
+    fill(&palette);
+    palette.set_compact(false);
+    palette.show().expect("the palette must show");
+    let edge_with_next = bottom_edge(&render(&window));
+
+    palette.set_next_name("Name with a non-breaking space".into());
+    palette.set_next_preview("Jan\u{2423}Kowalski".into());
+    let half = |half| Marker {
+        text: nkb_adapters::i18n::pair_half(half).into(),
+        risky: false,
+    };
+    palette.set_next_markers(ModelRc::new(VecModel::from(vec![
+        half(nkb_core::PairHalf::Second),
+        half(nkb_core::PairHalf::First),
+    ])));
+    let pair = render(&window);
+    let pair_path = offscreen::save_cropped(&pair, WIDTH, HEIGHT, "palette-next-pair.png");
+    assert_nothing_escapes_the_surface(
+        &pair,
+        "with a half of a pair",
+        &pair_path.display().to_string(),
+    );
+    assert_eq!(
+        bottom_edge(&pair),
+        edge_with_next,
+        "two pills beside the name moved the palette's bottom edge, so the line wraps \
+         rather than letting the name give way. Look at {}",
+        pair_path.display()
+    );
+}
+
 #[test]
 fn the_report_block_folds_and_opens_inside_the_palette() {
     let window = offscreen::start(WIDTH, HEIGHT);

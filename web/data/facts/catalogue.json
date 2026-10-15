@@ -41,6 +41,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "trailing-space",
@@ -75,6 +76,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "leading-space",
@@ -109,6 +111,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "leading-space",
@@ -147,6 +150,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "zero-width",
@@ -181,6 +185,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "unusual-space",
@@ -215,6 +220,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "line-break",
@@ -249,6 +255,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "tab",
@@ -283,6 +290,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "line-break",
@@ -317,6 +325,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "zero-width",
@@ -351,6 +360,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "unusual-space",
@@ -385,6 +395,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 14,
@@ -414,6 +425,7 @@
             "count": 1000
           },
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "leading-space",
@@ -431,7 +443,9 @@
             "utf16_units": 1000
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "unicode-text",
@@ -476,6 +490,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "bidi-control",
@@ -512,6 +527,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "soft-hyphen",
@@ -548,6 +564,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -579,6 +596,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -610,6 +628,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "zero-width",
@@ -646,6 +665,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "other-control",
@@ -682,6 +702,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -713,6 +734,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -744,6 +766,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -775,6 +798,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -806,6 +830,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 18,
@@ -837,6 +862,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -845,7 +871,9 @@
             "utf16_units": 13
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "length-bombs",
@@ -886,6 +914,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 0,
@@ -915,6 +944,7 @@
             "count": 255
           },
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 255,
@@ -944,6 +974,7 @@
             "count": 256
           },
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 256,
@@ -973,6 +1004,7 @@
             "count": 254
           },
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 254,
@@ -1002,6 +1034,7 @@
             "count": 1000
           },
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 1000,
@@ -1031,6 +1064,7 @@
             "count": 4000
           },
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4000,
@@ -1060,6 +1094,7 @@
             "count": 65535
           },
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 65535,
@@ -1089,6 +1124,7 @@
             "count": 100000
           },
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 100000,
@@ -1118,6 +1154,7 @@
             "count": 128
           },
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 128,
@@ -1147,6 +1184,7 @@
             "count": 64
           },
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 64,
@@ -1176,6 +1214,7 @@
             "count": 200
           },
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 200,
@@ -1205,6 +1244,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -1213,7 +1253,9 @@
             "utf16_units": 1
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "magic-values",
@@ -1258,6 +1300,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 2,
@@ -1289,6 +1332,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -1320,6 +1364,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -1351,6 +1396,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -1382,6 +1428,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 8,
@@ -1413,6 +1460,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -1444,6 +1492,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -1475,6 +1524,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -1506,6 +1556,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -1537,6 +1588,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -1568,6 +1620,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -1599,6 +1652,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -1607,7 +1661,9 @@
             "utf16_units": 1
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "numbers-extreme",
@@ -1652,6 +1708,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -1683,6 +1740,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -1714,6 +1772,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -1745,6 +1804,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 2,
@@ -1776,6 +1836,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -1807,6 +1868,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -1838,6 +1900,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -1869,6 +1932,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -1900,6 +1964,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -1931,6 +1996,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -1962,6 +2028,7 @@
             "count": 50
           },
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 50,
@@ -1993,6 +2060,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 2,
@@ -2001,7 +2069,9 @@
             "utf16_units": 2
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "dates-impossible",
@@ -2046,6 +2116,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2077,6 +2148,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2108,6 +2180,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2139,6 +2212,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2170,6 +2244,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2201,6 +2276,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2232,6 +2308,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2263,6 +2340,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 11,
@@ -2294,6 +2372,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2325,6 +2404,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 2,
@@ -2356,6 +2436,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 8,
@@ -2387,6 +2468,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -2395,7 +2477,9 @@
             "utf16_units": 10
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "export-breakers",
@@ -2442,6 +2526,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -2474,6 +2559,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -2506,6 +2592,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 13,
@@ -2538,6 +2625,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 20,
@@ -2570,6 +2658,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "line-break",
@@ -2607,6 +2696,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 19,
@@ -2639,6 +2729,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -2671,6 +2762,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -2703,6 +2795,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -2735,6 +2828,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -2767,6 +2861,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -2799,6 +2894,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -2807,7 +2903,9 @@
             "utf16_units": 3
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "locale-pl",
@@ -2854,6 +2952,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 11,
@@ -2886,6 +2985,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 11,
@@ -2918,6 +3018,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 19,
@@ -2950,6 +3051,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 14,
@@ -2982,6 +3084,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 6,
@@ -3014,6 +3117,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 19,
@@ -3022,7 +3126,9 @@
             "utf16_units": 19
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "filenames-paths",
@@ -3067,6 +3173,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 3,
@@ -3098,6 +3205,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 7,
@@ -3129,6 +3237,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "trailing-space",
@@ -3165,6 +3274,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 15,
@@ -3196,6 +3306,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 14,
@@ -3227,6 +3338,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "bidi-control",
@@ -3263,6 +3375,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -3294,6 +3407,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 2,
@@ -3325,6 +3439,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -3356,6 +3471,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -3387,6 +3503,7 @@
             "count": 260
           },
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 260,
@@ -3418,6 +3535,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 13,
@@ -3426,7 +3544,9 @@
             "utf16_units": 13
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "look-alike-pairs",
@@ -3474,6 +3594,12 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [
+            {
+              "pair": "latin-vs-cyrillic-a",
+              "half": 1
+            }
+          ],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -3506,6 +3632,12 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [
+            {
+              "pair": "latin-vs-cyrillic-a",
+              "half": 2
+            }
+          ],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -3538,6 +3670,12 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [
+            {
+              "pair": "latin-vs-greek-o",
+              "half": 1
+            }
+          ],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -3570,6 +3708,12 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [
+            {
+              "pair": "latin-vs-greek-o",
+              "half": 2
+            }
+          ],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -3602,6 +3746,12 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [
+            {
+              "pair": "nfc-vs-nfd",
+              "half": 1
+            }
+          ],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -3634,6 +3784,12 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [
+            {
+              "pair": "nfc-vs-nfd",
+              "half": 2
+            }
+          ],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -3666,6 +3822,12 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [
+            {
+              "pair": "space-vs-nbsp",
+              "half": 1
+            }
+          ],
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -3698,6 +3860,12 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [
+            {
+              "pair": "space-vs-nbsp",
+              "half": 2
+            }
+          ],
           "shape": [
             {
               "fact": "unusual-space",
@@ -3735,6 +3903,12 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [
+            {
+              "pair": "hyphen-vs-endash",
+              "half": 1
+            }
+          ],
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -3767,6 +3941,12 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [
+            {
+              "pair": "hyphen-vs-endash",
+              "half": 2
+            }
+          ],
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -3799,6 +3979,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -3831,6 +4012,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 2,
@@ -3838,6 +4020,64 @@
             "bytes": 2,
             "utf16_units": 2
           }
+        }
+      ],
+      "pair_count": 5,
+      "pairs": [
+        {
+          "id": "latin-vs-cyrillic-a",
+          "ref": "look-alike-pairs/latin-vs-cyrillic-a",
+          "name": "Latin a against Cyrillic a",
+          "relation": "look-alike",
+          "a": "latin-small-a",
+          "b": "cyrillic-small-a",
+          "breaks": "Two visually identical usernames become two accounts, and support cannot tell which is which.",
+          "expect": "Either both accepted as distinct and shown as distinct, or the second rejected as a duplicate.",
+          "since": "1.0"
+        },
+        {
+          "id": "latin-vs-greek-o",
+          "ref": "look-alike-pairs/latin-vs-greek-o",
+          "name": "Latin o against Greek omicron",
+          "relation": "look-alike",
+          "a": "latin-small-o",
+          "b": "greek-omicron",
+          "breaks": "Uniqueness checks that special-case one script miss the next one.",
+          "expect": "Either both accepted as distinct and shown as distinct, or the second rejected as a duplicate.",
+          "since": "1.0"
+        },
+        {
+          "id": "nfc-vs-nfd",
+          "ref": "look-alike-pairs/nfc-vs-nfd",
+          "name": "Composed against decomposed accents",
+          "relation": "look-alike",
+          "a": "nfc-lodz",
+          "b": "nfd-lodz",
+          "breaks": "The same name saved twice from two devices produces two records.",
+          "expect": "Normalised on save, so both spellings end up as one record.",
+          "since": "1.0"
+        },
+        {
+          "id": "space-vs-nbsp",
+          "ref": "look-alike-pairs/space-vs-nbsp",
+          "name": "Ordinary space against non-breaking space",
+          "relation": "look-alike",
+          "a": "plain-space-name",
+          "b": "nbsp-name",
+          "breaks": "Search finds one and not the other, and nobody can see why.",
+          "expect": "Both found by the same search, either because the space is normalised on save or because search treats both as a space.",
+          "since": "1.0"
+        },
+        {
+          "id": "hyphen-vs-endash",
+          "ref": "look-alike-pairs/hyphen-vs-endash",
+          "name": "Hyphen against en dash",
+          "relation": "look-alike",
+          "a": "hyphen-minus",
+          "b": "en-dash",
+          "breaks": "A range pasted from a document stops parsing, with no visible difference.",
+          "expect": "Both forms parse as the same range, or the dash is normalised before parsing.",
+          "since": "1.0"
         }
       ]
     },
@@ -3884,6 +4124,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "zero-width",
@@ -3920,6 +4161,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -3951,6 +4193,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "zero-width",
@@ -3987,6 +4230,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "zero-width",
@@ -4023,6 +4267,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -4054,6 +4299,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -4085,6 +4331,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -4116,6 +4363,7 @@
             "count": 50
           },
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 50,
@@ -4147,6 +4395,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -4178,6 +4427,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "zero-width",
@@ -4214,6 +4464,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 11,
@@ -4245,6 +4496,7 @@
             "count": 1000
           },
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 1000,
@@ -4253,7 +4505,9 @@
             "utf16_units": 2000
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "encoding-mojibake",
@@ -4296,6 +4550,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 8,
@@ -4326,6 +4581,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "zero-width",
@@ -4361,6 +4617,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -4391,6 +4648,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -4421,6 +4679,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -4451,6 +4710,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -4481,6 +4741,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -4511,6 +4772,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -4541,6 +4803,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "unusual-space",
@@ -4576,6 +4839,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -4606,6 +4870,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -4614,7 +4879,9 @@
             "utf16_units": 11
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "pasted-from-word",
@@ -4661,6 +4928,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 7,
@@ -4693,6 +4961,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -4725,6 +4994,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 14,
@@ -4757,6 +5027,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -4789,6 +5060,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "unusual-space",
@@ -4826,6 +5098,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "soft-hyphen",
@@ -4863,6 +5136,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -4895,6 +5169,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 7,
@@ -4927,6 +5202,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 7,
@@ -4959,6 +5235,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "zero-width",
@@ -4996,6 +5273,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -5028,6 +5306,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "unusual-space",
@@ -5041,7 +5320,9 @@
             "utf16_units": 9
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "emails-urls",
@@ -5083,6 +5364,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 20,
@@ -5112,6 +5394,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 15,
@@ -5141,6 +5424,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 18,
@@ -5170,6 +5454,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -5199,6 +5484,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 15,
@@ -5228,6 +5514,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -5257,6 +5544,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 76,
@@ -5286,6 +5574,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 26,
@@ -5315,6 +5604,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 11,
@@ -5344,6 +5634,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 29,
@@ -5373,6 +5664,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 2000,
@@ -5402,6 +5694,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 26,
@@ -5410,7 +5703,9 @@
             "utf16_units": 26
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "names-identity",
@@ -5455,6 +5750,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -5486,6 +5782,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 7,
@@ -5517,6 +5814,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 7,
@@ -5548,6 +5846,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 14,
@@ -5579,6 +5878,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -5610,6 +5910,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 1,
@@ -5641,6 +5942,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 8,
@@ -5672,6 +5974,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -5703,6 +6006,7 @@
             "count": 120
           },
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 120,
@@ -5734,6 +6038,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 15,
@@ -5765,6 +6070,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -5796,6 +6102,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -5804,7 +6111,9 @@
             "utf16_units": 4
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "time-zones",
@@ -5851,6 +6160,7 @@
             "weekday": "sunday",
             "time": "02:30"
           },
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -5884,6 +6194,7 @@
             "weekday": "sunday",
             "time": "02:30"
           },
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -5915,6 +6226,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 19,
@@ -5946,6 +6258,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 25,
@@ -5977,6 +6290,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 20,
@@ -6008,6 +6322,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 16,
@@ -6039,6 +6354,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -6070,6 +6386,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 20,
@@ -6101,6 +6418,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 20,
@@ -6132,6 +6450,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 20,
@@ -6163,6 +6482,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 25,
@@ -6194,6 +6514,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -6202,7 +6523,9 @@
             "utf16_units": 5
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "currency-separators",
@@ -6246,6 +6569,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -6276,6 +6600,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -6306,6 +6631,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 7,
@@ -6336,6 +6662,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "unusual-space",
@@ -6371,6 +6698,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 12,
@@ -6401,6 +6729,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -6431,6 +6760,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 8,
@@ -6461,6 +6791,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -6491,6 +6822,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 4,
@@ -6521,6 +6853,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 10,
@@ -6551,6 +6884,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 8,
@@ -6581,6 +6915,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 15,
@@ -6589,7 +6924,9 @@
             "utf16_units": 15
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     },
     {
       "id": "pseudolocalization",
@@ -6634,6 +6971,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 19,
@@ -6665,6 +7003,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 9,
@@ -6696,6 +7035,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 25,
@@ -6727,6 +7067,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 38,
@@ -6758,6 +7099,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 5,
@@ -6789,6 +7131,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [
             {
               "fact": "bidi-control",
@@ -6825,6 +7168,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 17,
@@ -6856,6 +7200,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 23,
@@ -6887,6 +7232,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 26,
@@ -6918,6 +7264,7 @@
           },
           "recipe": null,
           "next_date": null,
+          "halves": [],
           "shape": [],
           "counts": {
             "graphemes": 30,
@@ -6926,7 +7273,9 @@
             "utf16_units": 30
           }
         }
-      ]
+      ],
+      "pair_count": 0,
+      "pairs": []
     }
   ]
 }

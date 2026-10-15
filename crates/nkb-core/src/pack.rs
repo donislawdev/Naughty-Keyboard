@@ -144,6 +144,25 @@ pub struct PackPair {
     pub since: Option<String>,
 }
 
+/// Which half of a pair a value is - the one the format names `a`, or `b`.
+///
+/// `pack-format.md` 9: the first press types `a`, the next one `b`, and the
+/// palette says which half is next. The format's own two names rather than a
+/// place in the file, so a pack that puts `b` first is shown as it is written
+/// instead of having its pair renumbered to fit the order.
+///
+/// A fact about the value, not a state of the sequence. `ux-spec.md` 4 once
+/// planned `pair-a` and `pair-b` as states of their own, but which half the
+/// next value is follows from the value alone - and a state would have to be
+/// kept true by every step, skip and choice that moves the sequence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PairHalf {
+    /// The half named by `a`.
+    First,
+    /// The half named by `b`.
+    Second,
+}
+
 /// A whole pack file, loaded.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pack {
@@ -227,6 +246,26 @@ impl Pack {
     #[must_use]
     pub fn value(&self, id: &str) -> Option<&PackValue> {
         self.values.iter().find(|value| value.id == id)
+    }
+
+    /// Every pair the value with this identifier is a half of, and which half,
+    /// in the order the pairs stand in the file.
+    ///
+    /// Usually none or one. The format lets a value stand in more than one
+    /// pair, and nothing here picks one of them on the tester's behalf.
+    pub fn halves_of<'a>(
+        &'a self,
+        value_id: &'a str,
+    ) -> impl Iterator<Item = (&'a PackPair, PairHalf)> + 'a {
+        self.pairs.iter().filter_map(move |pair| {
+            if pair.a == value_id {
+                Some((pair, PairHalf::First))
+            } else if pair.b == value_id {
+                Some((pair, PairHalf::Second))
+            } else {
+                None
+            }
+        })
     }
 }
 
@@ -380,5 +419,68 @@ mod tests {
         let subject = pack(Risk::Normal, vec![value("trailing-space", None)]);
         assert!(subject.value("trailing-space").is_some());
         assert!(subject.value("no-such-value").is_none());
+    }
+
+    fn pair(id: &str, a: &str, b: &str) -> PackPair {
+        PackPair {
+            id: id.to_owned(),
+            name: format!("Pair {id}"),
+            relation: "look-alike".to_owned(),
+            a: a.to_owned(),
+            b: b.to_owned(),
+            breaks: None,
+            expect: None,
+            since: Some("1.0".to_owned()),
+        }
+    }
+
+    fn halves(subject: &Pack, value_id: &str) -> Vec<(String, PairHalf)> {
+        subject
+            .halves_of(value_id)
+            .map(|(pair, half)| (pair.id.clone(), half))
+            .collect()
+    }
+
+    #[test]
+    fn a_half_is_the_letter_the_pair_gives_it_not_its_place_in_the_file() {
+        // `b` stands first in the file, and is still the second half: the
+        // palette shows the pack as written rather than renumbering the pair.
+        let mut subject = pack(
+            Risk::Normal,
+            vec![value("later", None), value("sooner", None)],
+        );
+        subject.pairs = vec![pair("joined", "sooner", "later")];
+        assert_eq!(
+            halves(&subject, "sooner"),
+            [("joined".to_owned(), PairHalf::First)]
+        );
+        assert_eq!(
+            halves(&subject, "later"),
+            [("joined".to_owned(), PairHalf::Second)]
+        );
+    }
+
+    #[test]
+    fn a_value_outside_every_pair_is_no_half_and_one_in_two_pairs_is_both() {
+        let mut subject = pack(
+            Risk::Normal,
+            vec![
+                value("one", None),
+                value("two", None),
+                value("three", None),
+                value("alone", None),
+            ],
+        );
+        subject.pairs = vec![pair("first", "one", "two"), pair("second", "two", "three")];
+        assert!(halves(&subject, "alone").is_empty());
+        assert!(halves(&subject, "no-such-value").is_empty());
+        // In the order the pairs stand in the file, each with its own half.
+        assert_eq!(
+            halves(&subject, "two"),
+            [
+                ("first".to_owned(), PairHalf::Second),
+                ("second".to_owned(), PairHalf::First)
+            ]
+        );
     }
 }

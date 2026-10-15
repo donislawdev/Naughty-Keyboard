@@ -270,6 +270,12 @@ pub fn pack(pack: &Pack, warnings: usize) -> Vec<String> {
         if let Some(breaks) = &pair.breaks {
             lines.push(format!("    breaks   {breaks}"));
         }
+        // The same two sentences a value is shown with: a pair exists for the
+        // sentence one value alone cannot carry (`D33`), and what a correct
+        // application does is half of it.
+        if let Some(expect) = &pair.expect {
+            lines.push(format!("    expect   {expect}"));
+        }
         lines.push(String::new());
     }
 
@@ -326,6 +332,31 @@ mod tests {
         };
         let metrics = metrics_of(&body.into()).expect("a measurable recipe");
         assert_eq!(metrics.code_points, 1_000_000);
+    }
+
+    #[test]
+    fn a_pair_is_shown_with_both_of_its_sentences() {
+        use nkb_adapters::{BuiltInCatalogue, TomlPackFormat};
+        use nkb_app::ports::{PackFormat, PackSource};
+        let text = BuiltInCatalogue::new()
+            .read("look-alike-pairs")
+            .expect("the shipped pack with pairs is built in");
+        let shipped = TomlPackFormat.parse(&text).expect("a shipped pack parses");
+        let lines = pack(&shipped, 0);
+        let at = lines
+            .iter()
+            .position(|line| line == "  latin-vs-cyrillic-a [pair: look-alike]")
+            .expect("the first pair is listed");
+        assert_eq!(
+            lines.get(at + 1..at + 6).expect("five lines under it"),
+            [
+                "    Latin a against Cyrillic a",
+                "    a        latin-small-a",
+                "    b        cyrillic-small-a",
+                "    breaks   Two visually identical usernames become two accounts, and support cannot tell which is which.",
+                "    expect   Either both accepted as distinct and shown as distinct, or the second rejected as a duplicate.",
+            ]
+        );
     }
 
     #[test]
