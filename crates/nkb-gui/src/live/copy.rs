@@ -4,6 +4,7 @@
 //! clock, the owner's point 7. Apart from the loop in `live.rs`, which stands
 //! at the ceiling of `D113`.
 
+use nkb_app::advance_sequence::CopyFrom;
 use slint::ComponentHandle;
 
 use super::*;
@@ -57,6 +58,17 @@ pub fn copy_command(shown: &ShownKey, button: CopyButton) -> Option<Command> {
     ))
 }
 
+/// The band a value's Copy button stands beside, as the core asks for it: the
+/// day a value of type `next-date` names depends on it (`D133` 5). The report
+/// block's button never copies a value - its click is `Command::CopyReport` -
+/// and is read as the next value's only to keep the match whole.
+fn copy_from(button: CopyButton) -> CopyFrom {
+    match button {
+        CopyButton::Last => CopyFrom::LastSent,
+        CopyButton::Next | CopyButton::Report => CopyFrom::Upcoming,
+    }
+}
+
 /// The button that says "Copied" after the worker's answer: the one clicked,
 /// and only when the clipboard took what it was asked for. A value gone, a
 /// clipboard held by somebody else or a copy refused keeps the word, and the
@@ -78,7 +90,9 @@ impl Worker<'_> {
     /// clipboard route, answered in the message band - and with "Copied" on
     /// the button when the clipboard took it.
     pub(super) fn copy(&self, key: &ValueKey, button: CopyButton) -> Carried {
-        let said = self.sequence.copy_value(&key.pack, &key.value, self.ports);
+        let said = self
+            .sequence
+            .copy_value(&key.pack, &key.value, copy_from(button), self.ports);
         let copied = copied_by(std::slice::from_ref(&said), button);
         let line = i18n::message(&said, &key.pack, &self.memory.bindings.get());
         Carried {
@@ -183,6 +197,14 @@ mod tests {
             ),
             Some(Command::Copy(key("whitespace", "nbsp"), CopyButton::Last))
         );
+    }
+
+    /// `D133` 5: the button beside the value sent last asks for the day it went
+    /// out, the one beside the next value for today.
+    #[test]
+    fn each_copy_button_asks_for_the_band_it_stands_beside() {
+        assert_eq!(copy_from(CopyButton::Last), CopyFrom::LastSent);
+        assert_eq!(copy_from(CopyButton::Next), CopyFrom::Upcoming);
     }
 
     /// `D121`: "Copied" only when the clipboard took the value or the block,
