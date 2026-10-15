@@ -1195,20 +1195,53 @@ td code {
   gap: var(--space-2) var(--space-4);
 }
 
-.value-card h2 {
+/* A pair's card is a value card under the heading of the pairs, so its title
+   is one level down and drawn the same. */
+.value-card :is(h2, h3) {
   font-size: var(--size-h3);
   margin: 0;
   padding: 0;
 }
 
-.value-card h2 a {
+.value-card :is(h2, h3) a {
   color: inherit;
   text-decoration: none;
 }
 
-.value-card h2 a:hover::after {
+.value-card :is(h2, h3) a:hover::after {
   content: " #";
   color: var(--text-muted);
+}
+
+/* Which half of a pair a value is, and the pair it belongs to - on the value's
+   card and on the pair's. */
+.pair-of {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--size-small);
+}
+
+.pairs {
+  margin-top: var(--space-6);
+  scroll-margin-top: calc(var(--height-header) + var(--space-4));
+}
+
+.pairs .pair-card {
+  margin-top: var(--space-4);
+}
+
+/* Both halves in one sample box, set further apart than the lines of one
+   value: two classes, so the box's own gap, later in this file, gives way. */
+.sample.halves {
+  gap: var(--space-5);
+}
+
+.half {
+  display: grid;
+  gap: var(--space-2);
 }
 
 .value-card .id {

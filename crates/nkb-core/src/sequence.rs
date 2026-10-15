@@ -29,12 +29,15 @@
 //! reads, and untouchable rule 9 puts that wording behind translation keys, so
 //! an [`Effect`] names WHICH thing must be said and never says it.
 //!
-//! # What this deliberately does not cover
+//! # Paired values need no state of their own
 //!
-//! **Paired values.** `ux-spec.md` 4 gives them a sequence of their own -
-//! `pair-a`, `pair-b` - and step 3 of the plan of work does not include them.
-//! Folding them in now would double the states before any of them has been used
-//! once. When they arrive they extend [`Position`], not [`Sequence`].
+//! `ux-spec.md` 4 once gave them a sequence of their own - `pair-a`, `pair-b` -
+//! and this comment used to say they would extend [`Position`] when they came.
+//! They came without it (`OBS-181`): which half of a pair the next value is
+//! follows from the value at that position alone, so it is asked of the pack
+//! ([`crate::Pack::halves_of`]) and the states here stay as they were. A state
+//! would have had to be kept true by every step, skip and choice that moves the
+//! counter, and none of them would ever have needed it.
 
 use core::fmt;
 

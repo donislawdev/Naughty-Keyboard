@@ -7,6 +7,7 @@
 use std::cell::Cell;
 
 use nkb_core::hotkeys::HotkeyChord;
+use nkb_core::pack::PairHalf;
 use nkb_core::sequence::Sequence;
 use slint::ComponentHandle;
 
@@ -359,6 +360,7 @@ pub(super) fn next_view(upcoming: Option<&UpcomingValue>, sequence: &Sequence) -
             name,
             preview,
             offensive,
+            halves,
             ..
         } => Some(NextView {
             index: Some(*index),
@@ -368,17 +370,29 @@ pub(super) fn next_view(upcoming: Option<&UpcomingValue>, sequence: &Sequence) -
                 key: key.clone(),
                 name: name.clone(),
                 preview: preview_line(preview).0,
-                // The one risk known before a send. Warnings, `cleared first`
-                // and the rest are about a delivery that has not happened.
-                markers: if *offensive {
-                    vec![(i18n::label(PaletteLabel::Offensive).to_owned(), true)]
-                } else {
-                    Vec::new()
-                },
+                markers: next_markers(*offensive, halves),
             }),
             can_go_back,
         }),
     }
+}
+
+/// The markers of the value the next press sends: the one risk known before a
+/// send, then which half of a pair it is (`pack-format.md` 9, `OBS-181`).
+/// Warnings, `cleared first` and the rest are about a delivery that has not
+/// happened, so they wait for the band of the value that went out.
+fn next_markers(offensive: bool, halves: &[PairHalf]) -> Vec<(String, bool)> {
+    let mut markers = Vec::new();
+    if offensive {
+        markers.push((i18n::label(PaletteLabel::Offensive).to_owned(), true));
+    }
+    // Not a risk: a pair is how the pack meant the value to be typed.
+    markers.extend(
+        halves
+            .iter()
+            .map(|half| (i18n::pair_half(*half).to_owned(), false)),
+    );
+    markers
 }
 
 /// The line a preview draws, and - when it is a fragment - the sentence that
@@ -961,6 +975,44 @@ mod tests {
         assert!(!palette.get_has_shape());
         assert!(!palette.get_has_report(), "the old pack's block stayed");
         assert_eq!(slint::Model::row_count(&palette.get_markers()), 0);
+    }
+
+    /// `OBS-181`: the band of the next value says which half of a pair it is,
+    /// after the risk and not as one, once for each pair it stands in.
+    #[test]
+    fn the_next_value_names_its_half_of_each_pair_after_its_risk() {
+        let upcoming = |offensive, halves| UpcomingValue::Value {
+            index: 1,
+            total: 12,
+            key: ValueKey {
+                pack: "look-alike-pairs".to_owned(),
+                value: "latin-small-a".to_owned(),
+            },
+            name: "Name with a Latin a".to_owned(),
+            reference: "look-alike-pairs/latin-small-a".to_owned(),
+            preview: ValuePreview::Text(nkb_core::preview::preview("pawel")),
+            offensive,
+            halves,
+        };
+        // `None` would be a band with no value - compared, not unwrapped.
+        let markers = |offensive, halves| {
+            next_view(Some(&upcoming(offensive, halves)), &Sequence::default())
+                .and_then(|view| view.value)
+                .map(|value| value.markers)
+        };
+        assert_eq!(
+            markers(false, vec![PairHalf::First]),
+            Some(vec![("pair 1 of 2".to_owned(), false)])
+        );
+        assert_eq!(
+            markers(true, vec![PairHalf::Second, PairHalf::First]),
+            Some(vec![
+                ("offensive".to_owned(), true),
+                ("pair 2 of 2".to_owned(), false),
+                ("pair 1 of 2".to_owned(), false),
+            ])
+        );
+        assert_eq!(markers(false, Vec::new()), Some(Vec::new()));
     }
 
     /// `D121`: the report block arrives with the value it describes, and a

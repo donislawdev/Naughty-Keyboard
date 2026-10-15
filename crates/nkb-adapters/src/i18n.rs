@@ -87,7 +87,8 @@ mod windows;
 use palette::pattern_palette_label;
 pub use palette::{
     PaletteLabel, back_to, browser_did_not_open, counter, counts, label, next_end_of_pack,
-    next_value, no_value_yet, previous_types, sent_to, skip_to, typing_counter, warnings,
+    next_value, no_value_yet, pair_half, previous_types, sent_to, skip_to, typing_counter,
+    warnings,
 };
 pub use registration::{ended, registration, registrations, shortcuts_unavailable};
 pub use windows::{
@@ -2033,6 +2034,8 @@ mod tests {
             PaletteLabel::OnClipboard,
             PaletteLabel::Interrupted,
             PaletteLabel::Warnings,
+            PaletteLabel::PairFirst,
+            PaletteLabel::PairSecond,
             PaletteLabel::ClipboardMode,
             PaletteLabel::ClipboardForWindow,
             PaletteLabel::PreviewElided,
@@ -2111,6 +2114,8 @@ mod tests {
                 | PaletteLabel::Cleared
                 | PaletteLabel::OnClipboard
                 | PaletteLabel::Interrupted
+                | PaletteLabel::PairFirst
+                | PaletteLabel::PairSecond
                 | PaletteLabel::ClipboardMode
                 | PaletteLabel::ClipboardForWindow
                 | PaletteLabel::ShortcutsPaused

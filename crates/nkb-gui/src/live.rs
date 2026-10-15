@@ -1215,14 +1215,12 @@ mod tests {
         UpcomingValue::Value {
             index: 8,
             total: 34,
-            key: ValueKey {
-                pack: "unicode-text".to_owned(),
-                value: "trailing-nbsp".to_owned(),
-            },
+            key: value_key("unicode-text", "trailing-nbsp"),
             name: "Trailing no-break space".to_owned(),
             reference: "unicode-text/trailing-nbsp".to_owned(),
             preview: ValuePreview::Text(nkb_core::preview::preview("Kowalski\u{A0}")),
             offensive: true,
+            halves: Vec::new(),
         }
     }
 

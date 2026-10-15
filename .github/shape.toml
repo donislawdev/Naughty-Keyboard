@@ -54,7 +54,7 @@ near = 1
 # A whole Rust file, its tests included. nkb-gui/src/live.rs, then
 # nkb-adapters/src/i18n.rs at 2101.
 [files.rust-whole]
-ceiling = 2235
+ceiling = 2233
 # 5 since 2026-10-10, the owner's choice twice that day: the ceiling came down
 # from 2907 to 2481, 2408, 2407 and 2363 as live.rs moved code into modules, the
 # band came down with it, and it reached advance_sequence.rs, settings_file.rs
@@ -63,8 +63,9 @@ ceiling = 2235
 # since 2026-10-14, the owner's choice: the shortcuts the palette holds went to
 # live/hold.rs with their tests, the ceiling came down to 2268, and the band
 # reached toml_pack.rs at 1643. 2235 on 2026-10-14, when the words naming the
-# shortcuts went to live/view.rs beside the band that shows them. Below 2195 it
-# would reach keep_settings.rs at 1536.
+# shortcuts went to live/view.rs beside the band that shows them. 2233 on
+# 2026-10-15, when a test of live.rs named its value by the helper the module
+# already had. Below 2195 it would reach keep_settings.rs at 1536.
 near = 6
 
 # A Slint file, the gallery excepted. ui/screens/palette.slint since the fold

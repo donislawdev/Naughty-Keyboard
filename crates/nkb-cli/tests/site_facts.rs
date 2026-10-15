@@ -34,6 +34,7 @@
 use nkb_adapters::{BuiltInCatalogue, TomlPackFormat};
 use nkb_app::{Clock, EmitOutcome, PackEntry, ValueFacts, emit_values, list_packs};
 use nkb_core::calendar::Day;
+use nkb_core::pack::{Pack, PairHalf};
 use nkb_core::preview::{ShapeFact, ValuePreview};
 use nkb_core::value::Definition;
 use std::fmt::Write as _;
@@ -531,6 +532,48 @@ fn next_date_json(definition: &Definition) -> Json {
     ])
 }
 
+/// Every pair of a pack, each with the two sentences a value has (`D33`) and
+/// the identifiers of its halves, which the page links to (`OBS-181`).
+fn pairs_json(pack: &Pack) -> Vec<Json> {
+    pack.pairs
+        .iter()
+        .map(|pair| {
+            Json::Object(vec![
+                ("id", text(&pair.id)),
+                ("ref", text(&format!("{}/{}", pack.id, pair.id))),
+                ("name", text(&pair.name)),
+                ("relation", text(&pair.relation)),
+                ("a", text(&pair.a)),
+                ("b", text(&pair.b)),
+                ("breaks", maybe_text(pair.breaks.as_deref())),
+                ("expect", maybe_text(pair.expect.as_deref())),
+                ("since", maybe_text(pair.since.as_deref())),
+            ])
+        })
+        .collect()
+}
+
+/// Which half of which pair a value is - the palette's own answer
+/// (`Pack::halves_of`), so the page cannot number a half another way.
+fn halves_json(pack: &Pack, value: &str) -> Json {
+    Json::List(
+        pack.halves_of(value)
+            .map(|(pair, half)| {
+                Json::Object(vec![
+                    ("pair", text(&pair.id)),
+                    (
+                        "half",
+                        count(match half {
+                            PairHalf::First => 1,
+                            PairHalf::Second => 2,
+                        }),
+                    ),
+                ])
+            })
+            .collect(),
+    )
+}
+
 fn catalogue_facts() -> Json {
     let catalogue = BuiltInCatalogue::new();
     let listing = list_packs(&catalogue, &TomlPackFormat).expect("the built-in catalogue lists");
@@ -589,6 +632,7 @@ fn catalogue_facts() -> Json {
                 ("preview", preview),
                 ("recipe", recipe),
                 ("next_date", next_date),
+                ("halves", halves_json(&pack, &value.id)),
                 (
                     "shape",
                     Json::List(facts.shape.iter().map(shape_json).collect()),
@@ -605,6 +649,7 @@ fn catalogue_facts() -> Json {
             ]));
         }
         total += values.len();
+        let pairs = pairs_json(&pack);
         packs.push(Json::Object(vec![
             ("id", text(&pack.id)),
             ("name", text(&pack.name)),
@@ -617,6 +662,8 @@ fn catalogue_facts() -> Json {
             ("tags", texts(&pack.tags)),
             ("value_count", count(values.len())),
             ("values", Json::List(values)),
+            ("pair_count", count(pairs.len())),
+            ("pairs", Json::List(pairs)),
         ]));
     }
     Json::Object(vec![

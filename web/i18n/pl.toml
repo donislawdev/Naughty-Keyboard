@@ -351,6 +351,24 @@ other = "wersja {{ .version }}, aktualizacja {{ .updated }}"
 [pack_how]
 other = "Wpisuj je po jednej skrótem {{ .chord }} w palecie albo weź wszystkie do skryptu poleceniem <code>{{ .command }}</code>."
 
+[pairs_heading]
+other = "Pary"
+
+[pairs_lead]
+other = "Każda para to dwie wartości z listy wyżej, które warto wpisać obok siebie: w dwa pola albo dwa razy w jedno pole. Skrót {{ .chord }} wpisuje je po kolei, a paleta mówi, która połowa pary jest następna."
+
+[pair_half]
+other = "połowa {{ .half }} z 2"
+
+[relation_look-alike]
+other = "nie do odróżnienia"
+
+[relation_range]
+other = "zakres"
+
+[relation_identity]
+other = "tożsamość"
+
 # ---- a command of nkb --------------------------------------------------------
 
 [commands]
