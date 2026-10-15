@@ -205,6 +205,58 @@ fn search() -> Vec<PickRow> {
     ]
 }
 
+/// The pack `look-alike-pairs` opened in the tree (`D134`): its values with
+/// the half of a pair each one is beside its name, in the catalogue's words -
+/// the longest name of a half with the next pill on it, and a value in no
+/// pair. `with_halves` false draws the same rows without the words.
+fn pairs(with_halves: bool) -> Vec<PickRow> {
+    let half = |title: &str, types: &str, words: &str| PickRow {
+        aside: words.into(),
+        has_aside: with_halves,
+        ..value(title, types)
+    };
+    vec![
+        heading("Packs"),
+        PickRow {
+            open: true,
+            ..pack(
+                "Look-alike pairs",
+                "Pairs of values that are identical on screen and different in storage.",
+            )
+        },
+        half("Word with a Latin o", "robot", "pair 1 of 2"),
+        half("Word with a Greek omicron", "r\u{3BF}bot", "pair 2 of 2"),
+        half(
+            "Name with an ordinary space",
+            "Jan\u{2423}Kowalski",
+            "pair 1 of 2",
+        ),
+        PickRow {
+            badge: "next".into(),
+            has_badge: true,
+            badge_current: true,
+            ..half(
+                "Name with a non-breaking space",
+                "Jan\u{2423}Kowalski",
+                "pair 2 of 2",
+            )
+        },
+        value("Letter O and digit zero", "O0"),
+    ]
+}
+
+/// The row of the non-breaking space in [`pairs`]: the longest name, a half
+/// and the next value at once.
+const NBSP_ROW: usize = 5;
+
+/// The window's narrowest, `packs-min-width` - copied rather than read, for
+/// the reason [`ACCENT`] gives.
+const NARROWEST: u32 = 360;
+
+/// The row of the Greek omicron in [`pairs`]: a half with room to spare in
+/// its row, in the typeface of any system.
+const ROOMY_ROW: usize = 3;
+
 fn is_accent(buffer: &[offscreen::Pixel], x: u32, y: u32) -> bool {
     let p = buffer[(y * WIDTH + x) as usize];
     (p.r, p.g, p.b) == ACCENT
@@ -611,5 +663,122 @@ fn the_pack_window_shows_where_the_keyboard_is_and_which_row_it_reached() {
         "the pack beside a found value is not one line at the right of its row: {aside:?}. \
          Look at {}",
         search_path.display()
+    );
+}
+
+/// `D134`: a value under its pack says which half of a pair it is, beside its
+/// name and quieter than it. On a row with room the words take no width from
+/// the name. On the fullest row - the longest name of a half, with the next
+/// pill - they are still drawn, and what the value types stays whole at the
+/// row's right edge: the name gives way first.
+///
+/// Whether that longest name is whole depends on the system's typeface, which
+/// draws the prose of the window: it fits on Windows and is a few pixels short
+/// on Linux in CI (measured 2026-10-15), where it is cut like any name too
+/// long for its row - and where, until `preview-whole-characters`, the value
+/// lost its end too. So the claim about the name is made on the roomy row.
+#[test]
+fn a_value_in_a_pair_says_its_half_beside_its_name() {
+    let surface = offscreen::start(WIDTH, HEIGHT);
+    let window = PacksWindow::new().expect("the pack window must build");
+    fill(&window, pairs(true));
+    window.set_query("".into());
+    window.set_selected(NBSP_ROW as i32);
+    window.show().expect("the pack window must show");
+    let draw = |rows: Vec<PickRow>| {
+        window.set_rows(ModelRc::new(VecModel::from(rows)));
+        offscreen::draw(&surface, WIDTH, HEIGHT)
+    };
+
+    let shown = draw(pairs(true));
+    let path = offscreen::save(&shown, WIDTH, HEIGHT, "packs-pairs.png");
+    // The words of one row, as the pixels they add.
+    let words_of = |row: usize| {
+        let mut rows = pairs(true);
+        rows[row].has_aside = false;
+        offscreen::added(&draw(rows), &shown, WIDTH, HEIGHT)
+            .expect("the half of a pair is not drawn beside the value")
+    };
+
+    // The name of the roomy row, found as the pixels it adds, with the words
+    // beside it and without: the same ink both times.
+    let name_of = |with_halves: bool| {
+        let mut rows = pairs(with_halves);
+        let full = draw(rows.clone());
+        rows[ROOMY_ROW].title = "".into();
+        offscreen::added(&draw(rows), &full, WIDTH, HEIGHT).expect("the name is not drawn")
+    };
+    let (name, bare_name) = (name_of(true), name_of(false));
+    assert_eq!(
+        (name.left, name.right),
+        (bare_name.left, bare_name.right),
+        "the words beside a name with room squeezed it. Look at {}",
+        path.display()
+    );
+    let words = words_of(ROOMY_ROW);
+    assert!(
+        words.left > name.right && words.bottom - words.top < 30,
+        "the half is not one line after the name: {words:?} against {name:?}. Look at {}",
+        path.display()
+    );
+
+    // The fullest row. What the value types is found by another value as long
+    // in the same typeface of fixed width: the row keeps its layout, so the
+    // pixels that change are the value's own. An emptied value would let the
+    // name stretch and move the words and the pill. It stands where the same
+    // value stands on the row above, which has room - whole, at the right edge.
+    let types_of = |row: usize| {
+        let mut rows = pairs(true);
+        rows[row].detail = "XXXXXXXXXXXX".into();
+        offscreen::added(&draw(rows), &shown, WIDTH, HEIGHT)
+            .expect("what the value types is not drawn")
+    };
+    let (types, with_room) = (types_of(NBSP_ROW), types_of(NBSP_ROW - 1));
+    assert_eq!(
+        (types.left, types.right),
+        (with_room.left, with_room.right),
+        "on the fullest row what the value types is cut or moved, where the name should give          way. Look at {}",
+        path.display()
+    );
+    assert!(
+        types.right + 40 > WIDTH,
+        "what the value types left the row's right edge: {types:?}. Look at {}",
+        path.display()
+    );
+    // The half is drawn there too: one digit of it changed, left of the value.
+    let mut other_half = pairs(true);
+    other_half[NBSP_ROW].aside = "pair 1 of 2".into();
+    let digit = offscreen::added(&draw(other_half), &shown, WIDTH, HEIGHT)
+        .expect("the half on the fullest row is not drawn");
+    assert!(
+        digit.right < types.left && digit.bottom - digit.top < 30,
+        "the half on the fullest row is not on its line before the value: {digit:?} against          {types:?}. Look at {}",
+        path.display()
+    );
+
+    // At the window's narrowest the row is short of room on every system, so
+    // the rule that keeps the value whole is measured where the fullest row
+    // fits at the default width too. Whole means as wide as on a row with room,
+    // give or take the pixel a different position smooths differently - a cut
+    // value loses a whole character and the mark that says so.
+    surface.set_size(slint::PhysicalSize::new(NARROWEST, HEIGHT));
+    let draw_narrow = |rows: Vec<PickRow>| {
+        window.set_rows(ModelRc::new(VecModel::from(rows)));
+        offscreen::draw(&surface, NARROWEST, HEIGHT)
+    };
+    let narrow = draw_narrow(pairs(true));
+    let narrow_path = offscreen::save(&narrow, NARROWEST, HEIGHT, "packs-pairs-narrow.png");
+    let mut other_types = pairs(true);
+    other_types[NBSP_ROW].detail = "XXXXXXXXXXXX".into();
+    let squeezed = offscreen::added(&draw_narrow(other_types), &narrow, NARROWEST, HEIGHT)
+        .expect("what the value types is not drawn in the narrowest window");
+    let (whole, kept) = (
+        with_room.right - with_room.left,
+        squeezed.right - squeezed.left,
+    );
+    assert!(
+        whole.abs_diff(kept) <= 1,
+        "in the narrowest window what the value types is {kept} px wide, where whole it is          {whole} px - the value was cut before the name gave way. Look at {}",
+        narrow_path.display()
     );
 }

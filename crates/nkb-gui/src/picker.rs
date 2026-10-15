@@ -31,6 +31,8 @@
 //! where until then it said which pack and which position (the owner's point
 //! 5: "what does it do, like the main window shows what goes in"). A value
 //! listed away from its pack - used last, or found - names its pack beside it.
+//! Under its pack, a value that is a half of a pair says which beside its
+//! name, in the palette's words (`pair 1 of 2`, `D134`).
 //!
 //! With a query, the values that match come first, from every pack, then the
 //! packs that match: a flat list, where folds do not apply - a search that
@@ -63,10 +65,12 @@
 //!
 //! Words, all of which must appear, case not minded. A pack matches in its
 //! name, description, id or tags. A value matches in its OWN name, id, tags and
-//! fields, and not in the name of its pack: "unicode-text" finds the pack, not
-//! every one of its values (document 15 section 1, start narrower). No folding of
-//! diacritics: the catalogue's prose is English (`D23`, untouchable rule 8), and
-//! a wider match is easier to add than a narrower one is to take back.
+//! fields, and in the name and id of each pair it is a half of - the name of a
+//! pair is the test its two values make together - and not in the name of its
+//! pack: "unicode-text" finds the pack, not every one of its values (document
+//! 15 section 1, start narrower). No folding of diacritics: the catalogue's
+//! prose is English (`D23`, untouchable rule 8), and a wider match is easier to
+//! add than a narrower one is to take back.
 //!
 //! A row found by a part it does not show says which (`UX-GUI-008`): a value's
 //! id, tags or fields, a pack's id or tags - "in its tags". Without it a row
@@ -82,7 +86,7 @@ use nkb_app::ports::SourceError;
 use nkb_core::calendar::Day;
 use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::identity::ValueKey;
-use nkb_core::pack::{Pack, PackValue, Risk};
+use nkb_core::pack::{Pack, PackValue, PairHalf, Risk};
 use nkb_core::preview::preview_of;
 
 use crate::live::preview_line;
@@ -111,7 +115,10 @@ struct ValueChoice {
     /// What it types, as the palette previews it - one line.
     preview: String,
     offensive: bool,
-    /// Its own name shown, its id, tags and fields not.
+    /// Which half of a pair it is, once for each pair it stands in and in the
+    /// order of the pairs in the file (`D134`) - usually none or one.
+    halves: Vec<PairHalf>,
+    /// Its own name shown, its id, tags, fields and pairs not.
     haystack: Haystack,
 }
 
@@ -777,9 +784,17 @@ impl PackPicker {
                     title: choice.name.clone(),
                     detail: choice.preview.clone(),
                     // Under its own pack in the tree the pack goes without
-                    // saying. Found, it is named, with where the query hit.
-                    aside: (!tree)
-                        .then(|| i18n::value_aside(&owner.title, &choice.haystack.places(words))),
+                    // saying, and which half of a pair it is does not
+                    // (`D134`). Found, the pack is named, with where the
+                    // query hit.
+                    aside: if tree {
+                        i18n::pair_halves(&choice.halves)
+                    } else {
+                        Some(i18n::value_aside(
+                            &owner.title,
+                            &choice.haystack.places(words),
+                        ))
+                    },
                     badge: value_badge(choice, is_next),
                     enabled: true,
                     tree,
@@ -917,7 +932,8 @@ fn choice_of(entry: &PackEntry, today: Day) -> PackChoice {
                     name: value.name.clone(),
                     preview: preview_line(&preview_of(&value.definition.on(today))).0,
                     offensive: pack.risk_of(value) == Risk::Offensive,
-                    haystack: value_haystack_of(value),
+                    halves: pack.halves_of(&value.id).map(|(_, half)| half).collect(),
+                    haystack: value_haystack_of(pack, value),
                 })
                 .collect(),
         },
@@ -966,9 +982,10 @@ fn haystack_of(pack: &Pack) -> Haystack {
     )
 }
 
-/// The value's own name, which its row shows, and its id, tags and fields,
-/// which it does not.
-fn value_haystack_of(value: &PackValue) -> Haystack {
+/// The value's own name, which its row shows, and its id, tags and fields and
+/// the name and id of each pair it is a half of, which it does not - a pair's
+/// name is the test the two values make together (`D134`).
+fn value_haystack_of(pack: &Pack, value: &PackValue) -> Haystack {
     Haystack::new(
         &[value.name.as_str()],
         std::iter::once((MatchPlace::Id, value.id.as_str()))
@@ -983,7 +1000,13 @@ fn value_haystack_of(value: &PackValue) -> Haystack {
                     .fields
                     .iter()
                     .map(|field| (MatchPlace::Fields, field.as_str())),
-            ),
+            )
+            .chain(pack.halves_of(&value.id).flat_map(|(pair, _)| {
+                [
+                    (MatchPlace::Pair, pair.name.as_str()),
+                    (MatchPlace::Pair, pair.id.as_str()),
+                ]
+            })),
     )
 }
 
@@ -1340,6 +1363,63 @@ mod tests {
         // Folding keys do nothing in a search.
         assert_eq!(picker.unfold(), Folding::Nothing);
         assert_eq!(picker.fold(), Folding::Nothing);
+    }
+
+    /// `D134`: under its pack a value that is a half of a pair says which, in
+    /// the palette's words, and a value in no pair says nothing.
+    #[test]
+    fn a_value_under_its_pack_says_which_half_of_a_pair_it_is() {
+        let mut picker = shipped(None);
+        let at = picker
+            .rows()
+            .iter()
+            .position(|row| row.title == "Look-alike pairs")
+            .expect("a shipped pack");
+        assert_eq!(picker.toggle(at), Folding::Reshaped);
+        let values = of_kind(&picker, RowKind::Value);
+        let aside = |title: &str| {
+            values
+                .iter()
+                .find(|row| row.title == title)
+                .unwrap_or_else(|| panic!("a shipped value: {title}"))
+                .aside
+                .clone()
+        };
+        assert_eq!(aside("Word with a Latin o").as_deref(), Some("pair 1 of 2"));
+        assert_eq!(
+            aside("Word with a Greek omicron").as_deref(),
+            Some("pair 2 of 2")
+        );
+        assert_eq!(aside("Letter O and digit zero"), None, "in no pair");
+        assert_eq!(
+            values.iter().filter(|row| row.aside.is_some()).count(),
+            10,
+            "five pairs, two halves each: {values:?}"
+        );
+    }
+
+    /// `D134`: a value is found by the name or the id of a pair it is a half
+    /// of, and its row says so - the names of the pairs of `look-alike-pairs`
+    /// say "against", and no value of theirs does.
+    #[test]
+    fn a_value_is_found_by_its_pair_and_says_so() {
+        for query in ["composed against", "nfc-vs-nfd"] {
+            let mut picker = shipped(None);
+            type_in(&mut picker, query);
+            let values = of_kind(&picker, RowKind::Value);
+            let titles: Vec<&str> = values.iter().map(|row| row.title.as_str()).collect();
+            assert_eq!(
+                titles,
+                ["Accented word, composed", "Accented word, decomposed"],
+                "{query}"
+            );
+            assert!(
+                values
+                    .iter()
+                    .all(|row| row.aside.as_deref() == Some("Look-alike pairs - in its pair")),
+                "{query}: {values:?}"
+            );
+        }
     }
 
     #[test]

@@ -137,6 +137,7 @@ pub enum RuleCode {
     PairEndpointUnknown,
     UnknownRelation,
     PairEndpointsIdentical,
+    PairHalvesNotConsecutive,
     // Translations.
     TranslationCarriesValue,
     TranslatesUnknownPack,
@@ -192,6 +193,7 @@ impl RuleCode {
             Self::PairEndpointUnknown => "E040",
             Self::UnknownRelation => "E041",
             Self::PairEndpointsIdentical => "E042",
+            Self::PairHalvesNotConsecutive => "W043",
             Self::TranslationCarriesValue => "E050",
             Self::TranslatesUnknownPack => "E051",
             Self::TranslationRefersToMissingId => "W052",
@@ -231,7 +233,7 @@ const fn rule(code: RuleCode, severity: Severity, status: RuleStatus) -> LintRul
 
 /// The complete register. Its length is the number the specification states, and
 /// the test below is what keeps the two from drifting apart.
-pub const RULES: [LintRule; 46] = [
+pub const RULES: [LintRule; 47] = [
     rule(C::MissingOrUnsupportedFormat, Error, Checked),
     rule(C::UnknownKey, Error, Checked),
     rule(C::MissingRequiredField, Error, Checked),
@@ -295,6 +297,12 @@ pub const RULES: [LintRule; 46] = [
     rule(C::PairEndpointUnknown, Error, Checked),
     rule(C::UnknownRelation, Error, Checked),
     rule(C::PairEndpointsIdentical, Error, Checked),
+    // The format promises that the first press types half `a` and the next
+    // one half `b` (`pack-format.md` 9), and the palette marks the halves so.
+    // That holds only where `b` is the value written right after `a`. A
+    // warning and not a refusal: a value in two pairs cannot stand right
+    // after both, and such a pack is awkward to walk, not wrong (`D135`).
+    rule(C::PairHalvesNotConsecutive, Warning, Checked),
     rule(C::TranslationCarriesValue, Error, Checked),
     rule(C::TranslatesUnknownPack, Error, Checked),
     rule(C::TranslationRefersToMissingId, Warning, Checked),
@@ -611,9 +619,9 @@ mod tests {
 
     #[test]
     fn the_register_holds_the_number_of_rules_the_specification_states() {
-        // The specification says forty six. If this number has to change, the
+        // The specification says forty seven. If this number has to change, the
         // specification changed too, and that is a decision rather than a tidy up.
-        assert_eq!(RULES.len(), 46);
+        assert_eq!(RULES.len(), 47);
     }
 
     /// Every code the enum can spell has an entry in the register.
@@ -727,7 +735,7 @@ mod tests {
     #[test]
     fn coverage_counts_the_register_rather_than_repeating_a_stored_number() {
         let coverage = RuleCoverage::measure();
-        assert_eq!(coverage.total, 46);
+        assert_eq!(coverage.total, 47);
         // Every rule falls in exactly one bucket. If this ever fails, some rule
         // is being counted twice or not at all, and the summary that a reader
         // trusts to say what was not looked at has quietly stopped adding up.
@@ -738,7 +746,7 @@ mod tests {
         // Written out rather than computed, deliberately. A number derived from
         // the register would agree with the register whatever the register said,
         // and this is the line that makes somebody look when coverage moves.
-        assert_eq!(coverage.checked, 40);
+        assert_eq!(coverage.checked, 41);
         assert_eq!(coverage.partly, 1);
     }
 

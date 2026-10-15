@@ -13,17 +13,20 @@ band = 0.7
 # The code the two programs are made of: libraries and binaries, without tests
 # and examples. Measured 2026-10-08 on Windows with clippy 0.1.99. Complexity
 # 23 since 2026-10-11, when the reading of the remembered places left the
-# settings file's settings_of, its holder.
+# settings file's settings_of, its holder. Length 158 since 2026-10-15, when the
+# sentences about pairs left the lint report's sentence.
 [clippy.product]
-too-many-lines-threshold = 163
+too-many-lines-threshold = 158
 cognitive-complexity-threshold = 23
 excessive-nesting-threshold = 6
 too-many-arguments-threshold = 7
 
 # How many stand near each ceiling, per scope. Two at seven arguments since
 # 2026-10-15, when a send started taking the chosen value as one argument.
+# Eight near the length since the same day: the ceiling came down to 158 and
+# the band with it, onto settings_of, which did not grow.
 [clippy.near.product]
-too-many-lines-threshold = 7
+too-many-lines-threshold = 8
 cognitive-complexity-threshold = 1
 excessive-nesting-threshold = 1
 too-many-arguments-threshold = 2

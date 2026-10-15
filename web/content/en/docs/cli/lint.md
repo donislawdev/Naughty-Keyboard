@@ -18,7 +18,7 @@ A file that passes:
 ```console
 $ nkb lint my-pack.toml
 0 errors, 0 warnings.
-Checked 40 of 46 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.
+Checked 41 of 47 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.
 The pack format is not frozen yet: a later release may still change it.
 ```
 

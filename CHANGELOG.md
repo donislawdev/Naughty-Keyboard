@@ -15,18 +15,23 @@ Changes wait under Unreleased until then.
 - A value can name a date worked out on the day it is typed: `type = "next-date"`, with a `month`, a
   `week` from `first` to `fourth` or `last`, a `weekday` and an optional `time`. It inserts the next
   such day, at least two days ahead in UTC so that it lies ahead in every time zone, written like
-  `2027-03-28 02:30`. The palette, `nkb send`, `nkb emit` and the report block all use the date of the
-  day the value goes out, and `nkb show` and the website show the rule.
+  `2027-03-28 02:30`. The palette and its Copy buttons, `nkb send`, `nkb emit` and the report block
+  all use the date of the day the value goes out, and `nkb show` and the website show the rule.
 - The palette says which half of a pair the next value is, with `pair 1 of 2` or `pair 2 of 2` beside
-  its name. `nkb show` prints what a correct application does with a pair as well as what it breaks,
-  and a pack's page on the website lists its pairs, each linked with the two values it joins.
+  its name. The window that finds a value says the same beside each half, and typing the name of a
+  pair finds both of its values. `nkb show` prints what a correct application does with a pair as
+  well as what it breaks, and a pack's page on the website lists its pairs, each linked with the two
+  values it joins.
 
 ### Changed
 
 - The pack format gained the value type `next-date`, its four fields `month`, `week`, `weekday` and
-  `time`, and rule E018, which refuses a rule that names no day. `nkb lint` now checks 40 of its 46
-  rules. A pack written for 0.2.0 reads exactly as before. A translation may not carry the four new
-  fields, because they decide what is typed (E050).
+  `time`, and rule E018, which refuses a rule that names no day. A pack written for 0.2.0 reads
+  exactly as before. A translation may not carry the four new fields, because they decide what is
+  typed (E050).
+- `nkb lint` warns (W043) when the second half of a pair is not the value written right after its
+  first half, because the press after the first half then types another value. It now checks 41 of
+  its 47 rules.
 - `time-zones` 2.0: the hour the spring clock change skips and the hour the autumn one repeats are now
   the next ones rather than dates of 2027, so the pack no longer goes stale.
 

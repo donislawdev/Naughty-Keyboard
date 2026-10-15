@@ -753,7 +753,7 @@ fn check_values<'a>(
     problems
 }
 
-/// E040, E041 and E042, and the rules a pair shares with a value.
+/// E040, E041, E042 and W043, and the rules a pair shares with a value.
 ///
 /// A pair is two values that already exist, joined by a relation. It defines no
 /// value of its own, so that each half keeps its own description and can be
@@ -772,13 +772,15 @@ fn check_pairs<'a>(
 
     // The endpoints must name values, not other pairs: a pair joining two pairs
     // is a shape the format does not define and the palette could not present.
-    let values: HashSet<&str> = root
-        .get("values")
-        .and_then(Item::as_array_of_tables)
-        .into_iter()
-        .flat_map(|values| values.iter())
-        .filter_map(|table| table.get("id").and_then(Item::as_str))
-        .collect();
+    // Each with its place in the file, the first one where an id is used twice
+    // (E011), for W043.
+    let mut values: HashMap<&str, usize> = HashMap::new();
+    let tables = root.get("values").and_then(Item::as_array_of_tables);
+    for (place, table) in tables.into_iter().flat_map(|t| t.iter()).enumerate() {
+        if let Some(id) = table.get("id").and_then(Item::as_str) {
+            values.entry(id).or_insert(place);
+        }
+    }
 
     let mut problems = Vec::new();
     for (index, table) in pairs.iter().enumerate() {
@@ -821,9 +823,19 @@ fn check_pairs<'a>(
         }
 
         for endpoint in [a, b].into_iter().flatten().collect::<HashSet<&str>>() {
-            if !values.contains(endpoint) {
+            if !values.contains_key(endpoint) {
                 found.push(LintProblem::new(RuleCode::PairEndpointUnknown).about(endpoint));
             }
+        }
+
+        // W043: the first press types `a` and the next one `b` only where `b` is
+        // written right after `a`. Halves E040 or E042 refuse have no order.
+        if let (Some(first), Some(second)) = (a, b)
+            && first != second
+            && let (Some(&at_a), Some(&at_b)) = (values.get(first), values.get(second))
+            && at_b != at_a + 1
+        {
+            found.push(LintProblem::new(RuleCode::PairHalvesNotConsecutive).about(second));
         }
 
         // A pair carries a description for the same reason a value does, and the
@@ -2323,6 +2335,46 @@ mod tests {
         let found = one_of(&text, RuleCode::PairEndpointUnknown);
         assert_eq!(found.subject.as_deref(), Some("the-pair"));
         assert_eq!(found.owner.as_deref(), Some("second-pair"));
+    }
+
+    /// W043 (`D135`): the format promises that the first press types `a` and
+    /// the next one `b`, which holds only where `b` is written right after `a` -
+    /// not before it, and not with another value between the two.
+    #[test]
+    fn a_pair_whose_second_half_is_not_right_after_its_first_is_warned_about() {
+        let pair = |a: &str, b: &str| {
+            A_PAIR
+                .replace("a = \"trailing-space\"", &format!("a = \"{a}\""))
+                .replace("b = \"trailing-space\"", &format!("b = \"{b}\""))
+        };
+        let two = GOOD.to_owned() + LATER_VALUE;
+        let in_order = codes(&(two.clone() + &pair("trailing-space", "successor")));
+        assert!(!in_order.contains(&"W043"), "{in_order:?}");
+
+        let reversed = two + &pair("successor", "trailing-space");
+        let found = one_of(&reversed, RuleCode::PairHalvesNotConsecutive);
+        assert_eq!(found.subject.as_deref(), Some("trailing-space"));
+        assert_eq!(found.owner.as_deref(), Some("the-pair"));
+
+        let apart = GOOD.to_owned()
+            + SECOND_VALUE_WITH_SOURCE
+            + LATER_VALUE
+            + &pair("trailing-space", "successor");
+        let found = one_of(&apart, RuleCode::PairHalvesNotConsecutive);
+        assert_eq!(found.subject.as_deref(), Some("successor"));
+    }
+
+    #[test]
+    fn halves_already_refused_are_not_also_warned_about_for_their_order() {
+        // E042 and E040 say what is wrong with the halves. One value twice, or a
+        // half that is no value, has no order to get wrong.
+        let same = codes(&(GOOD.to_owned() + A_PAIR));
+        assert!(same.contains(&"E042"), "{same:?}");
+        assert!(!same.contains(&"W043"), "{same:?}");
+        let nowhere = A_PAIR.replace("b = \"trailing-space\"", "b = \"nowhere\"");
+        let unknown = codes(&(GOOD.to_owned() + LATER_VALUE + &nowhere));
+        assert!(unknown.contains(&"E040"), "{unknown:?}");
+        assert!(!unknown.contains(&"W043"), "{unknown:?}");
     }
 
     #[test]

@@ -65,9 +65,14 @@ const THE_CALL: &str = ".put_text(";
 
 /// The places that take the clipboard route, as `crates/<package>/src/<file>`
 /// with the number of reads of [`THE_ROUTE`] each may hold: the sequence, where
-/// clipboard mode sends a value, the window with higher privileges gets the
+/// clipboard mode sends a value and the window with higher privileges gets the
 /// same value in the same press (`D72`), and a Copy button copies one (`D98`).
-const ROUTE_TAKERS: &[(&str, usize)] = &[("nkb-app/src/advance_sequence.rs", 3)];
+/// The Copy buttons stand in a file of their own since 2026-10-15 - the same
+/// third place, moved, not a fourth (`D133` 5).
+const ROUTE_TAKERS: &[(&str, usize)] = &[
+    ("nkb-app/src/advance_sequence.rs", 2),
+    ("nkb-app/src/advance_sequence/copy.rs", 1),
+];
 
 /// The field of `Ports` that lends the clipboard route.
 const THE_ROUTE: &str = ".by_clipboard";

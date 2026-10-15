@@ -1,0 +1,45 @@
+# expect: W043
+#
+# The first press types half a of a pair and the next one half b, which holds
+# only where b is written right after a. Here b stands first, so a tester
+# walking the pack meets the second half before the first. A warning - the
+# pack loads exactly as written.
+
+format = 1
+
+[pack]
+id          = "pair-halves-not-consecutive"
+name        = "Pair halves not consecutive"
+description = "Writes the second half of a pair before its first."
+version     = "1.0"
+updated     = 2026-10-15
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["format-suite"]
+
+[[values]]
+id     = "second-half"
+name   = "Second half"
+value  = "after"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[values]]
+id     = "first-half"
+name   = "First half"
+value  = "before"
+breaks = "Nothing on its own - this value only exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"
+
+[[pairs]]
+id       = "written-back-to-front"
+name     = "Written back to front"
+relation = "identity"
+a        = "first-half"
+b        = "second-half"
+breaks   = "Nothing on its own - this pair only exists so the file is otherwise complete."
+expect   = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since    = "1.0"

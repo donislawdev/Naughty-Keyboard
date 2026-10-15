@@ -274,6 +274,10 @@ component PickRowView inherits Rectangle {
                     // the window's width empty. Elided like the name, at the
                     // end, because a value can be any length - the palette
                     // shows it whole once it is chosen.
+                    // In a row short of room the name gives way before what
+                    // the value types: a short value stays whole, a long one
+                    // keeps as many characters as the dictionary says, each
+                    // as wide as its own typeface of fixed width draws them.
                     if root.value-line && root.item.detail-mono: TextBody {
                         text: root.item.detail;
                         font-family: Tokens.font-mono;
@@ -281,6 +285,7 @@ component PickRowView inherits Rectangle {
                         horizontal-alignment: right;
                         horizontal-stretch: 1;
                         max-width: self.preferred-width;
+                        min-width: min(self.preferred-width, self.preferred-width / max(1, self.text.character-count) * Tokens.preview-whole-characters);
                     }
                     if root.value-line && !root.item.detail-mono: TextBody {
                         text: root.item.detail;

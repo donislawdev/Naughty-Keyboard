@@ -219,6 +219,15 @@ export global Tokens {
     // this column and one spacing step in - one step of the tree, never two
     // columns (`D110`, point 3).
     out property <length> fold-column: 24px;
+    // How many characters of what a value types the value window keeps
+    // whole when its row is short of room (`D134`): a value this long or
+    // shorter is never cut, a longer one is cut no shorter, and the name
+    // gives way first. A count, not a length - the width comes from the
+    // value's own typeface. Measured 2026-10-15 on Linux in CI, where the
+    // longest name of a pair's half, its half, the next pill and
+    // `Jan Kowalski` were a few pixels too wide, and the value lost its
+    // end as much as the name did.
+    out property <int> preview-whole-characters: 16;
 
     // ---- opacity -----------------------------------------------------------
     // Background alpha of the palette in its resting state (ux-spec.md 2,
