@@ -19,8 +19,10 @@ Changes wait under Unreleased until then.
   day the value goes out - the Copy button beside the value sent last too - and `nkb show` and the
   website show the rule.
 - The palette says which half of a pair the next value is, with `pair 1 of 2` or `pair 2 of 2` beside
-  its name. `nkb show` prints what a correct application does with a pair as well as what it breaks,
-  and a pack's page on the website lists its pairs, each linked with the two values it joins.
+  its name. The window that finds a value says the same beside each half, and typing the name of a
+  pair finds both of its values. `nkb show` prints what a correct application does with a pair as
+  well as what it breaks, and a pack's page on the website lists its pairs, each linked with the two
+  values it joins.
 
 ### Changed
 

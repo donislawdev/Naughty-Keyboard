@@ -4,6 +4,8 @@
 //! in a file of its own so that a window's words are found in one place - see
 //! the module above for why every one of them is a key.
 
+use nkb_core::pack::PairHalf;
+
 use super::*;
 
 /// The words of the pack window (`ux-spec.md` 5.2 and 6 K).
@@ -44,10 +46,16 @@ pub enum PacksLabel {
     PlaceId,
     PlaceTags,
     PlaceFields,
-    /// Two places and three, as one phrase - whole shapes, so a translation
-    /// is never built from an English joining rule.
+    PlacePair,
+    /// Two places, three and four, as one phrase - whole shapes, so a
+    /// translation is never built from an English joining rule.
     PlacesTwo,
     PlacesThree,
+    PlacesFour,
+    /// Beside a value under its pack in the tree: which half of a pair it is,
+    /// in the palette's words (`D134`). A value that is a half in two pairs -
+    /// `b` of one and `a` of the next - names both, joined two at a time.
+    Halves,
     /// The section heading over the values a query found, in every pack.
     FoundValues,
     /// The heading that folds the values the tester sent or chose last, in
@@ -118,8 +126,11 @@ pub(super) fn pattern_packs_label(label: PacksLabel) -> &'static str {
         PacksLabel::PlaceId => "id",
         PacksLabel::PlaceTags => "tags",
         PacksLabel::PlaceFields => "fields",
+        PacksLabel::PlacePair => "pair",
         PacksLabel::PlacesTwo => "{first} and {second}",
         PacksLabel::PlacesThree => "{first}, {second} and {third}",
+        PacksLabel::PlacesFour => "{first}, {second}, {third} and {fourth}",
+        PacksLabel::Halves => "{first}, {second}",
         PacksLabel::FoundValues => "Values",
         PacksLabel::Recent => "Recent ({count})",
         PacksLabel::PacksSection => "Packs",
@@ -212,6 +223,9 @@ pub enum MatchPlace {
     Tags,
     /// The field kinds a value narrows its pack's list to.
     Fields,
+    /// The name or the id of a pair the value is a half of (`D134`): the
+    /// pair's name is the test the two values make together.
+    Pair,
 }
 
 /// The places as one phrase: `id`, `id and tags`, `id, tags and fields`. In
@@ -225,6 +239,7 @@ fn places(found: &[MatchPlace]) -> String {
             MatchPlace::Id => PacksLabel::PlaceId,
             MatchPlace::Tags => PacksLabel::PlaceTags,
             MatchPlace::Fields => PacksLabel::PlaceFields,
+            MatchPlace::Pair => PacksLabel::PlacePair,
         })
     };
     match found.as_slice() {
@@ -234,13 +249,22 @@ fn places(found: &[MatchPlace]) -> String {
             pattern_packs_label(PacksLabel::PlacesTwo),
             &[("first", word(first)), ("second", word(second))],
         ),
-        // Three at most: `MatchPlace` has three, each kept once.
-        [first, second, third, ..] => fill(
+        [first, second, third] => fill(
             pattern_packs_label(PacksLabel::PlacesThree),
             &[
                 ("first", word(first)),
                 ("second", word(second)),
                 ("third", word(third)),
+            ],
+        ),
+        // Four at most: `MatchPlace` has four, each kept once.
+        [first, second, third, fourth, ..] => fill(
+            pattern_packs_label(PacksLabel::PlacesFour),
+            &[
+                ("first", word(first)),
+                ("second", word(second)),
+                ("third", word(third)),
+                ("fourth", word(fourth)),
             ],
         ),
     }
@@ -270,6 +294,22 @@ pub fn value_aside(pack: &str, found: &[MatchPlace]) -> String {
         pattern_packs_label(PacksLabel::ValueFound),
         &[("pack", pack), ("places", &places(found))],
     )
+}
+
+/// Beside a value under its pack in the tree: which half of a pair it is, in
+/// the words the palette writes beside the next value (`D134`) - `pair 1 of
+/// 2`. One per pair it stands in, in the order of the pairs in the file, and
+/// `None` for a value in no pair.
+#[must_use]
+pub fn pair_halves(halves: &[PairHalf]) -> Option<String> {
+    let mut words = halves.iter().map(|half| pair_half(*half).to_owned());
+    let first = words.next()?;
+    Some(words.fold(first, |joined, next| {
+        fill(
+            pattern_packs_label(PacksLabel::Halves),
+            &[("first", &joined), ("second", &next)],
+        )
+    }))
 }
 
 /// The heading that folds the values used last, with how many it holds.

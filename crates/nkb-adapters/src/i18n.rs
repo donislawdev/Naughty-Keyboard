@@ -94,9 +94,9 @@ pub use registration::{ended, registration, registrations, shortcuts_unavailable
 pub use windows::{
     AboutLabel, MatchPlace, PacksLabel, ShortcutsLabel, WelcomeLabel, about_copyright, about_label,
     found_in, no_match, not_read, pack_problems, pack_refused, pack_unreadable, packs_label,
-    packs_summary, packs_summary_filtered, recent_heading, shortcut_answer, shortcut_invite,
-    shortcuts_label, shortcuts_summary, value_aside, value_gone, welcome_label, welcome_ready,
-    welcome_try_it,
+    packs_summary, packs_summary_filtered, pair_halves, recent_heading, shortcut_answer,
+    shortcut_invite, shortcuts_label, shortcuts_summary, value_aside, value_gone, welcome_label,
+    welcome_ready, welcome_try_it,
 };
 
 /// Substitutes `{name}` placeholders in one pass over the pattern.
@@ -1108,6 +1108,7 @@ mod tests {
     use super::*;
     use crate::shortcuts::CONVENTION;
     use nkb_core::hotkeys::{Convention, HotkeyKey};
+    use nkb_core::pack::PairHalf;
 
     /// The shortcuts of a palette whose settings name none.
     fn defaults() -> Bindings {
@@ -1809,8 +1810,11 @@ mod tests {
             PacksLabel::PlaceId,
             PacksLabel::PlaceTags,
             PacksLabel::PlaceFields,
+            PacksLabel::PlacePair,
             PacksLabel::PlacesTwo,
             PacksLabel::PlacesThree,
+            PacksLabel::PlacesFour,
+            PacksLabel::Halves,
             PacksLabel::FoundValues,
             PacksLabel::Recent,
             PacksLabel::PacksSection,
@@ -1848,6 +1852,8 @@ mod tests {
                 | PacksLabel::Recent
                 | PacksLabel::PlacesTwo
                 | PacksLabel::PlacesThree
+                | PacksLabel::PlacesFour
+                | PacksLabel::Halves
                 | PacksLabel::ValueGone
                 | PacksLabel::Refused
                 | PacksLabel::Problems
@@ -1863,6 +1869,7 @@ mod tests {
                 | PacksLabel::PlaceId
                 | PacksLabel::PlaceTags
                 | PacksLabel::PlaceFields
+                | PacksLabel::PlacePair
                 | PacksLabel::PacksSection
                 | PacksLabel::Offensive
                 | PacksLabel::NoPacks
@@ -1950,6 +1957,23 @@ mod tests {
             "two words in tags are one place"
         );
         assert_eq!(
+            value_aside(
+                "Look-alike pairs",
+                &[
+                    MatchPlace::Pair,
+                    MatchPlace::Fields,
+                    MatchPlace::Tags,
+                    MatchPlace::Id
+                ]
+            ),
+            "Look-alike pairs - in its id, tags, fields and pair",
+            "all four places, the pair last"
+        );
+        assert_eq!(
+            found_in(&[MatchPlace::Pair]).as_deref(),
+            Some("in its pair")
+        );
+        assert_eq!(
             found_in(&[MatchPlace::Tags]).as_deref(),
             Some("in its tags")
         );
@@ -1957,6 +1981,26 @@ mod tests {
         assert_eq!(
             value_aside("{places}", &[MatchPlace::Tags]),
             "{places} - in its tags"
+        );
+    }
+
+    /// `D134`: beside a value under its pack, the half of each pair it stands
+    /// in, in the palette's words and the order of the pairs.
+    #[test]
+    fn a_value_says_which_half_of_each_of_its_pairs_it_is() {
+        assert_eq!(pair_halves(&[]), None, "a value in no pair says nothing");
+        assert_eq!(
+            pair_halves(&[PairHalf::First]).as_deref(),
+            Some("pair 1 of 2")
+        );
+        assert_eq!(
+            pair_halves(&[PairHalf::Second, PairHalf::First]).as_deref(),
+            Some("pair 2 of 2, pair 1 of 2"),
+            "b of one pair and a of the next, in the order of the pairs"
+        );
+        assert_eq!(
+            pair_halves(&[PairHalf::First, PairHalf::First, PairHalf::Second]).as_deref(),
+            Some("pair 1 of 2, pair 1 of 2, pair 2 of 2")
         );
     }
 
