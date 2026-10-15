@@ -407,9 +407,10 @@ fn chars_of(text: &str) -> Vec<(char, usize)> {
 /// well, so a name made of them is not Polish. Each one met a real English name
 /// in the code when this guard was written (2026-10-08): `datą` folds to `data`,
 /// `notę` to `note`. An entry is a word that is PLAINLY English, never a way to
-/// let a Polish name through.
+/// let a Polish name through. `minute` joined on 2026-10-15 with the time of day
+/// of a `next-date` value: `minutę` folds to it.
 const ALSO_ENGLISH: &[&str] = &[
-    "data", "date", "formula", "literal", "note", "probe", "role", "slow", "stale",
+    "data", "date", "formula", "literal", "minute", "note", "probe", "role", "slow", "stale",
 ];
 
 /// The shortest word the vocabulary keeps. Shorter Polish words are English

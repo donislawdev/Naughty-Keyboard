@@ -1,8 +1,8 @@
 {{- /*
   A value drawn the way the palette draws it, from the facts the palette works
   out (`ValueFacts::of`): every character nobody can see as a marker, a
-  generated value as its recipe, and a long value cut at both ends with its
-  full length said out loud.
+  generated value as its recipe, a date worked out on the day as its rule, and
+  a long value cut at both ends with its full length said out loud.
 
   The marker character comes in the facts and is drawn here as a box, so the
   page does not depend on a typeface having the glyph.
@@ -10,6 +10,8 @@
 {{- $marker := printf `<span class="marker" role="img" aria-label="%s"></span>` (T "invisible_character") }}
 {{- with .recipe }}
 <span class="value">{{ lang.FormatNumber 0 .count }} &times; {{ replace (htmlEscape .unit) "␣" $marker | safeHTML }}</span>
+{{- else with .next_date }}
+<span class="value next-date">{{ partial "next-date.html" . }}</span>
 {{- else }}
 {{- with .preview }}
 <span class="value">{{ replace (htmlEscape .shown) "␣" $marker | safeHTML }}</span>

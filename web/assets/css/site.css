@@ -1230,6 +1230,15 @@ td code {
   font-size: var(--size-h3);
 }
 
+/* A date worked out on the day it is inserted shows its rule, and the rule is a
+   sentence about the value rather than text to type - so it is set in the
+   reading face, where nobody takes it for the characters a field receives. */
+.sample .value.next-date {
+  font-family: var(--font-sans);
+  font-size: var(--size-body);
+  color: var(--text-secondary);
+}
+
 .sample .escaped {
   font-family: var(--font-mono);
   font-size: var(--size-meta);

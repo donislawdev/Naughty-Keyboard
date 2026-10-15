@@ -21,6 +21,7 @@ use crate::ports::{
     KeystrokeError, KeystrokeSender, PackFormat, PackSource, Progress, ReportText, SourceError,
     TargetInspector, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery,
 };
+use nkb_core::calendar::Day;
 use nkb_core::keys::KeyChord;
 use nkb_core::lint::{LintProblem, RuleCode};
 use nkb_core::pack::{Pack, PackValue, Risk};
@@ -337,7 +338,7 @@ pub(crate) fn a_value(id: &str, text: &str, risk: Option<Risk>) -> PackValue {
     PackValue {
         id: id.to_owned(),
         name: format!("Value {id}"),
-        body: ValueBody::Literal(LiteralText::new(text.to_owned())),
+        definition: ValueBody::Literal(LiteralText::new(text.to_owned())).into(),
         breaks: Some("It breaks something worth a whole sentence about it.".to_owned()),
         expect: None,
         risk,
@@ -418,7 +419,7 @@ impl PackFormat for FakeFormat {
 
 /// Chooses a three-value pack and hands back the ready sequence machine.
 pub(crate) fn chosen(risk: Risk) -> AdvanceSequence {
-    let mut advance = AdvanceSequence::new();
+    let mut advance = AdvanceSequence::new(Box::new(StoppedClock::default()));
     let pack = a_pack(
         vec![
             a_value("one", "alpha", None),
@@ -431,4 +432,49 @@ pub(crate) fn chosen(risk: Risk) -> AdvanceSequence {
         .choose_pack(&FakeSource, &FakeFormat::of(pack), "sample")
         .expect("a scripted pack with no errors loads");
     advance
+}
+
+/// 2026-10-15, the day `next-date` was written: the autumn clock change of 2026
+/// is still ahead, the spring one of 2027 is next.
+pub(crate) const WRITTEN_ON: Day = Day::from_days_since_1970(20_741);
+
+/// A clock stopped on one day, so that a value of type `next-date` names the
+/// same date in every run.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct StoppedClock(pub(crate) Day);
+
+impl Default for StoppedClock {
+    fn default() -> Self {
+        Self(WRITTEN_ON)
+    }
+}
+
+impl crate::ports::Clock for StoppedClock {
+    fn today(&self) -> Day {
+        self.0
+    }
+}
+
+/// A clock a test moves between two presses: a palette stays open across
+/// midnight, and a value of type `next-date` has to notice.
+#[derive(Debug, Clone)]
+pub(crate) struct MovingClock(std::sync::Arc<std::sync::atomic::AtomicI64>);
+
+impl MovingClock {
+    pub(crate) fn on(day: Day) -> Self {
+        Self(std::sync::Arc::new(std::sync::atomic::AtomicI64::new(
+            day.days_since_1970(),
+        )))
+    }
+
+    pub(crate) fn set(&self, day: Day) {
+        self.0
+            .store(day.days_since_1970(), std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl crate::ports::Clock for MovingClock {
+    fn today(&self) -> Day {
+        Day::from_days_since_1970(self.0.load(std::sync::atomic::Ordering::SeqCst))
+    }
 }

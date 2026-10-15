@@ -11,7 +11,8 @@
 //! includes, no addresses and nothing executable, so reading a pack can do
 //! nothing but add values to a list.
 
-use nkb_app::{Clock, Date, PackSink, PackSource, SinkError, SourceError};
+use nkb_app::{Clock, PackSink, PackSource, SinkError, SourceError};
+use nkb_core::calendar::Day;
 use std::path::{Path, PathBuf};
 
 /// Reads packs from one directory, addressing them by their pack identifier.
@@ -172,57 +173,25 @@ impl PackSink for DirectoryPackSink {
     }
 }
 
-/// Today's date, from the machine this is running on.
+/// Today's date in UTC, from the machine this is running on.
 #[derive(Debug, Clone, Copy)]
 pub struct SystemClock;
 
 impl Clock for SystemClock {
-    /// Falls back to the day the pack format was settled if the machine reports a
-    /// time before 1970. That is a clock nobody can trust, and a skeleton with a
-    /// wrong date is a smaller problem than one that refuses to be written - the
-    /// person editing it will change the date anyway.
-    fn today(&self) -> Date {
+    /// Falls back to 1970-01-01 if the machine reports a time before it. That is
+    /// a clock nobody can trust, and a skeleton with a wrong date is a smaller
+    /// problem than one that refuses to be written - the person editing it will
+    /// change the date anyway. A `next-date` value worked out from it is still a
+    /// real date with a four digit year (`nkb_core::next_date`).
+    fn today(&self) -> Day {
         let seconds = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |since| since.as_secs());
         // Whole days, which is all a date needs. Leap seconds do not exist in
-        // Unix time, so this division is exact rather than approximate.
-        civil_from_days(i64::try_from(seconds / 86_400).unwrap_or(0))
+        // Unix time, so this division is exact rather than approximate. The
+        // calendar arithmetic lives in the core, with its tests.
+        Day::from_days_since_1970(i64::try_from(seconds / 86_400).unwrap_or(0))
     }
-}
-
-/// Turns a count of days since 1970-01-01 into a calendar date.
-///
-/// # Why this is written out rather than taken from a crate
-///
-/// A date library would be a dependency, and a dependency in this project costs
-/// a justification and a licence check against GPL-3.0. This is the published
-/// civil-from-days algorithm, it is exact for every date this program will ever
-/// see, and it is shorter than the argument for adding a crate to avoid it.
-///
-/// The arithmetic shifts the year to start in March, which puts the leap day at
-/// the end of the year and removes every special case for February.
-fn civil_from_days(days: i64) -> Date {
-    let z = days + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let day_of_era = z - era * 146_097;
-    let year_of_era =
-        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let year = year_of_era + era * 400;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let shifted_month = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * shifted_month + 2) / 5 + 1;
-    let month = if shifted_month < 10 {
-        shifted_month + 3
-    } else {
-        shifted_month - 9
-    };
-
-    (
-        i32::try_from(year + i64::from(month <= 2)).unwrap_or(1970),
-        u32::try_from(month).unwrap_or(1),
-        u32::try_from(day).unwrap_or(1),
-    )
 }
 
 #[cfg(test)]
@@ -232,32 +201,6 @@ fn civil_from_days(days: i64) -> Date {
 )]
 mod tests {
     use super::*;
-
-    #[test]
-    fn the_calendar_arithmetic_agrees_with_dates_that_can_be_looked_up() {
-        // Fixed points rather than a property, because the failure mode of date
-        // arithmetic is being wrong by one day in a corner nobody visits. Each of
-        // these is a day somebody can check against a calendar.
-        for (days, expected) in [
-            (0_i64, (1970, 1, 1)),
-            (1, (1970, 1, 2)),
-            (58, (1970, 2, 28)),
-            (59, (1970, 3, 1)),
-            // 2000 was a leap year and 1900 was not - the rule that catches naive
-            // implementations, and the reason the century terms exist above.
-            (11_016, (2000, 2, 29)),
-            (11_017, (2000, 3, 1)),
-            // 2100 is not a leap year, so this pair straddles a February that has
-            // twenty eight days in a year divisible by four.
-            (47_540, (2100, 2, 28)),
-            (47_541, (2100, 3, 1)),
-            (20_703, (2026, 9, 7)),
-            (20_704, (2026, 9, 8)),
-            (-1, (1969, 12, 31)),
-        ] {
-            assert_eq!(civil_from_days(days), expected, "day {days}");
-        }
-    }
 
     #[test]
     fn a_new_pack_is_written_once_and_never_over_something_already_there() {

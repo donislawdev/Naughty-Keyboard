@@ -23,26 +23,70 @@
 use crate::english::plural;
 use nkb_app::{CatalogueSource, Listing, PackEntry, SourceError, SourceSkipped};
 use nkb_core::metrics::TextMetrics;
+use nkb_core::next_date::NextDate;
 use nkb_core::pack::{Pack, PackValue};
-use nkb_core::value::ValueBody;
+use nkb_core::value::{Definition, ValueBody};
 
 /// How a value would be written in a pack file: the recipe, or the escaped text.
 ///
 /// The one place both shapes are rendered, so that `nkb show` and anything after
-/// it cannot drift into describing the same value two ways.
+/// it cannot drift into describing the same value two ways. A `next-date` value
+/// is shown as its rule, never as today's date: `nkb show` describes the pack,
+/// and the pack says "the next one", not a day.
 #[must_use]
-pub fn written_form(body: &ValueBody) -> String {
-    match body {
-        ValueBody::Literal(text) => text.escape().as_str().to_owned(),
-        ValueBody::Repeat { unit, count } => {
+pub fn written_form(definition: &Definition) -> String {
+    match definition {
+        Definition::Fixed(ValueBody::Literal(text)) => text.escape().as_str().to_owned(),
+        Definition::Fixed(ValueBody::Repeat { unit, count }) => {
             format!("{} x {count}", unit.escape().as_str())
         }
+        Definition::NextDate(rule) => rule_in_words(rule),
     }
 }
 
+/// A `next-date` rule as an English sentence: `next date: the last Sunday of
+/// March, 02:30`.
+fn rule_in_words(rule: &NextDate) -> String {
+    const MONTHS: [&str; 12] = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ];
+    let month = usize::try_from(rule.month())
+        .ok()
+        .and_then(|month| MONTHS.get(month.checked_sub(1)?))
+        .copied()
+        .unwrap_or("?");
+    // The vocabulary words of the format, with the weekday capitalised the way
+    // English writes it.
+    let weekday = rule.weekday().name();
+    let mut capitalised = weekday.chars();
+    let weekday: String = capitalised
+        .next()
+        .map(|first| first.to_ascii_uppercase())
+        .into_iter()
+        .chain(capitalised)
+        .collect();
+    let mut words = format!("next date: the {} {weekday} of {month}", rule.week().name());
+    if let Some(time) = rule.time() {
+        words.push_str(", ");
+        words.push_str(&time.written());
+    }
+    words
+}
+
 /// The size a value would have, from its recipe.
-fn metrics_of(body: &ValueBody) -> Option<TextMetrics> {
-    body.metrics()
+fn metrics_of(definition: &Definition) -> Option<TextMetrics> {
+    definition.metrics()
 }
 
 /// One line describing what the run did and did not look at.
@@ -167,9 +211,9 @@ fn value_lines(pack: &Pack, value: &PackValue) -> Vec<String> {
     }
     lines.push(format!("  {}{marks}", value.id));
     lines.push(format!("    {}", value.name));
-    lines.push(format!("    value    {}", written_form(&value.body)));
+    lines.push(format!("    value    {}", written_form(&value.definition)));
 
-    if let Some(metrics) = metrics_of(&value.body) {
+    if let Some(metrics) = metrics_of(&value.definition) {
         lines.push(format!(
             "    size     {}, {}",
             plural(metrics.code_points, "code point"),
@@ -252,7 +296,7 @@ mod tests {
         // The point of the whole command. Printing the literal would put an
         // invisible character on the terminal and tell the reader nothing.
         let body = ValueBody::Literal(LiteralText::new("\u{200B}"));
-        let shown = written_form(&body);
+        let shown = written_form(&body.into());
         assert_eq!(shown, "\\u200B");
         assert!(shown.is_ascii());
     }
@@ -265,7 +309,7 @@ mod tests {
             unit: LiteralText::new(" "),
             count: 1_000_000,
         };
-        let shown = written_form(&body);
+        let shown = written_form(&body.into());
         assert_eq!(shown, "\\u0020 x 1000000");
         assert!(
             shown.len() < 40,
@@ -280,7 +324,28 @@ mod tests {
             unit: LiteralText::new("ab"),
             count: 500_000,
         };
-        let metrics = metrics_of(&body).expect("a measurable recipe");
+        let metrics = metrics_of(&body.into()).expect("a measurable recipe");
         assert_eq!(metrics.code_points, 1_000_000);
+    }
+
+    #[test]
+    fn a_next_date_value_is_shown_as_its_rule_and_never_as_a_date() {
+        // `nkb show` describes the pack, and the pack says "the next one".
+        use nkb_core::calendar::Weekday;
+        use nkb_core::next_date::{TimeOfDay, Week};
+        let rule = |week, weekday, time: Option<&str>| {
+            let time = time.and_then(TimeOfDay::parse);
+            Definition::NextDate(NextDate::new(3, week, weekday, time).expect("March"))
+        };
+        assert_eq!(
+            written_form(&rule(Week::Last, Weekday::Sunday, Some("02:30"))),
+            "next date: the last Sunday of March, 02:30"
+        );
+        assert_eq!(
+            written_form(&rule(Week::First, Weekday::Wednesday, None)),
+            "next date: the first Wednesday of March"
+        );
+        let metrics = metrics_of(&rule(Week::Last, Weekday::Sunday, Some("02:30")));
+        assert_eq!(metrics.map(|size| size.code_points), Some(16));
     }
 }

@@ -1,0 +1,15 @@
+{{- /*
+  The rule of a value of type next-date, in words: "the last Sunday of March,
+  02:30". Never a date - the site is built on one day and read on others, and
+  the date a rule names moves on once a year (D133).
+
+  The ordinal comes in two forms because in some languages it agrees with the
+  weekday: Polish says "ostatni poniedzialek" and "ostatnia niedziela". The
+  weekday's gender picks the form, and a language without the distinction
+  gives every day the same one.
+*/ -}}
+{{- $gender := T (printf "weekday_gender_%s" .weekday) }}
+{{- $week := T (printf "week_%s_%s" .week $gender) }}
+{{- $weekday := T (printf "weekday_%s" .weekday) }}
+{{- $month := T (printf "month_of_%d" (int .month)) }}
+{{- T "next_date" (dict "week" $week "weekday" $weekday "month" $month "time" .time) -}}

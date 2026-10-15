@@ -1,0 +1,29 @@
+# expect: E018
+#
+# A fifth Sunday exists in some months of some years only, so the vocabulary
+# stops at fourth and last. A rule that has no day in a given year would leave
+# the value with nothing to insert in that year.
+
+format = 1
+
+[pack]
+id          = "next-date-outside-vocabulary"
+name        = "Date rule with a fifth week"
+description = "Declares a next-date value in a week the format does not have."
+version     = "1.0"
+updated     = 2026-10-15
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["format-suite"]
+
+[[values]]
+id      = "fifth-sunday"
+name    = "Test value"
+type    = "next-date"
+month   = 3
+week    = "fifth"
+weekday = "sunday"
+breaks  = "Nothing on its own - this value exists so the file is otherwise complete."
+expect  = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since   = "1.0"

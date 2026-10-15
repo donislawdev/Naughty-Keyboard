@@ -312,7 +312,7 @@ mod tests {
             (Arrives::Later, NEXT),
             (Arrives::Later, NEXT),
         ]);
-        let mut sequence = AdvanceSequence::new();
+        let mut sequence = AdvanceSequence::new(Box::new(StoppedClock::default()));
         sequence
             .choose_pack(
                 &FakeSource,
@@ -351,7 +351,7 @@ mod tests {
         // No pack: `on_action` answers NoPack without touching the field, so a
         // press queued right behind it is a real press for the next turn.
         let shortcuts = Scripted::of(&[(Arrives::Later, NEXT), (Arrives::Queued, NEXT)]);
-        let mut sequence = AdvanceSequence::new();
+        let mut sequence = AdvanceSequence::new(Box::new(StoppedClock::default()));
 
         let (_, presented) = run(&shortcuts, &mut sequence, turns(2));
 

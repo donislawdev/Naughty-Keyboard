@@ -114,6 +114,7 @@ pub enum RuleCode {
     ReplacedByUnknownId,
     DuplicateValueBody,
     RiskOutsideVocabulary,
+    NextDateRuleIncomplete,
     // Value.
     UnescapedCharacter,
     InvalidEscapeSequence,
@@ -171,6 +172,7 @@ impl RuleCode {
             Self::ReplacedByUnknownId => "E015",
             Self::DuplicateValueBody => "E016",
             Self::RiskOutsideVocabulary => "E017",
+            Self::NextDateRuleIncomplete => "E018",
             Self::UnescapedCharacter => "E020",
             Self::InvalidEscapeSequence => "E021",
             Self::LiteralStringForEscapableValue => "E022",
@@ -229,7 +231,7 @@ const fn rule(code: RuleCode, severity: Severity, status: RuleStatus) -> LintRul
 
 /// The complete register. Its length is the number the specification states, and
 /// the test below is what keeps the two from drifting apart.
-pub const RULES: [LintRule; 45] = [
+pub const RULES: [LintRule; 46] = [
     rule(C::MissingOrUnsupportedFormat, Error, Checked),
     rule(C::UnknownKey, Error, Checked),
     rule(C::MissingRequiredField, Error, Checked),
@@ -259,6 +261,10 @@ pub const RULES: [LintRule; 45] = [
     // the point where it stopped being achievable - said out loud rather than
     // left for the next reader to puzzle over.
     rule(C::RiskOutsideVocabulary, Error, Checked),
+    // A value rule in the identity band for the reason E017 is: E020-E029 are
+    // taken. It is to `next-date` what E024 is to `repeat` - a recipe missing a
+    // part, or with a part outside its vocabulary, describes no date at all.
+    rule(C::NextDateRuleIncomplete, Error, Checked),
     // Control characters, format characters, whitespace other than a plain space
     // and a space at either edge are checked. The look-alike half needs a
     // published set of confusable characters pinned to a Unicode version, and
@@ -605,9 +611,9 @@ mod tests {
 
     #[test]
     fn the_register_holds_the_number_of_rules_the_specification_states() {
-        // The specification says forty five. If this number has to change, the
+        // The specification says forty six. If this number has to change, the
         // specification changed too, and that is a decision rather than a tidy up.
-        assert_eq!(RULES.len(), 45);
+        assert_eq!(RULES.len(), 46);
     }
 
     /// Every code the enum can spell has an entry in the register.
@@ -721,7 +727,7 @@ mod tests {
     #[test]
     fn coverage_counts_the_register_rather_than_repeating_a_stored_number() {
         let coverage = RuleCoverage::measure();
-        assert_eq!(coverage.total, 45);
+        assert_eq!(coverage.total, 46);
         // Every rule falls in exactly one bucket. If this ever fails, some rule
         // is being counted twice or not at all, and the summary that a reader
         // trusts to say what was not looked at has quietly stopped adding up.
@@ -732,7 +738,7 @@ mod tests {
         // Written out rather than computed, deliberately. A number derived from
         // the register would agree with the register whatever the register said,
         // and this is the line that makes somebody look when coverage moves.
-        assert_eq!(coverage.checked, 39);
+        assert_eq!(coverage.checked, 40);
         assert_eq!(coverage.partly, 1);
     }
 

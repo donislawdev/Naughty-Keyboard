@@ -46,6 +46,6 @@ pub use ports::{
     TargetInspector, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery, Wait,
 };
 pub use send_value::{
-    Clearing, ClearingOutcome, SendOutcome, SendRequest, Sending, SkipReason, ValueFacts,
+    Chosen, Clearing, ClearingOutcome, SendOutcome, SendRequest, Sending, SkipReason, ValueFacts,
     deliver_value, send_value,
 };

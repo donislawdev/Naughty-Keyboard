@@ -31,13 +31,15 @@
 //!
 //! # A value here is still a recipe
 //!
-//! [`ValueBody`] is carried unexpanded, because `architektura.md` 6.1 requires
-//! the size of a generated value to be known BEFORE the text exists - otherwise
-//! the promised warning about a length bomb arrives after the bomb has gone off
-//! inside the tool. Turning a recipe into text is a separate and explicit step,
-//! and it is not in this file.
+//! A [`Definition`] is carried unexpanded, because `architektura.md` 6.1
+//! requires the size of a generated value to be known BEFORE the text exists -
+//! otherwise the promised warning about a length bomb arrives after the bomb
+//! has gone off inside the tool. Turning a recipe into text is a separate and
+//! explicit step, and it is not in this file. Nor is today's date: a value of
+//! type `next-date` stays a rule here, and becomes a date only where it is
+//! inserted.
 
-use crate::value::ValueBody;
+use crate::value::Definition;
 
 /// How dangerous a value is to put into somebody else's application.
 ///
@@ -88,7 +90,7 @@ pub struct PackValue {
     pub id: String,
     pub name: String,
     /// The recipe. Never expanded by anything in this module.
-    pub body: ValueBody,
+    pub definition: Definition,
     /// What breaks when an application mishandles this. Prose, English.
     pub breaks: Option<String>,
     /// What correct handling looks like. Prose, English.
@@ -241,7 +243,7 @@ mod tests {
         PackValue {
             id: id.to_owned(),
             name: format!("Value {id}"),
-            body: ValueBody::Literal(LiteralText::new("x")),
+            definition: crate::value::ValueBody::Literal(LiteralText::new("x")).into(),
             breaks: None,
             expect: None,
             risk,

@@ -402,8 +402,11 @@ fn the_shipped_packs_reach_outside_the_guarantee_exactly_here() {
             .parse(&text)
             .unwrap_or_else(|| panic!("the shipped pack {id} does not parse"));
         for value in &pack.values {
+            // A `next-date` value on 2026-10-15: digits, a hyphen, a space and a
+            // colon on every day, so one day stands for all of them.
             let literal = value
-                .body
+                .definition
+                .on(nkb_core::calendar::Day::from_days_since_1970(20_741))
                 .materialise()
                 .unwrap_or_else(|e| panic!("{id}/{}: {e:?}", value.id));
             values += 1;

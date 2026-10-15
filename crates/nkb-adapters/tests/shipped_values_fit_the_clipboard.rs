@@ -47,8 +47,11 @@ fn every_shipped_value_goes_through_clipboard_mode_whole() {
             .parse(&text)
             .unwrap_or_else(|| panic!("shipped pack {id} parses"));
         for value in &pack.values {
+            // On 2026-10-15: a `next-date` value is a date, and any day's date
+            // is the same sixteen ASCII characters as far as the clipboard goes.
             let literal = value
-                .body
+                .definition
+                .on(nkb_core::calendar::Day::from_days_since_1970(20_741))
                 .materialise()
                 .unwrap_or_else(|e| panic!("{id}/{}: {e:?}", value.id));
             let clipboard = Recording(RefCell::new(Vec::new()));

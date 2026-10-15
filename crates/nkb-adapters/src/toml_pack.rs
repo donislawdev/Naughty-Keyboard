@@ -21,15 +21,18 @@
 //! of the file that a span points at - which was measured to be faithful.
 
 use crate::canonical;
+
+mod body;
+mod next_date;
+use body::{BodyKey, body_key, check_body};
+pub(crate) use next_date::rule_of;
+
 use nkb_app::{Date, PackFormat, TranslationCheck, TranslationTarget};
 use nkb_core::description::{self, BreaksFault};
 use nkb_core::identity::{is_pack_id, is_value_id};
 use nkb_core::lint::{LintProblem, MAX_VALUES_PER_PACK, RuleCode};
 use nkb_core::schema::{FieldKind, kind_of};
 use nkb_core::source_text::SourceText;
-use nkb_core::text::LiteralText;
-use nkb_core::value::ValueBody;
-use nkb_core::written_form;
 use std::collections::{HashMap, HashSet};
 use toml_edit::{Document, Item, Table, TableLike};
 
@@ -83,9 +86,10 @@ pub(crate) const PACK_KEYS: [&str; 12] = [
 ];
 
 /// Every key the format defines inside a value: the data model in
-/// `pack-format.md` 5, plus the three that describe a generated value from 6, and
-/// `source` from the inheritance rule in 5.
-pub(crate) const VALUE_KEYS: [&str; 16] = [
+/// `pack-format.md` 5, plus the seven that describe a generated value from 6 -
+/// three for `repeat`, four for `next-date` - and `source` from the inheritance
+/// rule in 5.
+pub(crate) const VALUE_KEYS: [&str; 20] = [
     "id",
     "name",
     "value",
@@ -102,6 +106,10 @@ pub(crate) const VALUE_KEYS: [&str; 16] = [
     "type",
     "unit",
     "count",
+    "month",
+    "week",
+    "weekday",
+    "time",
 ];
 
 /// Every key the format defines inside a pair, from `pack-format.md` 9.
@@ -174,21 +182,17 @@ const RELATIONS: [&str; 3] = ["look-alike", "range", "identity"];
 /// `count` and `type` decide the same thing for a generated value, so a rule
 /// covering only the first would state a safety property and leave three doors
 /// open. Recorded as a widening rather than made quietly - `decision-log.md` D35.
-const INSERTION_FIELDS: [&str; 4] = ["value", "unit", "count", "type"];
+/// The four parts of a `next-date` rule decide the date that gets typed, so they
+/// joined the list with the type itself (`D133`).
+const INSERTION_FIELDS: [&str; 8] = [
+    "value", "unit", "count", "type", "month", "week", "weekday", "time",
+];
 
 /// Fields every value must declare, whatever its type.
 ///
 /// `breaks` is deliberately absent from this list: the format gives it a rule of
 /// its own, E030, and reporting it here as well would give one mistake two codes.
 const REQUIRED_VALUE_FIELDS: [&str; 3] = ["id", "name", "since"];
-
-/// The kinds of value this build understands.
-///
-/// Six more names are reserved by the format and deliberately unsupported, so
-/// that nobody claims them for something else before they are designed. A file
-/// using one is refused with the same code as a typo, because to this build the
-/// two are the same thing: a kind it cannot produce.
-const SUPPORTED_TYPES: [&str; 2] = ["literal", "repeat"];
 
 /// The closed vocabulary of field kinds.
 ///
@@ -745,137 +749,6 @@ fn check_values<'a>(
             problem.owner = Some(identity.clone());
             problems.push(problem);
         }
-    }
-    problems
-}
-
-/// The rules about what one value is and how it is written.
-///
-/// E023 comes first and stops the rest: for a kind this build does not know,
-/// there is no telling which fields belong to it, so every further rule would be
-/// guessing about a shape nobody has defined.
-fn check_body(text: &SourceText<'_>, table: &Table) -> Vec<LintProblem> {
-    let declared = table.get("type").and_then(Item::as_str);
-
-    if let Some(kind) = declared
-        && !SUPPORTED_TYPES.contains(&kind)
-    {
-        return vec![LintProblem::new(RuleCode::UnknownValueType).about(kind)];
-    }
-
-    if declared == Some("repeat") {
-        return check_repeat(text, table);
-    }
-    check_literal(text, table)
-}
-
-/// What a value inserts, in a form two values can be compared by.
-///
-/// Three parts rather than one string, so that no separator has to be invented
-/// and no value can be built that collides with another by containing it: the
-/// kind, the text, and the repeat count (zero for a literal, which is not a
-/// legal count and so cannot be confused with one).
-type BodyKey = (&'static str, String, i64);
-
-/// The key for one value, or nothing when the body is not usable.
-///
-/// # Why this compares the recipe and not the text it produces
-///
-/// A value is a recipe, not a piece of text - a repeat can describe a million
-/// characters from one line, and building it in order to compare it would defeat
-/// the promise that the tool measures a length bomb without setting it off
-/// (`architektura.md` 6.1). So two values are the same when they are *written*
-/// the same, after parsing. A newline written as a four digit escape and the
-/// same newline written as the one letter escape are one value spelled two
-/// ways, and do compare equal. A literal `aaa` and a repeat of `a` three times
-/// produce the same text and do not: comparing those would mean building them.
-/// The rule says what it checks rather than claiming the wider thing and doing
-/// the narrower one.
-///
-/// Nothing is returned for a body some other rule already refuses. A value with
-/// no `value` is E003's, a bad `count` is E024's, an unknown `type` is E023's -
-/// and a rule that also spoke there would give one mistake two codes.
-fn body_key(table: &Table) -> Option<BodyKey> {
-    let declared = table.get("type").and_then(Item::as_str);
-    if let Some(kind) = declared
-        && !SUPPORTED_TYPES.contains(&kind)
-    {
-        return None;
-    }
-
-    if declared == Some("repeat") {
-        let unit = table.get("unit").and_then(Item::as_str)?;
-        let count = table.get("count").and_then(Item::as_integer)?;
-        return Some(("repeat", unit.to_owned(), count));
-    }
-
-    let value = table.get("value").and_then(Item::as_str)?;
-    Some(("literal", value.to_owned(), 0))
-}
-
-/// A value written out in the file: how it is spelled, and how long it is.
-fn check_literal(text: &SourceText<'_>, table: &Table) -> Vec<LintProblem> {
-    let Some(item) = table.get("value") else {
-        // Its absence is already reported as a missing required field. Saying so
-        // twice would give one mistake two codes.
-        return Vec::new();
-    };
-    let Some(expanded) = item.as_str() else {
-        return Vec::new();
-    };
-
-    let mut problems = written_form::check(raw_slice(text, item), expanded);
-    problems.extend(written_form::check_length(expanded));
-    problems
-}
-
-/// A value described by a recipe: the recipe's parts, its size, and the spelling
-/// of the unit it repeats.
-fn check_repeat(text: &SourceText<'_>, table: &Table) -> Vec<LintProblem> {
-    let mut problems = Vec::new();
-
-    if table.contains_key("value") {
-        // A recipe that also carries text has two answers to the same question,
-        // and nothing says which one the tool would send.
-        problems.push(LintProblem::new(RuleCode::ValuePresentForNonLiteralType).about("value"));
-    }
-
-    let unit = table.get("unit").and_then(Item::as_str);
-    let count = table
-        .get("count")
-        .and_then(|item| item.as_value()?.as_integer());
-
-    let (Some(unit), Some(count)) = (unit, count) else {
-        // Either part missing leaves a recipe that describes nothing. A part that
-        // is present but of the wrong kind is E009's finding, and reporting it
-        // here as well would tell the reader to add a field they can see.
-        let absent = if unit.is_none() { "unit" } else { "count" };
-        if !table.contains_key(absent) {
-            problems.push(LintProblem::new(RuleCode::RepeatCountOutOfRange).about(absent));
-        }
-        return problems;
-    };
-
-    // A count outside the machine word is out of range like any other, and saying
-    // so beats a silent conversion that turns a negative number into a large
-    // positive one - the kind of quiet wrap this catalogue exists to find.
-    let Ok(count) = u32::try_from(count) else {
-        problems.push(LintProblem::new(RuleCode::RepeatCountOutOfRange).about(count.to_string()));
-        return problems;
-    };
-
-    let body = ValueBody::Repeat {
-        unit: LiteralText::new(unit),
-        count,
-    };
-    if let Err(problem) = body.check_size() {
-        // The code travels from where the fault was found rather than being
-        // guessed back here, so E024 and E026 keep meaning what they mean.
-        problems.push(LintProblem::from(problem).about(count.to_string()));
-    }
-
-    if let Some(item) = table.get("unit") {
-        problems.extend(written_form::check(raw_slice(text, item), unit));
     }
     problems
 }
@@ -2240,6 +2113,159 @@ mod tests {
         let found = one_of(&text, RuleCode::FieldOfUnusableType);
         assert_eq!(found.subject.as_deref(), Some("updated"));
         assert_eq!(found.owner.as_deref(), Some("pack"));
+    }
+
+    /// The spring clock change, as `time-zones` writes it.
+    const SPRING: &str = "type    = \"next-date\"\nmonth   = 3\nweek    = \"last\"\nweekday = \"sunday\"\ntime    = \"02:30\"\n";
+
+    /// SPRING with the line for `field` replaced by `line`, or removed when
+    /// `line` is empty - and a refusal to hand back a text it did not change.
+    fn spring_with(field: &str, line: &str) -> String {
+        let changed: String = SPRING
+            .lines()
+            .map(|written| {
+                if written.split_whitespace().next() == Some(field) {
+                    line.to_owned()
+                } else {
+                    format!("{written}\n")
+                }
+            })
+            .collect();
+        assert_ne!(changed, SPRING, "SPRING has no line for {field}");
+        with_value(&changed)
+    }
+
+    #[test]
+    fn a_complete_next_date_rule_is_accepted() {
+        let text = with_value(SPRING);
+        assert_eq!(
+            codes(&text),
+            Vec::<&str>::new(),
+            "{:?}",
+            check(&text, PACK_ID)
+        );
+        // The time is optional: without it the value is a date alone.
+        let dated = spring_with("time", "");
+        assert_eq!(
+            codes(&dated),
+            Vec::<&str>::new(),
+            "{:?}",
+            check(&dated, PACK_ID)
+        );
+    }
+
+    #[test]
+    fn a_next_date_rule_missing_a_part_names_the_part_and_nothing_else() {
+        for missing in ["month", "week", "weekday"] {
+            let text = spring_with(missing, "");
+            assert_eq!(
+                codes(&text),
+                vec!["E018"],
+                "{missing}: {:?}",
+                check(&text, PACK_ID)
+            );
+            let found = one_of(&text, RuleCode::NextDateRuleIncomplete);
+            assert_eq!(found.subject.as_deref(), Some(missing));
+            assert_eq!(found.owner.as_deref(), Some("trailing-space"));
+        }
+    }
+
+    #[test]
+    fn a_next_date_part_outside_its_vocabulary_is_shown_as_written() {
+        // Escaped as the format escapes a value, so that an invisible character
+        // in a weekday is something the reader can see.
+        let zero_width = format!("{}u200B", '\\');
+        for (field, line, subject) in [
+            ("month", "month = 13\n".to_owned(), "month = 13".to_owned()),
+            ("month", "month = 0\n".to_owned(), "month = 0".to_owned()),
+            (
+                "week",
+                "week = \"fifth\"\n".to_owned(),
+                "week = \"fifth\"".to_owned(),
+            ),
+            (
+                "weekday",
+                "weekday = \"Sunday\"\n".to_owned(),
+                "weekday = \"Sunday\"".to_owned(),
+            ),
+            (
+                "weekday",
+                format!("weekday = \"sunday{zero_width}\"\n"),
+                format!("weekday = \"sunday{zero_width}\""),
+            ),
+            (
+                "time",
+                "time = \"2:30\"\n".to_owned(),
+                "time = \"2:30\"".to_owned(),
+            ),
+            (
+                "time",
+                "time = \"24:00\"\n".to_owned(),
+                "time = \"24:00\"".to_owned(),
+            ),
+        ] {
+            let text = spring_with(field, &line);
+            assert_eq!(
+                codes(&text),
+                vec!["E018"],
+                "{line}: {:?}",
+                check(&text, PACK_ID)
+            );
+            let found = one_of(&text, RuleCode::NextDateRuleIncomplete);
+            assert_eq!(found.subject.as_deref(), Some(subject.as_str()));
+            assert!(
+                found.line.is_some(),
+                "{line}: the problem points at the field"
+            );
+        }
+    }
+
+    #[test]
+    fn a_next_date_part_of_the_wrong_kind_is_one_finding_and_not_two() {
+        // `month = "3"` is E009's, the way a count written as text is.
+        let text = spring_with("month", "month = \"3\"\n");
+        let reported = codes(&text);
+        assert!(reported.contains(&"E009"), "{reported:?}");
+        assert!(!reported.contains(&"E018"), "{reported:?}");
+    }
+
+    #[test]
+    fn a_next_date_rule_carrying_text_as_well_has_two_answers() {
+        let text = with_value(&format!("{SPRING}value   = \"2027-03-28 02:30\"\n"));
+        assert_eq!(codes(&text), vec!["E025"], "{:?}", check(&text, PACK_ID));
+    }
+
+    #[test]
+    fn two_next_date_values_naming_the_same_day_are_one_value() {
+        let both = with_second_value(SPRING).replacen(GOOD, &with_value(SPRING), 1);
+        let found = one_of(&both, RuleCode::DuplicateValueBody);
+        assert_eq!(found.owner.as_deref(), Some("second"));
+
+        // A different hour on the same day is a different value.
+        let other_hour = SPRING.replace("02:30", "02:45");
+        let apart = with_second_value(&other_hour).replacen(GOOD, &with_value(SPRING), 1);
+        assert!(
+            !codes(&apart).contains(&"E016"),
+            "{:?}",
+            check(&apart, PACK_ID)
+        );
+    }
+
+    #[test]
+    fn a_translation_carrying_a_part_of_a_date_rule_is_refused() {
+        // `D133` widened the list of fields that decide what is inserted: a
+        // translation moving a weekday would move the date a tester types.
+        for line in [
+            "month = 4\n",
+            "week = \"first\"\n",
+            "weekday = \"monday\"\n",
+            "time = \"03:30\"\n",
+        ] {
+            let text = A_TRANSLATION.to_owned() + line;
+            let found = one_of(&text, RuleCode::TranslationCarriesValue);
+            let field = line.split(' ').next().expect("a key");
+            assert_eq!(found.subject.as_deref(), Some(field));
+        }
     }
 
     #[test]

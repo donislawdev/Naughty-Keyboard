@@ -39,11 +39,12 @@ use crate::ports::{
     Availability, DeliveryError, KeystrokeError, KeystrokeSender, PackFormat, PackSource, Progress,
     SourceError, StopReason, ValueDelivery,
 };
+use nkb_core::calendar::Day;
 use nkb_core::keys::line_clearing_recipe;
 use nkb_core::metrics::TextMetrics;
 use nkb_core::pack::{Pack, PackValue};
 use nkb_core::preview::{ShapeFact, ValuePreview, preview_of, shape};
-use nkb_core::value::ValueProblem;
+use nkb_core::value::{ValueBody, ValueProblem};
 
 /// Whether the field is cleared before the value goes in. Defined beside the
 /// ports since it became a setting the tester keeps (`D101`), and named here
@@ -89,6 +90,24 @@ pub struct SendRequest<'a> {
     /// Counted from one, in the pack's own order - see [`send_value`].
     pub position: usize,
     pub clearing: Clearing,
+    /// Today in UTC, from the clock port: the day a `next-date` value is
+    /// worked out for.
+    pub on: Day,
+}
+
+/// One value of a pack held in memory, chosen to go out on a given day.
+///
+/// One argument rather than four, because they travel together into every send
+/// and a send already takes as many as the ceiling allows (`D113`).
+#[derive(Debug, Clone, Copy)]
+pub struct Chosen<'a> {
+    pub pack: &'a Pack,
+    pub value: &'a PackValue,
+    /// Warnings the pack carried. It loaded anyway - warnings never block - but
+    /// a send should not hide them.
+    pub warnings: usize,
+    /// Today in UTC: the day a `next-date` value is worked out for.
+    pub on: Day,
 }
 
 /// What a person is told about the value a send was about, whether all of it
@@ -123,14 +142,16 @@ impl ValueFacts {
     /// The facts about `value`, worked out the one way the palette and the
     /// project website both show them.
     ///
-    /// `literal` is the value built from its body and `metrics` its size
-    /// measured from the recipe, both already in the caller's hands - a send
-    /// has them before it touches the field, and building them twice would
-    /// walk a value of a million characters twice.
+    /// `body` is what the value inserts on the day it went out, `literal` the
+    /// text built from it and `metrics` its size measured from the recipe, all
+    /// already in the caller's hands - a send has them before it touches the
+    /// field, and building them twice would walk a value of a million
+    /// characters twice.
     #[must_use]
     pub fn of(
         pack: &Pack,
         value: &PackValue,
+        body: &ValueBody,
         literal: &str,
         metrics: TextMetrics,
         warnings: usize,
@@ -150,7 +171,7 @@ impl ValueFacts {
             // (never the escaped form, which `nkb emit` already answers for).
             // From the recipe also means a million-character value is not
             // walked end to end to show a hundred characters of it.
-            preview: preview_of(&value.body),
+            preview: preview_of(body),
             shape: shape(literal),
         }
     }
@@ -299,15 +320,13 @@ fn deliver_one(
         };
     };
 
-    deliver_value(
+    let chosen = Chosen {
         pack,
         value,
-        delivery,
-        keys,
-        request.clearing,
         warnings,
-        progress,
-    )
+        on: request.on,
+    };
+    deliver_value(chosen, delivery, keys, request.clearing, progress)
 }
 
 /// A value on its way into the field, said while it goes (`OBS-160`): which
@@ -339,26 +358,33 @@ pub struct Sending<'a> {
 /// [`SendOutcome`] carries both the delivery result and the numbers the palette
 /// shows, so one call answers both questions.
 pub fn deliver_value(
-    pack: &Pack,
-    value: &PackValue,
+    chosen: Chosen<'_>,
     delivery: &dyn ValueDelivery,
     keys: &dyn KeystrokeSender,
     clearing: Clearing,
-    warnings: usize,
     progress: &mut dyn FnMut(Sending<'_>),
 ) -> SendOutcome {
+    let Chosen {
+        pack,
+        value,
+        warnings,
+        on,
+    } = chosen;
+    // The body for today: a `next-date` value becomes a date here and nowhere
+    // earlier, so a palette left open for a week still types the right one.
+    let body = value.definition.on(on);
     // Measured from the RECIPE, before anything is built - architektura.md 6.1.
     // A value declaring two billion characters is refused here without a single
     // byte being allocated for it - and, from today, without a single key
     // having been pressed in somebody else's field.
-    let Some(metrics) = value.body.metrics() else {
+    let Some(metrics) = body.metrics() else {
         return SendOutcome::ValueTooLarge {
             id: value.id.clone(),
             code: ValueProblem::RepeatProductUnmeasurable.code(),
         };
     };
 
-    let literal = match value.body.materialise() {
+    let literal = match body.materialise() {
         Ok(text) => text,
         Err(problem) => {
             return SendOutcome::ValueTooLarge {
@@ -390,7 +416,7 @@ pub fn deliver_value(
     let expected_units = literal.encode_utf16().count();
     // Built only when something reached the field, so a refusal costs no
     // grapheme walk over a value that may be a million characters long.
-    let facts = || ValueFacts::of(pack, value, &literal, metrics, warnings);
+    let facts = || ValueFacts::of(pack, value, &body, &literal, metrics, warnings);
 
     // Counted at the first report, if there is one, and kept for the outcome.
     let mut counted: Option<ValueFacts> = None;
@@ -527,7 +553,7 @@ mod tests {
         PackValue {
             id: id.to_owned(),
             name: format!("Value {id}"),
-            body: ValueBody::Literal(LiteralText::new(text.to_owned())),
+            definition: ValueBody::Literal(LiteralText::new(text.to_owned())).into(),
             breaks: Some("It breaks something worth a whole sentence about it.".to_owned()),
             expect: None,
             risk: None,
@@ -610,6 +636,7 @@ mod tests {
             pack_id: "sample",
             position,
             clearing,
+            on: crate::test_support::WRITTEN_ON,
         }
     }
 
@@ -825,10 +852,11 @@ mod tests {
         let bomb = Scripted {
             errors: 0,
             pack: Some(a_pack(vec![PackValue {
-                body: ValueBody::Repeat {
+                definition: ValueBody::Repeat {
                     unit: LiteralText::new("ab".to_owned()),
                     count: 2_000_000,
-                },
+                }
+                .into(),
                 ..value("bomb", "")
             }])),
         };
@@ -935,10 +963,11 @@ mod tests {
         let generated = Scripted {
             errors: 0,
             pack: Some(a_pack(vec![PackValue {
-                body: ValueBody::Repeat {
+                definition: ValueBody::Repeat {
                     unit: LiteralText::new("a".to_owned()),
                     count: 255,
-                },
+                }
+                .into(),
                 ..value("len-255", "")
             }])),
         };

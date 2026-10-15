@@ -29,10 +29,15 @@ use nkb_app::ports::{
     Availability, Delivered, DeliveryError, KeystrokeError, KeystrokeSender, PackCatalogue,
     PackFormat, PackSource, Progress, TargetRef, ValueDelivery,
 };
-use nkb_app::{Clearing, SendOutcome, ValueFacts, deliver_value};
+use nkb_app::{Chosen, Clearing, SendOutcome, ValueFacts, deliver_value};
+use nkb_core::calendar::Day;
 use nkb_core::keys::KeyChord;
 use nkb_core::pack::Pack;
 use nkb_core::report::{Arrival, ReportBlock};
+
+/// The day every value goes out on: 2026-10-15. A `next-date` value is a date
+/// of that day's choosing, and the block and the palette must agree on it.
+const ON: Day = Day::from_days_since_1970(20_741);
 
 /// A field that takes everything, so `deliver_value` reports what it measured.
 struct TakesEverything;
@@ -115,7 +120,7 @@ fn every_shipped_value_has_a_block_that_agrees_with_the_palette() {
     for pack in shipped_packs() {
         let mut rendered = Vec::new();
         for value in &pack.values {
-            let block = ReportBlock::describe(&pack, value, Arrival::Whole)
+            let block = ReportBlock::describe(&pack, value, ON, Arrival::Whole)
                 .unwrap_or_else(|e| panic!("{}/{}: {e:?}", pack.id, value.id));
 
             let SendOutcome::Sent {
@@ -130,12 +135,15 @@ fn every_shipped_value_has_a_block_that_agrees_with_the_palette() {
                     },
                 ..
             } = deliver_value(
-                &pack,
-                value,
+                Chosen {
+                    pack: &pack,
+                    value,
+                    warnings: 0,
+                    on: ON,
+                },
                 &TakesEverything,
                 &NoKeys,
                 Clearing::Keep,
-                0,
                 &mut |_| {},
             )
             else {

@@ -70,7 +70,8 @@ use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 use nkb_adapters::i18n::{self, Environment, PacksLabel, Startup};
-use nkb_adapters::{BuiltInCatalogue, LentFocus, TomlPackFormat};
+use nkb_adapters::{BuiltInCatalogue, LentFocus, SystemClock, TomlPackFormat};
+use nkb_app::Clock;
 use nkb_app::{Ended, list_packs};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
@@ -272,6 +273,7 @@ impl Packs {
             let now = in_use_now(&self.in_use);
             let picker = PackPicker::new(
                 list_packs(&BuiltInCatalogue::new(), &TomlPackFormat),
+                SystemClock.today(),
                 now.pack.as_deref(),
                 now.next.as_deref(),
             )

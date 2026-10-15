@@ -32,6 +32,7 @@
 //! later disagree, and a ticket quoting a size the palette never showed is a
 //! ticket nobody trusts.
 
+use crate::calendar::Day;
 use crate::normalization;
 use crate::pack::{Pack, PackValue};
 use crate::preview::{ShapeFact, shape};
@@ -152,7 +153,12 @@ pub enum Arrival {
 }
 
 impl ReportBlock {
-    /// Describes `value` from `pack` as it went out.
+    /// Describes `value` from `pack` as it went out on `sent_on`.
+    ///
+    /// The day is the one the value was inserted on, not the day the block is
+    /// asked for: a value of type `next-date` names a different date once the
+    /// rule has moved on, and a block written after midnight must still quote
+    /// what was typed before it (`D133`).
     ///
     /// Materialises the value to count its graphemes, because grapheme clusters
     /// change at the joins of a repeated unit and cannot be counted from the
@@ -168,19 +174,20 @@ impl ReportBlock {
     pub fn describe(
         pack: &Pack,
         value: &PackValue,
+        sent_on: Day,
         arrival: Arrival,
     ) -> Result<Self, ValueProblem> {
-        let metrics = value
-            .body
+        let body = value.definition.on(sent_on);
+        let metrics = body
             .metrics()
             .ok_or(ValueProblem::RepeatProductUnmeasurable)?;
-        let literal = value.body.materialise()?;
-        let typed = typed_of(&value.body);
+        let literal = body.materialise()?;
+        let typed = typed_of(&body);
         Ok(Self {
             reference: format!("{}/{}", pack.id, value.id),
             pack_version: pack.version.clone(),
             name: value.name.clone(),
-            spelled_out: spelled_out(&value.body, &typed),
+            spelled_out: spelled_out(&body, &typed),
             typed,
             shape: shape(&literal),
             graphemes: crate::graphemes::count(&literal),
@@ -242,11 +249,15 @@ mod tests {
     use crate::pack::Risk;
     use crate::text::LiteralText;
 
+    /// The day every value in these tests went out on. Nothing here is a date,
+    /// so any day would do.
+    const SENT: Day = Day::UNIX_EPOCH;
+
     fn value(id: &str, body: ValueBody) -> PackValue {
         PackValue {
             id: id.to_owned(),
             name: "A value".to_owned(),
-            body,
+            definition: body.into(),
             breaks: Some("Counters disagree.".to_owned()),
             expect: None,
             risk: None,
@@ -291,6 +302,7 @@ mod tests {
                 "zero-width-space-x3",
                 literal("ab\u{200B}\u{200B}\u{200B}cd"),
             ),
+            SENT,
             Arrival::Whole,
         )
         .expect("a small literal describes");
@@ -321,6 +333,7 @@ mod tests {
         let block = ReportBlock::describe(
             &pack(),
             &value("combining-acute", literal("e\u{0301}")),
+            SENT,
             Arrival::Whole,
         )
         .expect("a small literal describes");
@@ -341,8 +354,9 @@ mod tests {
             crate::normalization::may_change(text),
             "the value itself is one NFKC changes"
         );
-        let block = ReportBlock::describe(&pack(), &value("nbsp", literal(text)), Arrival::Whole)
-            .expect("a small literal describes");
+        let block =
+            ReportBlock::describe(&pack(), &value("nbsp", literal(text)), SENT, Arrival::Whole)
+                .expect("a small literal describes");
 
         assert_eq!(block.spelled_out, None);
     }
@@ -353,7 +367,7 @@ mod tests {
             unit: LiteralText::new("e\u{0301}"),
             count: 3,
         };
-        let block = ReportBlock::describe(&pack(), &value("accents", body), Arrival::Whole)
+        let block = ReportBlock::describe(&pack(), &value("accents", body), SENT, Arrival::Whole)
             .expect("three units describe");
 
         assert_eq!(
@@ -371,7 +385,7 @@ mod tests {
             unit: LiteralText::new("\u{200B}"),
             count: 1000,
         };
-        let block = ReportBlock::describe(&pack(), &value("zw-1000", body), Arrival::Whole)
+        let block = ReportBlock::describe(&pack(), &value("zw-1000", body), SENT, Arrival::Whole)
             .expect("a thousand units describe");
 
         assert_eq!(
@@ -394,7 +408,7 @@ mod tests {
             unit: LiteralText::new("\u{1F1F5}"),
             count: 3,
         };
-        let block = ReportBlock::describe(&pack(), &value("flags", body), Arrival::Whole)
+        let block = ReportBlock::describe(&pack(), &value("flags", body), SENT, Arrival::Whole)
             .expect("three indicators describe");
 
         assert_eq!(block.code_points, 3);
@@ -403,8 +417,9 @@ mod tests {
 
     #[test]
     fn an_empty_value_is_typed_as_empty_rather_than_refused() {
-        let block = ReportBlock::describe(&pack(), &value("empty", literal("")), Arrival::Whole)
-            .expect("an empty value is a legal test value");
+        let block =
+            ReportBlock::describe(&pack(), &value("empty", literal("")), SENT, Arrival::Whole)
+                .expect("an empty value is a legal test value");
 
         assert_eq!(block.typed, Typed::Written(LiteralText::new("").escape()));
         assert_eq!((block.graphemes, block.code_points, block.bytes), (0, 0, 0));
@@ -417,7 +432,7 @@ mod tests {
             units_sent: 12,
             units_expected: 40,
         };
-        let block = ReportBlock::describe(&pack(), &value("v", literal("abc")), arrival)
+        let block = ReportBlock::describe(&pack(), &value("v", literal("abc")), SENT, arrival)
             .expect("a literal describes");
 
         assert_eq!(block.arrival, arrival);
@@ -431,7 +446,7 @@ mod tests {
         };
 
         assert!(
-            ReportBlock::describe(&pack(), &value("huge", body), Arrival::Whole).is_err(),
+            ReportBlock::describe(&pack(), &value("huge", body), SENT, Arrival::Whole).is_err(),
             "two million code points is over the ceiling and must not be allocated"
         );
     }

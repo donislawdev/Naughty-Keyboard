@@ -29,6 +29,6 @@ cognitive-complexity-threshold = 76
 excessive-nesting-threshold = 10
 
 # Clippy's own default, written down so that it is a ceiling and not an
-# accident. Three functions of the product take seven: `live::choose_value`,
-# `send_value::deliver_value` and `keep_settings::change_shortcut`.
+# accident. Two functions of the product take seven: `live::choose_value` and
+# `keep_settings::change_shortcut`.
 too-many-arguments-threshold = 7

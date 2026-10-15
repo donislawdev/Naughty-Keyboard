@@ -293,7 +293,7 @@ mod tests {
             values: vec![nkb_core::pack::PackValue {
                 id: "one".to_owned(),
                 name: "One".to_owned(),
-                body: ValueBody::Literal(LiteralText::new("x")),
+                definition: ValueBody::Literal(LiteralText::new("x")).into(),
                 breaks: None,
                 expect: None,
                 risk: None,

@@ -55,13 +55,17 @@ const PACK_ORDER: [&str; 12] = [
 /// missing there. It goes here beside `fields` and `risk` because those three
 /// are exactly the fields a value inherits from its pack, and because the
 /// `[pack]` table lists it in the same block. Recorded rather than slipped in.
-const VALUE_ORDER: [&str; 16] = [
+const VALUE_ORDER: [&str; 20] = [
     "id",
     "name",
     "type",
     "value",
     "unit",
     "count",
+    "month",
+    "week",
+    "weekday",
+    "time",
     "breaks",
     "expect",
     "fields",
@@ -85,7 +89,12 @@ const PAIR_ORDER: [&str; 8] = [
 /// a disk. A formatter is the one piece of this tool that rewrites a curated
 /// file, and the pack it would damage first is the one made of characters nobody
 /// can see - so the check is a refusal to write rather than a note in a log.
-const INSERTION_FIELDS: [&str; 5] = ["id", "value", "unit", "count", "type"];
+///
+/// The four parts of a `next-date` rule are here for the same reason as the
+/// repeat's two: they decide the date the tool types (`D133`).
+const INSERTION_FIELDS: [&str; 9] = [
+    "id", "value", "unit", "count", "type", "month", "week", "weekday", "time",
+];
 
 /// The canonical text of a pack file, or `None` when it is not TOML at all.
 ///
@@ -508,6 +517,33 @@ name = \"Jeden\"
         let name = out.find("name").expect("name survives");
         let breaks = out.find("breaks").expect("breaks survives");
         assert!(name < breaks, "{out}");
+    }
+
+    #[test]
+    fn every_part_of_a_date_rule_is_part_of_what_gets_inserted() {
+        // `D133`: the four fields of a `next-date` value decide the date the tool
+        // types, so a formatter that changed one of them must be refused.
+        let before = "format = 1
+
+[[values]]
+id = \"d\"
+type = \"next-date\"
+month = 3
+                      week = \"last\"
+weekday = \"sunday\"
+time = \"02:30\"
+";
+        assert!(same_insertions(before, before));
+        for (from, to) in [
+            ("month = 3", "month = 4"),
+            ("week = \"last\"", "week = \"first\""),
+            ("weekday = \"sunday\"", "weekday = \"monday\""),
+            ("time = \"02:30\"", "time = \"03:30\""),
+        ] {
+            let changed = before.replace(from, to);
+            assert_ne!(changed, before, "{from} is not in the sample");
+            assert!(!same_insertions(before, &changed), "{to} went unnoticed");
+        }
     }
 
     #[test]

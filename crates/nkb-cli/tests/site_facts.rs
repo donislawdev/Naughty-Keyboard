@@ -32,8 +32,10 @@
 #![allow(clippy::panic, clippy::expect_used)]
 
 use nkb_adapters::{BuiltInCatalogue, TomlPackFormat};
-use nkb_app::{EmitOutcome, PackEntry, ValueFacts, emit_values, list_packs};
+use nkb_app::{Clock, EmitOutcome, PackEntry, ValueFacts, emit_values, list_packs};
+use nkb_core::calendar::Day;
 use nkb_core::preview::{ShapeFact, ValuePreview};
+use nkb_core::value::Definition;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -497,6 +499,38 @@ fn preview_json(preview: &ValuePreview) -> (Json, Json) {
     }
 }
 
+/// The day the facts are worked out on: 2026-10-15.
+///
+/// Fixed, so that the file this compares against does not change at midnight. A
+/// `next-date` value is the one thing in the catalogue that depends on the day,
+/// and the site shows its RULE rather than a date ([`next_date_json`]) - the
+/// date would be stale the day after the site was built. What the day still
+/// decides, the counts and the shape, is the same on every day.
+#[derive(Debug)]
+struct OnTheDayTheTypeWasWritten;
+
+impl Clock for OnTheDayTheTypeWasWritten {
+    fn today(&self) -> Day {
+        Day::from_days_since_1970(20_741)
+    }
+}
+
+/// The rule of a `next-date` value, in the format's own words, or null.
+fn next_date_json(definition: &Definition) -> Json {
+    let Definition::NextDate(rule) = definition else {
+        return Json::Null;
+    };
+    Json::Object(vec![
+        ("month", Json::Number(u64::from(rule.month()))),
+        ("week", text(rule.week().name())),
+        ("weekday", text(rule.weekday().name())),
+        (
+            "time",
+            rule.time().map_or(Json::Null, |time| text(&time.written())),
+        ),
+    ])
+}
+
 fn catalogue_facts() -> Json {
     let catalogue = BuiltInCatalogue::new();
     let listing = list_packs(&catalogue, &TomlPackFormat).expect("the built-in catalogue lists");
@@ -506,7 +540,9 @@ fn catalogue_facts() -> Json {
         let PackEntry::Loaded { pack, warnings } = entry else {
             panic!("a built-in pack did not load, and shipped_packs.rs says why");
         };
-        let EmitOutcome::Emitted(emission) = emit_values(&catalogue, &TomlPackFormat, &pack.id)
+        let day = OnTheDayTheTypeWasWritten;
+        let EmitOutcome::Emitted(emission) =
+            emit_values(&catalogue, &TomlPackFormat, &day, &pack.id)
         else {
             panic!("{} does not emit", pack.id);
         };
@@ -519,16 +555,17 @@ fn catalogue_facts() -> Json {
         let mut values = Vec::new();
         for (value, emitted) in pack.values.iter().zip(&emission.values) {
             assert_eq!(value.id, emitted.id, "{} emits in another order", pack.id);
-            let metrics = value
-                .body
-                .metrics()
-                .expect("a shipped value can be measured");
-            let literal = value
-                .body
-                .materialise()
-                .expect("a shipped value can be built");
-            let facts = ValueFacts::of(&pack, value, &literal, metrics, warnings);
-            let (preview, recipe) = preview_json(&facts.preview);
+            let body = value.definition.on(day.today());
+            let metrics = body.metrics().expect("a shipped value can be measured");
+            let literal = body.materialise().expect("a shipped value can be built");
+            let facts = ValueFacts::of(&pack, value, &body, &literal, metrics, warnings);
+            let next_date = next_date_json(&value.definition);
+            let (preview, recipe) = match next_date {
+                // The rule stands in for the preview, as the recipe does for a
+                // repeat: a date shown here would be the build day's.
+                Json::Null => preview_json(&facts.preview),
+                _ => (Json::Null, Json::Null),
+            };
             values.push(Json::Object(vec![
                 ("id", text(&emitted.id)),
                 ("ref", text(&emitted.reference)),
@@ -551,6 +588,7 @@ fn catalogue_facts() -> Json {
                 ("generated", Json::Bool(emitted.generated)),
                 ("preview", preview),
                 ("recipe", recipe),
+                ("next_date", next_date),
                 (
                     "shape",
                     Json::List(facts.shape.iter().map(shape_json).collect()),

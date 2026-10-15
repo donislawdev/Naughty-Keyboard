@@ -1,0 +1,29 @@
+# expect: E018
+#
+# A date worked out on the day of insertion needs a month, a week and a weekday.
+# Without the weekday the rule names no day at all, and a validator that let it
+# through would ship a value with nothing to insert.
+
+format = 1
+
+[pack]
+id          = "next-date-without-weekday"
+name        = "Date rule missing its weekday"
+description = "Declares a next-date value with no weekday."
+version     = "1.0"
+updated     = 2026-10-15
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["format-suite"]
+
+[[values]]
+id     = "half-a-rule"
+name   = "Test value"
+type   = "next-date"
+month  = 3
+week   = "last"
+time   = "02:30"
+breaks = "Nothing on its own - this value exists so the file is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"

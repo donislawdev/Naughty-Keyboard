@@ -79,6 +79,7 @@ use std::collections::BTreeSet;
 use nkb_adapters::i18n::{self, MatchPlace, PacksLabel};
 use nkb_app::browse_packs::{Listing, PackEntry};
 use nkb_app::ports::SourceError;
+use nkb_core::calendar::Day;
 use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::identity::ValueKey;
 use nkb_core::pack::{Pack, PackValue, Risk};
@@ -335,12 +336,17 @@ impl PackPicker {
     #[must_use]
     pub fn new(
         listing: Result<Listing, SourceError>,
+        today: Day,
         in_use: Option<&str>,
         next: Option<&str>,
     ) -> Self {
         let (packs, empty, notes) = match listing {
             Ok(listing) => {
-                let packs: Vec<PackChoice> = listing.entries.iter().map(choice_of).collect();
+                let packs: Vec<PackChoice> = listing
+                    .entries
+                    .iter()
+                    .map(|entry| choice_of(entry, today))
+                    .collect();
                 let empty = packs.is_empty().then_some(Empty::NoPacks);
                 (packs, empty, i18n::not_read(&listing.coverage))
             }
@@ -888,7 +894,9 @@ fn value_badge(choice: &ValueChoice, is_next: bool) -> Option<Badge> {
     }
 }
 
-fn choice_of(entry: &PackEntry) -> PackChoice {
+/// A row of the list. `today` is the day a `next-date` value names in its
+/// preview - the date the window shows is the date a press would type.
+fn choice_of(entry: &PackEntry, today: Day) -> PackChoice {
     match entry {
         PackEntry::Loaded { pack, .. } => PackChoice {
             id: pack.id.clone(),
@@ -907,7 +915,7 @@ fn choice_of(entry: &PackEntry) -> PackChoice {
                 .map(|value| ValueChoice {
                     id: value.id.clone(),
                     name: value.name.clone(),
-                    preview: preview_line(&preview_of(&value.body)).0,
+                    preview: preview_line(&preview_of(&value.definition.on(today))).0,
                     offensive: pack.risk_of(value) == Risk::Offensive,
                     haystack: value_haystack_of(value),
                 })
@@ -988,6 +996,9 @@ fn value_haystack_of(value: &PackValue) -> Haystack {
 mod tests {
     use super::*;
     use nkb_adapters::{BuiltInCatalogue, TomlPackFormat};
+
+    /// 2026-10-15, so that a `next-date` value previews the same in every run.
+    const TODAY: Day = Day::from_days_since_1970(20_741);
     use nkb_app::browse_packs::list_packs;
     use nkb_app::ports::{CatalogueCoverage, CatalogueSource};
 
@@ -1013,7 +1024,7 @@ mod tests {
     }
 
     fn shipped(in_use: Option<&str>) -> PackPicker {
-        PackPicker::new(Ok(listing()), in_use, None)
+        PackPicker::new(Ok(listing()), TODAY, in_use, None)
     }
 
     /// The id of value `index` (from 1) of a shipped pack.
@@ -1057,6 +1068,7 @@ mod tests {
                     skipped: Vec::new(),
                 },
             }),
+            TODAY,
             None,
             None,
         )
@@ -1079,7 +1091,7 @@ mod tests {
     #[test]
     fn it_opens_on_the_pack_in_use_with_every_pack_folded() {
         let next = value_id("whitespace", 3);
-        let picker = PackPicker::new(Ok(listing()), Some("whitespace"), Some(&next));
+        let picker = PackPicker::new(Ok(listing()), TODAY, Some("whitespace"), Some(&next));
         let rows = picker.rows();
         assert_eq!(rows[0].kind, RowKind::Heading);
         assert_eq!(rows[0].title, "Packs");
@@ -1219,7 +1231,7 @@ mod tests {
                 _ => None,
             })
             .flatten()
-            .map(|value| preview_line(&preview_of(&value.body)).0)
+            .map(|value| preview_line(&preview_of(&value.definition.on(TODAY))).0)
             .collect();
         assert_eq!(shown.len(), 207);
         assert_eq!(shown, expected);
@@ -1231,7 +1243,7 @@ mod tests {
     #[test]
     fn the_pack_in_use_opens_with_a_restart_row_that_makes_value_one_next() {
         let next = value_id("whitespace", 3);
-        let mut picker = PackPicker::new(Ok(listing()), Some("whitespace"), Some(&next))
+        let mut picker = PackPicker::new(Ok(listing()), TODAY, Some("whitespace"), Some(&next))
             .with_restart_key(Some(String::from("Alt+Shift+0")));
         let at = picker.selected().expect("the pack in use is selected");
         picker.unfold();
@@ -1396,6 +1408,7 @@ mod tests {
                     skipped: Vec::new(),
                 },
             }),
+            TODAY,
             None,
             None,
         )
@@ -1492,7 +1505,7 @@ mod tests {
     #[test]
     fn the_values_chosen_last_stand_in_a_closed_fold_on_top() {
         let next = value_id("whitespace", 3);
-        let mut picker = PackPicker::new(Ok(listing()), Some("whitespace"), Some(&next))
+        let mut picker = PackPicker::new(Ok(listing()), TODAY, Some("whitespace"), Some(&next))
             .with_recent(&[
                 recent_key("locale-pl", "pesel-valid"),
                 recent_key("whitespace", "trailing-space"),
@@ -1546,7 +1559,7 @@ mod tests {
         // A recent value that is the next one wears the pill, as it does
         // under its own pack.
         let first = value_id("whitespace", 1);
-        let mut on_first = PackPicker::new(Ok(listing()), Some("whitespace"), Some(&first))
+        let mut on_first = PackPicker::new(Ok(listing()), TODAY, Some("whitespace"), Some(&first))
             .with_recent(&[recent_key("whitespace", &first)]);
         on_first.click(0);
         assert_eq!(
@@ -1776,7 +1789,7 @@ mod tests {
         };
         let pack = String::from("whitespace");
         let value = value_id("whitespace", 2);
-        let mut picker = PackPicker::new(Ok(offensive_whitespace()), Some(&pack), None);
+        let mut picker = PackPicker::new(Ok(offensive_whitespace()), TODAY, Some(&pack), None);
         picker.unfold();
         let marked = of_kind(&picker, RowKind::Value)
             .into_iter()
@@ -1786,7 +1799,8 @@ mod tests {
             marked, 12,
             "every value of an offensive pack in use is marked"
         );
-        let mut picker = PackPicker::new(Ok(offensive_whitespace()), Some(&pack), Some(&value));
+        let mut picker =
+            PackPicker::new(Ok(offensive_whitespace()), TODAY, Some(&pack), Some(&value));
         picker.unfold();
         let badge = of_kind(&picker, RowKind::Value)
             .into_iter()
@@ -1801,7 +1815,12 @@ mod tests {
 
     #[test]
     fn a_catalogue_that_cannot_be_read_says_so_and_offers_nothing() {
-        let mut picker = PackPicker::new(Err(SourceError::Unreadable), Some("whitespace"), None);
+        let mut picker = PackPicker::new(
+            Err(SourceError::Unreadable),
+            TODAY,
+            Some("whitespace"),
+            None,
+        );
         assert!(picker.rows().is_empty());
         assert_eq!(picker.selected(), None);
         assert_eq!(picker.chosen(), Chosen::Nothing);
