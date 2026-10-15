@@ -205,6 +205,25 @@ fn kind_sentence(code: RuleCode, owner: &str, subject: &str) -> String {
     }
 }
 
+/// The sentences about a pair (E040, E041, E042 and W043). The subject is the
+/// half, or the relation, the sentence is about.
+fn pair_sentence(code: RuleCode, owner: &str, subject: &str) -> String {
+    match code {
+        RuleCode::PairEndpointUnknown => format!(
+            "pair `{owner}` names `{subject}` as one of its two halves, and no value in this pack has that id. A pair joins values that already exist, so that each half keeps its own description and can be cited on its own."
+        ),
+        RuleCode::UnknownRelation => format!(
+            "pair `{owner}` declares relation `{subject}`. The format has look-alike, range and identity - a relation nothing recognises is a pair the palette cannot present."
+        ),
+        RuleCode::PairEndpointsIdentical => format!(
+            "pair `{owner}` names `{subject}` on both sides. A pair is two values put next to each other, and one value twice compares nothing with nothing."
+        ),
+        _ => format!(
+            "pair `{owner}` has `{subject}` as its half b, and it is not the value written right after its half a. A tester presses once for a and once more for b, and that second press types whatever follows a - move `{subject}` to stand right after it."
+        ),
+    }
+}
+
 /// The sentence for one problem. Says what happened and what to do next - a
 /// message with only the first half is unfinished.
 pub fn sentence(problem: &LintProblem) -> String {
@@ -334,15 +353,10 @@ pub fn sentence(problem: &LintProblem) -> String {
         RuleCode::BreaksProbablyNotEnglish => format!(
             "value `{owner}` has a `breaks` carrying no English word. A source pack is written in English and translated in a file of its own - if this one is English after all, this line is the whole cost."
         ),
-        RuleCode::PairEndpointUnknown => format!(
-            "pair `{owner}` names `{subject}` as one of its two halves, and no value in this pack has that id. A pair joins values that already exist, so that each half keeps its own description and can be cited on its own."
-        ),
-        RuleCode::UnknownRelation => format!(
-            "pair `{owner}` declares relation `{subject}`. The format has look-alike, range and identity - a relation nothing recognises is a pair the palette cannot present."
-        ),
-        RuleCode::PairEndpointsIdentical => format!(
-            "pair `{owner}` names `{subject}` on both sides. A pair is two values put next to each other, and one value twice compares nothing with nothing."
-        ),
+        RuleCode::PairEndpointUnknown
+        | RuleCode::UnknownRelation
+        | RuleCode::PairEndpointsIdentical
+        | RuleCode::PairHalvesNotConsecutive => pair_sentence(problem.code, owner, subject),
         RuleCode::TranslationCarriesValue if owner.is_empty() => format!(
             "this translation carries `{subject}`, which decides what gets inserted into somebody else's application. A translation may change prose and nothing else - that is a safety property of the format, not a matter of tidiness."
         ),
@@ -607,7 +621,7 @@ mod tests {
             .about("unicode-text"),
         );
         let text = summary(&report).join("\n");
-        assert!(text.contains("Checked 40 of 46 rules"), "{text}");
+        assert!(text.contains("Checked 41 of 47 rules"), "{text}");
         assert!(
             text.contains("1 more rule could not be checked for this file"),
             "{text}"

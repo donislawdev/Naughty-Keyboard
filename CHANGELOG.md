@@ -25,9 +25,12 @@ Changes wait under Unreleased until then.
 ### Changed
 
 - The pack format gained the value type `next-date`, its four fields `month`, `week`, `weekday` and
-  `time`, and rule E018, which refuses a rule that names no day. `nkb lint` now checks 40 of its 46
-  rules. A pack written for 0.2.0 reads exactly as before. A translation may not carry the four new
-  fields, because they decide what is typed (E050).
+  `time`, and rule E018, which refuses a rule that names no day. A pack written for 0.2.0 reads
+  exactly as before. A translation may not carry the four new fields, because they decide what is
+  typed (E050).
+- `nkb lint` warns (W043) when the second half of a pair is not the value written right after its
+  first half, because the press after the first half then types another value. It now checks 41 of
+  its 47 rules.
 - `time-zones` 2.0: the hour the spring clock change skips and the hour the autumn one repeats are now
   the next ones rather than dates of 2027, so the pack no longer goes stale.
 
