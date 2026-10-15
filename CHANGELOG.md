@@ -15,9 +15,8 @@ Changes wait under Unreleased until then.
 - A value can name a date worked out on the day it is typed: `type = "next-date"`, with a `month`, a
   `week` from `first` to `fourth` or `last`, a `weekday` and an optional `time`. It inserts the next
   such day, at least two days ahead in UTC so that it lies ahead in every time zone, written like
-  `2027-03-28 02:30`. The palette, `nkb send`, `nkb emit` and the report block all use the date of the
-  day the value goes out - the Copy button beside the value sent last too - and `nkb show` and the
-  website show the rule.
+  `2027-03-28 02:30`. The palette and its Copy buttons, `nkb send`, `nkb emit` and the report block
+  all use the date of the day the value goes out, and `nkb show` and the website show the rule.
 - The palette says which half of a pair the next value is, with `pair 1 of 2` or `pair 2 of 2` beside
   its name. The window that finds a value says the same beside each half, and typing the name of a
   pair finds both of its values. `nkb show` prints what a correct application does with a pair as
