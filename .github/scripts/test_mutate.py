@@ -13,12 +13,17 @@ building anything: the verdicts it reads from the output of cargo and unittest,
 the file it puts back, the entries a change reaches, the parts it cuts and the
 report it makes of them. A runner that can only be seen saying "caught" is one
 nobody has seen work.
+
+The last class reads the workflow that runs it, for the properties that are
+quiet when lost: a part that turns red on its own, a pull request that gates, a
+cache that pushes out the one of main, a result the report never finds.
 """
 
 import contextlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -28,6 +33,7 @@ from argparse import Namespace
 from unittest import mock
 
 import mutate
+from test_release_ritual import block, jobs, read, runs, steps
 
 MUTATE = os.path.abspath(mutate.__file__)
 
@@ -694,6 +700,94 @@ class PlanAndReport(Planted):
     def test_annotation_text_is_escaped(self):
         self.assertEqual(mutate.escape_property("a,b:c%"), "a%2Cb%3Ac%25")
         self.assertEqual(mutate.escape_data("a\nb\r%"), "a%0Ab%0D%25")
+
+
+# ---- the workflow that runs it --------------------------------------------------
+
+
+class TheWorkflow(unittest.TestCase):
+    """mutation.yml read as text, each property from the narrowest piece that
+    carries it, with the readers test_release_ritual.py uses."""
+
+    def setUp(self):
+        self.text = read(os.path.join(mutate.ROOT, ".github", "workflows", "mutation.yml"))
+        self.jobs = jobs(self.text)
+
+    def step(self, job, name):
+        found = [s for s in steps(self.jobs[job]) if "name: %s\n" % name in s]
+        self.assertEqual(len(found), 1, name)
+        return found[0]
+
+    def test_it_runs_on_a_pull_request_every_thursday_and_by_hand_and_never_on_a_push(self):
+        on = block(self.text, "on:", 0)
+        self.assertIn("branches: [main]", block(on, "pull_request:", 2))
+        self.assertIn('- cron: "13 2 * * 4"', block(on, "schedule:", 2))
+        self.assertRegex(on, r"(?m)^  workflow_dispatch:\s*$")
+        self.assertNotRegex(on, r"(?m)^  push:")
+
+    def test_it_only_reads_and_every_checkout_forgets_its_token(self):
+        self.assertEqual(block(self.text, "permissions:", 0).split(), ["contents:", "read"])
+        self.assertEqual(self.text.count("permissions:"), 1)
+        self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+                      block(self.text, "concurrency:", 0))
+        checkouts = [s for job in self.jobs.values() for s in steps(job) if "actions/checkout@" in s]
+        self.assertEqual(len(checkouts), 3)
+        for checkout in checkouts:
+            self.assertIn("persist-credentials: false", checkout)
+        for action in re.findall(r"uses: (\S+)", self.text):
+            with self.subTest(action=action):
+                self.assertRegex(action, r"^(\./\.github/actions/[a-z-]+|[\w.-]+/[\w.-]+@[0-9a-f]{40})$")
+
+    def test_no_expression_is_pasted_into_a_shell(self):
+        for command in runs(self.text):
+            self.assertNotIn("${{", command)
+
+    def test_the_plan_decides_the_parts_and_a_pull_request_is_compared_with_its_base(self):
+        self.assertEqual(mutate.MAX_PARTS, 16)
+        self.assertIn("shard: ${{ fromJSON(needs.plan.outputs.shards) }}", self.jobs["run"])
+        for job, name in (("plan", "Choose the entries"), ("run", "Break the entries of this part")):
+            with self.subTest(job=job):
+                self.assertIn("fetch-depth: 0", self.step(job, "Check out the code"))
+                self.assertIn("BASE: ${{ github.event.pull_request.base.sha }}", self.step(job, name))
+        self.assertIn('--base "$BASE"', self.step("run", "Break the entries of this part"))
+        self.assertIn('--shard "$SHARD/$PARTS"', self.step("run", "Break the entries of this part"))
+
+    def test_the_parts_run_on_windows_without_a_cache_and_never_turn_red_themselves(self):
+        part = self.jobs["run"]
+        self.assertIn("runs-on: windows-latest", part)
+        self.assertIn("fail-fast: false", part)
+        self.assertIn('cache: "false"', self.step("run", "Set up Rust"))
+        self.assertNotIn("CARGO_INCREMENTAL", self.text)
+        breaking = self.step("run", "Break the entries of this part")
+        self.assertIn("continue-on-error: true", breaking)
+        job_limit = int(re.search(r"(?m)^    timeout-minutes: (\d+)", part).group(1))
+        step_limit = int(re.search(r"timeout-minutes: (\d+)", breaking).group(1))
+        self.assertLess(step_limit, job_limit)
+        self.assertLessEqual(job_limit, 360)
+        self.assertIn("if: ${{ always() }}", self.step("run", "Keep the verdicts of this part"))
+
+    def test_what_a_part_keeps_is_what_the_report_reads(self):
+        self.assertIn('--json "result-$SHARD.json"', self.step("run", "Break the entries of this part"))
+        kept = self.step("run", "Keep the verdicts of this part")
+        self.assertIn("name: mutation-result-${{ matrix.shard }}", kept)
+        self.assertIn("path: result-${{ matrix.shard }}.json", kept)
+        collected = self.step("report", "Collect the verdicts of every part")
+        self.assertIn("pattern: mutation-result-*", collected)
+        self.assertIn("path: results", collected)
+        self.assertIn("merge-multiple: true", collected)
+        self.assertIn("--folder results", self.step("report", "Report what the parts found"))
+
+    def test_only_a_run_off_a_pull_request_is_red(self):
+        reporting = self.step("report", "Report what the parts found")
+        self.assertIn("EVENT: ${{ github.event_name }}", reporting)
+        self.assertIn('if [ "$EVENT" != "pull_request" ]\n          then\n            gate=(--gate)',
+                      reporting)
+        self.assertIn("!cancelled()", self.jobs["report"])
+
+    def test_a_change_to_the_runner_or_this_workflow_reaches_every_entry(self):
+        for path in mutate.EVERYTHING:
+            with self.subTest(path=path):
+                self.assertTrue(os.path.isfile(os.path.join(mutate.ROOT, *path.split("/"))))
 
 
 if __name__ == "__main__":
