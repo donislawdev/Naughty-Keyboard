@@ -25,3 +25,15 @@ reason = "ttf-parser is unmaintained, and no vulnerability is reported against i
 [[IgnoredVulns]]
 id = "RUSTSEC-2025-0141"
 reason = "bincode is unmaintained, and no vulnerability is reported against it. It is in Cargo.lock only as an optional dependency of typed-index-collections, which Slint's compiler uses without that feature, so nothing is built with it: cargo tree --invert bincode --target all --edges all prints nothing. That is also why cargo-deny does not report it and deny.toml has no twin."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0370"
+reason = "zvariant is unmaintained, and no vulnerability is reported against it. It is reached only on Linux, through zbus 5, which Slint and crates under it (accessibility, the tray icon) use to talk over the session bus. It moved into zbus 6, released on 2026-10-16, and nothing in Slint's tree uses zbus 6 yet. The twin entry in deny.toml says the same."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0371"
+reason = "zbus_names is unmaintained, and no vulnerability is reported against it. It is reached only on Linux, through zbus 5, which Slint and crates under it (accessibility, the tray icon) use to talk over the session bus. It moved into zbus 6, released on 2026-10-16, and nothing in Slint's tree uses zbus 6 yet. The twin entry in deny.toml says the same."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0372"
+reason = "zvariant_derive is unmaintained, and no vulnerability is reported against it. It is the derive macro of zvariant, runs only while a Linux build compiles and is not part of the program. It moved into zbus 6 with zvariant, released on 2026-10-16, and nothing in Slint's tree uses zbus 6 yet. The twin entry in deny.toml says the same."
