@@ -27,6 +27,8 @@
 //! settings give now. Leaving for another window closes too, without handing
 //! the keyboard back, for the reason `packs` gives (`OBS-147`): a window that
 //! stayed open would keep the palette's shortcuts paused where nobody sees it.
+//! Minimizing it is leaving, made safe the pack window's way (`on_request`,
+//! `OBS-183`).
 
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
@@ -41,6 +43,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::focus::{HANDLE_WAIT, POLL, window_handle};
 use crate::live::{Command, ShortcutsNow, Tell, Told};
+use crate::on_request;
 use crate::packs::{Keyboard, forget_held_modifiers};
 use crate::shortcut_list::{Act, ShortcutList, ShortcutRow, key_of};
 use crate::{HintRow, PickRow, ShortcutsWindow};
@@ -185,9 +188,14 @@ impl Shortcuts {
     }
 
     /// Asks for the window: the worker pauses first, and the window shows on
-    /// its answer. Asked again while open, it asks for the keyboard again.
+    /// its answer. Asked again while open, it brings the window back should it
+    /// stand minimized, and asks for the keyboard again.
     pub fn open(self: &Rc<Self>) {
         if self.is_open() {
+            if let Err(error) = on_request::bring_up(self.window.window()) {
+                self.cannot_show(&error);
+                return;
+            }
             self.window.invoke_focus_keys();
             self.take_keyboard(Instant::now());
             return;
@@ -207,8 +215,12 @@ impl Shortcuts {
     /// Hands the keyboard back, hides the window and asks the worker to take
     /// the shortcuts again. In that order, for the reason `Packs::close`
     /// gives: once hidden, the system has already given the foreground away.
+    ///
+    /// A window already closed is hidden all the same, with nothing handed
+    /// back and nothing resumed - `Packs::close` says why.
     pub fn close(&self) {
         if self.list.borrow().is_none() {
+            let _ = self.window.hide();
             return;
         }
         if let Err(reason) = self.keyboard.give_back(window_handle(self.window.window())) {
@@ -218,21 +230,45 @@ impl Shortcuts {
     }
 
     /// The window stopped being the active one: the tester is elsewhere, and
-    /// the keyboard stays where they put it.
-    fn left(&self) {
-        if self.list.borrow().is_none() {
-            return;
+    /// the keyboard stays where they put it. The shortcuts are taken back at
+    /// once, and the window hides once the event is over, for the reason
+    /// `on_request` gives.
+    fn left(self: &Rc<Self>) {
+        if self.is_open() {
+            self.take_shortcuts_back();
         }
-        self.shut();
+        on_request::hide_once_left(
+            self,
+            |shortcuts| !shortcuts.is_open(),
+            |shortcuts| shortcuts.window.window(),
+        );
     }
 
-    /// Hides the window and takes the shortcuts back - every way out.
+    /// Hides the window and takes the shortcuts back - every way out but
+    /// leaving.
     fn shut(&self) {
         let _ = self.window.hide();
+        self.take_shortcuts_back();
+    }
+
+    /// The window's turn is over: the list goes, and the worker takes the
+    /// shortcuts again.
+    fn take_shortcuts_back(&self) {
         *self.list.borrow_mut() = None;
         if self.commands.send(Command::Resume).is_err() {
             self.worker_gone();
         }
+    }
+
+    /// The window could not be shown: the palette says so, and the shortcuts
+    /// are not left paused behind a window nobody sees.
+    fn cannot_show(&self, error: &slint::PlatformError) {
+        let _ = self.window.hide();
+        (self.say)(i18n::startup_failure(
+            Startup::WindowFailed,
+            &error.to_string(),
+        ));
+        self.take_shortcuts_back();
     }
 
     /// One answer from the worker, on the main thread.
@@ -300,15 +336,8 @@ impl Shortcuts {
         }
         *self.list.borrow_mut() = Some(ShortcutList::new(default_bindings(), now));
         self.show_all();
-        if let Err(error) = self.window.show() {
-            *self.list.borrow_mut() = None;
-            (self.say)(i18n::startup_failure(
-                Startup::WindowFailed,
-                &error.to_string(),
-            ));
-            if self.commands.send(Command::Resume).is_err() {
-                self.worker_gone();
-            }
+        if let Err(error) = on_request::bring_up(self.window.window()) {
+            self.cannot_show(&error);
             return;
         }
         self.window.invoke_focus_keys();

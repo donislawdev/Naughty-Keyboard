@@ -9,7 +9,8 @@
 //! handed back when it closes, to the window the tester was in - the pack
 //! window's reason: the next press of a shortcut belongs in the field under
 //! test. Leaving for another window closes it without handing the keyboard
-//! back, because it is where the tester put it (`OBS-147`).
+//! back, because it is where the tester put it (`OBS-147`) - and minimizing
+//! it is leaving, made safe the pack window's way (`on_request`, `OBS-183`).
 //!
 //! # Where the facts come from
 //!
@@ -27,6 +28,7 @@ use nkb_adapters::i18n::{self, AboutLabel, Environment, Startup};
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::focus::{HANDLE_WAIT, POLL, window_handle};
+use crate::on_request;
 use crate::packs::{Keyboard, build_before_the_loop, forget_held_modifiers};
 use crate::shortcut_list::{Key, key_of};
 use crate::{AboutWindow, Fact};
@@ -153,44 +155,49 @@ impl About {
     }
 
     /// Opens the window with the keyboard in it. Asked again while open, it
-    /// asks for the keyboard again. A window that does not open says so in
-    /// the palette.
+    /// brings the window back should it stand minimized, and asks for the
+    /// keyboard again. A window that does not open says so in the palette.
     pub fn open(self: &Rc<Self>) {
         if !self.is_open() {
             // Before the window shows: afterwards the answer is the window.
             self.keyboard.remember();
-            if let Err(error) = self.window.show() {
-                (self.say)(i18n::startup_failure(
-                    Startup::WindowFailed,
-                    &error.to_string(),
-                ));
-                return;
-            }
-            self.open.set(true);
         }
+        if let Err(error) = on_request::bring_up(self.window.window()) {
+            self.open.set(false);
+            (self.say)(i18n::startup_failure(
+                Startup::WindowFailed,
+                &error.to_string(),
+            ));
+            return;
+        }
+        self.open.set(true);
         self.window.invoke_focus_keys();
         self.take_keyboard(Instant::now());
     }
 
     /// Hands the keyboard back and hides the window, in that order, for the
     /// reason `Packs::close` gives: once hidden, the system has already given
-    /// the foreground away.
+    /// the foreground away. A window already closed is hidden all the same,
+    /// with nothing handed back - `Packs::close` says why.
     pub fn close(&self) {
-        if !self.open.replace(false) {
-            return;
-        }
-        if let Err(reason) = self.keyboard.give_back(window_handle(self.window.window())) {
+        if self.open.replace(false)
+            && let Err(reason) = self.keyboard.give_back(window_handle(self.window.window()))
+        {
             (self.say)(i18n::environment(Environment::FocusNotReturned, &reason));
         }
         let _ = self.window.hide();
     }
 
     /// The window stopped being the active one: the tester is elsewhere, and
-    /// the keyboard stays where they put it.
-    fn left(&self) {
-        if self.open.replace(false) {
-            let _ = self.window.hide();
-        }
+    /// the keyboard stays where they put it. Hidden once the event is over,
+    /// for the reason `on_request` gives.
+    fn left(self: &Rc<Self>) {
+        self.open.set(false);
+        on_request::hide_once_left(
+            self,
+            |about| !about.is_open(),
+            |about| about.window.window(),
+        );
     }
 
     /// Asks for the keyboard as soon as the window has a handle to ask with -

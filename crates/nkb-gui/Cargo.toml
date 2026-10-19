@@ -33,7 +33,15 @@ nkb-adapters.workspace = true
 # `raw-window-handle-06` is what makes `Window::window_handle()` exist at all.
 # Without it the palette cannot name its own window to the system, and C5b - the
 # window refusing the keyboard focus - has nothing to put the style on.
-slint = { workspace = true, features = ["renderer-software", "raw-window-handle-06"] }
+# `unstable-winit-030` reaches the winit window behind a Slint one, so a window
+# opened on request keeps Close as its only button (`src/on_request.rs`). No
+# crate is added - winit is the backend already - and "unstable" means the name
+# follows winit's version: a Slint that moves to a later winit renames it.
+slint = { workspace = true, features = [
+    "renderer-software",
+    "raw-window-handle-06",
+    "unstable-winit-030",
+] }
 
 # The traits that make the handle above readable. Licence sieve is in the
 # workspace manifest beside the version, where a reader of the dependency will

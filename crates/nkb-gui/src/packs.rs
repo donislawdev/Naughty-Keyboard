@@ -38,7 +38,9 @@
 //! this it stayed on top without the keyboard, and once, after a real
 //! shortcut, without a word either (`OBS-149`). Slint reports the change as the
 //! query line losing focus for `window-activation`, the only reason the view
-//! passes on.
+//! passes on. Minimizing the window is leaving it too - and why it then hides
+//! a moment later rather than at once, and comes back on the screen and not
+//! in the taskbar, is `on_request`'s (`OBS-183`).
 //!
 //! # Coming in while the shortcut is still held
 //!
@@ -77,6 +79,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::focus::{HANDLE_WAIT, POLL, window_handle};
 use crate::live::{Command, InUse, in_use_now};
+use crate::on_request;
 use crate::picker::{Chosen, Folding, PackPicker, Row, RowKind};
 use crate::query::{KeyPress, Pressed};
 use crate::{HintRow, PacksWindow, PickRow};
@@ -264,9 +267,10 @@ impl Packs {
     ///
     /// Asked again while open - the shortcut, or a click on the pack's name in
     /// the palette, with the window already up - it keeps the list, the query
-    /// and the window it will hand the keyboard back to, and asks for the
-    /// keyboard again. A tester who clicked away finds it closed instead (the
-    /// module header, "Leaving it for another window").
+    /// and the window it will hand the keyboard back to, brings the window
+    /// back should it stand minimized, and asks for the keyboard again. A
+    /// tester who clicked away finds it closed instead (the module header,
+    /// "Leaving it for another window").
     pub fn open(self: &Rc<Self>) {
         if !self.is_open() {
             self.keyboard.remember();
@@ -282,14 +286,16 @@ impl Packs {
             self.window.set_notes(strings(picker.notes()));
             *self.picker.borrow_mut() = Some(picker);
             self.show_list();
-            if let Err(error) = self.window.show() {
-                *self.picker.borrow_mut() = None;
-                (self.say)(i18n::startup_failure(
-                    Startup::WindowFailed,
-                    &error.to_string(),
-                ));
-                return;
-            }
+        }
+        // On every opening, the first and the next ones alike: a window that
+        // never got the keyboard can be minimized while it stays open.
+        if let Err(error) = on_request::bring_up(self.window.window()) {
+            *self.picker.borrow_mut() = None;
+            (self.say)(i18n::startup_failure(
+                Startup::WindowFailed,
+                &error.to_string(),
+            ));
+            return;
         }
         self.window.invoke_focus_search();
         self.take_keyboard(Instant::now());
@@ -300,11 +306,14 @@ impl Packs {
     /// 🔴 In THAT order: while the window is in front the tool may move the
     /// foreground, and once it is hidden the system has already given it to
     /// somebody - measured, see the module header.
+    ///
+    /// A window already closed hands nothing back - nothing was lent - and is
+    /// hidden all the same: one still standing would be a window that answers
+    /// no key and that its own close button does not close (`OBS-183`).
     pub fn close(&self) {
-        if !self.is_open() {
-            return;
-        }
-        if let Err(reason) = self.keyboard.give_back(window_handle(self.window.window())) {
+        if self.is_open()
+            && let Err(reason) = self.keyboard.give_back(window_handle(self.window.window()))
+        {
             (self.say)(i18n::environment(Environment::FocusNotReturned, &reason));
         }
         let _ = self.window.hide();
@@ -314,15 +323,17 @@ impl Packs {
     /// The window stopped being the active one: the tester is elsewhere.
     ///
     /// Closes without a word and without handing the keyboard back - it is
-    /// where the tester put it. Our own hand-back in [`Packs::close`] makes the
-    /// window inactive too, and whenever that report arrives, this finds the
-    /// window already closed or closes what `close` closes anyway: the first
-    /// line is the whole guard.
-    fn left(&self) {
-        if self.picker.borrow_mut().take().is_none() {
-            return;
-        }
-        let _ = self.window.hide();
+    /// where the tester put it - and hides once the event is over, for the
+    /// reason `on_request` gives. Our own hand-back in [`Packs::close`] makes
+    /// the window inactive too, and whenever that report arrives, this finds a
+    /// window already closed and hidden, and nothing changes.
+    fn left(self: &Rc<Self>) {
+        *self.picker.borrow_mut() = None;
+        on_request::hide_once_left(
+            self,
+            |packs| !packs.is_open(),
+            |packs| packs.window.window(),
+        );
     }
 
     /// Asks for the keyboard as soon as the window has a handle to ask with.

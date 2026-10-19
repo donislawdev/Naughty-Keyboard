@@ -696,8 +696,8 @@
       "id": "M245",
       "why": "the pack window hides BEFORE handing the keyboard back - the system gives the foreground to someone else, and a later hand-back has no right to it any more",
       "file": "crates/nkb-gui/src/packs.rs",
-      "find": "        if let Err(reason) = self.keyboard.give_back(window_handle(self.window.window())) {",
-      "replace": "        let _ = self.window.hide();\n        if let Err(reason) = self.keyboard.give_back(window_handle(self.window.window())) {",
+      "find": "        if self.is_open()\n            && let Err(reason) = self.keyboard.give_back(window_handle(self.window.window()))",
+      "replace": "        let _ = self.window.hide();\n        if self.is_open()\n            && let Err(reason) = self.keyboard.give_back(window_handle(self.window.window()))",
       "test": "the_pack_window_chooses_closes_and_always_hands_the_keyboard_back",
       "runner": "rust:nkb-gui:packs_window"
     },
@@ -705,8 +705,8 @@
       "id": "M246",
       "why": "closing the pack window does not hand the keyboard back - after Enter the tester types into nothing instead of the field they had before",
       "file": "crates/nkb-gui/src/packs.rs",
-      "find": "        if let Err(reason) = self.keyboard.give_back(window_handle(self.window.window())) {",
-      "replace": "        if let Err(reason) = Ok::<(), String>(()) {",
+      "find": "        if self.is_open()\n            && let Err(reason) = self.keyboard.give_back(window_handle(self.window.window()))",
+      "replace": "        if self.is_open()\n            && let Err(reason) = Ok::<(), String>(())",
       "test": "the_pack_window_chooses_closes_and_always_hands_the_keyboard_back",
       "runner": "rust:nkb-gui:packs_window"
     },
@@ -1326,8 +1326,8 @@
       "id": "M270",
       "why": "the tester walking away closes the window WITH a keyboard hand-back - it takes the keyboard from the window the tester just clicked (OBS-147)",
       "file": "crates/nkb-gui/src/packs.rs",
-      "find": "        if self.picker.borrow_mut().take().is_none() {",
-      "replace": "        self.close();\n        if self.picker.borrow_mut().take().is_none() {",
+      "find": "    fn left(self: &Rc<Self>) {\n        *self.picker.borrow_mut() = None;",
+      "replace": "    fn left(self: &Rc<Self>) {\n        self.close();\n        *self.picker.borrow_mut() = None;",
       "test": "the_pack_window_chooses_closes_and_always_hands_the_keyboard_back",
       "runner": "rust:nkb-gui:packs_window"
     },
@@ -1830,8 +1830,8 @@
       "id": "M342",
       "why": "walking away to another window hands the keyboard back - it takes it from where the tester put it (OBS-147)",
       "file": "crates/nkb-gui/src/shortcuts.rs",
-      "find": "    fn left(&self) {\n        if self.list.borrow().is_none() {\n            return;\n        }\n        self.shut();",
-      "replace": "    fn left(&self) {\n        if self.list.borrow().is_none() {\n            return;\n        }\n        self.close();",
+      "find": "    fn left(self: &Rc<Self>) {\n        if self.is_open() {\n            self.take_shortcuts_back();",
+      "replace": "    fn left(self: &Rc<Self>) {\n        if self.is_open() {\n            self.close();",
       "test": "the_shortcuts_window_pauses_records_and_always_takes_the_shortcuts_back",
       "runner": "rust:nkb-gui:shortcuts_window"
     },
@@ -6768,8 +6768,8 @@
       "id": "M945",
       "why": "a closed About window does not give the keyboard back (D122)",
       "file": "crates/nkb-gui/src/about.rs",
-      "find": "        if let Err(reason) = self.keyboard.give_back(window_handle(self.window.window())) {",
-      "replace": "        if let Err(reason) = Ok::<(), String>(()) {",
+      "find": "            && let Err(reason) = self.keyboard.give_back(window_handle(self.window.window()))",
+      "replace": "            && let Err(reason) = Ok::<(), String>(())",
       "test": "the_about_window_opens_with_the_keyboard_and_gives_it_back_on_every_way_out",
       "runner": "rust:nkb-gui:about_window"
     },
@@ -6777,8 +6777,8 @@
       "id": "M946",
       "why": "walking away to another window takes the keyboard from where the tester put it (OBS-147, D122)",
       "file": "crates/nkb-gui/src/about.rs",
-      "find": "    fn left(&self) {",
-      "replace": "    fn left(&self) {\n        self.close();",
+      "find": "    fn left(self: &Rc<Self>) {",
+      "replace": "    fn left(self: &Rc<Self>) {\n        self.close();",
       "test": "the_about_window_opens_with_the_keyboard_and_gives_it_back_on_every_way_out",
       "runner": "rust:nkb-gui:about_window"
     },
@@ -8212,6 +8212,51 @@
       "replace": "        if False:",
       "test": "test_each_outcome_is_read_by_its_test",
       "runner": "pyunit:.github/scripts:test_mutate"
+    },
+    {
+      "id": "M1125",
+      "why": "a window opened on request that was minimized on the way out opens again minimized - it takes the keyboard and nothing is on the screen (OBS-183)",
+      "file": "crates/nkb-gui/src/on_request.rs",
+      "find": "    window.set_minimized(false);",
+      "replace": "    // not brought back from the taskbar",
+      "test": "a_minimized_window_is_left_and_comes_back_on_the_screen",
+      "runner": "rust:nkb-gui:packs_window"
+    },
+    {
+      "id": "M1126",
+      "why": "the pack window hides inside the event that made it inactive - a window being minimized lost that hide and stayed in the taskbar while taken for closed (OBS-183)",
+      "file": "crates/nkb-gui/src/packs.rs",
+      "find": "        on_request::hide_once_left(\n            self,\n            |packs| !packs.is_open(),\n            |packs| packs.window.window(),\n        );",
+      "replace": "        let _ = self.window.hide();",
+      "test": "a_minimized_window_is_left_and_comes_back_on_the_screen",
+      "runner": "rust:nkb-gui:packs_window"
+    },
+    {
+      "id": "M1127",
+      "why": "the late hide of a window that was left also hides it when it was opened again in between - the tester's new opening vanishes (OBS-183)",
+      "file": "crates/nkb-gui/src/on_request.rs",
+      "find": "            && closed(&owner)",
+      "replace": "            && (closed(&owner) || true)",
+      "test": "a_minimized_window_is_left_and_comes_back_on_the_screen",
+      "runner": "rust:nkb-gui:packs_window"
+    },
+    {
+      "id": "M1128",
+      "why": "a pack window closed while it still stands on the screen is not hidden by Esc or its close button - it answers no key and nothing closes it (OBS-183)",
+      "file": "crates/nkb-gui/src/packs.rs",
+      "find": "    pub fn close(&self) {\n        if self.is_open()",
+      "replace": "    pub fn close(&self) {\n        if !self.is_open() {\n            return;\n        }\n        if self.is_open()",
+      "test": "a_minimized_window_is_left_and_comes_back_on_the_screen",
+      "runner": "rust:nkb-gui:packs_window"
+    },
+    {
+      "id": "M1129",
+      "why": "leaving a pack window that stands on the screen while closed does not hide it (OBS-183)",
+      "file": "crates/nkb-gui/src/packs.rs",
+      "find": "    fn left(self: &Rc<Self>) {\n        *self.picker.borrow_mut() = None;",
+      "replace": "    fn left(self: &Rc<Self>) {\n        if self.picker.borrow_mut().take().is_none() {\n            return;\n        }",
+      "test": "a_minimized_window_is_left_and_comes_back_on_the_screen",
+      "runner": "rust:nkb-gui:packs_window"
     }
   ]
 }

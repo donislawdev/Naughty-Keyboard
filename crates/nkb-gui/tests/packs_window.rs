@@ -396,6 +396,8 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
         !packs.is_open(),
         "a window the tester left stays on top without the keyboard (OBS-147)"
     );
+    // Hidden once the event is over - the test below says why (`OBS-183`).
+    slint::platform::update_timers_and_animations();
     assert!(!window.window().is_visible(), "closed means hidden");
     assert!(
         calls(&keyboard).is_empty(),
@@ -497,4 +499,113 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
         order.len() >= 6 && order.iter().all(|&shown| shown),
         "the keyboard was handed back after the window was hidden: {order:?}"
     );
+}
+
+/// Minimizing the window is leaving it (`OBS-183`). Measured on live windows
+/// before this held: the next opening came up minimized - with the keyboard,
+/// and nothing on the screen - and a window left standing while closed
+/// answered no key, and neither Esc nor its close button closed it.
+#[test]
+fn a_minimized_window_is_left_and_comes_back_on_the_screen() {
+    let _surface = offscreen::start(440, 560);
+    let keyboard = Rc::new(Recorded::default());
+    let (choose, _commands) = mpsc::channel();
+    let in_use = live::in_use();
+    *in_use.lock().expect("a fresh lock") = live::InUseNow {
+        pack: Some(String::from("whitespace")),
+        next: None,
+        restart: None,
+        recent: Vec::new(),
+    };
+    let said: Rc<RefCell<Vec<String>>> = Rc::default();
+    let heard = Rc::clone(&said);
+    let packs = Packs::new(
+        PacksWindow::new().expect("the pack window must build"),
+        Box::new(Shared(Rc::clone(&keyboard))),
+        choose,
+        in_use,
+        Box::new(move |line| heard.borrow_mut().push(line)),
+    );
+    let window = packs.window();
+    let shown = || window.window().is_visible();
+
+    // ---- minimized: left, and hidden once the event is over ----------------
+    packs.open();
+    window
+        .window()
+        .dispatch_event(WindowEvent::WindowActiveChanged(true));
+    window.window().set_minimized(true);
+    window
+        .window()
+        .dispatch_event(WindowEvent::WindowActiveChanged(false));
+    assert!(!packs.is_open(), "minimizing is leaving");
+    // Hidden inside the event, a window being minimized stayed in the taskbar.
+    assert!(shown(), "hidden inside the event");
+    slint::platform::update_timers_and_animations();
+    assert!(!shown(), "closed means hidden");
+    assert_eq!(
+        calls(&keyboard),
+        vec!["remember"],
+        "leaving hands nothing back"
+    );
+
+    // ---- opened again: on the screen, not in the taskbar --------------------
+    packs.open();
+    assert!(packs.is_open() && shown());
+    assert!(
+        !window.window().is_minimized(),
+        "opened as it was hidden - minimized"
+    );
+
+    // ---- left, and opened again before the hide came: it stays -------------
+    window
+        .window()
+        .dispatch_event(WindowEvent::WindowActiveChanged(true));
+    window
+        .window()
+        .dispatch_event(WindowEvent::WindowActiveChanged(false));
+    packs.open();
+    slint::platform::update_timers_and_animations();
+    assert!(
+        packs.is_open() && shown(),
+        "the late hide took a window opened again"
+    );
+
+    // ---- minimized without leaving, then asked again: back, query kept ------
+    // A window that never got the keyboard is not left when it is minimized.
+    type_text(window, "uni");
+    window.window().set_minimized(true);
+    let _ = calls(&keyboard);
+    packs.open();
+    assert!(!window.window().is_minimized());
+    assert_eq!(window.get_query(), "uni", "the same opening, not a new one");
+    assert!(calls(&keyboard).is_empty(), "nothing remembered anew");
+
+    // ---- standing while closed: Esc, its close button and leaving hide it ---
+    // The system can show a window its owner took for closed - the hide lost
+    // inside the minimizing, then a click on the taskbar button.
+    tap(window, ESCAPE);
+    assert!(!packs.is_open() && !shown());
+    assert_eq!(calls(&keyboard), vec!["give back"]);
+    window.window().show().expect("the system shows it");
+    tap(window, ESCAPE);
+    assert!(!shown(), "Esc closes a window left standing");
+    window.window().show().expect("the system shows it");
+    window.window().dispatch_event(WindowEvent::CloseRequested);
+    assert!(!shown(), "its close button closes it");
+    window.window().show().expect("the system shows it");
+    window
+        .window()
+        .dispatch_event(WindowEvent::WindowActiveChanged(true));
+    window
+        .window()
+        .dispatch_event(WindowEvent::WindowActiveChanged(false));
+    slint::platform::update_timers_and_animations();
+    assert!(!shown(), "leaving it hides it");
+    assert!(
+        calls(&keyboard).is_empty(),
+        "nothing was lent, nothing is handed back"
+    );
+    assert!(!packs.is_open(), "standing is not opening");
+    assert!(said.borrow().is_empty(), "{:?}", said.borrow());
 }
