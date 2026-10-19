@@ -486,6 +486,35 @@ mod tests {
     }
 
     #[test]
+    fn the_verdict_changes_at_nine_tenths_of_the_limit_and_not_before() {
+        // The boundary is part of the contract: an error after nine tenths of the
+        // wait is the application not answering, one a moment earlier is not.
+        let limit = Duration::from_secs(10);
+        assert_eq!(
+            pulse_verdict(-25204, Duration::from_secs(9), limit),
+            PulseVerdict::Hung
+        );
+        assert_eq!(
+            pulse_verdict(-25204, Duration::from_millis(8999), limit),
+            PulseVerdict::Unsupported
+        );
+    }
+
+    #[test]
+    fn a_family_of_joined_emoji_is_five_characters_and_eight_units() {
+        // Measured in the field: each scalar travels in its own event, the pairs
+        // whole, and the field joined them into one cluster (18 bytes).
+        let family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
+        let characters = scalars(family);
+        assert_eq!(characters.len(), 5);
+        assert_eq!(characters.iter().map(|s| s.count).sum::<usize>(), 8);
+        assert_eq!(
+            characters.iter().map(|s| s.count).collect::<Vec<_>>(),
+            [2, 1, 2, 1, 2]
+        );
+    }
+
+    #[test]
     fn a_text_role_with_a_settable_value_and_a_caret_is_a_field() {
         for role in TEXT_ROLES {
             assert_eq!(classify(role, true, true, false), FocusedInput::TextField);

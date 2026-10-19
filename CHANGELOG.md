@@ -12,13 +12,11 @@ Changes wait under Unreleased until then.
 
 ### Added
 
-- `nkb send` types into the focused field on macOS, with the same care as on Windows. It waits until
-  the keys on the keyboard are let go, looks at the window in front before every character, stops at
-  `Escape`, goes at the pace of the application and says when it could not follow that pace. `--clear`
-  clears the line first with the macOS keys for the start and end of a line. macOS lets a program
-  type only when the person has given the app it runs from the Accessibility permission, which for a
-  command in a terminal is the terminal. Without it `nkb send` says what to turn on and where, sends
-  nothing and exits with code 4. The palette is not on macOS yet.
+- `nkb send` types into the focused field on macOS with the same care as on Windows. It waits until
+  the keys are let go, watches the window in front, stops at `Escape` and goes at the pace of the
+  application. `--clear` clears the line first. macOS lets it type only when the app it runs from,
+  for a command in a terminal that is the terminal, has the Accessibility permission. Without it
+  `nkb send` says what to turn on, sends nothing and exits with code 4. The palette is not on macOS yet.
 - A value can name a date worked out on the day it is typed: `type = "next-date"`, with a `month`, a
   `week` from `first` to `fourth` or `last`, a `weekday` and an optional `time`. It inserts the next
   such day, at least two days ahead in UTC so that it lies ahead in every time zone, written like
