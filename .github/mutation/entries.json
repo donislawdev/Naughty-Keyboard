@@ -3475,10 +3475,10 @@
     },
     {
       "id": "M576",
-      "why": "the heading of the Next band opens the value window again - two places, one window",
+      "why": "the heading of the Next band becomes a button again - it lights up under the pointer and invites a click, and the pack's name is the one way in by the pointer",
       "file": "crates/nkb-gui/ui/components/next_band.slint",
       "find": "            TextSmallMuted {\n                text: root.heading;\n                overflow: elide;\n            }",
-      "replace": "            Disclosure {\n                text: root.heading;\n                action: root.copy-action;\n                clicked => {\n                    root.copy();\n                }\n            }",
+      "replace": "            SmallButton {\n                text: root.heading;\n                action: root.copy-action;\n                clicked => {\n                    root.copy();\n                }\n            }",
       "test": "the_palette_links_answer_the_pointer_and_open_their_windows",
       "runner": "rust:nkb-gui:palette_opener"
     },
@@ -7301,7 +7301,7 @@
       "file": "crates/nkb-adapters/src/built_in.rs",
       "find": "    (\"time-zones\", include_str!(\"../../../packs/time-zones.toml\")),\n",
       "replace": "",
-      "test": "the_list_holds_exactly_what_the_packs_folder_holds",
+      "test": "built_in::tests::the_list_holds_exactly_what_the_packs_folder_holds",
       "runner": "rust:nkb-adapters:lib"
     },
     {
