@@ -2514,8 +2514,8 @@
       "id": "M446",
       "why": "leaving the mode does not ask about the direct route - a system without one promises typing (D99)",
       "file": "crates/nkb-app/src/advance_sequence.rs",
-      "find": "        if let Availability::Unavailable { reason } = ports.direct.availability() {",
-      "replace": "        if let Availability::Unavailable { reason } = Availability::Ready {",
+      "find": "        match ports.direct.availability() {",
+      "replace": "        match Availability::Ready {",
       "test": "advance_sequence::tests::a_system_without_a_route_keeps_clipboard_mode_and_says_why",
       "runner": "rust:nkb-app:lib"
     },
@@ -3836,7 +3836,7 @@
     {
       "id": "M618",
       "why": "a focus outside a text field with --clear is described by the sentence about higher privileges - two causes, one sentence, the tester looks in the wrong place",
-      "file": "crates/nkb-cli/src/main.rs",
+      "file": "crates/nkb-cli/src/refusals.rs",
       "find": "        KeystrokeError::NoTextField => writeln!(err, \"{NO_TEXT_FIELD}\"),",
       "replace": "        KeystrokeError::NoTextField => writeln!(err, \"{HIGHER_PRIVILEGES}\"),",
       "test": "tests::every_failure_to_clear_or_to_deliver_has_a_sentence_of_its_own",

@@ -37,6 +37,13 @@ impl ValueDelivery for DirectInjection {
                 },
             };
         }
+        // A route exists, and the system may still hold it shut until the person
+        // allows it (the accessibility permission on macOS). Asked every time, not
+        // once: it can be granted or taken back while the program runs, and the
+        // answer decides between typing and the clipboard (`D138`).
+        if !nkb_sys::send_allowed() {
+            return Availability::NeedsPermission;
+        }
         // A route exists, but there may be nothing in front of it. That is a
         // different answer from "this system cannot", and the caller acts on it
         // differently - so it is reported by `deliver`, not folded in here.
@@ -77,6 +84,7 @@ impl ValueDelivery for DirectInjection {
             Err(nkb_sys::SendError::Unsupported { system }) => Err(DeliveryError::Unsupported {
                 system: system.to_owned(),
             }),
+            Err(nkb_sys::SendError::NeedsPermission) => Err(DeliveryError::NeedsPermission),
             Err(nkb_sys::SendError::Truncated {
                 units_sent,
                 units_expected,
@@ -266,6 +274,7 @@ impl KeystrokeSender for DirectInjection {
             Err(nkb_sys::SendError::Unsupported { system }) => Err(KeystrokeError::Unsupported {
                 system: system.to_owned(),
             }),
+            Err(nkb_sys::SendError::NeedsPermission) => Err(KeystrokeError::NeedsPermission),
             Err(nkb_sys::SendError::ModifierHeld { key }) => Err(KeystrokeError::ModifierHeld {
                 which: key.to_owned(),
             }),
@@ -438,7 +447,14 @@ mod tests {
     fn availability_agrees_with_what_nkb_sys_says_about_this_build() {
         let availability = DirectInjection.availability();
         if nkb_sys::can_send() {
-            assert_eq!(availability, Availability::Ready);
+            // Ready, unless the system holds the route shut until the person
+            // allows it: then it says so, and that is not a failure of this code.
+            let expected = if nkb_sys::send_allowed() {
+                Availability::Ready
+            } else {
+                Availability::NeedsPermission
+            };
+            assert_eq!(availability, expected);
         } else {
             let Availability::Unavailable { reason } = availability else {
                 panic!("a build that cannot send must not report itself ready");

@@ -364,6 +364,13 @@ pub enum Message {
     /// whose sentence blamed the application for ignoring simulated input - a
     /// cause the tool cannot detect before the input oracle (`OBS-42`).
     NoDirectRoute { system: String },
+    /// The system will not let this program type until the person allows it -
+    /// the accessibility permission on macOS - so values go to the clipboard
+    /// from now on, replacing what the tester had copied. Said when the palette
+    /// starts without the permission, or when a send finds it gone. Unlike
+    /// [`Message::NoDirectRoute`] the tester can change this one, and the
+    /// sentence says where (`D138`, `OBS-70`).
+    NeedsPermission,
     /// The window in front runs with higher privileges than the tool, so its
     /// values go to the clipboard, replacing what the tester had copied. Said
     /// once per window, when its first value goes there (`D72`). A cause the
@@ -664,6 +671,7 @@ impl AdvanceSequence {
             RouteRequest::Direct => match ports.direct.availability() {
                 Availability::Ready => return Vec::new(),
                 Availability::Unavailable { reason } => Message::NoDirectRoute { system: reason },
+                Availability::NeedsPermission => Message::NeedsPermission,
             },
         };
         let step = self.sequence.apply(Event::UseClipboard);
@@ -689,8 +697,12 @@ impl AdvanceSequence {
         if self.sequence.delivery == Delivery::Direct {
             return Vec::new();
         }
-        if let Availability::Unavailable { reason } = ports.direct.availability() {
-            return vec![Message::NoDirectRoute { system: reason }];
+        match ports.direct.availability() {
+            Availability::Ready => {}
+            Availability::Unavailable { reason } => {
+                return vec![Message::NoDirectRoute { system: reason }];
+            }
+            Availability::NeedsPermission => return vec![Message::NeedsPermission],
         }
         let step = self.sequence.apply(Event::UseDirect);
         self.sequence = step.sequence;
@@ -1181,6 +1193,12 @@ fn classify(
             None,
             vec![Message::NoDirectRoute { system }],
         ),
+        // The same move for a route the system holds shut until the person allows
+        // it: clipboard mode, and the value goes there in the same press.
+        SendOutcome::NotDelivered {
+            error: DeliveryError::NeedsPermission,
+            ..
+        } => (Event::InsertionFailed, None, vec![Message::NeedsPermission]),
         // `deliver_value` reports a fragment as `Interrupted`, with its value.
         // Reached only if a route ever reports one another way: still said as
         // an interruption, with how far it got.
@@ -1327,6 +1345,8 @@ fn after_clearing(error: KeystrokeError) -> (Event, Message) {
         KeystrokeError::Unsupported { system } => {
             (Event::InsertionFailed, Message::NoDirectRoute { system })
         }
+        // The same for a route the system holds shut until the person allows it.
+        KeystrokeError::NeedsPermission => (Event::InsertionFailed, Message::NeedsPermission),
         KeystrokeError::NoTarget => (Event::InsertionRefused, Message::NoTarget),
         KeystrokeError::ModifierHeld { which } => (
             Event::InsertionRefused,
@@ -1697,6 +1717,56 @@ mod tests {
             }]
         );
         assert_eq!(advance.sequence().delivery, Delivery::ClipboardMode);
+    }
+
+    #[test]
+    fn a_route_the_system_holds_shut_starts_in_clipboard_mode_and_says_how_to_open_it() {
+        // `D138`: the permission is the tester's to give, so the sentence is not
+        // the one for a build that cannot type, and the click that would leave
+        // the mode finds the same door shut and says the same thing.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_delivery(FakeDelivery::needs_permission());
+        assert_eq!(
+            advance.choose_route(RouteRequest::Direct, &kit.ports()),
+            vec![Message::NeedsPermission]
+        );
+        assert_eq!(advance.sequence().delivery, Delivery::ClipboardMode);
+        assert_eq!(
+            advance.leave_clipboard(&kit.ports()),
+            vec![Message::NeedsPermission]
+        );
+        assert_eq!(advance.sequence().delivery, Delivery::ClipboardMode);
+    }
+
+    #[test]
+    fn a_permission_taken_back_while_running_moves_the_value_to_the_clipboard() {
+        // The route was open at the start and the system refuses now: the press
+        // that found out is not lost, the same value goes to the clipboard.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_delivery(FakeDelivery::failing(DeliveryError::NeedsPermission));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(outcome.messages, vec![Message::NeedsPermission]);
+        assert_eq!(advance.sequence().delivery, Delivery::ClipboardMode);
+        assert_eq!(*kit.by_clipboard.handed.borrow(), vec!["alpha"]);
+        assert!(
+            outcome
+                .sent
+                .is_some_and(|sent| sent.arrival == Arrival::OnClipboard)
+        );
+        assert_eq!(advance.counter(), Some((1, 3)));
+    }
+
+    #[test]
+    fn a_permission_found_missing_by_the_clearing_is_the_same_move() {
+        // The clearing goes first, so on a machine that holds the route shut the
+        // keys answer before the value can - and it is no failed clear.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_keys(FakeKeys::failing(KeystrokeError::NeedsPermission));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(outcome.messages, vec![Message::NeedsPermission]);
+        assert!(!outcome.messages.contains(&Message::ClearingFailed));
+        assert_eq!(advance.sequence().delivery, Delivery::ClipboardMode);
+        assert!(kit.direct.handed.borrow().is_empty());
     }
 
     #[test]

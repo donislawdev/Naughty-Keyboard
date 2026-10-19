@@ -214,6 +214,134 @@ mod platform {
     }
 }
 
+#[cfg(target_os = "macos")]
+pub(crate) use mac_platform::{ReservedEscape, SystemEscape};
+
+/// `Escape` on macOS: `RegisterEventHotKey` takes the key from the application
+/// under test, and a press arrives as an event the sending thread pulls out of
+/// its own queue.
+///
+/// Measured 2026-10-19 (`tools/sondy/wpisywanie-macos.m`, `escape`, macOS 27.0):
+/// registered, a synthetic `Escape` reached the probe 3 times of 3 and the victim
+/// window 0 times. Not registered, the victim got all 3 (6 events) and the probe
+/// none. It worked the same with the main thread registering and pulling and with
+/// another thread doing both while the main thread slept - in a process with no
+/// `NSApplication`, which is how `nkb send` runs. What the palette does with an
+/// application loop running on the main thread is not measured here.
+#[cfg(target_os = "macos")]
+mod mac_platform {
+    use core::sync::atomic::{AtomicBool, Ordering};
+
+    use super::{ESCAPE_RELEASE_WAIT, EscapeKey, Reserved};
+    use crate::macos::ffi::{self, EventHotKeyId, EventTypeSpec, MutRef};
+
+    /// `kVK_Escape`.
+    const KEY_ESCAPE: u16 = 0x35;
+    /// The signature of our hot key, `nkbe`.
+    const SIGNATURE: u32 = u32::from_be_bytes(*b"nkbe");
+
+    /// `Escape` on the calling thread, with the flag its handler raises.
+    pub(crate) struct SystemEscape {
+        fired: Box<AtomicBool>,
+        hot_key: MutRef,
+        handler: MutRef,
+    }
+
+    /// `Escape` held by the sending thread for one send (`D96`).
+    pub(crate) type ReservedEscape = Reserved<SystemEscape>;
+
+    impl SystemEscape {
+        pub(crate) fn reserve() -> ReservedEscape {
+            Reserved::reserve(
+                Self {
+                    fired: Box::new(AtomicBool::new(false)),
+                    hot_key: core::ptr::null_mut(),
+                    handler: core::ptr::null_mut(),
+                },
+                ESCAPE_RELEASE_WAIT,
+            )
+        }
+    }
+
+    /// Raises the flag the reservation owns. Runs on the thread that pulls the
+    /// event, inside `fired`, so it needs no more than the flag.
+    extern "C" fn on_hot_key(_next: MutRef, _event: MutRef, user: MutRef) -> i32 {
+        if let Some(flag) = unsafe { user.cast::<AtomicBool>().as_ref() } {
+            flag.store(true, Ordering::SeqCst);
+        }
+        ffi::NO_ERR
+    }
+
+    impl EscapeKey for SystemEscape {
+        fn register(&mut self) -> bool {
+            let spec = EventTypeSpec {
+                class: ffi::CLASS_KEYBOARD,
+                kind: ffi::HOT_KEY_PRESSED,
+            };
+            let user = core::ptr::from_ref::<AtomicBool>(&self.fired)
+                .cast_mut()
+                .cast();
+            let target = unsafe { ffi::GetApplicationEventTarget() };
+            let installed = unsafe {
+                ffi::InstallEventHandler(target, on_hot_key, 1, &spec, user, &mut self.handler)
+            };
+            if installed != ffi::NO_ERR {
+                self.handler = core::ptr::null_mut();
+                return false;
+            }
+            let id = EventHotKeyId {
+                signature: SIGNATURE,
+                id: 1,
+            };
+            let registered = unsafe {
+                ffi::RegisterEventHotKey(u32::from(KEY_ESCAPE), 0, id, target, 0, &mut self.hot_key)
+            };
+            if registered != ffi::NO_ERR {
+                // Held by another program: the handler has nothing to hear.
+                unsafe { ffi::RemoveEventHandler(self.handler) };
+                self.handler = core::ptr::null_mut();
+                self.hot_key = core::ptr::null_mut();
+                return false;
+            }
+            true
+        }
+        fn unregister(&mut self) {
+            unsafe {
+                if !self.hot_key.is_null() {
+                    ffi::UnregisterEventHotKey(self.hot_key);
+                }
+                if !self.handler.is_null() {
+                    ffi::RemoveEventHandler(self.handler);
+                }
+            }
+            self.hot_key = core::ptr::null_mut();
+            self.handler = core::ptr::null_mut();
+        }
+        fn fired(&mut self) -> bool {
+            // A hot key press arrives in the queue of the thread that asked, and
+            // is delivered when the thread pulls it out and hands it on.
+            let mut event: MutRef = core::ptr::null_mut();
+            while unsafe { ffi::ReceiveNextEvent(0, core::ptr::null(), 0.0, 1, &mut event) }
+                == ffi::NO_ERR
+                && !event.is_null()
+            {
+                unsafe {
+                    ffi::SendEventToEventTarget(event, ffi::GetEventDispatcherTarget());
+                    ffi::ReleaseEvent(event);
+                }
+                event = core::ptr::null_mut();
+            }
+            self.fired.swap(false, Ordering::SeqCst)
+        }
+        fn down(&mut self) -> bool {
+            unsafe { ffi::CGEventSourceKeyState(ffi::STATE_HID, KEY_ESCAPE) }
+        }
+        fn pause(&mut self, how_long: core::time::Duration) {
+            std::thread::sleep(how_long);
+        }
+    }
+}
+
 #[cfg(test)]
 #[allow(
     clippy::expect_used,

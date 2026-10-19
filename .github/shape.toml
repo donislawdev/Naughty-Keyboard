@@ -49,10 +49,14 @@ band = 0.7
 # palette's view into modules of their own rather than raise this. 1121 since
 # 2026-10-13, when what nkb send says about the clearing went to clearing.rs.
 # 1119 since 2026-10-14, when what nkb new-pack says about the format fit on
-# one line.
+# one line. 1015 since 2026-10-19, when what nkb send says about a refusal went
+# to refusals.rs to make room for the macOS permission.
+# near = 4 since 2026-10-19: the ceiling came down by 104, and the band with it,
+# so three files that did not grow joined it (advance_sequence.rs, toml_pack.rs
+# and picker.rs). The count is the owner's to accept, as it was for toml_pack.rs.
 [files.rust-product]
-ceiling = 1119
-near = 1
+ceiling = 1015
+near = 4
 
 # A whole Rust file, its tests included. nkb-gui/src/live.rs, then
 # nkb-adapters/src/i18n.rs at 2101.

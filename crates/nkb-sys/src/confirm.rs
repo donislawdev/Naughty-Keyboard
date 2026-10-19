@@ -233,6 +233,7 @@ fn target_takes<E>(
     }
 }
 
+#[cfg(any(windows, test))]
 /// The steps of one chord: `Shift` down if asked, the key down and up, `Shift`
 /// up if it went down - each with the state it leaves. `event` builds the
 /// system's event from a key and whether it is a release.
@@ -260,6 +261,7 @@ pub(crate) fn chord_steps<E>(
     steps
 }
 
+#[cfg(any(windows, test))]
 /// How many UTF-16 units of a text arrived, when the unit after the first
 /// `before` stopped with `taken` of its two events shown. A character goes in
 /// on its key-down, so a unit whose down was shown arrived even if its up was
@@ -268,6 +270,7 @@ pub(crate) const fn units_arrived(before: usize, taken: usize) -> usize {
     before + if taken >= 1 { 1 } else { 0 }
 }
 
+#[cfg(any(windows, test))]
 /// How many chords ACTED, when the chord after the first `before` stopped with
 /// `taken` of its steps shown. A chord acts on its main key going down - the
 /// key, never `Shift` alone - so it counts once that step was shown, exactly as

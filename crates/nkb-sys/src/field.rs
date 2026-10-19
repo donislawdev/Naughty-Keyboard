@@ -115,7 +115,15 @@
 //! default timeouts - seconds - so both are set to [`TIMEOUT_MS`], and a
 //! timeout is `Unknown`, never a frozen palette.
 
+// On macOS the question is answered by accessibility (`macos/ax.rs`), and the
+// machinery below is what Windows and the tests ask it with.
+#![cfg_attr(
+    target_os = "macos",
+    allow(dead_code, reason = "the UI Automation rules are not asked on macOS")
+)]
+
 use crate::WindowRef;
+#[cfg(not(target_os = "macos"))]
 use std::time::{Duration, Instant};
 
 /// What holds the keyboard focus in a window.
@@ -165,6 +173,19 @@ pub const LOOK_STEP_MS: u64 = 40;
 /// Returns [`FocusedInput::Unknown`] on systems without UI Automation.
 #[must_use]
 pub fn focused_input(window: WindowRef) -> FocusedInput {
+    #[cfg(target_os = "macos")]
+    {
+        crate::macos::focused_input(window)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        focused_input_by_facts(window)
+    }
+}
+
+/// The question asked through the facts of one element, as Windows reads them.
+#[cfg(not(target_os = "macos"))]
+fn focused_input_by_facts(window: WindowRef) -> FocusedInput {
     let Some(first) = platform::facts(window) else {
         return FocusedInput::Unknown;
     };

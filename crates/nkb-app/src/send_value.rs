@@ -269,8 +269,18 @@ pub fn send_value(
     // so rather than spend the work and fail at the last step - and on macOS
     // that is not hypothetical: OBS-70 measured that the system refuses the
     // call outright without a permission no script can grant.
-    if let Availability::Unavailable { reason } = delivery.availability() {
-        return SendOutcome::RouteUnavailable { reason };
+    match delivery.availability() {
+        Availability::Ready => {}
+        Availability::Unavailable { reason } => return SendOutcome::RouteUnavailable { reason },
+        // The route is there and the system will not use it for us until the
+        // person allows it: the same refusal as a failed send, said before any
+        // work is spent (`D138`).
+        Availability::NeedsPermission => {
+            return SendOutcome::NotDelivered {
+                error: DeliveryError::NeedsPermission,
+                clearing: ClearingOutcome::NotAsked,
+            };
+        }
     }
 
     let text = match source.read(request.pack_id) {
@@ -1041,6 +1051,44 @@ mod tests {
             }
         );
         assert!(log.borrow().is_empty(), "no route means no key and no text");
+    }
+
+    #[test]
+    fn a_route_the_system_holds_shut_refuses_before_any_work_and_names_the_permission() {
+        // `D138`: asked first, like a missing route, but the person can change
+        // this one, so it is a refusal of the send and not "no route".
+        struct Exploding;
+        impl PackSource for Exploding {
+            fn read(&self, _id: &str) -> Result<String, SourceError> {
+                panic!("the pack must not be read when the system holds the route shut");
+            }
+        }
+        let log = log();
+        let spy = Spy {
+            available: Availability::NeedsPermission,
+            fail_with: None,
+            log: Rc::clone(&log),
+        };
+        let keys = KeySpy::working(&log);
+        let outcome = send_value(
+            &Exploding,
+            &Scripted::two(),
+            &spy,
+            &keys,
+            &request(1, Clearing::Line),
+            &mut |_| {},
+        );
+        assert_eq!(
+            outcome,
+            SendOutcome::NotDelivered {
+                error: DeliveryError::NeedsPermission,
+                clearing: ClearingOutcome::NotAsked,
+            }
+        );
+        assert!(
+            log.borrow().is_empty(),
+            "no permission means no key and no text"
+        );
     }
 
     #[test]
