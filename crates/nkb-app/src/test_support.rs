@@ -89,8 +89,18 @@ impl FakeDelivery {
             ..Self::ready()
         }
     }
+    /// A route the system holds shut until the person allows it - known before
+    /// any send, and found again at the send if it was taken back: the
+    /// accessibility permission on macOS (`D138`).
+    pub(crate) fn needs_permission() -> Self {
+        Self {
+            availability: Availability::NeedsPermission,
+            fail: Some(DeliveryError::NeedsPermission),
+            ..Self::ready()
+        }
+    }
     /// No route on this system, known before any send - what `DirectInjection`
-    /// answers on macOS and Linux today.
+    /// answers on Linux today.
     pub(crate) fn unavailable(system: &str) -> Self {
         Self {
             availability: Availability::Unavailable {

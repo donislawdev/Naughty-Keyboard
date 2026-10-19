@@ -142,6 +142,11 @@ pub enum DeliveryError {
     /// Refused by name rather than delivered cut short - the clipboard ends its
     /// text at `U+0000`, and a paste would stop there without a sign (`D71`).
     CannotCarry { character: char },
+    /// The system does not let this program type for the person: on macOS the
+    /// accessibility permission is not granted. Nothing went out, and the system
+    /// would have dropped every key while accepting it (`OBS-70`). The permission
+    /// can be taken back while the program runs, so it is asked before each send.
+    NeedsPermission,
     /// The window in front runs with higher privileges than the tool, so the
     /// system would drop every keystroke while reporting success (`OBS-128`).
     /// Nothing went out: the route asks BEFORE sending, because after the fact
@@ -175,6 +180,7 @@ impl fmt::Display for DeliveryError {
             }
             Self::HigherPrivileges => f.write_str("higher-privileges"),
             Self::NoTextField => f.write_str("no-text-field"),
+            Self::NeedsPermission => f.write_str("needs-permission"),
         }
     }
 }
@@ -206,7 +212,15 @@ pub struct TargetRef(pub u64);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Availability {
     Ready,
-    Unavailable { reason: String },
+    Unavailable {
+        reason: String,
+    },
+    /// A route exists, and the system will not let this program use it until the
+    /// person allows it: the accessibility permission on macOS. Not the same as
+    /// [`Availability::Unavailable`] - the tester can change this one, and the
+    /// sentence says how. Asked again before every send, because it can be
+    /// granted or taken back while the program runs.
+    NeedsPermission,
 }
 
 /// Puts a value into whatever field currently has the keyboard focus.
@@ -301,6 +315,10 @@ pub enum KeystrokeError {
     /// key was pressed: the system would have dropped them all and reported
     /// success (`OBS-128`, `D72`). The field is untouched.
     HigherPrivileges,
+    /// The system does not let this program press keys for the person (the
+    /// accessibility permission on macOS), so none was pressed and the field is
+    /// untouched. Not the window: the whole route, until the person allows it.
+    NeedsPermission,
     /// The keyboard focus is surely not in a text field, so no key was
     /// pressed: on a list of files `Home`, `Shift+End`, `Delete` select every
     /// file and delete them (`D73`, `OBS-135`). Nothing was touched.
@@ -339,6 +357,7 @@ impl fmt::Display for KeystrokeError {
             } => write!(f, "partial-{chords_sent}-of-{chords_expected}-{reason}"),
             Self::NothingArrived { reason } => write!(f, "nothing-arrived-{reason}"),
             Self::HigherPrivileges => f.write_str("higher-privileges"),
+            Self::NeedsPermission => f.write_str("needs-permission"),
             Self::NoTextField => f.write_str("no-text-field"),
             Self::FieldUnconfirmed => f.write_str("field-unconfirmed"),
             Self::InTerminal => f.write_str("in-terminal"),

@@ -76,6 +76,13 @@ too_many_arguments = "warn"
 # `screens.rs` (UX7: the palette remembers its place per layout of screens):
 # `EnumDisplayMonitors`, and the question whether this thread sees physical
 # pixels. Same crate, no new dependency.
+# macOS has NO dependency on purpose (`D138`). The frameworks are declared by hand in
+# `src/macos/ffi.rs`: about twenty C functions from CoreFoundation, ApplicationServices
+# and Carbon. The crates that wrap them (`core-graphics`, `core-foundation`, `objc2`)
+# would put an Objective-C bridge into the tree of the `nkb` command-line tool for those
+# calls, and the register of imports (`crates/nkb-cli/tests/imports/mod.rs`) names each
+# framework `nkb` links with its reason. A function is added to `ffi.rs` with the header
+# it comes from in mind, not from memory.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",

@@ -31,14 +31,18 @@
 
 // Windows feeds it, the tests run it everywhere. Elsewhere it would be dead code,
 // and `clippy -D warnings` refuses that on macOS and Linux (seen 2026-09-23).
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 mod confirm;
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 mod escape;
 pub mod field;
 pub mod held;
 pub mod hotkey;
 pub mod layout;
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(any(target_os = "macos", test))]
+mod macos_rules;
 pub mod privilege;
 pub mod program;
 pub mod screens;
@@ -138,6 +142,12 @@ pub enum SendError {
         chords_expected: usize,
         reason: StopReason,
     },
+    /// The system does not let this program type for the person: on macOS, the
+    /// accessibility permission is not granted. Nothing was sent. Asked before
+    /// every send, because the permission can be granted or taken back while the
+    /// program runs - and because the system accepts the events of a program that
+    /// lacks it and drops them without a word (`OBS-70`).
+    NeedsPermission,
 }
 
 impl core::fmt::Display for SendError {
@@ -168,6 +178,9 @@ impl core::fmt::Display for SendError {
                 "{chords_sent} of {chords_expected} key presses acted before the send \
                  stopped: {reason}"
             ),
+            Self::NeedsPermission => {
+                f.write_str("the system has not given this program permission to send keystrokes")
+            }
         }
     }
 }
@@ -505,6 +518,12 @@ mod windows_impl {
         ]
     }
 
+    /// Windows needs no permission to type: a window with higher privileges is
+    /// refused per window (`privilege.rs`), not for the program as a whole.
+    pub fn send_allowed() -> bool {
+        true
+    }
+
     pub fn foreground_window() -> Option<WindowRef> {
         let handle = unsafe { GetForegroundWindow() };
         if handle.is_null() {
@@ -595,19 +614,22 @@ mod windows_impl {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 mod other_impl {
     use super::{SendError, SendOutcome, SendProgress, WindowRef};
 
     /// Named rather than "this platform", so the message says something the
     /// reader can act on.
-    const SYSTEM: &str = if cfg!(target_os = "macos") {
-        "macOS"
-    } else if cfg!(target_os = "linux") {
+    const SYSTEM: &str = if cfg!(target_os = "linux") {
         "Linux"
     } else {
         "this system"
     };
+
+    /// Nothing sends here, so nothing is allowed to.
+    pub fn send_allowed() -> bool {
+        false
+    }
 
     pub fn foreground_window() -> Option<WindowRef> {
         None
@@ -617,10 +639,8 @@ mod other_impl {
         _text: &str,
         _progress: &mut dyn FnMut(SendProgress),
     ) -> Result<SendOutcome, SendError> {
-        // macOS is not merely unwritten: OBS-70 measured that `CGEventPost` is
-        // refused outright without the accessibility permission, which cannot be
-        // granted by a script. Linux depends on the session protocol - X11 has a
-        // measured route, Wayland has a named candidate and no measurement.
+        // Linux depends on the session protocol - X11 has a measured route,
+        // Wayland has a named candidate and no measurement (`D138`).
         Err(SendError::Unsupported { system: SYSTEM })
     }
 
@@ -632,7 +652,10 @@ mod other_impl {
 #[cfg(windows)]
 use windows_impl as platform;
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+use macos as platform;
+
+#[cfg(not(any(windows, target_os = "macos")))]
 use other_impl as platform;
 
 /// The window in front right now, if there is one.
@@ -683,13 +706,25 @@ pub fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
     platform::send_chords(chords)
 }
 
+/// Whether the system lets this program send keystrokes RIGHT NOW.
+///
+/// Different from [`can_send`], which is a fact about the build: on macOS the
+/// person has to grant the accessibility permission, and can take it back while
+/// the program runs, so the answer is asked again before every send. Where there
+/// is no route at all it is `false`, and [`can_send`] is the question that names
+/// the system.
+#[must_use]
+pub fn send_allowed() -> bool {
+    platform::send_allowed()
+}
+
 /// Whether this build can deliver keystrokes at all.
 ///
 /// Exists so a caller can say so BEFORE doing the work of building a value,
 /// rather than after - and so the answer is one fact in one place instead of a
 /// `cfg` repeated at every call site.
 pub const fn can_send() -> bool {
-    cfg!(windows)
+    cfg!(any(windows, target_os = "macos"))
 }
 
 #[cfg(test)]

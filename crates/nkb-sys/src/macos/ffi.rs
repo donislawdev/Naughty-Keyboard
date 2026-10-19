@@ -1,0 +1,193 @@
+//! The system calls the macOS route makes, declared and nothing else.
+//!
+//! No crate stands between this package and the frameworks: the two that wrap
+//! them (`core-graphics`, `objc2`) would put an Objective-C bridge into the
+//! tree of the `nkb` command-line tool for some twenty C functions. These are
+//! those functions, with the types they take, from the headers of the SDK
+//! (`CGEvent.h`, `AXUIElement.h`, `CarbonEventsCore.h`, `Processes.h`).
+//!
+//! `Boolean` in Core Foundation is an unsigned char and `bool` in Core Graphics
+//! is the C `_Bool`, and the declarations keep them apart on purpose.
+
+use core::ffi::{c_char, c_void};
+
+pub(crate) type CfRef = *const c_void;
+pub(crate) type MutRef = *mut c_void;
+
+/// `kCGEventSourceStatePrivate`.
+pub(crate) const STATE_PRIVATE: i32 = -1;
+/// `kCGEventSourceStateHIDSystemState` - the state of the keyboard as the
+/// hardware and the events posted at the HID tap leave it.
+pub(crate) const STATE_HID: i32 = 1;
+/// `kCGHIDEventTap`: the only tap at which the HID key state follows an event.
+/// Events posted higher are typed all the same and never shown in that state,
+/// which is what every event is waited for by (measured, `D138`).
+pub(crate) const TAP_HID: u32 = 0;
+/// `kCFStringEncodingUTF8`.
+pub(crate) const UTF8: u32 = 0x0800_0100;
+
+/// `noErr`.
+pub(crate) const NO_ERR: i32 = 0;
+/// `kEventClassKeyboard` and `kEventHotKeyPressed`.
+pub(crate) const CLASS_KEYBOARD: u32 = u32::from_be_bytes(*b"keyb");
+pub(crate) const HOT_KEY_PRESSED: u32 = 5;
+
+/// `ProcessSerialNumber`.
+#[repr(C)]
+#[derive(Default)]
+pub(crate) struct ProcessSerialNumber {
+    pub high: u32,
+    pub low: u32,
+}
+
+/// `EventTypeSpec`.
+#[repr(C)]
+pub(crate) struct EventTypeSpec {
+    pub class: u32,
+    pub kind: u32,
+}
+
+/// `EventHotKeyID`.
+#[repr(C)]
+pub(crate) struct EventHotKeyId {
+    pub signature: u32,
+    pub id: u32,
+}
+
+/// `EventHandlerUPP`.
+pub(crate) type EventHandler = extern "C" fn(MutRef, MutRef, MutRef) -> i32;
+
+#[link(name = "CoreFoundation", kind = "framework")]
+unsafe extern "C" {
+    pub(crate) fn CFRelease(object: CfRef);
+    pub(crate) fn CFArrayGetCount(array: CfRef) -> isize;
+    pub(crate) fn CFArrayGetValueAtIndex(array: CfRef, index: isize) -> CfRef;
+    pub(crate) fn CFGetTypeID(object: CfRef) -> usize;
+    pub(crate) fn CFStringGetTypeID() -> usize;
+    pub(crate) fn CFStringCreateWithCString(
+        allocator: CfRef,
+        text: *const c_char,
+        encoding: u32,
+    ) -> CfRef;
+    pub(crate) fn CFStringGetCString(
+        string: CfRef,
+        buffer: *mut c_char,
+        size: isize,
+        encoding: u32,
+    ) -> u8;
+}
+
+#[link(name = "ApplicationServices", kind = "framework")]
+unsafe extern "C" {
+    pub(crate) fn CGEventSourceCreate(state: i32) -> MutRef;
+    pub(crate) fn CGEventCreateKeyboardEvent(source: MutRef, key: u16, down: bool) -> MutRef;
+    pub(crate) fn CGEventKeyboardSetUnicodeString(event: MutRef, length: usize, units: *const u16);
+    pub(crate) fn CGEventSetFlags(event: MutRef, flags: u64);
+    pub(crate) fn CGEventPost(tap: u32, event: MutRef);
+    pub(crate) fn CGEventSourceKeyState(state: i32, key: u16) -> bool;
+    pub(crate) fn CGEventSourceFlagsState(state: i32) -> u64;
+    pub(crate) fn CGPreflightPostEventAccess() -> bool;
+
+    pub(crate) fn AXIsProcessTrusted() -> u8;
+    pub(crate) fn AXUIElementCreateApplication(pid: i32) -> MutRef;
+    pub(crate) fn AXUIElementSetMessagingTimeout(element: CfRef, seconds: f32) -> i32;
+    pub(crate) fn AXUIElementCopyAttributeValue(
+        element: CfRef,
+        attribute: CfRef,
+        value: *mut CfRef,
+    ) -> i32;
+    pub(crate) fn AXUIElementCopyAttributeNames(element: CfRef, names: *mut CfRef) -> i32;
+    pub(crate) fn AXUIElementIsAttributeSettable(
+        element: CfRef,
+        attribute: CfRef,
+        settable: *mut u8,
+    ) -> i32;
+    pub(crate) fn AXUIElementGetPid(element: CfRef, pid: *mut i32) -> i32;
+}
+
+#[link(name = "Carbon", kind = "framework")]
+unsafe extern "C" {
+    pub(crate) fn GetFrontProcess(psn: *mut ProcessSerialNumber) -> i16;
+    pub(crate) fn GetProcessPID(psn: *const ProcessSerialNumber, pid: *mut i32) -> i16;
+
+    pub(crate) fn GetApplicationEventTarget() -> MutRef;
+    pub(crate) fn GetEventDispatcherTarget() -> MutRef;
+    pub(crate) fn InstallEventHandler(
+        target: MutRef,
+        handler: EventHandler,
+        count: u32,
+        types: *const EventTypeSpec,
+        user_data: MutRef,
+        out: *mut MutRef,
+    ) -> i32;
+    pub(crate) fn RemoveEventHandler(handler: MutRef) -> i32;
+    pub(crate) fn RegisterEventHotKey(
+        key: u32,
+        modifiers: u32,
+        id: EventHotKeyId,
+        target: MutRef,
+        options: u32,
+        out: *mut MutRef,
+    ) -> i32;
+    pub(crate) fn UnregisterEventHotKey(hot_key: MutRef) -> i32;
+    pub(crate) fn ReceiveNextEvent(
+        count: u32,
+        types: *const EventTypeSpec,
+        timeout: f64,
+        pull: u8,
+        out: *mut MutRef,
+    ) -> i32;
+    pub(crate) fn SendEventToEventTarget(event: MutRef, target: MutRef) -> i32;
+    pub(crate) fn ReleaseEvent(event: MutRef);
+}
+
+// libSystem is linked into every program, so this block names no library.
+unsafe extern "C" {
+    pub(crate) fn proc_pidpath(pid: i32, buffer: *mut c_void, size: u32) -> i32;
+}
+
+/// An owned Core Foundation object, released when it goes out of scope.
+pub(crate) struct Owned(pub(crate) CfRef);
+
+impl Owned {
+    /// Takes ownership of `object`, or `None` for a null result.
+    ///
+    /// Lazy on purpose (`then`, not `then_some`): the value is BUILT before the
+    /// condition is looked at, a null `Owned` that is built is dropped, and
+    /// releasing null kills the program with a trap (found 2026-10-19, in the
+    /// first test that asked about an application with no accessibility).
+    pub(crate) fn new(object: CfRef) -> Option<Self> {
+        (!object.is_null()).then(|| Self(object))
+    }
+}
+
+impl Drop for Owned {
+    fn drop(&mut self) {
+        // Never null through `new`, and checked anyway: a release of null is not
+        // an error the system reports, it is the end of the process.
+        if !self.0.is_null() {
+            unsafe { CFRelease(self.0) };
+        }
+    }
+}
+
+/// A Core Foundation string made from a NUL-ended name, for the attribute names
+/// the accessibility API takes by string.
+pub(crate) fn cf_string(name: &core::ffi::CStr) -> Option<Owned> {
+    Owned::new(unsafe { CFStringCreateWithCString(core::ptr::null(), name.as_ptr(), UTF8) })
+}
+
+/// The text of a Core Foundation string, if `object` is one and it is valid.
+/// Used for the names of roles and attributes - kinds, never contents.
+pub(crate) fn string_of(object: CfRef) -> Option<String> {
+    if object.is_null() || unsafe { CFGetTypeID(object) != CFStringGetTypeID() } {
+        return None;
+    }
+    let mut buffer = [0 as c_char; 128];
+    let ok = unsafe { CFStringGetCString(object, buffer.as_mut_ptr(), 128, UTF8) };
+    if ok == 0 {
+        return None;
+    }
+    let text = unsafe { core::ffi::CStr::from_ptr(buffer.as_ptr()) };
+    text.to_str().ok().map(str::to_owned)
+}

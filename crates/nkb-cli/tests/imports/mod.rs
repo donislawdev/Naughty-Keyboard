@@ -340,10 +340,31 @@ const LINUX_WINDOW_GRANTED: &[Entry] = &[
     ("posix_spawnp", "the same process start"),
 ];
 
-const MACOS_BOTH: &[Entry] = &[(
-    "/usr/lib/libSystem.B.dylib",
-    "the C library and the system calls. macOS has no other way in",
-)];
+const MACOS_BOTH: &[Entry] = &[
+    (
+        "/usr/lib/libSystem.B.dylib",
+        "the C library and the system calls. macOS has no other way in",
+    ),
+    // The four below arrived with typing on macOS (`D138`), which `nkb send` and
+    // the palette share. None of them opens a connection, and each has its own
+    // reason here.
+    (
+        "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
+        "the strings and arrays the accessibility calls trade in, and the C base types under          Foundation for the window toolkit",
+    ),
+    (
+        "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
+        "the key events the tool posts and the key state it waits on (CGEventPost,          CGEventSourceKeyState), and the geometry of displays for the window toolkit",
+    ),
+    (
+        "/System/Library/Frameworks/ApplicationServices.framework/Versions/A/ApplicationServices",
+        "the accessibility API the typing route asks what has the keyboard focus, and the          umbrella over the frameworks above",
+    ),
+    (
+        "/System/Library/Frameworks/Carbon.framework/Versions/A/Carbon",
+        "the Escape key held for one send (RegisterEventHotKey), the Process Manager that          names the application in front, and the keyboard layout through Text Input Sources",
+    ),
+];
 
 const MACOS_WINDOW: &[Entry] = &[
     (
@@ -361,14 +382,6 @@ const MACOS_WINDOW: &[Entry] = &[
     (
         "/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation",
         "the Objective-C base classes",
-    ),
-    (
-        "/System/Library/Frameworks/CoreFoundation.framework/Versions/A/CoreFoundation",
-        "the C base types under Foundation",
-    ),
-    (
-        "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
-        "drawing and the geometry of displays",
     ),
     (
         "/System/Library/Frameworks/QuartzCore.framework/Versions/A/QuartzCore",
@@ -389,14 +402,6 @@ const MACOS_WINDOW: &[Entry] = &[
     (
         "/System/Library/Frameworks/ColorSync.framework/Versions/A/ColorSync",
         "the colour profile of a display",
-    ),
-    (
-        "/System/Library/Frameworks/ApplicationServices.framework/Versions/A/ApplicationServices",
-        "the umbrella over the frameworks above",
-    ),
-    (
-        "/System/Library/Frameworks/Carbon.framework/Versions/A/Carbon",
-        "the keyboard layout, read through Text Input Sources",
     ),
     (
         "/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices",

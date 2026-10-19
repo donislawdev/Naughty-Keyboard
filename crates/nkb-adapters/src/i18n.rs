@@ -222,6 +222,10 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::NoDirectRoute { .. } => {
             "This build cannot type into other applications on {system}, so values now go to your clipboard, replacing what you had copied. Press your paste shortcut to insert each one."
         }
+        // `D138`, ux-spec.md 6 A. The macOS permission, named as the person finds it.
+        Message::NeedsPermission => {
+            "macOS has not allowed Naughty Keyboard to type for you, so values now go to your clipboard, replacing what you had copied. Press your paste shortcut to insert each one, or turn Naughty Keyboard on in System Settings, Privacy and Security, Accessibility so it can type."
+        }
         Message::ClipboardMode => {
             "Clipboard mode: each value goes to your clipboard, replacing what you had copied. Press your paste shortcut to insert each one."
         }
@@ -330,6 +334,7 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
     match message {
         Message::ClipboardMode
         | Message::ClipboardModeOff
+        | Message::NeedsPermission
         | Message::HigherPrivileges
         | Message::NoTextField
         | Message::ClearingSkipped
@@ -1129,6 +1134,7 @@ mod tests {
             },
             Message::ClipboardMode,
             Message::ClipboardModeOff,
+            Message::NeedsPermission,
             Message::HigherPrivileges,
             Message::NoTextField,
             Message::ClearingSkipped,
@@ -1485,10 +1491,11 @@ mod tests {
             Message::AtFirstValue { .. } => 31,
             Message::ClearingSkippedClosedToAccessibility => 32,
             Message::NothingBefore => 33,
+            Message::NeedsPermission => 34,
         }
     }
 
-    const SLOTS: usize = 34;
+    const SLOTS: usize = 35;
 
     #[test]
     fn every_message_variant_is_listed_here() {

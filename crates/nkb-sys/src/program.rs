@@ -102,7 +102,17 @@ mod platform {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+mod platform {
+    use crate::WindowRef;
+
+    /// The path of the executable behind the application in front, from its pid.
+    pub fn image_path(window: WindowRef) -> Option<Vec<u16>> {
+        crate::macos::image_path(window)
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 mod platform {
     use crate::WindowRef;
 

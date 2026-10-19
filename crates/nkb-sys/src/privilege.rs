@@ -236,7 +236,9 @@ mod tests {
         // Reads this test process's own token - no window, no other process.
         // Where there is a route, a level we cannot read about ourselves would
         // turn every answer into `Unknown` and switch the check off in silence.
-        if !crate::can_send() {
+        // Integrity levels are a Windows idea: macOS sends where it is allowed to,
+        // and has no window it must refuse for being higher (`D72`).
+        if !cfg!(windows) {
             assert_eq!(platform::own_level(), None);
             return;
         }
