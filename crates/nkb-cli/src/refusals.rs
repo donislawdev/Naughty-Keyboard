@@ -66,7 +66,7 @@ pub(crate) fn say_not_cleared(err: &mut impl Write, error: &KeystrokeError) {
 }
 
 /// Why none of the value, or only part of it, reached the field - for a route
-/// that reports it other than through [`SendOutcome::Interrupted`].
+/// that reports it other than through `SendOutcome::Interrupted`.
 pub(crate) fn say_not_delivered(err: &mut impl Write, error: &DeliveryError) {
     match error {
         DeliveryError::NoTarget => {

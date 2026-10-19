@@ -1114,7 +1114,7 @@ mod tests {
 
     use nkb_adapters::{BuiltInCatalogue, TomlPackFormat, i18n};
     use nkb_app::advance_sequence::ChooseError;
-    use nkb_app::ports::SettingChange;
+    use nkb_app::ports::{Availability, SettingChange, ValueDelivery};
     use nkb_app::{AdvanceSequence, KeptSettings};
 
     use super::{
@@ -2372,19 +2372,21 @@ mod tests {
                 .carry_out(Command::TurnOffClipboard)
                 .view
                 .expect("turning off is answered");
-            // Only where this build types into other applications - Windows
-            // today. Elsewhere (`OBS-70`) there is no way to leave the mode
-            // for, and the palette says why rather than pretending: measured
-            // on macOS 2026-10-07, the first full run there since this test
-            // was written assuming Windows.
-            if !cfg!(windows) {
+            // Only where the direct route is open. Where it is not there is no
+            // way to leave the mode for, and the palette says why rather than
+            // pretending (`OBS-70`): no route at all, or - on macOS, asked of
+            // the real route, because a machine that has granted the permission
+            // does leave the mode - the permission the tester has to give
+            // (`D138`). This test assumed Windows until the first full run on
+            // macOS (2026-10-07) and then assumed no permission could be given.
+            let shut = match nkb_adapters::DirectInjection.availability() {
+                Availability::Ready => "",
+                Availability::NeedsPermission => "macOS has not allowed",
+                Availability::Unavailable { .. } => "This build cannot type into",
+            };
+            if !shut.is_empty() {
                 assert_eq!(off.messages.len(), 1, "{:?}", off.messages);
-                assert!(
-                    off.messages[0]
-                        .starts_with("This build cannot type into other applications on "),
-                    "{:?}",
-                    off.messages
-                );
+                assert!(off.messages[0].starts_with(shut), "{:?}", off.messages);
                 assert_eq!(off.clipboard_bar, Some("clipboard mode"));
                 assert!(off.clipboard_mode_on);
                 return;
