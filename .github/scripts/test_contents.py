@@ -17,6 +17,7 @@ import shutil
 import tempfile
 import textwrap
 import unittest
+from unittest import mock
 
 import contents
 
@@ -510,6 +511,16 @@ class StandardTexts(Tree):
         problems, listed = contents.check_standard_texts(self.root)
         self.assertEqual(listed, "SPDX License List 3.29.0")
         self.assertEqual(len(problems), 2, problems)
+
+    def test_a_folder_on_another_drive_is_named_whole(self):
+        # A Windows runner keeps the checkout on D: and its temporary folder on
+        # C:, and no relative path joins two drives.
+        self.put("Extra.txt", "nobody listed me\n")
+        self.put("index.toml", 'list = "SPDX License List 3.29.0"\n[sha256]\n')
+        other_drive = ValueError("path is on mount 'C:', start on mount 'D:'")
+        with mock.patch.object(contents.os.path, "relpath", side_effect=other_drive):
+            problems, _ = contents.check_standard_texts(self.root)
+        self.assertEqual(problems, ["%s/Extra.txt has no digest in index.toml" % self.root.replace(os.sep, "/")])
 
 
 class Tags(unittest.TestCase):

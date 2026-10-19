@@ -1,0 +1,221 @@
+name: Mutation
+
+# Every guard broken on purpose, one entry at a time, to see that it notices.
+#
+# A green test suite says the code does what the tests check. It does not say
+# the tests check anything. That takes each guard broken on purpose and watched
+# going red. .github/mutation/entries.json holds one entry per break, and
+# .github/scripts/mutate.py runs them. How a break is judged, and the safeguards
+# that put every file back, are written at the top of that script.
+#
+# Two kinds of run go through the same three jobs.
+#
+#   - Every Thursday night, and by hand from the Actions tab: every entry, cut
+#     into sixteen parts that run side by side. Red when an entry is not caught
+#     or a part does not finish. This is what finds a guard that stopped
+#     reaching its code through a change in some third file, which no choice of
+#     entries by file can see.
+#   - On a pull request: only the entries the change reaches. A finding is a
+#     warning beside the line it is about, and the run stays green. It is not a
+#     required check, and it is not meant to become one before it has run for
+#     some weeks without a false red.
+#
+# A whole run never happens on a developer's machine. The script refuses to
+# start one without --only, --base or --shard.
+#
+# Nothing runs on a push to main. The weekly run is what judges main, and a
+# workflow that ran on every push would be one a release has to wait for.
+#
+# Every action is pinned to a full commit, with its release in the comment.
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    # Thursday 02:13 UTC, a night no other mutation run of the same account is
+    # set for. They share the twenty jobs a free plan runs at once, and this run
+    # takes sixteen of them.
+    - cron: "13 2 * * 4"
+  workflow_dispatch:
+
+# Reads the code and nothing else. No step writes to the repository, to a pull
+# request or to a release.
+permissions:
+  contents: read
+
+# A newer push to the same pull request makes the older run worthless, so it is
+# cancelled rather than left holding sixteen machines. A weekly or hand-started
+# run is never cancelled by another one.
+concurrency:
+  group: mutation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # No debug symbols, for the reason given in ci.yml: they are most of the size
+  # of a debug build, and the disk of a runner is the limit. Incremental builds
+  # stay on, unlike in ci.yml, because a part builds the same crates again for
+  # every entry, and that is what they are for.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_NET_RETRY: "10"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  plan:
+    name: which entries
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      entries: ${{ steps.plan.outputs.entries }}
+      parts: ${{ steps.plan.outputs.parts }}
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      # The whole history, because a pull request is compared with its base and
+      # the base has to be here to be compared with. Nothing here pushes, so no
+      # token is kept in .git/config.
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # A pull request runs the entries its change reaches, any other run takes
+      # every entry. The commit reaches the script through the environment and
+      # never through the script text.
+      - name: Choose the entries
+        id: plan
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$BASE" ]
+          then
+            python .github/scripts/mutate.py plan --base "$BASE" --output "$GITHUB_OUTPUT"
+          else
+            python .github/scripts/mutate.py plan --output "$GITHUB_OUTPUT"
+          fi
+
+  run:
+    name: part ${{ matrix.shard }}
+    needs: plan
+    if: ${{ needs.plan.outputs.entries != '0' }}
+    # Windows, because every entry was measured there before it moved here, and
+    # the crate that calls into the system compiles most of its code only there.
+    runs-on: windows-latest
+    # A guess of 60 to 110 minutes a part was written down before the first run,
+    # and the first run is the measurement. The ceiling is far above the guess so
+    # that a hang ends as a part that did not finish. The step that breaks the
+    # entries stops first, so that what it judged is still kept.
+    timeout-minutes: 300
+    strategy:
+      # A part that fails must not stop the others. Their verdicts are the run.
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The whole history, for the same reason as in the plan job: a part works
+      # out its share of the same choice of entries the plan made.
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # No cache. The cache of the repository is full with what ci.yml keeps for
+      # main, and sixteen parts saving their own would push that out. Each part
+      # builds its dependencies cold, and the first runs measure what that costs.
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache: "false"
+
+      # Never red on its own. The verdicts go to the JSON file after every entry,
+      # and the report job decides. A part that crashed or ran out of time is
+      # found there as one that did not finish, never as a smaller run.
+      - name: Break the entries of this part
+        continue-on-error: true
+        timeout-minutes: 280
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          SHARD: ${{ matrix.shard }}
+          PARTS: ${{ needs.plan.outputs.parts }}
+        run: |
+          reached=()
+          if [ -n "$BASE" ]
+          then
+            reached=(--base "$BASE")
+          fi
+          python .github/scripts/mutate.py run "${reached[@]}" --shard "$SHARD/$PARTS" --json "result-$SHARD.json"
+
+      - name: Keep the verdicts of this part
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-result-${{ matrix.shard }}
+          path: result-${{ matrix.shard }}.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # How much of the disk a part used. Nothing measured it before the first
+      # run, and it fails far from its cause, in a linker error.
+      - name: Report disk use
+        if: ${{ always() }}
+        run: |
+          du -sh target/mutation 2>/dev/null || true
+          df -h . | tail -n 1
+
+  report:
+    name: what the run found
+    needs: [plan, run]
+    # After every part, whatever each of them did, and never on a run that a
+    # newer push cancelled.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.entries != '0' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.14"
+
+      # A run in which no part reported has nothing to download. That is for the
+      # report to say, as parts that did not report, rather than for this step to
+      # fail on.
+      - name: Collect the verdicts of every part
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mutation-result-*
+          path: results
+          merge-multiple: true
+
+      # Red on the weekly run and on a run by hand. On a pull request the same
+      # findings are warnings, and the job stays green.
+      - name: Report what the parts found
+        env:
+          ENTRIES: ${{ needs.plan.outputs.entries }}
+          PARTS: ${{ needs.plan.outputs.parts }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          gate=()
+          if [ "$EVENT" != "pull_request" ]
+          then
+            gate=(--gate)
+          fi
+          python .github/scripts/mutate.py report --folder results --entries "$ENTRIES" --parts "$PARTS" "${gate[@]}"
