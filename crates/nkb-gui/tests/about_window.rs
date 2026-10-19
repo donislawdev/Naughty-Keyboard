@@ -158,6 +158,9 @@ fn the_about_window_opens_with_the_keyboard_and_gives_it_back_on_every_way_out()
         !about.is_open(),
         "a window the tester left stays on top (OBS-147)"
     );
+    // Hidden once the event is over (`OBS-183`, the pack window's test).
+    slint::platform::update_timers_and_animations();
+    assert!(!window.window().is_visible(), "closed means hidden");
     assert!(
         calls(&keyboard).is_empty(),
         "the keyboard was taken back from where the tester put it"

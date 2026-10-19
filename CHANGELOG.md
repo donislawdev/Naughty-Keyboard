@@ -35,6 +35,14 @@ Changes wait under Unreleased until then.
 - `time-zones` 2.0: the hour the spring clock change skips and the hour the autumn one repeats are now
   the next ones rather than dates of 2027, so the pack no longer goes stale.
 
+### Fixed
+
+- The windows the palette opens - Find a value, Shortcuts and About - came back minimized after being
+  minimized once, with the keyboard in them and nothing on the screen, and one could stay in the
+  taskbar where no key and not even its close button closed it. Minimizing one now closes it like
+  leaving it for another window, every opening shows it, and its title bar keeps only the close
+  button.
+
 ## [0.2.0] - 2026-10-14
 
 The first public release. The project is in early development, and the pack format is not frozen yet:

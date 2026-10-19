@@ -301,6 +301,9 @@ fn the_shortcuts_window_pauses_records_and_always_takes_the_shortcuts_back() {
         .dispatch_event(WindowEvent::WindowActiveChanged(false));
     assert!(!shortcuts.is_open());
     assert_eq!(commands.try_recv(), Ok(Command::Resume));
+    // Hidden once the event is over (`OBS-183`, the pack window's test).
+    slint::platform::update_timers_and_animations();
+    assert!(!window.window().is_visible(), "closed means hidden");
     assert!(
         calls(&keyboard).is_empty(),
         "the keyboard was taken from where the tester put it"
