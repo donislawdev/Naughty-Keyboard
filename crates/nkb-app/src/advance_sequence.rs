@@ -2857,9 +2857,11 @@ mod tests {
         // the date ahead is next year's.
         clock.set(on_day(2026, 10, 24));
         let _ = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+        // The last block is the copied one: the view after the send asked for
+        // one too, before the clock moved.
         assert_eq!(
-            kit.text.blocks.borrow()[0].typed,
-            nkb_core::report::typed_of(&typed("2026-10-25 02:30")),
+            kit.text.blocks.borrow().last().map(|block| &block.typed),
+            Some(&nkb_core::report::typed_of(&typed("2026-10-25 02:30"))),
             "the block quotes what went out, not what would go out now"
         );
         assert!(advance.start_over());
