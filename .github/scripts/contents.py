@@ -129,7 +129,13 @@ def read_toml(path):
 
 
 def relative(path):
-    return os.path.relpath(path, ROOT).replace(os.sep, "/")
+    """The path from the root of the repository, for a sentence. A path on
+    another drive has none (a Windows runner keeps the checkout on D: and its
+    temporary folder on C:), and is named whole."""
+    try:
+        return os.path.relpath(path, ROOT).replace(os.sep, "/")
+    except ValueError:
+        return path.replace(os.sep, "/")
 
 
 def sha256_of(path):
