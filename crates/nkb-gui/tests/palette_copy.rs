@@ -135,11 +135,11 @@ fn each_copy_button_answers_the_pointer_and_asks_for_its_own_band() {
         "before the first value the next band's Copy and the value band's faded one must \
          both stand, in two places: {both:?}"
     );
-    // The arrows that walk the pack stand left of Copy in the same row (`D120`),
-    // and a word of another width moves them too, so the box measured there
-    // reaches over them. Copy ends the row, so its right edge is its own: the
-    // box is cut to the width of the button in the band below, which stands
-    // alone in its row.
+    // The name and its pills stand left of Copy in the same row (`D127`) and
+    // give way to it, so a word of another width moves the button's left edge
+    // and the box measured there reaches past it. Copy ends the row, so its
+    // right edge is its own: the box is cut to the width of the button in the
+    // band below, which stands alone in its row.
     let width = both[1].right - both[1].left;
     let button = Ink {
         left: both[0].right - width,
@@ -326,10 +326,16 @@ fn each_arrow_asks_for_its_own_step_and_back_rests_on_the_first_value() {
 }
 
 /// `D121`, the owner's point 7: after a copy the button says "Copied" and
-/// nothing moves. MEASURED on the render: Skip beside the next band's Copy
-/// stands where it stood, and the palette with the button saying "Copied" is
-/// the same picture as one whose Copy word IS "Copied" - so the word is drawn
-/// whole, not cut to the narrower word's frame.
+/// nothing moves. MEASURED on the render, around the button itself: every
+/// pixel the new word changes lies inside the frame the button had before,
+/// and the button saying "Copied" is the same picture as one whose Copy word
+/// IS "Copied" - so the word is drawn whole, not cut to the narrower word's
+/// frame.
+///
+/// Until 2026-10-19 the test looked for a move in the row of Skip, which stood
+/// beside Copy until `D127` put Copy beside the next value's name. From then
+/// on neither of its two checks could see the button, and the first full
+/// mutation run found both of its breaks missed.
 #[test]
 fn copied_changes_the_word_and_moves_nothing_beside_it() {
     let surface = offscreen::start(WIDTH, HEIGHT);
@@ -348,42 +354,47 @@ fn copied_changes_the_word_and_moves_nothing_beside_it() {
     palette.set_can_go_back(true);
     palette.show().expect("the palette must show");
 
-    // Skip, found by its word, in one state and the other.
-    let skip_at = |palette: &Palette| {
-        palette.set_skip_label("".into());
-        let without = offscreen::draw(&surface, WIDTH, HEIGHT);
-        palette.set_skip_label("Skip".into());
-        let with = offscreen::draw(&surface, WIDTH, HEIGHT);
-        let found = added(&without, &with, WIDTH, HEIGHT).expect("the word Skip is drawn");
-        (found.left, found.right, found.top, found.bottom)
-    };
-    let at_rest = skip_at(&palette);
+    // What the new word changes, anywhere on the palette.
     let rest = offscreen::draw(&surface, WIDTH, HEIGHT);
     palette.set_copied(CopiedButton::Next);
     let saying = offscreen::draw(&surface, WIDTH, HEIGHT);
     let path = offscreen::save(&saying, WIDTH, HEIGHT, "palette-copied.png");
+    let changed = added(&rest, &saying, WIDTH, HEIGHT)
+        .unwrap_or_else(|| panic!("the button said nothing new. Look at {}", path.display()));
+
+    // The button's frame before the copy: what the pointer over it lights up.
+    // The border and the word take another colour under the pointer, and
+    // nothing outside the button does.
+    palette.set_copied(CopiedButton::None);
+    point(palette.window(), changed.centre());
+    let lit = offscreen::draw(&surface, WIDTH, HEIGHT);
+    away(&palette);
+    let frame = added(&rest, &lit, WIDTH, HEIGHT).expect("the pointer over Copy lights it up");
     assert!(
-        added(&rest, &saying, WIDTH, HEIGHT).is_some(),
-        "the button said nothing new. Look at {}",
-        path.display()
+        frame.left > WIDTH / 2 && frame.bottom - frame.top < 30,
+        "the next band's Copy is not one short button at the right end of its row: {frame:?}"
     );
-    assert_eq!(
-        skip_at(&palette),
-        at_rest,
-        "Skip moved when Copy said Copied - the button changed its width. Look at {}",
+    // Inside the border, not on it: a button that took the width of the longer
+    // word moves its own edge, and the name and pills beside it with it.
+    assert!(
+        frame.left < changed.left
+            && changed.right < frame.right
+            && frame.top < changed.top
+            && changed.bottom < frame.bottom,
+        "saying Copied changed the palette at {changed:?}, outside the button's frame \
+         {frame:?} - the button changed its width and moved what stands beside it. Look at {}",
         path.display()
     );
 
-    // The row of the next band's buttons only: the Copy of the band below
-    // takes the same word, and its picture changes with it.
-    palette.set_copied(CopiedButton::None);
+    // The rows of the frame only: the Copy of the band below takes the same
+    // word, and its picture changes with it.
     palette.set_copy_label("Copied".into());
     let word = offscreen::draw(&surface, WIDTH, HEIGHT);
-    let (_, _, top, bottom) = at_rest;
-    let row = (top.saturating_sub(8) * WIDTH) as usize..((bottom + 8) * WIDTH) as usize;
+    let row = (frame.top * WIDTH) as usize..((frame.bottom + 1) * WIDTH) as usize;
     assert!(
         word[row.clone()] == saying[row],
-        "a button saying Copied is not the picture of one whose word is Copied: cut word or other frame. Look at {}",
+        "a button saying Copied is not the picture of one whose word is Copied: cut word or \
+         other frame. Look at {}",
         path.display()
     );
 }

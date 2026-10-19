@@ -6586,7 +6586,7 @@
     },
     {
       "id": "M924",
-      "why": "a button as wide as the word showing - Copied pushes it wider and Skip beside it moves (D121)",
+      "why": "a button as wide as the word showing - Copied pushes it wider and the name and pills beside it move (D121)",
       "file": "crates/nkb-gui/ui/components/button.slint",
       "find": "            min-width: max(word.preferred-width, done-word.preferred-width);",
       "replace": "            min-width: root.done ? done-word.preferred-width : word.preferred-width;",
