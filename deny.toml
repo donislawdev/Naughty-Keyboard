@@ -29,13 +29,18 @@ yanked = "deny"
 # cargo-deny reports an entry that no longer matches anything, so the list
 # cleans itself when Slint moves: delete the entry the run points at.
 #
-# The entry below is "unmaintained", not "vulnerable". No vulnerability is
-# reported against the crate and there is no fixed release to move to, which is
-# why the solution line in the report says "no safe upgrade is available". It
-# sits inside Slint's own tree, so the one who can drop it is Slint, and the next
-# Slint release is the moment to look again.
+# Every entry below is "unmaintained", not "vulnerable". No vulnerability is
+# reported against these crates and there is no fixed release to move to, which
+# is why the solution line in the report says "no safe upgrade is available".
+# They sit inside Slint's own tree, so the one who can drop them is Slint, and
+# the next Slint release is the moment to look again. The three zbus crates
+# went into zbus 6 itself, so they go when Slint and the crates under it move
+# to zbus 6.
 ignore = [
     { id = "RUSTSEC-2026-0192", reason = "`ttf-parser` is reached only through the window decorations that Slint's winit backend draws itself under Wayland on Linux (sctk-adwaita, then ab_glyph). It reads a font the toolkit ships and never a file the tester supplies. No vulnerability is reported against it." },
+    { id = "RUSTSEC-2026-0370", reason = "`zvariant` is unmaintained. It is reached only on Linux, through zbus 5, which Slint and crates under it (accessibility, the tray icon) use to talk over the session bus. It moved into zbus 6, released on 2026-10-16, and nothing in Slint's tree uses zbus 6 yet. No vulnerability is reported against it." },
+    { id = "RUSTSEC-2026-0371", reason = "`zbus_names` is unmaintained. It is reached only on Linux, through zbus 5, which Slint and crates under it (accessibility, the tray icon) use to talk over the session bus. It moved into zbus 6, released on 2026-10-16, and nothing in Slint's tree uses zbus 6 yet. No vulnerability is reported against it." },
+    { id = "RUSTSEC-2026-0372", reason = "`zvariant_derive` is unmaintained. It is the derive macro of `zvariant`, runs only while a Linux build compiles and is not part of the program. It moved into zbus 6 with `zvariant`. No vulnerability is reported against it." },
 ]
 
 [licenses]
