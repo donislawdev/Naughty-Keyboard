@@ -124,7 +124,8 @@ NOT_LOADED = ("SyntaxError", "IndentationError", "ImportError", "ModuleNotFoundE
 DRIVER_MARK = "MUTATE-UNITTEST "
 COLOURS = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 LIBTEST_RUNNING = re.compile(r"^running \d+ tests?$", re.M)
-LIBTEST_LINE = re.compile(r"^test (\S+) \.\.\. (ok|FAILED|ignored)\b", re.M)
+# A test with #[should_panic] is named with a tail: `test a::b - should panic ... ok`.
+LIBTEST_LINE = re.compile(r"^test (\S+)(?: - should panic)? \.\.\. (ok|FAILED|ignored)\b", re.M)
 
 
 class Refused(Exception):
@@ -275,16 +276,31 @@ class Tree:
         return self.texts[relative]
 
     def functions(self, folder):
-        """Every function name defined in a .rs file under the folder."""
+        """Every function name defined in a .rs file under the folder, with the
+        files that define it, as paths from the folder."""
         if folder not in self.indexes:
-            names = set()
-            for directory, _, files in os.walk(self.path(folder)):
+            names = collections.defaultdict(set)
+            start = self.path(folder)
+            for directory, _, files in os.walk(start):
                 for name in files:
                     if name.endswith(".rs"):
-                        relative = os.path.relpath(os.path.join(directory, name), self.root)
-                        names.update(RUST_FUNCTION.findall(self.text(relative.replace(os.sep, "/")) or ""))
-            self.indexes[folder] = names
+                        inside = os.path.relpath(os.path.join(directory, name), start).replace(os.sep, "/")
+                        for function in RUST_FUNCTION.findall(self.text(folder + "/" + inside) or ""):
+                            names[function].add(inside)
+            self.indexes[folder] = dict(names)
         return self.indexes[folder]
+
+
+def module_prefix(inside):
+    """How libtest begins the name of a test written in this file of src/:
+    a/b.rs and a/b/mod.rs give a::b::, and lib.rs and main.rs, the roots of the
+    library and of the program, give nothing."""
+    parts = inside[:-len(".rs")].split("/")
+    if parts[-1] == "mod":
+        parts = parts[:-1]
+    if parts in (["lib"], ["main"]):
+        return ""
+    return "".join(part + "::" for part in parts)
 
 
 def defines_function(text, name):
@@ -324,8 +340,17 @@ def tree_problems(item, tree):
             return problems + ["%s/tests/%s.rs does not exist" % (crate, runner.target)]
         scope = crate + "/tests"
     leaf = item["test"].rsplit("::", 1)[-1]
-    if leaf not in tree.functions(scope):
+    files = tree.functions(scope).get(leaf)
+    if not files:
         problems.append("no function %s is defined in %s" % (leaf, scope))
+    elif scope.endswith("/src"):
+        # A test of the library or of a program runs by its whole path, and
+        # --exact with a shorter name runs nothing and says nothing.
+        prefixes = sorted({module_prefix(inside) for inside in files})
+        if not any(item["test"].startswith(prefix) for prefix in prefixes):
+            problems.append("%s is defined in %s, so libtest names it from %s" % (
+                leaf, " and ".join("%s/%s" % (scope, inside) for inside in sorted(files)),
+                " or ".join(prefixes)))
     return problems
 
 
@@ -561,6 +586,31 @@ def libtest_results(text):
     return dict(LIBTEST_LINE.findall(text))
 
 
+def failure_of(text, name):
+    """Why one test failed, as libtest printed it in the test's own section:
+    where it panicked and the line after, which says what. Empty when the
+    section or the panic is not there."""
+    lines = [line.rstrip() for line in text.splitlines()]
+    header = "---- %s stdout ----" % name
+    if header not in lines:
+        return ""
+    section = lines[lines.index(header) + 1:]
+    for position, line in enumerate(section):
+        if line.startswith("---- ") or line == "failures:":
+            return ""
+        if "panicked at" in line:
+            said = line[line.index("panicked at"):]
+            after = section[position + 1].strip() if position + 1 < len(section) else ""
+            if after and not after.startswith(("note:", "---- ", "failures:")):
+                said = "%s %s" % (said, after)
+            return said[:200]
+    return ""
+
+
+def with_cause(sentence, cause):
+    return "%s: %s" % (sentence, cause) if cause else sentence
+
+
 def judge_rust(outcome, name, minutes):
     if outcome.timed_out:
         return Verdict(TIMEOUT, "stopped after %d minutes" % minutes)
@@ -621,12 +671,12 @@ def judge_pyunit(outcome, name, minutes):
         if report["setup_errors"]:
             return Verdict(WRONG_TEST, "a set-up failed before the test: %s" % report["setup_errors"][0])
         return Verdict(NO_TEST, "no test of that name ran")
-    stopped = [kind for status, kind in found.values() if status == "error" and kind in NOT_LOADED]
+    stopped = [kind for status, kind, _ in found.values() if status == "error" and kind in NOT_LOADED]
     if stopped:
         return Verdict(BROKEN, "the test stopped on %s" % stopped[0])
-    if any(status in ("fail", "error") for status, _ in found.values()):
+    if any(status in ("fail", "error") for status, _, _ in found.values()):
         return Verdict(CAUGHT, "")
-    if all(status == "skipped" for status, _ in found.values()):
+    if all(status == "skipped" for status, _, _ in found.values()):
         return Verdict(NO_TEST, "skipped here: %s" % next(iter(found.values()))[1])
     return Verdict(MISSED, "")
 
@@ -637,8 +687,15 @@ def judge(runner, outcome, name, minutes):
     return judge_pyunit(outcome, name, minutes)
 
 
+def message_of(err):
+    """The first line of what the exception said, short enough for a report."""
+    lines = str(err[1]).strip().splitlines()
+    return lines[0][:200] if lines else ""
+
+
 class Recording(unittest.TestResult):
-    """What each test came to, by its id, with the exception's name."""
+    """What each test came to, by its id: [status, the exception's name or the
+    reason of a skip, the first line of what the exception said]."""
 
     def __init__(self):
         super().__init__()
@@ -648,36 +705,36 @@ class Recording(unittest.TestResult):
 
     def addSuccess(self, test):
         super().addSuccess(test)
-        self.outcomes.setdefault(test.id(), ["ok", ""])
+        self.outcomes.setdefault(test.id(), ["ok", "", ""])
 
     def addFailure(self, test, err):
         super().addFailure(test, err)
-        self.outcomes[test.id()] = ["fail", err[0].__name__]
+        self.outcomes[test.id()] = ["fail", err[0].__name__, message_of(err)]
 
     def addError(self, test, err):
         super().addError(test, err)
         if isinstance(test, unittest.TestCase):
-            self.outcomes[test.id()] = ["error", err[0].__name__]
+            self.outcomes[test.id()] = ["error", err[0].__name__, message_of(err)]
         else:
             self.setup_errors.append("%s: %s" % (test.id(), err[0].__name__))
 
     def addSkip(self, test, reason):
         super().addSkip(test, reason)
-        self.outcomes[test.id()] = ["skipped", reason]
+        self.outcomes[test.id()] = ["skipped", reason, ""]
 
     def addExpectedFailure(self, test, err):
         super().addExpectedFailure(test, err)
-        self.outcomes[test.id()] = ["ok", ""]
+        self.outcomes[test.id()] = ["ok", "", ""]
 
     def addUnexpectedSuccess(self, test):
         super().addUnexpectedSuccess(test)
-        self.outcomes[test.id()] = ["fail", "UnexpectedSuccess"]
+        self.outcomes[test.id()] = ["fail", "UnexpectedSuccess", ""]
 
     def addSubTest(self, test, subtest, err):
         super().addSubTest(test, subtest, err)
         if err is not None:
             failed = issubclass(err[0], test.failureException)
-            self.outcomes[test.id()] = ["fail" if failed else "error", err[0].__name__]
+            self.outcomes[test.id()] = ["fail" if failed else "error", err[0].__name__, message_of(err)]
 
 
 def unittest_driver(folder, module, patterns):
@@ -823,7 +880,8 @@ def untouched(runner, outcome, name, minutes):
         if status == "ok":
             return None
         if status == "FAILED":
-            return Verdict(BASELINE_RED, "the test fails on the untouched tree")
+            return Verdict(BASELINE_RED, with_cause("the test fails on the untouched tree",
+                                                    failure_of(outcome.text, name)))
         if status == "ignored":
             return Verdict(NO_TEST, "the test is ignored")
         return Verdict(NO_TEST, "no test of that name ran")
@@ -834,9 +892,12 @@ def untouched(runner, outcome, name, minutes):
     found = matching(report, name)
     if not found:
         return Verdict(NO_TEST, "no test of that name ran")
-    if any(status in ("fail", "error") for status, _ in found.values()):
-        return Verdict(BASELINE_RED, "the test fails on the untouched tree")
-    if all(status == "skipped" for status, _ in found.values()):
+    red = [(kind, message) for status, kind, message in found.values() if status in ("fail", "error")]
+    if red:
+        kind, message = red[0]
+        return Verdict(BASELINE_RED, with_cause("the test fails on the untouched tree",
+                                                with_cause(kind, message)))
+    if all(status == "skipped" for status, _, _ in found.values()):
         return Verdict(NO_TEST, "skipped here: %s" % next(iter(found.values()))[1])
     return None
 

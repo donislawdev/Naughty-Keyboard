@@ -51,6 +51,9 @@ def libtest(results, code=None):
 
 
 def driver(tests, not_loaded=(), setup_errors=()):
+    """The driver's report for {id: [status, name or reason]} or with the
+    message as a third element, which is empty when left out."""
+    tests = {name: (list(said) + ["", ""])[:3] for name, said in tests.items()}
     return outcome(mutate.DRIVER_MARK + json.dumps({
         "tests": tests, "not_loaded": list(not_loaded), "setup_errors": list(setup_errors)}) + "\n")
 
@@ -181,6 +184,8 @@ class FitsTheCode(Planted):
         self.write("crates/nkb-x/src/lib.rs", "let x = 1\nmod tests {\n    fn t_ok() {}\n}\n")
         self.write("crates/nkb-x/tests/guard.rs", "fn guards() {}\n")
         self.write("crates/nkb-x/tests/shared/mod.rs", "fn helper() {}\n")
+        self.write("crates/nkb-x/src/a/b.rs", "mod tests {\n    fn t_deep() {}\n}\n")
+        self.write("crates/nkb-x/src/c/mod.rs", "mod tests {\n    fn t_folder() {}\n}\n")
         self.write(".github/scripts/test_gate.py", "class Gate:\n    def test_blocks(self):\n        pass\n")
         self.tree = mutate.Tree(self.root)
 
@@ -208,6 +213,28 @@ class FitsTheCode(Planted):
         self.assertIn("is not a crate", self.problems(runner="rust:nkb-y:lib")[0])
         self.assertIn("named like", self.problems(runner="pyunit:.github/scripts:test_gate", test="test_x")[0])
         self.assertIn("does not exist", self.problems(runner="pyunit:.github/scripts:test_none")[0])
+
+    def test_a_test_of_the_library_is_named_by_the_path_of_its_file(self):
+        # cargo test -- --exact runs a test of the library only by its whole
+        # path, and a shorter name runs nothing without a word. The path begins
+        # with the modules of the file, a folder's mod.rs is the folder, and
+        # lib.rs and main.rs add nothing.
+        self.assertEqual(self.problems(test="a::b::tests::t_deep"), [])
+        self.assertEqual(self.problems(test="c::tests::t_folder"), [])
+        self.assertEqual(self.problems(runner="rust:nkb-x:bin=x", test="a::b::tests::t_deep"), [])
+        for short in ("t_deep", "tests::t_deep", "b::tests::t_deep", "a::bb::tests::t_deep"):
+            with self.subTest(test=short):
+                found = self.problems(test=short)
+                self.assertEqual(len(found), 1, found)
+                self.assertIn("crates/nkb-x/src/a/b.rs, so libtest names it from a::b::", found[0])
+        self.assertIn("names it from c::", self.problems(test="tests::t_folder")[0])
+        # A name defined in two files fits when it begins with either path.
+        self.write("crates/nkb-x/src/c/mod.rs", "mod tests {\n    fn t_folder() {}\n    fn t_deep() {}\n}\n")
+        tree = mutate.Tree(self.root)
+        self.assertEqual(mutate.tree_problems(entry(test="c::tests::t_deep"), tree), [])
+        self.assertIn("a::b:: or c::", mutate.tree_problems(entry(test="t_deep"), tree)[0])
+        # An integration test is a program of its own, and the rule is not its.
+        self.assertEqual(self.problems(runner="rust:nkb-x:guard", test="helper"), [])
 
     def test_a_file_that_is_gone_is_named(self):
         self.assertIn("does not exist", self.problems(file="crates/nkb-x/src/gone.rs")[0])
@@ -248,6 +275,12 @@ class JudgingRust(unittest.TestCase):
     def test_a_name_inside_another_name_is_not_it(self):
         self.assertEqual(self.judge(libtest({"a::t_longer": "FAILED"})), mutate.WRONG_TEST)
 
+    def test_a_test_that_should_panic_is_read_by_its_name(self):
+        # libtest adds a tail to the name of a #[should_panic] test.
+        self.assertEqual(self.judge(libtest({"a::t - should panic": "FAILED"})), mutate.CAUGHT)
+        self.assertEqual(self.judge(libtest({"a::t - should panic": "ok"})), mutate.MISSED)
+        self.assertEqual(self.judge(libtest({"a::t_other - should panic": "FAILED"})), mutate.WRONG_TEST)
+
 
 class JudgingPython(unittest.TestCase):
     def judge(self, out, name="test_blocks"):
@@ -280,6 +313,44 @@ class Baseline(unittest.TestCase):
         self.assertEqual(mutate.untouched(rust, out, "a::red", 30).verdict, mutate.BASELINE_RED)
         self.assertEqual(mutate.untouched(rust, out, "a::off", 30).verdict, mutate.NO_TEST)
         self.assertEqual(mutate.untouched(rust, out, "a::gone", 30).verdict, mutate.NO_TEST)
+
+    def test_a_red_test_says_why(self):
+        # Without the cause a red baseline in CI can only be guessed at.
+        rust = mutate.parse_runner("rust:nkb-x:lib")
+        printed = "\n".join([
+            "running 2 tests",
+            "test a::red ... FAILED",
+            "test a::other ... FAILED",
+            "",
+            "failures:",
+            "",
+            "---- a::other stdout ----",
+            "",
+            "thread 'a::other' panicked at src/other.rs:1:1:",
+            "not this one",
+            "",
+            "---- a::red stdout ----",
+            "",
+            "thread 'a::red' panicked at src/a.rs:10:5:",
+            "assertion `left == right` failed",
+            "  left: 1",
+            "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace",
+            "",
+            "failures:",
+            "    a::other",
+            "    a::red",
+            ""])
+        self.assertEqual(mutate.untouched(rust, outcome(printed, 101), "a::red", 30).detail,
+                         "the test fails on the untouched tree: panicked at src/a.rs:10:5: "
+                         "assertion `left == right` failed")
+        # A failure without a section of its own says what it can.
+        self.assertEqual(mutate.untouched(rust, libtest({"a::red": "FAILED"}), "a::red", 30).detail,
+                         "the test fails on the untouched tree")
+        python = mutate.parse_runner("pyunit:.github/scripts:test_gate")
+        out = driver({"m.C.test_red": ["error", "ValueError", "path is on mount 'D:', start on mount 'C:'"]})
+        self.assertEqual(mutate.untouched(python, out, "test_red", 30).detail,
+                         "the test fails on the untouched tree: ValueError: path is on mount 'D:', "
+                         "start on mount 'C:'")
 
     def test_an_untouched_tree_that_does_not_build_judges_nothing(self):
         rust = mutate.parse_runner("rust:nkb-x:lib")
@@ -338,12 +409,12 @@ class TheUnittestDriver(Planted):
         ]))
         tests = self.report("test_known", "test_")["tests"]
         self.assertEqual(tests, {
-            "test_known.Known.test_passes": ["ok", ""],
-            "test_known.Known.test_fails": ["fail", "AssertionError"],
-            "test_known.Known.test_raises": ["error", "KeyError"],
-            "test_known.Known.test_names_nothing": ["error", "NameError"],
-            "test_known.Known.test_skipped": ["skipped", "not here"],
-            "test_known.Known.test_a_subtest_fails": ["fail", "AssertionError"],
+            "test_known.Known.test_passes": ["ok", "", ""],
+            "test_known.Known.test_fails": ["fail", "AssertionError", "1 != 2"],
+            "test_known.Known.test_raises": ["error", "KeyError", "'missing'"],
+            "test_known.Known.test_names_nothing": ["error", "NameError", "name 'undefined_name' is not defined"],
+            "test_known.Known.test_skipped": ["skipped", "not here", ""],
+            "test_known.Known.test_a_subtest_fails": ["fail", "AssertionError", "1 != 0"],
         })
         # The driver picks the way -k does, by a part of the name.
         only = self.report("test_known", "test_fails", "test_passes")
