@@ -9,4 +9,4 @@
 # so a run can differ from the last one in a dependency of Semgrep. The job holds
 # no secret and a read-only token, which is what makes that acceptable. Pinning
 # every dependency with hashes is the next step if this ever changes.
-semgrep==1.179.0
+semgrep==1.180.0
