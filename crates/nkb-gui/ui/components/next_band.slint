@@ -109,9 +109,11 @@ export component NextBand inherits Zone {
     }
     // The risk beside the name rather than on a row of its own: the palette
     // stays on top of the application under test, and a row spent on one pill
-    // is height taken from it. The name gives way, the pill does not, and the
-    // line is a pill's height when there is none, so a value with a risk is as
-    // tall as one without.
+    // is height taken from it. The name gives way, the pill does not. The Copy
+    // button at the end of the line is as tall as a pill and keeps its place
+    // when hidden (`slint.md` 2.55), so a value with a risk is as tall as one
+    // without, and so is the end of a pack - the render of that state in
+    // `palette_appearance` holds it.
     HorizontalLayout {
         spacing: Tokens.space-2;
         TextName {
@@ -121,10 +123,9 @@ export component NextBand inherits Zone {
             visible: root.has-value;
         }
         // Empty at the end of a pack, where a layout has no `visible` of its
-        // own to hide it by - and as tall as a pill either way.
+        // own to hide it by.
         MarkerRow {
             markers: root.has-value ? root.markers : [];
-            keeps-height: true;
         }
         // Copy beside the value it copies, not among the arrows that walk the
         // pack, where it read as copying something else (the owner's point 3,

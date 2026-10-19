@@ -385,25 +385,19 @@ export struct Marker {
     risky: bool,
 }
 
+// Empty, it takes no room. A line that must be as tall with a marker as
+// without gets that height from something else that stands in it: the next
+// value's line has its Copy button, laid out even when hidden (`slint.md`
+// 2.55). Until 2026-10-19 the row could hold a hidden pill of no width for
+// that, and the layout gave the hidden pill a gap of its own beside the real
+// one.
 export component MarkerRow inherits HorizontalLayout {
     in property <[Marker]> markers;
-    // As tall as a pill when it holds none: for a line that must be as tall
-    // with a marker as without - the next value's, which changes with every
-    // press and must not move what stands below it (`D110`). Off by default,
-    // so a row of markers on a line of its own takes no room when empty.
-    in property <bool> keeps-height;
     spacing: Tokens.space-2;
     alignment: start;
 
     for marker in root.markers: Pill {
         text: marker.text;
         tint: marker.risky ? Tokens.risk : Tokens.text-muted;
-    }
-    // Never drawn and no width: it lends the row a pill's height from the
-    // pill's own typeface and padding, not from a number fitted to one machine
-    // (GUI rule 14) - the shape `PickRowView` measured first (`slint.md` 2.36).
-    if root.keeps-height: Pill {
-        width: 0px;
-        visible: false;
     }
 }

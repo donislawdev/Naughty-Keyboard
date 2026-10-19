@@ -3753,15 +3753,6 @@
       "runner": "rust:nkb-gui:palette_appearance"
     },
     {
-      "id": "M608",
-      "why": "the name line in the Next band without the height of a pill - at the end of the pack the band shrinks and everything below jumps (D110)",
-      "file": "crates/nkb-gui/ui/components/next_band.slint",
-      "find": "            keeps-height: true;",
-      "replace": "            keeps-height: false;",
-      "test": "the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one",
-      "runner": "rust:nkb-gui:palette_appearance"
-    },
-    {
       "id": "M609",
       "why": "the Last sent band is missing before the first value - the first press puts the band in and moves the switches under the pointer (D110)",
       "file": "crates/nkb-gui/ui/screens/palette.slint",
