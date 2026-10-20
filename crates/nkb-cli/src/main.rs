@@ -20,6 +20,7 @@ mod lint_json;
 mod lint_report;
 mod output;
 mod refusals;
+mod sent_notes;
 
 use clearing::{not_cleared, say_clearing_before_failure};
 use emit_output::{EmitFormat, Form};
@@ -37,6 +38,7 @@ use nkb_app::{
 use nkb_core::report::{ControlKind, Target};
 use output::{out, outln};
 use refusals::{NEEDS_PERMISSION, say_not_cleared, say_not_delivered, stop_reason};
+use sent_notes::{say_pace, say_text_substitutions};
 use std::io::Write;
 use std::path::Path;
 
@@ -777,6 +779,7 @@ fn report_send(err: &mut impl Write, wanted: &str, outcome: SendOutcome) -> Exit
             utf16_units,
             clearing,
             paced,
+            may_alter,
         } => {
             match clearing {
                 ClearingOutcome::Done => {
@@ -793,22 +796,8 @@ fn report_send(err: &mut impl Write, wanted: &str, outcome: SendOutcome) -> Exit
                 "  {}",
                 sent_counts(graphemes, code_points, bytes, utf16_units)
             );
-            // Said plainly, because the shorter sentence reads as a stronger
-            // claim than the tool can make. Paced (`D95`), the application's
-            // queue took every key - which is still not what the field KEPT.
-            // Unpaced, only the system took them, and a busy application may
-            // have lost some (`OBS-158`).
-            let _ = if paced {
-                writeln!(
-                    err,
-                    "  the application took every keystroke - check the field to see what it kept"
-                )
-            } else {
-                writeln!(
-                    err,
-                    "  this application's pace could not be followed, so characters may be missing if it was busy - check the field"
-                )
-            };
+            say_pace(err, paced);
+            say_text_substitutions(err, may_alter);
             if warnings > 0 {
                 let _ = writeln!(
                     err,
@@ -1267,6 +1256,7 @@ mod tests {
     use super::*;
     use nkb_app::{DeliveryError, KeystrokeError, StopReason};
     use nkb_core::preview::{Recipe, ValuePreview};
+    use nkb_core::substitutions::Substitutions;
 
     fn args(items: &[&str]) -> Vec<String> {
         items.iter().map(|s| (*s).to_owned()).collect()
@@ -1432,6 +1422,34 @@ mod tests {
     }
 
     #[test]
+    fn a_send_the_system_may_have_changed_says_which_substitutions_could_have_acted() {
+        // `D139`: nothing is said when nothing could have acted, and when
+        // something could, the note names the services in words the person finds
+        // in the keyboard settings - on stderr, the exit code unchanged.
+        let sent = |may_alter: Substitutions| SendOutcome::Sent {
+            facts: some_facts(),
+            utf16_units: 1,
+            clearing: ClearingOutcome::NotAsked,
+            paced: true,
+            may_alter,
+        };
+        let (quiet, code) = reported(sent(Substitutions::NONE));
+        assert_eq!(code, ExitCode::Ok);
+        assert!(!quiet.contains("text substitutions"), "{quiet}");
+
+        let (said, code) = reported(sent(Substitutions {
+            capitalization: true,
+            period: true,
+            ..Substitutions::NONE
+        }));
+        assert_eq!(code, ExitCode::Ok);
+        assert!(
+            said.contains("the system's text substitutions may have changed what went in: the first letter of a sentence made a capital and a period added after two spaces - "),
+            "{said}"
+        );
+    }
+
+    #[test]
     fn every_ending_of_a_send_has_its_exit_code_and_only_a_delivery_says_sent() {
         // The exit codes are the table every pipeline reads (`D46`), and a zero
         // with nothing delivered is the bug this command is most likely to grow.
@@ -1443,6 +1461,7 @@ mod tests {
                     utf16_units: 1,
                     clearing: ClearingOutcome::Done,
                     paced: true,
+                    may_alter: Substitutions::NONE,
                 },
                 ExitCode::Ok,
             ),

@@ -506,3 +506,48 @@ pub fn warnings(count: usize) -> String {
         &[("count", &count.to_string())],
     )
 }
+
+/// How many characters the typeface note names before it counts the rest.
+///
+/// Eight, because the longest list any shipped value produces is eight - the
+/// full-width Latin one - so every shipped value is named whole. Past that the
+/// note grows by a line for roughly every eight more and pushes the counters,
+/// which a tester came to read, down the palette. Measured 2026-09-23 in the
+/// palette render: six code points take two lines, the first holding five
+/// after the words.
+const NOT_GUARANTEED_LISTED: usize = 8;
+
+/// The note under the preview naming what the shipped typeface does not draw.
+///
+/// `None` for an empty list, so "nothing to say" has one representation and a
+/// caller cannot show a note that ends in a colon.
+///
+/// The characters are written as `U+30B9`, never as themselves, and that is the
+/// whole point of the note: a character outside the guarantee may draw as the
+/// empty rectangle the note exists to explain. The notation is the Unicode
+/// standard's own and reads the same in every language, which is why it is
+/// written here rather than behind a key of its own.
+#[must_use]
+pub fn not_guaranteed(outside: &[char]) -> Option<String> {
+    if outside.is_empty() {
+        return None;
+    }
+    let list = outside
+        .iter()
+        .take(NOT_GUARANTEED_LISTED)
+        .map(|c| format!("U+{:04X}", u32::from(*c)))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let rest = outside.len().saturating_sub(NOT_GUARANTEED_LISTED);
+    Some(if rest == 0 {
+        fill(
+            pattern_palette_label(PaletteLabel::NotGuaranteed),
+            &[("list", &list)],
+        )
+    } else {
+        fill(
+            pattern_palette_label(PaletteLabel::NotGuaranteedMore),
+            &[("list", &list), ("rest", &rest.to_string())],
+        )
+    })
+}

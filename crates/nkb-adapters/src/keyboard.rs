@@ -11,6 +11,7 @@ use nkb_app::ports::{
 };
 use nkb_core::keys::{Key, KeyChord};
 use nkb_core::report::{ControlKind, Target};
+use nkb_core::substitutions::{Substitutions, could_act_on};
 
 /// Sends the value as synthetic keystrokes, straight to the focused field.
 ///
@@ -101,6 +102,20 @@ impl ValueDelivery for DirectInjection {
                 })
             }
         }
+    }
+
+    fn may_alter(&self, text: &str) -> Substitutions {
+        services_in_effect(nkb_sys::text_services::text_services()).both(could_act_on(text))
+    }
+}
+
+/// The text services the system reports on, in the words of the core - one to
+/// one, the two crates do not depend on each other (`D139`).
+fn services_in_effect(services: nkb_sys::text_services::TextServices) -> Substitutions {
+    Substitutions {
+        capitalization: services.capitalization,
+        period: services.period,
+        quotes: services.quotes,
     }
 }
 
@@ -381,6 +396,25 @@ mod tests {
                 StopReason::Escape
             ]
         );
+    }
+
+    #[test]
+    fn the_services_the_system_reports_become_the_ones_of_the_core() {
+        use nkb_sys::text_services::TextServices;
+        let on = TextServices {
+            capitalization: true,
+            period: false,
+            quotes: true,
+        };
+        assert_eq!(
+            services_in_effect(on),
+            Substitutions {
+                capitalization: true,
+                period: false,
+                quotes: true
+            }
+        );
+        assert!(services_in_effect(TextServices::default()).is_empty());
     }
 
     #[test]

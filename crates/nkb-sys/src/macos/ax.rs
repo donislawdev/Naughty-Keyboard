@@ -15,6 +15,11 @@
 //! Plus, for a terminal, the file name of the program (`program.rs`). Never the
 //! title, the description, the value or the text of anything.
 //!
+//! And one more fact, asked only when the application shows no focused element
+//! at all: whether it has a window in front ([`has_window`]). The window is a
+//! reference whose only use is that it exists. `tests/ax_reads_only_kinds.rs`
+//! holds the list of attribute names, and goes red when one is added.
+//!
 //! # Measured 2026-10-19 (macOS 27.0, a Slint window, `plain` field)
 //!
 //! - asked of the system-wide element the answer is always an error (`-25204`),
@@ -27,9 +32,25 @@
 //! - the field answered `AXTextArea`, subrole `AXUnknown`, value settable, a
 //!   selected-range attribute present. A second request took 0.9 ms.
 //!
-//! Not measured, and so `Unknown` here: Chromium and Firefox (whose trees are
-//! built only for a client that asks), Safari, and anything in a terminal beyond
-//! Terminal itself.
+//! # Measured 2026-10-20 (macOS 27.0, a page with one field per kind)
+//!
+//! - Safari answers like a native application, for `text`, `search`, `email`,
+//!   `password` (subrole `AXSecureTextField`), `textarea` and `contenteditable`:
+//!   `AXTextField` or `AXTextArea`, value settable, selected range present.
+//! - Chrome 152 does NOT. Its tree is built only for a client that asks, and a
+//!   plain read asks nothing: 60 requests over 2.4 s all answered `-25212`, the
+//!   focus of a page in the window in front. Writing `AXEnhancedUserInterface` to
+//!   the application wakes it (2 s for the first answer, then 1 ms), after which
+//!   every kind answers as in Safari. Electron (Visual Studio Code) wakes on
+//!   `AXManualAccessibility` and answers with a notification in its own window
+//!   ("Are you using a screen reader"), so this module never writes either: a tool
+//!   that changes how the browser under test renders pages, or what an editor asks
+//!   its user, would be measuring itself. The window in front is then
+//!   [`FocusedInput::ClosedToAccessibility`], as Firefox is on Windows (`D125`).
+//! - TextEdit answers `AXTextArea`, and Terminal.app `AXTextArea` with a value that
+//!   cannot be set, which the terminal rule of `classify` runs ahead of.
+//!
+//! Not measured, and so `Unknown` here: anything in a terminal beyond Terminal.
 
 use core::time::Duration;
 use std::time::Instant;
@@ -37,7 +58,7 @@ use std::time::Instant;
 use super::ffi::{self, CfRef, Owned};
 use crate::WindowRef;
 use crate::field::{FocusedInput, LOOK_STEP_MS, SECOND_LOOK_MS, TIMEOUT_MS};
-use crate::macos_rules::{TERMINAL_PROGRAMS, classify};
+use crate::macos_rules::{TERMINAL_PROGRAMS, classify, silent_answer};
 
 /// `kAXErrorNoValue`: the element has no focused child yet.
 const NO_VALUE: i32 = -25212;
@@ -98,6 +119,17 @@ fn read(app: CfRef, pid: i32) -> Result<Reading, i32> {
     })
 }
 
+/// Whether `app` has a window in front - a reference that exists, nothing read
+/// from it. The question behind [`FocusedInput::ClosedToAccessibility`].
+fn has_window(app: CfRef) -> bool {
+    let Some(name) = ffi::cf_string(c"AXFocusedWindow") else {
+        return false;
+    };
+    let mut window: CfRef = core::ptr::null();
+    let error = unsafe { ffi::AXUIElementCopyAttributeValue(app, name.0, &mut window) };
+    error == 0 && Owned::new(window).is_some()
+}
+
 /// What holds the keyboard focus in the application behind `window`, asked fresh.
 pub(crate) fn focused_input(window: WindowRef) -> FocusedInput {
     // A pid of zero or below is no process, and the accessibility call does not
@@ -120,6 +152,9 @@ pub(crate) fn focused_input(window: WindowRef) -> FocusedInput {
             Err(NO_VALUE) if Instant::now() < deadline => {
                 std::thread::sleep(Duration::from_millis(LOOK_STEP_MS));
             }
+            // The whole second look went by and the application still shows no
+            // focus: a window with nothing inside it, or no window at all.
+            Err(NO_VALUE) => return silent_answer(has_window(app.0)),
             Err(_) => return FocusedInput::Unknown,
         }
     };

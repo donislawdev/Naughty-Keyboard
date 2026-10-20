@@ -80,17 +80,21 @@ use crate::settings_file::SCHEMA;
 // Split by the window a word stands in, so that each window's words are found
 // in one file - and no file grows past the ceiling of `D113`. The paths stay
 // what they were: every name below is still `nkb_adapters::i18n::<name>`.
+mod causes;
 mod palette;
 mod registration;
+mod substitutions;
 mod windows;
 
+pub use causes::closed_window as closed_window_cause;
 use palette::pattern_palette_label;
 pub use palette::{
     PaletteLabel, back_to, browser_did_not_open, counter, counts, label, next_end_of_pack,
-    next_value, no_value_yet, pair_half, previous_types, sent_to, skip_to, typing_counter,
-    warnings,
+    next_value, no_value_yet, not_guaranteed, pair_half, previous_types, sent_to, skip_to,
+    typing_counter, warnings,
 };
 pub use registration::{ended, registration, registrations, shortcuts_unavailable};
+pub use substitutions::substitution_names;
 pub use windows::{
     AboutLabel, MatchPlace, PacksLabel, ShortcutsLabel, WelcomeLabel, about_copyright, about_label,
     found_in, no_match, not_read, pack_problems, pack_refused, pack_unreadable, packs_label,
@@ -241,9 +245,13 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::ClearingSkippedInTerminal => {
             "Not cleared first: this is a terminal, where the clearing keys go to the program running in it and could act beyond the line. The value went in on top of what was there."
         }
-        // `D125`, ux-spec.md 6 A. The setting's words are Firefox's own.
+        // `D125`, `D139`, ux-spec.md 6 A. `{cause}` is the program's own, per system.
         Message::ClearingSkippedClosedToAccessibility => {
-            "Not cleared first: this window shows the system nothing inside it, so the clearing keys could reach beyond the field, and the value went in on top of what was there. Firefox does this while \"Prevent accessibility services from accessing your browser\" is on in its settings - turn it off and restart Firefox to have the line cleared."
+            "Not cleared first: this window shows the system nothing inside it, so the clearing keys could reach beyond the field, and the value went in on top of what was there. {cause}"
+        }
+        // `D139`, ux-spec.md 6 A. The settings are macOS's own, named as the person finds them.
+        Message::MayBeAltered(_) => {
+            "The system's text substitutions may have changed what went in: {what}. To type exactly what is shown, switch them off in System Settings, Keyboard, Text Input, Edit."
         }
         Message::ClipboardBusy => {
             "Another application is holding the clipboard, so the value was not placed on it. Press the shortcut again in a moment."
@@ -336,7 +344,6 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
         | Message::NoTextField
         | Message::ClearingSkipped
         | Message::ClearingSkippedInTerminal
-        | Message::ClearingSkippedClosedToAccessibility
         | Message::ClipboardBusy
         | Message::NoTarget
         | Message::ClearingFailed
@@ -344,6 +351,10 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
         | Message::NothingBefore
         | Message::NothingToReport => pattern.to_owned(),
         Message::NoDirectRoute { system } => fill(pattern, &[("system", system)]),
+        Message::MayBeAltered(services) => substitutions::sentence(pattern, *services),
+        Message::ClearingSkippedClosedToAccessibility => {
+            fill(pattern, &[("cause", causes::closed_window())])
+        }
         Message::ClipboardFailed { detail } => fill(pattern, &[("detail", detail)]),
         Message::NotForClipboard { id, character } => fill(
             pattern,
@@ -619,51 +630,6 @@ pub fn recipe(count: u32, unit: &str) -> String {
         pattern_palette_label(PaletteLabel::Recipe),
         &[("count", &count.to_string()), ("unit", unit)],
     )
-}
-
-/// How many characters the typeface note names before it counts the rest.
-///
-/// Eight, because the longest list any shipped value produces is eight - the
-/// full-width Latin one - so every shipped value is named whole. Past that the
-/// note grows by a line for roughly every eight more and pushes the counters,
-/// which a tester came to read, down the palette. Measured 2026-09-23 in the
-/// palette render: six code points take two lines, the first holding five
-/// after the words.
-const NOT_GUARANTEED_LISTED: usize = 8;
-
-/// The note under the preview naming what the shipped typeface does not draw.
-///
-/// `None` for an empty list, so "nothing to say" has one representation and a
-/// caller cannot show a note that ends in a colon.
-///
-/// The characters are written as `U+30B9`, never as themselves, and that is the
-/// whole point of the note: a character outside the guarantee may draw as the
-/// empty rectangle the note exists to explain. The notation is the Unicode
-/// standard's own and reads the same in every language, which is why it is
-/// written here rather than behind a key of its own.
-#[must_use]
-pub fn not_guaranteed(outside: &[char]) -> Option<String> {
-    if outside.is_empty() {
-        return None;
-    }
-    let list = outside
-        .iter()
-        .take(NOT_GUARANTEED_LISTED)
-        .map(|c| format!("U+{:04X}", u32::from(*c)))
-        .collect::<Vec<_>>()
-        .join(" ");
-    let rest = outside.len().saturating_sub(NOT_GUARANTEED_LISTED);
-    Some(if rest == 0 {
-        fill(
-            pattern_palette_label(PaletteLabel::NotGuaranteed),
-            &[("list", &list)],
-        )
-    } else {
-        fill(
-            pattern_palette_label(PaletteLabel::NotGuaranteedMore),
-            &[("list", &list), ("rest", &rest.to_string())],
-        )
-    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1111,6 +1077,7 @@ mod tests {
     use crate::shortcuts::CONVENTION;
     use nkb_core::hotkeys::{Convention, HotkeyKey};
     use nkb_core::pack::PairHalf;
+    use nkb_core::substitutions::Substitutions;
 
     /// The shortcuts of a palette whose settings name none.
     fn defaults() -> Bindings {
@@ -1137,6 +1104,11 @@ mod tests {
             Message::ClearingSkipped,
             Message::ClearingSkippedInTerminal,
             Message::ClearingSkippedClosedToAccessibility,
+            Message::MayBeAltered(Substitutions {
+                capitalization: true,
+                period: true,
+                ..Substitutions::NONE
+            }),
             Message::ClipboardBusy,
             Message::ClipboardFailed {
                 detail: "the display went away".to_owned(),
@@ -1489,10 +1461,11 @@ mod tests {
             Message::ClearingSkippedClosedToAccessibility => 32,
             Message::NothingBefore => 33,
             Message::NeedsPermission => 34,
+            Message::MayBeAltered(_) => 35,
         }
     }
 
-    const SLOTS: usize = 35;
+    const SLOTS: usize = 36;
 
     #[test]
     fn every_message_variant_is_listed_here() {
@@ -1509,6 +1482,52 @@ mod tests {
                 "the Message variant in slot {slot} is missing from every_message()"
             );
         }
+    }
+
+    #[test]
+    fn the_text_service_sentence_names_exactly_the_services_that_could_have_acted() {
+        // `D139`: the person is told WHICH substitution may have touched the
+        // value, in words they can look for in the keyboard settings.
+        let said = |services: Substitutions| {
+            message(&Message::MayBeAltered(services), "whitespace", &defaults())
+        };
+        let capital = Substitutions {
+            capitalization: true,
+            ..Substitutions::NONE
+        };
+        assert!(
+            said(capital).contains(
+                "may have changed what went in: the first letter of a sentence made a capital."
+            ),
+            "{}",
+            said(capital)
+        );
+        let two = Substitutions {
+            capitalization: true,
+            period: true,
+            ..Substitutions::NONE
+        };
+        assert!(
+            said(two).contains(
+                "the first letter of a sentence made a capital and a period added after two spaces."
+            ),
+            "{}",
+            said(two)
+        );
+        let all = Substitutions {
+            capitalization: true,
+            period: true,
+            quotes: true,
+        };
+        assert!(
+            said(all).contains(
+                "the first letter of a sentence made a capital, a period added after two spaces and straight quotes made curly."
+            ),
+            "{}",
+            said(all)
+        );
+        assert!(said(all).ends_with("System Settings, Keyboard, Text Input, Edit."));
+        assert_eq!(substitution_names(Substitutions::NONE), "");
     }
 
     #[test]

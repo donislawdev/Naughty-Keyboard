@@ -8,6 +8,7 @@
 //! - `send` - typing and pressing, one event at a time, each waited for,
 //! - `pulse` - holding the send to the pace of the application,
 //! - `ax` - what holds the keyboard focus, by accessibility,
+//! - `text_services` - which automatic text services the person has switched on,
 //! - `hotkey` - global shortcuts, heard through the application's loop,
 //! - `window` - keeping the front where the tester put it, and lending it,
 //! - `ffi` - the calls themselves.
@@ -21,9 +22,11 @@ mod front;
 pub(crate) mod hotkey;
 mod pulse;
 mod send;
+mod text_services;
 mod trust;
 pub(crate) mod window;
 
 pub(crate) use ax::focused_input;
 pub(crate) use front::{foreground_window, image_path};
 pub(crate) use send::{send_allowed, send_chords, send_text};
+pub(crate) use text_services::text_services;

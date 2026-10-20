@@ -50,12 +50,14 @@ band = 0.7
 # 2026-10-13, when what nkb send says about the clearing went to clearing.rs.
 # 1119 since 2026-10-14, when what nkb new-pack says about the format fit on
 # one line. 1015 since 2026-10-19, when what nkb send says about a refusal went
-# to refusals.rs to make room for the macOS permission.
+# to refusals.rs to make room for the macOS permission. 1009 since 2026-10-20,
+# when the notes under a send went to sent_notes.rs with the one about the
+# system's text substitutions.
 # near = 4 since 2026-10-19: the ceiling came down by 104, and the band with it,
 # so three files that did not grow joined it (advance_sequence.rs, toml_pack.rs
 # and picker.rs). The count is the owner's to accept, as it was for toml_pack.rs.
 [files.rust-product]
-ceiling = 1015
+ceiling = 1009
 near = 4
 
 # A whole Rust file, its tests included. nkb-gui/src/live.rs, then

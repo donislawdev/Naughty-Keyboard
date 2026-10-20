@@ -78,6 +78,7 @@ use nkb_core::pack::{Pack, PackValue, PairHalf, Risk};
 use nkb_core::preview::{ValuePreview, preview_of};
 use nkb_core::report::{Arrival, ReportBlock, Target};
 use nkb_core::sequence::{Delivery, Effect, Event, Sequence, Upcoming};
+use nkb_core::substitutions::Substitutions;
 
 use crate::load_pack;
 use crate::ports::{
@@ -356,6 +357,11 @@ pub enum Message {
     /// queue, so characters may be missing if it was busy (`D95`, `OBS-158`).
     /// Said on every such send - silence here is the loss `D95` closes.
     NotPaced,
+    /// The value went in, and a text service the system has switched on could
+    /// have changed it on the way: the first letter made a capital, two spaces a
+    /// period, a straight quote a curly one (`D139`). Names which. The field may
+    /// hold something else than the value shown, and nothing in it says so.
+    MayBeAltered(Substitutions),
     /// This build has no direct route on `system`, so values go to the
     /// clipboard from now on, replacing what the tester had copied. Said when
     /// the palette starts on such a system, or when a send finds out.
@@ -1127,6 +1133,7 @@ fn classify(
             utf16_units,
             clearing,
             paced,
+            may_alter,
         } => (
             Event::InsertionFinished,
             Some(Sent {
@@ -1141,14 +1148,7 @@ fn classify(
                 target: None,
                 report: None,
             }),
-            // `D95`: a value typed without following the application may be
-            // missing characters - the worse news, so first. Then `D76`,
-            // `OBS-141`: the value landed, uncleared, and the tester is told why.
-            (!paced)
-                .then_some(Message::NotPaced)
-                .into_iter()
-                .chain(skipped_clearing(clearing))
-                .collect(),
+            notes_after_landing(paced, may_alter, clearing),
         ),
         // A fragment was left: interrupted, with how far it got - and WHICH
         // value, so the palette shows the value the report block describes
@@ -1317,6 +1317,23 @@ fn classify(
         | SendOutcome::NoSuchIndex { .. }
         | SendOutcome::RouteUnavailable { .. } => (Event::InsertionRefused, None, Vec::new()),
     }
+}
+
+/// What a value that went in tells the tester, worse news first (`D95`, `D139`,
+/// `D76`, `OBS-141`): that it may be missing characters because the application
+/// could not be followed, that a text service of the system may have changed it,
+/// and that it landed uncleared, with why.
+fn notes_after_landing(
+    paced: bool,
+    may_alter: Substitutions,
+    clearing: ClearingOutcome,
+) -> Vec<Message> {
+    (!paced)
+        .then_some(Message::NotPaced)
+        .into_iter()
+        .chain((!may_alter.is_empty()).then_some(Message::MayBeAltered(may_alter)))
+        .chain(skipped_clearing(clearing))
+        .collect()
 }
 
 /// The sentence a value that went in UNCLEARED carries, if it did (`D76`,
@@ -2795,6 +2812,31 @@ mod tests {
         let mut paced = chosen(Risk::Normal);
         let quiet = paced.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
         assert!(quiet.messages.is_empty(), "a paced send says nothing extra");
+    }
+
+    #[test]
+    fn a_value_the_system_may_have_changed_says_which_services_could_have_acted() {
+        // `D139`: the value went in and counts as sent, and the tester is told
+        // that a text service of the system could have changed it - which ones.
+        let mut advance = chosen(Risk::Normal);
+        let services = Substitutions {
+            capitalization: true,
+            period: true,
+            ..Substitutions::NONE
+        };
+        let kit = Kit::with_delivery(FakeDelivery::altering(services));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(outcome.messages, vec![Message::MayBeAltered(services)]);
+        assert!(outcome.sent.is_some());
+        assert_eq!(advance.counter(), Some((1, 3)));
+
+        // Nothing on, or nothing that could act: nothing said.
+        let mut quiet = chosen(Risk::Normal);
+        let none = quiet.on_action(
+            HotkeyAction::NextValue,
+            &Kit::with_delivery(FakeDelivery::altering(Substitutions::NONE)).ports(),
+        );
+        assert!(none.messages.is_empty());
     }
 
     #[test]

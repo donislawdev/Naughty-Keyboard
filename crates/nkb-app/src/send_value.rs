@@ -44,6 +44,7 @@ use nkb_core::keys::line_clearing_recipe;
 use nkb_core::metrics::TextMetrics;
 use nkb_core::pack::{Pack, PackValue};
 use nkb_core::preview::{ShapeFact, ValuePreview, preview_of, shape};
+use nkb_core::substitutions::Substitutions;
 use nkb_core::value::{ValueBody, ValueProblem};
 
 /// Whether the field is cleared before the value goes in. Defined beside the
@@ -192,6 +193,10 @@ pub enum SendOutcome {
         /// (`D95`). False: characters may be missing if it was busy, and both
         /// surfaces say so (`OBS-158`).
         paced: bool,
+        /// The system's text services that are on and could have changed the
+        /// typed text on its way into the field (`D139`). Empty on a route that
+        /// types nothing the system rewrites.
+        may_alter: Substitutions,
     },
     /// Part of the value reached the field, and then delivery stopped. The
     /// field holds a fragment. The facts are those of the WHOLE value, because
@@ -444,6 +449,7 @@ pub fn deliver_value(
             utf16_units: delivered.utf16_units,
             clearing,
             paced: delivered.paced,
+            may_alter: delivery.may_alter(&literal),
         },
         Err(DeliveryError::Partial {
             units_sent, reason, ..
