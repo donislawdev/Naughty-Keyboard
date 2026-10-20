@@ -14,7 +14,8 @@
 //! 6a puts state in `app`, and the one piece an adapter may hold is its own
 //! system handle.
 
-use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::path::PathBuf;
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::Duration;
 
 use nkb_app::ports::{
@@ -22,6 +23,9 @@ use nkb_app::ports::{
 };
 use nkb_core::hotkeys::{Bindings, Convention, HotkeyAction, HotkeyChord, HotkeyKey};
 use nkb_sys::hotkey::{self, Hotkey, HotkeyId, HotkeyListener, HotkeyRegistration};
+
+use crate::settings_file::SettingsFile;
+use crate::shortcut_claim::Claims;
 
 /// Which default table this build follows. The one place that knows the system,
 /// because `nkb_core::hotkeys` holds both tables and no `cfg` (`D82`).
@@ -115,6 +119,33 @@ fn chord_of(held: Option<nkb_sys::held::Held>) -> ChordHeld {
     }
 }
 
+/// The claim on the shortcuts of this user, held by this process once taken.
+static CLAIMS: Claims = Claims::new();
+
+/// Whether another palette of this user holds the shortcuts, on a system that
+/// does not say so itself (`shortcut_claim`). Windows refuses a second
+/// registration of a chord, so it is not asked there, and where the lock cannot
+/// be asked about the shortcuts are registered as always.
+fn claimed_elsewhere() -> bool {
+    CLAIMS.is_held_elsewhere(CLAIM_ASKED, claim_place().as_deref())
+}
+
+/// Whether this build asks for the claim: only where the system does not refuse
+/// a chord that is held already, which is macOS (`OBS-187`).
+const CLAIM_ASKED: bool = cfg!(target_os = "macos");
+
+/// The lock file: beside the settings file, in the folder of the program's own.
+fn claim_place() -> Option<PathBuf> {
+    claim_place_beside(&SettingsFile::for_this_user())
+}
+
+fn claim_place_beside(settings: &SettingsFile) -> Option<PathBuf> {
+    Some(settings.path()?.parent()?.join(CLAIM_FILE))
+}
+
+/// The name of the lock file, in the folder of the settings.
+const CLAIM_FILE: &str = "shortcuts.lock";
+
 /// Registers shortcuts through `nkb_sys::hotkey::listen`.
 ///
 /// Stateless, like `DirectInjection`: the state is the handle it returns.
@@ -128,7 +159,9 @@ pub struct GlobalShortcuts;
 /// down. The other order works too - `nkb-sys` keeps pumping on a failed send -
 /// but this one leaves nothing to reason about.
 struct Live {
-    _listener: HotkeyListener,
+    /// `None` for a set that was refused before the system was asked: another
+    /// palette of this user holds the shortcuts (`D144`).
+    _listener: Option<HotkeyListener>,
     fired: Receiver<HotkeyId>,
     /// Indexed by [`HotkeyId`]: the id handed to the system for binding `n` is
     /// `n`, so a fired id is a position in this table and nothing else.
@@ -141,6 +174,21 @@ impl HotkeyRegistrar for GlobalShortcuts {
         &self,
         bindings: &[(HotkeyAction, HotkeyChord)],
     ) -> Result<Box<dyn LiveShortcuts + Send>, ShortcutsUnavailable> {
+        Self::register_unless(bindings, claimed_elsewhere())
+    }
+}
+
+impl GlobalShortcuts {
+    /// [`HotkeyRegistrar::register`] with the claim answered by the caller: the
+    /// tests that register for real do not ask the lock of the user running them,
+    /// which a palette of that user may hold.
+    fn register_unless(
+        bindings: &[(HotkeyAction, HotkeyChord)],
+        refused: bool,
+    ) -> Result<Box<dyn LiveShortcuts + Send>, ShortcutsUnavailable> {
+        if refused {
+            return Ok(Box::new(Live::refused(bindings)));
+        }
         let hotkeys: Vec<Hotkey> = bindings
             .iter()
             .enumerate()
@@ -154,11 +202,32 @@ impl HotkeyRegistrar for GlobalShortcuts {
             .zip(listening.outcomes.into_iter().map(registration))
             .collect();
         Ok(Box::new(Live {
-            _listener: listening.listener,
+            _listener: Some(listening.listener),
             fired: listening.fired,
             actions,
             outcomes,
         }))
+    }
+}
+
+impl Live {
+    /// The handle of a set in which every shortcut is taken and the system was not
+    /// asked. Nothing stands behind it: its presses are a channel nobody sends on,
+    /// and the caller does not wait on a set that [`LiveShortcuts::holds_any`]
+    /// says holds nothing.
+    fn refused(bindings: &[(HotkeyAction, HotkeyChord)]) -> Self {
+        let (_, fired) = mpsc::channel::<HotkeyId>();
+        let actions: Vec<HotkeyAction> = bindings.iter().map(|(action, _)| *action).collect();
+        let outcomes = actions
+            .iter()
+            .map(|action| (*action, ShortcutRegistration::Taken))
+            .collect();
+        Self {
+            _listener: None,
+            fired,
+            actions,
+            outcomes,
+        }
     }
 }
 
@@ -456,6 +525,69 @@ mod tests {
         assert_eq!(pressed(&actions, HotkeyId(u32::MAX)), Wait::Nothing);
     }
 
+    /// `D144`: a palette that does not hold the claim gets a set in which every
+    /// shortcut is taken and nothing stands behind it, so the palette says so, does
+    /// not wait on it and tries again at a resume.
+    #[test]
+    fn a_set_refused_before_the_system_was_asked_is_taken_to_the_last_and_holds_nothing() {
+        let bindings = default_bindings();
+        let live = Live::refused(bindings.as_slice());
+        assert_eq!(live.outcomes().len(), bindings.as_slice().len());
+        assert!(
+            live.outcomes()
+                .iter()
+                .zip(bindings.as_slice())
+                .all(|((action, outcome), (asked, _))| action == asked
+                    && *outcome == ShortcutRegistration::Taken)
+        );
+        assert!(!live.holds_any(), "a set where nothing took");
+        // Nobody sends on it: a wait ends with the channel, not with a press.
+        assert_eq!(live.next(Duration::ZERO), Wait::Gone);
+    }
+
+    /// A registration that the claim refused is the refused set, and the system
+    /// is not asked: on a system with a route the same bindings would register.
+    #[test]
+    fn a_registration_that_the_claim_refused_is_the_refused_set() {
+        let bindings = default_bindings();
+        let live = GlobalShortcuts::register_unless(bindings.as_slice(), true)
+            .expect("a refused set is still a set");
+        assert!(!live.holds_any());
+        assert!(
+            live.outcomes()
+                .iter()
+                .all(|(_, outcome)| *outcome == ShortcutRegistration::Taken)
+        );
+        assert_eq!(live.outcomes().len(), bindings.as_slice().len());
+    }
+
+    /// Windows refuses a second registration of a chord by itself, so it never
+    /// asks the lock and a Windows palette never holds one for a Mac palette:
+    /// on Windows this pins the constant to false.
+    #[test]
+    fn only_the_system_that_does_not_refuse_a_held_chord_asks_for_the_claim() {
+        assert_eq!(CLAIM_ASKED, cfg!(target_os = "macos"));
+    }
+
+    /// The lock lies beside the settings file, in the folder of the program's
+    /// own, and nowhere when the settings have no place.
+    #[test]
+    fn the_lock_file_lies_beside_the_settings_file() {
+        let beside = claim_place_beside(&SettingsFile::at(
+            PathBuf::from("home")
+                .join("Naughty Keyboard")
+                .join("settings.toml"),
+        ));
+        assert_eq!(
+            beside,
+            Some(
+                PathBuf::from("home")
+                    .join("Naughty Keyboard")
+                    .join("shortcuts.lock")
+            )
+        );
+    }
+
     #[test]
     fn registration_outcomes_translate_one_to_one() {
         assert_eq!(
@@ -495,7 +627,7 @@ mod tests {
         // combination so a second registration succeeds too. Elsewhere the
         // port names the system instead of pretending.
         let bindings = [obscure(HotkeyKey::Digit3)];
-        match GlobalShortcuts.register(&bindings) {
+        match GlobalShortcuts::register_unless(&bindings, false) {
             Ok(live) => {
                 assert!(hotkey::can_register());
                 assert_eq!(
@@ -508,8 +640,7 @@ mod tests {
                     "nothing was pressed, and a zero wait does not block"
                 );
                 drop(live);
-                let again = GlobalShortcuts
-                    .register(&bindings)
+                let again = GlobalShortcuts::register_unless(&bindings, false)
                     .expect("the route did not vanish");
                 assert_eq!(
                     again.outcomes()[0].1,
@@ -535,8 +666,7 @@ mod tests {
         // The same combination twice in one set: the second is Taken by the
         // first. The set still registers, and the outcome says which.
         let bindings = [obscure(HotkeyKey::Digit2), obscure(HotkeyKey::Digit2)];
-        let live = GlobalShortcuts
-            .register(&bindings)
+        let live = GlobalShortcuts::register_unless(&bindings, false)
             .expect("a taken combination is an outcome, not an error");
         assert_eq!(live.outcomes()[0].1, ShortcutRegistration::Registered);
         assert_eq!(live.outcomes()[1].1, ShortcutRegistration::Taken);

@@ -8689,6 +8689,132 @@
       "replace": "    let rounded = value.floor();",
       "test": "screens::tests::display_bounds_that_are_no_number_or_no_area_are_no_screen",
       "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1178",
+      "why": "a process that holds the claim asks the lock again - its own second lock refuses it, and the palette refuses itself at the next resume",
+      "file": "crates/nkb-adapters/src/shortcut_claim.rs",
+      "find": "        if held.is_some() {",
+      "replace": "        if false {",
+      "test": "shortcut_claim::tests::a_process_that_holds_it_holds_it_again_without_opening_a_second_lock",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1179",
+      "why": "a lock that another process holds counts as no answer - the second palette registers its shortcuts and both hear every press",
+      "file": "crates/nkb-adapters/src/shortcut_claim.rs",
+      "find": "Err(TryLockError::WouldBlock) => Err(Claim::Refused),",
+      "replace": "Err(TryLockError::WouldBlock) => Err(Claim::Unasked),",
+      "test": "shortcut_claim::tests::a_second_holder_is_refused_until_the_first_is_gone",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1180",
+      "why": "the lock file is never made - the first palette finds nothing to lock and goes without an answer",
+      "file": "crates/nkb-adapters/src/shortcut_claim.rs",
+      "find": ".create(true)",
+      "replace": ".create(false)",
+      "test": "shortcut_claim::tests::the_first_to_ask_holds_it_and_makes_the_folder",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1181",
+      "why": "a folder that cannot be made refuses the palette - a tester with a read-only profile gets no shortcuts at all",
+      "file": "crates/nkb-adapters/src/shortcut_claim.rs",
+      "find": "std::fs::create_dir_all(folder).map_err(|_| Claim::Unasked)?;",
+      "replace": "std::fs::create_dir_all(folder).map_err(|_| Claim::Refused)?;",
+      "test": "shortcut_claim::tests::a_folder_that_cannot_be_made_is_no_answer",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1182",
+      "why": "a lock file that cannot be opened refuses the palette - the same tester gets no shortcuts one step later",
+      "file": "crates/nkb-adapters/src/shortcut_claim.rs",
+      "find": "        .open(place)\n        .map_err(|_| Claim::Unasked)?;",
+      "replace": "        .open(place)\n        .map_err(|_| Claim::Refused)?;",
+      "test": "shortcut_claim::tests::a_lock_file_that_cannot_be_opened_is_no_answer",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1183",
+      "why": "the question is turned around - a system that never asks takes the lock, and the one that needs it does not",
+      "file": "crates/nkb-adapters/src/shortcut_claim.rs",
+      "find": "        if !asked_here {",
+      "replace": "        if asked_here {",
+      "test": "shortcut_claim::tests::a_system_that_does_not_ask_is_not_refused_and_takes_nothing",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1184",
+      "why": "a lock that cannot be asked about is taken for a refusal - the palette goes without shortcuts when it could have had them",
+      "file": "crates/nkb-adapters/src/shortcut_claim.rs",
+      "find": "        self.take(place) == Claim::Refused",
+      "replace": "        self.take(place) != Claim::Held",
+      "test": "shortcut_claim::tests::a_lock_that_cannot_be_asked_about_is_no_refusal",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1185",
+      "why": "a settings file with no place refuses the palette - a profile with no home folder leaves a tester with no shortcuts",
+      "file": "crates/nkb-adapters/src/shortcut_claim.rs",
+      "find": "        let Some(place) = place else {\n            return false;\n        };",
+      "replace": "        let Some(place) = place else {\n            return true;\n        };",
+      "test": "shortcut_claim::tests::a_lock_that_cannot_be_asked_about_is_no_refusal",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1186",
+      "why": "the refusal is turned around - the second palette is let in and the first is turned away",
+      "file": "crates/nkb-adapters/src/shortcut_claim.rs",
+      "find": "        self.take(place) == Claim::Refused",
+      "replace": "        self.take(place) != Claim::Refused",
+      "test": "shortcut_claim::tests::a_system_that_asks_is_refused_while_another_holds_it",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1187",
+      "why": "a refused set says every shortcut is registered - the palette shows a legend of keys that do nothing",
+      "file": "crates/nkb-adapters/src/shortcuts.rs",
+      "find": ".map(|action| (*action, ShortcutRegistration::Taken))",
+      "replace": ".map(|action| (*action, ShortcutRegistration::Registered))",
+      "test": "shortcuts::tests::a_set_refused_before_the_system_was_asked_is_taken_to_the_last_and_holds_nothing",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1188",
+      "why": "the claim is asked and ignored - the second palette registers its shortcuts all the same",
+      "file": "crates/nkb-adapters/src/shortcuts.rs",
+      "find": "        if refused {",
+      "replace": "        if false {",
+      "test": "shortcuts::tests::a_registration_that_the_claim_refused_is_the_refused_set",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1189",
+      "why": "the lock file is the settings file - the palette would lock the file it saves the tester's choices in",
+      "file": "crates/nkb-adapters/src/shortcuts.rs",
+      "find": "const CLAIM_FILE: &str = \"shortcuts.lock\";",
+      "replace": "const CLAIM_FILE: &str = \"settings.toml\";",
+      "test": "shortcuts::tests::the_lock_file_lies_beside_the_settings_file",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1190",
+      "why": "the lock file lies under the settings file instead of beside it - no folder can hold a file below a file",
+      "file": "crates/nkb-adapters/src/shortcuts.rs",
+      "find": "Some(settings.path()?.parent()?.join(CLAIM_FILE))",
+      "replace": "Some(settings.path()?.join(CLAIM_FILE))",
+      "test": "shortcuts::tests::the_lock_file_lies_beside_the_settings_file",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1191",
+      "why": "every system asks for the claim - a Windows palette locks out a Mac palette on a shared profile, and the other way round",
+      "file": "crates/nkb-adapters/src/shortcuts.rs",
+      "find": "const CLAIM_ASKED: bool = cfg!(target_os = \"macos\");",
+      "replace": "const CLAIM_ASKED: bool = true;",
+      "test": "shortcuts::tests::only_the_system_that_does_not_refuse_a_held_chord_asks_for_the_claim",
+      "runner": "rust:nkb-adapters:lib"
     }
   ]
 }

@@ -18,6 +18,7 @@ pub(crate) mod read_pack;
 pub mod report_text;
 pub mod screens;
 pub mod settings_file;
+pub(crate) mod shortcut_claim;
 pub mod shortcuts;
 pub mod skeleton;
 pub mod startup;

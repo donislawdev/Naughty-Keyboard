@@ -39,6 +39,12 @@ Changes wait under Unreleased until then.
   there the next time. The place is kept when the window is closed with its close button. It is
   not kept when the palette is quit with Command+Q. A place that lies off every screen of the layout,
   after a display was unplugged, is not used, and the palette says so.
+- On macOS a second palette of the same user starts without shortcuts and says why, with the sentence
+  the palette already uses when every shortcut is taken. Until now both palettes heard every shortcut,
+  because macOS does not refuse a shortcut that another program holds, and each typed its own value
+  into the same field. The first palette keeps the shortcuts. When it ends, however it ends, the
+  second takes them as soon as its shortcuts window is closed. The palette keeps a small empty file,
+  `shortcuts.lock`, beside its settings file for this.
 - `nkb send` types into the focused field on macOS with the same care as on Windows. It waits until
   the keys are let go, watches the window in front, stops at `Escape` and goes at the pace of the
   application. `--clear` clears the line first. macOS lets it type only when the app it runs from,
