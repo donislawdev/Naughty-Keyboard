@@ -703,7 +703,7 @@ pub(super) fn pattern_shortcuts_label(label: ShortcutsLabel) -> &'static str {
             "Whether another application holds {shortcut} could not be checked: {reason}."
         }
         ShortcutsLabel::NoModifier => {
-            "{shortcut} holds no Ctrl, Alt or Win - taken globally it would stop that key working in every application. Add Ctrl, Alt or Win to it."
+            "{shortcut} holds no {modifiers} - taken globally it would stop that key working in every application. Add {modifiers} to it."
         }
         ShortcutsLabel::TypesCharacter => {
             "{shortcut} types \"{character}\" as AltGr on a keyboard layout of this computer - taken globally it would stop that character working in every application. Choose a combination without Ctrl+Alt."
@@ -841,6 +841,7 @@ pub fn shortcut_answer(
                     ("shortcut", &chord(refused.chord)),
                     ("other", other),
                     ("character", &character),
+                    ("modifiers", super::typing::command_modifiers()),
                 ],
             )]
         }

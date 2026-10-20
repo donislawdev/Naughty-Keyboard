@@ -255,7 +255,7 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     let shortcuts = Shortcuts::new(
         ShortcutsWindow::new()?,
         Box::new(SystemKeyboard::default()),
-        Box::new(System),
+        Box::new(System::default()),
         choose.clone(),
         say_in(&palette),
     );

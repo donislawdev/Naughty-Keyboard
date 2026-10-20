@@ -46,6 +46,7 @@ use crate::live::{Command, ShortcutsNow, Tell, Told};
 use crate::on_request;
 use crate::packs::{Keyboard, forget_held_modifiers};
 use crate::shortcut_list::{Act, ShortcutList, ShortcutRow, key_of};
+use crate::window_keys::KeyTracker;
 use crate::{HintRow, PickRow, ShortcutsWindow};
 
 /// What the window asks of the system besides the keyboard focus: which chord
@@ -60,19 +61,44 @@ pub trait SystemKeys {
     ///
     /// Why it could not, in the system layer's words.
     fn keep_menu_shut(&self, window: Option<u64>) -> Result<(), String>;
+    /// Starts following the window's own key events, for a system that cannot
+    /// be asked which keys are held (`window_keys`). Called once, before the
+    /// window shows. A system that can be asked has nothing to follow.
+    fn watch(&self, _window: &slint::Window) {}
 }
 
-/// The system, through the adapter.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct System;
+/// The system, through the adapter - and on macOS, where the adapter cannot
+/// tell which keys are held, through the window's own key events (`D142`).
+#[derive(Debug, Default, Clone)]
+pub struct System {
+    /// What the window's events say is held. Read only where the system cannot
+    /// be asked.
+    keys: Rc<RefCell<KeyTracker>>,
+}
 
 impl SystemKeys for System {
     fn chord_held(&self) -> ChordHeld {
-        nkb_adapters::chord_held()
+        if cfg!(target_os = "macos") {
+            self.keys.borrow().held()
+        } else {
+            nkb_adapters::chord_held()
+        }
     }
 
     fn keep_menu_shut(&self, window: Option<u64>) -> Result<(), String> {
         nkb_adapters::no_keyboard_menu(window).map_err(|error| error.to_string())
+    }
+
+    fn watch(&self, window: &slint::Window) {
+        use slint::winit_030::{EventResult, WinitWindowAccessor};
+        if !cfg!(target_os = "macos") {
+            return;
+        }
+        let keys = Rc::clone(&self.keys);
+        window.on_winit_window_event(move |_, event| {
+            keys.borrow_mut().observe(event);
+            EventResult::Propagate
+        });
     }
 }
 
@@ -137,6 +163,9 @@ impl Shortcuts {
             say,
         });
         WINDOW.with(|slot| *slot.borrow_mut() = Rc::downgrade(&shortcuts));
+        // Before the first press can reach the view: the filter on the window's
+        // own events is what tells `chord_held` the key, where the system cannot.
+        shortcuts.keys.watch(shortcuts.window.window());
         let weak = Rc::downgrade(&shortcuts);
         shortcuts
             .window

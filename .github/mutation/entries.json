@@ -8500,6 +8500,123 @@
       "replace": "                    ShortcutsLabel::TypesCharacter,\n                    \"\",",
       "test": "i18n::tests::a_restore_already_so_and_every_refusal_have_their_own_words",
       "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1157",
+      "why": "the Option key is read from the Control state - a Mac chord with Option and Command is recorded without its Option",
+      "file": "crates/nkb-gui/src/window_keys.rs",
+      "find": "                alt: self.modifiers.alt_key(),",
+      "replace": "                alt: self.modifiers.control_key(),",
+      "test": "window_keys::tests::one_key_with_the_modifiers_held_is_the_chord_in_the_macos_words",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1158",
+      "why": "the Command key is read from the Control state - a recorded chord holds Control where the tester held Command",
+      "file": "crates/nkb-gui/src/window_keys.rs",
+      "find": "                win: self.modifiers.super_key(),",
+      "replace": "                win: self.modifiers.control_key(),",
+      "test": "window_keys::tests::one_key_with_the_modifiers_held_is_the_chord_in_the_macos_words",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1159",
+      "why": "Shift is never read - Control+Option+Shift+1 is recorded without its Shift",
+      "file": "crates/nkb-gui/src/window_keys.rs",
+      "find": "                shift: self.modifiers.shift_key(),",
+      "replace": "                shift: false,",
+      "test": "window_keys::tests::one_key_with_the_modifiers_held_is_the_chord_in_the_macos_words",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1160",
+      "why": "a key let go stays held - after two keys are pressed and one is released the window still says several keys",
+      "file": "crates/nkb-gui/src/window_keys.rs",
+      "find": "            ElementState::Released => self.keys.retain(|down| *down != key),",
+      "replace": "            ElementState::Released => {}",
+      "test": "window_keys::tests::two_keys_are_ambiguous_until_one_is_let_go",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1161",
+      "why": "a repeat of a key already down is counted as a second key - holding a key makes every chord several keys",
+      "file": "crates/nkb-gui/src/window_keys.rs",
+      "find": "                if !self.keys.contains(&key) {",
+      "replace": "                if true {",
+      "test": "window_keys::tests::a_repeat_of_a_key_already_down_is_still_one_key",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1162",
+      "why": "the focus is not followed - a key whose release happened in another window stays held for the next recording",
+      "file": "crates/nkb-gui/src/window_keys.rs",
+      "find": "            WindowEvent::Focused(_) => self.reset(),",
+      "replace": "            WindowEvent::Focused(_) => {}",
+      "test": "window_keys::tests::the_window_events_that_carry_modifiers_or_the_focus_are_followed",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1163",
+      "why": "the M key is the physical N key - a chord recorded on M is registered on N",
+      "file": "crates/nkb-gui/src/window_keys.rs",
+      "find": "        HotkeyKey::M => KeyCode::KeyM,",
+      "replace": "        HotkeyKey::M => KeyCode::KeyN,",
+      "test": "window_keys::tests::every_key_of_the_vocabulary_has_its_own_physical_key_and_is_found_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1164",
+      "why": "forgetting keeps the modifiers - a chord recorded after the window was left carries the old Option and Command",
+      "file": "crates/nkb-gui/src/window_keys.rs",
+      "find": "        self.keys.clear();\n        self.modifiers = ModifiersState::empty();",
+      "replace": "        self.keys.clear();",
+      "test": "window_keys::tests::the_window_events_that_carry_modifiers_or_the_focus_are_followed",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1165",
+      "why": "two keys held are taken for none - the window says the key cannot end a shortcut instead of asking for a single key",
+      "file": "crates/nkb-gui/src/window_keys.rs",
+      "find": "        _ => ChordHeld::SeveralKeys,",
+      "replace": "        _ => ChordHeld::NoKey,",
+      "test": "window_keys::tests::two_keys_are_ambiguous_until_one_is_let_go",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1166",
+      "why": "the physical key is looked up by difference - Enter and the number pad are keys of the vocabulary, and the letters are not",
+      "file": "crates/nkb-gui/src/window_keys.rs",
+      "find": "        .find(|key| key_code(*key) == code)",
+      "replace": "        .find(|key| key_code(*key) != code)",
+      "test": "window_keys::tests::keys_the_vocabulary_does_not_hold_are_not_keys",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1167",
+      "why": "a Windows build names the modifiers the Mac way - a tester without a Control key is told to add one",
+      "file": "crates/nkb-adapters/src/i18n/typing.rs",
+      "find": "        Convention::WindowsAndLinux => \"Ctrl, Alt or Win\",",
+      "replace": "        Convention::WindowsAndLinux => \"Control, Option or Command\",",
+      "test": "i18n::typing::tests::the_modifiers_are_named_by_the_keyboard_of_the_system",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1168",
+      "why": "the settings sentence about a chord with no modifier leaves its modifiers blank - the tester is told to add nothing",
+      "file": "crates/nkb-adapters/src/i18n.rs",
+      "find": "                        (\"modifiers\", typing::command_modifiers()),",
+      "replace": "                        (\"modifiers\", \"\"),",
+      "test": "i18n::tests::every_sentence_about_a_shortcut_in_the_settings_file_is_whole_and_names_it",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1169",
+      "why": "the shortcuts window leaves the modifiers of its refusal blank - the tester is told to add nothing",
+      "file": "crates/nkb-adapters/src/i18n/windows.rs",
+      "find": "                    (\"modifiers\", super::typing::command_modifiers()),",
+      "replace": "                    (\"modifiers\", \"\"),",
+      "test": "i18n::tests::a_restore_already_so_and_every_refusal_have_their_own_words",
+      "runner": "rust:nkb-adapters:lib"
     }
   ]
 }

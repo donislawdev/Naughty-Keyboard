@@ -70,6 +70,10 @@ pub mod shortcut_list;
 // decides moved onto the window, opened once the worker paused the palette's
 // shortcuts and closed with them taken again (K5.5).
 pub mod shortcuts;
+// The chord held, read from the key events of the shortcuts window itself - how
+// macOS records a shortcut, where the system cannot be asked (`D142`). No
+// window in it, so the tracking is tested without one.
+pub mod window_keys;
 // The pack window itself, on the main thread: what `picker` decides moved onto
 // the window, the keyboard taken on opening and handed back on closing. Beside
 // `focus` for the reason `focus` gives - it is main-thread code.
