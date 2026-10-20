@@ -63,6 +63,31 @@ pub(crate) struct EventHotKeyId {
 /// `EventHandlerUPP`.
 pub(crate) type EventHandler = extern "C" fn(MutRef, MutRef, MutRef) -> i32;
 
+/// `CGPoint`: two doubles, in points.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub(crate) struct CgPoint {
+    pub x: f64,
+    pub y: f64,
+}
+
+/// `CGSize`: two doubles, in points.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub(crate) struct CgSize {
+    pub width: f64,
+    pub height: f64,
+}
+
+/// `CGRect`: the rectangle of a display on the global desktop, in points, with
+/// its origin at the top left corner of the main display and `y` growing down.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub(crate) struct CgRect {
+    pub origin: CgPoint,
+    pub size: CgSize,
+}
+
 #[link(name = "CoreFoundation", kind = "framework")]
 unsafe extern "C" {
     pub(crate) fn CFRelease(object: CfRef);
@@ -101,6 +126,11 @@ unsafe extern "C" {
     pub(crate) fn CGEventSourceKeyState(state: i32, key: u16) -> bool;
     pub(crate) fn CGEventSourceFlagsState(state: i32) -> u64;
     pub(crate) fn CGPreflightPostEventAccess() -> bool;
+    /// `CGGetActiveDisplayList`: fills `displays` with up to `max` identifiers
+    /// of the displays that are on, not mirrored copies, and says how many in
+    /// `count`. `kCGErrorSuccess` is zero.
+    pub(crate) fn CGGetActiveDisplayList(max: u32, displays: *mut u32, count: *mut u32) -> i32;
+    pub(crate) fn CGDisplayBounds(display: u32) -> CgRect;
 
     pub(crate) fn AXIsProcessTrusted() -> u8;
     pub(crate) fn AXUIElementCreateApplication(pid: i32) -> MutRef;

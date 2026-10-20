@@ -12,11 +12,13 @@
 //!
 //! # What a layout is
 //!
-//! The screens, each as its rectangle on the virtual desktop in PHYSICAL
-//! pixels - the unit the window system reports and takes a window's position
-//! in. The scale a screen is set to is not part of it: changing the scale
-//! keeps the physical rectangle, and a place in physical pixels stays where it
-//! was.
+//! The screens, each as its rectangle on the virtual desktop, in the unit the
+//! window system takes a window's position in: PHYSICAL pixels on Windows and
+//! POINTS on macOS (`nkb_sys::screens` says why). The scale a screen is set to
+//! is not part of it. On Windows changing the scale keeps the physical
+//! rectangle, and a place in physical pixels stays where it was. On macOS a
+//! display's size in points is the resolution it is set to, so a new
+//! resolution is a new layout and gets no remembered place.
 //!
 //! # The text form is a public name
 //!
@@ -38,7 +40,7 @@
 pub const MAX_SCREENS: usize = 16;
 
 /// How far inside a window's outer corner the point lies that has to be on a
-/// screen, in physical pixels: right and down.
+/// screen, in the unit of the layout: right and down.
 ///
 /// Not the corner itself, because the outer frame of a window on Windows 10
 /// and 11 has invisible borders - a window pushed against the left edge of a
@@ -46,7 +48,7 @@ pub const MAX_SCREENS: usize = 16;
 /// point is inside the title bar of any window at any scale this tool meets.
 pub const PROBE: Point = Point { x: 32, y: 16 };
 
-/// One screen: its rectangle on the virtual desktop, in physical pixels.
+/// One screen: its rectangle on the virtual desktop, in the unit of the layout.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Screen {
     pub x: i32,
@@ -69,8 +71,8 @@ impl Screen {
     }
 }
 
-/// A point on the virtual desktop in physical pixels - the top left corner of
-/// a window's outer frame, when it is a place.
+/// A point on the virtual desktop in the unit of the layout - the top left
+/// corner of a window's outer frame, when it is a place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Point {
     pub x: i32,
