@@ -372,6 +372,16 @@ const MACOS_BOTH: &[Entry] = &[
         "/usr/lib/libobjc.A.dylib",
         "the Objective-C runtime: three functions that find the windows of the palette's own process and set how they stand in the spaces. Nothing in it opens a connection",
     ),
+    // `UCKeyTranslate`, which says what a keyboard layout types with Option, is
+    // defined here and in no framework above (measured: a program that calls only
+    // it links this one), so the palette asks it of the layouts' own tables (`D141`).
+    // `nkb` names the library too, because the package with the system calls
+    // declares the function, and never calls it.
+    (
+        "/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices",
+        "the umbrella over Launch Services and the file system services. The one call made is UCKeyTranslate, which reads a layout's table and opens nothing. Launch Services opens \
+         addresses, and its LSOpen calls are refused above",
+    ),
 ];
 
 const MACOS_WINDOW: &[Entry] = &[
@@ -406,11 +416,6 @@ const MACOS_WINDOW: &[Entry] = &[
     (
         "/System/Library/Frameworks/ColorSync.framework/Versions/A/ColorSync",
         "the colour profile of a display",
-    ),
-    (
-        "/System/Library/Frameworks/CoreServices.framework/Versions/A/CoreServices",
-        "the umbrella over Launch Services and the file system services. Launch Services opens \
-         addresses, and its LSOpen calls are refused above",
     ),
 ];
 

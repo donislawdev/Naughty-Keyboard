@@ -37,6 +37,15 @@
 //! have rewritten a chord the tester chose. So both tables live here, and the
 //! layer that knows the system picks one - this crate has no `cfg` and keeps
 //! none.
+//!
+//! # The key that types is a fact of the convention too
+//!
+//! A global shortcut takes its chord from every application, so a chord a
+//! keyboard layout types a character on takes that character from them all. On
+//! Windows the chord is `Ctrl+Alt` (`AltGr`, `D88`), on macOS `Option` with no
+//! `Command` and no `Control` (`D141`). The core holds the SHAPE of that chord
+//! ([`Convention::can_type`]) and the system answers which character, if any, a
+//! layout types there: [`Bindings::typing_refusal`].
 
 /// One of the global actions the palette answers to.
 ///
@@ -416,6 +425,25 @@ impl HotkeyChord {
     pub const fn could_be_altgr(&self) -> bool {
         self.ctrl && self.alt && !self.win
     }
+
+    /// Whether `Option` can make a keyboard layout type this chord on macOS:
+    /// `Option` held, with or without `Shift`, and neither `Command` nor
+    /// `Control`. Such a chord takes a character from every application exactly
+    /// when the layout types one on that key (`D141`), which only the layer that
+    /// knows the layout can answer.
+    ///
+    /// Measured on macOS 27.0 with the Polish layout, 2026-10-21: `Option+A`
+    /// typed `U+0105` into a field, and the same chord registered as a global
+    /// shortcut typed nothing there, 3 presses of 3, with `Shift` as well. With
+    /// `Command` the layout types nothing a field takes (`Cmd+Opt+A` is a
+    /// shortcut to every application). A chord with `Control` is not asked
+    /// about: the layouts answer a control character on every letter, and for the
+    /// digits only an application can say what it inserts (the window measured
+    /// took `Control+Option+1` as a `1`, which no rule here can generalise).
+    #[must_use]
+    pub const fn could_type_with_option(&self) -> bool {
+        self.alt && !self.ctrl && !self.win
+    }
 }
 
 /// One of the four modifiers, as a name in text.
@@ -494,6 +522,25 @@ pub enum Convention {
     WindowsAndLinux,
     /// `Cmd+Alt+<key>` - macOS.
     MacOs,
+}
+
+impl Convention {
+    /// Whether a layout of this convention's system can make `chord` type a
+    /// character, which a global shortcut on it would then take from every
+    /// application: `Ctrl+Alt` is `AltGr` on Windows
+    /// ([`HotkeyChord::could_be_altgr`]), `Option` types on macOS
+    /// ([`HotkeyChord::could_type_with_option`]). The two shapes exclude each
+    /// other, and each system asks only its own.
+    ///
+    /// Whether the layout DOES type one is the system's answer, asked only when
+    /// this one is true.
+    #[must_use]
+    pub const fn can_type(self, chord: &HotkeyChord) -> bool {
+        match self {
+            Convention::WindowsAndLinux => chord.could_be_altgr(),
+            Convention::MacOs => chord.could_type_with_option(),
+        }
+    }
 }
 
 /// The key each action is bound to by default, the same on every system but one.
@@ -595,13 +642,21 @@ pub const fn default_bindings(
 /// needs no `Option`, and registering never reports one action as `Taken`
 /// against another of our own.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Bindings([(HotkeyAction, HotkeyChord); HotkeyAction::COUNT]);
+pub struct Bindings {
+    /// The convention these bindings follow: it decides which chords a layout
+    /// is asked about ([`Convention::can_type`]).
+    convention: Convention,
+    table: [(HotkeyAction, HotkeyChord); HotkeyAction::COUNT],
+}
 
 impl Bindings {
     /// The default table of a convention.
     #[must_use]
     pub const fn defaults(convention: Convention) -> Self {
-        Self(*default_bindings(convention))
+        Self {
+            convention,
+            table: *default_bindings(convention),
+        }
     }
 
     /// The chord an action answers to.
@@ -610,16 +665,42 @@ impl Bindings {
         // Every action is in the table (see the type), so the fallback is never
         // taken. It is the first entry rather than a panic, because the
         // workspace denies panics in product code.
-        self.0
+        self.table
             .iter()
             .find_map(|(candidate, chord)| (*candidate == action).then_some(*chord))
-            .unwrap_or(self.0[0].1)
+            .unwrap_or(self.table[0].1)
     }
 
     /// Every action with its chord, in the order of [`HotkeyAction::ALL`].
     #[must_use]
     pub fn as_slice(&self) -> &[(HotkeyAction, HotkeyChord)] {
-        &self.0
+        &self.table
+    }
+
+    /// Why a keyboard layout of this system refuses `chord` as a global
+    /// shortcut, if it does: `types` names a character the layout makes the
+    /// chord type, so taking the chord would take that character from every
+    /// application.
+    ///
+    /// `types` is the system's answer (the core knows no layout) and it is
+    /// asked ONLY for a chord the convention says can type ([`Convention::can_type`]):
+    /// an `Alt+Shift` chord is never `AltGr` whatever a layout does with
+    /// `Ctrl+Alt` on its key, and a `Cmd+Option` chord types nothing. `None`
+    /// from `types` means "no reason to refuse", so a chord is refused on a
+    /// character the answer can name, never on a guess. The one place this rule
+    /// stands, for the settings file and for the window that records a chord.
+    #[must_use]
+    pub fn typing_refusal(
+        &self,
+        chord: HotkeyChord,
+        types: &dyn Fn(HotkeyChord) -> Option<char>,
+    ) -> Option<Refusal> {
+        let may_type = self.convention.can_type(&chord);
+        let character = may_type.then(|| types(chord)).flatten()?;
+        Some(match self.convention {
+            Convention::WindowsAndLinux => Refusal::TypesCharacter(character),
+            Convention::MacOs => Refusal::OptionTypesCharacter(character),
+        })
     }
 
     /// These bindings with the tester's `wanted` chords on top, and every
@@ -628,13 +709,9 @@ impl Bindings {
     /// A wanted chord is refused when:
     /// - it has a [`HotkeyChord::problem`] - it would take a key from every
     ///   application.
-    /// - it [`could be AltGr`](HotkeyChord::could_be_altgr) and `types` names the
-    ///   character it types - it would take that character from every
-    ///   application. `types` is the system's answer (the core knows no
-    ///   layout), and it is asked ONLY for such a chord: an `Alt+Shift` chord is
-    ///   never `AltGr`, whatever a layout does with `Ctrl+Alt` on its key.
-    ///   `None` means "no reason to refuse", so a chord is refused on a
-    ///   character the answer can name, never on a guess.
+    /// - a layout types a character with it ([`Bindings::typing_refusal`]) - it
+    ///   would take that character from every application: `AltGr` on Windows,
+    ///   `Option` on macOS.
     /// - another action ends up answering to the same chord. First a wanted
     ///   chord that is already the chord of an action NOT changing goes back
     ///   (that action keeps it for good), then, of two wanted chords that
@@ -657,8 +734,8 @@ impl Bindings {
         wanted: &[(HotkeyAction, HotkeyChord)],
         types: &dyn Fn(HotkeyChord) -> Option<char>,
     ) -> (Self, Vec<Refused>) {
-        let before = self.0;
-        let mut table = self.0;
+        let before = self.table;
+        let mut table = self.table;
         let mut chosen = [false; HotkeyAction::COUNT];
         let mut refused = Vec::new();
         for (action, chord) in wanted {
@@ -673,11 +750,11 @@ impl Bindings {
                 });
                 continue;
             }
-            if let Some(character) = chord.could_be_altgr().then(|| types(*chord)).flatten() {
+            if let Some(why) = self.typing_refusal(*chord, types) {
                 refused.push(Refused {
                     action: *action,
                     chord: *chord,
-                    why: Refusal::TypesCharacter(character),
+                    why,
                 });
                 continue;
             }
@@ -705,7 +782,7 @@ impl Bindings {
                 why: Refusal::SameAs(owner.unwrap_or(action)),
             });
         }
-        (Self(table), refused)
+        (Self { table, ..self }, refused)
     }
 }
 
@@ -745,6 +822,9 @@ pub enum Refusal {
     /// system has - taken globally, the character is gone from every
     /// application.
     TypesCharacter(char),
+    /// A chord with `Option` that types this character on a layout the system
+    /// has (`D141`) - the same loss, on macOS.
+    OptionTypesCharacter(char),
     /// Another action answers to this chord.
     SameAs(HotkeyAction),
 }
@@ -1329,6 +1409,9 @@ mod tests {
                                         assert!(chord.could_be_altgr(), "{wanted:?}");
                                         assert_eq!(altgr_on_a(*chord), Some(character));
                                     }
+                                    Refusal::OptionTypesCharacter(_) => {
+                                        panic!("Windows asks no Option question: {wanted:?}")
+                                    }
                                     Refusal::Problem(problem) => {
                                         assert_eq!(chord.problem(), Some(problem));
                                     }
@@ -1368,5 +1451,170 @@ mod tests {
                 assert!(!default.could_be_altgr(), "{convention:?} {action:?}");
             }
         }
+    }
+
+    /// A layout like the Polish one on a single key: `Option+A` types `U+0105`,
+    /// every other key nothing. Answers for ANY chord it is asked about, so a
+    /// core that asked about a chord that cannot type would refuse it.
+    fn option_on_a(chord: HotkeyChord) -> Option<char> {
+        (chord.key == HotkeyKey::A).then_some('\u{105}')
+    }
+
+    const MAC_DEFAULTS: Bindings = Bindings::defaults(Convention::MacOs);
+
+    #[test]
+    fn an_option_chord_the_layout_types_on_is_refused_with_the_character() {
+        // With and without Shift: Option+Shift types the capital.
+        for text in ["Option+A", "Option+Shift+A"] {
+            let wanted = HotkeyChord::parse(text).expect("reads");
+            let (bindings, refused) =
+                MAC_DEFAULTS.with(&[(HotkeyAction::NextValue, wanted)], &option_on_a);
+            assert_eq!(bindings, MAC_DEFAULTS, "{text}");
+            assert_eq!(
+                refused,
+                vec![Refused {
+                    action: HotkeyAction::NextValue,
+                    chord: wanted,
+                    why: Refusal::OptionTypesCharacter('\u{105}'),
+                }],
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_option_chord_the_layout_types_nothing_on_is_used() {
+        let wanted = HotkeyChord::parse("Option+F5").expect("reads");
+        let (bindings, refused) =
+            MAC_DEFAULTS.with(&[(HotkeyAction::NextValue, wanted)], &option_on_a);
+        assert!(refused.is_empty(), "{refused:?}");
+        assert_eq!(bindings.chord(HotkeyAction::NextValue), wanted);
+    }
+
+    #[test]
+    fn macos_asks_the_layout_only_about_option_without_command_or_control() {
+        let asked = std::cell::RefCell::new(Vec::new());
+        let every_key_types = |chord: HotkeyChord| {
+            asked.borrow_mut().push(chord);
+            Some('x')
+        };
+        let with_command = HotkeyChord::parse("Command+Option+K").expect("reads");
+        let with_control = HotkeyChord::parse("Control+Option+K").expect("reads");
+        let ctrl_alt = HotkeyChord::parse("Ctrl+Alt+Shift+K").expect("reads");
+        let command_only = HotkeyChord::parse("Command+K").expect("reads");
+        let option = HotkeyChord::parse("Option+Shift+K").expect("reads");
+        let (bindings, refused) = MAC_DEFAULTS.with(
+            &[
+                (HotkeyAction::NextValue, with_command),
+                (HotkeyAction::PreviousValue, with_control),
+                (HotkeyAction::RepeatLast, ctrl_alt),
+                (HotkeyAction::RestartPack, command_only),
+                (HotkeyAction::CopyReport, option),
+            ],
+            &every_key_types,
+        );
+        assert_eq!(*asked.borrow(), vec![option]);
+        for (action, chord) in [
+            (HotkeyAction::NextValue, with_command),
+            (HotkeyAction::PreviousValue, with_control),
+            (HotkeyAction::RepeatLast, ctrl_alt),
+            (HotkeyAction::RestartPack, command_only),
+        ] {
+            assert_eq!(bindings.chord(action), chord, "{chord:?}");
+        }
+        assert_eq!(
+            refused,
+            vec![Refused {
+                action: HotkeyAction::CopyReport,
+                chord: option,
+                why: Refusal::OptionTypesCharacter('x'),
+            }]
+        );
+    }
+
+    #[test]
+    fn each_convention_asks_its_own_question_and_not_the_other() {
+        // `Alt` alone is the Option shape and `Ctrl+Alt` the AltGr one. Asking
+        // Windows about `Alt+A` would refuse a shortcut that takes nothing, and
+        // asking macOS about `Ctrl+Alt+A` would refuse one the applications
+        // decide.
+        let option = HotkeyChord::parse("Alt+A").expect("reads");
+        let altgr = HotkeyChord::parse("Ctrl+Alt+A").expect("reads");
+        let (bindings, refused) = DEFAULTS.with(&[(HotkeyAction::NextValue, option)], &option_on_a);
+        assert!(refused.is_empty(), "{refused:?}");
+        assert_eq!(bindings.chord(HotkeyAction::NextValue), option);
+        let (bindings, refused) =
+            MAC_DEFAULTS.with(&[(HotkeyAction::NextValue, altgr)], &option_on_a);
+        assert!(refused.is_empty(), "{refused:?}");
+        assert_eq!(bindings.chord(HotkeyAction::NextValue), altgr);
+    }
+
+    #[test]
+    fn typing_refusal_is_worded_for_the_key_of_the_convention() {
+        let altgr = HotkeyChord::parse("Ctrl+Alt+A").expect("reads");
+        let option = HotkeyChord::parse("Option+A").expect("reads");
+        assert_eq!(
+            DEFAULTS.typing_refusal(altgr, &altgr_on_a),
+            Some(Refusal::TypesCharacter('\u{105}'))
+        );
+        assert_eq!(
+            MAC_DEFAULTS.typing_refusal(option, &option_on_a),
+            Some(Refusal::OptionTypesCharacter('\u{105}'))
+        );
+        assert_eq!(DEFAULTS.typing_refusal(altgr, &no_layout), None);
+        assert_eq!(MAC_DEFAULTS.typing_refusal(option, &no_layout), None);
+    }
+
+    #[test]
+    fn only_option_without_command_or_control_can_type_with_option() {
+        let option = ["Option+N", "Option+Shift+N", "Alt+Space"];
+        let not = [
+            "Command+Option+N",
+            "Control+Option+N",
+            "Command+Option+Shift+N",
+            "Alt+Shift+Ctrl+N",
+            "Shift+N",
+            "Command+N",
+        ];
+        for text in option {
+            assert!(
+                HotkeyChord::parse(text)
+                    .expect("reads")
+                    .could_type_with_option(),
+                "{text}"
+            );
+        }
+        for text in not {
+            assert!(
+                !HotkeyChord::parse(text)
+                    .expect("reads")
+                    .could_type_with_option(),
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn no_default_of_any_convention_can_type_a_character() {
+        // A default that could type would be refused at the first run, or
+        // worse, registered and taking a character from every application.
+        for convention in CONVENTIONS {
+            for (action, default) in default_bindings(convention) {
+                assert!(
+                    !convention.can_type(default),
+                    "{convention:?} {action:?} {default:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_question_of_each_convention_is_the_shape_of_its_own_key() {
+        let altgr = HotkeyChord::parse("Ctrl+Alt+N").expect("reads");
+        let option = HotkeyChord::parse("Option+N").expect("reads");
+        assert!(Convention::WindowsAndLinux.can_type(&altgr));
+        assert!(!Convention::WindowsAndLinux.can_type(&option));
+        assert!(Convention::MacOs.can_type(&option));
+        assert!(!Convention::MacOs.can_type(&altgr));
     }
 }

@@ -31,6 +31,8 @@ pub use fs::{DirectoryPackSink, DirectoryPackSource, SystemClock};
 pub use keyboard::DirectInjection;
 pub use report_text::EnglishReport;
 pub use settings_file::SettingsFile;
-pub use shortcuts::{ChordHeld, GlobalShortcuts, altgr_character, chord_held, default_bindings};
+pub use shortcuts::{
+    ChordHeld, GlobalShortcuts, chord_held, default_bindings, layout_character, refresh_layouts,
+};
 pub use startup::report_window_failure;
 pub use toml_pack::TomlPackFormat;

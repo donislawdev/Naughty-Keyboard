@@ -480,6 +480,8 @@ pub enum ShortcutsLabel {
     NoModifier,
     /// Refused: a keyboard layout types a character on it as `AltGr`.
     TypesCharacter,
+    /// Refused: a keyboard layout types a character on it with `Option` (macOS).
+    OptionTypesCharacter,
     /// Refused: another action answers it.
     HeldBy,
     /// Refused: another application holds it.
@@ -706,6 +708,9 @@ pub(super) fn pattern_shortcuts_label(label: ShortcutsLabel) -> &'static str {
         ShortcutsLabel::TypesCharacter => {
             "{shortcut} types \"{character}\" as AltGr on a keyboard layout of this computer - taken globally it would stop that character working in every application. Choose a combination without Ctrl+Alt."
         }
+        ShortcutsLabel::OptionTypesCharacter => {
+            "{shortcut} types \"{character}\" with Option on a keyboard layout of this computer - taken globally it would stop that character working in every application. Choose a combination that also holds Command."
+        }
         ShortcutsLabel::HeldBy => {
             "{shortcut} is already the shortcut for \"{other}\". Give \"{other}\" another combination first."
         }
@@ -818,6 +823,11 @@ pub fn shortcut_answer(
                 }
                 Refusal::TypesCharacter(character) => (
                     ShortcutsLabel::TypesCharacter,
+                    "",
+                    shown_character(character),
+                ),
+                Refusal::OptionTypesCharacter(character) => (
+                    ShortcutsLabel::OptionTypesCharacter,
                     "",
                     shown_character(character),
                 ),

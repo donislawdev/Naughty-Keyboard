@@ -10,6 +10,7 @@
 //! - `ax` - what holds the keyboard focus, by accessibility,
 //! - `text_services` - which automatic text services the person has switched on,
 //! - `hotkey` - global shortcuts, heard through the application's loop,
+//! - `layout` - what the keyboard layouts type with `Option`,
 //! - `window` - keeping the front where the tester put it, and lending it,
 //! - `spaces` - letting the windows of the process stand in a full screen space,
 //! - `ffi` - the calls themselves.
@@ -21,6 +22,7 @@ mod ax;
 pub(crate) mod ffi;
 mod front;
 pub(crate) mod hotkey;
+pub(crate) mod layout;
 mod pulse;
 mod send;
 pub(crate) mod spaces;

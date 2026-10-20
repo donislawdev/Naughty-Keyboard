@@ -81,6 +81,8 @@ unsafe extern "C" {
         size: isize,
         encoding: u32,
     ) -> u8;
+    pub(crate) fn CFDataGetBytePtr(data: CfRef) -> *const u8;
+    pub(crate) fn CFDataGetLength(data: CfRef) -> isize;
     pub(crate) fn CFBooleanGetTypeID() -> usize;
     pub(crate) fn CFBooleanGetValue(boolean: CfRef) -> u8;
     pub(crate) fn CFPreferencesCopyAppValue(key: CfRef, application: CfRef) -> CfRef;
@@ -153,6 +155,27 @@ unsafe extern "C" {
     ) -> i32;
     pub(crate) fn SendEventToEventTarget(event: MutRef, target: MutRef) -> i32;
     pub(crate) fn ReleaseEvent(event: MutRef);
+
+    // Text Input Sources and the Unicode utilities: the keyboard layouts and what
+    // they type (`layout.rs`). The first two belong to the main thread.
+    pub(crate) fn TISCreateInputSourceList(properties: CfRef, include_all_installed: u8) -> CfRef;
+    pub(crate) fn TISGetInputSourceProperty(source: CfRef, key: CfRef) -> CfRef;
+    /// `kTISPropertyUnicodeKeyLayoutData`: a `CFData` holding the `uchr` table.
+    #[allow(non_upper_case_globals)]
+    pub(crate) static kTISPropertyUnicodeKeyLayoutData: CfRef;
+    pub(crate) fn UCKeyTranslate(
+        layout: *const c_void,
+        key_code: u16,
+        action: u16,
+        modifier_state: u32,
+        keyboard_type: u32,
+        options: u32,
+        dead_key_state: *mut u32,
+        max_length: usize,
+        actual_length: *mut usize,
+        text: *mut u16,
+    ) -> i32;
+    pub(crate) fn LMGetKbdType() -> u8;
     pub(crate) fn GetEventParameter(
         event: MutRef,
         name: u32,

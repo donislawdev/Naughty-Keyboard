@@ -84,6 +84,7 @@ mod causes;
 mod palette;
 mod registration;
 mod substitutions;
+mod typing;
 mod windows;
 
 pub use causes::closed_window as closed_window_cause;
@@ -890,11 +891,9 @@ fn pattern_settings_message(message: &SettingsMessage) -> Option<&'static str> {
             "The settings file {file} gives \"{action}\" the shortcut {wanted}, which holds no Ctrl, Alt or Win - taken globally it would stop that key working in every application, so the default {shortcut} is used. Add Ctrl, Alt or Win to it.",
         ),
         SettingsMessage::ShortcutNotUsed(Refused {
-            why: Refusal::TypesCharacter(_),
+            why: why @ (Refusal::TypesCharacter(_) | Refusal::OptionTypesCharacter(_)),
             ..
-        }) => Some(
-            "The settings file {file} gives \"{action}\" the shortcut {wanted}, which types \"{character}\" as AltGr on a keyboard layout of this computer - taken globally it would stop that character working in every application, so the default {shortcut} is used. Choose a combination without Ctrl+Alt.",
-        ),
+        }) => typing::pattern_typing_refusal(*why),
         SettingsMessage::ShortcutNotUsed(Refused {
             why: Refusal::SameAs(_),
             ..
@@ -1043,7 +1042,9 @@ pub fn settings_message(
         SettingsMessage::ShortcutNotUsed(refused) => {
             let (other, character) = match refused.why {
                 Refusal::SameAs(other) => (action_name(other), String::new()),
-                Refusal::TypesCharacter(character) => ("", shown_character(character)),
+                Refusal::TypesCharacter(character) | Refusal::OptionTypesCharacter(character) => {
+                    ("", shown_character(character))
+                }
                 Refusal::Problem(_) => ("", String::new()),
             };
             pattern_settings_message(message).map(|pattern| {
@@ -2425,6 +2426,15 @@ mod tests {
                 Refusal::TypesCharacter('\u{301}'),
                 "types \"U+0301\" as AltGr",
             ),
+            // On the Mac the key is named Option, and the way out is Command.
+            (
+                Refusal::OptionTypesCharacter('\u{105}'),
+                "types \"\u{105}\" with Option",
+            ),
+            (
+                Refusal::OptionTypesCharacter('\u{301}'),
+                "types \"U+0301\" with Option",
+            ),
         ] {
             let out = settings_message(
                 &SettingsMessage::ShortcutNotUsed(Refused {
@@ -2529,6 +2539,7 @@ mod tests {
             ShortcutsLabel::Unchecked,
             ShortcutsLabel::NoModifier,
             ShortcutsLabel::TypesCharacter,
+            ShortcutsLabel::OptionTypesCharacter,
             ShortcutsLabel::HeldBy,
             ShortcutsLabel::TakenElsewhere,
             ShortcutsLabel::NotRegisteredCode,
@@ -2546,6 +2557,7 @@ mod tests {
                 | ShortcutsLabel::Unchecked
                 | ShortcutsLabel::NoModifier
                 | ShortcutsLabel::TypesCharacter
+                | ShortcutsLabel::OptionTypesCharacter
                 | ShortcutsLabel::HeldBy
                 | ShortcutsLabel::TakenElsewhere
                 | ShortcutsLabel::NotRegisteredCode => true,
@@ -2666,6 +2678,10 @@ mod tests {
                 .contains("no Ctrl, Alt or Win")
         );
         assert!(refused(Refusal::TypesCharacter('\u{105}')).contains("types \"\u{105}\" as AltGr"));
+        assert!(
+            refused(Refusal::OptionTypesCharacter('\u{105}'))
+                .contains("types \"\u{105}\" with Option on a keyboard layout")
+        );
         assert_eq!(
             refused(Refusal::SameAs(HotkeyAction::RepeatLast)),
             format!(

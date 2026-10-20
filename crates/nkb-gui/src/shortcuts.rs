@@ -203,6 +203,9 @@ impl Shortcuts {
         if self.opening.get() {
             return;
         }
+        // The layouts are read here, on the main thread, for the recording that
+        // follows: the worker answers whether a chord types a character from them.
+        nkb_adapters::refresh_layouts();
         // Before the window exists: afterwards the answer is the window.
         self.keyboard.remember();
         self.opening.set(true);
