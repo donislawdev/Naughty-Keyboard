@@ -1461,8 +1461,8 @@
       "id": "M298",
       "why": "the core asks the layout about EVERY chord - Alt+Shift+A is refused because Ctrl+Alt+A types a character on that key",
       "file": "crates/nkb-core/src/hotkeys.rs",
-      "find": "            if let Some(character) = chord.could_be_altgr().then(|| types(*chord)).flatten() {",
-      "replace": "            if let Some(character) = types(*chord) {",
+      "find": "        let may_type = self.convention.can_type(&chord);",
+      "replace": "        let may_type = true;",
       "test": "hotkeys::tests::the_layout_is_asked_only_about_a_chord_that_can_be_altgr",
       "runner": "rust:nkb-core:lib"
     },
@@ -1470,8 +1470,8 @@
       "id": "M299",
       "why": "the core does not refuse a chord the layout types as AltGr - the shortcut takes the character from every application (D82)",
       "file": "crates/nkb-core/src/hotkeys.rs",
-      "find": "            if let Some(character) = chord.could_be_altgr().then(|| types(*chord)).flatten() {",
-      "replace": "            if let Some(character) = false.then(|| types(*chord)).flatten() {",
+      "find": "            if let Some(why) = self.typing_refusal(*chord, types) {",
+      "replace": "            if let Some(why) = None::<Refusal> {",
       "test": "hotkeys::tests::a_ctrl_alt_chord_the_layout_types_on_is_refused_with_the_character",
       "runner": "rust:nkb-core:lib"
     },
@@ -1603,10 +1603,10 @@
     },
     {
       "id": "M317",
-      "why": "a recorded Ctrl+Alt chord the layout types as AltGr is not refused - it would take the character from every application",
+      "why": "a recorded chord the layout types a character on is not refused - it would take the character from every application",
       "file": "crates/nkb-app/src/keep_settings.rs",
-      "find": "            if let Some(character) = chord.could_be_altgr().then(|| types(chord)).flatten() {",
-      "replace": "            if let Some(character) = None {",
+      "find": "            if let Some(why) = defaults.typing_refusal(chord, types) {",
+      "replace": "            if let Some(why) = None::<Refusal> {",
       "test": "keep_settings::tests::a_chord_that_is_no_global_shortcut_is_refused_for_its_own_reason",
       "runner": "rust:nkb-app:lib"
     },
@@ -8374,6 +8374,132 @@
       "replace": "    behavior & (CAN_JOIN_ALL_SPACES | FULL_SCREEN_AUXILIARY) != 0\n",
       "test": "macos_rules::tests::one_of_the_two_bits_is_not_standing_over_full_screen",
       "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1143",
+      "why": "the Option question ignores Command - Command+Option+N, a shortcut to every application that types nothing, is sent to the layout check as if Option typed it",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "        self.alt && !self.ctrl && !self.win",
+      "replace": "        self.alt && !self.ctrl",
+      "test": "hotkeys::tests::only_option_without_command_or_control_can_type_with_option",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1144",
+      "why": "the Option question ignores Control - Control+Option+N is sent to the layout check, whose answer for it is a control character on every letter",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "        self.alt && !self.ctrl && !self.win",
+      "replace": "        self.alt && !self.win",
+      "test": "hotkeys::tests::only_option_without_command_or_control_can_type_with_option",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1145",
+      "why": "the Option question does not need Option - Shift+N, which the layout types as a capital, is sent to the layout check as an Option chord",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "        self.alt && !self.ctrl && !self.win",
+      "replace": "        !self.ctrl && !self.win",
+      "test": "hotkeys::tests::only_option_without_command_or_control_can_type_with_option",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1146",
+      "why": "macOS asks the Windows question - Ctrl+Alt+A is refused on a Mac and Option+A, which takes a character from every application, is used",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "            Convention::MacOs => chord.could_type_with_option(),",
+      "replace": "            Convention::MacOs => chord.could_be_altgr(),",
+      "test": "hotkeys::tests::the_question_of_each_convention_is_the_shape_of_its_own_key",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1147",
+      "why": "Windows asks the Mac question - Alt+A, which takes nothing, is refused on Windows and Ctrl+Alt+A, which takes the AltGr character, is used",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "            Convention::WindowsAndLinux => chord.could_be_altgr(),\n            Convention::MacOs",
+      "replace": "            Convention::WindowsAndLinux => chord.could_type_with_option(),\n            Convention::MacOs",
+      "test": "hotkeys::tests::the_question_of_each_convention_is_the_shape_of_its_own_key",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1148",
+      "why": "a refusal on a Mac is worded as AltGr - the settings file and the shortcuts window tell a Mac user about a key their keyboard does not have",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "            Convention::MacOs => Refusal::OptionTypesCharacter(character),",
+      "replace": "            Convention::MacOs => Refusal::TypesCharacter(character),",
+      "test": "hotkeys::tests::typing_refusal_is_worded_for_the_key_of_the_convention",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1149",
+      "why": "a refusal on Windows is worded as Option - the sentence names a key the keyboard does not have",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "            Convention::WindowsAndLinux => Refusal::TypesCharacter(character),",
+      "replace": "            Convention::WindowsAndLinux => Refusal::OptionTypesCharacter(character),",
+      "test": "hotkeys::tests::typing_refusal_is_worded_for_the_key_of_the_convention",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1150",
+      "why": "Option+Shift is read as Option alone - the layout is asked for the small letter and the capital that Option+Shift types is not found",
+      "file": "crates/nkb-sys/src/layout.rs",
+      "find": "    if shift { 0x0A } else { 0x08 }",
+      "replace": "    if shift { 0x08 } else { 0x08 }",
+      "test": "layout::tests::option_types_what_the_layout_gives_on_the_key_and_the_capital_with_shift",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1151",
+      "why": "Option is left out of the modifier state - the layout is asked what the key types bare, which is a letter with no accent",
+      "file": "crates/nkb-sys/src/layout.rs",
+      "find": "    if shift { 0x0A } else { 0x08 }",
+      "replace": "    if shift { 0x0A } else { 0x00 }",
+      "test": "layout::tests::option_types_what_the_layout_gives_on_the_key_and_the_capital_with_shift",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1152",
+      "why": "a dead key is not counted - Option+E on the U.S. layout, which arms an accent the tester would lose, is let through as a shortcut",
+      "file": "crates/nkb-sys/src/layout.rs",
+      "find": "        translate(SPACE_KEY_CODE, 0, first.dead)?.units",
+      "replace": "        Vec::new()",
+      "test": "layout::tests::a_dead_key_counts_and_is_the_accent_space_makes_of_it",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1153",
+      "why": "the dead key state is not passed to Space - Space completes nothing and the accent is never named",
+      "file": "crates/nkb-sys/src/layout.rs",
+      "find": "        translate(SPACE_KEY_CODE, 0, first.dead)?.units",
+      "replace": "        translate(SPACE_KEY_CODE, 0, 0)?.units",
+      "test": "layout::tests::a_dead_key_counts_and_is_the_accent_space_makes_of_it",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1154",
+      "why": "a key that wrote nothing is taken for a dead key - every key a layout leaves empty is completed with Space into a space",
+      "file": "crates/nkb-sys/src/layout.rs",
+      "find": "    let units = if first.dead == 0 {",
+      "replace": "    let units = if first.dead != 0 {",
+      "test": "layout::tests::a_character_that_is_no_dead_key_is_asked_once",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1155",
+      "why": "the key that completes a dead key is not Space - the accent is looked up on another key",
+      "file": "crates/nkb-sys/src/layout.rs",
+      "find": "const SPACE_KEY_CODE: u16 = 49;",
+      "replace": "const SPACE_KEY_CODE: u16 = 0;",
+      "test": "layout::tests::a_dead_key_counts_and_is_the_accent_space_makes_of_it",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1156",
+      "why": "the shortcuts window words an Option refusal as AltGr - a Mac user is told to leave out Ctrl+Alt",
+      "file": "crates/nkb-adapters/src/i18n/windows.rs",
+      "find": "                    ShortcutsLabel::OptionTypesCharacter,\n                    \"\",",
+      "replace": "                    ShortcutsLabel::TypesCharacter,\n                    \"\",",
+      "test": "i18n::tests::a_restore_already_so_and_every_refusal_have_their_own_words",
+      "runner": "rust:nkb-adapters:lib"
     }
   ]
 }

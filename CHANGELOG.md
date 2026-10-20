@@ -24,6 +24,12 @@ Changes wait under Unreleased until then.
   is the Finder's. Without the Accessibility permission for the palette's own app the values go to
   the clipboard. Not there yet: recording a shortcut in the shortcuts window and remembering where
   the palette stood.
+- On macOS a shortcut made of `Option`, with or without `Shift`, and neither `Command` nor `Control`
+  is refused when a keyboard layout of the Mac types a character on that key. Taken globally it would
+  take that character from every application, the field under test included: `Option+A` types
+  `U+0105` on the Polish layout and `U+00E5` on the U.S. one. The palette says which character and
+  keeps the default shortcut. This is the rule `AltGr` has on Windows, and the default shortcuts,
+  which hold `Command` and `Option`, are not touched by it.
 - `nkb send` types into the focused field on macOS with the same care as on Windows. It waits until
   the keys are let go, watches the window in front, stops at `Escape` and goes at the pace of the
   application. `--clear` clears the line first. macOS lets it type only when the app it runs from,

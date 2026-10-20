@@ -39,17 +39,29 @@ pub const fn default_bindings() -> Bindings {
     Bindings::defaults(CONVENTION)
 }
 
-/// The character a keyboard layout of this system types for `chord` as
-/// `AltGr` - the answer `KeptSettings::bindings` hands to the core (`K4d`).
+/// The character a keyboard layout of this system types for `chord`, as the key
+/// that makes it type: `AltGr` on Windows, `Option` on macOS - the answer
+/// `KeptSettings::bindings` hands to the core (`K4d`, `D141`).
 ///
-/// Asks `nkb-sys` about `Ctrl+Alt` on the chord's key, with `Shift` when the
-/// chord has it. It does not look at the chord's own `Ctrl` and `Alt`:
-/// whether a chord CAN be `AltGr` is the core's question
-/// (`HotkeyChord::could_be_altgr`), asked before this one - so the two
-/// vocabularies still meet only in `virtual_key`.
+/// Asks `nkb-sys` about that key on the chord's key, with `Shift` when the chord
+/// has it. It does not look at the chord's own modifiers: whether a chord CAN
+/// type is the core's question ([`Convention::can_type`]), asked before this
+/// one - so the two vocabularies still meet only in `virtual_key`.
 #[must_use]
-pub fn altgr_character(chord: HotkeyChord) -> Option<char> {
-    nkb_sys::layout::altgr_character(virtual_key(chord.key), chord.shift)
+pub fn layout_character(chord: HotkeyChord) -> Option<char> {
+    let key = virtual_key(chord.key);
+    match CONVENTION {
+        Convention::WindowsAndLinux => nkb_sys::layout::altgr_character(key, chord.shift),
+        Convention::MacOs => nkb_sys::layout::option_character(key, chord.shift),
+    }
+}
+
+/// Reads the keyboard layouts again on the thread that calls it, which must be
+/// the main one on macOS (`nkb_sys::layout::refresh_layouts`). Called where the
+/// tester is about to choose a shortcut. [`layout_character`] answers from what
+/// was read last, on any thread.
+pub fn refresh_layouts() {
+    nkb_sys::layout::refresh_layouts();
 }
 
 /// What is held down as a window of ours handles a key press - the chord the

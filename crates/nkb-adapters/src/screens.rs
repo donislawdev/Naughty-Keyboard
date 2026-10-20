@@ -3,7 +3,7 @@
 //! The system's answer comes from `nkb-sys`, the rule of what makes a layout
 //! from `nkb-core` - this is where the two meet, so the window layer needs
 //! neither the system nor the rule. No port: there is one way to ask and no
-//! second one to swap in, the same reasoning as `altgr_character` (`D88`).
+//! second one to swap in, the same reasoning as `layout_character` (`D88`).
 
 use nkb_core::screens::{Layout, Screen};
 

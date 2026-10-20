@@ -331,8 +331,8 @@ impl KeptSettings {
             if let Some(problem) = chord.problem() {
                 return refuse(chord, Refusal::Problem(problem));
             }
-            if let Some(character) = chord.could_be_altgr().then(|| types(chord)).flatten() {
-                return refuse(chord, Refusal::TypesCharacter(character));
+            if let Some(why) = defaults.typing_refusal(chord, types) {
+                return refuse(chord, why);
             }
         }
         let (now, _) = defaults.with(&self.settings.shortcuts, types);

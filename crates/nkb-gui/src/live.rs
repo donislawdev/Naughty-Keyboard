@@ -88,7 +88,7 @@ use std::time::{Duration, Instant};
 use nkb_adapters::i18n::PaletteLabel;
 use nkb_adapters::{
     BuiltInCatalogue, ClipboardDelivery, DirectInjection, EnglishReport, GlobalShortcuts,
-    SettingsFile, SystemClock, TomlPackFormat, altgr_character, default_bindings, i18n,
+    SettingsFile, SystemClock, TomlPackFormat, default_bindings, i18n, layout_character,
 };
 use nkb_app::advance_sequence::{InFlight, Ports, RouteRequest, Sent};
 use nkb_app::browse_packs::{Direction, list_packs};
@@ -466,7 +466,7 @@ pub fn drive(
         ports: &ports,
         standing,
         defaults: default_bindings(),
-        types: &altgr_character,
+        types: &layout_character,
         route: Some(route),
         collapse: Collapse::new(&memory),
     };

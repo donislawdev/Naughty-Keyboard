@@ -1,4 +1,5 @@
-//! What the keyboard layouts type for a key held with `Ctrl` and `Alt`.
+//! What the keyboard layouts type for a key held with `Ctrl` and `Alt` (Windows)
+//! or with `Option` (macOS).
 //!
 //! # Why the palette asks
 //!
@@ -27,6 +28,27 @@
 //! window. Every INSTALLED layout is asked, not only the active one, because the
 //! tester can switch layouts while the palette runs and the shortcut would then
 //! take the character of the other one.
+//!
+//! # macOS: `Option` is the key that types (`D141`)
+//!
+//! There `AltGr` does not exist, and the key that makes a layout type a second
+//! character is `Option` (`Option+A` is `U+0105` on the Polish layout, `U+00E5`
+//! on the U.S. one). Measured 2026-10-21 on macOS 27.0 with the layouts of the
+//! system: on each of the 6 layouts asked, `Option` and `Option+Shift` type a
+//! character on nearly every letter and digit (a few keys are dead keys, see
+//! below) and on Space (`U+00A0`), while the function keys give `U+0010`, a control
+//! character, and `Command+Option` gives nothing a field takes. Typed into a
+//! field with the Polish layout, `Option+A` made `U+0105`, `Option+Shift+E`
+//! `U+0118` and `Option+Space` a space, and a shortcut on `Option+A` or on
+//! `Option+Shift+A` took the character from the field (3 presses of 3 each).
+//!
+//! `UCKeyTranslate` answers it from the layout's own table, with `Option` as the
+//! modifier state and nothing pressed. A dead key (`Option+E` on the U.S. layout)
+//! writes nothing and arms an accent, which the tester would lose with the
+//! shortcut, so it counts, and its character is what Space makes of it. Every
+//! ENABLED layout is asked, as on Windows. The layouts are read through Text
+//! Input Sources, which the header says belongs to the main thread, so they are
+//! copied there and the copy answers from any thread (`macos/layout.rs`).
 
 /// The first character any installed layout types for the virtual key `vk`
 /// held with `Ctrl` and `Alt` - and `Shift` when `shift` - or `None` when no
@@ -41,6 +63,38 @@ pub fn altgr_character(vk: u16, shift: bool) -> Option<char> {
     platform::altgr_character(vk, shift)
 }
 
+/// The first character any enabled keyboard layout types for the key with the
+/// virtual key `vk` held with `Option` - and `Shift` when `shift` - or `None`
+/// when no layout types anything there or the layouts could not be read.
+///
+/// Like [`altgr_character`], `None` is "no reason to refuse", and on every
+/// system but macOS it is the true answer: `Option` is the key of the Mac.
+/// `vk` is the vocabulary of the shortcuts (`HotkeyKey`), as there.
+#[must_use]
+pub fn option_character(vk: u16, shift: bool) -> Option<char> {
+    #[cfg(target_os = "macos")]
+    {
+        crate::macos::layout::option_character(vk, shift)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (vk, shift);
+        None
+    }
+}
+
+/// Reads the keyboard layouts again, where reading them belongs to one thread: on
+/// macOS the main thread, which the next question from any thread then answers
+/// from. A thread that is not the main one reads nothing, and elsewhere there is
+/// nothing to read - the layouts are asked at every question.
+///
+/// Called where the tester is about to choose a shortcut, so a layout enabled
+/// while the palette runs is among those asked.
+pub fn refresh_layouts() {
+    #[cfg(target_os = "macos")]
+    crate::macos::layout::refresh();
+}
+
 /// What one `ToUnicodeEx` answer types, apart from the reading, so it can be
 /// checked on every system.
 ///
@@ -49,7 +103,7 @@ pub fn altgr_character(vk: u16, shift: bool) -> Option<char> {
 /// character in the buffer, and counts, because the tester would lose the dead
 /// key too. A control character is not typing: a layout without `AltGr` may
 /// answer `Ctrl+Alt+A` with `U+0001`, which no application inserts.
-#[cfg(any(windows, test))]
+#[cfg(any(windows, target_os = "macos", test))]
 fn typed_character(written: i32, buffer: &[u16]) -> Option<char> {
     let units = match written {
         0 => return None,
@@ -59,6 +113,50 @@ fn typed_character(written: i32, buffer: &[u16]) -> Option<char> {
     let units = buffer.get(..units.min(buffer.len()))?;
     let first = char::decode_utf16(units.iter().copied()).next()?.ok()?;
     (!first.is_control()).then_some(first)
+}
+
+/// What one `UCKeyTranslate` answer was: the units it wrote and the dead key
+/// state it left. A dead key writes nothing and leaves a state.
+#[cfg(any(target_os = "macos", test))]
+pub(crate) struct Translated {
+    pub units: Vec<u16>,
+    pub dead: u32,
+}
+
+/// The modifier state `UCKeyTranslate` takes for `Option`, and for `Option` with
+/// `Shift`: the Carbon bits (`optionKey` 0x800, `shiftKey` 0x200) shifted down by
+/// eight, as the header of `UnicodeUtilities.h` says.
+#[cfg(any(target_os = "macos", test))]
+const fn option_state(shift: bool) -> u32 {
+    if shift { 0x0A } else { 0x08 }
+}
+
+/// The key code of Space, which completes a dead key into its accent.
+#[cfg(any(target_os = "macos", test))]
+const SPACE_KEY_CODE: u16 = 49;
+
+/// The character `Option` types on the key with macOS key code `code`, from
+/// `translate` - the layout's answer for a key code, a modifier state and the
+/// dead key state going in. Apart from the reading, so every case can be checked
+/// on every system.
+///
+/// A dead key counts: it writes nothing, arms an accent and the tester would
+/// lose it with the shortcut, so the character is what Space makes of it. A
+/// control character is not typing (the function keys answer `U+0010`), and
+/// neither is a key the layout cannot answer for.
+#[cfg(any(target_os = "macos", test))]
+pub(crate) fn option_character_via(
+    translate: &dyn Fn(u16, u32, u32) -> Option<Translated>,
+    code: u16,
+    shift: bool,
+) -> Option<char> {
+    let first = translate(code, option_state(shift), 0)?;
+    let units = if first.dead == 0 {
+        first.units
+    } else {
+        translate(SPACE_KEY_CODE, 0, first.dead)?.units
+    };
+    typed_character(i32::try_from(units.len()).unwrap_or(i32::MAX), &units)
 }
 
 #[cfg(windows)]
@@ -191,6 +289,104 @@ mod tests {
                 altgr_character(vk, false),
                 "vk 0x{vk:X}"
             );
+        }
+    }
+
+    /// A layout as `UCKeyTranslate` is asked about it: only the answers listed
+    /// are given, every other question gets no answer at all.
+    fn answering(
+        known: Vec<((u16, u32, u32), Translated)>,
+    ) -> impl Fn(u16, u32, u32) -> Option<Translated> {
+        move |code, state, dead| {
+            known
+                .iter()
+                .find(|(key, _)| *key == (code, state, dead))
+                .map(|(_, answer)| Translated {
+                    units: answer.units.clone(),
+                    dead: answer.dead,
+                })
+        }
+    }
+
+    fn typed(units: &[u16]) -> Translated {
+        Translated {
+            units: units.to_vec(),
+            dead: 0,
+        }
+    }
+
+    #[test]
+    fn option_types_what_the_layout_gives_on_the_key_and_the_capital_with_shift() {
+        // `A` is key code 0. The states are Carbon's `optionKey` and
+        // `optionKey | shiftKey` shifted down by eight.
+        let layout = answering(vec![
+            ((0, 0x08, 0), typed(&[0x0105])),
+            ((0, 0x0A, 0), typed(&[0x0104])),
+        ]);
+        assert_eq!(option_character_via(&layout, 0, false), Some('\u{105}'));
+        assert_eq!(option_character_via(&layout, 0, true), Some('\u{104}'));
+        assert_eq!(option_character_via(&layout, 11, false), None);
+    }
+
+    #[test]
+    fn a_dead_key_counts_and_is_the_accent_space_makes_of_it() {
+        // `Option+E` on the U.S. layout writes nothing and arms state 0x1000.
+        // Space with no modifier completes it to `U+00B4`.
+        let layout = answering(vec![
+            (
+                (14, 0x08, 0),
+                Translated {
+                    units: Vec::new(),
+                    dead: 0x1000,
+                },
+            ),
+            ((49, 0, 0x1000), typed(&[0x00B4])),
+        ]);
+        assert_eq!(option_character_via(&layout, 14, false), Some('\u{B4}'));
+    }
+
+    #[test]
+    fn a_dead_key_nothing_completes_is_not_named() {
+        let dead = || Translated {
+            units: Vec::new(),
+            dead: 0x1000,
+        };
+        let unanswered = answering(vec![((14, 0x08, 0), dead())]);
+        assert_eq!(option_character_via(&unanswered, 14, false), None);
+        let empty = answering(vec![((14, 0x08, 0), dead()), ((49, 0, 0x1000), typed(&[]))]);
+        assert_eq!(option_character_via(&empty, 14, false), None);
+    }
+
+    #[test]
+    fn a_function_key_a_control_character_and_silence_are_not_typing() {
+        // The function keys answer `U+0010` under `Option` on every layout.
+        let layout = answering(vec![
+            ((122, 0x08, 0), typed(&[0x0010])),
+            ((0, 0x08, 0), typed(&[])),
+        ]);
+        assert_eq!(option_character_via(&layout, 122, false), None);
+        assert_eq!(option_character_via(&layout, 0, false), None);
+    }
+
+    #[test]
+    fn a_character_that_is_no_dead_key_is_asked_once() {
+        let asked = std::cell::Cell::new(0);
+        let counting = |_: u16, _: u32, _: u32| {
+            asked.set(asked.get() + 1);
+            Some(typed(&[0x00E5]))
+        };
+        assert_eq!(option_character_via(&counting, 0, false), Some('\u{E5}'));
+        assert_eq!(asked.get(), 1);
+    }
+
+    #[test]
+    fn option_is_asked_of_no_system_but_the_mac() {
+        if cfg!(target_os = "macos") {
+            return;
+        }
+        for vk in 0x20u16..=0x87 {
+            assert_eq!(option_character(vk, false), None, "vk 0x{vk:X}");
+            assert_eq!(option_character(vk, true), None, "vk 0x{vk:X} with Shift");
         }
     }
 }
