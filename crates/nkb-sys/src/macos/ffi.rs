@@ -167,6 +167,21 @@ unsafe extern "C" {
 // libSystem is linked into every program, so this block names no library.
 unsafe extern "C" {
     pub(crate) fn proc_pidpath(pid: i32, buffer: *mut c_void, size: u32) -> i32;
+    /// 1 on the main thread, 0 on any other.
+    pub(crate) fn pthread_main_np() -> i32;
+}
+
+// The Objective-C runtime: three functions, to send messages to the windows of
+// this very process (`spaces.rs`). Not AppKit - the classes are found by name at
+// run time, so a program that never opens a window never asks for them.
+#[link(name = "objc")]
+unsafe extern "C" {
+    pub(crate) fn objc_getClass(name: *const c_char) -> MutRef;
+    pub(crate) fn sel_registerName(name: *const c_char) -> MutRef;
+    // `objc_msgSend` is declared without its arguments and cast to the signature
+    // of each message at the call, the only way messages of several shapes can be
+    // sent without a declaration per shape.
+    pub(crate) fn objc_msgSend();
 }
 
 /// The identifier a hot key event was registered with, if it carries one.

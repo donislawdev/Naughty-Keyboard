@@ -64,6 +64,10 @@ Changes wait under Unreleased until then.
   taskbar where no key and not even its close button closed it. Minimizing one now closes it like
   leaving it for another window, every opening shows it, and its title bar keeps only the close
   button.
+- On macOS the palette is now on the screen while the application in front is in full screen. It
+  stayed in the space it was made in, so the shortcut worked and the value arrived while the palette
+  was out of sight. It now stands in every space, and says so in a sentence if the system would
+  not let it.
 
 ## [0.2.0] - 2026-10-14
 

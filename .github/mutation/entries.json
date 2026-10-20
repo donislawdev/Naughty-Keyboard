@@ -8347,6 +8347,33 @@
       "replace": "    if !has_window {\n        FocusedInput::ClosedToAccessibility",
       "test": "macos_rules::tests::an_application_that_shows_no_focus_is_closed_only_with_a_window_in_front",
       "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1140",
+      "why": "the bits that cannot stand beside the full screen ones stay on a window, so AppKit raises an exception for the combination and the palette process ends (D140)",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "    (behavior & !(MOVE_TO_ACTIVE_SPACE | FULL_SCREEN_PRIMARY | FULL_SCREEN_NONE))\n",
+      "replace": "    (behavior)\n",
+      "test": "macos_rules::tests::the_bits_that_cannot_stand_beside_them_are_taken_off",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1141",
+      "why": "the palette is not put in every space, so it stays in the space it was made in and is out of sight in the one of an application in full screen (D140)",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "        | CAN_JOIN_ALL_SPACES\n        | FULL_SCREEN_AUXILIARY\n}",
+      "replace": "        | FULL_SCREEN_AUXILIARY\n}",
+      "test": "macos_rules::tests::a_window_with_no_behaviour_gets_the_two_bits",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1142",
+      "why": "one of the two bits is taken for a window that stands in the space of an application in full screen, so a palette that kept only one is reported as let in (D140)",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "    behavior & (CAN_JOIN_ALL_SPACES | FULL_SCREEN_AUXILIARY)\n        == CAN_JOIN_ALL_SPACES | FULL_SCREEN_AUXILIARY\n",
+      "replace": "    behavior & (CAN_JOIN_ALL_SPACES | FULL_SCREEN_AUXILIARY) != 0\n",
+      "test": "macos_rules::tests::one_of_the_two_bits_is_not_standing_over_full_screen",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }

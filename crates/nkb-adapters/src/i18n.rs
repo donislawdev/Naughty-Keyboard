@@ -667,6 +667,10 @@ pub enum Environment {
     /// The About window opened, and the system kept the keyboard somewhere
     /// else - Esc would go to the application under test, not close it.
     AboutFocusNotTaken,
+    /// The palette could not be let into the space of an application in full
+    /// screen (macOS), so the shortcuts work and the palette is out of sight
+    /// there (`OBS-193`).
+    NotOverFullScreen,
 }
 
 /// The pattern for an environment limit. `ux-spec.md` 6, section B.
@@ -699,6 +703,9 @@ fn pattern_environment(limit: Environment) -> &'static str {
         }
         Environment::AboutFocusNotTaken => {
             "The About window could not take the keyboard focus: {reason}. Close it with its Close button."
+        }
+        Environment::NotOverFullScreen => {
+            "The palette may stay out of sight while an application is in full screen: {reason}. The shortcuts still work. Leave full screen to see it."
         }
     }
 }
@@ -1082,6 +1089,19 @@ mod tests {
     /// The shortcuts of a palette whose settings name none.
     fn defaults() -> Bindings {
         Bindings::defaults(CONVENTION)
+    }
+
+    #[test]
+    fn the_palette_out_of_sight_in_full_screen_says_why_and_that_the_shortcuts_work() {
+        // `OBS-193`: the shortcut works and the value arrives, so the sentence says
+        // what is wrong and what is not.
+        let line = environment(
+            Environment::NotOverFullScreen,
+            "the program has no window yet",
+        );
+        assert!(line.contains("the program has no window yet"), "{line}");
+        assert!(line.contains("full screen"), "{line}");
+        assert!(line.contains("shortcuts still work"), "{line}");
     }
 
     /// One of every message, with arguments chosen so the test can check the

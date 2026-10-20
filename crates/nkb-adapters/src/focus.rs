@@ -27,6 +27,7 @@
 //! [`KeptFocus::remember`] cannot be either.
 
 use nkb_sys::WindowRef;
+use nkb_sys::spaces::SpacesError;
 use nkb_sys::window::{
     FocusError, KeyMenuError, can_refuse_focus, hand_back_foreground, refuse_activation,
     take_foreground,
@@ -167,6 +168,21 @@ impl LentFocus {
 /// The handle missing, the system refusing, or no route on this system.
 pub fn no_keyboard_menu(window: Option<u64>) -> Result<(), KeyMenuError> {
     nkb_sys::window::no_keyboard_menu(WindowRef(window.ok_or(KeyMenuError::HandleUnavailable)?))
+}
+
+/// Lets every window of this program that exists now stand in the space of an
+/// application in full screen, and answers how many it did that for (`OBS-193`).
+///
+/// Here with the focus calls because it is asked at the same moment: once the
+/// window manager has made the palette's window, on the thread that owns it. On
+/// every system but macOS there is no such space and the answer is `Ok(0)`.
+///
+/// # Errors
+///
+/// The program having no window yet, the system keeping the old setting, or the
+/// windows being asked from a thread that does not own them.
+pub fn stand_over_full_screen() -> Result<usize, SpacesError> {
+    nkb_sys::spaces::stand_over_full_screen()
 }
 
 #[cfg(test)]

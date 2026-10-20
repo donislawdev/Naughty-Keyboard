@@ -11,6 +11,7 @@
 //! - `text_services` - which automatic text services the person has switched on,
 //! - `hotkey` - global shortcuts, heard through the application's loop,
 //! - `window` - keeping the front where the tester put it, and lending it,
+//! - `spaces` - letting the windows of the process stand in a full screen space,
 //! - `ffi` - the calls themselves.
 //!
 //! The decisions that need no system are in `macos_rules.rs` and tested on every
@@ -22,6 +23,7 @@ mod front;
 pub(crate) mod hotkey;
 mod pulse;
 mod send;
+pub(crate) mod spaces;
 mod text_services;
 mod trust;
 pub(crate) mod window;

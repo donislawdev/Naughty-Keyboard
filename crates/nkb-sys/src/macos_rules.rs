@@ -330,6 +330,49 @@ pub(crate) fn classify(
     }
 }
 
+/// The bits of `NSWindowCollectionBehavior` the route below puts on a window or
+/// takes off it, read from `NSWindow.h` of the SDK (macOS 27.0, 2026-10-21).
+pub(crate) mod collection {
+    /// Shown in every space.
+    pub const CAN_JOIN_ALL_SPACES: u64 = 1 << 0;
+    /// Moved to the space that is active when it is ordered front. Exclusive
+    /// with the one above.
+    pub const MOVE_TO_ACTIVE_SPACE: u64 = 1 << 1;
+    /// The window that is the full screen one. At most one of this, the next
+    /// and `FULL_SCREEN_NONE`.
+    pub const FULL_SCREEN_PRIMARY: u64 = 1 << 7;
+    /// Shown with a full screen window, in its space.
+    pub const FULL_SCREEN_AUXILIARY: u64 = 1 << 8;
+    /// Cannot be made full screen.
+    pub const FULL_SCREEN_NONE: u64 = 1 << 9;
+}
+
+/// The collection behaviour that lets a window stand in the space of an
+/// application in full screen, from the behaviour it has now.
+///
+/// Two bits are put on - every space, and with a full screen window - and the
+/// three that cannot stand beside them are taken off. That is not tidiness: the
+/// header says the full screen bits are at most one, and an Objective-C exception
+/// raised for a combination that breaks it ends the process, since nothing here
+/// can catch one. Every other bit the toolkit set stays as it was.
+pub(crate) const fn over_full_screen(behavior: u64) -> u64 {
+    use collection::{
+        CAN_JOIN_ALL_SPACES, FULL_SCREEN_AUXILIARY, FULL_SCREEN_NONE, FULL_SCREEN_PRIMARY,
+        MOVE_TO_ACTIVE_SPACE,
+    };
+    (behavior & !(MOVE_TO_ACTIVE_SPACE | FULL_SCREEN_PRIMARY | FULL_SCREEN_NONE))
+        | CAN_JOIN_ALL_SPACES
+        | FULL_SCREEN_AUXILIARY
+}
+
+/// Whether a window with this behaviour stands in the space of an application
+/// in full screen - the read-back, which is the whole verdict.
+pub(crate) const fn stands_over_full_screen(behavior: u64) -> bool {
+    use collection::{CAN_JOIN_ALL_SPACES, FULL_SCREEN_AUXILIARY};
+    behavior & (CAN_JOIN_ALL_SPACES | FULL_SCREEN_AUXILIARY)
+        == CAN_JOIN_ALL_SPACES | FULL_SCREEN_AUXILIARY
+}
+
 #[cfg(test)]
 #[allow(
     clippy::expect_used,
@@ -338,6 +381,52 @@ pub(crate) fn classify(
 )]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_window_with_no_behaviour_gets_the_two_bits() {
+        let wanted = collection::CAN_JOIN_ALL_SPACES | collection::FULL_SCREEN_AUXILIARY;
+        assert_eq!(over_full_screen(0), wanted);
+        assert!(stands_over_full_screen(wanted));
+        assert!(!stands_over_full_screen(0));
+    }
+
+    #[test]
+    fn the_bits_that_cannot_stand_beside_them_are_taken_off() {
+        // Left on, FullScreenPrimary and FullScreenAuxiliary together raise an
+        // exception in AppKit, and so do the two space bits.
+        for old in [
+            collection::FULL_SCREEN_PRIMARY,
+            collection::FULL_SCREEN_NONE,
+            collection::MOVE_TO_ACTIVE_SPACE,
+            collection::FULL_SCREEN_PRIMARY | collection::MOVE_TO_ACTIVE_SPACE,
+        ] {
+            let new = over_full_screen(old);
+            assert_eq!(new & collection::FULL_SCREEN_PRIMARY, 0, "{old:#x}");
+            assert_eq!(new & collection::FULL_SCREEN_NONE, 0, "{old:#x}");
+            assert_eq!(new & collection::MOVE_TO_ACTIVE_SPACE, 0, "{old:#x}");
+            assert!(stands_over_full_screen(new), "{old:#x}");
+        }
+    }
+
+    #[test]
+    fn every_other_bit_the_toolkit_set_stays() {
+        // Bits 2 to 6 and 11 to 18 are other groups of the header.
+        let others: u64 = (0b1_1111 << 2) | (0xFF << 11);
+        let new = over_full_screen(others | collection::FULL_SCREEN_PRIMARY);
+        assert_eq!(new & others, others);
+    }
+
+    #[test]
+    fn the_rule_is_idempotent() {
+        let once = over_full_screen(collection::FULL_SCREEN_PRIMARY | 0b1_0100);
+        assert_eq!(over_full_screen(once), once);
+    }
+
+    #[test]
+    fn one_of_the_two_bits_is_not_standing_over_full_screen() {
+        assert!(!stands_over_full_screen(collection::CAN_JOIN_ALL_SPACES));
+        assert!(!stands_over_full_screen(collection::FULL_SCREEN_AUXILIARY));
+    }
 
     fn keys(steps: &[Step<MacEvent>]) -> Vec<(u16, bool, u64)> {
         steps
