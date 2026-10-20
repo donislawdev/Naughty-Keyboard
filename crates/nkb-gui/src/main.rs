@@ -63,14 +63,13 @@ use nkb_adapters::{
 use nkb_app::ports::Settings;
 use nkb_app::{KeptSettings, RouteRequest};
 use nkb_core::hotkeys::{Bindings, HotkeyAction};
-use nkb_core::screens::Point;
 use nkb_gui::about::About;
 use nkb_gui::packs::{Packs, SystemKeyboard};
 use nkb_gui::shortcuts::{Shortcuts, System};
 use nkb_gui::welcome::Welcome;
 use nkb_gui::{
     AboutWindow, Gallery, HeaderLinkKind, PacksWindow, Palette, ShortcutsWindow, WelcomeWindow,
-    focus, header_links, live,
+    focus, header_links, live, place,
 };
 use slint::ComponentHandle;
 
@@ -191,9 +190,7 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     let (place, off_screen) = settings.position_on(screens::layout().as_ref());
     said.extend(off_screen);
     if let Some(at) = place {
-        palette
-            .window()
-            .set_position(slint::PhysicalPosition::new(at.x, at.y));
+        palette.window().set_position(place::restore(at));
     }
     label_palette(&palette, &bindings, compact, settings.settings());
 
@@ -336,8 +333,7 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         let welcome = welcome.clone();
         move || {
             if let Some(palette) = palette.upgrade() {
-                let at = palette.window().position();
-                closed_at.set(Some(Point { x: at.x, y: at.y }));
+                closed_at.set(Some(place::standing(palette.window())));
             }
             packs.close();
             shortcuts.close();

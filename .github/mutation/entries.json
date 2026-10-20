@@ -8617,6 +8617,78 @@
       "replace": "                    (\"modifiers\", \"\"),",
       "test": "i18n::tests::a_restore_already_so_and_every_refusal_have_their_own_words",
       "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1170",
+      "why": "the place on macOS is the physical position times the scale - a palette on a display with two pixels to a point is restored twice as far from the corner as it stood",
+      "file": "crates/nkb-gui/src/place.rs",
+      "find": "    (f64::from(physical) / scale).round() as i32",
+      "replace": "    (f64::from(physical) * scale).round() as i32",
+      "test": "place::tests::on_macos_the_place_is_the_position_in_points",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1171",
+      "why": "the unit of Windows is divided by a scale - the palette is restored off the corner it was left in on a screen set to 150 percent",
+      "file": "crates/nkb-gui/src/place.rs",
+      "find": "    if !points {",
+      "replace": "    if points {",
+      "test": "place::tests::on_windows_the_place_is_the_position_the_toolkit_reports",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1172",
+      "why": "a place is told to the toolkit in the other unit - on macOS in physical pixels that are divided by the scale of the main display, on Windows in logical ones",
+      "file": "crates/nkb-gui/src/place.rs",
+      "find": "    if points {",
+      "replace": "    if !points {",
+      "test": "place::tests::the_place_goes_back_to_the_toolkit_in_the_unit_it_takes_for_the_system",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1173",
+      "why": "a scale of zero is divided by - the place of a window whose scale is not yet known goes to the far edge of the number line",
+      "file": "crates/nkb-gui/src/place.rs",
+      "find": "    let scale = if scale.is_finite() && scale > 0.0 {",
+      "replace": "    let scale = if scale.is_finite() {",
+      "test": "place::tests::a_scale_that_is_not_a_positive_number_is_one_pixel_to_a_point",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1174",
+      "why": "a coordinate that is no number is taken for zero - a display the system could not measure becomes a corner of the desktop",
+      "file": "crates/nkb-sys/src/screens.rs",
+      "find": "    if rounded.is_nan() || rounded < f64::from(i32::MIN) || rounded > f64::from(i32::MAX) {",
+      "replace": "    if rounded < f64::from(i32::MIN) || rounded > f64::from(i32::MAX) {",
+      "test": "screens::tests::display_bounds_that_are_no_number_or_no_area_are_no_screen",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1175",
+      "why": "the right edge of a display is its width - every display left of or below the main one is the wrong size",
+      "file": "crates/nkb-sys/src/screens.rs",
+      "find": "whole(x + width)?",
+      "replace": "whole(width)?",
+      "test": "screens::tests::display_bounds_in_points_are_screens_and_the_edges_are_what_is_rounded",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1176",
+      "why": "every system counts in points - a Windows palette is told its place in logical pixels",
+      "file": "crates/nkb-adapters/src/screens.rs",
+      "find": "pub const IN_POINTS: bool = cfg!(target_os = \"macos\");",
+      "replace": "pub const IN_POINTS: bool = true;",
+      "test": "place::tests::the_unit_follows_the_system",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1177",
+      "why": "a coordinate is cut down instead of rounded - two displays that touch leave a sliver of a point between them",
+      "file": "crates/nkb-sys/src/screens.rs",
+      "find": "    let rounded = value.round();",
+      "replace": "    let rounded = value.floor();",
+      "test": "screens::tests::display_bounds_that_are_no_number_or_no_area_are_no_screen",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }

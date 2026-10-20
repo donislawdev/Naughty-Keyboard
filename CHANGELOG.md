@@ -22,7 +22,7 @@ Changes wait under Unreleased until then.
   the keyboard straight back. Values go in with the same care as `nkb send`, and `Escape` stops a
   long one. The window that finds a value opens on Option+Command+F, because Option+Command+Space
   is the Finder's. Without the Accessibility permission for the palette's own app the values go to
-  the clipboard. Not there yet: remembering where the palette stood.
+  the clipboard.
 - On macOS a shortcut made of `Option`, with or without `Shift`, and neither `Command` nor `Control`
   is refused when a keyboard layout of the Mac types a character on that key. Taken globally it would
   take that character from every application, the field under test included: `Option+A` types
@@ -35,6 +35,10 @@ Changes wait under Unreleased until then.
   combinations belong to the application menu and cannot be recorded there: Command+Q, Command+H and
   Option+Command+H. The sentences about a shortcut without a modifier name the keys of a Mac,
   Control, Option and Command, instead of Ctrl, Alt and Win.
+- On macOS the palette remembers where it stood, separately for each layout of screens, and opens
+  there the next time. The place is kept when the window is closed with its close button. It is
+  not kept when the palette is quit with Command+Q. A place that lies off every screen of the layout,
+  after a display was unplugged, is not used, and the palette says so.
 - `nkb send` types into the focused field on macOS with the same care as on Windows. It waits until
   the keys are let go, watches the window in front, stops at `Escape` and goes at the pace of the
   application. `--clear` clears the line first. macOS lets it type only when the app it runs from,

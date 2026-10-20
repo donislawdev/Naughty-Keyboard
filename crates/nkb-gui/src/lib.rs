@@ -98,3 +98,8 @@ mod on_request;
 // owner's points of 2026-10-14). The one place that hands an address to
 // anything, and why: the module's own header.
 pub mod header_links;
+
+// Where the palette stood, in the unit the layout of screens is in - physical
+// pixels on Windows, points on macOS (`D143`). No window in it, so both
+// directions are tested without a screen.
+pub mod place;

@@ -354,7 +354,7 @@ const MACOS_BOTH: &[Entry] = &[
     ),
     (
         "/System/Library/Frameworks/CoreGraphics.framework/Versions/A/CoreGraphics",
-        "the key events the tool posts and the key state it waits on (CGEventPost,          CGEventSourceKeyState), and the geometry of displays for the window toolkit",
+        "the key events the tool posts and the key state it waits on (CGEventPost,          CGEventSourceKeyState), and the geometry of displays, which the window toolkit uses and the palette asks of the display list to remember where it stood (CGGetActiveDisplayList, CGDisplayBounds)",
     ),
     (
         "/System/Library/Frameworks/ApplicationServices.framework/Versions/A/ApplicationServices",
