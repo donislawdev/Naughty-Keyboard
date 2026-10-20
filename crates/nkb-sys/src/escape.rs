@@ -237,8 +237,9 @@ mod mac_platform {
 
     /// `kVK_Escape`.
     const KEY_ESCAPE: u16 = 0x35;
-    /// The signature of our hot key, `nkbe`.
+    /// The signature of our hot key, `nkbe`, and its identifier.
     const SIGNATURE: u32 = u32::from_be_bytes(*b"nkbe");
+    const HOT_KEY_ID: u32 = 1;
 
     /// `Escape` on the calling thread, with the flag its handler raises.
     pub(crate) struct SystemEscape {
@@ -264,8 +265,19 @@ mod mac_platform {
     }
 
     /// Raises the flag the reservation owns. Runs on the thread that pulls the
-    /// event, inside `fired`, so it needs no more than the flag.
-    extern "C" fn on_hot_key(_next: MutRef, _event: MutRef, user: MutRef) -> i32 {
+    /// event, inside `fired`, or on the thread that runs the application's loop
+    /// when there is one (the palette), so it needs no more than the flag.
+    ///
+    /// Every hot key press in the process reaches every handler, the palette's
+    /// shortcuts included. Taking those for `Escape` would stop a send at the next
+    /// shortcut, and answering "handled" would keep that shortcut from the palette,
+    /// so a press that is not ours is passed on.
+    extern "C" fn on_hot_key(_next: MutRef, event: MutRef, user: MutRef) -> i32 {
+        let ours = ffi::hot_key_id(event)
+            .is_some_and(|id| id.signature == SIGNATURE && id.id == HOT_KEY_ID);
+        if !ours {
+            return ffi::EVENT_NOT_HANDLED;
+        }
         if let Some(flag) = unsafe { user.cast::<AtomicBool>().as_ref() } {
             flag.store(true, Ordering::SeqCst);
         }
@@ -291,7 +303,7 @@ mod mac_platform {
             }
             let id = EventHotKeyId {
                 signature: SIGNATURE,
-                id: 1,
+                id: HOT_KEY_ID,
             };
             let registered = unsafe {
                 ffi::RegisterEventHotKey(u32::from(KEY_ESCAPE), 0, id, target, 0, &mut self.hot_key)

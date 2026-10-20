@@ -184,15 +184,12 @@ pub fn action_name(action: HotkeyAction) -> &'static str {
 /// language has its own entry here. `Space` is a word rather than a character
 /// on purpose - a blank between two plus signs is not readable as a key.
 ///
-/// ⚠️ This is the WINDOWS AND LINUX way of writing keys, and on macOS it is
-/// wrong in a way worth naming rather than discovering. `ux-spec.md` 3 writes the
-/// macOS defaults as `⌥⌘N`, and this function prints the same chord as
-/// `Alt+Win+N` - words a Mac user does not use for those keys. Delivery on macOS
-/// is blocked anyway (`OBS-70`), so the palette does not run there yet and this
-/// has no victim today. `OBS-115`.
+/// The words are those of the system the build runs on: Option and Command on
+/// macOS, where the tester calls the keys so (`OBS-115`, which had no victim until
+/// the palette ran there). Both ways are read back by the parser.
 #[must_use]
 pub fn chord(chord: HotkeyChord) -> String {
-    chord.text()
+    chord.display(crate::shortcuts::CONVENTION)
 }
 
 /// The shortcut an action answers to in this run, as text.
@@ -1685,7 +1682,11 @@ mod tests {
                 win: true,
                 key: HotkeyKey::H,
             }),
-            "Ctrl+Alt+Shift+Win+H"
+            if CONVENTION == Convention::MacOs {
+                "Control+Option+Shift+Command+H"
+            } else {
+                "Ctrl+Alt+Shift+Win+H"
+            }
         );
     }
 
@@ -2250,7 +2251,10 @@ mod tests {
         assert_eq!(counter(7, 34), "7 / 34");
         assert_eq!(
             no_value_yet(nkb_core::hotkeys::DEFAULT_BINDINGS[0].1),
-            "Nothing sent yet. Put the cursor in any field and press Alt+Shift+N."
+            format!(
+                "Nothing sent yet. Put the cursor in any field and press {}.",
+                chord(nkb_core::hotkeys::DEFAULT_BINDINGS[0].1)
+            )
         );
         // The count after the label, so one of anything reads right in every
         // language without a plural rule (`D80`, `OBS-120`).
@@ -2422,12 +2426,17 @@ mod tests {
             &|_| None,
         );
         assert!(refused.is_empty());
+        // The words of the system the tests run on, as the screen says them.
+        let (nine, f7) = (
+            chord(mine.chord(HotkeyAction::RestartPack)),
+            chord(mine.chord(HotkeyAction::OpenPacks)),
+        );
         let out = message(&Message::CounterKept { done: 1, total: 2 }, "p", &mine);
-        assert!(out.contains("Ctrl+Alt+Win+9"), "{out}");
+        assert!(out.contains(&nine), "{out}");
         // `UX-GUI-014`: no pack sends the tester to the value window's shortcut.
         assert_eq!(
             message(&Message::NoPack, "", &mine),
-            "No pack is chosen, so there is nothing to send. Press Ctrl+Alt+Win+F7 to choose one."
+            format!("No pack is chosen, so there is nothing to send. Press {f7} to choose one.")
         );
         let taken = registration(
             &ShortcutRegistration::Taken,
@@ -2436,7 +2445,7 @@ mod tests {
         )
         .expect("said");
         assert!(
-            taken.starts_with("Ctrl+Alt+Win+9 is already taken"),
+            taken.starts_with(&format!("{nine} is already taken")),
             "{taken}"
         );
         assert!(

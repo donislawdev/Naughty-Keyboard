@@ -15,6 +15,14 @@
 //! reconstruct the broken arrangement, because the pieces are never handed out
 //! apart.
 //!
+//! # macOS has no thread of its own for this
+//!
+//! A press there is an event of the application, delivered by the loop of the
+//! application, on the thread that runs it (`macos/hotkey.rs`). [`listen`] registers
+//! from the caller's own thread and spawns nothing, and the presses are heard only
+//! while the process runs such a loop - the palette does, on its main thread. In a
+//! process without one a press is queued and nobody takes it.
+//!
 //! # Why a registered hotkey is not a hot path
 //!
 //! Also from 6.5, and worth stating because the opposite is a common belief:
@@ -175,10 +183,11 @@ impl HotkeyListener {
 /// [`crate::can_send`].
 #[must_use]
 pub const fn can_register() -> bool {
-    cfg!(windows)
+    cfg!(any(windows, target_os = "macos"))
 }
 
-/// Starts listening for the given shortcuts on a dedicated thread.
+/// Starts listening for the given shortcuts - on a dedicated thread on Windows, and
+/// through the loop of the application on macOS (see the module text).
 ///
 /// Returns the per-hotkey [`HotkeyRegistration`] outcomes, a receiver of fired
 /// [`HotkeyId`]s, and the handle that keeps the thread alive. Registration
@@ -377,16 +386,17 @@ mod platform {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+use crate::macos::hotkey as platform;
+
+#[cfg(not(any(windows, target_os = "macos")))]
 mod platform {
     use super::{Hotkey, HotkeyId, HotkeyRegistration, HotkeyUnavailable};
     use std::sync::mpsc::Receiver;
 
     /// Named rather than "this platform", so the message says something the
     /// reader can act on - the same wording as the rest of this crate.
-    const SYSTEM: &str = if cfg!(target_os = "macos") {
-        "macOS"
-    } else if cfg!(target_os = "linux") {
+    const SYSTEM: &str = if cfg!(target_os = "linux") {
         "Linux"
     } else {
         "this system"
@@ -403,10 +413,7 @@ mod platform {
     pub fn listen(
         _hotkeys: &[Hotkey],
     ) -> Result<(Vec<HotkeyRegistration>, Receiver<HotkeyId>, Listener), HotkeyUnavailable> {
-        // macOS registers a hotkey without a permission, but delivering a value
-        // is blocked without accessibility (OBS-70), so a listener with no way
-        // to act on what it hears would be a promise the tool cannot keep. Linux
-        // depends on the session protocol. Both say so by name rather than
+        // Linux depends on the session protocol, and says so by name rather than
         // returning a listener that never fires.
         Err(HotkeyUnavailable::Unsupported { system: SYSTEM })
     }
@@ -528,6 +535,32 @@ mod tests {
 
         contender.listener.stop();
         holder.listener.stop();
+    }
+
+    #[test]
+    fn a_shortcut_registered_on_one_thread_is_released_on_another() {
+        if !can_register() {
+            return;
+        }
+        // On macOS the listener has no thread of its own, so the thread that
+        // registers and the one that releases are the caller's two, and the
+        // system has to take the release from a thread that did not register.
+        let registered = std::thread::spawn(|| listen(&[obscure(0xB050, 0x7A)]).expect("route"))
+            .join()
+            .expect("the registering thread finished");
+        assert_eq!(
+            registered.outcomes.as_slice(),
+            &[HotkeyRegistration::Registered]
+        );
+        registered.listener.stop();
+
+        let again = listen(&[obscure(0xB051, 0x7A)]).expect("route exists");
+        assert_eq!(
+            again.outcomes.as_slice(),
+            &[HotkeyRegistration::Registered],
+            "released from the other thread, so the same combination is free"
+        );
+        again.listener.stop();
     }
 
     #[test]

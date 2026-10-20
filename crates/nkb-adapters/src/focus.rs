@@ -66,6 +66,18 @@ impl KeptFocus {
         can_refuse_focus()
     }
 
+    /// Whether `window` - the raw handle of our own window, `None` while the
+    /// library has none to give - is the one in front right now.
+    ///
+    /// Asked on macOS, where a click on the palette takes the front a moment
+    /// after the press and the palette gives it back (`macos/window.rs`): the
+    /// give-back is only called once the front is ours, and a front that is not
+    /// is waited for, not assumed.
+    #[must_use]
+    pub fn is_in_front(window: Option<u64>) -> bool {
+        window.is_some_and(|window| nkb_sys::foreground_window() == Some(WindowRef(window)))
+    }
+
     /// Makes `window` refuse activation and hands the focus back.
     ///
     /// `window` is the raw handle of the palette's own window, as the graphical

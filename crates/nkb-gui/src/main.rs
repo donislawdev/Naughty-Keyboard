@@ -137,7 +137,13 @@ fn request() -> Request {
 fn start(request: Request) -> Result<(), slint::PlatformError> {
     match request {
         Request::Gallery => Gallery::new()?.run(),
-        Request::Palette { pack, route } => run_palette(pack, route),
+        Request::Palette { pack, route } => {
+            // 🔴 Before the first window of the process: on macOS the process and
+            // every window are set so that the palette does not take the front.
+            #[cfg(target_os = "macos")]
+            focus::select_backend()?;
+            run_palette(pack, route)
+        }
     }
 }
 
@@ -445,6 +451,9 @@ fn show_palette(
 ) -> Result<(), slint::PlatformError> {
     palette.show()?;
     focus::refuse_focus(palette, kept, standing, || {});
+    // A click takes the front on macOS all the same, and is answered (`focus`).
+    #[cfg(target_os = "macos")]
+    focus::hand_back_on_press(palette, standing);
     Ok(())
 }
 

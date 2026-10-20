@@ -31,6 +31,12 @@ pub(crate) const NO_ERR: i32 = 0;
 /// `kEventClassKeyboard` and `kEventHotKeyPressed`.
 pub(crate) const CLASS_KEYBOARD: u32 = u32::from_be_bytes(*b"keyb");
 pub(crate) const HOT_KEY_PRESSED: u32 = 5;
+/// `kEventParamDirectObject` and `typeEventHotKeyID`: where a hot key event
+/// keeps the identifier it was registered with.
+pub(crate) const PARAM_DIRECT_OBJECT: u32 = u32::from_be_bytes(*b"----");
+pub(crate) const TYPE_HOT_KEY_ID: u32 = u32::from_be_bytes(*b"hkid");
+/// `eventNotHandledErr`: the handler leaves the event to the next one.
+pub(crate) const EVENT_NOT_HANDLED: i32 = -9874;
 
 /// `ProcessSerialNumber`.
 #[repr(C)]
@@ -109,6 +115,8 @@ unsafe extern "C" {
 unsafe extern "C" {
     pub(crate) fn GetFrontProcess(psn: *mut ProcessSerialNumber) -> i16;
     pub(crate) fn GetProcessPID(psn: *const ProcessSerialNumber, pid: *mut i32) -> i16;
+    pub(crate) fn GetProcessForPID(pid: i32, psn: *mut ProcessSerialNumber) -> i16;
+    pub(crate) fn SetFrontProcess(psn: *const ProcessSerialNumber) -> i16;
 
     pub(crate) fn GetApplicationEventTarget() -> MutRef;
     pub(crate) fn GetEventDispatcherTarget() -> MutRef;
@@ -139,11 +147,43 @@ unsafe extern "C" {
     ) -> i32;
     pub(crate) fn SendEventToEventTarget(event: MutRef, target: MutRef) -> i32;
     pub(crate) fn ReleaseEvent(event: MutRef);
+    pub(crate) fn GetEventParameter(
+        event: MutRef,
+        name: u32,
+        wanted: u32,
+        actual: *mut u32,
+        size: u32,
+        actual_size: *mut u32,
+        data: MutRef,
+    ) -> i32;
 }
 
 // libSystem is linked into every program, so this block names no library.
 unsafe extern "C" {
     pub(crate) fn proc_pidpath(pid: i32, buffer: *mut c_void, size: u32) -> i32;
+}
+
+/// The identifier a hot key event was registered with, if it carries one.
+///
+/// Every handler on the application's event target hears every hot key press,
+/// whoever registered it, so each one asks first whether the press is its own.
+pub(crate) fn hot_key_id(event: MutRef) -> Option<EventHotKeyId> {
+    let mut id = EventHotKeyId {
+        signature: 0,
+        id: 0,
+    };
+    let read = unsafe {
+        GetEventParameter(
+            event,
+            PARAM_DIRECT_OBJECT,
+            TYPE_HOT_KEY_ID,
+            core::ptr::null_mut(),
+            core::mem::size_of::<EventHotKeyId>() as u32,
+            core::ptr::null_mut(),
+            core::ptr::from_mut(&mut id).cast(),
+        )
+    };
+    (read == NO_ERR).then_some(id)
 }
 
 /// An owned Core Foundation object, released when it goes out of scope.

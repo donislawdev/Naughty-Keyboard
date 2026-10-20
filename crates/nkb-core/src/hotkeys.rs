@@ -284,10 +284,9 @@ impl HotkeyChord {
     /// `Alt`, `Shift`, `Win`), then the key, joined by `+`, so the same chord is
     /// always the same text and [`HotkeyChord::parse`] reads it back unchanged.
     ///
-    /// ⚠️ These are the Windows and Linux words. On macOS the tester calls the
-    /// keys Option and Command (`OBS-115`), and the palette does not run there
-    /// yet (`OBS-70`). The parser already takes the macOS words, so a file
-    /// written with them stays readable when this learns to write them.
+    /// These are the Windows and Linux words, and the words of the settings file
+    /// on every system. What the screen says on macOS, where the tester calls
+    /// the keys Option and Command, is [`Self::display`].
     #[must_use]
     pub fn text(&self) -> String {
         let mut out = String::new();
@@ -304,6 +303,36 @@ impl HotkeyChord {
         }
         out.push_str(self.key.name());
         out
+    }
+
+    /// The shortcut as the tester of `convention` calls its keys, for the screen.
+    ///
+    /// The same chord and the same order of modifiers as [`Self::text`] -
+    /// Control, Option, Shift, Command is the order Apple writes them in too -
+    /// with the words of the system: `Option+Command+N`. Every word is one
+    /// [`Self::parse`] reads back, so the screen still shows what the tester
+    /// writes to change a shortcut (`OBS-115`).
+    #[must_use]
+    pub fn display(&self, convention: Convention) -> String {
+        match convention {
+            Convention::WindowsAndLinux => self.text(),
+            Convention::MacOs => {
+                let mut out = String::new();
+                for (held, name) in [
+                    (self.ctrl, "Control"),
+                    (self.alt, "Option"),
+                    (self.shift, "Shift"),
+                    (self.win, "Command"),
+                ] {
+                    if held {
+                        out.push_str(name);
+                        out.push('+');
+                    }
+                }
+                out.push_str(self.key.name());
+                out
+            }
+        }
     }
 
     /// Reads a shortcut written as text.
@@ -467,12 +496,13 @@ pub enum Convention {
     MacOs,
 }
 
-/// The key each action is bound to by default, the same on every system.
+/// The key each action is bound to by default, the same on every system but one.
 ///
-/// One entry per action, in the order of [`HotkeyAction::ALL`]. Only the
-/// modifiers differ between the conventions, so a tester who moves between
-/// systems keeps the letters. The letters are the ones `ux-spec.md` 3 chose, so
-/// the move from `Ctrl+Alt` changed the family and nothing else.
+/// One entry per action, in the order of [`HotkeyAction::ALL`]. The modifiers
+/// differ between the conventions, so a tester who moves between systems keeps
+/// the letters - all but the one [`macos_key`] names. The letters are the ones
+/// `ux-spec.md` 3 chose, so the move from `Ctrl+Alt` changed the family and
+/// nothing else.
 ///
 /// ⊕ The four of `D120` go in pairs of neighbouring keys, back on the left and
 /// forward on the right: `A` | `S` for a value, `Z` | `X` for a pack.
@@ -493,8 +523,24 @@ const DEFAULT_KEYS: [(HotkeyAction, HotkeyKey); HotkeyAction::COUNT] = [
     (HotkeyAction::PreviousPack, HotkeyKey::Z),
 ];
 
+/// The key the macOS table binds to `action`, where it is not the key of
+/// [`DEFAULT_KEYS`].
+///
+/// One exception, and a measured one (2026-10-20, macOS 27.0): `Option+Command+
+/// Space` is a shortcut of the system - it opens the Finder search window. A
+/// registered hot key does not keep it from the system, and Finder takes the front
+/// the moment the chord is pressed, so the value window the chord opens closes
+/// with it (`OBS-186`). `F` for Find is free in the table. The owner's choice,
+/// 2026-10-20.
+const fn macos_key(action: HotkeyAction, key: HotkeyKey) -> HotkeyKey {
+    match action {
+        HotkeyAction::OpenPacks => HotkeyKey::F,
+        _ => key,
+    }
+}
+
 /// One convention's table, built from [`DEFAULT_KEYS`] so the two cannot
-/// disagree about which letter belongs to which action.
+/// disagree about which letter belongs to which action - [`macos_key`] apart.
 const fn table(convention: Convention) -> [(HotkeyAction, HotkeyChord); HotkeyAction::COUNT] {
     let mut out = [(
         HotkeyAction::NextValue,
@@ -505,7 +551,7 @@ const fn table(convention: Convention) -> [(HotkeyAction, HotkeyChord); HotkeyAc
         let (action, key) = DEFAULT_KEYS[index];
         let chord = match convention {
             Convention::WindowsAndLinux => HotkeyChord::alt_shift(key),
-            Convention::MacOs => HotkeyChord::command_alt(key),
+            Convention::MacOs => HotkeyChord::command_alt(macos_key(action, key)),
         };
         out[index] = (action, chord);
         index += 1;
@@ -786,14 +832,20 @@ mod tests {
     }
 
     #[test]
-    fn both_conventions_bind_the_same_key_to_the_same_action() {
+    fn both_conventions_bind_the_same_key_to_the_same_action_but_the_one_the_system_holds() {
         // Only the modifiers differ, so a tester moving between systems keeps
-        // the letters - and a table edited on one side only is caught here.
+        // the letters - and a table edited on one side only is caught here. The
+        // exception is the value window: `Option+Command+Space` is Finder's.
         for ((action_a, chord_a), (action_b, chord_b)) in
             DEFAULT_BINDINGS.iter().zip(MACOS_DEFAULT_BINDINGS.iter())
         {
             assert_eq!(action_a, action_b);
-            assert_eq!(chord_a.key, chord_b.key, "{action_a:?}");
+            if *action_a == HotkeyAction::OpenPacks {
+                assert_eq!(chord_a.key, HotkeyKey::Space);
+                assert_eq!(chord_b.key, HotkeyKey::F);
+            } else {
+                assert_eq!(chord_a.key, chord_b.key, "{action_a:?}");
+            }
         }
     }
 
@@ -868,6 +920,40 @@ mod tests {
             chord(false, true, false, true, HotkeyKey::Digit0).text(),
             "Alt+Win+0"
         );
+    }
+
+    #[test]
+    fn the_screen_says_the_words_of_the_system_and_the_parser_reads_every_one_back() {
+        let all = chord(true, true, true, true, HotkeyKey::F12);
+        assert_eq!(
+            all.display(Convention::MacOs),
+            "Control+Option+Shift+Command+F12"
+        );
+        assert_eq!(all.display(Convention::WindowsAndLinux), all.text());
+        assert_eq!(
+            MACOS_DEFAULT_BINDINGS[0].1.display(Convention::MacOs),
+            "Option+Command+N"
+        );
+        // What the screen shows is what the tester may write to change it, for
+        // every key, every combination of modifiers and either convention.
+        for key in HotkeyKey::ALL {
+            for bits in 0u8..16 {
+                let shown = chord(
+                    bits & 1 != 0,
+                    bits & 2 != 0,
+                    bits & 4 != 0,
+                    bits & 8 != 0,
+                    *key,
+                );
+                for convention in [Convention::WindowsAndLinux, Convention::MacOs] {
+                    assert_eq!(
+                        HotkeyChord::parse(&shown.display(convention)),
+                        Ok(shown),
+                        "{convention:?} {shown:?}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
