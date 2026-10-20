@@ -211,7 +211,9 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     assert_eq!(restart.title, "Restart pack");
     assert!(restart.enabled && !restart.heading && restart.single_line && restart.child);
     assert!(restart.has_key);
-    assert_eq!(restart.key, "Alt+Shift+F9");
+    // In the words of the system the tests run on: Option and Command on macOS.
+    let wanted = HotkeyChord::parse("Alt+Shift+F9").expect("a chord");
+    assert_eq!(restart.key, nkb_adapters::i18n::chord(wanted));
     let values: Vec<_> = window
         .get_rows()
         .iter()

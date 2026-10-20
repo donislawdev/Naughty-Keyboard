@@ -91,7 +91,7 @@ fn calls(keyboard: &Rc<Recorded>) -> Vec<&'static str> {
 /// one it was written on: measured on macOS 2026-10-07, the first full run there
 /// since this test was written with the Windows chords spelled out.
 fn default_chord(action: HotkeyAction) -> String {
-    nkb_adapters::default_bindings().chord(action).text()
+    nkb_adapters::i18n::chord(nkb_adapters::default_bindings().chord(action))
 }
 
 #[test]
