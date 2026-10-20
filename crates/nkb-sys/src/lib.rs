@@ -42,6 +42,8 @@ pub mod layout;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(any(target_os = "macos", test))]
+mod macos_hotkeys;
+#[cfg(any(target_os = "macos", test))]
 mod macos_rules;
 pub mod privilege;
 pub mod program;

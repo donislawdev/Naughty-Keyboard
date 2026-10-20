@@ -60,6 +60,14 @@ fn main() {
         return;
     }
 
+    if cfg!(target_os = "macos") {
+        println!(
+            "On macOS a press is delivered by the loop of an application, and this example \
+             has none. The palette (nkb-gui) is the program that listens there."
+        );
+        return;
+    }
+
     let wanted = [ctrl_alt(NEXT_VALUE, VK_N), ctrl_alt(SHOW_HIDE, VK_H)];
     let listening = match hotkey::listen(&wanted) {
         Ok(listening) => listening,

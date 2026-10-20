@@ -189,6 +189,7 @@ impl Welcome {
             self.appear();
             return;
         }
+        crate::on_request::take_the_front(self.window.window());
         self.open.set(true);
         self.window.invoke_focus_box();
         self.take_keyboard(Instant::now());

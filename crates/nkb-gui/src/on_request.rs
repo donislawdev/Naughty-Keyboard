@@ -49,8 +49,27 @@ pub(crate) fn bring_up(window: &slint::Window) -> Result<(), slint::PlatformErro
     // `apply_diff`), and asked again for the same buttons it has no change
     // to write.
     keep_only_close(window);
+    take_the_front(window);
     Ok(())
 }
+
+/// Brings a window opened on request, and the keyboard, in front.
+///
+/// On macOS every window of the palette is created not active, so that the
+/// palette itself does not take the front (`focus::select_backend`), and a window
+/// that is meant to take it has to be asked. Through winit's own call, which
+/// activates the application and makes the window the key one: measured, the three
+/// letters typed after it reached the window, where `SetFrontProcess` alone left
+/// the keyboard with the application that had it (`nkb-sys`, `macos/window.rs`).
+/// Elsewhere the window manager does it on show, and the caller's `LentFocus`
+/// makes sure. Needs the event loop to be running, which every opening is.
+#[cfg(target_os = "macos")]
+pub(crate) fn take_the_front(window: &slint::Window) {
+    let _ = window.with_winit_window(|window| window.focus_window());
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn take_the_front(_window: &slint::Window) {}
 
 /// Leaves Close as the title bar's only button - minimize and maximize go.
 ///

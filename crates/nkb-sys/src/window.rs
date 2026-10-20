@@ -1,5 +1,9 @@
 //! Making a window refuse the keyboard focus.
 //!
+//! This is the Windows account. On macOS a window is not made to refuse the focus
+//! by a call on its handle - the same two jobs are done another way, and
+//! `macos/window.rs` has what was measured.
+//!
 //! # The requirement, and why it needs two calls rather than one
 //!
 //! `ux-spec.md` 2 calls it the sharpest technical requirement in the product:
@@ -327,15 +331,16 @@ mod platform {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+use crate::macos::window as platform;
+
+#[cfg(not(any(windows, target_os = "macos")))]
 mod platform {
     use super::{FocusError, KeyMenuError, WindowRef};
 
     /// Named rather than "this platform", so the message says something the
     /// reader can act on.
-    const SYSTEM: &str = if cfg!(target_os = "macos") {
-        "macOS"
-    } else if cfg!(target_os = "linux") {
+    const SYSTEM: &str = if cfg!(target_os = "linux") {
         "Linux"
     } else {
         "this system"
@@ -367,7 +372,7 @@ mod platform {
 /// once, in one place, rather than repeating a `cfg` at every call site.
 #[must_use]
 pub const fn can_refuse_focus() -> bool {
-    cfg!(windows)
+    cfg!(any(windows, target_os = "macos"))
 }
 
 #[cfg(test)]

@@ -8257,6 +8257,60 @@
       "replace": "    fn left(self: &Rc<Self>) {\n        if self.picker.borrow_mut().take().is_none() {\n            return;\n        }",
       "test": "a_minimized_window_is_left_and_comes_back_on_the_screen",
       "runner": "rust:nkb-gui:packs_window"
+    },
+    {
+      "id": "M1130",
+      "why": "the shortcuts of this program sign with the same two bytes as the Escape reservation - the palette would take Escape for one of its shortcuts and swallow it (D138)",
+      "file": "crates/nkb-sys/src/macos_hotkeys.rs",
+      "find": "const SIGNATURE_PREFIX: u32 = 0x4E4B_0000;",
+      "replace": "const SIGNATURE_PREFIX: u32 = 0x6E6B_0000;",
+      "test": "macos_hotkeys::tests::a_signature_finds_its_listener_and_nobody_elses_does",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1131",
+      "why": "the Command key is registered as the Shift bit - every macOS default shortcut would be Option+Shift and take a different chord from the tester",
+      "file": "crates/nkb-sys/src/macos_hotkeys.rs",
+      "find": "        bits |= 0x0100;",
+      "replace": "        bits |= 0x0200;",
+      "test": "macos_hotkeys::tests::each_modifier_is_its_own_bit_and_the_command_key_is_win",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1132",
+      "why": "Space has no macOS key code - the shortcut that opens the value window fails to register and the palette says it is not registered",
+      "file": "crates/nkb-sys/src/macos_hotkeys.rs",
+      "find": "        0x20 => Some(SPACE),",
+      "replace": "        0x20 => None,",
+      "test": "macos_hotkeys::tests::every_key_has_the_code_the_sdk_header_gives_it",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1133",
+      "why": "a chord this process already holds is reported registered - two shortcuts on one chord both look fine and the second never fires",
+      "file": "crates/nkb-sys/src/macos_hotkeys.rs",
+      "find": "        EXISTS => HotkeyRegistration::Taken,",
+      "replace": "        EXISTS => HotkeyRegistration::Registered,",
+      "test": "macos_hotkeys::tests::only_a_chord_this_process_holds_is_taken_and_every_other_failure_keeps_its_number",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1134",
+      "why": "the macOS screen writes Option as Alt - the tester reads a key that is not on the keyboard in front of them (OBS-115)",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "                    (self.alt, \"Option\"),",
+      "replace": "                    (self.alt, \"Alt\"),",
+      "test": "hotkeys::tests::the_screen_says_the_words_of_the_system_and_the_parser_reads_every_one_back",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1135",
+      "why": "the macOS value window goes back to Option+Command+Space, which the system holds for the Finder search window - the chord opens Finder and the window closes with the loss of focus (OBS-186)",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "        HotkeyAction::OpenPacks => HotkeyKey::F,",
+      "replace": "        HotkeyAction::OpenPacks => key,",
+      "test": "hotkeys::tests::both_conventions_bind_the_same_key_to_the_same_action_but_the_one_the_system_holds",
+      "runner": "rust:nkb-core:lib"
     }
   ]
 }

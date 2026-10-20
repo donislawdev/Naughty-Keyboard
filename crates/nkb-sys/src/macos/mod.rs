@@ -8,6 +8,8 @@
 //! - `send` - typing and pressing, one event at a time, each waited for,
 //! - `pulse` - holding the send to the pace of the application,
 //! - `ax` - what holds the keyboard focus, by accessibility,
+//! - `hotkey` - global shortcuts, heard through the application's loop,
+//! - `window` - keeping the front where the tester put it, and lending it,
 //! - `ffi` - the calls themselves.
 //!
 //! The decisions that need no system are in `macos_rules.rs` and tested on every
@@ -16,9 +18,11 @@
 mod ax;
 pub(crate) mod ffi;
 mod front;
+pub(crate) mod hotkey;
 mod pulse;
 mod send;
 mod trust;
+pub(crate) mod window;
 
 pub(crate) use ax::focused_input;
 pub(crate) use front::{foreground_window, image_path};
