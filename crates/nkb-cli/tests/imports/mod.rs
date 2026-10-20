@@ -364,13 +364,17 @@ const MACOS_BOTH: &[Entry] = &[
         "/System/Library/Frameworks/Carbon.framework/Versions/A/Carbon",
         "the Escape key held for one send (RegisterEventHotKey), the Process Manager that          names the application in front, and the keyboard layout through Text Input Sources",
     ),
+    // Linked by the package that holds the system calls, so every program that
+    // links it names it, `nkb` too, which never calls it: the window toolkit
+    // speaks to AppKit through it, and the palette lets its windows into the space
+    // of an application in full screen through it (`OBS-193`).
+    (
+        "/usr/lib/libobjc.A.dylib",
+        "the Objective-C runtime: three functions that find the windows of the palette's own process and set how they stand in the spaces. Nothing in it opens a connection",
+    ),
 ];
 
 const MACOS_WINDOW: &[Entry] = &[
-    (
-        "/usr/lib/libobjc.A.dylib",
-        "the Objective-C runtime the window toolkit speaks to AppKit through",
-    ),
     (
         "/usr/lib/libiconv.2.dylib",
         "conversion between character sets",

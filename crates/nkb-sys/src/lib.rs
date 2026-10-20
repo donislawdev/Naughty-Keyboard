@@ -48,6 +48,7 @@ mod macos_rules;
 pub mod privilege;
 pub mod program;
 pub mod screens;
+pub mod spaces;
 pub mod startup;
 pub mod text_services;
 pub mod window;

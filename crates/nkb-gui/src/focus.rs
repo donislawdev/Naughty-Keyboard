@@ -31,6 +31,13 @@
 //! the same, by putting the application that had it back in front within a tenth
 //! of a second.
 //!
+//! # macOS: the palette in the space of an application in full screen
+//!
+//! The same poll lets the palette's window stand in the space of an application
+//! in full screen, once there is a window to let (`nkb-sys`, `spaces.rs`). Without
+//! it the shortcut was heard and the value arrived, and the tester saw nothing
+//! (`OBS-193`).
+//!
 //! # What this does NOT do
 //!
 //! It does not keep watch. The flag and the hand-back happen once, and measured
@@ -122,6 +129,16 @@ pub fn refuse_focus(
                 &palette,
                 &standing,
                 &i18n::environment(Environment::FocusNotRefused, &error.to_string()),
+            );
+        }
+        #[cfg(target_os = "macos")]
+        if handle.is_some()
+            && let Err(error) = nkb_adapters::stand_over_full_screen()
+        {
+            say(
+                &palette,
+                &standing,
+                &i18n::environment(Environment::NotOverFullScreen, &error.to_string()),
             );
         }
         if let Some(then) = then.take() {
