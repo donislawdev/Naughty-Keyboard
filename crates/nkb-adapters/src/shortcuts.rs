@@ -562,11 +562,11 @@ mod tests {
     }
 
     /// Windows refuses a second registration of a chord by itself, so it never
-    /// asks the lock and a Windows palette never holds one for a Mac palette.
+    /// asks the lock and a Windows palette never holds one for a Mac palette:
+    /// on Windows this pins the constant to false.
     #[test]
     fn only_the_system_that_does_not_refuse_a_held_chord_asks_for_the_claim() {
         assert_eq!(CLAIM_ASKED, cfg!(target_os = "macos"));
-        assert!(!(cfg!(windows) && CLAIM_ASKED));
     }
 
     /// The lock lies beside the settings file, in the folder of the program's
