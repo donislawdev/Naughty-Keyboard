@@ -888,7 +888,7 @@ fn pattern_settings_message(message: &SettingsMessage) -> Option<&'static str> {
             why: Refusal::Problem(ChordProblem::NoCommandModifier),
             ..
         }) => Some(
-            "The settings file {file} gives \"{action}\" the shortcut {wanted}, which holds no Ctrl, Alt or Win - taken globally it would stop that key working in every application, so the default {shortcut} is used. Add Ctrl, Alt or Win to it.",
+            "The settings file {file} gives \"{action}\" the shortcut {wanted}, which holds no {modifiers} - taken globally it would stop that key working in every application, so the default {shortcut} is used. Add {modifiers} to it.",
         ),
         SettingsMessage::ShortcutNotUsed(Refused {
             why: why @ (Refusal::TypesCharacter(_) | Refusal::OptionTypesCharacter(_)),
@@ -1056,6 +1056,7 @@ pub fn settings_message(
                         ("wanted", &chord(refused.chord)),
                         ("other", other),
                         ("character", &character),
+                        ("modifiers", typing::command_modifiers()),
                         ("shortcut", &chord_text(bindings, refused.action)),
                     ],
                 )
@@ -2407,9 +2408,10 @@ mod tests {
         assert!(out.len() < 300, "{out}");
 
         for (why, named) in [
+            // The modifiers are named by the keyboard of the system (`OBS-196`).
             (
                 Refusal::Problem(ChordProblem::NoCommandModifier),
-                "no Ctrl, Alt or Win",
+                format!("no {} - taken", typing::command_modifiers()).as_str(),
             ),
             (
                 Refusal::SameAs(HotkeyAction::PreviousValue),
@@ -2675,7 +2677,7 @@ mod tests {
         };
         assert!(
             refused(Refusal::Problem(ChordProblem::NoCommandModifier))
-                .contains("no Ctrl, Alt or Win")
+                .contains(&format!("holds no {} -", typing::command_modifiers()))
         );
         assert!(refused(Refusal::TypesCharacter('\u{105}')).contains("types \"\u{105}\" as AltGr"));
         assert!(
