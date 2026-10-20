@@ -26,6 +26,7 @@ use nkb_core::keys::KeyChord;
 use nkb_core::lint::{LintProblem, RuleCode};
 use nkb_core::pack::{Pack, PackValue, Risk};
 use nkb_core::report::{ControlKind, ReportBlock, Target};
+use nkb_core::substitutions::Substitutions;
 use nkb_core::text::LiteralText;
 use nkb_core::value::ValueBody;
 
@@ -41,6 +42,9 @@ pub(crate) struct FakeDelivery {
     /// What a successful delivery says about following the application
     /// (`D95`): true unless a test asks for the unpaced route.
     paced: bool,
+    /// The text services the route says could have changed what it typed
+    /// (`D139`): none unless a test asks.
+    altered: Substitutions,
     /// What the route says on the way, in order, before it answers - a long
     /// send as the real route reports it (`OBS-160`). Empty: a send too short
     /// to report.
@@ -55,8 +59,17 @@ impl FakeDelivery {
             target: Cell::new(Some(TargetRef(1))),
             fail: None,
             paced: true,
+            altered: Substitutions::NONE,
             reports: Vec::new(),
             handed: RefCell::new(Vec::new()),
+        }
+    }
+    /// A route on a system whose text services are on and could act on what it
+    /// types.
+    pub(crate) fn altering(altered: Substitutions) -> Self {
+        Self {
+            altered,
+            ..Self::ready()
         }
     }
     /// A route that says how far it got, `reports` times, before answering.
@@ -137,6 +150,9 @@ impl ValueDelivery for FakeDelivery {
             }),
             Some(error) => Err(error.clone()),
         }
+    }
+    fn may_alter(&self, _text: &str) -> Substitutions {
+        self.altered
     }
 }
 

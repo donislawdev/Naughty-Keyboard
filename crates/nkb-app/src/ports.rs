@@ -18,6 +18,7 @@ use nkb_core::lint::LintProblem;
 use nkb_core::pack::Pack;
 use nkb_core::report::{ReportBlock, Target};
 use nkb_core::screens::{Layout, Point};
+use nkb_core::substitutions::Substitutions;
 use std::fmt;
 use std::time::Duration;
 
@@ -265,6 +266,16 @@ pub trait ValueDelivery {
         text: &str,
         progress: &mut dyn FnMut(Progress),
     ) -> Result<Delivered, DeliveryError>;
+
+    /// Which of the system's automatic text services are on AND could act on
+    /// `text` - the ones that may have changed what the field holds from what
+    /// was typed (`nkb_core::substitutions`). Asked after a value went in.
+    ///
+    /// Nothing by default: a route that types nothing the system rewrites, or a
+    /// system with no such services, has nothing to say.
+    fn may_alter(&self, _text: &str) -> Substitutions {
+        Substitutions::NONE
+    }
 }
 
 /// What the target of a typed value is, read at the press (UX8, `D104`): the

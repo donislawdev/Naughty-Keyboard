@@ -12,6 +12,11 @@ Changes wait under Unreleased until then.
 
 ### Added
 
+- On macOS the palette and `nkb send` now say when the system's text substitutions could have changed
+  a value that went in: a capital letter at the start of a sentence, a period after two spaces, and
+  a straight quote made curly in a rich text document. The field can then hold something other than
+  the value shown, and nothing in the field says so. The note appears only when a substitution that
+  is switched on could act on that very value, and names where to switch it off.
 - The palette runs on macOS. Its shortcuts, Option and Command with a letter, work while another
   application is in front, and the palette does not take the keyboard from it: a click on it gives
   the keyboard straight back. Values go in with the same care as `nkb send`, and `Escape` stops a
@@ -49,6 +54,11 @@ Changes wait under Unreleased until then.
 
 ### Fixed
 
+- On macOS a window that shows the system nothing inside it, such as Chrome or an application built
+  on Electron before accessibility is on in it, is no longer taken for an unknown focus. When the line
+  was not cleared first, the sentence now says why. Typing a value turns accessibility on there until
+  the application is restarted, so the next send clears the line. That also makes those pages heavier
+  until the restart, which matters when you measure performance.
 - The windows the palette opens - Find a value, Shortcuts and About - came back minimized after being
   minimized once, with the keyboard in them and nothing on the screen, and one could stay in the
   taskbar where no key and not even its close button closed it. Minimizing one now closes it like

@@ -49,6 +49,7 @@ pub mod privilege;
 pub mod program;
 pub mod screens;
 pub mod startup;
+pub mod text_services;
 pub mod window;
 
 /// What a successful send actually did.

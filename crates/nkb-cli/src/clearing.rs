@@ -24,11 +24,14 @@ pub(crate) fn say_clearing_before_failure(err: &mut impl Write, clearing: Cleari
 /// Why the line was not cleared, in the sentence of that reason - one place
 /// for both moments it is said, after a value that arrived and before the news
 /// that one did not.
-pub(crate) fn not_cleared(reason: SkipReason) -> &'static str {
+pub(crate) fn not_cleared(reason: SkipReason) -> String {
     match reason {
-        SkipReason::Unconfirmed => CLEARING_SKIPPED,
-        SkipReason::Terminal => CLEARING_SKIPPED_IN_TERMINAL,
-        SkipReason::ClosedToAccessibility => CLEARING_SKIPPED_CLOSED_TO_ACCESSIBILITY,
+        SkipReason::Unconfirmed => CLEARING_SKIPPED.to_owned(),
+        SkipReason::Terminal => CLEARING_SKIPPED_IN_TERMINAL.to_owned(),
+        SkipReason::ClosedToAccessibility => format!(
+            "{CLEARING_SKIPPED_CLOSED_TO_ACCESSIBILITY} {}",
+            nkb_adapters::i18n::closed_window_cause()
+        ),
     }
 }
 
@@ -52,12 +55,13 @@ const CLEARING_SKIPPED_IN_TERMINAL: &str = "nkb send: not cleared first - this i
 /// What `nkb send --clear` says when the window shows the system nothing
 /// inside it (`D125`, `OBS-175`).
 ///
-/// Firefox does so while it keeps accessibility services out: the focus is the
-/// window itself, wherever it is inside. Nothing tells a field from the rest
-/// there, so the keys stay out as for any focus nobody recognised - and this
-/// cause is known and the tester can change it, so the sentence names the
-/// setting in Firefox's own words.
-const CLEARING_SKIPPED_CLOSED_TO_ACCESSIBILITY: &str = "nkb send: not cleared first - this window shows the system nothing inside it, so the clearing keys could reach beyond the field, and the value went in on top of what was there. Firefox does this while \"Prevent accessibility services from accessing your browser\" is on in its settings - turn it off and restart Firefox to have the line cleared.";
+/// Firefox does so while it keeps accessibility services out, and Chrome and
+/// the Electron applications on macOS until accessibility is asked of them: the
+/// focus is the window itself, wherever it is inside. Nothing tells a field from
+/// the rest there, so the keys stay out as for any focus nobody recognised - and
+/// this cause is known and the tester can change it, so the sentence ends with
+/// the cause of the system it runs on, in the program's own words (`D139`).
+const CLEARING_SKIPPED_CLOSED_TO_ACCESSIBILITY: &str = "nkb send: not cleared first - this window shows the system nothing inside it, so the clearing keys could reach beyond the field, and the value went in on top of what was there.";
 
 #[cfg(test)]
 mod tests {
@@ -75,10 +79,22 @@ mod tests {
         let closed = not_cleared(SkipReason::ClosedToAccessibility);
         assert!(
             closed.starts_with("nkb send: not cleared first - this window shows")
-                && closed
-                    .contains("\"Prevent accessibility services from accessing your browser\"")
-                && closed.contains("restart Firefox"),
+                && closed.ends_with(nkb_adapters::i18n::closed_window_cause()),
             "{closed}"
         );
+        // The cause is the system's own: Firefox's setting where it is the one,
+        // Chrome's page for accessibility on macOS.
+        if cfg!(target_os = "macos") {
+            assert!(
+                closed.contains("the next send has the line cleared"),
+                "{closed}"
+            );
+        } else {
+            assert!(
+                closed.contains("\"Prevent accessibility services from accessing your browser\"")
+                    && closed.contains("restart Firefox"),
+                "{closed}"
+            );
+        }
     }
 }

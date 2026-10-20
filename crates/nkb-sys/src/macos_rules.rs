@@ -290,6 +290,17 @@ const TEXT_ROLES: &[&str] = &["AXTextField", "AXTextArea", "AXSearchField", "AXC
 /// entry needs a measurement, not a guess.
 pub(crate) const TERMINAL_PROGRAMS: &[&str] = &["Terminal"];
 
+/// What an application that shows no focused element for the whole second look
+/// is: a window with nothing inside it for the system to see - Chrome and the
+/// Electron applications until accessibility is asked of them - or no window.
+pub(crate) const fn silent_answer(has_window: bool) -> FocusedInput {
+    if has_window {
+        FocusedInput::ClosedToAccessibility
+    } else {
+        FocusedInput::Unknown
+    }
+}
+
 /// What the role of the focused element, and the two facts read beside it, make
 /// of it. `settable` is whether its value can be set at all and `has_range`
 /// whether it has a selected text range - names of attributes, never their
@@ -540,6 +551,40 @@ mod tests {
             classify("AXTextArea", true, true, true),
             FocusedInput::Terminal
         );
+    }
+
+    #[test]
+    fn terminal_app_reads_as_a_terminal_though_its_value_cannot_be_set() {
+        // Measured 2026-10-20: Terminal.app answers `AXTextArea` with a value that
+        // cannot be set and a selected range present. Without the program name it
+        // would be a read-only area, which is `NotTextField`.
+        assert_eq!(
+            classify("AXTextArea", false, true, true),
+            FocusedInput::Terminal
+        );
+        assert_eq!(
+            classify("AXTextArea", false, true, false),
+            FocusedInput::NotTextField
+        );
+    }
+
+    #[test]
+    fn the_kinds_of_page_field_safari_and_chrome_report_are_all_fields() {
+        // Measured 2026-10-20 in Safari and in Chrome once its tree was awake: the
+        // roles and subroles are the ones the page fields (text, search, email,
+        // password, textarea, contenteditable) answered, and the subrole is never
+        // asked, so a password field is a field like any other.
+        for role in ["AXTextField", "AXTextArea"] {
+            assert_eq!(classify(role, true, true, false), FocusedInput::TextField);
+        }
+    }
+
+    #[test]
+    fn an_application_that_shows_no_focus_is_closed_only_with_a_window_in_front() {
+        // Chrome until it is asked, measured: every request over 2.4 s answered
+        // "no value" while the application had its window in front.
+        assert_eq!(silent_answer(true), FocusedInput::ClosedToAccessibility);
+        assert_eq!(silent_answer(false), FocusedInput::Unknown);
     }
 
     #[test]

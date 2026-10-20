@@ -34,6 +34,7 @@ pub mod schema;
 pub mod screens;
 pub mod sequence;
 pub mod source_text;
+pub mod substitutions;
 pub mod text;
 pub mod typeface;
 pub mod value;

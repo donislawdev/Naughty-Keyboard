@@ -81,6 +81,12 @@ unsafe extern "C" {
         size: isize,
         encoding: u32,
     ) -> u8;
+    pub(crate) fn CFBooleanGetTypeID() -> usize;
+    pub(crate) fn CFBooleanGetValue(boolean: CfRef) -> u8;
+    pub(crate) fn CFPreferencesCopyAppValue(key: CfRef, application: CfRef) -> CfRef;
+    /// `kCFPreferencesAnyApplication`: the global domain.
+    #[allow(non_upper_case_globals)]
+    pub(crate) static kCFPreferencesAnyApplication: CfRef;
 }
 
 #[link(name = "ApplicationServices", kind = "framework")]

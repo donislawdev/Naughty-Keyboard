@@ -2001,8 +2001,8 @@
       "id": "M373",
       "why": "a send that could not follow the pace of the application keeps quiet - silent loss of characters under 'sent' comes back (OBS-158, D95)",
       "file": "crates/nkb-app/src/advance_sequence.rs",
-      "find": "            (!paced)\n                .then_some(Message::NotPaced)",
-      "replace": "            false\n                .then_some(Message::NotPaced)",
+      "find": "    (!paced)\n        .then_some(Message::NotPaced)",
+      "replace": "    false\n        .then_some(Message::NotPaced)",
       "test": "advance_sequence::tests::a_value_sent_without_following_the_application_says_characters_may_be_missing",
       "runner": "rust:nkb-app:lib"
     },
@@ -7054,10 +7054,10 @@
     },
     {
       "id": "M977",
-      "why": "nkb send --clear prints a vague sentence instead of the one naming the Firefox setting (D125)",
+      "why": "nkb send --clear prints a vague sentence instead of the one naming the cause of the closed window (D125, D139)",
       "file": "crates/nkb-cli/src/clearing.rs",
-      "find": "        SkipReason::ClosedToAccessibility => CLEARING_SKIPPED_CLOSED_TO_ACCESSIBILITY,",
-      "replace": "        SkipReason::ClosedToAccessibility => CLEARING_SKIPPED,",
+      "find": "        SkipReason::ClosedToAccessibility => format!(\n            \"{CLEARING_SKIPPED_CLOSED_TO_ACCESSIBILITY} {}\",\n            nkb_adapters::i18n::closed_window_cause()\n        ),",
+      "replace": "        SkipReason::ClosedToAccessibility => CLEARING_SKIPPED.to_owned(),",
       "test": "clearing::tests::each_reason_for_not_clearing_has_its_own_sentence",
       "runner": "rust:nkb-cli:bin=nkb"
     },
@@ -8311,6 +8311,42 @@
       "replace": "        HotkeyAction::OpenPacks => key,",
       "test": "hotkeys::tests::both_conventions_bind_the_same_key_to_the_same_action_but_the_one_the_system_holds",
       "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1136",
+      "why": "two spaces after a word are no longer a text service that could turn them into a period, so a value is typed without the note and the field holds a period nobody chose (D139)",
+      "file": "crates/nkb-core/src/substitutions.rs",
+      "find": "                found.period = true;",
+      "replace": "                found.period = false;",
+      "test": "substitutions::tests::two_spaces_after_a_word_could_become_a_period",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1137",
+      "why": "an opening quote or bracket hides the first letter of a sentence, so a value that starts with a quotation mark is typed without the note about the capital (D139)",
+      "file": "crates/nkb-core/src/substitutions.rs",
+      "find": "        if !c.is_whitespace() && !OPENS_A_SENTENCE.contains(&c) {",
+      "replace": "        if !c.is_whitespace() {",
+      "test": "substitutions::tests::a_lowercase_letter_after_a_sentence_end_or_a_line_break_could_be_capitalised",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1138",
+      "why": "a value that a text service of the system may have changed is reported as typed exactly, with no note (D139)",
+      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "find": "        .chain((!may_alter.is_empty()).then_some(Message::MayBeAltered(may_alter)))",
+      "replace": "        .chain(None)",
+      "test": "advance_sequence::tests::a_value_the_system_may_have_changed_says_which_services_could_have_acted",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1139",
+      "why": "an application that shows no focused element is taken for an unknown focus when it has a window, and a closed window when it has none (D139)",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "    if has_window {\n        FocusedInput::ClosedToAccessibility",
+      "replace": "    if !has_window {\n        FocusedInput::ClosedToAccessibility",
+      "test": "macos_rules::tests::an_application_that_shows_no_focus_is_closed_only_with_a_window_in_front",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }
