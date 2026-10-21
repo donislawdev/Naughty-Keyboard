@@ -13,13 +13,11 @@ Changes wait under Unreleased until then.
 ### Added
 
 - On Linux, `nkb send` types into programs running under an X11 session. Each character goes through
-  a spare key that is rewritten for the moment, and after every batch the program is asked whether it
-  has taken the keys, so a slow program is waited for. The keys stay as they are for a moment after the
-  last answer, because Chromium and some other programs turn a key into a character after they have
-  answered. A program that reads each key through an input method, such as xterm with IBus, can still
-  lose the end of a value longer than about a hundred characters. `Escape` stops a long value. Nothing is sent,
-  and the reason is named, in a Wayland session, for a display that is not on this machine, while
-  Caps Lock is on, and while a modifier is held. Clearing the field first is not yet available.
+  a spare key rewritten for the moment. The program is asked after every batch if it took the keys,
+  and the keys are kept a moment longer, as Chromium needs. A program that reads keys through an
+  input method, such as xterm with IBus, can lose the end of a value longer than about a hundred
+  characters. Nothing is sent in a Wayland session, for a remote display, or while Caps Lock is on
+  or a modifier is held. `--clear` is not available yet.
 - On macOS the palette and `nkb send` now say when the system's text substitutions could have changed
   a value that went in: a capital letter at the start of a sentence, a period after two spaces, and
   a straight quote made curly in a rich text document. The field can then hold something other than
