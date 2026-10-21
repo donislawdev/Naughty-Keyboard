@@ -20,8 +20,9 @@ use super::ffi::{self, MutRef, Owned};
 use super::front::front_pid;
 use super::pulse::Pulse;
 use super::trust;
+use crate::cadence::{Cadence, PROGRESS_INTERVAL};
 use crate::confirm::press_confirmed;
-use crate::confirm::{Cadence, PROGRESS_INTERVAL, Step, TAKEN_WAIT, Waits, Watch, Wire};
+use crate::confirm::{Step, TAKEN_WAIT, Waits, Watch, Wire};
 use crate::escape::{ReservedEscape, SystemEscape};
 use crate::macos_rules::{
     MacEvent, PulseVerdict, TEXT_KEY, chord_acted, chord_steps, held_modifier, scalars, text_steps,

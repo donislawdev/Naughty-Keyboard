@@ -340,6 +340,24 @@ const LINUX_WINDOW_GRANTED: &[Entry] = &[
     ("posix_spawnp", "the same process start"),
 ];
 
+/// What `nkb` itself is granted on Linux: the one connection of `nkb send`, to the
+/// X server of this machine (`D145`).
+const LINUX_CLI_GRANTED: &[Entry] = &[
+    (
+        "socket",
+        "nkb send types through the X server of this machine. The standard library's Unix \
+         socket is the way there, opened by one call in crates/nkb-sys/src/linux/connect.rs \
+         and by nothing else (nothing_reaches_the_network.rs, register 4). The path is built \
+         from the display number, never from an address",
+    ),
+    (
+        "connect",
+        "the same Unix socket. A DISPLAY that names a host is refused before the call \
+         (linux_rules.rs), and the X11 library's own connect, which would follow it over TCP, \
+         is forbidden in the source",
+    ),
+];
+
 const MACOS_BOTH: &[Entry] = &[
     (
         "/usr/lib/libSystem.B.dylib",
@@ -422,10 +440,15 @@ const MACOS_WINDOW: &[Entry] = &[
 /// The expected libraries of one program on one system, and the refused
 /// functions it is granted. `None` for a system this repository does not build.
 fn expected(program: Program, os: &str) -> Option<(Vec<Entry>, Vec<Entry>)> {
-    let (both, window, granted): (&[Entry], &[Entry], &[Entry]) = match os {
-        "windows" => (WINDOWS_BOTH, WINDOWS_WINDOW, WINDOWS_WINDOW_GRANTED),
-        "linux" => (LINUX_BOTH, LINUX_WINDOW, LINUX_WINDOW_GRANTED),
-        "macos" => (MACOS_BOTH, MACOS_WINDOW, &[]),
+    let (both, window, granted, cli_granted): (&[Entry], &[Entry], &[Entry], &[Entry]) = match os {
+        "windows" => (WINDOWS_BOTH, WINDOWS_WINDOW, WINDOWS_WINDOW_GRANTED, &[]),
+        "linux" => (
+            LINUX_BOTH,
+            LINUX_WINDOW,
+            LINUX_WINDOW_GRANTED,
+            LINUX_CLI_GRANTED,
+        ),
+        "macos" => (MACOS_BOTH, MACOS_WINDOW, &[], &[]),
         _ => return None,
     };
     let mut libraries = both.to_vec();
@@ -433,7 +456,7 @@ fn expected(program: Program, os: &str) -> Option<(Vec<Entry>, Vec<Entry>)> {
         libraries.extend_from_slice(window);
         return Some((libraries, granted.to_vec()));
     }
-    Some((libraries, Vec::new()))
+    Some((libraries, cli_granted.to_vec()))
 }
 
 // ---------------------------------------------------------------------------

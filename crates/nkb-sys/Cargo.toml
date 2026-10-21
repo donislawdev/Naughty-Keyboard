@@ -83,6 +83,27 @@ too_many_arguments = "warn"
 # calls, and the register of imports (`crates/nkb-cli/tests/imports/mod.rs`) names each
 # framework `nkb` links with its reason. A function is added to `ffi.rs` with the header
 # it comes from in mind, not from memory.
+# Linux has ONE dependency, and only where the X11 route lives (`D145`).
+#
+# `x11rb` 0.14.0 is the current stable release (crates.io, checked 2026-10-20, rule 19).
+# Licence sieve, both questions:
+#   (a) MIT OR Apache-2.0, and so are `x11rb-protocol` and `bitflags`. `gethostname` is
+#       Apache-2.0 and `rustix` and `linux-raw-sys` are Apache-2.0 WITH LLVM-exception OR
+#       Apache-2.0 OR MIT. All of them are GPL-3.0 compatible, Apache-2.0 specifically.
+#   (b) not applicable - a protocol implementation, not a reference dataset.
+# Pure Rust and `#![forbid(unsafe_code)]` without `allow-unsafe-code`, which is NOT turned
+# on: the wire is spoken by the crate itself, so no `libX11` and no `libxcb` is linked and
+# `nkb` keeps running on a server without graphics libraries (`D25`). `default-features =
+# false` brings only what the sending needs, the core protocol plus `xtest` (the extension
+# that injects key events). Everything outside the core protocol is a feature of its own
+# and stays off. `winit` carries `x11rb` 0.13.2 for the window, so the lock holds two
+# versions, which `deny.toml` allows on purpose.
+#
+# The connection is made to the LOCAL socket and nothing else (`linux/connect.rs`): the
+# crate's own `connect` would also follow a `DISPLAY` that names a host over TCP.
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = { version = "=0.14.0", default-features = false, features = ["xtest"] }
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",

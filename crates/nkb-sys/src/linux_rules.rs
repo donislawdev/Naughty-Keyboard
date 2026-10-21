@@ -1,0 +1,786 @@
+//! The decisions of the Linux route that need no X server (`D145`, `OBS-202`).
+//!
+//! Typing on X11 is a recipe, and every number in it was measured (2026-10-20,
+//! Xvfb 21.1 with openbox, a winit and a GTK4 victim, `tools/sonda-x11`):
+//!
+//! - every character, ASCII included, goes through a SPARE key whose row was
+//!   rewritten to the Unicode form of the keysym, written twice. A key the
+//!   layout already has depends on the layout group and on Caps Lock (`Hello`
+//!   came out as `hELLO` and as `Руддщ`), and a keysym alone on a key is
+//!   case-converted by the server (point 7),
+//! - the first XTest key event of a connection wipes a remap made before it, so
+//!   one tap of an unmapped key comes first (point 1),
+//! - a remap before every character loses 30 to 80 percent, a batch with a pause
+//!   loses 8 percent at 50 ms, and only the answer of the application to
+//!   `_NET_WM_PING` after every batch lost nothing in seven of seven runs (point 3),
+//! - there are 18 spare keys on the servers measured, so a batch holds at most 18
+//!   different characters (point 5).
+//!
+//! The system is `linux/`. Everything that is only a decision about numbers,
+//! names and text lives here and is tested on every system.
+
+use core::time::Duration;
+
+/// Where the X server of this machine keeps its sockets for local clients.
+pub(crate) const SOCKET_DIR: &str = "/tmp/.X11-unix";
+
+/// The most characters one batch holds before the application is asked whether it
+/// has taken them. Measured with 240 different CJK characters in a dozen batches
+/// (`OBS-202` point 3). It is a ceiling: how long a batch is depends on how fast the
+/// application was seen to take the one before (`next_limit`).
+pub(crate) const MAX_CHARS_PER_ACK: usize = 256;
+
+/// The characters of the first batch, before any pace is known. A fast application
+/// answers 64 characters in well under a second, and a slow one in far less than the
+/// wait for the answer.
+pub(crate) const FIRST_BATCH_CHARS: usize = 64;
+
+/// The fewest characters a batch is cut to, however slow the application is.
+pub(crate) const MIN_BATCH_CHARS: usize = 8;
+
+/// How long an answer is hoped to take. A batch is cut to the characters that fit
+/// this at the pace just seen, so an application that is slow but alive - 20 ms a
+/// character in a long text field, measured on `nkb-target` - is never mistaken for
+/// one that has stopped, which is waited for `PING_WAIT` and no longer.
+pub(crate) const ANSWER_TARGET: Duration = Duration::from_secs(1);
+
+/// How long the application is given to answer `_NET_WM_PING`. A stopped
+/// application is waited for exactly this long (`OBS-202` point 9), and the batch it
+/// did not answer is lost when it runs again, because the layout is given back by
+/// then (`OBS-206`).
+pub(crate) const PING_WAIT: Duration = Duration::from_secs(5);
+
+/// The pause after a remap, before the keys that use it. The clients are told of
+/// the new map before they are told of the keys, so this is a hedge for the ones
+/// that read it late, not what the recipe stands on.
+pub(crate) const REMAP_SETTLE: Duration = Duration::from_millis(50);
+
+/// The pause after the tap that makes the server announce its map, before the
+/// first remap (`OBS-202` point 1).
+pub(crate) const WARMUP_SETTLE: Duration = Duration::from_millis(100);
+
+/// The pause after a batch to an application that does not take part in
+/// `_NET_WM_PING`. Longer than the 50 ms that still lost 8 percent: this send is
+/// reported as unpaced and the person is told that characters may be missing.
+pub(crate) const UNPACED_SETTLE: Duration = Duration::from_millis(150);
+
+/// How long a wait for a held key to come up pauses between two looks.
+pub(crate) const LOOK_EVERY: Duration = Duration::from_millis(10);
+
+/// The keysyms that are not characters in the Unicode form.
+pub(crate) const KEYSYM_RETURN: u32 = 0xff0d;
+pub(crate) const KEYSYM_TAB: u32 = 0xff09;
+pub(crate) const KEYSYM_ESCAPE: u32 = 0xff1b;
+
+/// The keysym of a Unicode character is `0x0100_0000` plus its code point.
+const UNICODE_KEYSYM_BASE: u32 = 0x0100_0000;
+
+/// The `Lock` bit of the modifier state, which Caps Lock sets.
+const LOCK_MASK: u16 = 0x02;
+
+/// The display a program may type into: a local one, by number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DisplayAddress {
+    pub number: u32,
+    pub screen: usize,
+}
+
+/// Why `DISPLAY` does not name an X server this program may talk to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DisplayRefusal {
+    /// Not set, or empty.
+    Unset,
+    /// Names a host, so the connection would leave the machine.
+    NotLocal,
+    /// Not of the form `:N`, `:N.S` or `unix:N`.
+    Malformed,
+}
+
+/// Reads a `DISPLAY` value, accepting only the local forms `:N`, `:N.S` and
+/// `unix:N` (`D145`).
+///
+/// Anything that names a host is refused BEFORE a connection is made, because
+/// following it would send keystrokes over TCP to another machine - the program
+/// that promises it sends nothing off the machine (untouchable rule 17).
+pub(crate) fn parse_display(value: Option<&str>) -> Result<DisplayAddress, DisplayRefusal> {
+    let value = value
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .ok_or(DisplayRefusal::Unset)?;
+    let (host, rest) = value.split_once(':').ok_or(DisplayRefusal::Malformed)?;
+    if !host.is_empty() && host != "unix" {
+        return Err(DisplayRefusal::NotLocal);
+    }
+    let (number, screen) = match rest.split_once('.') {
+        Some((number, screen)) => (number, screen),
+        None => (rest, "0"),
+    };
+    Ok(DisplayAddress {
+        number: digits(number, 5).ok_or(DisplayRefusal::Malformed)?,
+        screen: digits(screen, 3).ok_or(DisplayRefusal::Malformed)? as usize,
+    })
+}
+
+/// The number written in `text`: ASCII digits only, one to `longest` of them. No
+/// sign, no space, nothing a parser might read more generously than a human.
+fn digits(text: &str, longest: usize) -> Option<u32> {
+    if text.is_empty() || text.len() > longest || !text.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    text.parse().ok()
+}
+
+/// The socket a local client connects to for this display.
+pub(crate) fn socket_path(address: DisplayAddress) -> String {
+    format!("{SOCKET_DIR}/X{}", address.number)
+}
+
+/// Whether the session says it is Wayland: the type the login set, or a
+/// compositor socket the environment points at.
+pub(crate) fn session_is_wayland(
+    session_type: Option<&str>,
+    wayland_display: Option<&str>,
+) -> bool {
+    session_type.is_some_and(|value| value.trim().eq_ignore_ascii_case("wayland"))
+        || wayland_display.is_some_and(|value| !value.trim().is_empty())
+}
+
+/// What the environment says about where this program runs.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct Environment<'a> {
+    pub display: Option<&'a str>,
+    pub session_type: Option<&'a str>,
+    pub wayland_display: Option<&'a str>,
+}
+
+/// Why this program does not type on this machine, in the words the person reads
+/// after `on` (`Unsupported { system }`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Refusal {
+    /// A Wayland session: the X server there is XWayland, and through it only the
+    /// characters of the compositor's layout arrive (`OBS-203`).
+    Wayland,
+    /// No local X server to type through.
+    NoLocalServer,
+    /// The server has no XTEST extension, the only way to inject key events.
+    NoXtest,
+    /// Every key of the server has a symbol, so there is none to type through.
+    NoSpareKeys,
+}
+
+impl Refusal {
+    /// The system as the refusal names it.
+    pub(crate) const fn system(self) -> &'static str {
+        match self {
+            Self::Wayland => "Linux under Wayland",
+            Self::NoLocalServer => "Linux without a local X server",
+            Self::NoXtest => "Linux on an X server without the XTEST extension",
+            Self::NoSpareKeys => "Linux on an X server with no spare keys to type through",
+        }
+    }
+}
+
+/// Whether the environment allows typing, and into which display. Wayland is
+/// asked first: under it `DISPLAY` is set too, and it is XWayland.
+pub(crate) fn route(environment: &Environment<'_>) -> Result<DisplayAddress, Refusal> {
+    if session_is_wayland(environment.session_type, environment.wayland_display) {
+        return Err(Refusal::Wayland);
+    }
+    parse_display(environment.display).map_err(|_| Refusal::NoLocalServer)
+}
+
+/// A character no key of an X server can type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CannotCarry(pub char);
+
+/// The keysym that types `character`.
+///
+/// Line feed and tab are the keys of those names. Every other character is its
+/// Unicode keysym, ASCII included (`OBS-202` point 6). `U+0000` is no keysym at
+/// all, and refusing it by name is the alternative to sending nothing for it.
+pub(crate) fn keysym_for(character: char) -> Result<u32, CannotCarry> {
+    match character {
+        '\0' => Err(CannotCarry(character)),
+        '\n' => Ok(KEYSYM_RETURN),
+        '\t' => Ok(KEYSYM_TAB),
+        other => Ok(UNICODE_KEYSYM_BASE + u32::from(other)),
+    }
+}
+
+/// UTF-16 units in `characters`, the unit every route reports in.
+pub(crate) fn utf16_units(characters: &[char]) -> usize {
+    characters
+        .iter()
+        .map(|character| character.len_utf16())
+        .sum()
+}
+
+/// A run of characters typed between two answers of the application, and the
+/// different keysyms they need, in the order they first appear. The keysym at
+/// index `n` goes on the `n`-th spare key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Batch {
+    /// Index of the first character.
+    pub first: usize,
+    /// Index after the last character.
+    pub end: usize,
+    pub keysyms: Vec<u32>,
+}
+
+impl Batch {
+    /// The spare key, by its index in the batch, that types `keysym`.
+    pub(crate) fn slot(&self, keysym: u32) -> Option<usize> {
+        self.keysyms.iter().position(|assigned| *assigned == keysym)
+    }
+}
+
+/// The batch that starts at `first`: as many characters as fit `spare` keys and
+/// `max_chars`, in order. A batch always holds at least one character, so a send
+/// that is slow cannot stand still.
+///
+/// `first` must be inside `keysyms` and `spare` at least one - the caller refuses a
+/// server with no spare key before it begins.
+pub(crate) fn next_batch(keysyms: &[u32], first: usize, spare: usize, max_chars: usize) -> Batch {
+    let max_chars = max_chars.max(1);
+    let mut assigned: Vec<u32> = Vec::new();
+    let mut end = first;
+    while end < keysyms.len() && end - first < max_chars {
+        let keysym = keysyms[end];
+        if !assigned.contains(&keysym) {
+            if assigned.len() == spare {
+                break;
+            }
+            assigned.push(keysym);
+        }
+        end += 1;
+    }
+    Batch {
+        first,
+        end,
+        keysyms: assigned,
+    }
+}
+
+/// How many characters the next batch may hold, from how long the application took
+/// to answer for the last one.
+pub(crate) fn next_limit(characters: usize, answered_in: Duration) -> usize {
+    let per_character = answered_in.as_secs_f64() / characters.max(1) as f64;
+    if per_character <= 0.0 {
+        return MAX_CHARS_PER_ACK;
+    }
+    let fit = (ANSWER_TARGET.as_secs_f64() / per_character).min(MAX_CHARS_PER_ACK as f64);
+    (fit as usize).clamp(MIN_BATCH_CHARS, MAX_CHARS_PER_ACK)
+}
+
+/// The keyboard map of the server, as `GetKeyboardMapping` returns it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Keymap {
+    min_keycode: u8,
+    per_keycode: usize,
+    keysyms: Vec<u32>,
+}
+
+impl Keymap {
+    pub(crate) fn new(min_keycode: u8, per_keycode: usize, keysyms: Vec<u32>) -> Self {
+        Self {
+            min_keycode,
+            per_keycode,
+            keysyms,
+        }
+    }
+
+    fn rows(&self) -> usize {
+        self.keysyms.len() / self.per_keycode.max(1)
+    }
+
+    fn row(&self, index: usize) -> &[u32] {
+        let start = index * self.per_keycode;
+        &self.keysyms[start..start + self.per_keycode]
+    }
+
+    fn keycode(&self, index: usize) -> Option<u8> {
+        u8::try_from(usize::from(self.min_keycode) + index).ok()
+    }
+
+    /// The keys with no symbol on any level: the ones to type through. Keys that
+    /// have any symbol are never touched - changing one replaces its definition
+    /// and breaks the layout (`OBS-202` point 5).
+    pub(crate) fn spare_keycodes(&self) -> Vec<u8> {
+        (0..self.rows())
+            .filter(|index| self.row(*index).iter().all(|keysym| *keysym == 0))
+            .filter_map(|index| self.keycode(index))
+            .collect()
+    }
+
+    /// The first key that types `keysym` on its first level.
+    pub(crate) fn find_keycode(&self, keysym: u32) -> Option<u8> {
+        (0..self.rows())
+            .find(|index| self.row(*index).first() == Some(&keysym))
+            .and_then(|index| self.keycode(index))
+    }
+}
+
+/// The window the keyboard focus is in, if it is in one. `None` and
+/// `PointerRoot` (0 and 1) name no window, and the root window is where the
+/// focus rests when nothing has it.
+pub(crate) fn focus_window(raw: u32, root: u32) -> Option<u32> {
+    (raw > 1 && raw != root).then_some(raw)
+}
+
+/// The name of a modifier whose being down changes what a typed character means,
+/// by its index in the server's modifier map (`Shift`, `Lock`, `Control`, `Mod1`
+/// to `Mod5`). The two lock-like ones are left out: `Lock` is Caps Lock, which has
+/// its own refusal, and `Mod2` is Num Lock, and neither changes a character typed
+/// through the Unicode keysym of a spare key. `Mod3` is left out because some
+/// layouts keep Scroll Lock there.
+pub(crate) const fn modifier_name(index: usize) -> Option<&'static str> {
+    match index {
+        0 => Some("Shift"),
+        2 => Some("Ctrl"),
+        3 => Some("Alt"),
+        6 => Some("Super"),
+        7 => Some("AltGr"),
+        _ => None,
+    }
+}
+
+/// Whether `keycode` is down in a 32-byte `QueryKeymap` reply.
+pub(crate) fn key_is_down(keys: &[u8], keycode: u8) -> bool {
+    keys.get(usize::from(keycode / 8))
+        .is_some_and(|byte| byte & (1 << (keycode % 8)) != 0)
+}
+
+/// The first modifier of `modifier_name` that has a key down, given the
+/// `QueryKeymap` bits and the server's modifier map (`keycodes_per_modifier` keys
+/// for each of the eight modifiers, zero where there is none).
+pub(crate) fn held_modifier(
+    keys: &[u8],
+    mapping: &[u8],
+    keycodes_per_modifier: usize,
+) -> Option<&'static str> {
+    if keycodes_per_modifier == 0 {
+        return None;
+    }
+    mapping
+        .chunks(keycodes_per_modifier)
+        .enumerate()
+        .find_map(|(index, row)| {
+            let name = modifier_name(index)?;
+            row.iter()
+                .any(|keycode| *keycode != 0 && key_is_down(keys, *keycode))
+                .then_some(name)
+        })
+}
+
+/// Whether Caps Lock is on, from the modifier state the server reports.
+pub(crate) fn caps_lock_on(state: u16) -> bool {
+    state & LOCK_MASK != 0
+}
+
+/// A token for one `_NET_WM_PING`, different for every ping of one send and made
+/// different between programs by the process id, so two sends to one application
+/// do not take each other's answers.
+pub(crate) fn ping_token(process: u32, counter: u32) -> u32 {
+    process.wrapping_mul(0x9E37_79B1) ^ counter
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::panic,
+    reason = "a failed expectation in a test is a failed test"
+)]
+mod tests {
+    use super::*;
+
+    fn display(value: &str) -> Result<DisplayAddress, DisplayRefusal> {
+        parse_display(Some(value))
+    }
+
+    #[test]
+    fn the_local_forms_of_display_are_read() {
+        let at = |number, screen| Ok(DisplayAddress { number, screen });
+        assert_eq!(display(":0"), at(0, 0));
+        assert_eq!(display(":99"), at(99, 0));
+        assert_eq!(display(":1.2"), at(1, 2));
+        assert_eq!(display("unix:3"), at(3, 0));
+        assert_eq!(display("  :0 "), at(0, 0), "a stray space is not a host");
+    }
+
+    #[test]
+    fn a_display_that_names_a_host_is_refused_before_any_connection() {
+        // Untouchable rule 17: nothing leaves the machine. Each of these would be
+        // a TCP connection for the library's own `connect`.
+        for host in [
+            "localhost:0",
+            "192.168.1.5:0",
+            "myhost:10.0",
+            "[::1]:0",
+            "tcp/localhost:0",
+        ] {
+            assert_eq!(display(host), Err(DisplayRefusal::NotLocal), "{host}");
+        }
+    }
+
+    #[test]
+    fn a_display_that_is_not_a_display_is_refused() {
+        assert_eq!(parse_display(None), Err(DisplayRefusal::Unset));
+        assert_eq!(display(""), Err(DisplayRefusal::Unset));
+        assert_eq!(display("   "), Err(DisplayRefusal::Unset));
+        for bad in [
+            "0", ":", ":x", ":-1", ":+1", ":1.", ":.1", ":1.x", ":0:0", ":123456", ":1.1234", ": 1",
+        ] {
+            assert_eq!(display(bad), Err(DisplayRefusal::Malformed), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn the_socket_is_built_from_the_number_and_nothing_else() {
+        let address = display(":12.1").expect("a display");
+        assert_eq!(socket_path(address), "/tmp/.X11-unix/X12");
+    }
+
+    #[test]
+    fn a_wayland_session_is_told_by_its_type_or_by_its_socket() {
+        assert!(session_is_wayland(Some("wayland"), None));
+        assert!(session_is_wayland(Some(" Wayland "), None));
+        assert!(session_is_wayland(None, Some("wayland-0")));
+        assert!(session_is_wayland(Some("x11"), Some("wayland-0")));
+        assert!(!session_is_wayland(Some("x11"), None));
+        assert!(!session_is_wayland(Some("tty"), Some("  ")));
+        assert!(!session_is_wayland(None, None));
+    }
+
+    #[test]
+    fn the_route_names_wayland_before_it_looks_at_display() {
+        let wayland = Environment {
+            display: Some(":0"),
+            session_type: Some("wayland"),
+            wayland_display: Some("wayland-0"),
+        };
+        assert_eq!(route(&wayland), Err(Refusal::Wayland));
+        let x11 = Environment {
+            display: Some(":0"),
+            session_type: Some("x11"),
+            wayland_display: None,
+        };
+        assert_eq!(
+            route(&x11),
+            Ok(DisplayAddress {
+                number: 0,
+                screen: 0
+            })
+        );
+        let remote = Environment {
+            display: Some("host:0"),
+            ..Environment::default()
+        };
+        assert_eq!(route(&remote), Err(Refusal::NoLocalServer));
+        assert_eq!(
+            route(&Environment::default()),
+            Err(Refusal::NoLocalServer),
+            "no display, no server"
+        );
+    }
+
+    #[test]
+    fn every_refusal_names_linux_and_its_own_cause() {
+        let all = [
+            Refusal::Wayland,
+            Refusal::NoLocalServer,
+            Refusal::NoXtest,
+            Refusal::NoSpareKeys,
+        ];
+        for (index, one) in all.iter().enumerate() {
+            assert!(one.system().starts_with("Linux "), "{}", one.system());
+            for other in &all[index + 1..] {
+                assert_ne!(one.system(), other.system());
+            }
+        }
+    }
+
+    #[test]
+    fn every_character_is_its_unicode_keysym_and_two_are_keys() {
+        assert_eq!(keysym_for('a'), Ok(0x0100_0061));
+        assert_eq!(keysym_for('ż'), Ok(0x0100_017C));
+        assert_eq!(keysym_for('日'), Ok(0x0100_65E5));
+        assert_eq!(keysym_for('😀'), Ok(0x0101_F600));
+        assert_eq!(keysym_for(' '), Ok(0x0100_0020));
+        assert_eq!(keysym_for('\n'), Ok(KEYSYM_RETURN));
+        assert_eq!(keysym_for('\t'), Ok(KEYSYM_TAB));
+        assert_eq!(keysym_for('\u{10FFFF}'), Ok(0x0110_FFFF));
+    }
+
+    #[test]
+    fn nul_cannot_be_carried_and_is_refused_by_name() {
+        assert_eq!(keysym_for('\0'), Err(CannotCarry('\0')));
+    }
+
+    #[test]
+    fn units_are_utf16_units() {
+        let text: Vec<char> = "a😀日".chars().collect();
+        assert_eq!(utf16_units(&text), 4);
+        assert_eq!(utf16_units(&[]), 0);
+    }
+
+    fn keysyms_of(text: &str) -> Vec<u32> {
+        text.chars()
+            .map(|character| keysym_for(character).expect("a carriable character"))
+            .collect()
+    }
+
+    /// The batches a send would cut `keysyms` into with a fixed limit.
+    fn plan(keysyms: &[u32], spare: usize, max_chars: usize) -> Vec<Batch> {
+        let mut batches = Vec::new();
+        let mut first = 0;
+        while first < keysyms.len() {
+            let batch = next_batch(keysyms, first, spare, max_chars);
+            first = batch.end;
+            batches.push(batch);
+        }
+        batches
+    }
+
+    #[test]
+    fn a_short_text_is_one_batch_with_one_key_per_different_character() {
+        let keysyms = keysyms_of("hello");
+        let batches = plan(&keysyms, 18, 256);
+        assert_eq!(batches.len(), 1);
+        let batch = &batches[0];
+        assert_eq!((batch.first, batch.end), (0, 5));
+        assert_eq!(batch.keysyms.len(), 4, "the two l share a key");
+        assert_eq!(batch.slot(keysyms[2]), batch.slot(keysyms[3]));
+        assert_eq!(batch.slot(keysyms[0]), Some(0), "first appearance first");
+    }
+
+    #[test]
+    fn a_batch_ends_before_the_character_that_has_no_key_left() {
+        let text: String = ('a'..='z').collect();
+        let keysyms = keysyms_of(&text);
+        let batches = plan(&keysyms, 18, 256);
+        assert_eq!(batches.len(), 2);
+        assert_eq!((batches[0].first, batches[0].end), (0, 18));
+        assert_eq!((batches[1].first, batches[1].end), (18, 26));
+        assert!(batches.iter().all(|batch| batch.keysyms.len() <= 18));
+    }
+
+    #[test]
+    fn a_batch_keeps_repeating_a_character_that_already_has_its_key() {
+        // Eighteen different characters and then the first one again: the
+        // repeat needs no new key, so it stays in the same batch.
+        let text: String = ('a'..='r').chain(['a', 'b']).collect();
+        let batches = plan(&keysyms_of(&text), 18, 256);
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].end, 20);
+    }
+
+    #[test]
+    fn a_long_text_is_cut_by_length_too() {
+        let keysyms = keysyms_of(&"a".repeat(600));
+        let batches = plan(&keysyms, 18, 256);
+        let lengths: Vec<usize> = batches
+            .iter()
+            .map(|batch| batch.end - batch.first)
+            .collect();
+        assert_eq!(lengths, vec![256, 256, 88]);
+    }
+
+    #[test]
+    fn batches_cover_the_text_once_and_in_order() {
+        let text = "Zażółć gęślą jaźń 日本語 😀 AbC ".repeat(9);
+        let keysyms = keysyms_of(&text);
+        for spare in [1, 2, 5, 18] {
+            let batches = plan(&keysyms, spare, 40);
+            let mut next = 0;
+            for batch in &batches {
+                assert_eq!(batch.first, next, "no gap and no overlap, spare {spare}");
+                assert!(batch.end > batch.first, "a batch always moves on");
+                assert!(batch.keysyms.len() <= spare);
+                for keysym in &keysyms[batch.first..batch.end] {
+                    assert!(batch.slot(*keysym).is_some(), "every character has a key");
+                }
+                next = batch.end;
+            }
+            assert_eq!(next, keysyms.len());
+        }
+    }
+
+    #[test]
+    fn a_limit_of_zero_still_moves_the_send_on() {
+        // A batch always holds one character, so a bad limit cannot loop for ever.
+        let batches = plan(&keysyms_of("ab"), 18, 0);
+        assert_eq!(batches.len(), 2);
+        assert!(plan(&[], 18, 256).is_empty());
+    }
+
+    #[test]
+    fn a_fast_application_gets_the_longest_batches() {
+        // 18 characters answered in 20 ms is about a millisecond a character: a
+        // second holds a thousand of them, and the ceiling is what is left.
+        let fast = next_limit(18, Duration::from_millis(20));
+        assert_eq!(fast, MAX_CHARS_PER_ACK);
+        assert_eq!(next_limit(1, Duration::ZERO), MAX_CHARS_PER_ACK);
+    }
+
+    #[test]
+    fn a_slow_application_gets_the_characters_that_fit_a_second() {
+        // 256 characters that took 5 s are 20 ms a character, which is 50 in a
+        // second: the shape of the slow field in `nkb-target` (`OBS-204`).
+        let slow = next_limit(256, Duration::from_secs(5));
+        assert_eq!(slow, 51);
+        // Never below the floor, however slow.
+        assert_eq!(next_limit(64, Duration::from_secs(60)), MIN_BATCH_CHARS);
+    }
+
+    #[test]
+    fn the_first_batch_is_between_the_floor_and_the_ceiling() {
+        let first = [FIRST_BATCH_CHARS];
+        assert!(
+            first
+                .iter()
+                .all(|chars| (MIN_BATCH_CHARS..=MAX_CHARS_PER_ACK).contains(chars))
+        );
+        assert!(ANSWER_TARGET < PING_WAIT);
+    }
+
+    fn keymap(rows: &[&[u32]]) -> Keymap {
+        let per = rows.first().map_or(1, |row| row.len());
+        Keymap::new(
+            8,
+            per,
+            rows.iter().flat_map(|row| row.iter().copied()).collect(),
+        )
+    }
+
+    #[test]
+    fn a_key_with_no_symbol_on_any_level_is_spare() {
+        let map = keymap(&[&[0x61, 0x41], &[0, 0], &[0, 0x42], &[0, 0]]);
+        assert_eq!(map.spare_keycodes(), vec![9, 11]);
+    }
+
+    #[test]
+    fn a_key_with_a_symbol_on_a_higher_level_only_is_not_spare() {
+        // Typing through it would replace its definition (`OBS-202` point 5).
+        let map = keymap(&[&[0, 0, 0x1000_0041]]);
+        assert!(map.spare_keycodes().is_empty());
+    }
+
+    #[test]
+    fn the_last_keycode_is_not_lost_to_overflow() {
+        let rows: Vec<Vec<u32>> = (0..248).map(|_| vec![0, 0]).collect();
+        let refs: Vec<&[u32]> = rows.iter().map(Vec::as_slice).collect();
+        let map = keymap(&refs);
+        let spare = map.spare_keycodes();
+        assert_eq!(spare.first(), Some(&8));
+        assert_eq!(spare.last(), Some(&255));
+        // A map that runs past 255 keys is cut, not wrapped round.
+        let too_many: Vec<Vec<u32>> = (0..250).map(|_| vec![0, 0]).collect();
+        let refs: Vec<&[u32]> = too_many.iter().map(Vec::as_slice).collect();
+        assert_eq!(keymap(&refs).spare_keycodes().len(), 248);
+    }
+
+    #[test]
+    fn a_key_is_found_by_its_first_level() {
+        let map = keymap(&[&[0x61, 0x41], &[KEYSYM_ESCAPE, 0], &[0x62, KEYSYM_ESCAPE]]);
+        assert_eq!(map.find_keycode(KEYSYM_ESCAPE), Some(9));
+        assert_eq!(
+            map.find_keycode(0x41),
+            None,
+            "a second level is no key of its own"
+        );
+        assert_eq!(map.find_keycode(0x7A), None);
+    }
+
+    #[test]
+    fn the_focus_names_a_window_only_when_it_is_one() {
+        assert_eq!(focus_window(0, 0x100), None, "None");
+        assert_eq!(focus_window(1, 0x100), None, "PointerRoot");
+        assert_eq!(focus_window(0x100, 0x100), None, "the root rests the focus");
+        assert_eq!(focus_window(0x4000_0002, 0x100), Some(0x4000_0002));
+    }
+
+    #[test]
+    fn a_held_key_is_found_in_the_bits_of_the_keymap_reply() {
+        let mut keys = [0u8; 32];
+        assert!(!key_is_down(&keys, 50));
+        keys[6] |= 1 << 2; // keycode 50
+        assert!(key_is_down(&keys, 50));
+        assert!(!key_is_down(&keys, 51));
+        assert!(
+            !key_is_down(&keys[..4], 50),
+            "a short reply is not a held key"
+        );
+    }
+
+    #[test]
+    fn a_held_modifier_is_named_by_its_slot_in_the_modifier_map() {
+        // Two keys per modifier. Shift: 50 and 62, Lock: 66, Control: 37 and 105.
+        let mut mapping = [0u8; 16];
+        mapping[..2].copy_from_slice(&[50, 62]);
+        mapping[2..4].copy_from_slice(&[66, 0]);
+        mapping[4..6].copy_from_slice(&[37, 105]);
+        mapping[6..8].copy_from_slice(&[64, 108]);
+        mapping[8..10].copy_from_slice(&[77, 0]);
+        mapping[12..14].copy_from_slice(&[133, 134]);
+        mapping[14..16].copy_from_slice(&[92, 0]);
+        let mut keys = [0u8; 32];
+        assert_eq!(held_modifier(&keys, &mapping, 2), None);
+        for (keycode, name) in [
+            (62u8, "Shift"),
+            (105, "Ctrl"),
+            (64, "Alt"),
+            (134, "Super"),
+            (92, "AltGr"),
+        ] {
+            keys = [0u8; 32];
+            keys[usize::from(keycode / 8)] |= 1 << (keycode % 8);
+            assert_eq!(held_modifier(&keys, &mapping, 2), Some(name), "{keycode}");
+        }
+        // Caps Lock (66) and Num Lock (77) are not held modifiers.
+        for keycode in [66u8, 77] {
+            keys = [0u8; 32];
+            keys[usize::from(keycode / 8)] |= 1 << (keycode % 8);
+            assert_eq!(held_modifier(&keys, &mapping, 2), None, "{keycode}");
+        }
+        assert_eq!(
+            held_modifier(&keys, &mapping, 0),
+            None,
+            "no map, nothing held"
+        );
+    }
+
+    #[test]
+    fn caps_lock_is_the_lock_bit_alone() {
+        assert!(caps_lock_on(0x02));
+        assert!(caps_lock_on(0x12));
+        assert!(!caps_lock_on(0x01), "Shift");
+        assert!(!caps_lock_on(0x10), "Num Lock");
+        assert!(!caps_lock_on(0));
+    }
+
+    #[test]
+    fn the_pauses_and_limits_keep_the_order_the_measurements_gave_them() {
+        // Each pause is shorter than the one that stands in for the answer it
+        // replaces: a settle after a remap, then the settle that stands in for a
+        // ping, then the wait for the ping itself (`OBS-202` points 3 and 9).
+        let waits = [REMAP_SETTLE, UNPACED_SETTLE, PING_WAIT];
+        assert!(waits.windows(2).all(|pair| pair[0] < pair[1]), "{waits:?}");
+        // The tap that makes the server announce its map needs at least the 100 ms
+        // that were measured to be enough.
+        assert!(WARMUP_SETTLE >= Duration::from_millis(100));
+        // A batch is never cut by length before it is cut by keys.
+        let lengths = [MAX_CHARS_PER_ACK];
+        assert!(lengths.iter().all(|length| *length >= 18));
+        // A held modifier is looked at many times in the wait for it.
+        assert!(LOOK_EVERY * 10 <= crate::MODIFIER_RELEASE_WAIT);
+    }
+
+    #[test]
+    fn the_pings_of_one_send_differ_and_so_do_those_of_two_programs() {
+        let tokens: Vec<u32> = (0..64).map(|counter| ping_token(4242, counter)).collect();
+        for (index, token) in tokens.iter().enumerate() {
+            assert!(!tokens[index + 1..].contains(token));
+        }
+        assert_ne!(ping_token(4242, 1), ping_token(4243, 1));
+    }
+}

@@ -57,6 +57,13 @@ const FORBIDDEN: &[&str] = &[
     "PROCESS_QUERY_INFORMATION |",
     "PROCESS_ALL_ACCESS",
     "SetWinEventHook",
+    // Linux: the title and class of an X window, and the parts of a process beyond
+    // the link to its program (`D145`).
+    "WM_NAME",
+    "WM_CLASS",
+    "/cmdline",
+    "/environ",
+    "/maps",
 ];
 
 /// The code of one file with test modules and `//` comments taken out.
@@ -176,6 +183,21 @@ fn the_scanner_sees_what_it_is_meant_to_forbid() {
     names_it(
         file("program.rs", "GetFileVersionInfoW(path, 0, size, data);\n"),
         "GetFileVersionInfo",
+    );
+    // Linux: the title of an X window, and a process read beyond the link to its program.
+    names_it(
+        file(
+            "front.rs",
+            "let title = get_property(false, w, WM_NAME, t, 0, 9);\n",
+        ),
+        "WM_NAME",
+    );
+    names_it(
+        file(
+            "program.rs",
+            "std::fs::read(format!(\"/proc/{pid}/cmdline\"));\n",
+        ),
+        "/cmdline",
     );
     // A call hidden in a test module is not code of the product.
     let in_test = code_of("fn x() {}\n#[cfg(test)]\nGetWindowTextW(h, b, 9);\n");

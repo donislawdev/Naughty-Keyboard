@@ -82,6 +82,13 @@ pub(crate) fn say_not_delivered(err: &mut impl Write, error: &DeliveryError) {
                 "nkb send: {which} is still held on the keyboard, so the value was not sent - release it and run again."
             );
         }
+        // A state somebody left on, not a key held: the sentence says "off".
+        DeliveryError::CapsLockOn => {
+            let _ = writeln!(
+                err,
+                "nkb send: Caps Lock is on, so nothing was sent - many applications would turn the letters into capitals. Turn it off and run again."
+            );
+        }
         // `send_value` reports a fragment as `Interrupted`, above, with
         // the value it belongs to. Reached only if a route ever reports
         // one another way - still said, without the name it does not have.

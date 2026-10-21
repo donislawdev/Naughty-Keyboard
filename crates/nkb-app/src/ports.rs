@@ -118,6 +118,11 @@ pub enum DeliveryError {
     /// was sent: under a held modifier the value's characters mean something
     /// else to many applications. The ordinary case right after a hotkey.
     ModifierHeld { which: String },
+    /// Caps Lock is on, so nothing went out: on X11 the toolkit turns the letters
+    /// it is handed into capitals (`OBS-202` point 8), and the field would hold
+    /// another value than the one sent. A state somebody left on, not a key held,
+    /// so it is refused and not waited for.
+    CapsLockOn,
     /// Part of the value arrived - at least one unit, never zero (that is
     /// [`DeliveryError::NothingArrived`]). The field now holds a fragment, and
     /// saying so is the entire reason this variant is separate from the others:
@@ -166,6 +171,7 @@ impl fmt::Display for DeliveryError {
             Self::Unsupported { system } => write!(f, "unsupported-on-{system}"),
             Self::NoTarget => f.write_str("no-target"),
             Self::ModifierHeld { which } => write!(f, "modifier-held-{which}"),
+            Self::CapsLockOn => f.write_str("caps-lock-on"),
             Self::Partial {
                 units_sent,
                 units_expected,

@@ -1287,10 +1287,10 @@ mod tests {
     // ---- nkb send ---------------------------------------------------------
     //
     // ⚠️ These stop at argument parsing on purpose. Everything past that point
-    // depends on the machine: on macOS and Linux there is no delivery route at
-    // all, and on a build server there may be no focused window - so a test that
-    // reached the send would be green here and red on two of the three systems
-    // this project is checked on. What a real send does is measured by running
+    // depends on the machine: macOS needs a permission, Linux needs an X11
+    // session, and on a build server there may be no focused window - so a test
+    // that reached the send would be green here and red on others of the three
+    // systems this project is checked on. What a real send does is measured by running
     // it, and that measurement is written down rather than automated, because
     // automating it means typing into whatever window the build agent has.
     //
@@ -1602,6 +1602,7 @@ mod tests {
             DeliveryError::CannotCarry { character: '\0' },
             DeliveryError::HigherPrivileges,
             DeliveryError::NoTextField,
+            DeliveryError::CapsLockOn,
         ];
         let mut seen = std::collections::BTreeSet::new();
         for error in &not_delivered {

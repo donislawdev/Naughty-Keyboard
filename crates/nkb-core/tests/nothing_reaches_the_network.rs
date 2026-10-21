@@ -158,6 +158,14 @@ const FORBIDDEN: &[(&str, &str)] = &[
         "Launch Services, which opens an address or a program",
     ),
     ("xdg-open", "hands an address to the Linux desktop's opener"),
+    (
+        "RustConnection::connect(",
+        "the X11 library's own connect, which follows DISPLAY to a host over TCP",
+    ),
+    (
+        "DefaultStream::connect",
+        "the X11 library's stream, which opens TCP when DISPLAY names a host",
+    ),
     ("libc::socket", "a socket through the C library"),
     ("libc::connect", "a connection through the C library"),
     ("SYS_socket", "a socket by system call number"),
@@ -267,6 +275,25 @@ fn granted(rel: &str, name: &str) -> bool {
     rel == GRANTED_TO_THE_PRODUCT.0 && name == GRANTED_TO_THE_PRODUCT.1
 }
 
+// ---------------------------------------------------------------------------
+// Register 4: the one local socket the product opens
+// ---------------------------------------------------------------------------
+
+/// The one local socket the PRODUCT may open: the file, the call, and why. On
+/// Linux `nkb send` types through the X server of this machine (`D145`), and the
+/// way there is a Unix socket. It leaves the machine nowhere: the address is
+/// built from the display NUMBER by `linux_rules::socket_path`, a `DISPLAY` that
+/// names a host is refused before any connection (`parse_display`), and the
+/// library's own `connect`, which would follow it over TCP, is forbidden above.
+const LOCAL_SOCKET_GRANTED_TO_THE_PRODUCT: (&str, &str, &str) = (
+    "crates/nkb-sys/src/linux/connect.rs",
+    "UnixStream::connect(socket_path(address))",
+    "nkb send on Linux types through the X server of this machine, reached by the Unix socket \
+     /tmp/.X11-unix/X<N>. The path is built from the display number alone, a DISPLAY that \
+     names a host is refused before a connection is made, and the X11 library's own connect \
+     (TCP) is forbidden",
+);
+
 /// Files whose string literals NAME what they refuse, so their literals are not
 /// read for either register. Their code is read like any other file's.
 const REFUSING: &[(&str, &str)] = &[
@@ -305,6 +332,7 @@ fn is_allowed(rel: &str, kind: &str) -> bool {
     ALLOWED
         .iter()
         .any(|(file, granted, _)| *file == rel && *granted == kind)
+        || (kind == "local-socket" && rel == LOCAL_SOCKET_GRANTED_TO_THE_PRODUCT.0)
 }
 
 fn refuses(rel: &str) -> bool {
@@ -486,6 +514,36 @@ fn the_one_grant_to_the_product_opens_its_named_addresses_and_nothing_else() {
              door open"
         );
     }
+}
+
+/// Register 4 opens one call from one file. The canary sees both refusals - the
+/// socket in any other file, and TCP in the granted one - and the grant is held
+/// to live code, so a file that stopped using the socket does not keep it open.
+#[test]
+fn the_one_local_socket_of_the_product_is_the_x_server_and_nothing_else() {
+    let (file, call, reason) = LOCAL_SOCKET_GRANTED_TO_THE_PRODUCT;
+    assert!(!reason.is_empty());
+    let source = read(&workspace_root().join(file));
+    assert!(
+        source.contains(call),
+        "{file} no longer opens the socket this way - take register 4 out rather than keep the \
+         door open, or change the call here on purpose"
+    );
+    let right = format!("fn open(address: Display) {{ let _ = {call}; }}\n");
+    assert_eq!(findings(Syntax::Rust, &right, file), Vec::new());
+    assert!(
+        findings(Syntax::Rust, &right, "crates/nkb-sys/src/linux/send.rs")
+            .iter()
+            .any(|finding| finding.0 == "unregistered"),
+        "the socket is for one file, and the same call anywhere else is unregistered"
+    );
+    let tcp = "fn open(a: A) { let _ = TcpStream::connect(a); }\n";
+    assert!(
+        findings(Syntax::Rust, tcp, file)
+            .iter()
+            .any(|finding| finding.0 == "forbidden"),
+        "the granted file may open a Unix socket and never a TCP one"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -782,6 +840,16 @@ const BAD_RUST: &[(&str, &str, &str)] = &[
         "a local socket",
         "let s = UnixStream::connect(path)?;",
         "unregistered",
+    ),
+    (
+        "the X11 library's own connect",
+        "let (c, screen) = RustConnection::connect(None)?;",
+        "forbidden",
+    ),
+    (
+        "the X11 library's stream",
+        "let (s, peer) = DefaultStream::connect(&address)?;",
+        "forbidden",
     ),
 ];
 
