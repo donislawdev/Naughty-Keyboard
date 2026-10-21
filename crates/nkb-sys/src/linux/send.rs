@@ -40,9 +40,10 @@ use super::escape::{ReservedEscape, XEscape};
 use super::front::{PingAtoms, focus, focused_toplevel, ping_atoms, ping_target};
 use crate::cadence::{Cadence, PROGRESS_INTERVAL};
 use crate::linux_rules::{
-    Batch, FIRST_BATCH_CHARS, KEYSYM_ESCAPE, Keymap, LOOK_EVERY, PING_ANSWER_MASK, PING_WAIT,
-    REMAP_SETTLE, Refusal, UNPACED_SETTLE, WARMUP_SETTLE, caps_lock_on, held_modifier, keysym_for,
-    next_batch, next_limit, ping_token, utf16_units,
+    Batch, FIRST_BATCH_CHARS, KEYSYM_ESCAPE, Keymap, LOOK_EVERY, LayoutKeys, PING_ANSWER_MASK,
+    PING_WAIT, REMAP_SETTLE, Refusal, UNPACED_SETTLE, WARMUP_SETTLE, batch_of_value, caps_lock_on,
+    give_back_wait, held_modifier, keysym_for, names_an_input_method, next_batch, next_limit,
+    ping_token, slots_for_value, utf16_units,
 };
 use crate::{Chord, MODIFIER_RELEASE_WAIT, SendError, SendOutcome, SendProgress, StopReason};
 
@@ -102,6 +103,9 @@ struct Remapped<'a> {
     conn: &'a RustConnection,
     spare: &'a [u8],
     used: usize,
+    /// How long the keys must stay as they are, because keys were sent through
+    /// them and the application may not have read them yet (`give_back_wait`).
+    owed: Duration,
 }
 
 impl Remapped<'_> {
@@ -109,6 +113,7 @@ impl Remapped<'_> {
     /// on a key is changed to lower case by the server, and one copy makes the key
     /// a letter that Caps Lock acts on (`OBS-202` point 7).
     fn assign(&mut self, slot: usize, keysym: u32) -> Result<(), Lost> {
+        self.pay();
         self.used = self.used.max(slot + 1);
         self.conn
             .change_keyboard_mapping(1, self.spare[slot], 2, &[keysym, keysym])?;
@@ -116,8 +121,26 @@ impl Remapped<'_> {
     }
 }
 
+impl Remapped<'_> {
+    /// Notes that keys were sent and answered, so the layout is kept for `wait`
+    /// before the next rewrite or the give-back. Zero when nothing was sent that
+    /// the application could still read.
+    fn owe(&mut self, wait: Duration) {
+        self.owed = wait;
+    }
+
+    /// Waits out what is owed, once.
+    fn pay(&mut self) {
+        if !self.owed.is_zero() {
+            std::thread::sleep(self.owed);
+            self.owed = Duration::ZERO;
+        }
+    }
+}
+
 impl Drop for Remapped<'_> {
     fn drop(&mut self) {
+        self.pay();
         for keycode in &self.spare[..self.used] {
             let _ = self.conn.change_keyboard_mapping(1, *keycode, 1, &[0]);
         }
@@ -292,21 +315,35 @@ fn keysyms_of(characters: &[char]) -> Result<Vec<u32>, SendError> {
         .collect()
 }
 
-/// One batch on the wire: the spare keys rewritten, pressed and released.
+/// The spare keys rewritten to `keysyms`, and the application given time to read
+/// the new map before a key is pressed.
+fn assign_all(server: &Server, remapped: &mut Remapped<'_>, keysyms: &[u32]) -> Result<(), Lost> {
+    for (slot, keysym) in keysyms.iter().enumerate() {
+        remapped.assign(slot, *keysym)?;
+    }
+    roundtrip(&server.conn)?;
+    std::thread::sleep(REMAP_SETTLE);
+    Ok(())
+}
+
+/// One batch on the wire: the keys pressed and released, after the spare keys were
+/// rewritten when `rewrite` says they were not assigned for the whole value.
 fn type_batch(
     server: &Server,
     remapped: &mut Remapped<'_>,
     batch: &Batch,
     keysyms: &[u32],
+    layout: &LayoutKeys,
+    rewrite: bool,
 ) -> Result<(), Lost> {
-    for (slot, keysym) in batch.keysyms.iter().enumerate() {
-        remapped.assign(slot, *keysym)?;
+    if rewrite {
+        assign_all(server, remapped, &batch.keysyms)?;
     }
-    roundtrip(&server.conn)?;
-    std::thread::sleep(REMAP_SETTLE);
     for keysym in &keysyms[batch.first..batch.end] {
-        let slot = batch.slot(*keysym).ok_or(Lost)?;
-        let keycode = remapped.spare[slot];
+        let keycode = match layout.key_for(*keysym) {
+            Some(keycode) => keycode,
+            None => remapped.spare[batch.slot(*keysym).ok_or(Lost)?],
+        };
         fake(&server.conn, server.root, true, keycode)?;
         fake(&server.conn, server.root, false, keycode)?;
     }
@@ -361,7 +398,17 @@ pub(crate) fn send_text(
         conn: &server.conn,
         spare: &spare,
         used: 0,
+        owed: Duration::ZERO,
     };
+    // A value that fits the spare keys is assigned once, here, and the keys are not
+    // touched again until the send is over. One that does not fit is rewritten
+    // between batches, after the wait the last batch is owed.
+    let layout = LayoutKeys::from_keymap(&keyboard.keymap);
+    let input_method = names_an_input_method(std::env::var("XMODIFIERS").ok().as_deref());
+    let plan = slots_for_value(&keysyms, spare.len(), &layout);
+    if let Some(slots) = &plan {
+        assign_all(&server, &mut remapped, slots).map_err(lost)?;
+    }
 
     let mut cadence = Cadence::starting(Instant::now(), PROGRESS_INTERVAL);
     let mut arrived = 0usize;
@@ -372,9 +419,21 @@ pub(crate) fn send_text(
         if let Some(reason) = stop_before_next(&server, front, &mut escape) {
             return Err(truncated(arrived, expected, reason));
         }
-        let batch = next_batch(&keysyms, first, spare.len(), limit);
+        let batch = match &plan {
+            Some(slots) => batch_of_value(slots, first, keysyms.len(), limit),
+            None => next_batch(&keysyms, first, spare.len(), limit, &layout),
+        };
         let batch_units = utf16_units(&characters[batch.first..batch.end]);
-        if type_batch(&server, &mut remapped, &batch, &keysyms).is_err() {
+        if type_batch(
+            &server,
+            &mut remapped,
+            &batch,
+            &keysyms,
+            &layout,
+            plan.is_none(),
+        )
+        .is_err()
+        {
             return Err(truncated(arrived, expected, StopReason::Dropped));
         }
         // From here the batch is on the wire, and it counts only once the
@@ -393,10 +452,25 @@ pub(crate) fn send_text(
             }
         };
         match answer {
+            // An application that does not answer is not reading, and holding the
+            // layout for it would only keep the send waiting.
             Answer::TimedOut => return Err(truncated(arrived, expected, StopReason::NotTaking)),
             // The next batch is as long as the pace just seen allows (`OBS-204`).
-            Answer::Taken(took) => limit = next_limit(batch.end - batch.first, took),
-            Answer::Unpaced => {}
+            // The answer says the keys were taken, not that they were read, so the
+            // layout is kept a while longer (`OBS-210`).
+            Answer::Taken(took) => {
+                limit = next_limit(batch.end - batch.first, took);
+                remapped.owe(give_back_wait(batch.end - batch.first, input_method));
+            }
+            // The pause that stands in for the answer was part of the wait already:
+            // an application that takes no part in the ping reads its keys as late
+            // as any other (xterm through IBus, `OBS-211`).
+            Answer::Unpaced => {
+                remapped.owe(
+                    give_back_wait(batch.end - batch.first, input_method)
+                        .saturating_sub(UNPACED_SETTLE),
+                );
+            }
         }
         arrived += batch_units;
         first = batch.end;

@@ -227,6 +227,39 @@ pub(crate) fn utf16_units(characters: &[char]) -> usize {
         .sum()
 }
 
+/// The keys of the layout that Return and Tab are typed through, when it has them.
+///
+/// An application that tells these two apart from every other key by the key
+/// itself, and not by the keysym it types, does nothing for them on a spare key:
+/// Chromium takes Enter from the physical key through a table of its own, and a
+/// line feed typed through a spare key reached its text area as nothing, 0 of 3
+/// values with a new line or a tab (`OBS-211`). So these two go through the
+/// layout's own key, and every other character through a spare one.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct LayoutKeys {
+    return_key: Option<u8>,
+    tab_key: Option<u8>,
+}
+
+impl LayoutKeys {
+    pub(crate) fn from_keymap(keymap: &Keymap) -> Self {
+        Self {
+            return_key: keymap.find_keycode(KEYSYM_RETURN),
+            tab_key: keymap.find_keycode(KEYSYM_TAB),
+        }
+    }
+
+    /// The key of the layout that types `keysym`, if it is one of the two and the
+    /// layout has it.
+    pub(crate) fn key_for(&self, keysym: u32) -> Option<u8> {
+        match keysym {
+            KEYSYM_RETURN => self.return_key,
+            KEYSYM_TAB => self.tab_key,
+            _ => None,
+        }
+    }
+}
+
 /// A run of characters typed between two answers of the application, and the
 /// different keysyms they need, in the order they first appear. The keysym at
 /// index `n` goes on the `n`-th spare key.
@@ -252,13 +285,19 @@ impl Batch {
 ///
 /// `first` must be inside `keysyms` and `spare` at least one - the caller refuses a
 /// server with no spare key before it begins.
-pub(crate) fn next_batch(keysyms: &[u32], first: usize, spare: usize, max_chars: usize) -> Batch {
+pub(crate) fn next_batch(
+    keysyms: &[u32],
+    first: usize,
+    spare: usize,
+    max_chars: usize,
+    layout: &LayoutKeys,
+) -> Batch {
     let max_chars = max_chars.max(1);
     let mut assigned: Vec<u32> = Vec::new();
     let mut end = first;
     while end < keysyms.len() && end - first < max_chars {
         let keysym = keysyms[end];
-        if !assigned.contains(&keysym) {
+        if layout.key_for(keysym).is_none() && !assigned.contains(&keysym) {
             if assigned.len() == spare {
                 break;
             }
@@ -271,6 +310,103 @@ pub(crate) fn next_batch(keysyms: &[u32], first: usize, spare: usize, max_chars:
         end,
         keysyms: assigned,
     }
+}
+
+/// The different keysyms of a whole value, each once, in the order they first
+/// appear: the keysym at index `n` goes on the `n`-th spare key for the whole send.
+/// `None` when the value has more of them than there are spare keys, and then the
+/// keys are rewritten between batches.
+///
+/// A key that is rewritten while an application has not yet read the keys sent
+/// through it would type the new character where the old one was meant, so a value
+/// that fits is assigned once and the keys are not touched again until the send is
+/// over (`OBS-210`).
+pub(crate) fn slots_for_value(
+    keysyms: &[u32],
+    spare: usize,
+    layout: &LayoutKeys,
+) -> Option<Vec<u32>> {
+    let mut slots: Vec<u32> = Vec::new();
+    for keysym in keysyms {
+        if layout.key_for(*keysym).is_some() {
+            continue;
+        }
+        if !slots.contains(keysym) {
+            if slots.len() == spare {
+                return None;
+            }
+            slots.push(*keysym);
+        }
+    }
+    Some(slots)
+}
+
+/// The batch that starts at `first` of a value whose keys are all assigned already:
+/// `max_chars` characters, or what is left. It carries every slot, because they all
+/// stay assigned, and a batch holds at least one character.
+pub(crate) fn batch_of_value(
+    slots: &[u32],
+    first: usize,
+    length: usize,
+    max_chars: usize,
+) -> Batch {
+    Batch {
+        first,
+        end: first.saturating_add(max_chars.max(1)).min(length),
+        keysyms: slots.to_vec(),
+    }
+}
+
+/// How long the layout is kept after keys were sent, so that an application that
+/// has answered the ping but has not yet turned the keys into characters still
+/// finds them where they were. An application reads a key with the map it has at
+/// that moment, and some do it after the answer: Chromium answered a ping within
+/// milliseconds and put the characters into the field up to 100 ms after, so a
+/// layout given back at once left 0 of 9 characters in 6 runs of 6, and after
+/// 50 ms or more 16 runs of 16 were whole (`OBS-210`).
+///
+/// The wait grows with the keys in the batch because an application with a
+/// handler per key needs time per key. The 4 ms for each is a bound set between
+/// what was measured and what a long batch could cost, not a measurement of its
+/// own, and the ceiling keeps a long batch from holding the send for seconds.
+pub(crate) const GIVE_BACK_BASE: Duration = Duration::from_millis(100);
+pub(crate) const GIVE_BACK_PER_KEY: Duration = Duration::from_millis(4);
+pub(crate) const GIVE_BACK_CEILING: Duration = Duration::from_millis(3000);
+
+/// The wait for each key when the session names an input method in `XMODIFIERS`.
+/// An application that goes through the X input method protocol hands every key to
+/// the input method and has it back before it reads the next, and that took about
+/// 22 ms a key with IBus on xterm: nine keys needed 200 ms and lost one to three
+/// of them with none, and 12 ms a key still lost the end of values of 13 keys
+/// (`OBS-211`). It is paid by every application of such a session, XIM or not,
+/// and the ceiling cuts it, so a value of more than about 100 characters can
+/// still lose its end in an XIM application.
+pub(crate) const GIVE_BACK_PER_KEY_INPUT_METHOD: Duration = Duration::from_millis(25);
+
+/// Whether `XMODIFIERS` names an input method: `@im=ibus`, `@im=fcitx`, and not
+/// `@im=none`, which is how a session says it has none. Applications that use the
+/// X input method protocol find their server by this variable, so a session
+/// without it has none of the applications that the longer wait is for.
+pub(crate) fn names_an_input_method(xmodifiers: Option<&str>) -> bool {
+    xmodifiers
+        .into_iter()
+        .flat_map(|value| value.split('@'))
+        .filter_map(|part| part.strip_prefix("im="))
+        .any(|name| !name.is_empty() && name != "none")
+}
+
+/// The wait before the layout is given back, or a key is rewritten, after a batch
+/// of `keys` characters that the application has answered.
+pub(crate) fn give_back_wait(keys: usize, input_method: bool) -> Duration {
+    let per_key = if input_method {
+        GIVE_BACK_PER_KEY_INPUT_METHOD
+    } else {
+        GIVE_BACK_PER_KEY
+    };
+    let per_keys = per_key.saturating_mul(u32::try_from(keys).unwrap_or(u32::MAX));
+    GIVE_BACK_BASE
+        .saturating_add(per_keys)
+        .min(GIVE_BACK_CEILING)
 }
 
 /// How many characters the next batch may hold, from how long the application took
@@ -546,7 +682,7 @@ mod tests {
         let mut batches = Vec::new();
         let mut first = 0;
         while first < keysyms.len() {
-            let batch = next_batch(keysyms, first, spare, max_chars);
+            let batch = next_batch(keysyms, first, spare, max_chars, &LayoutKeys::default());
             first = batch.end;
             batches.push(batch);
         }
@@ -615,6 +751,175 @@ mod tests {
             }
             assert_eq!(next, keysyms.len());
         }
+    }
+
+    #[test]
+    fn a_whole_value_gets_one_key_for_each_different_keysym_in_order_of_appearance() {
+        let keysyms = keysyms_of("Kowalski ");
+        let slots = slots_for_value(&keysyms, 18, &LayoutKeys::default())
+            .expect("nine different characters fit");
+        assert_eq!(
+            slots.len(),
+            9,
+            "K and k are two keysyms and the space is a third kind"
+        );
+        assert_eq!(slots[0], keysym_for('K').expect("K has a keysym"));
+        assert_eq!(slots[1], keysym_for('o').expect("o has a keysym"));
+        // Every character of the value finds its key among the slots.
+        for keysym in &keysyms {
+            assert!(slots.contains(keysym));
+        }
+        // The same keysym twice is one slot, so a value of one repeated character
+        // needs one key however long it is.
+        let repeated = keysyms_of(&"a".repeat(5000));
+        assert_eq!(
+            slots_for_value(&repeated, 1, &LayoutKeys::default()).map(|slots| slots.len()),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn a_value_with_more_different_keysyms_than_spare_keys_gets_no_plan() {
+        let text: String = ('a'..='z').collect();
+        let keysyms = keysyms_of(&text);
+        assert!(slots_for_value(&keysyms, 25, &LayoutKeys::default()).is_none());
+        assert_eq!(
+            slots_for_value(&keysyms, 26, &LayoutKeys::default()).map(|slots| slots.len()),
+            Some(26)
+        );
+        assert!(slots_for_value(&keysyms, 0, &LayoutKeys::default()).is_none());
+        assert_eq!(
+            slots_for_value(&[], 0, &LayoutKeys::default()),
+            Some(Vec::new()),
+            "nothing to type needs no key"
+        );
+    }
+
+    #[test]
+    fn a_batch_of_a_planned_value_carries_every_slot_and_is_cut_by_length_only() {
+        let keysyms = keysyms_of(&"abc".repeat(100));
+        let slots =
+            slots_for_value(&keysyms, 18, &LayoutKeys::default()).expect("three keysyms fit");
+        let first = batch_of_value(&slots, 0, keysyms.len(), 64);
+        assert_eq!((first.first, first.end), (0, 64));
+        assert_eq!(
+            first.keysyms, slots,
+            "the keys stay assigned for the whole send"
+        );
+        let last = batch_of_value(&slots, 256, keysyms.len(), 64);
+        assert_eq!(
+            (last.first, last.end),
+            (256, 300),
+            "the end is the end of the value"
+        );
+        assert_eq!(last.slot(keysyms[299]), first.slot(keysyms[299]));
+        let stuck = batch_of_value(&slots, 10, keysyms.len(), 0);
+        assert_eq!(
+            (stuck.first, stuck.end),
+            (10, 11),
+            "a batch always moves on"
+        );
+    }
+
+    /// A layout with letters on keycodes 10 and 11, Return on 36 and Tab on 23.
+    fn layout_with_return_and_tab() -> LayoutKeys {
+        let mut rows = vec![0u32; 2 * 40];
+        rows[2 * (36 - 8)] = KEYSYM_RETURN;
+        rows[2 * (23 - 8)] = KEYSYM_TAB;
+        rows[2 * (10 - 8)] = 0x61;
+        LayoutKeys::from_keymap(&Keymap::new(8, 2, rows))
+    }
+
+    #[test]
+    fn return_and_tab_are_typed_through_the_keys_of_the_layout() {
+        let layout = layout_with_return_and_tab();
+        assert_eq!(layout.key_for(KEYSYM_RETURN), Some(36));
+        assert_eq!(layout.key_for(KEYSYM_TAB), Some(23));
+        assert_eq!(layout.key_for(0x61), None, "a letter is not one of the two");
+        assert_eq!(layout.key_for(keysym_for('a').expect("a")), None);
+        // A layout without them leaves them to the spare keys.
+        let bare = LayoutKeys::from_keymap(&Keymap::new(8, 2, vec![0; 80]));
+        assert_eq!(bare.key_for(KEYSYM_RETURN), None);
+        assert_eq!(bare.key_for(KEYSYM_TAB), None);
+    }
+
+    #[test]
+    fn a_line_feed_and_a_tab_take_no_spare_key_when_the_layout_has_them() {
+        let layout = layout_with_return_and_tab();
+        let keysyms = keysyms_of("a\tb\nc");
+        let slots = slots_for_value(&keysyms, 3, &layout).expect("a, b and c fit three keys");
+        assert_eq!(
+            slots.len(),
+            3,
+            "the tab and the line feed are not among them"
+        );
+        assert!(!slots.contains(&KEYSYM_RETURN) && !slots.contains(&KEYSYM_TAB));
+        // Without the keys of the layout they need two more, and three do not hold five.
+        let bare = LayoutKeys::default();
+        assert!(slots_for_value(&keysyms, 3, &bare).is_none());
+        assert_eq!(
+            slots_for_value(&keysyms, 5, &bare).map(|slots| slots.len()),
+            Some(5)
+        );
+        // The batch is cut by the keys it needs, and these two need none.
+        let batch = next_batch(&keysyms, 0, 3, 256, &layout);
+        assert_eq!(batch.end, 5);
+        assert_eq!(batch.keysyms.len(), 3);
+    }
+
+    #[test]
+    fn the_wait_before_the_layout_is_given_back_grows_with_the_keys_and_stops_at_a_ceiling() {
+        // Chromium needed 50 ms or more for nine keys, and a layout given back at
+        // once lost them all: the wait for a short batch is never below that.
+        assert!(give_back_wait(0, false) >= Duration::from_millis(100));
+        assert!(give_back_wait(9, false) >= Duration::from_millis(50));
+        for input_method in [false, true] {
+            let waits: Vec<Duration> = [0, 1, 9, 64, 256]
+                .iter()
+                .map(|keys| give_back_wait(*keys, input_method))
+                .collect();
+            assert!(waits.windows(2).all(|pair| pair[0] < pair[1]), "{waits:?}");
+            assert_eq!(give_back_wait(1_000_000, input_method), GIVE_BACK_CEILING);
+            assert_eq!(
+                give_back_wait(usize::MAX, input_method),
+                GIVE_BACK_CEILING,
+                "no overflow"
+            );
+        }
+        assert_eq!(
+            give_back_wait(64, false),
+            GIVE_BACK_BASE + GIVE_BACK_PER_KEY * 64
+        );
+        assert!(
+            GIVE_BACK_CEILING < PING_WAIT,
+            "holding the layout is shorter than waiting for a stopped application"
+        );
+    }
+
+    #[test]
+    fn an_input_method_in_the_session_lengthens_the_wait_for_each_key() {
+        // xterm through IBus needed 200 ms for nine keys: the wait for nine keys
+        // of such a session reaches it, and the wait of a session without one is
+        // shorter.
+        assert!(give_back_wait(9, true) >= Duration::from_millis(200));
+        assert!(give_back_wait(9, true) > give_back_wait(9, false));
+        assert_eq!(
+            give_back_wait(0, true),
+            give_back_wait(0, false),
+            "the base is the same"
+        );
+    }
+
+    #[test]
+    fn xmodifiers_names_an_input_method_unless_it_says_none_or_nothing() {
+        assert!(names_an_input_method(Some("@im=ibus")));
+        assert!(names_an_input_method(Some("@im=fcitx")));
+        assert!(names_an_input_method(Some("@im=ibus@other=1")));
+        assert!(!names_an_input_method(Some("@im=none")));
+        assert!(!names_an_input_method(Some("@im=")));
+        assert!(!names_an_input_method(Some("")));
+        assert!(!names_an_input_method(Some("something else")));
+        assert!(!names_an_input_method(None));
     }
 
     #[test]
