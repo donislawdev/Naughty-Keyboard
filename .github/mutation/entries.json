@@ -228,10 +228,10 @@
     {
       "id": "M45",
       "why": "fill stops being a single pass - a value with braces is scanned again, so an argument could inject a placeholder of its own",
-      "file": "crates/nkb-adapters/src/i18n.rs",
+      "file": "crates/nkb-adapters/src/i18n/fill.rs",
       "find": "            Some((_, value)) => out.push_str(value),",
       "replace": "            Some((_, value)) => { rest = &after[close + 1..]; out.push_str(&fill(value, values)); continue; }",
-      "test": "i18n::tests::fill_does_not_rescan_what_it_substituted",
+      "test": "i18n::fill::tests::fill_does_not_rescan_what_it_substituted",
       "runner": "rust:nkb-adapters:lib"
     },
     {
@@ -2090,19 +2090,19 @@
     {
       "id": "M383",
       "why": "a progress report already in the first tenth of a second - every short send would flash a band in the palette and a line in the command line (OBS-160)",
-      "file": "crates/nkb-sys/src/confirm.rs",
+      "file": "crates/nkb-sys/src/cadence.rs",
       "find": "        if now < self.next {",
       "replace": "        if false && now < self.next {",
-      "test": "confirm::tests::nothing_is_reported_before_the_first_interval",
+      "test": "cadence::tests::nothing_is_reported_before_the_first_interval",
       "runner": "rust:nkb-sys:lib"
     },
     {
       "id": "M384",
       "why": "the next report is counted from the previous due time and not from the report - a send after a stall pours out a burst of reports (OBS-160)",
-      "file": "crates/nkb-sys/src/confirm.rs",
+      "file": "crates/nkb-sys/src/cadence.rs",
       "find": "        self.next = now + self.every;",
       "replace": "        self.next += self.every;",
-      "test": "confirm::tests::a_report_is_due_once_per_interval_and_a_stall_owes_no_burst",
+      "test": "cadence::tests::a_report_is_due_once_per_interval_and_a_stall_owes_no_burst",
       "runner": "rust:nkb-sys:lib"
     },
     {
@@ -8815,6 +8815,294 @@
       "replace": "const CLAIM_ASKED: bool = true;",
       "test": "shortcuts::tests::only_the_system_that_does_not_refuse_a_held_chord_asks_for_the_claim",
       "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1192",
+      "why": "a DISPLAY that names a host is followed - the keystrokes would cross the network to another machine (untouchable rule 17)",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    if !host.is_empty() && host != \"unix\" {",
+      "replace": "    if false {",
+      "test": "linux_rules::tests::a_display_that_names_a_host_is_refused_before_any_connection",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1193",
+      "why": "the unix: form of DISPLAY is taken for a host and refused - nkb send finds no server on a machine that names its own socket",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "host != \"unix\"",
+      "replace": "host != \"tcp\"",
+      "test": "linux_rules::tests::the_local_forms_of_display_are_read",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1194",
+      "why": "a display number of any length is read - a DISPLAY made of digits of unbounded length reaches the socket path",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "text.len() > longest",
+      "replace": "text.len() > longest + 10",
+      "test": "linux_rules::tests::a_display_that_is_not_a_display_is_refused",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1195",
+      "why": "a sign is read as part of the display number - parse accepts a leading plus, so a value no server writes names a socket",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "|| !text.bytes().all(|byte| byte.is_ascii_digit())",
+      "replace": "|| false",
+      "test": "linux_rules::tests::a_display_that_is_not_a_display_is_refused",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1196",
+      "why": "Wayland is not asked first - under it DISPLAY is set too, so a send would type through XWayland and lose characters outside the layout (OBS-203)",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    if session_is_wayland(environment.session_type, environment.wayland_display) {",
+      "replace": "    if false {",
+      "test": "linux_rules::tests::the_route_names_wayland_before_it_looks_at_display",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1197",
+      "why": "the session type is compared with its case - a login that writes Wayland with a capital is typed into",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "value.trim().eq_ignore_ascii_case(\"wayland\")",
+      "replace": "value.trim() == \"wayland\"",
+      "test": "linux_rules::tests::a_wayland_session_is_told_by_its_type_or_by_its_socket",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1198",
+      "why": "an empty compositor socket counts as one - a shell that exports WAYLAND_DISPLAY empty is refused for nothing",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "wayland_display.is_some_and(|value| !value.trim().is_empty())",
+      "replace": "wayland_display.is_some()",
+      "test": "linux_rules::tests::a_wayland_session_is_told_by_its_type_or_by_its_socket",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1199",
+      "why": "the Wayland refusal names no Linux - the person is told about Wayland and not about the system the tool stood on",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "Self::Wayland => \"Linux under Wayland\",",
+      "replace": "Self::Wayland => \"Wayland\",",
+      "test": "linux_rules::tests::every_refusal_names_linux_and_its_own_cause",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1200",
+      "why": "U+0000 is carried - it is no keysym, and a send would press a key that types nothing and report it as sent",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        '\\0' => Err(CannotCarry(character)),",
+      "replace": "        '\\0' => Ok(UNICODE_KEYSYM_BASE),",
+      "test": "linux_rules::tests::nul_cannot_be_carried_and_is_refused_by_name",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1201",
+      "why": "a line feed is typed as its Unicode keysym - toolkits drop a control character, so the line break never arrives",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        '\\n' => Ok(KEYSYM_RETURN),",
+      "replace": "        '\\n' => Ok(UNICODE_KEYSYM_BASE + 10),",
+      "test": "linux_rules::tests::every_character_is_its_unicode_keysym_and_two_are_keys",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1202",
+      "why": "a character is typed as its legacy keysym - a letter alone on a key is changed to lower case by the server (OBS-202 point 7)",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        other => Ok(UNICODE_KEYSYM_BASE + u32::from(other)),",
+      "replace": "        other => Ok(u32::from(other)),",
+      "test": "linux_rules::tests::every_character_is_its_unicode_keysym_and_two_are_keys",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1203",
+      "why": "a character counts as one unit - the progress and the count of what arrived are wrong for every character above the basic plane",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": ".map(|character| character.len_utf16())",
+      "replace": ".map(|_| 1)",
+      "test": "linux_rules::tests::units_are_utf16_units",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1204",
+      "why": "a batch takes one different character more than there are spare keys - the last one types the key of another",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "            if assigned.len() == spare {",
+      "replace": "            if assigned.len() > spare {",
+      "test": "linux_rules::tests::a_batch_ends_before_the_character_that_has_no_key_left",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1205",
+      "why": "a batch is never cut by length - a long text of one letter waits for no answer of the application until the end",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "while end < keysyms.len() && end - first < max_chars {",
+      "replace": "while end < keysyms.len() && end - first < usize::MAX {",
+      "test": "linux_rules::tests::a_long_text_is_cut_by_length_too",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1206",
+      "why": "a key with a symbol only on its first level is spare - typing through it replaces a definition of the layout (OBS-202 point 5)",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": ".filter(|index| self.row(*index).iter().all(|keysym| *keysym == 0))",
+      "replace": ".filter(|index| self.row(*index).iter().take(1).all(|keysym| *keysym == 0))",
+      "test": "linux_rules::tests::a_key_with_a_symbol_on_a_higher_level_only_is_not_spare",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1207",
+      "why": "Escape is found on any level of a key - the grab would be put on a key that types Escape only with a modifier",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": ".find(|index| self.row(*index).first() == Some(&keysym))",
+      "replace": ".find(|index| self.row(*index).contains(&keysym))",
+      "test": "linux_rules::tests::a_key_is_found_by_its_first_level",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1208",
+      "why": "PointerRoot counts as a window - a focus that names no window is typed into",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    (raw > 1 && raw != root).then_some(raw)",
+      "replace": "    (raw > 0 && raw != root).then_some(raw)",
+      "test": "linux_rules::tests::the_focus_names_a_window_only_when_it_is_one",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1209",
+      "why": "the root window counts as the window in front - a focus that rests on the root is typed into",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    (raw > 1 && raw != root).then_some(raw)",
+      "replace": "    (raw > 1).then_some(raw)",
+      "test": "linux_rules::tests::the_focus_names_a_window_only_when_it_is_one",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1210",
+      "why": "a held Alt is not named - the send types under a modifier that turns the next character into a shortcut",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        3 => Some(\"Alt\"),",
+      "replace": "        3 => None,",
+      "test": "linux_rules::tests::a_held_modifier_is_named_by_its_slot_in_the_modifier_map",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1211",
+      "why": "the Caps Lock key counts as a held modifier - a send is refused for a key that only toggles a state",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        0 => Some(\"Shift\"),",
+      "replace": "        0 | 1 => Some(\"Shift\"),",
+      "test": "linux_rules::tests::a_held_modifier_is_named_by_its_slot_in_the_modifier_map",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1212",
+      "why": "the wrong bit of a keymap byte is read - a held key is seen on its neighbour",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": ".is_some_and(|byte| byte & (1 << (keycode % 8)) != 0)",
+      "replace": ".is_some_and(|byte| byte & (1 << (keycode % 7)) != 0)",
+      "test": "linux_rules::tests::a_held_key_is_found_in_the_bits_of_the_keymap_reply",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1213",
+      "why": "Shift counts as Caps Lock - every send with a Shift latched is refused with the wrong words",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    state & LOCK_MASK != 0",
+      "replace": "    state & 0x01 != 0",
+      "test": "linux_rules::tests::caps_lock_is_the_lock_bit_alone",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1214",
+      "why": "every ping of a send carries the same token - the answer to the first is taken for the answer to the next",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    process.wrapping_mul(0x9E37_79B1) ^ counter",
+      "replace": "    process.wrapping_mul(0x9E37_79B1)",
+      "test": "linux_rules::tests::the_pings_of_one_send_differ_and_so_do_those_of_two_programs",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1215",
+      "why": "the pause after a remap is ten times longer - every batch of every send waits half a second for nothing",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "pub(crate) const REMAP_SETTLE: Duration = Duration::from_millis(50);",
+      "replace": "pub(crate) const REMAP_SETTLE: Duration = Duration::from_millis(500);",
+      "test": "linux_rules::tests::the_pauses_and_limits_keep_the_order_the_measurements_gave_them",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1216",
+      "why": "the wait for the answer of the application is zero - a stopped application is given up on at once and the keys are given back under it",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "pub(crate) const PING_WAIT: Duration = Duration::from_secs(5);",
+      "replace": "pub(crate) const PING_WAIT: Duration = Duration::from_secs(0);",
+      "test": "linux_rules::tests::the_pauses_and_limits_keep_the_order_the_measurements_gave_them",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1217",
+      "why": "a batch holds ten characters at most - a long text takes twenty five times as many round trips",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "pub(crate) const MAX_CHARS_PER_ACK: usize = 256;",
+      "replace": "pub(crate) const MAX_CHARS_PER_ACK: usize = 10;",
+      "test": "linux_rules::tests::the_pauses_and_limits_keep_the_order_the_measurements_gave_them",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1218",
+      "why": "Caps Lock on degrades the route instead of refusing the press - the next press would send the same value to the clipboard without a word",
+      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "find": "        } => (Event::InsertionRefused, None, vec![Message::CapsLockOn]),",
+      "replace": "        } => (Event::InsertionFailed, None, vec![Message::CapsLockOn]),",
+      "test": "advance_sequence::tests::caps_lock_on_refuses_without_degrading_and_the_same_value_waits",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1219",
+      "why": "Caps Lock on says another sentence - the person is told there is no target and turns nothing off",
+      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "find": "        } => (Event::InsertionRefused, None, vec![Message::CapsLockOn]),",
+      "replace": "        } => (Event::InsertionRefused, None, vec![Message::NoTarget]),",
+      "test": "advance_sequence::tests::caps_lock_on_refuses_without_degrading_and_the_same_value_waits",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1220",
+      "why": "the local socket is granted to every file of the product - any code could open a Unix socket and the network guard would not notice",
+      "file": "crates/nkb-core/tests/nothing_reaches_the_network.rs",
+      "find": "        || (kind == \"local-socket\" && rel == LOCAL_SOCKET_GRANTED_TO_THE_PRODUCT.0)",
+      "replace": "        || kind == \"local-socket\"",
+      "test": "the_one_local_socket_of_the_product_is_the_x_server_and_nothing_else",
+      "runner": "rust:nkb-core:nothing_reaches_the_network"
+    },
+    {
+      "id": "M1221",
+      "why": "a slow application is cut to no floor - a batch of one character per round trip, and a long text takes minutes of round trips",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "(fit as usize).clamp(MIN_BATCH_CHARS, MAX_CHARS_PER_ACK)",
+      "replace": "(fit as usize).min(MAX_CHARS_PER_ACK)",
+      "test": "linux_rules::tests::a_slow_application_gets_the_characters_that_fit_a_second",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1222",
+      "why": "the answer is hoped for in five seconds, which is the whole wait - a slow application is given batches it cannot answer in time and is taken for a stopped one (OBS-204)",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "pub(crate) const ANSWER_TARGET: Duration = Duration::from_secs(1);",
+      "replace": "pub(crate) const ANSWER_TARGET: Duration = Duration::from_secs(5);",
+      "test": "linux_rules::tests::a_slow_application_gets_the_characters_that_fit_a_second",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1223",
+      "why": "an answer with no time at all gets the floor - a fast application is held to the shortest batches for good",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        return MAX_CHARS_PER_ACK;\n    }\n    let fit",
+      "replace": "        return MIN_BATCH_CHARS;\n    }\n    let fit",
+      "test": "linux_rules::tests::a_fast_application_gets_the_longest_batches",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }

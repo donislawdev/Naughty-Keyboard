@@ -336,6 +336,8 @@ pub enum Message {
     /// A modifier is physically held, so nothing was sent - release it and try
     /// again. Names which one.
     ModifierHeld { key: String },
+    /// Caps Lock is on, so nothing was sent - turn it off and try again.
+    CapsLockOn,
     /// The field could not be cleared, so the value was not sent. The field is
     /// in an unknown state between its old content and empty.
     ClearingFailed,
@@ -1248,6 +1250,11 @@ fn classify(
             None,
             vec![Message::ModifierHeld { key: which }],
         ),
+        // A state left on, not a key held. Nothing was sent: refuse, and say it.
+        SendOutcome::NotDelivered {
+            error: DeliveryError::CapsLockOn,
+            ..
+        } => (Event::InsertionRefused, None, vec![Message::CapsLockOn]),
         // `attempt` sends this value to the clipboard before classifying, so
         // this arm is reached only if a route other than the direct one ever
         // reported it. Nothing was pressed: refuse, and say why.
@@ -1909,6 +1916,21 @@ mod tests {
                 key: "Ctrl".to_owned()
             }]
         );
+        assert_eq!(advance.sequence().delivery, Delivery::Direct);
+        assert_eq!(advance.sequence().position, Position::Ready { total: 3 });
+    }
+
+    #[test]
+    fn caps_lock_on_refuses_without_degrading_and_the_same_value_waits() {
+        // A state somebody left on: nothing was sent, the route stays direct and
+        // the counter stays, so the press after Caps Lock is off sends this value.
+        let mut advance = chosen(Risk::Normal);
+        let outcome = advance.on_action(
+            HotkeyAction::NextValue,
+            &Kit::with_delivery(FakeDelivery::failing(DeliveryError::CapsLockOn)).ports(),
+        );
+        assert_eq!(outcome.messages, vec![Message::CapsLockOn]);
+        assert!(outcome.sent.is_none());
         assert_eq!(advance.sequence().delivery, Delivery::Direct);
         assert_eq!(advance.sequence().position, Position::Ready { total: 3 });
     }

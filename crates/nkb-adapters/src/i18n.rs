@@ -81,6 +81,7 @@ use crate::settings_file::SCHEMA;
 // in one file - and no file grows past the ceiling of `D113`. The paths stay
 // what they were: every name below is still `nkb_adapters::i18n::<name>`.
 mod causes;
+mod fill;
 mod palette;
 mod registration;
 mod substitutions;
@@ -88,6 +89,7 @@ mod typing;
 mod windows;
 
 pub use causes::closed_window as closed_window_cause;
+pub(crate) use fill::fill;
 use palette::pattern_palette_label;
 pub use palette::{
     PaletteLabel, back_to, browser_did_not_open, counter, counts, label, next_end_of_pack,
@@ -103,45 +105,6 @@ pub use windows::{
     shortcut_invite, shortcuts_label, shortcuts_summary, value_aside, value_gone, welcome_label,
     welcome_ready, welcome_try_it,
 };
-
-/// Substitutes `{name}` placeholders in one pass over the pattern.
-///
-/// One pass, not a chain of `replace` calls, and the difference is not style: a
-/// chain re-scans what it has just substituted, so a value that happens to
-/// contain braces would be substituted again. Here a substituted value is
-/// copied into the output and never looked at.
-///
-/// An unknown placeholder is left standing rather than swallowed. That is
-/// deliberate: a `{sent}` visible in the palette is ugly and gets fixed, while a
-/// silently emptied sentence reads as finished. The test below refuses any
-/// pattern that still holds a brace after its own arguments are applied, so the
-/// ugly version never reaches a tester.
-pub(crate) fn fill(pattern: &str, values: &[(&str, &str)]) -> String {
-    let mut out = String::with_capacity(pattern.len());
-    let mut rest = pattern;
-
-    while let Some(open) = rest.find('{') {
-        out.push_str(&rest[..open]);
-        let after = &rest[open + 1..];
-        let Some(close) = after.find('}') else {
-            // No closing brace at all: the rest is literal text.
-            out.push_str(&rest[open..]);
-            return out;
-        };
-        let name = &after[..close];
-        match values.iter().find(|(key, _)| *key == name) {
-            Some((_, value)) => out.push_str(value),
-            None => {
-                out.push('{');
-                out.push_str(name);
-                out.push('}');
-            }
-        }
-        rest = &after[close + 1..];
-    }
-    out.push_str(rest);
-    out
-}
 
 // ---------------------------------------------------------------------------
 // The pieces a sentence is built from
@@ -288,6 +251,9 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::ModifierHeld { .. } => {
             "{key} is still held down, so nothing was sent. Release it and press the shortcut again."
         }
+        Message::CapsLockOn => {
+            "Caps Lock is on, so nothing was sent - many applications would turn the letters into capitals. Turn it off and press the shortcut again."
+        }
         Message::ClearingFailed => {
             "The field could not be cleared, so nothing was sent. It may hold part of its old content - check it before trying again."
         }
@@ -343,6 +309,7 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
         | Message::NeedsPermission
         | Message::HigherPrivileges
         | Message::NoTextField
+        | Message::CapsLockOn
         | Message::ClearingSkipped
         | Message::ClearingSkippedInTerminal
         | Message::ClipboardBusy
@@ -1161,6 +1128,7 @@ mod tests {
                 key: "Ctrl".to_owned(),
             },
             Message::ClearingFailed,
+            Message::CapsLockOn,
             Message::ValueTooLarge {
                 id: "len-100000".to_owned(),
             },
@@ -1484,10 +1452,11 @@ mod tests {
             Message::NothingBefore => 33,
             Message::NeedsPermission => 34,
             Message::MayBeAltered(_) => 35,
+            Message::CapsLockOn => 36,
         }
     }
 
-    const SLOTS: usize = 36;
+    const SLOTS: usize = 37;
 
     #[test]
     fn every_message_variant_is_listed_here() {
@@ -1580,23 +1549,6 @@ mod tests {
             })
             .ends_with("printed by: nkb emit whitespace")
         );
-    }
-
-    #[test]
-    fn fill_does_not_rescan_what_it_substituted() {
-        // A value carrying braces must be copied out, not treated as a new
-        // placeholder. Today no argument can contain one - identifiers come from
-        // a narrow alphabet - but the property is what makes that safe to stop
-        // thinking about.
-        let out = fill("a {x} b", &[("x", "{y}"), ("y", "NO")]);
-        assert_eq!(out, "a {y} b");
-    }
-
-    #[test]
-    fn fill_leaves_an_unknown_placeholder_visible() {
-        assert_eq!(fill("a {x} b", &[]), "a {x} b");
-        assert_eq!(fill("a { b", &[]), "a { b");
-        assert_eq!(fill("{x}", &[("x", "")]), "");
     }
 
     #[test]

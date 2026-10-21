@@ -38,6 +38,15 @@ impl ValueDelivery for DirectInjection {
                 },
             };
         }
+        // A route exists in principle and is shut for this session: on Linux, a
+        // Wayland session or a display that is not on this machine (`D145`). The
+        // refusal names what is in the way, and the caller acts on it as on any
+        // system with no route at all.
+        if let Some(reason) = nkb_sys::route_refusal() {
+            return Availability::Unavailable {
+                reason: reason.to_owned(),
+            };
+        }
         // A route exists, and the system may still hold it shut until the person
         // allows it (the accessibility permission on macOS). Asked every time, not
         // once: it can be granted or taken back while the program runs, and the
@@ -94,6 +103,10 @@ impl ValueDelivery for DirectInjection {
             Err(nkb_sys::SendError::ModifierHeld { key }) => Err(DeliveryError::ModifierHeld {
                 which: key.to_owned(),
             }),
+            Err(nkb_sys::SendError::CapsLockOn) => Err(DeliveryError::CapsLockOn),
+            Err(nkb_sys::SendError::CannotCarry { character }) => {
+                Err(DeliveryError::CannotCarry { character })
+            }
             // `send_text` never reports in chords. If it ever did, the honest
             // translation is "nothing is known to have arrived".
             Err(nkb_sys::SendError::ChordsTruncated { reason, .. }) => {
@@ -293,6 +306,14 @@ impl KeystrokeSender for DirectInjection {
             Err(nkb_sys::SendError::ModifierHeld { key }) => Err(KeystrokeError::ModifierHeld {
                 which: key.to_owned(),
             }),
+            // The clearing keys are not letters and Caps Lock does not change them,
+            // and they are not characters either. `send_chords` never reports these.
+            // If it ever did, nothing is known to have acted.
+            Err(nkb_sys::SendError::CapsLockOn | nkb_sys::SendError::CannotCarry { .. }) => {
+                Err(KeystrokeError::NothingArrived {
+                    reason: StopReason::Dropped,
+                })
+            }
             Err(nkb_sys::SendError::ChordsTruncated {
                 chords_sent,
                 chords_expected,
@@ -480,7 +501,16 @@ mod tests {
     #[test]
     fn availability_agrees_with_what_nkb_sys_says_about_this_build() {
         let availability = DirectInjection.availability();
-        if nkb_sys::can_send() {
+        if let Some(reason) = nkb_sys::route_refusal() {
+            // A route that is shut for this session (Linux under Wayland, or with
+            // no local display) is reported as having no route, named.
+            assert_eq!(
+                availability,
+                Availability::Unavailable {
+                    reason: reason.to_owned()
+                }
+            );
+        } else if nkb_sys::can_send() {
             // Ready, unless the system holds the route shut until the person
             // allows it: then it says so, and that is not a failure of this code.
             let expected = if nkb_sys::send_allowed() {

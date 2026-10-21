@@ -31,14 +31,20 @@
 
 // Windows feeds it, the tests run it everywhere. Elsewhere it would be dead code,
 // and `clippy -D warnings` refuses that on macOS and Linux (seen 2026-09-23).
+#[cfg(any(windows, target_os = "macos", target_os = "linux", test))]
+mod cadence;
 #[cfg(any(windows, target_os = "macos", test))]
 mod confirm;
-#[cfg(any(windows, target_os = "macos", test))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux", test))]
 mod escape;
 pub mod field;
 pub mod held;
 pub mod hotkey;
 pub mod layout;
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(any(target_os = "linux", test))]
+mod linux_rules;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(any(target_os = "macos", test))]
@@ -152,6 +158,14 @@ pub enum SendError {
     /// program runs - and because the system accepts the events of a program that
     /// lacks it and drops them without a word (`OBS-70`).
     NeedsPermission,
+    /// Caps Lock is on, so nothing was sent. On X11 the toolkit turns the letters
+    /// it is handed into capitals whatever key typed them (GTK, `OBS-202` point 8),
+    /// so the field would hold another value than the one sent. A state somebody
+    /// left on, not a key held: waiting for it would be waiting for them.
+    CapsLockOn,
+    /// The route cannot type this character at all, so nothing was sent. Refused
+    /// by name before the first key rather than left out: `U+0000` is no keysym.
+    CannotCarry { character: char },
 }
 
 impl core::fmt::Display for SendError {
@@ -185,6 +199,14 @@ impl core::fmt::Display for SendError {
             Self::NeedsPermission => {
                 f.write_str("the system has not given this program permission to send keystrokes")
             }
+            Self::CapsLockOn => {
+                f.write_str("Caps Lock is on, so nothing was sent - turn it off first")
+            }
+            Self::CannotCarry { character } => write!(
+                f,
+                "U+{:04X} cannot be typed on this system, so nothing was sent",
+                u32::from(*character)
+            ),
         }
     }
 }
@@ -229,9 +251,10 @@ pub struct WindowRef(pub u64);
 mod windows_impl {
     use super::{SendError, SendOutcome, SendProgress, StopReason, WindowRef};
 
+    use super::cadence::{Cadence, PROGRESS_INTERVAL};
     use super::confirm::{
-        Cadence, PROGRESS_INTERVAL, Pressed, Step, TAKEN_WAIT, TARGET_WAIT, Waits, Watch,
-        chord_steps, chords_acted, press_confirmed, units_arrived,
+        Pressed, Step, TAKEN_WAIT, TARGET_WAIT, Waits, Watch, chord_steps, chords_acted,
+        press_confirmed, units_arrived,
     };
     use super::escape::{ReservedEscape, SystemEscape};
     use super::{Chord, MODIFIER_RELEASE_WAIT, NavKey};
@@ -618,17 +641,13 @@ mod windows_impl {
     }
 }
 
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 mod other_impl {
     use super::{SendError, SendOutcome, SendProgress, WindowRef};
 
     /// Named rather than "this platform", so the message says something the
     /// reader can act on.
-    const SYSTEM: &str = if cfg!(target_os = "linux") {
-        "Linux"
-    } else {
-        "this system"
-    };
+    const SYSTEM: &str = "this system";
 
     /// Nothing sends here, so nothing is allowed to.
     pub fn send_allowed() -> bool {
@@ -643,8 +662,6 @@ mod other_impl {
         _text: &str,
         _progress: &mut dyn FnMut(SendProgress),
     ) -> Result<SendOutcome, SendError> {
-        // Linux depends on the session protocol - X11 has a measured route,
-        // Wayland has a named candidate and no measurement (`D138`).
         Err(SendError::Unsupported { system: SYSTEM })
     }
 
@@ -659,7 +676,10 @@ use windows_impl as platform;
 #[cfg(target_os = "macos")]
 use macos as platform;
 
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(target_os = "linux")]
+use linux as platform;
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 use other_impl as platform;
 
 /// The window in front right now, if there is one.
@@ -728,7 +748,27 @@ pub fn send_allowed() -> bool {
 /// rather than after - and so the answer is one fact in one place instead of a
 /// `cfg` repeated at every call site.
 pub const fn can_send() -> bool {
-    cfg!(any(windows, target_os = "macos"))
+    cfg!(any(windows, target_os = "macos", target_os = "linux"))
+}
+
+/// Why this build, on this machine and in this session, does not type - in the
+/// words that follow `on` - when the system can say so before anything is sent.
+///
+/// A route can exist in principle and be shut for the session: on Linux there is
+/// no way to type into a Wayland session without losing characters, and none to a
+/// display that is not on this machine (`D145`). On Linux this makes one connection
+/// to the X server and drops it. `None` means nothing is known to stand in the
+/// way, not that a send will succeed.
+#[must_use]
+pub fn route_refusal() -> Option<&'static str> {
+    #[cfg(target_os = "linux")]
+    {
+        linux::route_refusal()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -756,6 +796,16 @@ mod tests {
             ),
             Err(SendError::Unsupported { .. }) => {}
             Err(other) => panic!("an empty text must not be truncated: {other}"),
+        }
+    }
+
+    #[test]
+    fn a_route_shut_for_the_session_is_named_and_is_not_allowed() {
+        // On Linux without an X server, as on a build server, the refusal says what
+        // is in the way. Everywhere else nothing is known to be.
+        if let Some(reason) = route_refusal() {
+            assert!(!reason.is_empty(), "untouchable rule 1: the cause is named");
+            assert!(!send_allowed(), "a shut route must not report itself open");
         }
     }
 

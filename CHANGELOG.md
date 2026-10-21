@@ -12,6 +12,11 @@ Changes wait under Unreleased until then.
 
 ### Added
 
+- On Linux, `nkb send` types into programs running under an X11 session. Each character goes through
+  a spare key that is rewritten for the moment, and after every batch the program is asked whether it
+  has taken the keys, so a slow program is waited for. `Escape` stops a long value. Nothing is sent,
+  and the reason is named, in a Wayland session, for a display that is not on this machine, while
+  Caps Lock is on, and while a modifier is held. Clearing the field first is not yet available.
 - On macOS the palette and `nkb send` now say when the system's text substitutions could have changed
   a value that went in: a capital letter at the start of a sentence, a period after two spaces, and
   a straight quote made curly in a rich text document. The field can then hold something other than

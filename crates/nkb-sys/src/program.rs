@@ -112,12 +112,29 @@ mod platform {
     }
 }
 
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(target_os = "linux")]
 mod platform {
     use crate::WindowRef;
 
-    // No route to type into other windows exists here yet, so there is no
-    // window a value went to and nothing to name.
+    /// The path the program of the window was started from: the process of the
+    /// window (`_NET_WM_PID`) and where its link `exe` points. Only that link is
+    /// read - not the command line, not the environment, not the memory.
+    pub fn image_path(window: WindowRef) -> Option<Vec<u16>> {
+        let pid = crate::linux::window_pid(window)?;
+        let path = std::fs::read_link(format!("/proc/{pid}/exe")).ok()?;
+        let path = path.to_string_lossy();
+        // A program replaced while it runs is named with this suffix by the kernel.
+        let path = path.strip_suffix(" (deleted)").unwrap_or(&path);
+        Some(path.encode_utf16().collect())
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+mod platform {
+    use crate::WindowRef;
+
+    // No route to type into other windows exists here, so there is no window a
+    // value went to and nothing to name.
     pub fn image_path(_window: WindowRef) -> Option<Vec<u16>> {
         None
     }
