@@ -9121,6 +9121,132 @@
       "replace": "pub(crate) const STRUCTURE_NOTIFY: u32 = 0x0001_0000;",
       "test": "linux_rules::tests::the_answer_to_a_ping_is_heard_on_the_masks_every_toolkit_sends_it_with",
       "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1226",
+      "why": "a value that exactly fills the spare keys is given no plan - every such send rewrites keys between batches and loses the characters an application reads late",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "            if slots.len() == spare {\n                return None;",
+      "replace": "            if slots.len() == spare + 1 {\n                return None;",
+      "test": "linux_rules::tests::a_value_with_more_different_keysyms_than_spare_keys_gets_no_plan",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1227",
+      "why": "a repeated keysym gets a key of its own each time - a long run of one character needs more keys than the keyboard has and is refused a plan",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        if !slots.contains(keysym) {\n            if slots.len() == spare {\n                return None;",
+      "replace": "        if true {\n            if slots.len() == spare {\n                return None;",
+      "test": "linux_rules::tests::a_whole_value_gets_one_key_for_each_different_keysym_in_order_of_appearance",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1228",
+      "why": "the last batch of a planned value runs past the end of the value - the send indexes outside the text",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        end: first.saturating_add(max_chars.max(1)).min(length),",
+      "replace": "        end: first.saturating_add(max_chars.max(1)),",
+      "test": "linux_rules::tests::a_batch_of_a_planned_value_carries_every_slot_and_is_cut_by_length_only",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1229",
+      "why": "a batch of a planned value may hold no character - a send with a limit of zero never moves on",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        end: first.saturating_add(max_chars.max(1)).min(length),",
+      "replace": "        end: first.saturating_add(max_chars).min(length),",
+      "test": "linux_rules::tests::a_batch_of_a_planned_value_carries_every_slot_and_is_cut_by_length_only",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1230",
+      "why": "the wait before the layout is given back has no ceiling - a long batch holds the send for as many seconds as it has keys",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        .saturating_add(per_keys)\n        .min(GIVE_BACK_CEILING)",
+      "replace": "        .saturating_add(per_keys)",
+      "test": "linux_rules::tests::the_wait_before_the_layout_is_given_back_grows_with_the_keys_and_stops_at_a_ceiling",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1231",
+      "why": "the base of the wait before the layout is given back is a tenth of what Chromium needed - its characters are lost again",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "pub(crate) const GIVE_BACK_BASE: Duration = Duration::from_millis(100);",
+      "replace": "pub(crate) const GIVE_BACK_BASE: Duration = Duration::from_millis(10);",
+      "test": "linux_rules::tests::the_wait_before_the_layout_is_given_back_grows_with_the_keys_and_stops_at_a_ceiling",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1232",
+      "why": "the wait does not grow with the keys - a long batch is given the wait of a short one",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    let per_keys = per_key.saturating_mul(u32::try_from(keys).unwrap_or(u32::MAX));",
+      "replace": "    let per_keys = per_key.saturating_mul(u32::try_from(keys.min(1)).unwrap_or(u32::MAX));",
+      "test": "linux_rules::tests::the_wait_before_the_layout_is_given_back_grows_with_the_keys_and_stops_at_a_ceiling",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1233",
+      "why": "a tab is typed through the key of the line feed - every tab becomes a new line",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "            KEYSYM_TAB => self.tab_key,",
+      "replace": "            KEYSYM_TAB => self.return_key,",
+      "test": "linux_rules::tests::return_and_tab_are_typed_through_the_keys_of_the_layout",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1234",
+      "why": "a line feed and a tab take a spare key although the layout has their own keys - they are typed on a key that Chromium takes for nothing",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        if layout.key_for(*keysym).is_some() {\n            continue;\n        }",
+      "replace": "        if false {\n            continue;\n        }",
+      "test": "linux_rules::tests::a_line_feed_and_a_tab_take_no_spare_key_when_the_layout_has_them",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1235",
+      "why": "a batch counts a line feed or a tab among the keys it needs - batches end early and spare keys are given to keys the layout has",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        if layout.key_for(keysym).is_none() && !assigned.contains(&keysym) {",
+      "replace": "        if !assigned.contains(&keysym) {",
+      "test": "linux_rules::tests::a_line_feed_and_a_tab_take_no_spare_key_when_the_layout_has_them",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1236",
+      "why": "a session with an input method is given the wait of one without - an application that goes through the X input method protocol loses the end of the value again",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    let per_key = if input_method {\n        GIVE_BACK_PER_KEY_INPUT_METHOD",
+      "replace": "    let per_key = if false {\n        GIVE_BACK_PER_KEY_INPUT_METHOD",
+      "test": "linux_rules::tests::an_input_method_in_the_session_lengthens_the_wait_for_each_key",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1237",
+      "why": "the wait for each key in a session with an input method is the short one - nine keys no longer reach the 200 ms that were measured",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "pub(crate) const GIVE_BACK_PER_KEY_INPUT_METHOD: Duration = Duration::from_millis(25);",
+      "replace": "pub(crate) const GIVE_BACK_PER_KEY_INPUT_METHOD: Duration = Duration::from_millis(4);",
+      "test": "linux_rules::tests::an_input_method_in_the_session_lengthens_the_wait_for_each_key",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1238",
+      "why": "a session whose XMODIFIERS says none is taken for one with an input method - every send pays the longer wait",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "name != \"none\"",
+      "replace": "name != \"nobody\"",
+      "test": "linux_rules::tests::xmodifiers_names_an_input_method_unless_it_says_none_or_nothing",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1239",
+      "why": "an empty input method name is taken for one - every session that sets the variable pays the longer wait",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "!name.is_empty() && ",
+      "replace": "",
+      "test": "linux_rules::tests::xmodifiers_names_an_input_method_unless_it_says_none_or_nothing",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }
