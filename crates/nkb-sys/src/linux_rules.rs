@@ -67,6 +67,18 @@ pub(crate) const UNPACED_SETTLE: Duration = Duration::from_millis(150);
 /// How long a wait for a held key to come up pauses between two looks.
 pub(crate) const LOOK_EVERY: Duration = Duration::from_millis(10);
 
+/// The event mask the answers to a ping are listened for with, on the root window.
+/// EWMH asks for an answer sent with `SubstructureNotify` and `SubstructureRedirect`,
+/// which GTK and winit do. Qt sends it with `StructureNotify` and
+/// `SubstructureRedirect`, so a listener on `SubstructureNotify` alone never hears
+/// it and a Qt application looks stopped (measured with Qt 6.10 on Xorg). The
+/// redirect bit is the window manager's, so both notify bits are listened for.
+pub(crate) const PING_ANSWER_MASK: u32 = STRUCTURE_NOTIFY | SUBSTRUCTURE_NOTIFY;
+
+/// The two event mask bits of the X11 protocol that a ping answer can arrive on.
+pub(crate) const STRUCTURE_NOTIFY: u32 = 0x0002_0000;
+pub(crate) const SUBSTRUCTURE_NOTIFY: u32 = 0x0008_0000;
+
 /// The keysyms that are not characters in the Unicode form.
 pub(crate) const KEYSYM_RETURN: u32 = 0xff0d;
 pub(crate) const KEYSYM_TAB: u32 = 0xff09;
@@ -773,6 +785,22 @@ mod tests {
         assert!(lengths.iter().all(|length| *length >= 18));
         // A held modifier is looked at many times in the wait for it.
         assert!(LOOK_EVERY * 10 <= crate::MODIFIER_RELEASE_WAIT);
+    }
+
+    #[test]
+    fn the_answer_to_a_ping_is_heard_on_the_masks_every_toolkit_sends_it_with() {
+        // The bits are the X11 protocol's own: StructureNotify is bit 17 and
+        // SubstructureNotify bit 19. GTK and winit answer on the second, Qt on the
+        // first, and a listener on one of them alone takes the other for silence.
+        assert_eq!(STRUCTURE_NOTIFY, 1 << 17);
+        assert_eq!(SUBSTRUCTURE_NOTIFY, 1 << 19);
+        assert_eq!(PING_ANSWER_MASK & STRUCTURE_NOTIFY, STRUCTURE_NOTIFY);
+        assert_eq!(PING_ANSWER_MASK & SUBSTRUCTURE_NOTIFY, SUBSTRUCTURE_NOTIFY);
+        assert_eq!(
+            PING_ANSWER_MASK,
+            STRUCTURE_NOTIFY | SUBSTRUCTURE_NOTIFY,
+            "the redirect bit belongs to the window manager and cannot be listened for"
+        );
     }
 
     #[test]
