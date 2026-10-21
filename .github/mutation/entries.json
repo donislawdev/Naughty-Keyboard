@@ -9103,6 +9103,24 @@
       "replace": "        return MIN_BATCH_CHARS;\n    }\n    let fit",
       "test": "linux_rules::tests::a_fast_application_gets_the_longest_batches",
       "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1224",
+      "why": "the answer to a ping is listened for on the root without the StructureNotify bit - a Qt application, which answers on that mask, looks stopped and nkb send refuses every one of them",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "pub(crate) const PING_ANSWER_MASK: u32 = STRUCTURE_NOTIFY | SUBSTRUCTURE_NOTIFY;",
+      "replace": "pub(crate) const PING_ANSWER_MASK: u32 = SUBSTRUCTURE_NOTIFY;",
+      "test": "linux_rules::tests::the_answer_to_a_ping_is_heard_on_the_masks_every_toolkit_sends_it_with",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1225",
+      "why": "StructureNotify is given the value of another event mask bit - the listener hears the wrong events and the Qt answer is still missed",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "pub(crate) const STRUCTURE_NOTIFY: u32 = 0x0002_0000;",
+      "replace": "pub(crate) const STRUCTURE_NOTIFY: u32 = 0x0001_0000;",
+      "test": "linux_rules::tests::the_answer_to_a_ping_is_heard_on_the_masks_every_toolkit_sends_it_with",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }

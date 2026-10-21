@@ -40,9 +40,9 @@ use super::escape::{ReservedEscape, XEscape};
 use super::front::{PingAtoms, focus, focused_toplevel, ping_atoms, ping_target};
 use crate::cadence::{Cadence, PROGRESS_INTERVAL};
 use crate::linux_rules::{
-    Batch, FIRST_BATCH_CHARS, KEYSYM_ESCAPE, Keymap, LOOK_EVERY, PING_WAIT, REMAP_SETTLE, Refusal,
-    UNPACED_SETTLE, WARMUP_SETTLE, caps_lock_on, held_modifier, keysym_for, next_batch, next_limit,
-    ping_token, utf16_units,
+    Batch, FIRST_BATCH_CHARS, KEYSYM_ESCAPE, Keymap, LOOK_EVERY, PING_ANSWER_MASK, PING_WAIT,
+    REMAP_SETTLE, Refusal, UNPACED_SETTLE, WARMUP_SETTLE, caps_lock_on, held_modifier, keysym_for,
+    next_batch, next_limit, ping_token, utf16_units,
 };
 use crate::{Chord, MODIFIER_RELEASE_WAIT, SendError, SendOutcome, SendProgress, StopReason};
 
@@ -183,7 +183,8 @@ fn ping(server: &Server, pinged: Pinged, token: u32) -> Result<Answer, Lost> {
 }
 
 /// The window that answers pings, if the one at the focus takes part in the
-/// protocol. The answers go to the root window, so the root is listened to.
+/// protocol. The answers go to the root window, so the root is listened to, on the
+/// masks that GTK, winit and Qt send their answers with (`PING_ANSWER_MASK`).
 fn pinged_window(server: &Server) -> Result<Option<Pinged>, Lost> {
     let Some(focused) = focus(&server.conn, server.root)? else {
         return Ok(None);
@@ -196,7 +197,7 @@ fn pinged_window(server: &Server) -> Result<Option<Pinged>, Lost> {
         .conn
         .change_window_attributes(
             server.root,
-            &ChangeWindowAttributesAux::new().event_mask(EventMask::SUBSTRUCTURE_NOTIFY),
+            &ChangeWindowAttributesAux::new().event_mask(EventMask::from(PING_ANSWER_MASK)),
         )?
         .check();
     Ok(listening.is_ok().then_some(Pinged { atoms, window }))
