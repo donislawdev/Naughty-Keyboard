@@ -20,16 +20,21 @@
 //! through XWayland only the characters of the compositor's layout arrive (`OBS-203`),
 //! and a send that types half a value and says it sent it is the one thing this program
 //! does not do (untouchable rule 1). The text goes to the desktop's input method instead
-//! (`ibus`). The palette's window stands on XWayland, and its shortcuts, which this route
-//! does not have yet, are refused on Wayland by name.
+//! (`ibus`). The palette's window stands on XWayland, and its shortcuts are asked of the
+//! portal of the desktop (`portal`) instead of grabbed, because the X server of a Wayland
+//! session never sees the keys of a window that is not an X client.
 //!
-//! - `ibus` - typing on a Wayland session, by committing text from an engine of ours.
+//! - `bus` - the file socket of a bus of this machine, which `ibus` and `portal` both use,
+//! - `ibus` - typing on a Wayland session, by committing text from an engine of ours,
+//! - `portal` - global shortcuts on a Wayland session, asked of the portal.
 
+mod bus;
 mod connect;
 mod escape;
 mod front;
 pub(crate) mod hotkey;
 mod ibus;
+pub(crate) mod portal;
 mod send;
 pub(crate) mod window;
 

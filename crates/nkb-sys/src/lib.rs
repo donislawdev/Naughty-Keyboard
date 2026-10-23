@@ -48,6 +48,8 @@ mod linux_hotkeys;
 #[cfg(any(target_os = "linux", test))]
 mod linux_ibus_rules;
 #[cfg(any(target_os = "linux", test))]
+mod linux_portal_rules;
+#[cfg(any(target_os = "linux", test))]
 mod linux_rules;
 #[cfg(any(target_os = "linux", test))]
 mod linux_window_rules;
@@ -57,6 +59,7 @@ mod macos;
 mod macos_hotkeys;
 #[cfg(any(target_os = "macos", test))]
 mod macos_rules;
+pub mod portal;
 pub mod privilege;
 pub mod program;
 pub mod screens;
