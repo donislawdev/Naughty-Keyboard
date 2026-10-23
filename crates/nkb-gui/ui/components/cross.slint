@@ -1,0 +1,45 @@
+// The cross of the button that closes the palette on a system that gave the
+// window no frame of its own (`D145` point 38).
+//
+// A shape drawn here rather than a character, for the reason `Chevron` gives in
+// `chrome.slint`: a character is a quoted string, which a view may not hold
+// (`D58`), and its look would depend on the typeface. It takes the ink of the
+// button it stands in, so the cross and the frame answer the pointer together.
+//
+// Two strokes on a 10 by 10 box, kept one unit from its edge so the round ends
+// are not cut by it.
+
+import { Tokens } from "../tokens.slint";
+
+export component Cross inherits Rectangle {
+    in property <color> ink: Tokens.text-secondary;
+
+    width: Tokens.cross-size;
+    height: Tokens.cross-size;
+
+    Path {
+        width: Tokens.cross-size;
+        height: Tokens.cross-size;
+        viewbox-width: 10;
+        viewbox-height: 10;
+        stroke: root.ink;
+        stroke-width: Tokens.cross-stroke;
+        stroke-line-cap: round;
+        MoveTo {
+            x: 1;
+            y: 1;
+        }
+        LineTo {
+            x: 9;
+            y: 9;
+        }
+        MoveTo {
+            x: 9;
+            y: 1;
+        }
+        LineTo {
+            x: 1;
+            y: 9;
+        }
+    }
+}

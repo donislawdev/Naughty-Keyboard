@@ -2129,6 +2129,7 @@ mod tests {
             PaletteLabel::TurnOffClipboard,
             PaletteLabel::Collapse,
             PaletteLabel::Expand,
+            PaletteLabel::ClosePalette,
             PaletteLabel::EachValue,
             PaletteLabel::ClearLineFirst,
             PaletteLabel::InsertAtCursor,
@@ -2203,6 +2204,7 @@ mod tests {
                 | PaletteLabel::TurnOffClipboard
                 | PaletteLabel::Collapse
                 | PaletteLabel::Expand
+                | PaletteLabel::ClosePalette
                 | PaletteLabel::EachValue
                 | PaletteLabel::ClearLineFirst
                 | PaletteLabel::InsertAtCursor

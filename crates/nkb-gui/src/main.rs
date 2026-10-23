@@ -69,7 +69,7 @@ use nkb_gui::shortcuts::{Shortcuts, System};
 use nkb_gui::welcome::Welcome;
 use nkb_gui::{
     AboutWindow, Gallery, HeaderLinkKind, PacksWindow, Palette, ShortcutsWindow, WelcomeWindow,
-    focus, header_links, live, place,
+    focus, header_links, live, own_frame, place,
 };
 use slint::ComponentHandle;
 
@@ -141,9 +141,50 @@ fn start(request: Request) -> Result<(), slint::PlatformError> {
             // every window are set so that the palette does not take the front.
             #[cfg(target_os = "macos")]
             focus::select_backend()?;
-            run_palette(pack, route)
+            // Whether the system gives the palette's window no frame, so it draws its own
+            // (Linux on Wayland, `D145` point 38).
+            #[cfg(target_os = "linux")]
+            let own_frame = focus::select_backend()?;
+            #[cfg(not(target_os = "linux"))]
+            let own_frame = false;
+            run_palette(pack, route, own_frame)
         }
     }
+}
+
+/// The clicks of the palette that only ask the worker for something.
+///
+/// The worker holds the sequence and the settings, so each click sends a command,
+/// as the shortcut of the same action does.
+fn wire_clicks(palette: &Palette, choose: &std::sync::mpsc::Sender<live::Command>) {
+    palette.on_copy_next(copy_on_click(
+        palette,
+        choose,
+        Palette::get_next_key,
+        live::CopyButton::Next,
+    ));
+    palette.on_copy_last(copy_on_click(
+        palette,
+        choose,
+        Palette::get_last_key,
+        live::CopyButton::Last,
+    ));
+    // The report block's Copy is the report shortcut's action (`D121`).
+    palette.on_copy_report(ask_on_click(choose, live::Command::CopyReport));
+    // The arrows that walk the pack without typing (`D120`).
+    palette.on_back_one_value(ask_on_click(choose, live::Command::Back));
+    palette.on_skip_value(ask_on_click(choose, live::Command::Skip));
+    // Clipboard mode on and off (`D99`).
+    palette.on_choose_route(ask_for_way(choose, live::route_command));
+    palette.on_turn_off_clipboard(ask_on_click(choose, live::Command::TurnOffClipboard));
+    // Collapse and expand: the worker owns the switch and remembers it (`D84`).
+    palette.on_toggle_compact(ask_on_click(choose, live::Command::ToggleCompact));
+    // The list of shortcuts folds in the window at once, and the worker only
+    // remembers it (`D123`).
+    live::wire_shortcut_list(palette, choose);
+    // The way of meeting the field (`D101`) - the worker holds the choice, and
+    // its view brings back the way in effect.
+    palette.on_choose_clearing(ask_for_way(choose, live::clearing_command));
 }
 
 /// The palette, with the shortcuts driving it.
@@ -160,7 +201,11 @@ fn start(request: Request) -> Result<(), slint::PlatformError> {
 /// `Ctrl+Alt+N` and nine others taken from whoever wants them next, for as long
 /// as the process lingers. Joining also means a send in flight finishes writing
 /// rather than being cut in half inside somebody's field.
-fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::PlatformError> {
+fn run_palette(
+    pack: Option<String>,
+    route: RouteRequest,
+    own_frame: bool,
+) -> Result<(), slint::PlatformError> {
     // 🔴 BEFORE the window exists. Afterwards the answer is the palette itself,
     // and handing the focus back to ourselves is a no-op that reports success -
     // the failure shape this project keeps meeting (`slint.md` 2.17).
@@ -181,7 +226,13 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     let compact = live::starts_compact(settings.settings());
     // Asked here, before the settings move to the worker (UX7, `D103`).
     let welcome_due = settings.welcome_due();
+    #[cfg(target_os = "linux")]
+    let palette = focus::new_palette()?;
+    #[cfg(not(target_os = "linux"))]
     let palette = Palette::new()?;
+    if own_frame {
+        own_frame::wire(&palette);
+    }
     // Where the tester left it on this layout of screens (UX7). Asked after the
     // window is built, because from then on the process sees physical pixels
     // (`nkb_adapters::screens`), and before it is shown, because the backend
@@ -216,37 +267,7 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
         Arc::clone(&in_use),
         say_in(&palette),
     );
-    palette.on_copy_next(copy_on_click(
-        &palette,
-        &choose,
-        Palette::get_next_key,
-        live::CopyButton::Next,
-    ));
-    palette.on_copy_last(copy_on_click(
-        &palette,
-        &choose,
-        Palette::get_last_key,
-        live::CopyButton::Last,
-    ));
-    // The report block's Copy is the report shortcut's action (`D121`).
-    palette.on_copy_report(ask_on_click(&choose, live::Command::CopyReport));
-    // The arrows that walk the pack without typing (`D120`): the worker holds the
-    // sequence, so the click only asks - the same way the shortcuts go.
-    palette.on_back_one_value(ask_on_click(&choose, live::Command::Back));
-    palette.on_skip_value(ask_on_click(&choose, live::Command::Skip));
-    // Clipboard mode on and off (`D99`): the worker holds the sequence, so the
-    // click only asks.
-    palette.on_choose_route(ask_for_way(&choose, live::route_command));
-    palette.on_turn_off_clipboard(ask_on_click(&choose, live::Command::TurnOffClipboard));
-    // Collapse and expand: the worker owns the switch and remembers it (`D84`),
-    // so the click asks, as the shortcut does.
-    palette.on_toggle_compact(ask_on_click(&choose, live::Command::ToggleCompact));
-    // The list of shortcuts folds in the window at once, and the worker only
-    // remembers it (`D123`).
-    live::wire_shortcut_list(&palette, &choose);
-    // The way of meeting the field (`D101`) - the worker holds the choice, and
-    // its view brings back the way in effect.
-    palette.on_choose_clearing(ask_for_way(&choose, live::clearing_command));
+    wire_clicks(&palette, &choose);
     // The same way: created once, shown on request - and the one window the
     // worker's answers about shortcuts are delivered to (`shortcuts::tell`).
     let shortcuts = Shortcuts::new(

@@ -57,12 +57,23 @@ export component WindowFrame inherits Rectangle {
     // sections must not stretch to fill it. False for a window the tester
     // resizes, where `ZoneFill` takes the room.
     in property <bool> packed;
+    // A hairline round the window, for one the system gave no frame (`D145`
+    // point 38): without it the palette's edge is the difference between its
+    // ground and whatever lies under it, which on a dark desktop is nothing.
+    in property <bool> outlined;
 
     background: root.dimmed ? Tokens.surface.with-alpha(Tokens.alpha-resting) : Tokens.surface;
 
     VerticalLayout {
         alignment: root.packed ? LayoutAlignment.start : LayoutAlignment.stretch;
         @children
+    }
+
+    // Over the content, not under it: the header's and the status line's own
+    // grounds reach the edge and would paint over a line drawn beneath them.
+    if root.outlined: Rectangle {
+        border-width: Tokens.hairline;
+        border-color: Tokens.border-strong;
     }
 }
 
@@ -73,15 +84,32 @@ export component WindowFrame inherits Rectangle {
 // `opens`: the title is the way to choose another - the palette's pack, which
 // opens the value window. It then answers the pointer the way the product's
 // links do (`PickerOpener`) and carries the mark a drop-down list wears.
+//
+// `draggable`: the header is the way to move a window the system gave no frame
+// (`D145` point 38). What a press on it and a movement of the pointer come to is
+// handed on as the four numbers the toolkit reports, and the arithmetic is the
+// program's, not the view's: where the press was, where the pointer is now,
+// both in the header's own coordinates, which move with the window.
 export component WindowHeader inherits Rectangle {
     in property <string> title;
     in property <bool> opens;
     // What a click on the title does, as UI Automation reads it.
     in property <string> action;
     in property <bool> dimmed;
+    in property <bool> draggable;
     callback clicked();
+    callback dragged(length, length, length, length);
 
     height: band.preferred-height;
+
+    // Under the band, so a link or a button on it answers its own press and
+    // only the empty parts of the header start a drag.
+    if root.draggable: TouchArea {
+        mouse-cursor: move;
+        moved => {
+            root.dragged(self.pressed-x, self.pressed-y, self.mouse-x, self.mouse-y);
+        }
+    }
 
     band := ChromeBand {
         dimmed: root.dimmed;

@@ -212,6 +212,12 @@ export global Tokens {
     // proportion makes it, so it reads as a sign beside the word, not a picture.
     out property <length> heart-width: 11px;
     out property <length> heart-height: 10px;
+    // The cross of the button that closes a palette the system gave no frame
+    // (`D145` point 38): a square a little taller than a capital of the small
+    // text, so it reads as a sign and stays a mark. The stroke is thicker than
+    // a hairline, because two hairlines crossed at an angle break into dots.
+    out property <length> cross-size: 9px;
+    out property <length> cross-stroke: 1.5px;
     // The column at the left of a row in the value window's tree that holds
     // the fold mark (the owner's point 4). As wide as the largest spacing step
     // below a line of text: the whole column is the mark's target, and a

@@ -1,0 +1,111 @@
+// What the palette has to say, last in its window: the standing clipboard bar,
+// a send in progress, every sentence the tool has to say, and before the first
+// value how to send one.
+//
+// Whatever comes and goes here moves the bottom edge and nothing above it. In
+// BOTH states of the palette - rule 1 of this project forbids a palette that
+// goes quiet because the tester made it small - so every role in it is one the
+// resting state may show (D53): no muted text.
+//
+// A component of its own for the reason `HeaderActions` gives: `screens/
+// palette.slint` stands at the Slint ceiling of `D113`, and this section has a
+// state of its own - the four things it says come and go independently.
+//
+// The standing bar. Permanent by design: a message that disappears stops
+// existing while the limitation stays - `ux-spec.md` 2. The ACCENT tint, not the
+// risk one (D71): clipboard mode is a full route rather than a failure,
+// `ux-spec.md` 8 says so in words, and a bar in the risk colour would say the
+// opposite without any. The way out stands on it while the switch is out of
+// sight (D99).
+//
+// A send in progress (W3, D96, OBS-160): until this band a long send left the
+// palette showing what it showed before, for minutes, with nothing to say that
+// Escape stops it. No muted role here, the hint bar's own look included. The
+// counter and the bar are in one layout: neither wraps, so the trap of a wrapped
+// text behind an `if` (`slint.md` 2.23) has nothing to bite, and the two come
+// and go as one.
+//
+// The sentences: rule 1 of this project, a run that did less than it promised
+// says so, and this is where the palette says it. Before the first value, what
+// to do to send one: GUI rule 3, the palette has an empty state and it is on
+// screen from the first frame.
+
+import { Tokens } from "../tokens.slint";
+import { TextBody, TextCounter } from "typography.slint";
+import { Spacer, Pill, ProgressBar } from "chrome.slint";
+import { SmallButton } from "button.slint";
+import { WindowStatus } from "frame.slint";
+
+export component PaletteStatus inherits WindowStatus {
+    // The standing bar, and the way out of it while the switch is out of sight.
+    in property <bool> bar-said;
+    in property <string> clipboard-mode-label;
+    in property <bool> clipboard-mode-on;
+    in property <string> turn-off-label;
+    in property <string> turn-off-action;
+    // A send in progress: finished words, and the share of the bar already
+    // computed and clamped in the worker - the view draws, it does not count.
+    in property <bool> sending;
+    in property <string> sending-label;
+    in property <string> sending-counter;
+    in property <float> sending-fraction;
+    in property <string> sending-hint;
+    // The sentences, and the one before the first value.
+    in property <[string]> messages;
+    in property <bool> nothing-sent-said;
+    in property <string> no-value;
+    callback turn-off-clipboard();
+
+    if root.bar-said: HorizontalLayout {
+        spacing: Tokens.space-2;
+        // Centred on the button's row (`slint.md` 2.43).
+        VerticalLayout {
+            alignment: center;
+            Pill {
+                text: root.clipboard-mode-label;
+                tint: Tokens.accent;
+            }
+        }
+        Spacer { }
+        if root.clipboard-mode-on: SmallButton {
+            text: root.turn-off-label;
+            action: root.turn-off-action;
+            enabled: !root.sending;
+            clicked => {
+                root.turn-off-clipboard();
+            }
+        }
+    }
+
+    if root.sending: VerticalLayout {
+        spacing: Tokens.space-2;
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            TextBody {
+                text: root.sending-label;
+                overflow: elide;
+            }
+            Spacer { }
+            TextCounter {
+                text: root.sending-counter;
+            }
+        }
+        ProgressBar {
+            fraction: root.sending-fraction;
+        }
+    }
+    if root.sending: TextBody {
+        text: root.sending-hint;
+        wrap: word-wrap;
+    }
+
+    for message in root.messages: TextBody {
+        text: message;
+        wrap: word-wrap;
+    }
+
+    if root.nothing-sent-said: TextBody {
+        text: root.no-value;
+        wrap: word-wrap;
+    }
+}

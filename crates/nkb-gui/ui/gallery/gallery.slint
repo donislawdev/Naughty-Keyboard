@@ -51,6 +51,8 @@ import {
     LastSentBand,
     SwitchesBand,
     Heart,
+    Cross,
+    PaletteStatus,
     HeaderActions,
     HeaderLinkKind,
 } from "../components.slint";
@@ -476,6 +478,66 @@ export component Gallery inherits Window {
                     { kind: HeaderLinkKind.about, text: "About" },
                 ];
             }
+        }
+        // What the palette has to say, in the window's last band: the standing
+        // clipboard bar with the way out, a send in progress, a sentence, and
+        // the one before the first value - each as it comes alone.
+        WindowFrame {
+            packed: true;
+            PaletteStatus {
+                bar-said: true;
+                clipboard-mode-label: "clipboard mode";
+                clipboard-mode-on: true;
+                turn-off-label: "Turn off";
+                turn-off-action: "Turn off clipboard mode";
+            }
+            PaletteStatus {
+                sending: true;
+                sending-label: "Typing";
+                sending-counter: "6200 / 100000 units";
+                sending-fraction: 0.062;
+                sending-hint: "Press Esc to stop.";
+            }
+            PaletteStatus {
+                messages: ["A sentence the tool has to say, long enough to wrap onto a second line in the window."];
+                nothing-sent-said: true;
+                no-value: "Nothing sent yet.";
+            }
+        }
+        // The palette where the system gave its window no frame (Linux on
+        // Wayland, `D145` point 38): the header is the handle, the button at
+        // its end is the way to close it, and a hairline marks the edge. The
+        // pointer states need a pointer, so `palette_own_frame.rs` measures
+        // them on the real palette.
+        WindowFrame {
+            packed: true;
+            outlined: true;
+            WindowHeader {
+                title: "A palette with a frame of its own";
+                opens: true;
+                action: "Find a value";
+                draggable: true;
+                HeaderActions {
+                    counter: "3 / 12";
+                    toggle-label: "Collapse";
+                    links: [
+                        { kind: HeaderLinkKind.source-code, text: "GitHub" },
+                        { kind: HeaderLinkKind.donate, text: "Donate" },
+                        { kind: HeaderLinkKind.about, text: "About" },
+                    ];
+                    own-frame: true;
+                    close-label: "Close the palette";
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: Tokens.space-2;
+            TextSmallMuted { text: "cross"; }
+            Spacer { }
+            SmallButton { text: "Close the palette"; action: "Close the palette"; cross: true; }
+            SmallButton { text: "Close the palette"; action: "Close the palette"; cross: true; enabled: false; }
+            Cross { }
+            Cross { ink: Tokens.accent; }
         }
 
         Hairline {}

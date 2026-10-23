@@ -90,10 +90,6 @@
 
 import {
     Tokens,
-    TextBody,
-    TextCounter,
-    Spacer,
-    Pill,
     HintRow,
     HintBar,
     Marker,
@@ -103,9 +99,7 @@ import {
     HeaderLink,
     HeaderLinkKind,
     WindowFooter,
-    WindowStatus,
-    ProgressBar,
-    SmallButton,
+    PaletteStatus,
     NextBand,
     LastSentBand,
     SwitchesBand,
@@ -355,6 +349,13 @@ export component Palette inherits Window {
     // (`nothing_reaches_the_network`).
     in property <[HeaderLink]> header-links;
     callback open-link(HeaderLinkKind);
+    // The window has no frame of the system's, so the palette moves and closes
+    // by its own header (`D145` point 38, Linux on Wayland): the drag as the
+    // four numbers the header reports, and the button's words and click.
+    in property <bool> own-frame;
+    in property <string> close-label;
+    callback drag-header(length, length, length, length);
+    callback close-palette();
 
     title: root.window-title;
     icon: Tokens.app-icon;
@@ -362,6 +363,7 @@ export component Palette inherits Window {
     // (D53) - a window background would take it too, but one frame for every
     // window means one place that draws the ground.
     background: transparent;
+    no-frame: root.own-frame;
     always-on-top: true;
     width: Tokens.palette-width;
     // The palette follows its own content, in both states. Measured 2026-09-22:
@@ -381,6 +383,7 @@ export component Palette inherits Window {
     frame := WindowFrame {
         dimmed: root.compact && root.translucency-allowed;
         packed: true;
+        outlined: root.own-frame;
 
         // The pack and the counter: the palette's title, and at rest the one
         // band besides the status line. A pack name is somebody else's string
@@ -393,6 +396,10 @@ export component Palette inherits Window {
             opens: true;
             action: root.open-packs-label;
             dimmed: root.compact && root.translucency-allowed;
+            draggable: root.own-frame;
+            dragged(pressed-x, pressed-y, now-x, now-y) => {
+                root.drag-header(pressed-x, pressed-y, now-x, now-y);
+            }
             // The links, the counter, and Collapse or Expand - the reasons for
             // their order and states stand in the component.
             HeaderActions {
@@ -401,11 +408,16 @@ export component Palette inherits Window {
                 sending: root.sending;
                 toggle-label: root.compact ? root.expand-label : root.collapse-label;
                 links: root.header-links;
+                own-frame: root.own-frame;
+                close-label: root.close-label;
                 toggle-compact => {
                     root.toggle-compact();
                 }
                 open-link(kind) => {
                     root.open-link(kind);
+                }
+                close => {
+                    root.close-palette();
                 }
             }
         }
@@ -530,87 +542,30 @@ export component Palette inherits Window {
             }
         }
 
-        // What the tool has to say, last in the window: whatever comes and
-        // goes here moves the bottom edge and nothing above it. In BOTH
-        // states - rule 1 of this project forbids a palette that goes quiet
-        // because the tester made it small - so every role in it is one the
-        // resting state may show (D53): no muted text.
-        if root.bar-said || root.sending || root.messages.length > 0 || root.nothing-sent-said: WindowStatus {
+        // What the tool has to say, last in the window (`components/
+        // palette_status.slint`, where the reasons for its shape stand): in BOTH
+        // states of the palette, and whatever comes and goes there moves the
+        // bottom edge and nothing above it.
+        if root.bar-said || root.sending || root.messages.length > 0 || root.nothing-sent-said: PaletteStatus {
             dimmed: root.compact && root.translucency-allowed;
             // Collapsed, the line stands right under the header, whose rule
             // already parts them.
             divided: !root.compact;
-
-            // The standing bar. Permanent by design: a message that disappears
-            // stops existing while the limitation stays - `ux-spec.md` 2. The
-            // ACCENT tint, not the risk one (D71): clipboard mode is a full
-            // route rather than a failure, `ux-spec.md` 8 says so in words, and
-            // a bar in the risk colour would say the opposite without any. The
-            // way out stands on it while the switch is out of sight (D99).
-            if root.bar-said: HorizontalLayout {
-                spacing: Tokens.space-2;
-                // Centred on the button's row (`slint.md` 2.43).
-                VerticalLayout {
-                    alignment: center;
-                    Pill {
-                        text: root.clipboard-mode-label;
-                        tint: Tokens.accent;
-                    }
-                }
-                Spacer { }
-                if root.clipboard-mode-on: SmallButton {
-                    text: root.turn-off-label;
-                    action: root.turn-off-action;
-                    enabled: !root.sending;
-                    clicked => {
-                        root.turn-off-clipboard();
-                    }
-                }
-            }
-
-            // A send in progress (W3, D96, OBS-160): until this band a long
-            // send left the palette showing what it showed before, for
-            // minutes, with nothing to say that Escape stops it. No muted role
-            // here, the hint bar's own look included.
-            //
-            // The counter and the bar in one layout: neither wraps, so the
-            // trap of a wrapped text behind an `if` (`slint.md` 2.23) has
-            // nothing to bite, and the two come and go as one.
-            if root.sending: VerticalLayout {
-                spacing: Tokens.space-2;
-                HorizontalLayout {
-                    spacing: Tokens.space-2;
-                    TextBody {
-                        text: root.sending-label;
-                        overflow: elide;
-                    }
-                    Spacer { }
-                    TextCounter {
-                        text: root.sending-counter;
-                    }
-                }
-                ProgressBar {
-                    fraction: root.sending-fraction;
-                }
-            }
-            if root.sending: TextBody {
-                text: root.sending-hint;
-                wrap: word-wrap;
-            }
-
-            // Rule 1 of this project: a run that did less than it promised
-            // says so, and this is where the palette says it.
-            for message in root.messages: TextBody {
-                text: message;
-                wrap: word-wrap;
-            }
-
-            // Before the first value: what to do to send one. GUI rule 3: the
-            // palette has an empty state and it is on screen from the first
-            // frame.
-            if root.nothing-sent-said: TextBody {
-                text: root.no-value;
-                wrap: word-wrap;
+            bar-said: root.bar-said;
+            clipboard-mode-label: root.clipboard-mode-label;
+            clipboard-mode-on: root.clipboard-mode-on;
+            turn-off-label: root.turn-off-label;
+            turn-off-action: root.turn-off-action;
+            sending: root.sending;
+            sending-label: root.sending-label;
+            sending-counter: root.sending-counter;
+            sending-fraction: root.sending-fraction;
+            sending-hint: root.sending-hint;
+            messages: root.messages;
+            nothing-sent-said: root.nothing-sent-said;
+            no-value: root.no-value;
+            turn-off-clipboard => {
+                root.turn-off-clipboard();
             }
         }
     }

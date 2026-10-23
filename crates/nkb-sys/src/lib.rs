@@ -49,6 +49,8 @@ mod linux_hotkeys;
 mod linux_ibus_rules;
 #[cfg(any(target_os = "linux", test))]
 mod linux_rules;
+#[cfg(any(target_os = "linux", test))]
+mod linux_window_rules;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(any(target_os = "macos", test))]
