@@ -13,7 +13,7 @@
 //! keys. This module knows nothing of any system, which is what keeps it in the
 //! core.
 //!
-//! # Why the family is `Alt+Shift` and not `Ctrl+Alt`
+//! # Why the family is `Alt+Shift` and not `Ctrl+Alt` - on Windows
 //!
 //! Until `D82` every default was `Ctrl+Alt+<key>`, as `ux-spec.md` 3 first
 //! proposed. On Windows `Ctrl+Alt` IS `AltGr`, and a global shortcut matches the
@@ -28,24 +28,30 @@
 //! `Ctrl` and the combination then no longer matches. Measured free of other
 //! applications on the same machine. What it still costs is named in `D82`.
 //!
-//! # Two conventions, both as data
+//! # Three conventions, all as data
 //!
 //! macOS keeps `Cmd+Alt+<key>` (`ux-spec.md` 3): there `Option` types
 //! characters and `Command` does not. Until `D82` the macOS table did not exist
 //! and the registering adapter swapped `ctrl` for the Command bit on every
 //! chord. That worked for a table whose every entry held `ctrl`, and it would
-//! have rewritten a chord the tester chose. So both tables live here, and the
+//! have rewritten a chord the tester chose. So the tables live here, and the
 //! layer that knows the system picks one - this crate has no `cfg` and keeps
 //! none.
+//!
+//! Linux goes back to `Ctrl+Alt+<key>` (`D145`, the owner's choice). The reason
+//! `D82` left it is Windows-only: on X11 `AltGr` is `ISO_Level3_Shift`, a
+//! modifier of its own, so `Ctrl+Alt` types nothing. And `Alt+Shift` is the chord
+//! `grp:alt_shift_toggle` and three other layout toggles take whole, before a
+//! grab hears it (`OBS-215`).
 //!
 //! # The key that types is a fact of the convention too
 //!
 //! A global shortcut takes its chord from every application, so a chord a
 //! keyboard layout types a character on takes that character from them all. On
 //! Windows the chord is `Ctrl+Alt` (`AltGr`, `D88`), on macOS `Option` with no
-//! `Command` and no `Control` (`D141`). The core holds the SHAPE of that chord
-//! ([`Convention::can_type`]) and the system answers which character, if any, a
-//! layout types there: [`Bindings::typing_refusal`].
+//! `Command` and no `Control` (`D141`), on Linux there is none. The core holds
+//! the SHAPE of that chord ([`Convention::can_type`]) and the system answers
+//! which character, if any, a layout types there: [`Bindings::typing_refusal`].
 
 /// One of the global actions the palette answers to.
 ///
@@ -263,12 +269,23 @@ pub struct HotkeyChord {
 }
 
 impl HotkeyChord {
-    /// The `Alt+Shift+<key>` shape every default uses on Windows and Linux.
+    /// The `Alt+Shift+<key>` shape every default uses on Windows.
     const fn alt_shift(key: HotkeyKey) -> Self {
         Self {
             ctrl: false,
             alt: true,
             shift: true,
+            win: false,
+            key,
+        }
+    }
+
+    /// The `Ctrl+Alt+<key>` shape every default uses on Linux.
+    const fn ctrl_alt(key: HotkeyKey) -> Self {
+        Self {
+            ctrl: true,
+            alt: true,
+            shift: false,
             win: false,
             key,
         }
@@ -293,9 +310,10 @@ impl HotkeyChord {
     /// `Alt`, `Shift`, `Win`), then the key, joined by `+`, so the same chord is
     /// always the same text and [`HotkeyChord::parse`] reads it back unchanged.
     ///
-    /// These are the Windows and Linux words, and the words of the settings file
-    /// on every system. What the screen says on macOS, where the tester calls
-    /// the keys Option and Command, is [`Self::display`].
+    /// These are the Windows words, and the words of the settings file on every
+    /// system. What the screen says on macOS, where the tester calls the keys
+    /// Option and Command, and on Linux, where the Windows key is Super, is
+    /// [`Self::display`].
     #[must_use]
     pub fn text(&self) -> String {
         let mut out = String::new();
@@ -318,30 +336,28 @@ impl HotkeyChord {
     ///
     /// The same chord and the same order of modifiers as [`Self::text`] -
     /// Control, Option, Shift, Command is the order Apple writes them in too -
-    /// with the words of the system: `Option+Command+N`. Every word is one
-    /// [`Self::parse`] reads back, so the screen still shows what the tester
-    /// writes to change a shortcut (`OBS-115`).
+    /// with the words of the system: `Option+Command+N`, `Ctrl+Alt+Super+N`. Every
+    /// word is one [`Self::parse`] reads back, so the screen still shows what the
+    /// tester writes to change a shortcut (`OBS-115`).
     #[must_use]
     pub fn display(&self, convention: Convention) -> String {
-        match convention {
-            Convention::WindowsAndLinux => self.text(),
-            Convention::MacOs => {
-                let mut out = String::new();
-                for (held, name) in [
-                    (self.ctrl, "Control"),
-                    (self.alt, "Option"),
-                    (self.shift, "Shift"),
-                    (self.win, "Command"),
-                ] {
-                    if held {
-                        out.push_str(name);
-                        out.push('+');
-                    }
-                }
-                out.push_str(self.key.name());
-                out
+        let names = match convention {
+            Convention::Windows => return self.text(),
+            Convention::Linux => ["Ctrl", "Alt", "Shift", "Super"],
+            Convention::MacOs => ["Control", "Option", "Shift", "Command"],
+        };
+        let mut out = String::new();
+        for (held, name) in [self.ctrl, self.alt, self.shift, self.win]
+            .into_iter()
+            .zip(names)
+        {
+            if held {
+                out.push_str(name);
+                out.push('+');
             }
         }
+        out.push_str(self.key.name());
+        out
     }
 
     /// Reads a shortcut written as text.
@@ -518,8 +534,10 @@ pub enum ChordProblem {
 /// Chosen by the layer that knows the system. The core only holds the tables.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Convention {
-    /// `Alt+Shift+<key>` - Windows and Linux.
-    WindowsAndLinux,
+    /// `Alt+Shift+<key>` - Windows.
+    Windows,
+    /// `Ctrl+Alt+<key>` - Linux, where `AltGr` is a key of its own.
+    Linux,
     /// `Cmd+Alt+<key>` - macOS.
     MacOs,
 }
@@ -532,12 +550,18 @@ impl Convention {
     /// ([`HotkeyChord::could_type_with_option`]). The two shapes exclude each
     /// other, and each system asks only its own.
     ///
+    /// Linux asks nothing: `AltGr` is `ISO_Level3_Shift` there, a modifier of its
+    /// own that a grab on `Ctrl` and `Alt` does not match, so no chord takes a
+    /// character from an application (measured on X11 with the Polish layout,
+    /// `D145`).
+    ///
     /// Whether the layout DOES type one is the system's answer, asked only when
     /// this one is true.
     #[must_use]
     pub const fn can_type(self, chord: &HotkeyChord) -> bool {
         match self {
-            Convention::WindowsAndLinux => chord.could_be_altgr(),
+            Convention::Windows => chord.could_be_altgr(),
+            Convention::Linux => false,
             Convention::MacOs => chord.could_type_with_option(),
         }
     }
@@ -548,8 +572,9 @@ impl Convention {
 /// One entry per action, in the order of [`HotkeyAction::ALL`]. The modifiers
 /// differ between the conventions, so a tester who moves between systems keeps
 /// the letters - all but the one [`macos_key`] names. The letters are the ones
-/// `ux-spec.md` 3 chose, so the move from `Ctrl+Alt` changed the family and
-/// nothing else.
+/// `ux-spec.md` 3 chose, so the move from `Ctrl+Alt` to `Alt+Shift` on Windows
+/// changed the family and nothing else, and Linux went back to `Ctrl+Alt` with
+/// the same letters.
 ///
 /// ⊕ The four of `D120` go in pairs of neighbouring keys, back on the left and
 /// forward on the right: `A` | `S` for a value, `Z` | `X` for a pack.
@@ -586,7 +611,7 @@ const fn macos_key(action: HotkeyAction, key: HotkeyKey) -> HotkeyKey {
     }
 }
 
-/// One convention's table, built from [`DEFAULT_KEYS`] so the two cannot
+/// One convention's table, built from [`DEFAULT_KEYS`] so the three cannot
 /// disagree about which letter belongs to which action - [`macos_key`] apart.
 const fn table(convention: Convention) -> [(HotkeyAction, HotkeyChord); HotkeyAction::COUNT] {
     let mut out = [(
@@ -597,7 +622,8 @@ const fn table(convention: Convention) -> [(HotkeyAction, HotkeyChord); HotkeyAc
     while index < DEFAULT_KEYS.len() {
         let (action, key) = DEFAULT_KEYS[index];
         let chord = match convention {
-            Convention::WindowsAndLinux => HotkeyChord::alt_shift(key),
+            Convention::Windows => HotkeyChord::alt_shift(key),
+            Convention::Linux => HotkeyChord::ctrl_alt(key),
             Convention::MacOs => HotkeyChord::command_alt(macos_key(action, key)),
         };
         out[index] = (action, chord);
@@ -606,7 +632,7 @@ const fn table(convention: Convention) -> [(HotkeyAction, HotkeyChord); HotkeyAc
     out
 }
 
-/// The default shortcut for every action, in the Windows and Linux convention.
+/// The default shortcut for every action, in the Windows convention.
 ///
 /// Every default is `Alt+Shift+<key>`: `ux-spec.md` 3 keeps them one family so
 /// a tester learns them as a set rather than as so many separate things. The table
@@ -615,7 +641,16 @@ const fn table(convention: Convention) -> [(HotkeyAction, HotkeyChord); HotkeyAc
 /// would be a registration that reports the second action as `Taken` against the
 /// first.
 pub const DEFAULT_BINDINGS: [(HotkeyAction, HotkeyChord); HotkeyAction::COUNT] =
-    table(Convention::WindowsAndLinux);
+    table(Convention::Windows);
+
+/// The same table in the Linux convention, `Ctrl+Alt+<key>`.
+///
+/// Not `Alt+Shift` because the layout toggles of X11 (`grp:alt_shift_toggle` and
+/// the others the server consumes before a grab hears them) take that chord
+/// whole, and a shortcut registered on it never fires (`OBS-215`, `D145`).
+/// `Ctrl+Alt` is taken only by `grp:ctrl_alt_toggle`, which is rare.
+pub const LINUX_DEFAULT_BINDINGS: [(HotkeyAction, HotkeyChord); HotkeyAction::COUNT] =
+    table(Convention::Linux);
 
 /// The same table in the macOS convention, `Cmd+Alt+<key>`.
 pub const MACOS_DEFAULT_BINDINGS: [(HotkeyAction, HotkeyChord); HotkeyAction::COUNT] =
@@ -627,7 +662,8 @@ pub const fn default_bindings(
     convention: Convention,
 ) -> &'static [(HotkeyAction, HotkeyChord); HotkeyAction::COUNT] {
     match convention {
-        Convention::WindowsAndLinux => &DEFAULT_BINDINGS,
+        Convention::Windows => &DEFAULT_BINDINGS,
+        Convention::Linux => &LINUX_DEFAULT_BINDINGS,
         Convention::MacOs => &MACOS_DEFAULT_BINDINGS,
     }
 }
@@ -698,7 +734,9 @@ impl Bindings {
         let may_type = self.convention.can_type(&chord);
         let character = may_type.then(|| types(chord)).flatten()?;
         Some(match self.convention {
-            Convention::WindowsAndLinux => Refusal::TypesCharacter(character),
+            // Linux never gets here: `can_type` is false there, so `character` is
+            // `None`. The arm names the refusal that would be true of `Ctrl+Alt`.
+            Convention::Windows | Convention::Linux => Refusal::TypesCharacter(character),
             Convention::MacOs => Refusal::OptionTypesCharacter(character),
         })
     }
@@ -847,7 +885,8 @@ mod tests {
             .find_map(|(candidate, chord)| (*candidate == action).then_some(*chord))
     }
 
-    const CONVENTIONS: [Convention; 2] = [Convention::WindowsAndLinux, Convention::MacOs];
+    const CONVENTIONS: [Convention; 3] =
+        [Convention::Windows, Convention::Linux, Convention::MacOs];
 
     #[test]
     fn every_action_has_exactly_one_default() {
@@ -888,7 +927,7 @@ mod tests {
     }
 
     #[test]
-    fn every_default_on_windows_and_linux_is_alt_shift_and_never_ctrl_alt() {
+    fn every_default_on_windows_is_alt_shift_and_never_ctrl_alt() {
         // D82: Ctrl+Alt is AltGr on Windows, so a default holding both would
         // swallow a letter of somebody's alphabet in every application while the
         // palette runs. One family, so a tester can guess the rest from one.
@@ -898,6 +937,35 @@ mod tests {
                 "{action:?} default is not Alt+Shift: {chord:?}"
             );
         }
+    }
+
+    #[test]
+    fn every_default_on_linux_is_ctrl_alt_and_never_alt_shift() {
+        // D145: the layout toggles of X11 take Alt+Shift whole (`OBS-215`), and
+        // AltGr is a key of its own there, so Ctrl+Alt takes nothing from a layout.
+        for (action, chord) in LINUX_DEFAULT_BINDINGS {
+            assert!(
+                chord.ctrl && chord.alt && !chord.shift && !chord.win,
+                "{action:?} Linux default is not Ctrl+Alt: {chord:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn each_convention_answers_with_its_own_table() {
+        for (convention, table) in [
+            (Convention::Windows, &DEFAULT_BINDINGS),
+            (Convention::Linux, &LINUX_DEFAULT_BINDINGS),
+            (Convention::MacOs, &MACOS_DEFAULT_BINDINGS),
+        ] {
+            assert_eq!(default_bindings(convention), table, "{convention:?}");
+            assert_eq!(
+                Bindings::defaults(convention).as_slice(),
+                table,
+                "{convention:?}"
+            );
+        }
+        assert_eq!(LINUX_DEFAULT_BINDINGS[0].1.text(), "Ctrl+Alt+N");
     }
 
     #[test]
@@ -912,7 +980,7 @@ mod tests {
     }
 
     #[test]
-    fn both_conventions_bind_the_same_key_to_the_same_action_but_the_one_the_system_holds() {
+    fn the_conventions_bind_the_same_key_to_the_same_action_but_the_one_the_system_holds() {
         // Only the modifiers differ, so a tester moving between systems keeps
         // the letters - and a table edited on one side only is caught here. The
         // exception is the value window: `Option+Command+Space` is Finder's.
@@ -926,6 +994,12 @@ mod tests {
             } else {
                 assert_eq!(chord_a.key, chord_b.key, "{action_a:?}");
             }
+        }
+        for ((action_a, chord_a), (action_b, chord_b)) in
+            DEFAULT_BINDINGS.iter().zip(LINUX_DEFAULT_BINDINGS.iter())
+        {
+            assert_eq!(action_a, action_b);
+            assert_eq!(chord_a.key, chord_b.key, "{action_a:?}");
         }
     }
 
@@ -1009,13 +1083,22 @@ mod tests {
             all.display(Convention::MacOs),
             "Control+Option+Shift+Command+F12"
         );
-        assert_eq!(all.display(Convention::WindowsAndLinux), all.text());
+        assert_eq!(all.display(Convention::Windows), all.text());
+        assert_eq!(
+            all.display(Convention::Linux),
+            "Ctrl+Alt+Shift+Super+F12",
+            "a Linux keyboard has a Super key, not a Win key"
+        );
         assert_eq!(
             MACOS_DEFAULT_BINDINGS[0].1.display(Convention::MacOs),
             "Option+Command+N"
         );
+        assert_eq!(
+            LINUX_DEFAULT_BINDINGS[0].1.display(Convention::Linux),
+            "Ctrl+Alt+N"
+        );
         // What the screen shows is what the tester may write to change it, for
-        // every key, every combination of modifiers and either convention.
+        // every key, every combination of modifiers and every convention.
         for key in HotkeyKey::ALL {
             for bits in 0u8..16 {
                 let shown = chord(
@@ -1025,7 +1108,7 @@ mod tests {
                     bits & 8 != 0,
                     *key,
                 );
-                for convention in [Convention::WindowsAndLinux, Convention::MacOs] {
+                for convention in CONVENTIONS {
                     assert_eq!(
                         HotkeyChord::parse(&shown.display(convention)),
                         Ok(shown),
@@ -1124,7 +1207,7 @@ mod tests {
         (chord.key == HotkeyKey::A).then_some('\u{105}')
     }
 
-    const DEFAULTS: Bindings = Bindings::defaults(Convention::WindowsAndLinux);
+    const DEFAULTS: Bindings = Bindings::defaults(Convention::Windows);
 
     #[test]
     fn a_ctrl_alt_chord_the_layout_types_on_is_refused_with_the_character() {
@@ -1446,7 +1529,8 @@ mod tests {
                 "{text}"
             );
         }
-        for convention in CONVENTIONS {
+        // Linux defaults have the shape on purpose: there it is not `AltGr`.
+        for convention in [Convention::Windows, Convention::MacOs] {
             for (action, default) in default_bindings(convention) {
                 assert!(!default.could_be_altgr(), "{convention:?} {action:?}");
             }
@@ -1612,9 +1696,35 @@ mod tests {
     fn the_question_of_each_convention_is_the_shape_of_its_own_key() {
         let altgr = HotkeyChord::parse("Ctrl+Alt+N").expect("reads");
         let option = HotkeyChord::parse("Option+N").expect("reads");
-        assert!(Convention::WindowsAndLinux.can_type(&altgr));
-        assert!(!Convention::WindowsAndLinux.can_type(&option));
+        assert!(Convention::Windows.can_type(&altgr));
+        assert!(!Convention::Windows.can_type(&option));
         assert!(Convention::MacOs.can_type(&option));
         assert!(!Convention::MacOs.can_type(&altgr));
+        // `AltGr` is a key of its own on Linux and `Alt` types nothing there.
+        assert!(!Convention::Linux.can_type(&altgr));
+        assert!(!Convention::Linux.can_type(&option));
+    }
+
+    #[test]
+    fn a_layout_is_never_asked_about_a_chord_on_linux() {
+        // `altgr_on_a` answers for any chord it is asked about, so a refusal here
+        // would mean the core asked.
+        let linux = Bindings::defaults(Convention::Linux);
+        // The first has the shape `AltGr` has on Windows, so the same wish there
+        // is refused with the character.
+        let ctrl_alt_shift_a = HotkeyChord::parse("Ctrl+Alt+Shift+A").expect("reads");
+        let alt_a = HotkeyChord::parse("Alt+A").expect("reads");
+        assert_eq!(
+            DEFAULTS
+                .with(&[(HotkeyAction::NextValue, ctrl_alt_shift_a)], &altgr_on_a)
+                .1
+                .len(),
+            1
+        );
+        for wanted in [ctrl_alt_shift_a, alt_a] {
+            let (bindings, refused) = linux.with(&[(HotkeyAction::NextValue, wanted)], &altgr_on_a);
+            assert_eq!(refused, vec![], "{wanted:?}");
+            assert_eq!(bindings.chord(HotkeyAction::NextValue), wanted);
+        }
     }
 }

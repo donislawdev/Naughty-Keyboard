@@ -31,8 +31,10 @@ use crate::shortcut_claim::Claims;
 /// because `nkb_core::hotkeys` holds both tables and no `cfg` (`D82`).
 pub const CONVENTION: Convention = if cfg!(target_os = "macos") {
     Convention::MacOs
+} else if cfg!(target_os = "linux") {
+    Convention::Linux
 } else {
-    Convention::WindowsAndLinux
+    Convention::Windows
 };
 
 /// The default shortcuts on the system this build runs on - what a palette
@@ -44,8 +46,8 @@ pub const fn default_bindings() -> Bindings {
 }
 
 /// The character a keyboard layout of this system types for `chord`, as the key
-/// that makes it type: `AltGr` on Windows, `Option` on macOS - the answer
-/// `KeptSettings::bindings` hands to the core (`K4d`, `D141`).
+/// that makes it type: `AltGr` on Windows, `Option` on macOS, none on Linux - the
+/// answer `KeptSettings::bindings` hands to the core (`K4d`, `D141`).
 ///
 /// Asks `nkb-sys` about that key on the chord's key, with `Shift` when the chord
 /// has it. It does not look at the chord's own modifiers: whether a chord CAN
@@ -55,7 +57,10 @@ pub const fn default_bindings() -> Bindings {
 pub fn layout_character(chord: HotkeyChord) -> Option<char> {
     let key = virtual_key(chord.key);
     match CONVENTION {
-        Convention::WindowsAndLinux => nkb_sys::layout::altgr_character(key, chord.shift),
+        Convention::Windows => nkb_sys::layout::altgr_character(key, chord.shift),
+        // The core never asks on Linux (`can_type` is false there), and a layout
+        // has no key that turns `Ctrl+Alt` into a character.
+        Convention::Linux => None,
         Convention::MacOs => nkb_sys::layout::option_character(key, chord.shift),
     }
 }
@@ -507,6 +512,8 @@ mod tests {
     fn this_build_uses_the_table_of_its_own_system() {
         let expected = if cfg!(target_os = "macos") {
             &nkb_core::hotkeys::MACOS_DEFAULT_BINDINGS
+        } else if cfg!(target_os = "linux") {
+            &nkb_core::hotkeys::LINUX_DEFAULT_BINDINGS
         } else {
             &DEFAULT_BINDINGS
         };

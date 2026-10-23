@@ -18,11 +18,12 @@ Changes wait under Unreleased until then.
   through an input method, such as xterm with IBus, can lose the end of a long run of those. Nothing
   is sent in a Wayland session, for a remote display, or while Caps Lock is on or a modifier is held.
   `--clear` is not available yet.
-- The palette runs under an X11 session. Its shortcuts work while another program is in front, and
-  a click on the palette leaves the keyboard where it was. Values go in the way `nkb send` puts them in.
-  A layout that switches on the same two keys as a shortcut, as `Alt+Shift` often does, takes that
-  shortcut from the palette, and the palette says it could not register it. Nothing works in a Wayland
-  session. Remembering the window's place and recording a new shortcut come later.
+- The palette runs under an X11 session. Its shortcuts, `Ctrl+Alt` with a letter, work while another
+  program is in front, and a click on the palette leaves the keyboard where it was. Values go in the
+  way `nkb send` puts them in. A layout that switches on the same two keys as a shortcut, as
+  `Ctrl+Alt` rarely does, takes that shortcut from the palette, and the palette says it could not
+  register it. Nothing works in a Wayland session. Remembering the window's place and recording a
+  new shortcut come later.
 - On macOS the palette and `nkb send` now say when the system's text substitutions could have changed
   a value that went in: a capital letter at the start of a sentence, a period after two spaces, and
   a straight quote made curly in a rich text document. The field can then hold something other than

@@ -30,12 +30,13 @@ pub(super) fn pattern_typing_refusal(why: Refusal) -> Option<&'static str> {
 
 /// The modifiers a global shortcut has to hold one of, named as the keyboard of
 /// this system names them - what fills `{modifiers}` in the two sentences about a
-/// chord with none. Windows and Linux print `Ctrl`, `Alt` and `Win`, a Mac
-/// `Control`, `Option` and `Command` (`OBS-196`: the Windows words were said to a
-/// Mac, which has no key called either `Alt` or `Win`).
+/// chord with none. Windows prints `Ctrl`, `Alt` and `Win`, Linux `Ctrl`, `Alt`
+/// and `Super`, a Mac `Control`, `Option` and `Command` (`OBS-196`: the Windows
+/// words were said to a Mac, which has no key called either `Alt` or `Win`).
 pub(super) const fn command_modifiers() -> &'static str {
     match CONVENTION {
-        Convention::WindowsAndLinux => "Ctrl, Alt or Win",
+        Convention::Windows => "Ctrl, Alt or Win",
+        Convention::Linux => "Ctrl, Alt or Super",
         Convention::MacOs => "Control, Option or Command",
     }
 }
@@ -48,7 +49,8 @@ mod tests {
     fn the_modifiers_are_named_by_the_keyboard_of_the_system() {
         let named = command_modifiers();
         match CONVENTION {
-            Convention::WindowsAndLinux => assert_eq!(named, "Ctrl, Alt or Win"),
+            Convention::Windows => assert_eq!(named, "Ctrl, Alt or Win"),
+            Convention::Linux => assert_eq!(named, "Ctrl, Alt or Super"),
             Convention::MacOs => assert_eq!(named, "Control, Option or Command"),
         }
         // Whatever the system, every word is one the chord text prints, so the

@@ -1075,7 +1075,7 @@ mod tests {
         });
         let (kept, said) = KeptSettings::open(&store);
         assert!(said.is_empty(), "{said:?}");
-        let defaults = Bindings::defaults(Convention::WindowsAndLinux);
+        let defaults = Bindings::defaults(Convention::Windows);
         // The system's answer goes through untouched: `AltGr+A` types `U+0105`.
         let polish = |wanted: HotkeyChord| (wanted == chord("Ctrl+Alt+A")).then_some('\u{105}');
         let (bindings, messages) = kept.bindings(defaults, &polish);
@@ -1113,7 +1113,7 @@ mod tests {
         HotkeyChord::parse(text).unwrap_or_else(|error| panic!("{text}: {error:?}"))
     }
 
-    const DEFAULTS: Bindings = Bindings::defaults(nkb_core::hotkeys::Convention::WindowsAndLinux);
+    const DEFAULTS: Bindings = Bindings::defaults(nkb_core::hotkeys::Convention::Windows);
 
     fn no_layout(_: HotkeyChord) -> Option<char> {
         None
