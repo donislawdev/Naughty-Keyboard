@@ -63,7 +63,7 @@ impl KeptFocus {
     /// Lets a caller say so once instead of repeating a `cfg`, and lets a test
     /// ask the question without knowing which system it is on.
     #[must_use]
-    pub const fn possible() -> bool {
+    pub fn possible() -> bool {
         can_refuse_focus()
     }
 
@@ -103,6 +103,23 @@ impl KeptFocus {
         let window = WindowRef(window.ok_or(FocusError::HandleUnavailable)?);
         refuse_activation(window)?;
         hand_back_foreground(window, self.previous)
+    }
+
+    /// Gives the focus back once more, if the window took it again: no flag, only the
+    /// hand-back of [`Self::refuse_for`], which does nothing when the window does not hold
+    /// the focus.
+    ///
+    /// On X11 the toolkit asks the window manager to activate a window as it shows it, and
+    /// that request comes AFTER the handle exists (`nkb-sys`, `linux/window.rs`), so the
+    /// hand-back of `refuse_for` can find the focus not yet taken. The caller that knows
+    /// there is such a request coming asks again for a moment.
+    ///
+    /// # Errors
+    ///
+    /// The same as `refuse_for` for its second half.
+    pub fn hand_back_for(self, window: Option<u64>) -> Result<(), FocusError> {
+        let ours = window.map(WindowRef).ok_or(FocusError::HandleUnavailable)?;
+        hand_back_foreground(ours, self.previous)
     }
 }
 
@@ -199,6 +216,27 @@ mod tests {
         let lent = LentFocus::remember();
         assert_eq!(lent.take_for(None), Err(FocusError::HandleUnavailable));
         assert_eq!(lent.give_back(None), Err(FocusError::HandleUnavailable));
+    }
+
+    #[test]
+    fn handing_back_again_with_no_handle_says_the_handle_is_missing_on_every_system() {
+        // The answer of the repeated hand-back at the end of the settling is shown to the
+        // tester, so a missing handle must not read as a hand-back that went well.
+        assert_eq!(
+            KeptFocus::remember().hand_back_for(None),
+            Err(FocusError::HandleUnavailable)
+        );
+    }
+
+    #[test]
+    fn handing_back_again_for_a_window_that_holds_nothing_is_not_a_failure() {
+        // Zero is no window, so it never holds the focus and there is nothing to give back.
+        let outcome = KeptFocus::remember().hand_back_for(Some(0));
+        if KeptFocus::possible() {
+            assert_eq!(outcome, Ok(()));
+        } else {
+            assert!(matches!(outcome, Err(FocusError::Unsupported { .. })));
+        }
     }
 
     #[test]

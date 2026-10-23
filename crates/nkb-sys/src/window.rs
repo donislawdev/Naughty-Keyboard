@@ -334,17 +334,16 @@ mod platform {
 #[cfg(target_os = "macos")]
 use crate::macos::window as platform;
 
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(target_os = "linux")]
+use crate::linux::window as platform;
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 mod platform {
     use super::{FocusError, KeyMenuError, WindowRef};
 
     /// Named rather than "this platform", so the message says something the
     /// reader can act on.
-    const SYSTEM: &str = if cfg!(target_os = "linux") {
-        "Linux"
-    } else {
-        "this system"
-    };
+    const SYSTEM: &str = "this system";
 
     pub fn refuse_activation(_window: WindowRef) -> Result<(), FocusError> {
         Err(FocusError::Unsupported { system: SYSTEM })
@@ -370,9 +369,19 @@ mod platform {
 ///
 /// Exists for the same reason as [`crate::can_send`]: so a caller can say so
 /// once, in one place, rather than repeating a `cfg` at every call site.
+///
+/// On Linux that is the question of [`crate::hotkey::can_register`]: a local X server and
+/// not XWayland, whose windows are not the ones a Wayland compositor gives the keyboard to.
 #[must_use]
-pub const fn can_refuse_focus() -> bool {
-    cfg!(any(windows, target_os = "macos"))
+pub fn can_refuse_focus() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::route_refusal().is_none()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        cfg!(any(windows, target_os = "macos"))
+    }
 }
 
 #[cfg(test)]

@@ -68,6 +68,17 @@ pub const HANDLE_WAIT: Duration = Duration::from_secs(3);
 /// the 258 ms the handle costs anyway, long enough that the poll is not a spin.
 pub(crate) const POLL: Duration = Duration::from_millis(16);
 
+/// How long, after the palette refused the focus, it is handed back again when the
+/// palette has taken it once more. Only where the toolkit's own request to be activated
+/// is known to arrive after the handle does, which is X11 (`nkb-sys`, `linux/window.rs`):
+/// measured on `openbox` the palette was made active 10 to 40 ms after the properties
+/// were set, three times of three. The measurements of the other systems do not show it.
+const SETTLE: Duration = if cfg!(target_os = "linux") {
+    Duration::from_millis(600)
+} else {
+    Duration::ZERO
+};
+
 /// A sentence that stays true for the rest of the run, shared with the worker.
 ///
 /// `None` while nothing is wrong, which is the ordinary case and costs a lock
@@ -109,6 +120,9 @@ pub fn refuse_focus(
     let weak = palette.as_weak();
     let standing = Arc::clone(standing);
     let started = std::time::Instant::now();
+    // The moment the focus was refused, and the handle, once there is one: from then on
+    // the timer hands the focus back for `SETTLE` more.
+    let mut settling: Option<(std::time::Instant, Option<u64>)> = None;
     // `Rc`, not `Arc`: everything below runs on the main thread, and a `slint::Timer`
     // is neither `Send` nor `Sync`. An `Arc` here would claim a sharing that the
     // type cannot honour, which clippy says in as many words.
@@ -119,12 +133,38 @@ pub fn refuse_focus(
             itself.stop();
             return;
         };
+        if let Some((since, handle)) = settling {
+            let over = since.elapsed() >= SETTLE;
+            // An answer is wanted only at the end: while the toolkit's request may still
+            // be on its way, "the palette holds the focus" is not yet a failure.
+            let answer = kept.hand_back_for(handle);
+            if !over {
+                return;
+            }
+            itself.stop();
+            if let Err(error) = answer {
+                say(
+                    &palette,
+                    &standing,
+                    &i18n::environment(Environment::FocusNotRefused, &error.to_string()),
+                );
+            }
+            if let Some(then) = then.take() {
+                then();
+            }
+            return;
+        }
         let handle = window_handle(palette.window());
         if handle.is_none() && started.elapsed() < HANDLE_WAIT {
             return;
         }
+        let outcome = kept.refuse_for(handle);
+        if outcome.is_ok() && handle.is_some() && !SETTLE.is_zero() {
+            settling = Some((std::time::Instant::now(), handle));
+            return;
+        }
         itself.stop();
-        if let Err(error) = kept.refuse_for(handle) {
+        if let Err(error) = outcome {
             say(
                 &palette,
                 &standing,
@@ -161,17 +201,31 @@ thread_local! {
 /// A number rather than a type: it is what the adapter takes, and it is all this
 /// layer knows. On Windows it is the `HWND`. On macOS it is the process, because
 /// that is the unit the system's front application is told in and nothing is done
-/// to a single window there (`nkb-sys`, `macos/window.rs`). Anything else answers
-/// `None`, which on Linux is the honest answer today - there is no route there
-/// either way, and the adapter says so in words.
+/// to a single window there (`nkb-sys`, `macos/window.rs`). On X11 it is the id of
+/// the window, which the toolkit gives as an Xlib or an XCB handle depending on how
+/// the connection was made. Anything else (Wayland) answers `None`, and the adapter
+/// says in words that there is no route.
 pub(crate) fn window_handle(window: &slint::Window) -> Option<u64> {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle};
     let window = window.window_handle();
     match window.window_handle().ok()?.as_raw() {
         RawWindowHandle::Win32(handle) => Some(handle.hwnd.get() as u64),
         RawWindowHandle::AppKit(_) => Some(u64::from(std::process::id())),
+        RawWindowHandle::Xlib(handle) => Some(xlib_id(handle.window)),
+        RawWindowHandle::Xcb(handle) => Some(u64::from(handle.window.get())),
         _ => None,
     }
+}
+
+/// An Xlib window id as the number the adapters take. `c_ulong` is 64 bits on a 64 bit
+/// system, where it is a plain `u64` and clippy sees a cast of a type to itself, and 32 on
+/// a 32 bit one, where the cast widens. One cast serves both.
+#[allow(
+    clippy::unnecessary_cast,
+    reason = "c_ulong is u64 on 64 bit systems and u32 on 32 bit ones"
+)]
+fn xlib_id(window: core::ffi::c_ulong) -> u64 {
+    window as u64
 }
 
 /// Selects the windowing backend with the three settings that keep the palette

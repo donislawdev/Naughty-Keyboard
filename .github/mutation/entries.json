@@ -9634,6 +9634,15 @@
       "replace": "",
       "test": "linux_hotkeys::tests::a_keycode_outside_the_map_has_no_symbols",
       "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1283",
+      "why": "the repeated hand-back of the palette without a handle reads as success - the tester is never told the palette still holds the keyboard",
+      "file": "crates/nkb-adapters/src/focus.rs",
+      "find": "        let ours = window.map(WindowRef).ok_or(FocusError::HandleUnavailable)?;\n",
+      "replace": "        let ours = window.map(WindowRef).unwrap_or(WindowRef(0));\n",
+      "test": "focus::tests::handing_back_again_with_no_handle_says_the_handle_is_missing_on_every_system",
+      "runner": "rust:nkb-adapters:lib"
     }
   ]
 }
