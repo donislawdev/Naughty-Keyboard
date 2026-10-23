@@ -370,17 +370,36 @@ mod platform {
 /// Exists for the same reason as [`crate::can_send`]: so a caller can say so
 /// once, in one place, rather than repeating a `cfg` at every call site.
 ///
-/// On Linux that is the question of [`crate::hotkey::can_register`]: a local X server and
-/// not XWayland, whose windows are not the ones a Wayland compositor gives the keyboard to.
+/// On Linux that is a local X server, which may be the one inside a Wayland compositor:
+/// the palette is a client of it there, made so that a click does not give it the
+/// keyboard (`D145` point 38). A Wayland session without such a server cannot.
 #[must_use]
 pub fn can_refuse_focus() -> bool {
     #[cfg(target_os = "linux")]
     {
-        crate::linux::route_refusal().is_none()
+        crate::linux::window_refusal().is_none()
     }
     #[cfg(not(target_os = "linux"))]
     {
         cfg!(any(windows, target_os = "macos"))
+    }
+}
+
+/// Whether the windows of this program stand on XWayland, the X server inside a Wayland
+/// compositor. The palette is then a window with no frame of the system's, and draws
+/// a frame of its own (`D145` point 38). Always `false` where there is no such thing.
+///
+/// A question to the server, so it is asked once, before the window is made, and what it
+/// says is kept for the run by the caller.
+#[must_use]
+pub fn on_xwayland() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::on_xwayland()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
     }
 }
 

@@ -983,9 +983,9 @@
     {
       "id": "M92",
       "why": "the clipboard mode bar goes back to the risk colour, the one offensive carries - the words say 'clipboard mode' and the colour says 'failure' (caught by pixels of two renders)",
-      "file": "crates/nkb-gui/ui/screens/palette.slint",
-      "find": "                        tint: Tokens.accent;",
-      "replace": "                        tint: Tokens.risk;",
+      "file": "crates/nkb-gui/ui/components/palette_status.slint",
+      "find": "            tint: Tokens.accent;",
+      "replace": "            tint: Tokens.risk;",
       "test": "the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one",
       "runner": "rust:nkb-gui:palette_appearance"
     },
@@ -2172,8 +2172,8 @@
       "id": "M392",
       "why": "the send band is hidden when collapsed - a smaller palette keeps quiet through a whole long send (OBS-160)",
       "file": "crates/nkb-gui/ui/screens/palette.slint",
-      "find": "            if root.sending: VerticalLayout {",
-      "replace": "            if root.sending && !root.compact: VerticalLayout {",
+      "find": "        if root.bar-said || root.sending || root.messages.length > 0 || root.nothing-sent-said: PaletteStatus {",
+      "replace": "        if root.bar-said || (root.sending && !root.compact) || root.messages.length > 0 || root.nothing-sent-said: PaletteStatus {",
       "test": "the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one",
       "runner": "rust:nkb-gui:palette_appearance"
     },
@@ -2585,9 +2585,9 @@
     {
       "id": "M454",
       "why": "Turn off on every bar, the one of a window with higher privileges too - the click ends nothing (D72, D99)",
-      "file": "crates/nkb-gui/ui/screens/palette.slint",
-      "find": "                if root.clipboard-mode-on: SmallButton {",
-      "replace": "                if root.clipboard-mode: SmallButton {",
+      "file": "crates/nkb-gui/ui/components/palette_status.slint",
+      "find": "        if root.clipboard-mode-on: SmallButton {",
+      "replace": "        if true: SmallButton {",
       "test": "the_route_switch_turns_clipboard_mode_on_and_off_and_its_bar_turns_it_off",
       "runner": "rust:nkb-gui:palette_clipboard_mode"
     },
@@ -2595,17 +2595,17 @@
       "id": "M456",
       "why": "Turn off turns the mode on instead of off (D99)",
       "file": "crates/nkb-gui/ui/screens/palette.slint",
-      "find": "                        root.turn-off-clipboard();",
-      "replace": "                        root.choose-route(1);",
+      "find": "            turn-off-clipboard => {\n                root.turn-off-clipboard();",
+      "replace": "            turn-off-clipboard => {\n                root.choose-route(1);",
       "test": "the_route_switch_turns_clipboard_mode_on_and_off_and_its_bar_turns_it_off",
       "runner": "rust:nkb-gui:palette_clipboard_mode"
     },
     {
       "id": "M457",
       "why": "Turn off works during a send - the route changes under a value on its way (D99)",
-      "file": "crates/nkb-gui/ui/screens/palette.slint",
-      "find": "                    action: root.turn-off-action;\n                    enabled: !root.sending;",
-      "replace": "                    action: root.turn-off-action;\n                    enabled: true;",
+      "file": "crates/nkb-gui/ui/components/palette_status.slint",
+      "find": "            action: root.turn-off-action;\n            enabled: !root.sending;",
+      "replace": "            action: root.turn-off-action;\n            enabled: true;",
       "test": "the_route_switch_turns_clipboard_mode_on_and_off_and_its_bar_turns_it_off",
       "runner": "rust:nkb-gui:palette_clipboard_mode"
     },
@@ -3783,8 +3783,8 @@
       "id": "M612",
       "why": "the door gives out ChromeBand - a screen can build its own header beside the frame (D110)",
       "file": "crates/nkb-gui/ui/components.slint",
-      "find": "    ZoneFill,\n    ProgressBar,\n    Chevron,\n} from \"components/chrome.slint\";",
-      "replace": "    ZoneFill,\n    ProgressBar,\n    Chevron,\n    ChromeBand,\n} from \"components/chrome.slint\";",
+      "find": "    ZoneFill,\n    ProgressBar,\n} from \"components/chrome.slint\";",
+      "replace": "    ZoneFill,\n    ProgressBar,\n    ChromeBand,\n} from \"components/chrome.slint\";",
       "test": "every_window_stands_in_the_frame",
       "runner": "rust:nkb-gui:ui_guard"
     },
@@ -3990,8 +3990,8 @@
       "id": "M635",
       "why": "the ceiling of Slint files one above the measurement - free room nobody granted",
       "file": ".github/shape.toml",
-      "find": "[files.slint]\nceiling = 306",
-      "replace": "[files.slint]\nceiling = 307",
+      "find": "[files.slint]\nceiling = 283",
+      "replace": "[files.slint]\nceiling = 284",
       "test": "no_file_has_grown_past_its_ceiling_and_each_ceiling_is_the_measurement",
       "runner": "rust:nkb-adapters:shape"
     },
@@ -6579,8 +6579,8 @@
       "id": "M924",
       "why": "a button as wide as the word showing - Copied pushes it wider and the name and pills beside it move (D121)",
       "file": "crates/nkb-gui/ui/components/button.slint",
-      "find": "            min-width: max(word.preferred-width, done-word.preferred-width);",
-      "replace": "            min-width: root.done ? done-word.preferred-width : word.preferred-width;",
+      "find": "            min-width: root.cross ? Tokens.cross-size : max(word.preferred-width, done-word.preferred-width);",
+      "replace": "            min-width: root.cross ? Tokens.cross-size : (root.done ? done-word.preferred-width : word.preferred-width);",
       "test": "copied_changes_the_word_and_moves_nothing_beside_it",
       "runner": "rust:nkb-gui:palette_copy"
     },
@@ -6588,7 +6588,7 @@
       "id": "M925",
       "why": "the word Copied is never drawn - a click says nothing (D121)",
       "file": "crates/nkb-gui/ui/components/button.slint",
-      "find": "                text: root.done-text;\n                color: root.ink;\n                visible: root.done;",
+      "find": "                text: root.done-text;\n                color: root.ink;\n                visible: root.done && !root.cross;",
       "replace": "                text: root.done-text;\n                color: root.ink;\n                visible: false;",
       "test": "copied_changes_the_word_and_moves_nothing_beside_it",
       "runner": "rust:nkb-gui:palette_copy"
@@ -6938,7 +6938,7 @@
     {
       "id": "M964",
       "why": "the fold mark changes size with the state again - the heading jumps sideways at a click (D123)",
-      "file": "crates/nkb-gui/ui/components/chrome.slint",
+      "file": "crates/nkb-gui/ui/components/chevron.slint",
       "find": "    width: Tokens.chevron-width;\n    height: Tokens.chevron-width;\n",
       "replace": "    width: root.open ? Tokens.chevron-width : Tokens.chevron-height;\n    height: root.open ? Tokens.chevron-height : Tokens.chevron-width;\n",
       "test": "the_heading_folds_the_list_of_shortcuts_and_stays_where_it_was",
@@ -9814,6 +9814,123 @@
       "replace": "        \"Builder::address_is_not_refused(\",",
       "test": "the_scanner_catches_every_shape_it_exists_to_catch",
       "runner": "rust:nkb-core:nothing_reaches_the_network"
+    },
+    {
+      "id": "M1303",
+      "why": "a window is said to hold the keyboard only when both the manager and the server say so, so a focus that one of them tells late reads as not held",
+      "file": "crates/nkb-sys/src/linux_window_rules.rs",
+      "find": "    state.contains(&focused_atom) || input_focus == Some(window)",
+      "replace": "    state.contains(&focused_atom) && input_focus == Some(window)",
+      "test": "linux_window_rules::tests::a_window_holds_the_keyboard_when_either_side_says_so",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1304",
+      "why": "any window that has the server's focus counts as ours, so the compositor's own window in the focus reads as the palette holding the keyboard",
+      "file": "crates/nkb-sys/src/linux_window_rules.rs",
+      "find": "    state.contains(&focused_atom) || input_focus == Some(window)",
+      "replace": "    state.contains(&focused_atom) || input_focus.is_some()",
+      "test": "linux_window_rules::tests::a_window_does_not_hold_it_when_neither_side_says_so",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1305",
+      "why": "any frame at all reads as no frame, so a window the manager framed passes for the palette's frameless one",
+      "file": "crates/nkb-sys/src/linux_window_rules.rs",
+      "find": "    extents.is_none_or(|extents| extents.iter().all(|edge| *edge == 0))",
+      "replace": "    extents.is_none_or(|extents| extents.iter().any(|edge| *edge == 0))",
+      "test": "linux_window_rules::tests::a_frame_on_any_one_side_is_a_frame",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1306",
+      "why": "a window that holds the keyboard is blamed whatever its frame, so a window opened to be used is reported as a failure to give it back",
+      "file": "crates/nkb-sys/src/linux_window_rules.rs",
+      "find": "    if holds && frameless {",
+      "replace": "    if holds {",
+      "test": "linux_window_rules::tests::nothing_else_is_a_failure_to_give_back",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1307",
+      "why": "a window with no frame is blamed whether it holds the keyboard or not, so every palette is reported as holding it",
+      "file": "crates/nkb-sys/src/linux_window_rules.rs",
+      "find": "    if holds && frameless {",
+      "replace": "    if frameless {",
+      "test": "linux_window_rules::tests::nothing_else_is_a_failure_to_give_back",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1308",
+      "why": "the windows read the display from nothing, so a Wayland session is told it has no server for the palette",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    parse_display(display).map_err(|_| Refusal::NoLocalServer)",
+      "replace": "    parse_display(None).map_err(|_| Refusal::NoLocalServer)",
+      "test": "linux_rules::tests::the_windows_stand_on_the_display_whatever_the_session_is",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1309",
+      "why": "a drag ignores the scale of the screen, so on a scaled screen the window falls behind the pointer",
+      "file": "crates/nkb-gui/src/own_frame.rs",
+      "find": "    let step = |from: f32, to: f32| ((to - from) * scale).round() as i32;",
+      "replace": "    let step = |from: f32, to: f32| (to - from).round() as i32;",
+      "test": "own_frame::tests::the_distance_is_scaled_to_physical_pixels",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1310",
+      "why": "a drag takes the window away from the pointer on the first axis, so it runs the wrong way",
+      "file": "crates/nkb-gui/src/own_frame.rs",
+      "find": "        at.0.saturating_add(step(pressed.0, now.0)),",
+      "replace": "        at.0.saturating_sub(step(pressed.0, now.0)),",
+      "test": "own_frame::tests::the_window_goes_as_far_as_the_pointer_has_gone_from_where_it_pressed",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1311",
+      "why": "a drag measures the second axis from the pointer to the press, so the window runs the wrong way up and down",
+      "file": "crates/nkb-gui/src/own_frame.rs",
+      "find": "        at.1.saturating_add(step(pressed.1, now.1)),",
+      "replace": "        at.1.saturating_add(step(now.1, pressed.1)),",
+      "test": "own_frame::tests::the_window_goes_as_far_as_the_pointer_has_gone_from_where_it_pressed",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1312",
+      "why": "the palette's header is no longer a handle when the window has no frame, so there is nothing to move it by",
+      "file": "crates/nkb-gui/ui/screens/palette.slint",
+      "find": "            draggable: root.own-frame;",
+      "replace": "            draggable: false;",
+      "test": "the_header_of_a_palette_with_a_frame_of_its_own_moves_it_and_a_button_closes_it",
+      "runner": "rust:nkb-gui:palette_own_frame"
+    },
+    {
+      "id": "M1313",
+      "why": "the header ends without the button that closes the window, so a window with no frame cannot be closed",
+      "file": "crates/nkb-gui/ui/components/header_actions.slint",
+      "find": "    if root.own-frame: VerticalLayout {",
+      "replace": "    if false: VerticalLayout {",
+      "test": "the_header_of_a_palette_with_a_frame_of_its_own_moves_it_and_a_button_closes_it",
+      "runner": "rust:nkb-gui:palette_own_frame"
+    },
+    {
+      "id": "M1314",
+      "why": "the outline of the window with no frame is gone, so on a dark desktop its edge cannot be seen",
+      "file": "crates/nkb-gui/ui/components/frame.slint",
+      "find": "    if root.outlined: Rectangle {",
+      "replace": "    if false: Rectangle {",
+      "test": "only_the_palette_with_a_frame_of_its_own_has_an_outline",
+      "runner": "rust:nkb-gui:palette_own_frame"
+    },
+    {
+      "id": "M1315",
+      "why": "the header is a handle in every window, so a window the system moves already is moved twice",
+      "file": "crates/nkb-gui/ui/components/frame.slint",
+      "find": "    if root.draggable: TouchArea {",
+      "replace": "    if true: TouchArea {",
+      "test": "a_palette_with_the_frame_of_the_system_has_neither_the_button_nor_the_drag",
+      "runner": "rust:nkb-gui:palette_own_frame"
     }
   ]
 }

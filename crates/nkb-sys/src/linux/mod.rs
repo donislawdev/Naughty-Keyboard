@@ -20,8 +20,8 @@
 //! through XWayland only the characters of the compositor's layout arrive (`OBS-203`),
 //! and a send that types half a value and says it sent it is the one thing this program
 //! does not do (untouchable rule 1). The text goes to the desktop's input method instead
-//! (`ibus`), and the palette, which needs a shortcut and a window this route does not
-//! have yet, is refused on Wayland by name.
+//! (`ibus`). The palette's window stands on XWayland, and its shortcuts, which this route
+//! does not have yet, are refused on Wayland by name.
 //!
 //! - `ibus` - typing on a Wayland session, by committing text from an engine of ours.
 
@@ -35,9 +35,10 @@ pub(crate) mod window;
 
 use crate::{SendError, SendOutcome, SendProgress, WindowRef};
 
-// `route_refusal` is the question of the X server alone, which is what the shortcuts and
-// the palette window ask: they have no Wayland route yet, whatever typing has.
-pub(crate) use connect::route_refusal;
+// `route_refusal` is the question of a real X server alone, which is what the shortcuts
+// ask: they have no Wayland route yet, whatever typing has. The windows are at home on
+// XWayland too (`window_refusal`, `on_xwayland`).
+pub(crate) use connect::{on_xwayland, route_refusal, window_refusal};
 pub(crate) use front::window_pid;
 pub(crate) use send::send_chords;
 

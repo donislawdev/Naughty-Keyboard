@@ -1,0 +1,99 @@
+// The small triangle that marks a thing that opens, moved out of `chrome.slint`
+// when the palette's own frame had to make room in `screens/palette.slint`
+// (`D145` point 51): `chrome.slint` stood near the Slint ceiling of `D113`, and
+// the band of the largest files would have taken it in. The reasons for the shape
+// stand beside it, below.
+
+import { Tokens } from "../tokens.slint";
+
+// The small triangle that says a thing opens: pointing down where a click
+// opens a list or a fold is open, pointing right where a fold is closed.
+//
+// One shape for every such mark in the product - the pack's name in the
+// palette, the folds of the value window and of the last value sent - so a
+// change to how the mark looks is a change in one place (GUI rule 5). Drawn as
+// a path rather than a character: a character would be a quoted string, which
+// a view may not hold (`D58`), and its look would depend on the typeface.
+//
+// Only a shape: what a click does is the business of whatever holds it, and
+// the colour comes from there too, so the mark and its words wear one colour.
+//
+// ⊕ It also points LEFT, for the arrow on the button that steps the next value
+// back (`D120`): one shape for every such triangle, so the arrows of a button
+// and the marks of a fold cannot drift apart.
+export component Chevron inherits Rectangle {
+    // Down when true, right when false.
+    in property <bool> open: true;
+    // Left instead of right, where `open` is false.
+    in property <bool> backward;
+    in property <color> ink: Tokens.text-secondary;
+
+    // One square box in every state, the triangle centred in it at its own
+    // size - an element with a size and no position is centred. Until
+    // 2026-10-11 the box was the triangle's, wide when open and tall when
+    // folded, so the words beside a fold jumped four pixels across and one
+    // down at every click (measured by palette_shortcut_list.rs).
+    width: Tokens.chevron-width;
+    height: Tokens.chevron-width;
+
+    if root.open: Path {
+        width: Tokens.chevron-width;
+        height: Tokens.chevron-height;
+        viewbox-width: 2;
+        viewbox-height: 1;
+        fill: root.ink;
+        MoveTo {
+            x: 0;
+            y: 0;
+        }
+        LineTo {
+            x: 2;
+            y: 0;
+        }
+        LineTo {
+            x: 1;
+            y: 1;
+        }
+        Close { }
+    }
+    if !root.open && root.backward: Path {
+        width: Tokens.chevron-height;
+        height: Tokens.chevron-width;
+        viewbox-width: 1;
+        viewbox-height: 2;
+        fill: root.ink;
+        MoveTo {
+            x: 1;
+            y: 0;
+        }
+        LineTo {
+            x: 0;
+            y: 1;
+        }
+        LineTo {
+            x: 1;
+            y: 2;
+        }
+        Close { }
+    }
+    if !root.open && !root.backward: Path {
+        width: Tokens.chevron-height;
+        height: Tokens.chevron-width;
+        viewbox-width: 1;
+        viewbox-height: 2;
+        fill: root.ink;
+        MoveTo {
+            x: 0;
+            y: 0;
+        }
+        LineTo {
+            x: 1;
+            y: 1;
+        }
+        LineTo {
+            x: 0;
+            y: 2;
+        }
+        Close { }
+    }
+}

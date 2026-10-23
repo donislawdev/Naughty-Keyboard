@@ -28,8 +28,11 @@ Changes wait under Unreleased until then.
   program is in front, and a click on the palette leaves the keyboard where it was. Values go in the
   way `nkb send` puts them in. A layout that switches on the same two keys as a shortcut, as
   `Ctrl+Alt` rarely does, takes that shortcut from the palette, and the palette says it could not
-  register it. Nothing works in a Wayland session. Remembering the window's place and recording a
-  new shortcut come later.
+  register it. Remembering the window's place and recording a new shortcut come later.
+- The palette opens in a Wayland session as a window without a frame of the system's, run through
+  XWayland, so that a click on it does not take the keyboard from the field under test. Its header
+  moves it and a cross at the end closes it. It has no shortcuts there yet and does not type, so its
+  buttons only walk the pack and copy values.
 - On macOS the palette and `nkb send` now say when the system's text substitutions could have changed
   a value that went in: a capital letter at the start of a sentence, a period after two spaces, and
   a straight quote made curly in a rich text document. The field can then hold something other than

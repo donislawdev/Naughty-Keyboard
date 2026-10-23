@@ -67,6 +67,15 @@ impl KeptFocus {
         can_refuse_focus()
     }
 
+    /// Whether the windows of this program stand on XWayland, the X server inside a
+    /// Wayland compositor. The palette is then made as a notification with no frame of the
+    /// system's, so that a click on it does not take the keyboard, and it draws a frame of
+    /// its own (`D145` point 38). Asked once, before the window is made.
+    #[must_use]
+    pub fn on_xwayland() -> bool {
+        nkb_sys::window::on_xwayland()
+    }
+
     /// Whether `window` - the raw handle of our own window, `None` while the
     /// library has none to give - is the one in front right now.
     ///
@@ -264,6 +273,15 @@ mod tests {
             KeptFocus::remember().refuse_for(None),
             Err(FocusError::HandleUnavailable)
         );
+    }
+
+    #[test]
+    fn a_window_system_that_is_xwayland_is_one_that_can_refuse_the_focus() {
+        // XWayland is a place the palette can be kept from the keyboard (`D145` point 38),
+        // so a build that says it stands there and also says it cannot refuse is wrong.
+        if KeptFocus::on_xwayland() {
+            assert!(KeptFocus::possible());
+        }
     }
 
     #[test]

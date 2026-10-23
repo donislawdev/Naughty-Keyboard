@@ -213,7 +213,14 @@ pub(crate) fn route(environment: &Environment<'_>) -> Result<DisplayAddress, Ref
     if session_is_wayland(environment.session_type, environment.wayland_display) {
         return Err(Refusal::Wayland);
     }
-    parse_display(environment.display).map_err(|_| Refusal::NoLocalServer)
+    window_display(environment.display)
+}
+
+/// The display the windows of this program stand on, whatever the session is. A
+/// Wayland session names its XWayland in `DISPLAY` as well, and the palette is a
+/// client of that one (`D145` point 38), so here the session is not asked.
+pub(crate) fn window_display(display: Option<&str>) -> Result<DisplayAddress, Refusal> {
+    parse_display(display).map_err(|_| Refusal::NoLocalServer)
 }
 
 /// A character no key of an X server can type.
@@ -778,6 +785,22 @@ mod tests {
             Err(Refusal::NoLocalServer),
             "no display, no server"
         );
+    }
+
+    #[test]
+    fn the_windows_stand_on_the_display_whatever_the_session_is() {
+        // A Wayland session names its XWayland in `DISPLAY`, and the palette is a
+        // client of it, so the session type is not what the windows ask.
+        assert_eq!(
+            window_display(Some(":0")),
+            Ok(DisplayAddress {
+                number: 0,
+                screen: 0
+            })
+        );
+        // A host is refused here as it is for typing, because nothing leaves the machine.
+        assert_eq!(window_display(Some("host:0")), Err(Refusal::NoLocalServer));
+        assert_eq!(window_display(None), Err(Refusal::NoLocalServer));
     }
 
     #[test]

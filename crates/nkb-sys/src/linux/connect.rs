@@ -12,7 +12,7 @@ use x11rb::reexports::x11rb_protocol::xauth::get_auth;
 use x11rb::rust_connection::{DefaultStream, RustConnection};
 
 use crate::linux_rules::{
-    DisplayAddress, Environment, Refusal, route, session_is_wayland, socket_path,
+    DisplayAddress, Environment, Refusal, route, session_is_wayland, socket_path, window_display,
 };
 
 /// A connection, the root window of its screen, and the facts about the server
@@ -57,6 +57,78 @@ pub(crate) fn route_refusal() -> Option<&'static str> {
 /// Connects to the local socket of `address`. The server is refused when it is
 /// XWayland (`OBS-203`) or has no `XTEST`, the one way to inject key events.
 pub(crate) fn connect(address: DisplayAddress) -> Result<Server, Refusal> {
+    let server = open(address)?;
+    // The server of a Wayland session. The environment need not say so: a shell
+    // that was started from an SSH login has no session type, and `DISPLAY=:0`
+    // still names XWayland.
+    if has_extension(&server.conn, "XWAYLAND") {
+        return Err(Refusal::Wayland);
+    }
+    if !has_extension(&server.conn, "XTEST") {
+        return Err(Refusal::NoXtest);
+    }
+    Ok(server)
+}
+
+/// What the windows of this program stand on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Display {
+    /// A server of its own, with a window manager that obeys the hints.
+    X11,
+    /// The X server inside a Wayland compositor, which ignores the hint that keeps a
+    /// window from taking the keyboard (`OBS-218`).
+    XWayland,
+}
+
+/// The connection of the windows and what it stands on.
+pub(crate) struct Windows {
+    pub server: Server,
+    pub display: Display,
+}
+
+/// Connects for the windows of this program. Unlike typing, they are at home on
+/// XWayland: the palette is a client of it on a Wayland session, so that a click on
+/// it can be kept from taking the keyboard (`D145` point 38). A Wayland session
+/// without a local X server says Wayland, which is what it is.
+pub(crate) fn connect_windows() -> Result<Windows, Refusal> {
+    let display = std::env::var("DISPLAY").ok();
+    let server = window_display(display.as_deref())
+        .and_then(open)
+        .map_err(|refusal| {
+            if wayland_session() {
+                Refusal::Wayland
+            } else {
+                refusal
+            }
+        })?;
+    if has_extension(&server.conn, "XWAYLAND") {
+        return Ok(Windows {
+            server,
+            display: Display::XWayland,
+        });
+    }
+    if !has_extension(&server.conn, "XTEST") {
+        return Err(Refusal::NoXtest);
+    }
+    Ok(Windows {
+        server,
+        display: Display::X11,
+    })
+}
+
+/// Why the windows cannot stand here, in the words that follow `on`, or `None`.
+pub(crate) fn window_refusal() -> Option<&'static str> {
+    connect_windows().err().map(Refusal::system)
+}
+
+/// Whether the windows stand on XWayland: the palette then draws its own frame
+/// (`D145` point 38).
+pub(crate) fn on_xwayland() -> bool {
+    connect_windows().is_ok_and(|windows| windows.display == Display::XWayland)
+}
+
+/// Opens the local socket of `address` and says nothing of what answers.
+fn open(address: DisplayAddress) -> Result<Server, Refusal> {
     let stream = UnixStream::connect(socket_path(address)).map_err(|_| Refusal::NoLocalServer)?;
     let (stream, (family, peer)) =
         DefaultStream::from_unix_stream(stream).map_err(|_| Refusal::NoLocalServer)?;
@@ -74,15 +146,6 @@ pub(crate) fn connect(address: DisplayAddress) -> Result<Server, Refusal> {
         .get(address.screen)
         .map(|screen| screen.root)
         .ok_or(Refusal::NoLocalServer)?;
-    // The server of a Wayland session. The environment need not say so: a shell
-    // that was started from an SSH login has no session type, and `DISPLAY=:0`
-    // still names XWayland.
-    if has_extension(&conn, "XWAYLAND") {
-        return Err(Refusal::Wayland);
-    }
-    if !has_extension(&conn, "XTEST") {
-        return Err(Refusal::NoXtest);
-    }
     Ok(Server { conn, root })
 }
 

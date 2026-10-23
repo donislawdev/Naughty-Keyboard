@@ -100,8 +100,9 @@ const WIDTH: u32 = 480;
 /// 2000 until 2026-10-10, when the palette's value bands came in and fell below
 /// it the same way - so the test now holds the catalogue to this height and
 /// fails with the height it needs, rather than cutting it off. 3200 until the
-/// switches under the value bands and the report block came in (`D121`).
-const HEIGHT: u32 = 3800;
+/// switches under the value bands and the report block came in (`D121`), 3800 until
+/// the palette's own frame and its status line came in (`D145` point 51).
+const HEIGHT: u32 = 4100;
 
 fn draw(window: &Rc<MinimalSoftwareWindow>) -> Vec<Pixel> {
     let mut buffer = vec![Pixel::default(); (WIDTH * HEIGHT) as usize];

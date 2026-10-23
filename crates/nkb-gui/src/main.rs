@@ -69,7 +69,7 @@ use nkb_gui::shortcuts::{Shortcuts, System};
 use nkb_gui::welcome::Welcome;
 use nkb_gui::{
     AboutWindow, Gallery, HeaderLinkKind, PacksWindow, Palette, ShortcutsWindow, WelcomeWindow,
-    focus, header_links, live, place,
+    focus, header_links, live, own_frame, place,
 };
 use slint::ComponentHandle;
 
@@ -141,7 +141,13 @@ fn start(request: Request) -> Result<(), slint::PlatformError> {
             // every window are set so that the palette does not take the front.
             #[cfg(target_os = "macos")]
             focus::select_backend()?;
-            run_palette(pack, route)
+            // Whether the system gives the palette's window no frame, so it draws its own
+            // (Linux on Wayland, `D145` point 38).
+            #[cfg(target_os = "linux")]
+            let own_frame = focus::select_backend()?;
+            #[cfg(not(target_os = "linux"))]
+            let own_frame = false;
+            run_palette(pack, route, own_frame)
         }
     }
 }
@@ -160,7 +166,11 @@ fn start(request: Request) -> Result<(), slint::PlatformError> {
 /// `Ctrl+Alt+N` and nine others taken from whoever wants them next, for as long
 /// as the process lingers. Joining also means a send in flight finishes writing
 /// rather than being cut in half inside somebody's field.
-fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::PlatformError> {
+fn run_palette(
+    pack: Option<String>,
+    route: RouteRequest,
+    own_frame: bool,
+) -> Result<(), slint::PlatformError> {
     // 🔴 BEFORE the window exists. Afterwards the answer is the palette itself,
     // and handing the focus back to ourselves is a no-op that reports success -
     // the failure shape this project keeps meeting (`slint.md` 2.17).
@@ -181,7 +191,13 @@ fn run_palette(pack: Option<String>, route: RouteRequest) -> Result<(), slint::P
     let compact = live::starts_compact(settings.settings());
     // Asked here, before the settings move to the worker (UX7, `D103`).
     let welcome_due = settings.welcome_due();
+    #[cfg(target_os = "linux")]
+    let palette = focus::new_palette()?;
+    #[cfg(not(target_os = "linux"))]
     let palette = Palette::new()?;
+    if own_frame {
+        own_frame::wire(&palette);
+    }
     // Where the tester left it on this layout of screens (UX7). Asked after the
     // window is built, because from then on the process sees physical pixels
     // (`nkb_adapters::screens`), and before it is shown, because the backend

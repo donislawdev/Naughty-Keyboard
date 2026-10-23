@@ -24,6 +24,18 @@
 //! So the two jobs of the Windows account (`window.rs`) are done by one property and one
 //! request here, and as there the verdict is a READ and not the return of a call.
 //!
+//! # XWayland: the same property and request, and no frame besides
+//!
+//! On a Wayland session the palette is a client of XWayland (`D145` point 38). Probed
+//! 2026-10-23 on GNOME 50 with a native application under test and keys and clicks through
+//! the portal (`linux_window_rules.rs` has the numbers): mutter ignores the hint on a window
+//! with a frame of its own and honours it on one without, whatever the type of the window.
+//! The frame is given up when the window is made (`nkb-gui`, `focus.rs`), and here it is
+//! READ, because a window the manager drew a frame round is one that a click gives the
+//! keyboard to. The keyboard cannot be given back to an application of Wayland from here,
+//! so what is checked is that the palette never holds it, and a window that takes it on
+//! purpose is trusted to lose it by being hidden.
+//!
 //! # A window of ours and the window in front are not the same number
 //!
 //! The toolkit hands out the window of the application. With a reparenting manager the
@@ -42,10 +54,11 @@ use x11rb::protocol::xproto::{
 use x11rb::rust_connection::RustConnection;
 
 use super::Lost;
-use super::connect::{Server, connect, environment_route};
+use super::connect::{Display, Server, Windows, connect_windows};
 use super::front::{focused_toplevel, toplevel};
 use crate::WindowRef;
 use crate::linux_rules::Refusal;
+use crate::linux_window_rules::{StillHeld, hand_back, holds_keyboard, is_frameless};
 use crate::window::{FocusError, KeyMenuError};
 
 /// How long the manager is given to show a change of the focus. Measured 2026-10-23: both
@@ -69,6 +82,10 @@ const SOURCE_PAGER: u32 = 2;
 /// The source of a `_NET_WM_STATE` request made by an application.
 const SOURCE_APPLICATION: u32 = 1;
 
+/// How many atoms of a property are read: far more than any window lists, so a list
+/// is never cut short.
+const ATOM_LIST_LONGEST: u32 = 64;
+
 /// `_NET_WM_STATE_ADD`.
 const STATE_ADD: u32 = 1;
 
@@ -78,8 +95,8 @@ fn refused(refusal: Refusal) -> FocusError {
     }
 }
 
-fn server() -> Result<Server, FocusError> {
-    connect(environment_route().map_err(refused)?).map_err(refused)
+fn windows() -> Result<Windows, FocusError> {
+    connect_windows().map_err(refused)
 }
 
 fn id_of(window: WindowRef) -> Result<u32, FocusError> {
@@ -171,12 +188,74 @@ fn bring_to_front(
 /// windows. The first by `WM_HINTS` saying the window takes no input, which the manager
 /// reads as "never give this window the focus", the second by a request to add
 /// `_NET_WM_STATE_ABOVE`, because the toolkit's own never reached the server.
+///
+/// On XWayland the hint is not enough: mutter ignores it on a window it has framed
+/// (`OBS-218`, `OBS-221`). The palette is made without a frame. That is not done later,
+/// because a frame taken off a window that has drawn none of its own would leave it with
+/// nothing to move it by. So here it is READ, and a window that has a frame is told not
+/// to refuse the keyboard.
 pub(crate) fn refuse_activation(window: WindowRef) -> Result<(), FocusError> {
-    let server = server()?;
-    match refuse_on(&server, id_of(window)?) {
+    let windows = windows()?;
+    let id = id_of(window)?;
+    let refused = refuse_on(&windows.server, id).and_then(|held| match windows.display {
+        Display::X11 => Ok(held),
+        Display::XWayland => Ok(held && has_no_frame(&windows.server, id)?),
+    });
+    match refused {
         Ok(true) => Ok(()),
         Ok(false) | Err(Lost) => Err(FocusError::StyleRefused),
     }
+}
+
+/// The atoms a property of `window` holds, for a property of that type.
+fn atoms_of(conn: &RustConnection, window: u32, property: &[u8]) -> Result<Vec<u32>, Lost> {
+    let property = atom(conn, property)?;
+    let reply = conn
+        .get_property(
+            false,
+            window,
+            property,
+            AtomEnum::ATOM,
+            0,
+            ATOM_LIST_LONGEST,
+        )?
+        .reply()?;
+    Ok(reply.value32().map(Iterator::collect).unwrap_or_default())
+}
+
+/// Whether the manager has put no frame round the window: `_NET_FRAME_EXTENTS` is written
+/// for a window it has framed and not for one it has not.
+fn has_no_frame(server: &Server, window: u32) -> Result<bool, Lost> {
+    let property = atom(&server.conn, b"_NET_FRAME_EXTENTS")?;
+    let reply = server
+        .conn
+        .get_property(false, window, property, AtomEnum::CARDINAL, 0, 4)?
+        .reply()?;
+    // Not written at all is no frame. Written in a shape that is not four edges is not
+    // something this reads as no frame.
+    Ok(match reply.value32().map(Iterator::collect::<Vec<u32>>) {
+        None => is_frameless(None),
+        Some(edges) => <[u32; 4]>::try_from(edges).is_ok_and(|edges| is_frameless(Some(edges))),
+    })
+}
+
+/// Whether the window holds the keyboard, as the manager and the server say it.
+fn holds_the_keyboard(server: &Server, window: u32) -> Result<bool, Lost> {
+    let focused = atom(&server.conn, b"_NET_WM_STATE_FOCUSED")?;
+    let state = atoms_of(&server.conn, window, b"_NET_WM_STATE")?;
+    let input = focused_toplevel(&server.conn, server.root)?;
+    Ok(holds_keyboard(&state, focused, input, window))
+}
+
+/// Giving the keyboard back on XWayland. A client of the X server cannot name the
+/// application of Wayland that had it, and cannot give it to that application either, so
+/// there is no call to make. What is read is whether a window that must never hold the
+/// keyboard does (`linux_window_rules.rs`).
+fn hand_back_on_xwayland(server: &Server, window: u32) -> Result<(), FocusError> {
+    let still = |_: Lost| FocusError::StillForeground;
+    let holds = holds_the_keyboard(server, window).map_err(still)?;
+    let frameless = has_no_frame(server, window).map_err(still)?;
+    hand_back(holds, frameless).map_err(|StillHeld| FocusError::StillForeground)
 }
 
 /// Writes the hints and the request, and answers whether the server holds the hints.
@@ -204,13 +283,16 @@ pub(crate) fn hand_back_foreground(
     ours: WindowRef,
     previous: Option<WindowRef>,
 ) -> Result<(), FocusError> {
-    let server = server()?;
+    let Windows { server, display } = windows()?;
     let id = id_of(ours)?;
     let still = |_: Lost| FocusError::StillForeground;
     // A window the server does not know holds nothing, so there is nothing to give back.
     let Ok(frame) = toplevel(&server.conn, server.root, id) else {
         return Ok(());
     };
+    if display == Display::XWayland {
+        return hand_back_on_xwayland(&server, id);
+    }
     if focused_toplevel(&server.conn, server.root).map_err(still)? != Some(frame) {
         // We never took it, or have given it back already.
         return Ok(());
@@ -232,11 +314,19 @@ pub(crate) fn hand_back_foreground(
 
 /// Brings `window`, one of ours, to the front with the keyboard.
 pub(crate) fn take_foreground(window: WindowRef) -> Result<(), FocusError> {
-    let server = server()?;
+    let Windows { server, display } = windows()?;
     let id = id_of(window)?;
     let not_taken = |_: Lost| FocusError::NotTaken;
     let frame = toplevel(&server.conn, server.root, id).map_err(not_taken)?;
-    if bring_to_front(&server, id, |front| front == Some(frame)) {
+    // On XWayland the window is put in a frame of the compositor's AFTER it is shown, so
+    // the top-level window found now is not the one the focus will be reported in: the
+    // verdict is asked of the window each time (`OBS-221`, a window that held the keyboard
+    // was said not to).
+    let ready = |front: Option<u32>| match display {
+        Display::X11 => front == Some(frame),
+        Display::XWayland => holds_the_keyboard(&server, id).unwrap_or(false),
+    };
+    if bring_to_front(&server, id, ready) {
         Ok(())
     } else {
         Err(FocusError::NotTaken)
@@ -253,8 +343,7 @@ pub(crate) fn no_keyboard_menu(window: WindowRef) -> Result<(), KeyMenuError> {
         system: refusal.system(),
     };
     let id = u32::try_from(window.0).map_err(|_| KeyMenuError::HandleUnavailable)?;
-    let address = environment_route().map_err(refused)?;
-    let server = connect(address).map_err(refused)?;
+    let Windows { server, .. } = connect_windows().map_err(refused)?;
     server
         .conn
         .get_window_attributes(id)

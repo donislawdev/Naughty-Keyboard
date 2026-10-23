@@ -48,8 +48,15 @@ export component HeaderActions inherits HorizontalLayout {
     in property <string> toggle-label;
     // The links, in the order they stand.
     in property <[HeaderLink]> links;
+    // Whether the window has no frame of the system's, so the header ends in
+    // the button that closes it (`D145` point 38), and what that button is
+    // called to UI Automation. In both states of the palette: the one button
+    // that cannot be reached any other way.
+    in property <bool> own-frame;
+    in property <string> close-label;
     callback toggle-compact();
     callback open-link(HeaderLinkKind);
+    callback close();
 
     spacing: Tokens.space-3;
 
@@ -86,6 +93,17 @@ export component HeaderActions inherits HorizontalLayout {
             enabled: !root.sending;
             clicked => {
                 root.toggle-compact();
+            }
+        }
+    }
+    if root.own-frame: VerticalLayout {
+        alignment: center;
+        SmallButton {
+            cross: true;
+            text: root.close-label;
+            action: root.close-label;
+            clicked => {
+                root.close();
             }
         }
     }

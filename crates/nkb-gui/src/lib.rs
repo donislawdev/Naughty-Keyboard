@@ -103,3 +103,8 @@ pub mod header_links;
 // pixels on Windows, points on macOS (`D143`). No window in it, so both
 // directions are tested without a screen.
 pub mod place;
+
+// The frame the palette draws for itself where the system gives its window none
+// (Linux on Wayland, `D145` point 38): moving it by the header and closing it.
+// The arithmetic of a move needs no window, so it is tested without a screen.
+pub mod own_frame;

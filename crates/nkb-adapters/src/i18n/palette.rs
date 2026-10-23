@@ -200,6 +200,10 @@ pub enum PaletteLabel {
     /// rest of the palette that the compact state shows (`UX-GUI-004`): until
     /// it, the compact palette said nothing about how to expand it again.
     Expand,
+    /// The button that closes the palette where the system gave its window no frame
+    /// (Linux on Wayland, `D145` point 38): drawn as a cross, so this is what UI
+    /// Automation reads, and the words of what a click does.
+    ClosePalette,
     /// The label of the switch that chooses how a typed value meets the field
     /// (`UX-GUI-005`, `D101`). Until the owner's point 2 of 2026-10-07 this
     /// was a sentence naming the way in effect beside a button naming the
@@ -286,6 +290,7 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::TurnOffClipboard => "Turn off clipboard mode",
         PaletteLabel::Collapse => "Collapse",
         PaletteLabel::Expand => "Expand",
+        PaletteLabel::ClosePalette => "Close the palette",
         PaletteLabel::EachValue => "Each value",
         PaletteLabel::ClearLineFirst => "Clear line first",
         PaletteLabel::InsertAtCursor => "Insert at cursor",

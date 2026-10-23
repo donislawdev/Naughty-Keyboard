@@ -85,7 +85,9 @@ near = 5
 # of its shortcut list (2026-10-11), then ui/components/list.slint at 260 once
 # the fold's heading went to a file of its own. The About window's facts went
 # to a file of their own rather than take ui/components/chrome.slint into the
-# band. 306 since the header's links became one list (2026-10-14).
+# band. 306 since the header's links became one list (2026-10-14), and 283
+# since the palette's status line went to a file of its own to make room for
+# the header's own frame (2026-10-23).
 [files.slint]
-ceiling = 306
+ceiling = 283
 near = 2

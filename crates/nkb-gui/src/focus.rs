@@ -257,6 +257,77 @@ pub fn select_backend() -> Result<(), slint::PlatformError> {
         .select()
 }
 
+/// Selects the windowing backend on a Wayland session, so that the palette can be kept
+/// from taking the keyboard, and answers whether it did - which is also whether the
+/// palette has to draw a frame of its own (`own_frame`, `D145` point 38).
+///
+/// On GNOME a click on a window of Wayland always gives it the keyboard, and the field
+/// under test would lose it. The palette is made a client of XWayland instead, as a
+/// window of the notification type, which mutter does not give the keyboard to when it
+/// also holds the hint that it takes no input (`nkb-sys`, `linux_window_rules.rs`). Winit
+/// prefers Wayland whenever the session names one, so XWayland is asked for.
+///
+/// 🔴 The type is given when the window is MADE, through the attributes of its creation,
+/// and only to the palette's window (`new_palette`): the windows opened on request take
+/// the keyboard on purpose and stay normal windows with a frame of the system's. Before
+/// the first window of the process.
+///
+/// Where the windows do not stand on XWayland nothing is selected and the answer is
+/// `false`.
+///
+/// # Errors
+///
+/// The toolkit's own, when no backend can be selected.
+#[cfg(target_os = "linux")]
+pub fn select_backend() -> Result<bool, slint::PlatformError> {
+    use slint::winit_030::EventLoopBuilder;
+    use slint::winit_030::winit::platform::x11::{
+        EventLoopBuilderExtX11, WindowAttributesExtX11, WindowType,
+    };
+    if !KeptFocus::on_xwayland() {
+        return Ok(false);
+    }
+    let mut builder: EventLoopBuilder =
+        slint::winit_030::winit::event_loop::EventLoop::with_user_event();
+    builder.with_x11();
+    slint::BackendSelector::new()
+        .backend_name("winit".into())
+        .with_winit_event_loop_builder(builder)
+        .with_winit_window_attributes_hook(|attributes| {
+            if NEXT_IS_PALETTE.replace(false) {
+                attributes
+                    .with_decorations(false)
+                    .with_x11_window_type(vec![WindowType::Notification])
+            } else {
+                attributes
+            }
+        })
+        .select()?;
+    Ok(true)
+}
+
+#[cfg(target_os = "linux")]
+thread_local! {
+    /// Whether the window being made is the palette's. The toolkit calls the hook above for
+    /// every window it makes, before it has said which one, so the one place that makes the
+    /// palette says so first.
+    static NEXT_IS_PALETTE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Builds the palette's window, as the notification `select_backend` makes of it where
+/// there is one to make.
+///
+/// # Errors
+///
+/// The toolkit's own, when the window cannot be made.
+#[cfg(target_os = "linux")]
+pub fn new_palette() -> Result<Palette, slint::PlatformError> {
+    NEXT_IS_PALETTE.set(true);
+    let palette = Palette::new();
+    NEXT_IS_PALETTE.set(false);
+    palette
+}
+
 /// How often the front is looked at after a press, and how long a press is waited
 /// for. The activation was seen 47 to 61 ms after the press (5 runs of 5).
 #[cfg(target_os = "macos")]
