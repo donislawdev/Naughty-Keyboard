@@ -272,8 +272,10 @@ fn pressed(actions: &[HotkeyAction], id: HotkeyId) -> Wait {
 ///
 /// The key codes are the Windows `VK_*` values, which for letters and digits
 /// are their ASCII codes and for Space is `VK_SPACE`. They go through
-/// `nkb-sys`, whose route today is Windows only. The day a Linux route exists
-/// it will want X11 keysyms here, and this is the one function that changes.
+/// `nkb-sys`, which takes them as they are on Windows and translates them on the
+/// other two systems: to a Carbon key code on macOS (`macos_hotkeys::key_code`) and
+/// to an X11 keysym on Linux (`linux_hotkeys::keysym_for_vk`). So this is still the
+/// one function that names keys, and no system but its own needs to know them.
 ///
 /// 🔴 The chord is registered AS WRITTEN, on every system. Until `D82` the macOS
 /// branch swapped `ctrl` for the Command bit here, because the core carried one

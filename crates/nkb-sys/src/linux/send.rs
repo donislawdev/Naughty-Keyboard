@@ -236,16 +236,17 @@ fn pinged_window(server: &Server) -> Result<Option<Pinged>, Lost> {
     Ok(listening.is_ok().then_some(Pinged { atoms, window }))
 }
 
-/// What the server says about the keyboard before anything is sent.
-struct Keyboard {
-    keymap: Keymap,
-    modifier_keys: Vec<u8>,
-    keys_per_modifier: usize,
+/// What the server says about the keyboard before anything is sent. A shortcut asks
+/// the same questions (`hotkey.rs`), so the fields it reads are not private.
+pub(super) struct Keyboard {
+    pub(super) keymap: Keymap,
+    pub(super) modifier_keys: Vec<u8>,
+    pub(super) keys_per_modifier: usize,
     /// The key the server counts as Shift: the first of the first modifier.
     shift_key: Option<u8>,
 }
 
-fn read_keyboard(conn: &RustConnection) -> Result<Keyboard, Lost> {
+pub(super) fn read_keyboard(conn: &RustConnection) -> Result<Keyboard, Lost> {
     let setup = conn.setup();
     let (min, max) = (setup.min_keycode, setup.max_keycode);
     let mapping = conn.get_keyboard_mapping(min, max - min + 1)?.reply()?;

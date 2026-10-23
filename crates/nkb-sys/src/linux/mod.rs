@@ -8,6 +8,7 @@
 //! - `front` - which window holds the keyboard focus, and which window of it
 //!   answers `_NET_WM_PING`,
 //! - `escape` - `Escape` held for as long as one send lasts,
+//! - `hotkey` - the global shortcuts of the palette, grabs held by a thread,
 //! - `send` - typing: spare keys rewritten to the characters, batches, and the
 //!   answer of the application after every batch.
 //!
@@ -22,6 +23,7 @@
 mod connect;
 mod escape;
 mod front;
+pub(crate) mod hotkey;
 mod send;
 
 pub(crate) use connect::route_refusal;

@@ -44,6 +44,8 @@ pub mod layout;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(any(target_os = "linux", test))]
+mod linux_hotkeys;
+#[cfg(any(target_os = "linux", test))]
 mod linux_rules;
 #[cfg(target_os = "macos")]
 mod macos;
