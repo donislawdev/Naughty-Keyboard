@@ -9373,6 +9373,267 @@
       "replace": "",
       "test": "linux_rules::tests::a_keysym_is_a_character_only_in_the_forms_a_layout_hands_out",
       "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1254",
+      "why": "a letter is taken for its upper case keysym - no key types it without Shift, so a shortcut finds no key",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "        0x41..=0x5A => Some(vk as u32 + 0x20),",
+      "replace": "        0x41..=0x5A => Some(vk as u32),",
+      "test": "linux_hotkeys::tests::a_key_of_the_vocabulary_is_the_keysym_it_types_without_shift",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1255",
+      "why": "Space has no keysym - the shortcut that opens the window of values finds no key",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "        0x30..=0x39 | 0x20 => Some(vk as u32),",
+      "replace": "        0x30..=0x39 => Some(vk as u32),",
+      "test": "linux_hotkeys::tests::a_key_of_the_vocabulary_is_the_keysym_it_types_without_shift",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1256",
+      "why": "every function key is the next one up - a shortcut on F5 grabs F6",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "        0x70..=0x87 => Some(KEYSYM_F1 + (vk as u32 - 0x70)),",
+      "replace": "        0x70..=0x87 => Some(KEYSYM_F1 + (vk as u32 - 0x6F)),",
+      "test": "linux_hotkeys::tests::the_function_keys_run_from_f1_to_f24_of_the_keysym_table",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1257",
+      "why": "a keyboard with only a right Alt key has no Alt modifier - every shortcut that names Alt is refused",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "(&mut bits.alt, &[KEYSYM_ALT_L, KEYSYM_ALT_R][..]),",
+      "replace": "(&mut bits.alt, &[KEYSYM_ALT_L][..]),",
+      "test": "linux_hotkeys::tests::a_keyboard_with_only_the_right_alt_and_super_keys_has_both_bits",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1258",
+      "why": "a keyboard with only a right Super key has no Super modifier - every shortcut that names it is refused",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "(&mut bits.super_key, &[KEYSYM_SUPER_L, KEYSYM_SUPER_R][..]),",
+      "replace": "(&mut bits.super_key, &[KEYSYM_SUPER_L][..]),",
+      "test": "linux_hotkeys::tests::a_keyboard_with_only_the_right_alt_and_super_keys_has_both_bits",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1259",
+      "why": "the last modifier with an Alt key wins - the chord is grabbed on a bit that needs two states at once",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "                if *slot == 0 && holds(wanted) {",
+      "replace": "                if holds(wanted) {",
+      "test": "linux_hotkeys::tests::a_modifier_with_two_rows_of_the_kind_takes_the_lowest",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1260",
+      "why": "Scroll Lock counts as a modifier of the chord - with it on, no press is heard",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "        LOCK | self.num_lock | self.scroll_lock",
+      "replace": "        LOCK | self.num_lock",
+      "test": "linux_hotkeys::tests::the_locks_are_caps_and_every_lock_the_keyboard_has",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1261",
+      "why": "a lock the keyboard does not have is grabbed in as a combination - the same grab is made twice",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "        if lock != 0 && !locks.contains(&lock) {",
+      "replace": "        if !locks.contains(&lock) {",
+      "test": "linux_hotkeys::tests::a_keyboard_with_no_num_lock_key_has_two_combinations",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1262",
+      "why": "two locks on one modifier are grabbed as four combinations of it - the same grab is made again and again",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "if lock != 0 && !locks.contains(&lock) {",
+      "replace": "if lock != 0 {",
+      "test": "linux_hotkeys::tests::two_locks_on_one_modifier_are_one_combination_of_it",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1263",
+      "why": "Control is left out of the grab - the shortcut is heard on the bare key",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "        modifiers |= CONTROL;",
+      "replace": "        modifiers |= 0;",
+      "test": "linux_hotkeys::tests::control_and_super_are_added_to_the_bits",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1264",
+      "why": "Shift is left out of the grab - the shortcut is heard on Alt and the key alone",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "        modifiers |= SHIFT;",
+      "replace": "        modifiers |= 0;",
+      "test": "linux_hotkeys::tests::a_chord_is_the_key_and_the_modifier_bits_of_this_keyboard",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1265",
+      "why": "a chord that names a modifier no key has is grabbed with no modifier - the bare key is taken from every program",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "            if bit == 0 {",
+      "replace": "            if bit == 0xFFFF {",
+      "test": "linux_hotkeys::tests::alt_with_no_alt_key_mapped_is_said_by_a_code_of_its_own",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1266",
+      "why": "a key the keyboard does not have is reported as a missing modifier - the person is told the wrong thing",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": ".ok_or(NO_SUCH_KEY)?;",
+      "replace": ".ok_or(NO_SUCH_MODIFIER)?;",
+      "test": "linux_hotkeys::tests::a_key_the_keyboard_does_not_have_is_said_by_a_code_of_its_own",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1267",
+      "why": "a missing modifier is reported as a missing key - the person is told the wrong thing",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "                return Err(NO_SUCH_MODIFIER);",
+      "replace": "                return Err(NO_SUCH_KEY);",
+      "test": "linux_hotkeys::tests::alt_with_no_alt_key_mapped_is_said_by_a_code_of_its_own",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1268",
+      "why": "a second shortcut on the same key with other modifiers is refused as taken",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "other.keycode == binding.keycode && other.modifiers == binding.modifiers",
+      "replace": "other.keycode == binding.keycode",
+      "test": "linux_hotkeys::tests::a_chord_a_listener_holds_is_held_already_whatever_its_id",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1269",
+      "why": "every refusal but the one of another client reads as taken - a broken request looks like a clash",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "    if error_code == BAD_ACCESS {",
+      "replace": "    if error_code != BAD_ACCESS {",
+      "test": "linux_hotkeys::tests::only_bad_access_means_taken",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1270",
+      "why": "a lock counts as a modifier of the press - with Caps Lock on the shortcut is never found",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "    let held = state & MODIFIER_BITS & !locks;",
+      "replace": "    let held = state & MODIFIER_BITS;",
+      "test": "linux_hotkeys::tests::the_locks_do_not_change_which_shortcut_a_press_is",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1271",
+      "why": "the layout group and the buttons of the pointer count as modifiers - in the second layout no shortcut is found",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "    let held = state & MODIFIER_BITS & !locks;",
+      "replace": "    let held = state & !locks;",
+      "test": "linux_hotkeys::tests::the_layout_group_and_the_buttons_do_not_change_it_either",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1272",
+      "why": "the key of the press is not looked at - any key with the right modifiers fires the first shortcut",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": ".find(|binding| binding.keycode == keycode && binding.modifiers == held)",
+      "replace": ".find(|binding| binding.modifiers == held)",
+      "test": "linux_hotkeys::tests::a_press_finds_its_shortcut_by_key_and_modifiers",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1273",
+      "why": "every press of a key just released is a repeat - a person tapping twice is heard once",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "        let repeat = self.released == Some((keycode, time));",
+      "replace": "        let repeat = self.released.map(|(code, _)| code) == Some(keycode);",
+      "test": "linux_hotkeys::tests::a_press_after_a_release_at_another_time_is_the_person_pressing_again",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1274",
+      "why": "a press of another key at the same time is a repeat - a shortcut is lost to a neighbour",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "        let repeat = self.released == Some((keycode, time));",
+      "replace": "        let repeat = self.released.map(|(_, at)| at) == Some(time);",
+      "test": "linux_hotkeys::tests::a_press_of_another_key_is_not_the_repeat_of_the_release",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1275",
+      "why": "a release is remembered for ever - the next press at the same time is also called a repeat",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "        self.released = None;\n",
+      "replace": "",
+      "test": "linux_hotkeys::tests::a_release_is_the_other_half_of_one_press_only",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1276",
+      "why": "the options are read from the variants string - the layout toggle is never found",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "        .nth(4)\n",
+      "replace": "        .nth(3)\n",
+      "test": "linux_hotkeys::tests::the_options_are_the_fifth_string_of_the_property",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1277",
+      "why": "a toggle of right hand keys is not known - a chord it takes is registered and never heard",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "        .or_else(|| part.strip_prefix('r'))\n",
+      "replace": "",
+      "test": "linux_hotkeys::tests::the_sides_of_a_toggle_are_the_same_mechanism",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1278",
+      "why": "a chord with one modifier of the toggle is refused - shortcuts the layout leaves alone are lost",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "    first != second && holds(hotkey, first) && holds(hotkey, second)",
+      "replace": "    first != second && (holds(hotkey, first) || holds(hotkey, second))",
+      "test": "linux_hotkeys::tests::a_chord_is_taken_only_when_it_holds_both_modifiers_of_the_toggle",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1279",
+      "why": "Alt and Shift and Space is refused as the toggle on Alt and Space - the measured chord that is heard is lost",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "            && !hotkey.shift\n",
+      "replace": "",
+      "test": "linux_hotkeys::tests::alt_space_toggle_takes_alt_and_space_alone",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1280",
+      "why": "the toggle on Alt and Space is not known - Alt and Space is registered and never heard",
+      "file": "crates/nkb-sys/src/linux_hotkeys.rs",
+      "find": "        return first == Modifier::Alt\n",
+      "replace": "        return first == Modifier::Ctrl\n",
+      "test": "linux_hotkeys::tests::alt_space_toggle_takes_alt_and_space_alone",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1281",
+      "why": "a symbol on a second group is not found - a layout with Cyrillic first has no shortcut on n",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": ".find(|index| self.row(*index).contains(&keysym))",
+      "replace": ".find(|_| false)",
+      "test": "linux_hotkeys::tests::a_symbol_on_a_second_group_is_found_when_no_first_level_has_it",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1282",
+      "why": "a keycode past the map is read as a row of it - the program stops on a slice out of range",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "            .filter(|index| *index < self.rows())\n",
+      "replace": "",
+      "test": "linux_hotkeys::tests::a_keycode_outside_the_map_has_no_symbols",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }

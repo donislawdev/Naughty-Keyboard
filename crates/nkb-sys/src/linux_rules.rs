@@ -566,6 +566,26 @@ impl Keymap {
             .and_then(|index| self.keycode(index))
     }
 
+    /// The symbols a key has on every level of every group, none for a keycode the
+    /// map does not cover.
+    pub(crate) fn keysyms_of(&self, keycode: u8) -> &[u32] {
+        usize::from(keycode)
+            .checked_sub(usize::from(self.min_keycode))
+            .filter(|index| *index < self.rows())
+            .map_or(&[], |index| self.row(index))
+    }
+
+    /// The first key that types `keysym` on any level of any group, one that types it
+    /// on a first level before one that needs a level or a group (`D145`, a shortcut
+    /// is the key whose symbol it names, wherever the layout puts that symbol).
+    pub(crate) fn find_keycode_anywhere(&self, keysym: u32) -> Option<u8> {
+        self.find_keycode(keysym).or_else(|| {
+            (0..self.rows())
+                .find(|index| self.row(*index).contains(&keysym))
+                .and_then(|index| self.keycode(index))
+        })
+    }
+
     /// The characters the keys type in `group` on their first two levels, each with
     /// the key that types it. The ones that need no Shift come first, so a character
     /// on two keys is pressed through the one that needs fewer events.

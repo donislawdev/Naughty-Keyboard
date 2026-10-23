@@ -23,6 +23,13 @@
 //! while the process runs such a loop - the palette does, on its main thread. In a
 //! process without one a press is queued and nobody takes it.
 //!
+//! # X11 has a thread of its own and a connection of its own
+//!
+//! A grab is held by a connection and its presses are read from it, so [`listen`]
+//! opens one for the shortcuts and starts a thread that reads it (`linux/hotkey.rs`).
+//! A session under Wayland has no route: its X server never sees the keys of a window
+//! that is not an X client. [`can_register`] says so, and [`listen`] names it.
+//!
 //! # Why a registered hotkey is not a hot path
 //!
 //! Also from 6.5, and worth stating because the opposite is a common belief:
@@ -90,7 +97,9 @@ pub struct Hotkey {
     pub alt: bool,
     pub shift: bool,
     pub win: bool,
-    /// A platform virtual-key code. On Windows this is a `VK_*` value.
+    /// A platform virtual-key code. On Windows this is a `VK_*` value, and the other
+    /// systems are given the same codes and translate them (`macos_hotkeys::key_code`,
+    /// `linux_hotkeys::keysym_for_vk`).
     pub vk: u16,
 }
 
@@ -181,9 +190,20 @@ impl HotkeyListener {
 /// Asked before the work, so a system with no route says so rather than
 /// spawning a thread that can do nothing. One fact in one place, mirroring
 /// [`crate::can_send`].
+///
+/// On Linux that depends on the machine and not on the build: there has to be a local
+/// X server, and not XWayland, which never sees the keys of a Wayland window. The
+/// question connects to the server and lets go of it again.
 #[must_use]
-pub const fn can_register() -> bool {
-    cfg!(any(windows, target_os = "macos"))
+pub fn can_register() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::route_refusal().is_none()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        cfg!(any(windows, target_os = "macos"))
+    }
 }
 
 /// Starts listening for the given shortcuts - on a dedicated thread on Windows, and
@@ -389,18 +409,17 @@ mod platform {
 #[cfg(target_os = "macos")]
 use crate::macos::hotkey as platform;
 
-#[cfg(not(any(windows, target_os = "macos")))]
+#[cfg(target_os = "linux")]
+use crate::linux::hotkey as platform;
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 mod platform {
     use super::{Hotkey, HotkeyId, HotkeyRegistration, HotkeyUnavailable};
     use std::sync::mpsc::Receiver;
 
     /// Named rather than "this platform", so the message says something the
     /// reader can act on - the same wording as the rest of this crate.
-    const SYSTEM: &str = if cfg!(target_os = "linux") {
-        "Linux"
-    } else {
-        "this system"
-    };
+    const SYSTEM: &str = "this system";
 
     /// A handle that owns nothing, because there is no thread on this system.
     pub struct Listener;
