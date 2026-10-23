@@ -9931,6 +9931,168 @@
       "replace": "    if true: TouchArea {",
       "test": "a_palette_with_the_frame_of_the_system_has_neither_the_button_nor_the_drag",
       "runner": "rust:nkb-gui:palette_own_frame"
+    },
+    {
+      "id": "M1316",
+      "why": "an address that is set but empty wins over the runtime directory, so a session whose variable is blank has no bus",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "address.filter(|address| !address.trim().is_empty())",
+      "replace": "address.filter(|address| true || !address.trim().is_empty())",
+      "test": "linux_portal_rules::tests::without_an_address_the_bus_is_in_the_runtime_directory",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1317",
+      "why": "a trailing slash of the runtime directory is doubled into the path of the bus",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "Ok(format!(\"{}/bus\", dir.trim_end_matches('/')))",
+      "replace": "Ok(format!(\"{}/bus\", dir))",
+      "test": "linux_portal_rules::tests::without_an_address_the_bus_is_in_the_runtime_directory",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1318",
+      "why": "the dots of a unique name stay in the path of a request, which is then a path that has no such object",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "fits.then(|| rest.replace('.', \"_\"))",
+      "replace": "fits.then(|| rest.to_owned())",
+      "test": "linux_portal_rules::tests::a_unique_name_is_the_sender_of_a_path_without_its_colon_and_dots",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1319",
+      "why": "an empty token makes a path of a request that ends in a slash",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "    !token.is_empty()\n        && token",
+      "replace": "    true\n        && token",
+      "test": "linux_portal_rules::tests::the_path_of_a_request_is_known_before_the_call_is_made",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1320",
+      "why": "a person who closes the window of the system is told the portal ended the request with a code",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "        1 => Answer::Cancelled,",
+      "replace": "        1 => Answer::Ended(1),",
+      "test": "linux_portal_rules::tests::a_code_is_granted_cancelled_or_the_code",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1321",
+      "why": "an identifier of a shortcut with a leading zero is taken for ours, and so is one nobody here made",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "&& (digits == \"0\" || !digits.starts_with('0'));",
+      "replace": "&& true;",
+      "test": "linux_portal_rules::tests::an_identifier_of_a_shortcut_is_ours_only_in_the_exact_form",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1322",
+      "why": "the function keys are named one too low, so the portal is offered F4 for F5",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "Some(format!(\"F{}\", vk - 0x70 + 1))",
+      "replace": "Some(format!(\"F{}\", vk - 0x70))",
+      "test": "linux_portal_rules::tests::a_key_has_one_name_and_the_name_gives_the_key_back",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1323",
+      "why": "a key F25 is read out of the words of the portal, which the vocabulary has no key for",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "(1..=24).contains(&number).then_some(0x70 + number - 1)",
+      "replace": "(1..=25).contains(&number).then_some(0x70 + number - 1)",
+      "test": "linux_portal_rules::tests::a_name_that_is_not_one_of_ours_is_no_key",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1324",
+      "why": "the key of the Windows family is offered to the portal under a name it does not know",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "parts.push(String::from(\"LOGO\"));",
+      "replace": "parts.push(String::from(\"SUPER\"));",
+      "test": "linux_portal_rules::tests::the_chord_offered_is_in_the_syntax_of_the_specification",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1325",
+      "why": "the Super key in the words of the portal is read as Alt",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "\"super\" | \"mod4\" => win = true,",
+      "replace": "\"super\" | \"mod4\" => alt = true,",
+      "test": "linux_portal_rules::tests::the_language_of_the_words_does_not_matter_only_the_accelerator_in_them",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1326",
+      "why": "the Control key in the words of the portal is read as Shift",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "\"control\" | \"ctrl\" | \"primary\" => ctrl = true,",
+      "replace": "\"control\" | \"ctrl\" | \"primary\" => shift = true,",
+      "test": "linux_portal_rules::tests::the_words_of_the_portal_give_the_chord_back",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1327",
+      "why": "words that hold two accelerators are read as the first, which may not be the one the person chose",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "    if words.next().is_some() {",
+      "replace": "    if false {",
+      "test": "linux_portal_rules::tests::words_that_do_not_name_one_chord_of_the_vocabulary_name_none",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1328",
+      "why": "a system directory with no applications of its own is looked in at the wrong place when the environment names none",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": ".unwrap_or(\"/usr/local/share:/usr/share\");",
+      "replace": ".unwrap_or(\"/usr/share\");",
+      "test": "linux_portal_rules::tests::the_entry_is_looked_for_in_the_directory_of_the_person_and_then_the_system",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1329",
+      "why": "a directory of the system that is not a full path is looked in, relative to wherever the program stands",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "list.split(':').filter(|dir| dir.starts_with('/'))",
+      "replace": "list.split(':').filter(|dir| !dir.is_empty())",
+      "test": "linux_portal_rules::tests::the_entry_is_looked_for_in_the_directory_of_the_person_and_then_the_system",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1330",
+      "why": "a percent sign in the path of the program reaches the desktop as a field code",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "'%' => out.push_str(\"%%\"),",
+      "replace": "'%' => out.push('%'),",
+      "test": "linux_portal_rules::tests::a_percent_sign_is_written_twice_quoted_or_not",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1331",
+      "why": "a path of the program that is not a full path is written into an entry the desktop cannot start",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "if !exe.starts_with('/') {",
+      "replace": "if false {",
+      "test": "linux_portal_rules::tests::a_program_whose_place_cannot_be_written_down_gets_no_entry",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1332",
+      "why": "a path with a line break in it ends the Exec line of the entry and starts a line of somebody's choosing",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "exe.chars().any(char::is_control)",
+      "replace": "exe.chars().any(|c| c == 'q')",
+      "test": "linux_portal_rules::tests::a_program_whose_place_cannot_be_written_down_gets_no_entry",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1333",
+      "why": "a comment that quotes the mark makes a file of somebody else's ours, and ours is then removed",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "content.lines().any(|line| line == ENTRY_MARK)",
+      "replace": "content.contains(ENTRY_MARK)",
+      "test": "linux_portal_rules::tests::an_entry_that_somebody_else_made_is_not_ours",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }

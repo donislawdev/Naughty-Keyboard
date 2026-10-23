@@ -304,12 +304,13 @@ const GRANTED_TO_THE_PRODUCT: (&str, &str, &[&str], &str) = (
 /// like the grants above. The network types themselves stay forbidden by name in the
 /// granted file as in every other: only this spelling is opened.
 const SPELLINGS_GRANTED_TO_THE_PRODUCT: &[(&str, &str, &str)] = &[(
-    "crates/nkb-sys/src/linux/ibus/daemon.rs",
+    "crates/nkb-sys/src/linux/bus.rs",
     "std::net",
     "`std::net::Shutdown` is the argument of `UnixStream::shutdown`, which shuts the file \
-     socket of the input method daemon when a send runs past its deadline. The enum lives in \
-     `std::net` for historical reasons and has nothing to do with the network: `TcpStream`, \
-     `SocketAddr` and the rest stay forbidden here as everywhere",
+     socket of a bus of this machine (the input method daemon, the session bus) when a call \
+     runs past its deadline. The enum lives in `std::net` for historical reasons and has \
+     nothing to do with the network: `TcpStream`, `SocketAddr` and the rest stay forbidden \
+     here as everywhere",
 )];
 
 /// Whether `name` is the spelling granted to the file `rel`.
@@ -348,12 +349,14 @@ const LOCAL_SOCKETS_GRANTED_TO_THE_PRODUCT: &[(&str, &str, &str)] = &[
          library's own connect (TCP) is forbidden",
     ),
     (
-        "crates/nkb-sys/src/linux/ibus/daemon.rs",
+        "crates/nkb-sys/src/linux/bus.rs",
         "UnixStream::connect(path)",
-        "nkb send on a Wayland session hands the text to the IBus daemon of this machine, \
-         reached by the file socket its own address file names. Only a `unix:path=` address is \
-         accepted, TCP and the abstract namespace are refused before a connection is made, and \
-         the stream is opened here and given to the bus library, which never sees an address",
+        "on a Wayland session nkb send hands the text to the IBus daemon of this machine, \
+         reached by the file socket its own address file names, and the palette asks the \
+         portal of the desktop for its shortcuts over the session bus, a file socket too. \
+         Only a `unix:path=` address is accepted for either, TCP and the abstract namespace \
+         are refused before a connection is made, and the stream is opened here and given to \
+         the bus library, which never sees an address",
     ),
 ];
 
