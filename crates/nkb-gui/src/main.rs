@@ -152,6 +152,41 @@ fn start(request: Request) -> Result<(), slint::PlatformError> {
     }
 }
 
+/// The clicks of the palette that only ask the worker for something.
+///
+/// The worker holds the sequence and the settings, so each click sends a command,
+/// as the shortcut of the same action does.
+fn wire_clicks(palette: &Palette, choose: &std::sync::mpsc::Sender<live::Command>) {
+    palette.on_copy_next(copy_on_click(
+        palette,
+        choose,
+        Palette::get_next_key,
+        live::CopyButton::Next,
+    ));
+    palette.on_copy_last(copy_on_click(
+        palette,
+        choose,
+        Palette::get_last_key,
+        live::CopyButton::Last,
+    ));
+    // The report block's Copy is the report shortcut's action (`D121`).
+    palette.on_copy_report(ask_on_click(choose, live::Command::CopyReport));
+    // The arrows that walk the pack without typing (`D120`).
+    palette.on_back_one_value(ask_on_click(choose, live::Command::Back));
+    palette.on_skip_value(ask_on_click(choose, live::Command::Skip));
+    // Clipboard mode on and off (`D99`).
+    palette.on_choose_route(ask_for_way(choose, live::route_command));
+    palette.on_turn_off_clipboard(ask_on_click(choose, live::Command::TurnOffClipboard));
+    // Collapse and expand: the worker owns the switch and remembers it (`D84`).
+    palette.on_toggle_compact(ask_on_click(choose, live::Command::ToggleCompact));
+    // The list of shortcuts folds in the window at once, and the worker only
+    // remembers it (`D123`).
+    live::wire_shortcut_list(palette, choose);
+    // The way of meeting the field (`D101`) - the worker holds the choice, and
+    // its view brings back the way in effect.
+    palette.on_choose_clearing(ask_for_way(choose, live::clearing_command));
+}
+
 /// The palette, with the shortcuts driving it.
 ///
 /// # The shape of the two threads, and why the join is not optional
@@ -232,37 +267,7 @@ fn run_palette(
         Arc::clone(&in_use),
         say_in(&palette),
     );
-    palette.on_copy_next(copy_on_click(
-        &palette,
-        &choose,
-        Palette::get_next_key,
-        live::CopyButton::Next,
-    ));
-    palette.on_copy_last(copy_on_click(
-        &palette,
-        &choose,
-        Palette::get_last_key,
-        live::CopyButton::Last,
-    ));
-    // The report block's Copy is the report shortcut's action (`D121`).
-    palette.on_copy_report(ask_on_click(&choose, live::Command::CopyReport));
-    // The arrows that walk the pack without typing (`D120`): the worker holds the
-    // sequence, so the click only asks - the same way the shortcuts go.
-    palette.on_back_one_value(ask_on_click(&choose, live::Command::Back));
-    palette.on_skip_value(ask_on_click(&choose, live::Command::Skip));
-    // Clipboard mode on and off (`D99`): the worker holds the sequence, so the
-    // click only asks.
-    palette.on_choose_route(ask_for_way(&choose, live::route_command));
-    palette.on_turn_off_clipboard(ask_on_click(&choose, live::Command::TurnOffClipboard));
-    // Collapse and expand: the worker owns the switch and remembers it (`D84`),
-    // so the click asks, as the shortcut does.
-    palette.on_toggle_compact(ask_on_click(&choose, live::Command::ToggleCompact));
-    // The list of shortcuts folds in the window at once, and the worker only
-    // remembers it (`D123`).
-    live::wire_shortcut_list(&palette, &choose);
-    // The way of meeting the field (`D101`) - the worker holds the choice, and
-    // its view brings back the way in effect.
-    palette.on_choose_clearing(ask_for_way(&choose, live::clearing_command));
+    wire_clicks(&palette, &choose);
     // The same way: created once, shown on request - and the one window the
     // worker's answers about shortcuts are delivered to (`shortcuts::tell`).
     let shortcuts = Shortcuts::new(

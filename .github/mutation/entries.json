@@ -6399,7 +6399,7 @@
       "id": "M904",
       "why": "the gallery back in a 2000 px buffer - the catalogue runs past the image and its last entries disappear without a word",
       "file": "crates/nkb-gui/tests/appearance.rs",
-      "find": "const HEIGHT: u32 = 3800;\n",
+      "find": "const HEIGHT: u32 = 4100;\n",
       "replace": "const HEIGHT: u32 = 2000;\n",
       "test": "the_gallery_renders_off_screen_and_renders_the_same_way_twice",
       "runner": "rust:nkb-gui:appearance"
