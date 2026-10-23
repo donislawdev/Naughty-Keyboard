@@ -419,7 +419,7 @@
       "file": "crates/nkb-core/src/hotkeys.rs",
       "find": "            ctrl: false,\n            alt: true,\n            shift: true,",
       "replace": "            ctrl: true,\n            alt: true,\n            shift: true,",
-      "test": "hotkeys::tests::every_default_on_windows_and_linux_is_alt_shift_and_never_ctrl_alt",
+      "test": "hotkeys::tests::every_default_on_windows_is_alt_shift_and_never_ctrl_alt",
       "runner": "rust:nkb-core:lib"
     },
     {
@@ -8298,8 +8298,8 @@
       "id": "M1134",
       "why": "the macOS screen writes Option as Alt - the tester reads a key that is not on the keyboard in front of them (OBS-115)",
       "file": "crates/nkb-core/src/hotkeys.rs",
-      "find": "                    (self.alt, \"Option\"),",
-      "replace": "                    (self.alt, \"Alt\"),",
+      "find": "            Convention::MacOs => [\"Control\", \"Option\", \"Shift\", \"Command\"],",
+      "replace": "            Convention::MacOs => [\"Control\", \"Alt\", \"Shift\", \"Command\"],",
       "test": "hotkeys::tests::the_screen_says_the_words_of_the_system_and_the_parser_reads_every_one_back",
       "runner": "rust:nkb-core:lib"
     },
@@ -8309,7 +8309,7 @@
       "file": "crates/nkb-core/src/hotkeys.rs",
       "find": "        HotkeyAction::OpenPacks => HotkeyKey::F,",
       "replace": "        HotkeyAction::OpenPacks => key,",
-      "test": "hotkeys::tests::both_conventions_bind_the_same_key_to_the_same_action_but_the_one_the_system_holds",
+      "test": "hotkeys::tests::the_conventions_bind_the_same_key_to_the_same_action_but_the_one_the_system_holds",
       "runner": "rust:nkb-core:lib"
     },
     {
@@ -8415,8 +8415,8 @@
       "id": "M1147",
       "why": "Windows asks the Mac question - Alt+A, which takes nothing, is refused on Windows and Ctrl+Alt+A, which takes the AltGr character, is used",
       "file": "crates/nkb-core/src/hotkeys.rs",
-      "find": "            Convention::WindowsAndLinux => chord.could_be_altgr(),\n            Convention::MacOs",
-      "replace": "            Convention::WindowsAndLinux => chord.could_type_with_option(),\n            Convention::MacOs",
+      "find": "            Convention::Windows => chord.could_be_altgr(),",
+      "replace": "            Convention::Windows => chord.could_type_with_option(),",
       "test": "hotkeys::tests::the_question_of_each_convention_is_the_shape_of_its_own_key",
       "runner": "rust:nkb-core:lib"
     },
@@ -8433,8 +8433,8 @@
       "id": "M1149",
       "why": "a refusal on Windows is worded as Option - the sentence names a key the keyboard does not have",
       "file": "crates/nkb-core/src/hotkeys.rs",
-      "find": "            Convention::WindowsAndLinux => Refusal::TypesCharacter(character),",
-      "replace": "            Convention::WindowsAndLinux => Refusal::OptionTypesCharacter(character),",
+      "find": "            Convention::Windows | Convention::Linux => Refusal::TypesCharacter(character),",
+      "replace": "            Convention::Windows | Convention::Linux => Refusal::OptionTypesCharacter(character),",
       "test": "hotkeys::tests::typing_refusal_is_worded_for_the_key_of_the_convention",
       "runner": "rust:nkb-core:lib"
     },
@@ -8595,8 +8595,8 @@
       "id": "M1167",
       "why": "a Windows build names the modifiers the Mac way - a tester without a Control key is told to add one",
       "file": "crates/nkb-adapters/src/i18n/typing.rs",
-      "find": "        Convention::WindowsAndLinux => \"Ctrl, Alt or Win\",",
-      "replace": "        Convention::WindowsAndLinux => \"Control, Option or Command\",",
+      "find": "        Convention::Windows => \"Ctrl, Alt or Win\",",
+      "replace": "        Convention::Windows => \"Control, Option or Command\",",
       "test": "i18n::typing::tests::the_modifiers_are_named_by_the_keyboard_of_the_system",
       "runner": "rust:nkb-adapters:lib"
     },
@@ -9643,6 +9643,51 @@
       "replace": "        let ours = window.map(WindowRef).unwrap_or(WindowRef(0));\n",
       "test": "focus::tests::handing_back_again_with_no_handle_says_the_handle_is_missing_on_every_system",
       "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1284",
+      "why": "the Linux table uses the Windows family - Alt+Shift, which a layout toggle of X11 takes whole, is registered and never fires",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "            Convention::Linux => HotkeyChord::ctrl_alt(key),",
+      "replace": "            Convention::Linux => HotkeyChord::alt_shift(key),",
+      "test": "hotkeys::tests::every_default_on_linux_is_ctrl_alt_and_never_alt_shift",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1285",
+      "why": "the Linux shape of a default lacks Ctrl - Alt+key is registered, and a program that reads it as a command key loses it",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "    const fn ctrl_alt(key: HotkeyKey) -> Self {\n        Self {\n            ctrl: true,",
+      "replace": "    const fn ctrl_alt(key: HotkeyKey) -> Self {\n        Self {\n            ctrl: false,",
+      "test": "hotkeys::tests::every_default_on_linux_is_ctrl_alt_and_never_alt_shift",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1286",
+      "why": "Linux asks the Windows question - a Ctrl+Alt chord is refused for a character the layout never types there, and the default itself cannot be chosen",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "            Convention::Linux => false,",
+      "replace": "            Convention::Linux => chord.could_be_altgr(),",
+      "test": "hotkeys::tests::the_question_of_each_convention_is_the_shape_of_its_own_key",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1287",
+      "why": "the Linux screen names the Super key Win - a Linux keyboard has no key with that name",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "            Convention::Linux => [\"Ctrl\", \"Alt\", \"Shift\", \"Super\"],",
+      "replace": "            Convention::Linux => [\"Ctrl\", \"Alt\", \"Shift\", \"Win\"],",
+      "test": "hotkeys::tests::the_screen_says_the_words_of_the_system_and_the_parser_reads_every_one_back",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1288",
+      "why": "Linux is handed the Windows table - the palette registers Alt+Shift chords that a layout toggle consumes",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "        Convention::Linux => &LINUX_DEFAULT_BINDINGS,",
+      "replace": "        Convention::Linux => &DEFAULT_BINDINGS,",
+      "test": "hotkeys::tests::each_convention_answers_with_its_own_table",
+      "runner": "rust:nkb-core:lib"
     }
   ]
 }

@@ -1634,11 +1634,16 @@ mod tests {
 
             let text = chord_text(&defaults(), action);
             assert!(!text.is_empty(), "{action:?} has no shortcut text");
-            if CONVENTION == Convention::WindowsAndLinux {
-                assert!(
+            match CONVENTION {
+                Convention::Windows => assert!(
                     text.starts_with("Alt+Shift+"),
                     "{action:?} reads as {text}, and every default is Alt+Shift+<key> (D82)"
-                );
+                ),
+                Convention::Linux => assert!(
+                    text.starts_with("Ctrl+Alt+"),
+                    "{action:?} reads as {text}, and every default is Ctrl+Alt+<key> (D145)"
+                ),
+                Convention::MacOs => {}
             }
         }
         names.sort_unstable();
@@ -1653,18 +1658,23 @@ mod tests {
 
     #[test]
     fn a_shortcut_reads_the_way_a_tester_writes_it() {
-        if CONVENTION == Convention::WindowsAndLinux {
+        let family = match CONVENTION {
+            Convention::Windows => Some("Alt+Shift+"),
+            Convention::Linux => Some("Ctrl+Alt+"),
+            Convention::MacOs => None,
+        };
+        if let Some(family) = family {
             assert_eq!(
                 chord_text(&defaults(), HotkeyAction::NextValue),
-                "Alt+Shift+N"
+                format!("{family}N")
             );
             assert_eq!(
                 chord_text(&defaults(), HotkeyAction::RestartPack),
-                "Alt+Shift+0"
+                format!("{family}0")
             );
             assert_eq!(
                 chord_text(&defaults(), HotkeyAction::OpenPacks),
-                "Alt+Shift+Space"
+                format!("{family}Space")
             );
         }
         assert_eq!(
@@ -1675,10 +1685,10 @@ mod tests {
                 win: true,
                 key: HotkeyKey::H,
             }),
-            if CONVENTION == Convention::MacOs {
-                "Control+Option+Shift+Command+H"
-            } else {
-                "Ctrl+Alt+Shift+Win+H"
+            match CONVENTION {
+                Convention::MacOs => "Control+Option+Shift+Command+H",
+                Convention::Linux => "Ctrl+Alt+Shift+Super+H",
+                Convention::Windows => "Ctrl+Alt+Shift+Win+H",
             }
         );
     }
