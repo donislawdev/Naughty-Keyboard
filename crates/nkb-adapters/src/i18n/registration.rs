@@ -31,6 +31,11 @@ fn pattern_registration(outcome: &ShortcutRegistration) -> Option<&'static str> 
         ShortcutRegistration::Failed { .. } => Some(
             "{shortcut} could not be registered, so \"{action}\" will not respond. The system returned code {code}.",
         ),
+        // No `{shortcut}`: the chord asked for is not the one the desktop would
+        // have given, and a sentence naming it would be about nothing.
+        ShortcutRegistration::NotGiven => {
+            Some("The desktop did not give \"{action}\" a shortcut, so it will not respond.")
+        }
     }
 }
 
@@ -52,7 +57,9 @@ pub fn registration(
     // not change what this function returned, so the guard could not see it. Two
     // places holding one decision is the shape that drifts.
     let code = match outcome {
-        ShortcutRegistration::Registered | ShortcutRegistration::Taken => String::new(),
+        ShortcutRegistration::Registered
+        | ShortcutRegistration::Taken
+        | ShortcutRegistration::NotGiven => String::new(),
         ShortcutRegistration::Failed { code } => code.to_string(),
     };
     Some(fill(
@@ -127,6 +134,29 @@ fn pattern_unavailable(reason: &ShortcutsUnavailable) -> &'static str {
         ShortcutsUnavailable::CouldNotStart => {
             "The shortcut listener could not start, so no shortcut will respond. Restart the palette to try again."
         }
+        ShortcutsUnavailable::Desktop(refusal) => pattern_desktop(*refusal),
+    }
+}
+
+/// The pattern for the desktop's own way to give shortcuts giving none. Each
+/// refusal is a sentence of its own: they differ in what the person can do.
+fn pattern_desktop(refusal: DesktopRefusal) -> &'static str {
+    match refusal {
+        DesktopRefusal::NeedsEntry => {
+            "The desktop does not know Naughty Keyboard yet, so it cannot give the palette global shortcuts."
+        }
+        DesktopRefusal::NoPortal => {
+            "The desktop did not offer global shortcuts to programs, so the palette cannot be driven from the keyboard here."
+        }
+        DesktopRefusal::Closed => {
+            "The window of the system was closed without choosing shortcuts, so none will respond. Restart the palette to be asked again."
+        }
+        DesktopRefusal::Ended { .. } => {
+            "The desktop ended the request for shortcuts, so none will respond. The system returned code {code}."
+        }
+        DesktopRefusal::NothingGiven => {
+            "The desktop gave none of the shortcuts the palette asked for, so none will respond."
+        }
     }
 }
 
@@ -136,7 +166,12 @@ pub fn shortcuts_unavailable(reason: &ShortcutsUnavailable) -> String {
     let pattern = pattern_unavailable(reason);
     match reason {
         ShortcutsUnavailable::Unsupported { system } => fill(pattern, &[("system", system)]),
-        ShortcutsUnavailable::CouldNotStart => pattern.to_owned(),
+        ShortcutsUnavailable::Desktop(DesktopRefusal::Ended { code }) => {
+            fill(pattern, &[("code", &code.to_string())])
+        }
+        ShortcutsUnavailable::CouldNotStart | ShortcutsUnavailable::Desktop(_) => {
+            pattern.to_owned()
+        }
     }
 }
 
@@ -158,4 +193,70 @@ fn pattern_ended(ended: Ended) -> Option<&'static str> {
 #[must_use]
 pub fn ended(ended: Ended) -> Option<String> {
     pattern_ended(ended).map(ToOwned::to_owned)
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::panic,
+    reason = "a failed expectation in a test is a failed test"
+)]
+mod tests {
+    use super::*;
+    use crate::shortcuts::default_bindings;
+
+    /// A shortcut the desktop did not give is said once for its action, and the
+    /// sentence names no chord: the chord asked for is not one anybody holds.
+    #[test]
+    fn a_shortcut_the_desktop_did_not_give_is_said_by_its_action_and_names_no_chord() {
+        let asked = default_bindings().chord(HotkeyAction::NextValue);
+        let said = registration(
+            &ShortcutRegistration::NotGiven,
+            HotkeyAction::NextValue,
+            asked,
+        )
+        .expect("a shortcut that was not given is said");
+        assert!(
+            said.contains(action_name(HotkeyAction::NextValue)),
+            "{said}"
+        );
+        assert!(!said.contains(&chord(asked)), "{said}");
+
+        // One of the set left out is one sentence, as a taken one is.
+        let one = registrations(&HotkeyAction::ALL.map(|action| {
+            let outcome = if action == HotkeyAction::PreviousValue {
+                ShortcutRegistration::NotGiven
+            } else {
+                ShortcutRegistration::Registered
+            };
+            (action, default_bindings().chord(action), outcome)
+        }));
+        assert_eq!(one.len(), 1, "{one:?}");
+        assert!(
+            one[0].contains(action_name(HotkeyAction::PreviousValue)),
+            "{one:?}"
+        );
+    }
+
+    /// Each refusal of the desktop is a sentence of its own, with no gap left
+    /// where a value was to go, and the code of an ended request is in it.
+    #[test]
+    fn every_refusal_of_the_desktop_is_said_in_words_of_its_own() {
+        let said: Vec<String> = [
+            DesktopRefusal::NeedsEntry,
+            DesktopRefusal::NoPortal,
+            DesktopRefusal::Closed,
+            DesktopRefusal::Ended { code: 2 },
+            DesktopRefusal::NothingGiven,
+        ]
+        .map(|refusal| shortcuts_unavailable(&ShortcutsUnavailable::Desktop(refusal)))
+        .into();
+        for (index, one) in said.iter().enumerate() {
+            assert!(!one.contains('{'), "a gap is left in: {one}");
+            for other in &said[index + 1..] {
+                assert_ne!(one, other);
+            }
+        }
+        assert!(said[3].contains("code 2"), "{}", said[3]);
+    }
 }

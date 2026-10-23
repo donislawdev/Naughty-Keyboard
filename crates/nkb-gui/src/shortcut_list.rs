@@ -256,7 +256,11 @@ impl ShortcutList {
             .map(|(_, _, outcome)| *outcome);
         let risk = match registered {
             Some(ShortcutRegistration::Taken) => Some(ShortcutsLabel::Taken),
-            Some(ShortcutRegistration::Failed { .. }) => Some(ShortcutsLabel::NotRegistered),
+            // A shortcut the desktop did not give is not registered either: it
+            // will not respond, and the row must not look like one that does.
+            Some(ShortcutRegistration::Failed { .. } | ShortcutRegistration::NotGiven) => {
+                Some(ShortcutsLabel::NotRegistered)
+            }
             Some(ShortcutRegistration::Registered) | None => None,
         };
         if let Some(label) = risk {
@@ -547,6 +551,34 @@ mod tests {
                 .as_ref()
                 .map(|badge| badge.text.as_str()),
             Some("taken")
+        );
+    }
+
+    /// A shortcut the desktop did not give is a risk in its row, as one the
+    /// system refused is, and is not called taken: nobody is known to hold it.
+    #[test]
+    fn a_shortcut_the_desktop_did_not_give_is_a_risk_that_is_not_called_taken() {
+        let wanted = defaults().chord(HotkeyAction::NextValue);
+        let list = ShortcutList::new(
+            defaults(),
+            ShortcutsNow {
+                bindings: defaults(),
+                registered: vec![(
+                    HotkeyAction::NextValue,
+                    wanted,
+                    ShortcutRegistration::NotGiven,
+                )],
+            },
+        );
+        let at = HotkeyAction::READING_ORDER
+            .iter()
+            .position(|action| *action == HotkeyAction::NextValue)
+            .expect("every action has a row");
+        let badge = list.rows()[at].badge.clone().expect("the row says it");
+        assert!(badge.risky);
+        assert_eq!(
+            badge.text,
+            i18n::shortcuts_label(ShortcutsLabel::NotRegistered)
         );
     }
 

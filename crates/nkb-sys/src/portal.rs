@@ -29,9 +29,44 @@ pub struct Wish {
     /// The chord offered. The person may choose another, and `id` is what comes back with a
     /// press of whatever they chose.
     pub hotkey: Hotkey,
+    /// The name the desktop keeps the shortcut under. It keeps the chord the person chose
+    /// under that name, from one run of the program to the next and from one version to the
+    /// next, so a name is never changed for a shortcut and never given to another (`OBS-223`).
+    /// Lower case letters, digits and hyphens, and none is asked for twice ([`usable_name`]).
+    pub name: String,
     /// What the shortcut does, in the words the window of the system and the settings of the
     /// desktop show beside it.
     pub description: String,
+}
+
+/// The longest name a shortcut is kept under.
+const NAME_LONGEST: usize = 64;
+
+/// Whether `name` can be what the desktop keeps a shortcut under: lower case letters, digits
+/// and hyphens, with a letter or a digit at both ends, at most 64 of them. The same alphabet
+/// as the keys of the settings file, so the name of an action is a name of a shortcut as it is.
+#[must_use]
+pub fn usable_name(name: &str) -> bool {
+    let plain = |byte: &u8| byte.is_ascii_lowercase() || byte.is_ascii_digit();
+    let bytes = name.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= NAME_LONGEST
+        && bytes.iter().all(|byte| plain(byte) || *byte == b'-')
+        && bytes.first().is_some_and(plain)
+        && bytes.last().is_some_and(plain)
+}
+
+/// Whether `wishes` can be asked for together: each has a name the desktop can keep, and no
+/// name is asked for twice, which would make two shortcuts of one. Only the system that asks a
+/// portal asks it, and the tests ask it everywhere.
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn names_usable(wishes: &[Wish]) -> bool {
+    wishes.iter().enumerate().all(|(index, wish)| {
+        usable_name(&wish.name)
+            && wishes[..index]
+                .iter()
+                .all(|earlier| earlier.name != wish.name)
+    })
 }
 
 /// A shortcut the portal says it holds.
@@ -65,6 +100,9 @@ pub enum Unavailable {
     Ended(u32),
     /// The portal answered in a way its own specification does not allow.
     Odd,
+    /// A shortcut was asked for under a name the desktop cannot keep, or two under one
+    /// name. Nothing was asked of the desktop.
+    BadWish,
 }
 
 impl core::fmt::Display for Unavailable {
@@ -79,6 +117,9 @@ impl core::fmt::Display for Unavailable {
             Self::Ended(code) => write!(f, "the portal ended the request with code {code}"),
             Self::Odd => {
                 f.write_str("the portal answered in a way its specification does not allow")
+            }
+            Self::BadWish => {
+                f.write_str("a shortcut was asked for under a name the desktop cannot keep")
             }
         }
     }
@@ -272,6 +313,7 @@ mod tests {
             Unavailable::Cancelled,
             Unavailable::Ended(2),
             Unavailable::Odd,
+            Unavailable::BadWish,
         ];
         let words: Vec<String> = reasons.iter().map(ToString::to_string).collect();
         for (index, one) in words.iter().enumerate() {
@@ -281,6 +323,57 @@ mod tests {
             }
         }
         assert!(Unavailable::Ended(77).to_string().contains("77"));
+    }
+
+    /// A name is what the desktop keeps the person's chord under, so it must be one that
+    /// is the same on every system and in every language: no capital, no space, no sign.
+    #[test]
+    fn a_name_is_lower_case_letters_digits_and_inner_hyphens_only() {
+        for good in ["a", "0", "next-value", "mark-ok", "a-b-c", "x1", "1x"] {
+            assert!(usable_name(good), "{good:?}");
+        }
+        for bad in [
+            "",
+            "-",
+            "-a",
+            "a-",
+            "Next",
+            "next value",
+            "next_value",
+            "k.1",
+            "ą",
+            "a\n",
+        ] {
+            assert!(!usable_name(bad), "{bad:?}");
+        }
+        assert!(usable_name(&"a".repeat(NAME_LONGEST)));
+        assert!(!usable_name(&"a".repeat(NAME_LONGEST + 1)));
+    }
+
+    fn wish(name: &str) -> Wish {
+        Wish {
+            hotkey: Hotkey {
+                id: crate::hotkey::HotkeyId(0),
+                ctrl: true,
+                alt: true,
+                shift: false,
+                win: false,
+                vk: 0x4E,
+            },
+            name: name.to_owned(),
+            description: String::from("a shortcut"),
+        }
+    }
+
+    /// Two shortcuts under one name would be one to the desktop, and a press of it would
+    /// belong to whichever was read last.
+    #[test]
+    fn wishes_are_asked_together_only_under_names_that_are_usable_and_apart() {
+        assert!(names_usable(&[]));
+        assert!(names_usable(&[wish("next-value"), wish("repeat-last")]));
+        assert!(!names_usable(&[wish("next-value"), wish("next-value")]));
+        assert!(!names_usable(&[wish("next-value"), wish("Repeat")]));
+        assert!(!names_usable(&[wish("")]));
     }
 
     #[test]

@@ -33,8 +33,9 @@ use nkb_core::screens::{Layout, Point};
 
 use crate::advance_sequence::ChooseError;
 use crate::ports::{
-    HotkeyRegistrar, POSITIONS_KEPT, RECENT_KEPT, SaveError, SettingChange, Settings, SettingsLoad,
-    SettingsNote, SettingsStore, SettingsUnusable, ShortcutRegistration, ShortcutsUnavailable,
+    DesktopRefusal, HotkeyRegistrar, POSITIONS_KEPT, RECENT_KEPT, SaveError, SettingChange,
+    Settings, SettingsLoad, SettingsNote, SettingsStore, SettingsUnusable, ShortcutRegistration,
+    ShortcutsUnavailable,
 };
 
 /// Something about the settings worth telling the tester.
@@ -601,6 +602,11 @@ fn trial(registrar: &dyn HotkeyRegistrar, action: HotkeyAction, chord: HotkeyCho
         Some(ShortcutRegistration::Registered) => Trial::Free,
         Some(ShortcutRegistration::Taken) => Trial::Taken,
         Some(ShortcutRegistration::Failed { code }) => Trial::Failed { code },
+        // A desktop that chooses the chords never says one is taken, and a
+        // chord it did not give is no answer about the chord: it is not checked.
+        Some(ShortcutRegistration::NotGiven) => {
+            Trial::Unchecked(ShortcutsUnavailable::Desktop(DesktopRefusal::NothingGiven))
+        }
         None => Trial::Unchecked(ShortcutsUnavailable::CouldNotStart),
     }
 }
@@ -1694,6 +1700,33 @@ mod tests {
                 .chord(HotkeyAction::NextValue),
             chord("Alt+Shift+M")
         );
+    }
+
+    /// A desktop that chooses the chords never says that one is held by somebody
+    /// else, so a chord it did not give on trial is a chord nobody could check:
+    /// the change goes through saying so, and is not refused as taken.
+    #[test]
+    fn a_chord_the_desktop_did_not_give_on_trial_goes_through_unchecked() {
+        let registrar = FakeRegistrar::answering(Ok(ShortcutRegistration::NotGiven));
+        let store = FakeStore::loading(SettingsLoad::Absent);
+        let (mut kept, _) = KeptSettings::open(&store);
+
+        let (change, _) = kept.change_shortcut(
+            &store,
+            &registrar,
+            DEFAULTS,
+            &no_layout,
+            HotkeyAction::NextValue,
+            Some(chord("Alt+Shift+M")),
+        );
+
+        let nothing = ShortcutsUnavailable::Desktop(DesktopRefusal::NothingGiven);
+        assert!(
+            matches!(&change, ShortcutChange::Changed { unchecked: Some(why), .. } if *why == nothing),
+            "{change:?}"
+        );
+        assert_eq!(store.saves().len(), 1);
+        assert_eq!(registrar.alive.load(Ordering::SeqCst), 0);
     }
 
     fn layout(text: &str) -> Layout {

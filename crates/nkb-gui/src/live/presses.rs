@@ -3,6 +3,8 @@
 //! palette took, ends the wait. Apart from the loop in `live.rs`, so that the
 //! two are found apart and neither file grows past the ceiling of `D113`.
 
+use nkb_app::ports::GivenShortcut;
+
 use super::*;
 
 /// Whether the loop goes on: no while the window is closing, and no while a
@@ -67,6 +69,10 @@ pub(super) struct PaletteShortcuts<'a> {
 impl LiveShortcuts for PaletteShortcuts<'_> {
     fn outcomes(&self) -> &[(HotkeyAction, ShortcutRegistration)] {
         self.inner.outcomes()
+    }
+
+    fn given(&self) -> &[(HotkeyAction, GivenShortcut)] {
+        self.inner.given()
     }
 
     fn next(&self, wait: Duration) -> Wait {

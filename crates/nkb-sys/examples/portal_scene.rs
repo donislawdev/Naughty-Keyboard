@@ -125,6 +125,7 @@ fn bind(args: &[String]) {
             return;
         };
         wishes.push(Wish {
+            name: format!("probe-{}", hotkey.id.0),
             description: format!("Probe shortcut {}", hotkey.id.0),
             hotkey,
         });

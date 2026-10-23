@@ -39,10 +39,9 @@ use crate::hotkey::HotkeyId;
 use crate::linux_portal_rules::{
     ANSWER_WAIT, APP_ID, Answer, BIND_WAIT, CALL_WAIT, PORTAL_NAME, PORTAL_PATH,
     REGISTRY_INTERFACE, REQUEST_INTERFACE, SESSION_INTERFACE, SHORTCUTS_INTERFACE, answer_of,
-    bound_hotkey, hotkey_id_of, preferred_trigger, request_path, session_bus_socket, shortcut_id,
-    token,
+    bound_hotkey, preferred_trigger, request_path, session_bus_socket, token,
 };
-use crate::portal::{Bound, Unavailable, Wish};
+use crate::portal::{Bound, Unavailable, Wish, names_usable};
 
 /// The answer of a request: a dictionary of what the portal has to say.
 type Results = HashMap<String, OwnedValue>;
@@ -115,16 +114,18 @@ fn unwrapped<'v, 'a>(value: &'v Value<'a>) -> &'v Value<'a> {
     }
 }
 
-/// One shortcut of the answer to a bind, or `None` when it is not one of ours or is not in
-/// the shape the specification gives.
-fn bound_one(item: &Value<'_>) -> Option<Bound> {
+/// One shortcut of the answer to a bind, or `None` when it is not one of `wishes` or is not
+/// in the shape the specification gives. The desktop answers by the name a shortcut was asked
+/// for under, and a name nobody asked for is a shortcut somebody else left in the session.
+fn bound_one(item: &Value<'_>, wishes: &[Wish]) -> Option<Bound> {
     let Value::Structure(entry) = unwrapped(item) else {
         return None;
     };
     let [id, info] = entry.fields() else {
         return None;
     };
-    let id = hotkey_id_of(text_of(id)?)?;
+    let name = text_of(id)?;
+    let id = wishes.iter().find(|wish| wish.name == name)?.hotkey.id;
     let Value::Dict(info) = unwrapped(info) else {
         return None;
     };
@@ -141,7 +142,7 @@ fn bound_one(item: &Value<'_>) -> Option<Bound> {
 }
 
 /// The shortcuts in the answer to a bind. None when the person was given none.
-fn bound_in(results: &Results) -> Vec<Bound> {
+fn bound_in(results: &Results, wishes: &[Wish]) -> Vec<Bound> {
     let Some(list) = results.get("shortcuts") else {
         return Vec::new();
     };
@@ -149,7 +150,11 @@ fn bound_in(results: &Results) -> Vec<Bound> {
     let Value::Array(array) = unwrapped(list) else {
         return Vec::new();
     };
-    array.inner().iter().filter_map(bound_one).collect()
+    array
+        .inner()
+        .iter()
+        .filter_map(|item| bound_one(item, wishes))
+        .collect()
 }
 
 /// What an answer other than agreement means for the caller.
@@ -290,7 +295,7 @@ impl Portal {
                     if let Some(offered) = preferred_trigger(&wish.hotkey) {
                         info.insert("preferred_trigger", Value::from(offered));
                     }
-                    (shortcut_id(wish.hotkey.id), info)
+                    (wish.name.clone(), info)
                 })
                 .collect();
             let mut options: HashMap<&str, Value<'_>> = HashMap::new();
@@ -306,7 +311,7 @@ impl Portal {
         if answer != Answer::Granted {
             return Err(refusal(answer));
         }
-        Ok(bound_in(&results))
+        Ok(bound_in(&results, wishes))
     }
 
     /// The presses of the shortcuts of `session`, as the portal announces them.
@@ -326,7 +331,13 @@ impl Portal {
 }
 
 /// Hears the presses until the connection is shut, and passes on the ones of our session.
-fn hear(presses: MessageIterator, session: &str, fired: &Sender<HotkeyId>) {
+/// `names` is each shortcut asked for, by the name the desktop knows it under.
+fn hear(
+    presses: MessageIterator,
+    session: &str,
+    names: &[(String, HotkeyId)],
+    fired: &Sender<HotkeyId>,
+) {
     for message in presses {
         let Ok(message) = message else {
             break;
@@ -341,8 +352,8 @@ fn hear(presses: MessageIterator, session: &str, fired: &Sender<HotkeyId>) {
         if from.as_str() != session {
             continue;
         }
-        if let Some(id) = hotkey_id_of(&shortcut)
-            && fired.send(id).is_err()
+        if let Some((_, id)) = names.iter().find(|(name, _)| *name == shortcut)
+            && fired.send(*id).is_err()
         {
             break;
         }
@@ -391,6 +402,11 @@ pub(crate) type Begun = (Vec<Bound>, Receiver<HotkeyId>, Listener);
 
 /// Asks the portal for `wishes`. See `portal::start`.
 pub(crate) fn start(wishes: &[Wish]) -> Result<Begun, Unavailable> {
+    // Nothing is asked of a desktop that would keep two shortcuts as one, or one under a name
+    // it cannot keep, and the bus is not even opened.
+    if !names_usable(wishes) {
+        return Err(Unavailable::BadWish);
+    }
     let mut portal = Portal::open()?;
     portal.introduce()?;
     let session = portal.create_session()?;
@@ -401,7 +417,11 @@ pub(crate) fn start(wishes: &[Wish]) -> Result<Begun, Unavailable> {
         .name("nkb-portal".to_owned())
         .spawn({
             let session = session.clone();
-            move || hear(presses, &session, &sender)
+            let names: Vec<(String, HotkeyId)> = wishes
+                .iter()
+                .map(|wish| (wish.name.clone(), wish.hotkey.id))
+                .collect();
+            move || hear(presses, &session, &names, &sender)
         })?;
     let Portal {
         connection, stream, ..

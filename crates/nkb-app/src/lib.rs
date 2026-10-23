@@ -39,12 +39,12 @@ pub use load_pack::{LoadedPack, Refused, load};
 pub use new_pack::{NewPackOutcome, new_pack};
 pub use ports::{
     Availability, CatalogueCoverage, CatalogueSource, Clock, Date, Delivered, DeliveryError,
-    Following, HotkeyRegistrar, KeystrokeError, KeystrokeSender, LiveShortcuts, POSITIONS_KEPT,
-    PackCatalogue, PackFormat, PackSink, PackSource, Progress, RECENT_KEPT, SaveError,
-    SettingChange, Settings, SettingsLoad, SettingsNote, SettingsStore, SettingsUnusable,
-    ShortcutRegistration, ShortcutUnreadable, ShortcutsUnavailable, SinkError, SourceError,
-    SourceSkipped, StopReason, TargetInspector, TargetRef, TranslationCheck, TranslationTarget,
-    ValueDelivery, Wait,
+    DesktopRefusal, Following, GivenShortcut, HotkeyRegistrar, KeystrokeError, KeystrokeSender,
+    LiveShortcuts, POSITIONS_KEPT, PackCatalogue, PackFormat, PackSink, PackSource, Progress,
+    RECENT_KEPT, SaveError, SettingChange, Settings, SettingsLoad, SettingsNote, SettingsStore,
+    SettingsUnusable, ShortcutRegistration, ShortcutUnreadable, ShortcutsUnavailable, SinkError,
+    SourceError, SourceSkipped, StopReason, TargetInspector, TargetRef, TranslationCheck,
+    TranslationTarget, ValueDelivery, Wait,
 };
 pub use send_value::{
     Chosen, Clearing, ClearingOutcome, SendOutcome, SendRequest, Sending, SkipReason, ValueFacts,
