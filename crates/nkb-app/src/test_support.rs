@@ -17,7 +17,7 @@ use std::rc::Rc;
 
 use crate::advance_sequence::{AdvanceSequence, InFlight, Ports};
 use crate::ports::{
-    Availability, Clipboard, ClipboardError, Date, Delivered, DeliveryError, History,
+    Availability, Clipboard, ClipboardError, Date, Delivered, DeliveryError, Following, History,
     KeystrokeError, KeystrokeSender, PackFormat, PackSource, Progress, ReportText, SourceError,
     TargetInspector, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery,
 };
@@ -40,8 +40,8 @@ pub(crate) struct FakeDelivery {
     target: Cell<Option<TargetRef>>,
     fail: Option<DeliveryError>,
     /// What a successful delivery says about following the application
-    /// (`D95`): true unless a test asks for the unpaced route.
-    paced: bool,
+    /// (`D95`, `D145`): the application unless a test asks for another route.
+    following: Following,
     /// The text services the route says could have changed what it typed
     /// (`D139`): none unless a test asks.
     altered: Substitutions,
@@ -58,7 +58,7 @@ impl FakeDelivery {
             availability: Availability::Ready,
             target: Cell::new(Some(TargetRef(1))),
             fail: None,
-            paced: true,
+            following: Following::Application,
             altered: Substitutions::NONE,
             reports: Vec::new(),
             handed: RefCell::new(Vec::new()),
@@ -82,7 +82,14 @@ impl FakeDelivery {
     /// A route that delivers but could not follow the application's queue.
     pub(crate) fn unpaced() -> Self {
         Self {
-            paced: false,
+            following: Following::System,
+            ..Self::ready()
+        }
+    }
+    /// A route that hands the value to the desktop's input method.
+    pub(crate) fn handing_over() -> Self {
+        Self {
+            following: Following::HandedOver,
             ..Self::ready()
         }
     }
@@ -146,7 +153,7 @@ impl ValueDelivery for FakeDelivery {
         match &self.fail {
             None => Ok(Delivered {
                 utf16_units: text.encode_utf16().count(),
-                paced: self.paced,
+                following: self.following,
             }),
             Some(error) => Err(error.clone()),
         }

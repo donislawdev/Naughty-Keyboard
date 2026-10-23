@@ -28,7 +28,9 @@ use crate::macos_rules::{
     MacEvent, PulseVerdict, TEXT_KEY, chord_acted, chord_steps, held_modifier, scalars, text_steps,
     units_after,
 };
-use crate::{Chord, MODIFIER_RELEASE_WAIT, SendError, SendOutcome, SendProgress, StopReason};
+use crate::{
+    Chord, Following, MODIFIER_RELEASE_WAIT, SendError, SendOutcome, SendProgress, StopReason,
+};
 
 /// Whether this program is allowed to send keystrokes right now. Asked on every
 /// send: the person can grant it, or take it back, while the program runs.
@@ -186,7 +188,7 @@ pub(crate) fn send_text(
         return Ok(SendOutcome {
             units: 0,
             events: 0,
-            paced: true,
+            following: Following::Application,
         });
     }
     if !trust::may_send() {
@@ -227,7 +229,11 @@ pub(crate) fn send_text(
     Ok(SendOutcome {
         units: expected,
         events,
-        paced: session.wire.pulse.active(),
+        following: if session.wire.pulse.active() {
+            Following::Application
+        } else {
+            Following::System
+        },
     })
 }
 

@@ -21,6 +21,7 @@ mod lint_report;
 mod output;
 mod refusals;
 mod sent_notes;
+mod target_line;
 
 use clearing::{not_cleared, say_clearing_before_failure};
 use emit_output::{EmitFormat, Form};
@@ -35,12 +36,12 @@ use nkb_app::{
     ValueDelivery, ValueFacts, emit_values, format_pack, lint_pack, list_packs, new_pack,
     send_value, show_pack,
 };
-use nkb_core::report::{ControlKind, Target};
 use output::{out, outln};
 use refusals::{NEEDS_PERMISSION, say_not_cleared, say_not_delivered, stop_reason};
 use sent_notes::{say_pace, say_text_substitutions};
 use std::io::Write;
 use std::path::Path;
+use target_line::{Countdown, say_where_it_goes, where_it_goes};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -728,29 +729,15 @@ fn wait_for_a_target(
     // read once here - "WindowsTerminal.exe, a terminal" is the sentence a tester
     // can act on, and the palette says the same after each value (parity,
     // untouchable rule 12).
-    let mut err = std::io::stderr();
-    match after {
-        Some(target) => {
-            let _ = writeln!(
-                err,
-                "nkb send: target is window {:#x} - {}",
-                target.0,
-                where_it_goes(&delivery.inspect(target))
-            );
-            if delay_seconds > 0 && before == after {
-                let _ = writeln!(
-                    err,
-                    "  the focus did not change during the countdown - if that is the terminal, stop now"
-                );
-            }
-            Ok(())
-        }
-        None => {
-            let _ = writeln!(err, "nkb send: nothing holds the keyboard focus.");
-            let _ = writeln!(err, "Click into a field, then run this again.");
-            Err(ExitCode::InsertFailed)
-        }
-    }
+    say_where_it_goes(
+        &mut std::io::stderr(),
+        &Countdown {
+            before,
+            after,
+            delay_seconds,
+        },
+        |target| where_it_goes(&delivery.inspect(target)),
+    )
 }
 
 /// What `nkb send` says about one send, and the exit code it ends with.
@@ -778,7 +765,7 @@ fn report_send(err: &mut impl Write, wanted: &str, outcome: SendOutcome) -> Exit
                 },
             utf16_units,
             clearing,
-            paced,
+            following,
             may_alter,
         } => {
             match clearing {
@@ -796,7 +783,7 @@ fn report_send(err: &mut impl Write, wanted: &str, outcome: SendOutcome) -> Exit
                 "  {}",
                 sent_counts(graphemes, code_points, bytes, utf16_units)
             );
-            say_pace(err, paced);
+            say_pace(err, following);
             say_text_substitutions(err, may_alter);
             if warnings > 0 {
                 let _ = writeln!(
@@ -929,24 +916,6 @@ fn sent_counts(graphemes: usize, code_points: usize, bytes: usize, utf16_units: 
         english::plural(bytes, "byte"),
         english::plural(utf16_units, "UTF-16 unit")
     )
-}
-
-/// The program and the kind of control a value goes to, in the CLI's words -
-/// `chrome.exe, a text field` (`D104`). The program's name comes from the
-/// system and is escaped, so a control character in it cannot reach the
-/// terminal as a command.
-fn where_it_goes(target: &Target) -> String {
-    let control = match target.field {
-        ControlKind::TextField => "a text field",
-        ControlKind::Terminal => "a terminal",
-        ControlKind::Unconfirmed => "a control not confirmed as a field",
-        ControlKind::NotTextField => "not a text field",
-        ControlKind::ClosedToAccessibility => "a window closed to accessibility",
-    };
-    match &target.program {
-        Some(program) => format!("{}, {control}", program.escape_debug()),
-        None => format!("a program that did not give its name, {control}"),
-    }
 }
 
 fn count_down(seconds: u64) {
@@ -1254,7 +1223,7 @@ fn print_fmt_help() {
 )]
 mod tests {
     use super::*;
-    use nkb_app::{DeliveryError, KeystrokeError, StopReason};
+    use nkb_app::{DeliveryError, Following, KeystrokeError, StopReason};
     use nkb_core::preview::{Recipe, ValuePreview};
     use nkb_core::substitutions::Substitutions;
 
@@ -1430,7 +1399,7 @@ mod tests {
             facts: some_facts(),
             utf16_units: 1,
             clearing: ClearingOutcome::NotAsked,
-            paced: true,
+            following: Following::Application,
             may_alter,
         };
         let (quiet, code) = reported(sent(Substitutions::NONE));
@@ -1460,7 +1429,7 @@ mod tests {
                     facts: some_facts(),
                     utf16_units: 1,
                     clearing: ClearingOutcome::Done,
-                    paced: true,
+                    following: Following::Application,
                     may_alter: Substitutions::NONE,
                 },
                 ExitCode::Ok,
@@ -1939,35 +1908,6 @@ mod tests {
             still_typing(std::time::Duration::from_secs(9), &mut said, step),
             None,
             "said once, not once a report"
-        );
-    }
-
-    #[test]
-    fn the_target_line_names_the_program_and_the_kind_of_control_as_the_palette_does() {
-        let at = |program: Option<&str>, field| Target {
-            program: program.map(ToOwned::to_owned),
-            field,
-        };
-        assert_eq!(
-            where_it_goes(&at(Some("WindowsTerminal.exe"), ControlKind::Terminal)),
-            "WindowsTerminal.exe, a terminal"
-        );
-        assert_eq!(
-            where_it_goes(&at(None, ControlKind::TextField)),
-            "a program that did not give its name, a text field"
-        );
-        // A control character from the system reaches the terminal escaped.
-        assert_eq!(
-            where_it_goes(&at(Some("a\u{1b}[2Jb"), ControlKind::Unconfirmed)),
-            "a\\u{1b}[2Jb, a control not confirmed as a field"
-        );
-        assert_eq!(
-            where_it_goes(&at(Some("x.exe"), ControlKind::NotTextField)),
-            "x.exe, not a text field"
-        );
-        assert_eq!(
-            where_it_goes(&at(Some("firefox.exe"), ControlKind::ClosedToAccessibility)),
-            "firefox.exe, a window closed to accessibility"
         );
     }
 }

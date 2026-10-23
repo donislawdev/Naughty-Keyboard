@@ -82,9 +82,9 @@ use nkb_core::substitutions::Substitutions;
 
 use crate::load_pack;
 use crate::ports::{
-    Availability, Clipboard, ClipboardError, Clock, DeliveryError, History, KeystrokeError,
-    KeystrokeSender, PackFormat, PackSource, Progress, ReportText, SourceError, StopReason,
-    TargetInspector, TargetRef, ValueDelivery,
+    Availability, Clipboard, ClipboardError, Clock, DeliveryError, Following, History,
+    KeystrokeError, KeystrokeSender, PackFormat, PackSource, Progress, ReportText, SourceError,
+    StopReason, TargetInspector, TargetRef, ValueDelivery,
 };
 use crate::send_value::{
     Chosen, Clearing, ClearingOutcome, SendOutcome, Sending, SkipReason, ValueFacts, deliver_value,
@@ -359,6 +359,11 @@ pub enum Message {
     /// queue, so characters may be missing if it was busy (`D95`, `OBS-158`).
     /// Said on every such send - silence here is the loss `D95` closes.
     NotPaced,
+    /// The value was handed to the desktop's input method, which gives it to
+    /// whatever has the keyboard focus (Wayland, `D145`). Nothing after that can
+    /// be followed, not even whether a field had the focus, so it is never said
+    /// to be IN the field. Said on every such send.
+    HandedOver,
     /// The value went in, and a text service the system has switched on could
     /// have changed it on the way: the first letter made a capital, two spaces a
     /// period, a straight quote a curly one (`D139`). Names which. The field may
@@ -1134,7 +1139,7 @@ fn classify(
             facts,
             utf16_units,
             clearing,
-            paced,
+            following,
             may_alter,
         } => (
             Event::InsertionFinished,
@@ -1150,7 +1155,7 @@ fn classify(
                 target: None,
                 report: None,
             }),
-            notes_after_landing(paced, may_alter, clearing),
+            notes_after_landing(following, may_alter, clearing),
         ),
         // A fragment was left: interrupted, with how far it got - and WHICH
         // value, so the palette shows the value the report block describes
@@ -1327,16 +1332,21 @@ fn classify(
 }
 
 /// What a value that went in tells the tester, worse news first (`D95`, `D139`,
-/// `D76`, `OBS-141`): that it may be missing characters because the application
-/// could not be followed, that a text service of the system may have changed it,
-/// and that it landed uncleared, with why.
+/// `D76`, `OBS-141`, `D145`): that it may be missing characters because the
+/// application could not be followed, or that it was only handed to the input
+/// method, that a text service of the system may have changed it, and that it
+/// landed uncleared, with why.
 fn notes_after_landing(
-    paced: bool,
+    following: Following,
     may_alter: Substitutions,
     clearing: ClearingOutcome,
 ) -> Vec<Message> {
-    (!paced)
-        .then_some(Message::NotPaced)
+    let followed = match following {
+        Following::Application => None,
+        Following::System => Some(Message::NotPaced),
+        Following::HandedOver => Some(Message::HandedOver),
+    };
+    followed
         .into_iter()
         .chain((!may_alter.is_empty()).then_some(Message::MayBeAltered(may_alter)))
         .chain(skipped_clearing(clearing))
@@ -2834,6 +2844,19 @@ mod tests {
         let mut paced = chosen(Risk::Normal);
         let quiet = paced.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
         assert!(quiet.messages.is_empty(), "a paced send says nothing extra");
+    }
+
+    #[test]
+    fn a_value_handed_to_the_input_method_is_sent_and_never_said_to_be_in_the_field() {
+        // `D145`: on Wayland the text is committed from an input method engine, and
+        // not even whether a field had the focus can be followed afterwards. The value
+        // counts as sent, and the tester is told that it was handed over.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_delivery(FakeDelivery::handing_over());
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_eq!(outcome.messages, vec![Message::HandedOver]);
+        assert!(outcome.sent.is_some());
+        assert_eq!(advance.counter(), Some((1, 3)));
     }
 
     #[test]

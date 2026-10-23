@@ -42,7 +42,7 @@ use x11rb::protocol::xtest::ConnectionExt as _;
 use x11rb::rust_connection::RustConnection;
 
 use super::Lost;
-use super::connect::{Server, connect, environment_route, route_refusal};
+use super::connect::{Server, connect, environment_route};
 use super::escape::{ReservedEscape, XEscape};
 use super::front::{PingAtoms, focus, focused_toplevel, ping_atoms, ping_target};
 use crate::cadence::{Cadence, PROGRESS_INTERVAL};
@@ -52,16 +52,12 @@ use crate::linux_rules::{
     batch_of_value, caps_lock_on, give_back_wait, held_modifier, keysym_for, names_an_input_method,
     next_batch, next_limit, ping_token, slots_for_value, utf16_units,
 };
-use crate::{Chord, MODIFIER_RELEASE_WAIT, SendError, SendOutcome, SendProgress, StopReason};
+use crate::{
+    Chord, Following, MODIFIER_RELEASE_WAIT, SendError, SendOutcome, SendProgress, StopReason,
+};
 
 /// What this system is called when a route cannot be named more closely.
 const SYSTEM: &str = "Linux";
-
-/// Whether this program may type here: a session that is not Wayland, a local
-/// `DISPLAY`, and a server that has what is needed (`route_refusal`).
-pub(crate) fn send_allowed() -> bool {
-    route_refusal().is_none()
-}
 
 /// Clearing needs a field that is KNOWN to be one (`D76`), and the kind of field
 /// is read through accessibility, which this route does not have yet.
@@ -477,7 +473,7 @@ pub(crate) fn send_text(
         return Ok(SendOutcome {
             units: 0,
             events: 0,
-            paced: true,
+            following: Following::Application,
         });
     }
     let keysyms = keysyms_of(&characters)?;
@@ -589,6 +585,10 @@ pub(crate) fn send_text(
     Ok(SendOutcome {
         units: expected,
         events: characters.len() * 2,
-        paced: pinged.is_some(),
+        following: if pinged.is_some() {
+            Following::Application
+        } else {
+            Following::System
+        },
     })
 }

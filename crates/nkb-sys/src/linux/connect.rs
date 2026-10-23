@@ -11,7 +11,9 @@ use x11rb::connection::Connection;
 use x11rb::reexports::x11rb_protocol::xauth::get_auth;
 use x11rb::rust_connection::{DefaultStream, RustConnection};
 
-use crate::linux_rules::{DisplayAddress, Environment, Refusal, route, socket_path};
+use crate::linux_rules::{
+    DisplayAddress, Environment, Refusal, route, session_is_wayland, socket_path,
+};
 
 /// A connection, the root window of its screen, and the facts about the server
 /// that decide whether it can be typed into.
@@ -30,6 +32,14 @@ pub(crate) fn environment_route() -> Result<DisplayAddress, Refusal> {
         session_type: session_type.as_deref(),
         wayland_display: wayland_display.as_deref(),
     })
+}
+
+/// Whether the environment says this is a Wayland session. Typing there does not go
+/// through the X server (`linux/ibus`).
+pub(crate) fn wayland_session() -> bool {
+    let session_type = std::env::var("XDG_SESSION_TYPE").ok();
+    let wayland_display = std::env::var("WAYLAND_DISPLAY").ok();
+    session_is_wayland(session_type.as_deref(), wayland_display.as_deref())
 }
 
 /// Why this program does not type here - in the words that follow `on` - or `None`

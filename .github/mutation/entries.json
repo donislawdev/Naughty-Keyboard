@@ -2001,8 +2001,8 @@
       "id": "M373",
       "why": "a send that could not follow the pace of the application keeps quiet - silent loss of characters under 'sent' comes back (OBS-158, D95)",
       "file": "crates/nkb-app/src/advance_sequence.rs",
-      "find": "    (!paced)\n        .then_some(Message::NotPaced)",
-      "replace": "    false\n        .then_some(Message::NotPaced)",
+      "find": "        Following::System => Some(Message::NotPaced),",
+      "replace": "        Following::System => None,",
       "test": "advance_sequence::tests::a_value_sent_without_following_the_application_says_characters_may_be_missing",
       "runner": "rust:nkb-app:lib"
     },
@@ -3188,10 +3188,10 @@
     {
       "id": "M542",
       "why": "nkb send writes the program name unescaped - a control sequence reaches the terminal (D104)",
-      "file": "crates/nkb-cli/src/main.rs",
+      "file": "crates/nkb-cli/src/target_line.rs",
       "find": "        Some(program) => format!(\"{}, {control}\", program.escape_debug()),",
       "replace": "        Some(program) => format!(\"{program}, {control}\"),",
-      "test": "tests::the_target_line_names_the_program_and_the_kind_of_control_as_the_palette_does",
+      "test": "target_line::tests::the_target_line_names_the_program_and_the_kind_of_control_as_the_palette_does",
       "runner": "rust:nkb-cli:bin=nkb"
     },
     {
@@ -7046,10 +7046,10 @@
     {
       "id": "M976",
       "why": "nkb send calls the target in Firefox without accessibility 'unknown' (D125)",
-      "file": "crates/nkb-cli/src/main.rs",
+      "file": "crates/nkb-cli/src/target_line.rs",
       "find": "        ControlKind::ClosedToAccessibility => \"a window closed to accessibility\",",
       "replace": "        ControlKind::ClosedToAccessibility => \"a control not confirmed as a field\",",
-      "test": "tests::the_target_line_names_the_program_and_the_kind_of_control_as_the_palette_does",
+      "test": "target_line::tests::the_target_line_names_the_program_and_the_kind_of_control_as_the_palette_does",
       "runner": "rust:nkb-cli:bin=nkb"
     },
     {
@@ -7254,8 +7254,8 @@
       "id": "M1005",
       "why": "the Donate exemption granted to the spelling in every file - webbrowser:: passes everywhere (register 3, D127)",
       "file": "crates/nkb-core/tests/nothing_reaches_the_network.rs",
-      "find": "    rel == GRANTED_TO_THE_PRODUCT.0 && name == GRANTED_TO_THE_PRODUCT.1",
-      "replace": "    name == GRANTED_TO_THE_PRODUCT.1",
+      "find": "    (rel == GRANTED_TO_THE_PRODUCT.0 && name == GRANTED_TO_THE_PRODUCT.1)",
+      "replace": "    (name == GRANTED_TO_THE_PRODUCT.1)",
       "test": "the_one_grant_to_the_product_opens_its_named_addresses_and_nothing_else",
       "runner": "rust:nkb-core:nothing_reaches_the_network"
     },
@@ -9072,9 +9072,9 @@
       "id": "M1220",
       "why": "the local socket is granted to every file of the product - any code could open a Unix socket and the network guard would not notice",
       "file": "crates/nkb-core/tests/nothing_reaches_the_network.rs",
-      "find": "        || (kind == \"local-socket\" && rel == LOCAL_SOCKET_GRANTED_TO_THE_PRODUCT.0)",
-      "replace": "        || kind == \"local-socket\"",
-      "test": "the_one_local_socket_of_the_product_is_the_x_server_and_nothing_else",
+      "find": "                .any(|(file, _, _)| *file == rel))",
+      "replace": "                .any(|(_, _, _)| true))",
+      "test": "the_local_sockets_of_the_product_are_the_x_server_and_the_input_method_and_nothing_else",
       "runner": "rust:nkb-core:nothing_reaches_the_network"
     },
     {
@@ -9688,6 +9688,132 @@
       "replace": "        Convention::Linux => &DEFAULT_BINDINGS,",
       "test": "hotkeys::tests::each_convention_answers_with_its_own_table",
       "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1289",
+      "why": "a machine id may carry a slash or a dot, so the name of the address file can lead out of the directory",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "    if machine.is_empty() || !machine.bytes().all(|byte| byte.is_ascii_alphanumeric()) {",
+      "replace": "    if machine.is_empty() {",
+      "test": "linux_ibus_rules::tests::nothing_the_environment_says_leads_out_of_the_directory",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1290",
+      "why": "a Wayland socket that starts with a dot is taken for a file name, so the address file can be a hidden one",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "        && !name.starts_with('.')",
+      "replace": "        && true",
+      "test": "linux_ibus_rules::tests::nothing_the_environment_says_leads_out_of_the_directory",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1291",
+      "why": "a relative XDG_CONFIG_HOME is taken for the configuration directory, so the address file is looked for beside the working directory",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "    let config = match place.config_home.filter(|path| path.starts_with('/')) {",
+      "replace": "    let config = match place.config_home {",
+      "test": "linux_ibus_rules::tests::the_configuration_directory_of_the_person_wins_over_the_home",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1292",
+      "why": "an address whose path is not absolute is taken for a socket, so a connection is made to whatever is beside the working directory",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "    if path.starts_with('/') && !path.contains('\\0') {",
+      "replace": "    if !path.contains('\\0') {",
+      "test": "linux_ibus_rules::tests::an_address_that_does_not_read_is_malformed",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1293",
+      "why": "an escaped byte is read as two characters, so the path of the socket is another path",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "            at += 3;",
+      "replace": "            at += 2;",
+      "test": "linux_ibus_rules::tests::escaped_bytes_of_the_path_are_read",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1294",
+      "why": "the engine of another send is put back as the person's, handing the next person the engine of a process that has gone",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "    previous.filter(|name| !name.is_empty() && !is_our_engine(name))",
+      "replace": "    previous.filter(|name| !name.is_empty())",
+      "test": "linux_ibus_rules::tests::only_the_engine_of_the_person_is_put_back",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1295",
+      "why": "every engine whose name begins with ours is taken for ours, so the engine of a person with a similar name is never put back",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "        .is_some_and(|rest| rest.starts_with('-'))",
+      "replace": "        .is_some_and(|_| true)",
+      "test": "linux_ibus_rules::tests::engines_of_ours_are_told_from_the_engines_of_the_person",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1296",
+      "why": "a value of exactly the bytes a piece may carry is cut in two, which is one commit more than the message needs",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "        if at + character.len_utf8() - start > COMMIT_BYTES {",
+      "replace": "        if at + character.len_utf8() - start >= COMMIT_BYTES {",
+      "test": "linux_ibus_rules::tests::a_text_is_cut_between_characters_and_in_order",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1297",
+      "why": "the width of the character at the cut is forgotten, so a piece with a four-byte character at its end is longer than a message may be",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "        if at + character.len_utf8() - start > COMMIT_BYTES {",
+      "replace": "        if at - start > COMMIT_BYTES {",
+      "test": "linux_ibus_rules::tests::a_four_byte_character_on_the_cut_goes_whole_into_the_next_piece",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1298",
+      "why": "Escape with Control held is taken as the person stopping the send, though it is a shortcut of the application",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "    keyval == KEYSYM_ESCAPE && state & IBUS_MODIFIER_MASK == 0",
+      "replace": "    keyval == KEYSYM_ESCAPE",
+      "test": "linux_ibus_rules::tests::only_escape_on_its_own_is_escape",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1299",
+      "why": "a key being let go is read as one being pressed, so the release of Escape would stop the send and be given to the application as half a key",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "    state & IBUS_RELEASE_MASK != 0",
+      "replace": "    state & IBUS_RELEASE_MASK == 0",
+      "test": "linux_ibus_rules::tests::only_escape_on_its_own_is_escape",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1300",
+      "why": "a long value is given the time of a short one, so the watch over the connection closes it on the way",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "    DEADLINE + (COMMIT_GAP + CALL_WAIT / 50) * u32::try_from(pieces).unwrap_or(u32::MAX)",
+      "replace": "    DEADLINE",
+      "test": "linux_ibus_rules::tests::a_long_value_is_given_the_time_its_pauses_take",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1301",
+      "why": "the spelling granted to the daemon file is granted to every file, so std::net is allowed anywhere the guard would otherwise refuse it",
+      "file": "crates/nkb-core/tests/nothing_reaches_the_network.rs",
+      "find": "            .any(|(file, spelling, _)| *file == rel && *spelling == name)",
+      "replace": "            .any(|(_, spelling, _)| *spelling == name)",
+      "test": "a_spelling_granted_to_one_file_is_forbidden_everywhere_else",
+      "runner": "rust:nkb-core:nothing_reaches_the_network"
+    },
+    {
+      "id": "M1302",
+      "why": "the bus library's own address is no longer a refused spelling, so the library could be handed an address and follow it to a host",
+      "file": "crates/nkb-core/tests/nothing_reaches_the_network.rs",
+      "find": "        \"Builder::address(\",",
+      "replace": "        \"Builder::address_is_not_refused(\",",
+      "test": "the_scanner_catches_every_shape_it_exists_to_catch",
+      "runner": "rust:nkb-core:nothing_reaches_the_network"
     }
   ]
 }

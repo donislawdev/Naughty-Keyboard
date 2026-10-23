@@ -6,8 +6,8 @@
 //! function, so nothing in this package needs it.
 
 use nkb_app::ports::{
-    Availability, Delivered, DeliveryError, KeystrokeError, KeystrokeSender, Progress, StopReason,
-    TargetInspector, TargetRef, ValueDelivery,
+    Availability, Delivered, DeliveryError, Following, KeystrokeError, KeystrokeSender, Progress,
+    StopReason, TargetInspector, TargetRef, ValueDelivery,
 };
 use nkb_core::keys::{Key, KeyChord};
 use nkb_core::report::{ControlKind, Target};
@@ -89,7 +89,7 @@ impl ValueDelivery for DirectInjection {
         match nkb_sys::send_text(text, &mut told) {
             Ok(outcome) => Ok(Delivered {
                 utf16_units: outcome.units,
-                paced: outcome.paced,
+                following: following(outcome.following),
             }),
             Err(nkb_sys::SendError::Unsupported { system }) => Err(DeliveryError::Unsupported {
                 system: system.to_owned(),
@@ -219,6 +219,16 @@ fn clearing_verdict(focus: nkb_sys::field::FocusedInput) -> Result<(), Keystroke
         nkb_sys::field::FocusedInput::ClosedToAccessibility => {
             Err(KeystrokeError::ClosedToAccessibility)
         }
+    }
+}
+
+/// How far the route could follow what it sent, in the words of `app`. Mirrors the
+/// enum of `nkb-sys` one to one - the two crates do not depend on each other (`D95`).
+fn following(following: nkb_sys::Following) -> Following {
+    match following {
+        nkb_sys::Following::Application => Following::Application,
+        nkb_sys::Following::System => Following::System,
+        nkb_sys::Following::HandedOver => Following::HandedOver,
     }
 }
 
@@ -496,6 +506,27 @@ mod tests {
             Ok(()) | Err(KeystrokeError::NoTarget) => {}
             Err(other) => panic!("an empty sequence must not fail this way: {other}"),
         }
+    }
+
+    #[test]
+    fn the_unnamed_window_means_the_same_thing_to_both_crates() {
+        // The two crates do not depend on each other, so the handle of "whatever has the
+        // keyboard focus" is written once in each, and this is what keeps them one.
+        assert_eq!(TargetRef::UNNAMED.0, nkb_sys::UNNAMED_WINDOW.0);
+        assert!(TargetRef(nkb_sys::UNNAMED_WINDOW.0).is_unnamed());
+    }
+
+    #[test]
+    fn what_the_route_says_about_following_is_carried_over_one_to_one() {
+        assert_eq!(
+            following(nkb_sys::Following::Application),
+            Following::Application
+        );
+        assert_eq!(following(nkb_sys::Following::System), Following::System);
+        assert_eq!(
+            following(nkb_sys::Following::HandedOver),
+            Following::HandedOver
+        );
     }
 
     #[test]

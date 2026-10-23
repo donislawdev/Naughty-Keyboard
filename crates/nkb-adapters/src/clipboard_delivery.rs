@@ -31,8 +31,8 @@
 //! The report block takes the other door and stays in the history on purpose.
 
 use nkb_app::ports::{
-    Availability, Clipboard, ClipboardError, Delivered, DeliveryError, History, Progress,
-    TargetRef, ValueDelivery,
+    Availability, Clipboard, ClipboardError, Delivered, DeliveryError, Following, History,
+    Progress, TargetRef, ValueDelivery,
 };
 
 /// What [`ClipboardDelivery::target`] answers: the clipboard, which is always
@@ -92,7 +92,7 @@ impl ValueDelivery for ClipboardDelivery<'_> {
                 utf16_units: text.encode_utf16().count(),
                 // No keys, so no application queue to fall behind: the value is
                 // on the clipboard whole, and the tester pastes it (`D95`).
-                paced: true,
+                following: Following::Application,
             }),
             Err(ClipboardError::Busy) => Err(DeliveryError::Busy),
             Err(ClipboardError::Failed { detail }) => Err(DeliveryError::Refused { detail }),

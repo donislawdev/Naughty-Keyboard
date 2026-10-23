@@ -16,8 +16,14 @@ Changes wait under Unreleased until then.
   layout has is pressed as its own key, so a page sees the key events of a person's keyboard. Any
   other character goes through a spare key, rewritten for the moment. A program that reads keys
   through an input method, such as xterm with IBus, can lose the end of a long run of those. Nothing
-  is sent in a Wayland session, for a remote display, or while Caps Lock is on or a modifier is held.
-  `--clear` is not available yet.
+  is sent for a remote display, or while Caps Lock is on or a modifier is held. `--clear` is not
+  available yet.
+- On Linux, `nkb send` types into a Wayland session by handing the text to the desktop's input
+  method, IBus, so every character arrives, those the keyboard layout lacks included. The command
+  says the value was handed over and never that it is in the field, because the desktop does not say
+  whether a field had the focus. A long value goes in pieces, 100000 characters in about 2.5
+  seconds, and `Escape` stops it. Nothing is sent without an IBus daemon on a local socket. The
+  palette and `--clear` are not available there yet.
 - The palette runs under an X11 session. Its shortcuts, `Ctrl+Alt` with a letter, work while another
   program is in front, and a click on the palette leaves the keyboard where it was. Values go in the
   way `nkb send` puts them in. A layout that switches on the same two keys as a shortcut, as

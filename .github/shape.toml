@@ -52,12 +52,14 @@ band = 0.7
 # one line. 1015 since 2026-10-19, when what nkb send says about a refusal went
 # to refusals.rs to make room for the macOS permission. 1009 since 2026-10-20,
 # when the notes under a send went to sent_notes.rs with the one about the
-# system's text substitutions.
+# system's text substitutions. 983 since 2026-10-23, when the line before a
+# send, where the value is about to go, went to target_line.rs with the sentence
+# for a session that cannot name the window.
 # near = 4 since 2026-10-19: the ceiling came down by 104, and the band with it,
 # so three files that did not grow joined it (advance_sequence.rs, toml_pack.rs
 # and picker.rs). The count is the owner's to accept, as it was for toml_pack.rs.
 [files.rust-product]
-ceiling = 1009
+ceiling = 983
 near = 4
 
 # A whole Rust file, its tests included. nkb-gui/src/live.rs, then
@@ -74,8 +76,10 @@ ceiling = 2233
 # reached toml_pack.rs at 1643. 2235 on 2026-10-14, when the words naming the
 # shortcuts went to live/view.rs beside the band that shows them. 2233 on
 # 2026-10-15, when a test of live.rs named its value by the helper the module
-# already had. Below 2195 it would reach keep_settings.rs at 1536.
-near = 6
+# already had. Below 2195 it would reach keep_settings.rs at 1536. 5 since
+# 2026-10-23, when nkb-cli's main.rs gave the line before a send and its tests
+# to target_line.rs and fell out of the band at 1679.
+near = 5
 
 # A Slint file, the gallery excepted. ui/screens/palette.slint since the fold
 # of its shortcut list (2026-10-11), then ui/components/list.slint at 260 once

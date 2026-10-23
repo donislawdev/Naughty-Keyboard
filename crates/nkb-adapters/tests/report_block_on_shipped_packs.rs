@@ -26,8 +26,8 @@ use std::path::Path;
 use nkb_adapters::report_text::report_text;
 use nkb_adapters::{BuiltInCatalogue, TomlPackFormat};
 use nkb_app::ports::{
-    Availability, Delivered, DeliveryError, KeystrokeError, KeystrokeSender, PackCatalogue,
-    PackFormat, PackSource, Progress, TargetRef, ValueDelivery,
+    Availability, Delivered, DeliveryError, Following, KeystrokeError, KeystrokeSender,
+    PackCatalogue, PackFormat, PackSource, Progress, TargetRef, ValueDelivery,
 };
 use nkb_app::{Chosen, Clearing, SendOutcome, ValueFacts, deliver_value};
 use nkb_core::calendar::Day;
@@ -56,7 +56,7 @@ impl ValueDelivery for TakesEverything {
     ) -> Result<Delivered, DeliveryError> {
         Ok(Delivered {
             utf16_units: text.encode_utf16().count(),
-            paced: true,
+            following: Following::Application,
         })
     }
 }

@@ -101,8 +101,32 @@ too_many_arguments = "warn"
 #
 # The connection is made to the LOCAL socket and nothing else (`linux/connect.rs`): the
 # crate's own `connect` would also follow a `DISPLAY` that names a host over TCP.
+#
+# The second dependency is the Wayland route (`D145` points 37 and 41, `OBS-217` to
+# `OBS-219`): a Wayland session lets a client type only the characters of the
+# compositor's layout, so the text goes to the desktop's input method instead, as a
+# commit from an engine of our own that lives for the length of one send.
+#
+# `zbus` 5.19.0 is the version `Cargo.lock` already holds for `nkb-gui` (Slint reaches the
+# session bus through it), so the lock gains an edge and no new crate version. The owner
+# chose it over a bus client written by hand on 2026-10-23, knowing the price: about 70
+# packages and 8 procedural-macro crates (`zbus_macros`, `zvariant_derive`, `serde_derive`,
+# `serde_repr`, `enumflags2_derive`, `async-trait`, `async-recursion`, `tracing-attributes`,
+# with `syn`, `quote` and `proc-macro2`) enter the tree of the `nkb` command-line tool on
+# Linux, and `sprawdz-warstwy.ps1` lists every one of them.
+# Licence sieve, both questions:
+#   (a) MIT OR Apache-2.0 for `zbus` and `zvariant`. The rest of the tree is the usual
+#       MIT, Apache-2.0 and Unlicense set, which `deny.toml` admits for the whole lock.
+#   (b) not applicable - a protocol implementation, not a reference dataset.
+# `default-features = false` and the two features the default has: `async-io` (the
+# executor, no tokio) and `blocking-api` (the `zbus::blocking` wrappers).
+#
+# The connection is made to the LOCAL file socket of the IBus daemon and nothing else
+# (`linux/ibus/daemon.rs`): the stream is opened here and handed to the crate, so the
+# crate never reads an address and never follows one over TCP.
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = { version = "=0.14.0", default-features = false, features = ["xtest"] }
+zbus = { version = "=5.19.0", default-features = false, features = ["async-io", "blocking-api"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [

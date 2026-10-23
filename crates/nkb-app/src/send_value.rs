@@ -36,8 +36,8 @@
 //! parts are missing is untouchable rule 1 applied to a use case.
 
 use crate::ports::{
-    Availability, DeliveryError, KeystrokeError, KeystrokeSender, PackFormat, PackSource, Progress,
-    SourceError, StopReason, ValueDelivery,
+    Availability, DeliveryError, Following, KeystrokeError, KeystrokeSender, PackFormat,
+    PackSource, Progress, SourceError, StopReason, ValueDelivery,
 };
 use nkb_core::calendar::Day;
 use nkb_core::keys::line_clearing_recipe;
@@ -189,10 +189,12 @@ pub enum SendOutcome {
         utf16_units: usize,
         /// What became of the clearing before the value.
         clearing: ClearingOutcome,
-        /// Whether the application took every key, not only the system
-        /// (`D95`). False: characters may be missing if it was busy, and both
-        /// surfaces say so (`OBS-158`).
-        paced: bool,
+        /// How far the route could follow the value after it left (`D95`,
+        /// `D145`). When it could not follow the application, characters may be
+        /// missing if it was busy, and when it handed the value to the input
+        /// method, nothing says it reached a field. Both surfaces say so
+        /// (`OBS-158`).
+        following: Following,
         /// The system's text services that are on and could have changed the
         /// typed text on its way into the field (`D139`). Empty on a route that
         /// types nothing the system rewrites.
@@ -448,7 +450,7 @@ pub fn deliver_value(
             facts: facts(),
             utf16_units: delivered.utf16_units,
             clearing,
-            paced: delivered.paced,
+            following: delivered.following,
             may_alter: delivery.may_alter(&literal),
         },
         Err(DeliveryError::Partial {
@@ -474,7 +476,9 @@ pub fn deliver_value(
 )]
 mod tests {
     use super::*;
-    use crate::ports::{Date, Delivered, TargetRef, TranslationCheck, TranslationTarget};
+    use crate::ports::{
+        Date, Delivered, Following, TargetRef, TranslationCheck, TranslationTarget,
+    };
     use nkb_core::keys::KeyChord;
     use nkb_core::lint::{LintProblem, RuleCode};
     use nkb_core::pack::Risk;
@@ -520,7 +524,7 @@ mod tests {
             match &self.fail_with {
                 None => Ok(Delivered {
                     utf16_units: text.encode_utf16().count(),
-                    paced: true,
+                    following: Following::Application,
                 }),
                 Some(error) => Err(error.clone()),
             }
@@ -1226,7 +1230,7 @@ mod tests {
             ) -> Result<Delivered, DeliveryError> {
                 Ok(Delivered {
                     utf16_units: text.encode_utf16().count(),
-                    paced: false,
+                    following: Following::System,
                 })
             }
         }
@@ -1239,10 +1243,14 @@ mod tests {
             &request(1, Clearing::Keep),
             &mut |_| {},
         );
-        let SendOutcome::Sent { paced, .. } = outcome else {
+        let SendOutcome::Sent { following, .. } = outcome else {
             panic!("an unpaced delivery still delivered, got {outcome:?}");
         };
-        assert!(!paced, "the caller must learn it was not paced (`D95`)");
+        assert_eq!(
+            following,
+            Following::System,
+            "the caller must learn it was not paced (`D95`)"
+        );
     }
 
     #[test]
@@ -1273,7 +1281,7 @@ mod tests {
                 });
                 Ok(Delivered {
                     utf16_units: total,
-                    paced: true,
+                    following: Following::Application,
                 })
             }
         }

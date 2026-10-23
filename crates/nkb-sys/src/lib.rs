@@ -46,6 +46,8 @@ mod linux;
 #[cfg(any(target_os = "linux", test))]
 mod linux_hotkeys;
 #[cfg(any(target_os = "linux", test))]
+mod linux_ibus_rules;
+#[cfg(any(target_os = "linux", test))]
 mod linux_rules;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -70,13 +72,31 @@ pub mod window;
 pub struct SendOutcome {
     /// UTF-16 code units sent. Two per character above the basic plane.
     pub units: usize,
-    /// Key events sent. Two per unit - one down, one up.
+    /// Key events sent. Two per unit - one down, one up. On a route that hands
+    /// the text over whole, the pieces it went in.
     pub events: usize,
-    /// Whether every event was also taken by the application holding the
-    /// keyboard focus, not only by the system (`D95`). False when its queue
-    /// could not be followed - then characters may be missing if it was busy
-    /// (`OBS-158`), and the caller has to say so.
-    pub paced: bool,
+    /// How far the send could be followed after it left, and so what the caller
+    /// may say about where it went (`D95`, `OBS-158`, `D145`).
+    pub following: Following,
+}
+
+/// How far a send could be followed after it left this program.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Following {
+    /// Every event was taken by the application holding the keyboard focus, not
+    /// only by the system (`D95`). Also what a send of nothing is: there was
+    /// nothing to follow.
+    Application,
+    /// Only the system took the events: the queue of the application could not
+    /// be followed, so characters may be missing if it was busy (`OBS-158`), and
+    /// the caller has to say so.
+    System,
+    /// The text was handed whole to the desktop's input method, which gives it to
+    /// whatever has the keyboard focus (Wayland, `D145`). No key was pressed and
+    /// nothing after the hand-over can be followed, not even whether anything
+    /// with a field had the focus, so the caller says "handed", never "in the
+    /// field".
+    HandedOver,
 }
 
 /// How far a send got, said on the way (`OBS-160`) - at most once per
@@ -249,9 +269,16 @@ pub const MODIFIER_RELEASE_WAIT: core::time::Duration = core::time::Duration::fr
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WindowRef(pub u64);
 
+/// The handle that stands for "whatever has the keyboard focus", on a session that
+/// cannot name the window in front: a Wayland compositor does not tell a client which
+/// window has the focus (`D145`). Every question put to it answers "not known", and
+/// two of them are equal whatever happened between, so it says nothing about the
+/// focus having moved.
+pub const UNNAMED_WINDOW: WindowRef = WindowRef(u64::MAX);
+
 #[cfg(windows)]
 mod windows_impl {
-    use super::{SendError, SendOutcome, SendProgress, StopReason, WindowRef};
+    use super::{Following, SendError, SendOutcome, SendProgress, StopReason, WindowRef};
 
     use super::cadence::{Cadence, PROGRESS_INTERVAL};
     use super::confirm::{
@@ -575,7 +602,7 @@ mod windows_impl {
             return Ok(SendOutcome {
                 units: 0,
                 events: 0,
-                paced: true,
+                following: Following::Application,
             });
         }
         wait_for_modifiers_released()?;
@@ -638,7 +665,11 @@ mod windows_impl {
         Ok(SendOutcome {
             units: expected,
             events: expected * 2,
-            paced: session.joined.is_some(),
+            following: if session.joined.is_some() {
+                Following::Application
+            } else {
+                Following::System
+            },
         })
     }
 }
@@ -697,7 +728,7 @@ pub fn foreground_window() -> Option<WindowRef> {
 /// refuses with [`SendError::ModifierHeld`] if it does not. Every event goes
 /// alone and the next only once the system shows it taken (`D94`) and, where the
 /// queue holding the keyboard focus could be joined, once that application took
-/// it (`D95`) - [`SendOutcome::paced`] says which. The window in front is looked
+/// it (`D95`) - [`SendOutcome::following`] says which. The window in front is looked
 /// at before every event, and so is `Escape`, which the send holds for as long as
 /// it lasts and gives back once the key is up (`D96`). A stop ends the send with
 /// [`SendError::Truncated`] and its [`StopReason`].
@@ -757,15 +788,15 @@ pub const fn can_send() -> bool {
 /// words that follow `on` - when the system can say so before anything is sent.
 ///
 /// A route can exist in principle and be shut for the session: on Linux there is
-/// no way to type into a Wayland session without losing characters, and none to a
-/// display that is not on this machine (`D145`). On Linux this makes one connection
-/// to the X server and drops it. `None` means nothing is known to stand in the
-/// way, not that a send will succeed.
+/// none to a display that is not on this machine, and none to a Wayland session
+/// without an IBus daemon to hand the text to (`D145`). On Linux this makes one
+/// connection, to the X server or to the daemon, and drops it. `None` means nothing
+/// is known to stand in the way, not that a send will succeed.
 #[must_use]
 pub fn route_refusal() -> Option<&'static str> {
     #[cfg(target_os = "linux")]
     {
-        linux::route_refusal()
+        linux::typing_refusal()
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -792,7 +823,7 @@ mod tests {
                 SendOutcome {
                     units: 0,
                     events: 0,
-                    paced: true
+                    following: Following::Application
                 },
                 "an empty text has no units and no events"
             ),
