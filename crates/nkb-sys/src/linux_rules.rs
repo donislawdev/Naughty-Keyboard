@@ -3,11 +3,14 @@
 //! Typing on X11 is a recipe, and every number in it was measured (2026-10-20,
 //! Xvfb 21.1 with openbox, a winit and a GTK4 victim, `tools/sonda-x11`):
 //!
-//! - every character, ASCII included, goes through a SPARE key whose row was
-//!   rewritten to the Unicode form of the keysym, written twice. A key the
-//!   layout already has depends on the layout group and on Caps Lock (`Hello`
-//!   came out as `hELLO` and as `Руддщ`), and a keysym alone on a key is
-//!   case-converted by the server (point 7),
+//! - a character the layout types goes through its own key, with Shift held where
+//!   it takes one, but only while the state is plain and the layout group is one
+//!   of the first two, because a key of the layout types what the state says
+//!   (`Hello` came out as `hELLO` and as `Руддщ`, point 6). The page or program
+//!   then sees what a person's keyboard gives it (`OBS-212`). Every other character
+//!   goes through a SPARE key whose row was rewritten to the Unicode form of the
+//!   keysym, written twice, because a keysym alone on a key is case-converted by
+//!   the server (point 7),
 //! - the first XTest key event of a connection wipes a remap made before it, so
 //!   one tap of an unmapped key comes first (point 1),
 //! - a remap before every character loses 30 to 80 percent, a batch with a pause
@@ -20,6 +23,7 @@
 //! names and text lives here and is tested on every system.
 
 use core::time::Duration;
+use std::collections::HashMap;
 
 /// Where the X server of this machine keeps its sockets for local clients.
 pub(crate) const SOCKET_DIR: &str = "/tmp/.X11-unix";
@@ -86,6 +90,11 @@ pub(crate) const KEYSYM_ESCAPE: u32 = 0xff1b;
 
 /// The keysym of a Unicode character is `0x0100_0000` plus its code point.
 const UNICODE_KEYSYM_BASE: u32 = 0x0100_0000;
+
+/// The Unicode form is defined from U+0100 up. Below it a character has its Latin-1
+/// keysym, and an X server never hands out the Unicode form of a Latin-1 one.
+const UNICODE_KEYSYM_FIRST: u32 = 0x0100_0100;
+const UNICODE_KEYSYM_LAST: u32 = 0x0110_FFFF;
 
 /// The `Lock` bit of the modifier state, which Caps Lock sets.
 const LOCK_MASK: u16 = 0x02;
@@ -227,37 +236,127 @@ pub(crate) fn utf16_units(characters: &[char]) -> usize {
         .sum()
 }
 
-/// The keys of the layout that Return and Tab are typed through, when it has them.
+/// A key of the layout and whether Shift is held to reach the character.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct LayoutKey {
+    pub keycode: u8,
+    pub shift: bool,
+}
+
+/// The keys of the layout that characters are typed through, when it has them.
 ///
-/// An application that tells these two apart from every other key by the key
-/// itself, and not by the keysym it types, does nothing for them on a spare key:
-/// Chromium takes Enter from the physical key through a table of its own, and a
-/// line feed typed through a spare key reached its text area as nothing, 0 of 3
-/// values with a new line or a tab (`OBS-211`). So these two go through the
-/// layout's own key, and every other character through a spare one.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+/// A character the layout types is pressed as its own key, because that is what a
+/// page or a program sees from a person: Chromium named the key of every character
+/// typed through a spare key NUL, with an empty code and a key code of 0, against
+/// 237 of 237 right for the keys of the layout, and Firefox gave the right letter but
+/// the wrong code and one extra event (`OBS-212`). The keys of the layout are not
+/// rewritten, so there is no race with an application that reads them late and no
+/// wait for it (`OBS-210`), and an input method that hands every key on slowly
+/// (xterm through IBus lost the end of 9 of 47 values) has nothing to lose.
+///
+/// An application that tells Return and Tab apart from every other key by the key
+/// itself does nothing for them on a spare key: Chromium takes Enter from the
+/// physical key through a table of its own, and a line feed typed through a spare
+/// key reached its text area as nothing, 0 of 3 values with a new line or a tab
+/// (`OBS-211`). These two go through the key of the layout in every state.
+///
+/// The printable characters do only when the state is plain (`layout_is_plain`) and
+/// the layout group is one of the first two (`usable_group`), because the key of a
+/// layout types what the state says and not what was meant: Caps Lock turned
+/// `Hello` into `hELLO` and the second group into `Руддщ` (`OBS-202` point 6). A
+/// spare key with its keysym on both levels does not depend on either, and is what
+/// every other character goes through.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct LayoutKeys {
     return_key: Option<u8>,
     tab_key: Option<u8>,
+    shift_key: Option<u8>,
+    characters: HashMap<u32, LayoutKey>,
 }
 
 impl LayoutKeys {
+    /// Return and Tab only.
     pub(crate) fn from_keymap(keymap: &Keymap) -> Self {
         Self {
             return_key: keymap.find_keycode(KEYSYM_RETURN),
             tab_key: keymap.find_keycode(KEYSYM_TAB),
+            ..Self::default()
         }
     }
 
-    /// The key of the layout that types `keysym`, if it is one of the two and the
-    /// layout has it.
-    pub(crate) fn key_for(&self, keysym: u32) -> Option<u8> {
+    /// Return and Tab, and the printable characters of the layout when `state` is
+    /// plain and has a group to read. `shift_key` is the key the server counts as
+    /// Shift, and without one only the characters that need no Shift are kept.
+    pub(crate) fn typing(keymap: &Keymap, shift_key: Option<u8>, state: u16) -> Self {
+        let mut layout = Self::from_keymap(keymap);
+        let Some(group) = usable_group(state).filter(|_| layout_is_plain(state)) else {
+            return layout;
+        };
+        layout.shift_key = shift_key;
+        for (keysym, key) in keymap.character_keys(group) {
+            if !key.shift || shift_key.is_some() {
+                layout.characters.entry(keysym).or_insert(key);
+            }
+        }
+        layout
+    }
+
+    /// The key of the layout that types `keysym`, if it has one to use.
+    pub(crate) fn key_for(&self, keysym: u32) -> Option<LayoutKey> {
+        let plain = |keycode: Option<u8>| {
+            keycode.map(|keycode| LayoutKey {
+                keycode,
+                shift: false,
+            })
+        };
         match keysym {
-            KEYSYM_RETURN => self.return_key,
-            KEYSYM_TAB => self.tab_key,
-            _ => None,
+            KEYSYM_RETURN => plain(self.return_key),
+            KEYSYM_TAB => plain(self.tab_key),
+            _ => self.characters.get(&keysym).copied(),
         }
     }
+
+    /// The key that is held down for the characters that need Shift.
+    pub(crate) fn shift_key(&self) -> Option<u8> {
+        self.shift_key
+    }
+}
+
+/// The modifiers of an X state that change what a key of the layout types: Shift,
+/// Lock, Control, Mod1, Mod3, Mod4 and Mod5. Mod2 is Num Lock, which only the
+/// keypad answers to, and the button bits are not modifiers.
+const TYPING_MODIFIERS: u16 = 0x00EF;
+
+/// The keyboard group lives in bits 13 and 14 of the state the server reports.
+const GROUP_SHIFT: u16 = 13;
+
+/// Whether no modifier is down, latched or locked that would change a character
+/// typed through the layout's own key.
+pub(crate) fn layout_is_plain(state: u16) -> bool {
+    state & TYPING_MODIFIERS == 0
+}
+
+/// The layout group in effect, when it is one of the first two. The core map has
+/// two columns for each of them (the first four columns) and the columns after
+/// those belong to higher levels, so a third group cannot be told from a third
+/// level.
+pub(crate) fn usable_group(state: u16) -> Option<usize> {
+    let group = usize::from((state >> GROUP_SHIFT) & 0x3);
+    (group <= 1).then_some(group)
+}
+
+/// The keysym of a character in the form `keysym_for` gives, when `keysym` is one:
+/// the Latin-1 keysyms are their own code points, and the Unicode form starts above
+/// them. Function keys, dead keys, the keypad and the legacy keysyms of other
+/// scripts are none, and are typed through a spare key.
+fn character_keysym(keysym: u32) -> Option<u32> {
+    let character = match keysym {
+        0x20..=0x7E | 0xA0..=0xFF => keysym,
+        UNICODE_KEYSYM_FIRST..=UNICODE_KEYSYM_LAST => keysym - UNICODE_KEYSYM_BASE,
+        _ => return None,
+    };
+    char::from_u32(character)?;
+    Some(UNICODE_KEYSYM_BASE + character)
 }
 
 /// A run of characters typed between two answers of the application, and the
@@ -465,6 +564,30 @@ impl Keymap {
         (0..self.rows())
             .find(|index| self.row(*index).first() == Some(&keysym))
             .and_then(|index| self.keycode(index))
+    }
+
+    /// The characters the keys type in `group` on their first two levels, each with
+    /// the key that types it. The ones that need no Shift come first, so a character
+    /// on two keys is pressed through the one that needs fewer events.
+    pub(crate) fn character_keys(&self, group: usize) -> Vec<(u32, LayoutKey)> {
+        let mut found = Vec::new();
+        for shift in [false, true] {
+            let column = 2 * group + usize::from(shift);
+            for index in 0..self.rows() {
+                let Some(keycode) = self.keycode(index) else {
+                    continue;
+                };
+                let keysym = self
+                    .row(index)
+                    .get(column)
+                    .copied()
+                    .and_then(character_keysym);
+                if let Some(keysym) = keysym {
+                    found.push((keysym, LayoutKey { keycode, shift }));
+                }
+            }
+        }
+        found
     }
 }
 
@@ -830,11 +953,239 @@ mod tests {
         LayoutKeys::from_keymap(&Keymap::new(8, 2, rows))
     }
 
+    fn bare_key(keycode: u8) -> Option<LayoutKey> {
+        Some(LayoutKey {
+            keycode,
+            shift: false,
+        })
+    }
+
+    fn shifted_key(keycode: u8) -> Option<LayoutKey> {
+        Some(LayoutKey {
+            keycode,
+            shift: true,
+        })
+    }
+
+    /// A keyboard of four columns (group 1 plain and Shift, group 2 plain and Shift)
+    /// with the keys given by keycode, the rest of the map empty.
+    fn keyboard(keys: &[(u8, [u32; 4])]) -> Keymap {
+        let last = keys.iter().map(|(code, _)| *code).max().unwrap_or(8);
+        let mut symbols = vec![0u32; 4 * (usize::from(last) - 7)];
+        for (code, row) in keys {
+            let start = 4 * (usize::from(*code) - 8);
+            symbols[start..start + 4].copy_from_slice(row);
+        }
+        Keymap::new(8, 4, symbols)
+    }
+
+    const SHIFT_L: u8 = 50;
+
+    /// A few keys of a layout with a second group: digits, letters, a space, a dead
+    /// key, a keypad key, a euro sign in the Unicode form, a pound sign, Return, Tab
+    /// and Shift.
+    fn us_ru_keyboard() -> Keymap {
+        keyboard(&[
+            (10, [0x31, 0x21, 0x31, 0x21]),
+            (11, [0x61, 0x41, 0x06C6, 0x06E6]),
+            (12, [0x20, 0x20, 0x20, 0x20]),
+            (13, [0xFE51, 0xFE57, 0, 0]),
+            (14, [0xFFB1, 0xFFB1, 0, 0]),
+            (15, [0x0100_20AC, 0xA3, 0, 0]),
+            (
+                16,
+                [KEYSYM_RETURN, KEYSYM_RETURN, KEYSYM_RETURN, KEYSYM_RETURN],
+            ),
+            (17, [KEYSYM_TAB, 0xFE20, KEYSYM_TAB, 0xFE20]),
+            (SHIFT_L, [0xFFE1, 0xFFE1, 0xFFE1, 0xFFE1]),
+        ])
+    }
+
+    fn key_of(layout: &LayoutKeys, character: char) -> Option<LayoutKey> {
+        layout.key_for(keysym_for(character).expect("a carriable character"))
+    }
+
+    #[test]
+    fn a_keysym_is_a_character_only_in_the_forms_a_layout_hands_out() {
+        for (keysym, character) in [
+            (0x20, 0x20),
+            (0x61, 0x61),
+            (0x7E, 0x7E),
+            (0xA0, 0xA0),
+            (0xE9, 0xE9),
+            (0xFF, 0xFF),
+            (0x0100_0100, 0x100),
+            (0x0100_20AC, 0x20AC),
+            (0x0101_F600, 0x1_F600),
+            (0x0110_FFFF, 0x10_FFFF),
+        ] {
+            assert_eq!(
+                character_keysym(keysym),
+                Some(UNICODE_KEYSYM_BASE + character),
+                "{keysym:#x}"
+            );
+        }
+        for keysym in [
+            0x0,
+            0x1F,
+            0x7F,
+            0x9F,
+            0x0100,
+            0x06C6,
+            0xFE51,
+            0xFFB1,
+            0xFFE1,
+            KEYSYM_RETURN,
+            0x0100_0061,
+            0x0100_00FF,
+            0x0100_D800,
+            0x0100_DFFF,
+            0x0111_0000,
+        ] {
+            assert_eq!(character_keysym(keysym), None, "{keysym:#x}");
+        }
+    }
+
+    #[test]
+    fn the_characters_of_the_layout_are_typed_through_its_keys_with_shift_where_it_takes_one() {
+        let layout = LayoutKeys::typing(&us_ru_keyboard(), Some(SHIFT_L), 0);
+        assert_eq!(key_of(&layout, '1'), bare_key(10));
+        assert_eq!(key_of(&layout, '!'), shifted_key(10));
+        assert_eq!(key_of(&layout, 'a'), bare_key(11));
+        assert_eq!(key_of(&layout, 'A'), shifted_key(11));
+        assert_eq!(key_of(&layout, '\u{20AC}'), bare_key(15), "Unicode form");
+        assert_eq!(key_of(&layout, '\u{A3}'), shifted_key(15), "Latin-1 form");
+        assert_eq!(layout.shift_key(), Some(SHIFT_L));
+        // Not on any key: a spare key types them.
+        assert_eq!(key_of(&layout, 'b'), None);
+        assert_eq!(key_of(&layout, '\u{17C}'), None);
+        // The key of a legacy Cyrillic keysym is not a character this table knows.
+        assert_eq!(key_of(&layout, '\u{444}'), None);
+        // A dead key and the keypad type something other than their name.
+        assert_eq!(key_of(&layout, '\u{B4}'), None);
+        assert_eq!(key_of(&layout, '\u{A8}'), None);
+        // Return and Tab are the keys of those names whatever is on them.
+        assert_eq!(layout.key_for(KEYSYM_RETURN), bare_key(16));
+        assert_eq!(layout.key_for(KEYSYM_TAB), bare_key(17));
+    }
+
+    #[test]
+    fn a_space_on_both_levels_takes_no_shift() {
+        let layout = LayoutKeys::typing(&us_ru_keyboard(), Some(SHIFT_L), 0);
+        assert_eq!(key_of(&layout, ' '), bare_key(12));
+    }
+
+    #[test]
+    fn a_character_on_two_keys_is_pressed_through_the_one_that_needs_no_shift() {
+        // The digit 2 is on a Shift level of a lower key and on the plain level of a
+        // higher one: the plain level wins, the order of the keys does not.
+        let keymap = keyboard(&[
+            (20, [0x61, 0x32, 0, 0]),
+            (30, [0x32, 0x42, 0, 0]),
+            (SHIFT_L, [0xFFE1, 0xFFE1, 0, 0]),
+        ]);
+        let layout = LayoutKeys::typing(&keymap, Some(SHIFT_L), 0);
+        assert_eq!(key_of(&layout, '2'), bare_key(30));
+        assert_eq!(key_of(&layout, 'B'), shifted_key(30));
+    }
+
+    #[test]
+    fn without_a_shift_key_only_the_characters_that_need_none_are_typed_through_the_layout() {
+        let layout = LayoutKeys::typing(&us_ru_keyboard(), None, 0);
+        assert_eq!(key_of(&layout, 'a'), bare_key(11));
+        assert_eq!(key_of(&layout, 'A'), None);
+        assert_eq!(key_of(&layout, '!'), None);
+        assert_eq!(layout.shift_key(), None);
+    }
+
+    #[test]
+    fn the_second_group_reads_the_second_pair_of_columns() {
+        let second = 1u16 << 13;
+        let layout = LayoutKeys::typing(&us_ru_keyboard(), Some(SHIFT_L), second);
+        // The letter a is a Cyrillic one in this group: no key of the layout types it.
+        assert_eq!(key_of(&layout, 'a'), None);
+        assert_eq!(key_of(&layout, '1'), bare_key(10), "the digit is on both");
+        assert_eq!(layout.key_for(KEYSYM_RETURN), bare_key(16));
+    }
+
+    #[test]
+    fn a_state_that_would_change_the_characters_leaves_them_to_the_spare_keys() {
+        let keymap = us_ru_keyboard();
+        // Shift, Lock, Control, Mod1, Mod3, Mod4 and Mod5, and the third and fourth group.
+        for state in [
+            0x01u16,
+            0x02,
+            0x04,
+            0x08,
+            0x20,
+            0x40,
+            0x80,
+            0x2 << 13,
+            0x3 << 13,
+            0x01 | (0x1 << 13),
+        ] {
+            let layout = LayoutKeys::typing(&keymap, Some(SHIFT_L), state);
+            assert_eq!(key_of(&layout, 'a'), None, "state {state:#x}");
+            assert_eq!(layout.shift_key(), None, "state {state:#x}");
+            assert_eq!(layout.key_for(KEYSYM_RETURN), bare_key(16), "{state:#x}");
+            assert_eq!(layout.key_for(KEYSYM_TAB), bare_key(17), "{state:#x}");
+        }
+        // Num Lock and a pressed mouse button change no character of the main block.
+        for state in [0x10u16, 0x0100, 0x1000, 0x10 | 0x0300] {
+            let layout = LayoutKeys::typing(&keymap, Some(SHIFT_L), state);
+            assert_eq!(key_of(&layout, 'a'), bare_key(11), "state {state:#x}");
+        }
+    }
+
+    #[test]
+    fn the_state_is_plain_without_modifiers_and_the_group_is_read_from_bits_13_and_14() {
+        assert!(layout_is_plain(0));
+        assert!(layout_is_plain(0x10), "Num Lock");
+        assert!(layout_is_plain(0x1F00), "buttons");
+        assert!(layout_is_plain(0x6000), "a group is not a modifier");
+        for bit in [0x01u16, 0x02, 0x04, 0x08, 0x20, 0x40, 0x80] {
+            assert!(!layout_is_plain(bit), "{bit:#x}");
+        }
+        assert_eq!(usable_group(0), Some(0));
+        assert_eq!(usable_group(0x2000), Some(1));
+        assert_eq!(usable_group(0x4000), None);
+        assert_eq!(usable_group(0x6000), None);
+        assert_eq!(usable_group(0x1FFF), Some(0), "the low bits are no group");
+    }
+
+    #[test]
+    fn a_value_the_layout_types_needs_no_spare_key_and_no_batch_is_cut_by_them() {
+        let keys: Vec<(u8, [u32; 4])> = ('a'..='z')
+            .zip(20u8..)
+            .map(|(letter, code)| {
+                (
+                    code,
+                    [letter as u32, letter.to_ascii_uppercase() as u32, 0, 0],
+                )
+            })
+            .chain([(SHIFT_L, [0xFFE1; 4])])
+            .collect();
+        let layout = LayoutKeys::typing(&keyboard(&keys), Some(SHIFT_L), 0);
+        let keysyms = keysyms_of("QuickBrownFoxJumps");
+        assert_eq!(
+            slots_for_value(&keysyms, 0, &layout),
+            Some(Vec::new()),
+            "nothing to assign, and no spare key is needed to say so"
+        );
+        let batch = next_batch(&keysyms, 0, 0, 256, &layout);
+        assert_eq!(batch.end, keysyms.len());
+        assert!(batch.keysyms.is_empty());
+        // One character it does not type needs the one spare key there is.
+        let mixed = keysyms_of("QuickBrownFox\u{17C}Jumps");
+        let slots = slots_for_value(&mixed, 1, &layout).expect("one spare key holds it");
+        assert_eq!(slots, vec![keysym_for('\u{17C}').expect("a keysym")]);
+    }
+
     #[test]
     fn return_and_tab_are_typed_through_the_keys_of_the_layout() {
         let layout = layout_with_return_and_tab();
-        assert_eq!(layout.key_for(KEYSYM_RETURN), Some(36));
-        assert_eq!(layout.key_for(KEYSYM_TAB), Some(23));
+        assert_eq!(layout.key_for(KEYSYM_RETURN), bare_key(36));
+        assert_eq!(layout.key_for(KEYSYM_TAB), bare_key(23));
         assert_eq!(layout.key_for(0x61), None, "a letter is not one of the two");
         assert_eq!(layout.key_for(keysym_for('a').expect("a")), None);
         // A layout without them leaves them to the spare keys.
