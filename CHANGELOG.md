@@ -12,12 +12,12 @@ Changes wait under Unreleased until then.
 
 ### Added
 
-- On Linux, `nkb send` types into programs running under an X11 session. Each character goes through
-  a spare key rewritten for the moment. The program is asked after every batch if it took the keys,
-  and the keys are kept a moment longer, as Chromium needs. A program that reads keys through an
-  input method, such as xterm with IBus, can lose the end of a value longer than about a hundred
-  characters. Nothing is sent in a Wayland session, for a remote display, or while Caps Lock is on
-  or a modifier is held. `--clear` is not available yet.
+- On Linux, `nkb send` types into programs running under an X11 session. A character the keyboard
+  layout has is pressed as its own key, so a page sees the key events of a person's keyboard. Any
+  other character goes through a spare key, rewritten for the moment. A program that reads keys
+  through an input method, such as xterm with IBus, can lose the end of a long run of those. Nothing
+  is sent in a Wayland session, for a remote display, or while Caps Lock is on or a modifier is held.
+  `--clear` is not available yet.
 - On macOS the palette and `nkb send` now say when the system's text substitutions could have changed
   a value that went in: a capital letter at the start of a sentence, a period after two spaces, and
   a straight quote made curly in a rich text document. The field can then hold something other than

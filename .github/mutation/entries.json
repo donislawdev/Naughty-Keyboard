@@ -9189,8 +9189,8 @@
       "id": "M1233",
       "why": "a tab is typed through the key of the line feed - every tab becomes a new line",
       "file": "crates/nkb-sys/src/linux_rules.rs",
-      "find": "            KEYSYM_TAB => self.tab_key,",
-      "replace": "            KEYSYM_TAB => self.return_key,",
+      "find": "            KEYSYM_TAB => plain(self.tab_key),",
+      "replace": "            KEYSYM_TAB => plain(self.return_key),",
       "test": "linux_rules::tests::return_and_tab_are_typed_through_the_keys_of_the_layout",
       "runner": "rust:nkb-sys:lib"
     },
@@ -9246,6 +9246,132 @@
       "find": "!name.is_empty() && ",
       "replace": "",
       "test": "linux_rules::tests::xmodifiers_names_an_input_method_unless_it_says_none_or_nothing",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1240",
+      "why": "Num Lock is counted among the modifiers that forbid the keys of the layout - with Num Lock on, the usual state, every character goes through a spare key again",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "const TYPING_MODIFIERS: u16 = 0x00EF;",
+      "replace": "const TYPING_MODIFIERS: u16 = 0x00FF;",
+      "test": "linux_rules::tests::a_state_that_would_change_the_characters_leaves_them_to_the_spare_keys",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1241",
+      "why": "Mod3 is not counted among the modifiers that forbid the keys of the layout - a layout that keeps a lock there types the wrong characters through its own keys",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "const TYPING_MODIFIERS: u16 = 0x00EF;",
+      "replace": "const TYPING_MODIFIERS: u16 = 0x00CF;",
+      "test": "linux_rules::tests::a_state_that_would_change_the_characters_leaves_them_to_the_spare_keys",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1242",
+      "why": "a latched Shift is not counted among the modifiers that forbid the keys of the layout - every letter comes out as a capital",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "const TYPING_MODIFIERS: u16 = 0x00EF;",
+      "replace": "const TYPING_MODIFIERS: u16 = 0x00EE;",
+      "test": "linux_rules::tests::a_state_that_would_change_the_characters_leaves_them_to_the_spare_keys",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1243",
+      "why": "a third layout group is read through the columns of the third level - the characters are typed from keys that do not type them",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    (group <= 1).then_some(group)",
+      "replace": "    (group <= 2).then_some(group)",
+      "test": "linux_rules::tests::the_state_is_plain_without_modifiers_and_the_group_is_read_from_bits_13_and_14",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1244",
+      "why": "the layout group is read from the wrong bits of the state - a layout switched to its second group is taken for the first",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "const GROUP_SHIFT: u16 = 13;",
+      "replace": "const GROUP_SHIFT: u16 = 12;",
+      "test": "linux_rules::tests::the_state_is_plain_without_modifiers_and_the_group_is_read_from_bits_13_and_14",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1245",
+      "why": "the characters are read from the first group whatever group is in effect - a layout switched to its second group types the letters of the first",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "            let column = 2 * group + usize::from(shift);",
+      "replace": "            let column = usize::from(shift);",
+      "test": "linux_rules::tests::the_second_group_reads_the_second_pair_of_columns",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1246",
+      "why": "the keys that need Shift are read first - a character on two keys is pressed with Shift although a key without it exists",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        for shift in [false, true] {",
+      "replace": "        for shift in [true, false] {",
+      "test": "linux_rules::tests::a_character_on_two_keys_is_pressed_through_the_one_that_needs_no_shift",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1247",
+      "why": "characters that need Shift are kept although the server names no Shift key - a send would hold a key it cannot name",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "            if !key.shift || shift_key.is_some() {",
+      "replace": "            if true {",
+      "test": "linux_rules::tests::without_a_shift_key_only_the_characters_that_need_none_are_typed_through_the_layout",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1248",
+      "why": "a locked or latched modifier does not stop the keys of the layout - characters come out as the state says and not as the value says",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": ".filter(|_| layout_is_plain(state))",
+      "replace": ".filter(|_| true)",
+      "test": "linux_rules::tests::a_state_that_would_change_the_characters_leaves_them_to_the_spare_keys",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1249",
+      "why": "the layout group in effect is ignored - a layout switched to another group types the characters of the first",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "usable_group(state).filter(|_| layout_is_plain(state))",
+      "replace": "Some(0usize).filter(|_| layout_is_plain(state))",
+      "test": "linux_rules::tests::the_second_group_reads_the_second_pair_of_columns",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1250",
+      "why": "the space is not a character of the layout - every space of a value takes a spare key again",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        0x20..=0x7E | 0xA0..=0xFF => keysym,",
+      "replace": "        0x21..=0x7E | 0xA0..=0xFF => keysym,",
+      "test": "linux_rules::tests::a_keysym_is_a_character_only_in_the_forms_a_layout_hands_out",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1251",
+      "why": "the no-break space is not a character of the layout - it takes a spare key and is typed as a character no page can name",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        0x20..=0x7E | 0xA0..=0xFF => keysym,",
+      "replace": "        0x20..=0x7E | 0xA1..=0xFF => keysym,",
+      "test": "linux_rules::tests::a_keysym_is_a_character_only_in_the_forms_a_layout_hands_out",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1252",
+      "why": "the Unicode form of a Latin-1 character is read as a key of the layout - a form the server never hands out names keys",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "const UNICODE_KEYSYM_FIRST: u32 = 0x0100_0100;",
+      "replace": "const UNICODE_KEYSYM_FIRST: u32 = 0x0100_0000;",
+      "test": "linux_rules::tests::a_keysym_is_a_character_only_in_the_forms_a_layout_hands_out",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1253",
+      "why": "a keysym in the Unicode form of a surrogate is taken for a character - the table holds a key that types nothing",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    char::from_u32(character)?;\n",
+      "replace": "",
+      "test": "linux_rules::tests::a_keysym_is_a_character_only_in_the_forms_a_layout_hands_out",
       "runner": "rust:nkb-sys:lib"
     }
   ]

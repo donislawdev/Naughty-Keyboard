@@ -1,22 +1,29 @@
-//! Typing on X11: spare keys rewritten to the characters, batches, and the answer
-//! of the application after every batch (`D145`, `OBS-202`).
+//! Typing on X11: the keys of the layout for the characters it types, spare keys
+//! rewritten to the rest, batches, and the answer of the application after every
+//! batch (`D145`, `OBS-202`, `OBS-212`).
 //!
 //! The order of one send, and the measurement behind each step:
 //!
 //! 1. the characters become keysyms, and the send is refused by name if one has
 //!    none (`U+0000`), before anything is touched,
 //! 2. the connection is made to the LOCAL socket, or the send is refused (Wayland,
-//!    no server, no `XTEST`, no spare key),
+//!    no server, no `XTEST`),
 //! 3. a held modifier is waited for, and Caps Lock on is refused: GTK turns the
-//!    letters to capitals under it whatever key typed them (point 8),
-//! 4. one tap of an unmapped key makes the server announce its map. The first
-//!    XTest key event of a connection does, and a remap made before it is gone
-//!    (point 1),
-//! 5. a batch is: rewrite the spare keys, press and release them, and ask the
-//!    window at the keyboard focus to answer `_NET_WM_PING`. The answer comes from
-//!    the application's own loop after the key events before it, so it means they
-//!    were taken (point 3). The keys are rewritten again only after it,
-//! 6. the keys are given back to the layout on every way out of the send.
+//!    letters to capitals under it whatever key typed them (point 8). The state
+//!    then read decides whether the keys of the layout may type the characters
+//!    (`LayoutKeys::typing`), and a send with a character they cannot type is
+//!    refused if the server has no spare key,
+//! 4. when a spare key is needed, one tap of an unmapped key makes the server
+//!    announce its map. The first XTest key event of a connection does, and a
+//!    remap made before it is gone (point 1). A value the layout types alone gets
+//!    no tap and no remap,
+//! 5. a batch is: rewrite the spare keys, press and release the keys (Shift held
+//!    around those that need it), and ask the window at the keyboard focus to
+//!    answer `_NET_WM_PING`. The answer comes from the application's own loop after
+//!    the key events before it, so it means they were taken (point 3). The spare
+//!    keys are rewritten again only after it,
+//! 6. the spare keys are given back to the layout, and Shift is let go, on every
+//!    way out of the send.
 //!
 //! What the answer does not say is whether the application put the character in
 //! the field, and that is measured with a victim that reports its field
@@ -40,10 +47,10 @@ use super::escape::{ReservedEscape, XEscape};
 use super::front::{PingAtoms, focus, focused_toplevel, ping_atoms, ping_target};
 use crate::cadence::{Cadence, PROGRESS_INTERVAL};
 use crate::linux_rules::{
-    Batch, FIRST_BATCH_CHARS, KEYSYM_ESCAPE, Keymap, LOOK_EVERY, LayoutKeys, PING_ANSWER_MASK,
-    PING_WAIT, REMAP_SETTLE, Refusal, UNPACED_SETTLE, WARMUP_SETTLE, batch_of_value, caps_lock_on,
-    give_back_wait, held_modifier, keysym_for, names_an_input_method, next_batch, next_limit,
-    ping_token, slots_for_value, utf16_units,
+    Batch, FIRST_BATCH_CHARS, KEYSYM_ESCAPE, Keymap, LOOK_EVERY, LayoutKey, LayoutKeys,
+    PING_ANSWER_MASK, PING_WAIT, REMAP_SETTLE, Refusal, UNPACED_SETTLE, WARMUP_SETTLE,
+    batch_of_value, caps_lock_on, give_back_wait, held_modifier, keysym_for, names_an_input_method,
+    next_batch, next_limit, ping_token, slots_for_value, utf16_units,
 };
 use crate::{Chord, MODIFIER_RELEASE_WAIT, SendError, SendOutcome, SendProgress, StopReason};
 
@@ -165,10 +172,13 @@ enum Answer {
     Taken(Duration),
     /// It does not take part in the protocol, so it was given time instead.
     Unpaced,
-    /// No answer in time. The keys of the batch were sent, but the layout is given
-    /// back before the application runs again, and a key it reads then types
+    /// No answer in time. The spare keys of the batch were sent, but the layout is
+    /// given back before the application runs again, and a key it reads then types
     /// nothing (`OBS-206`): the batch is counted as not arrived, and what the
-    /// application took before it stopped is not known.
+    /// application took before it stopped is not known. The keys of the layout
+    /// are not given back and are typed when the application runs again, which is
+    /// why a send begins with `confirm_alive`: a program found stopped after those
+    /// keys went would be said to have taken nothing while it holds them.
     TimedOut,
 }
 
@@ -231,6 +241,8 @@ struct Keyboard {
     keymap: Keymap,
     modifier_keys: Vec<u8>,
     keys_per_modifier: usize,
+    /// The key the server counts as Shift: the first of the first modifier.
+    shift_key: Option<u8>,
 }
 
 fn read_keyboard(conn: &RustConnection) -> Result<Keyboard, Lost> {
@@ -239,6 +251,12 @@ fn read_keyboard(conn: &RustConnection) -> Result<Keyboard, Lost> {
     let mapping = conn.get_keyboard_mapping(min, max - min + 1)?.reply()?;
     let modifiers = conn.get_modifier_mapping()?.reply()?;
     let keys_per_modifier = usize::from(modifiers.keycodes_per_modifier());
+    let shift_key = modifiers
+        .keycodes
+        .iter()
+        .take(keys_per_modifier)
+        .copied()
+        .find(|keycode| *keycode != 0);
     Ok(Keyboard {
         keymap: Keymap::new(
             min,
@@ -247,6 +265,7 @@ fn read_keyboard(conn: &RustConnection) -> Result<Keyboard, Lost> {
         ),
         modifier_keys: modifiers.keycodes,
         keys_per_modifier,
+        shift_key,
     })
 }
 
@@ -263,8 +282,8 @@ fn modifier_down(server: &Server, keyboard: &Keyboard) -> Result<Option<&'static
 /// Waits for every modifier to come up, for at most `MODIFIER_RELEASE_WAIT`, and
 /// then refuses Caps Lock. The modifier is the ordinary case right after a hotkey.
 /// Caps Lock is a state somebody left on, and waiting for it would be waiting for
-/// them.
-fn wait_for_keys_released(server: &Server, keyboard: &Keyboard) -> Result<(), SendError> {
+/// them. Gives the modifier state the server reports, with the layout group in it.
+fn wait_for_keys_released(server: &Server, keyboard: &Keyboard) -> Result<u16, SendError> {
     let lost = || unsupported(Refusal::NoLocalServer);
     let deadline = Instant::now() + MODIFIER_RELEASE_WAIT;
     while let Some(key) = modifier_down(server, keyboard).map_err(|_| lost())? {
@@ -273,17 +292,19 @@ fn wait_for_keys_released(server: &Server, keyboard: &Keyboard) -> Result<(), Se
         }
         std::thread::sleep(LOOK_EVERY);
     }
-    let state = server
-        .conn
-        .query_pointer(server.root)
-        .map_err(|_| lost())?
-        .reply()
-        .map_err(|_| lost())?
-        .mask;
-    if caps_lock_on(u16::from(state)) {
+    let state = u16::from(
+        server
+            .conn
+            .query_pointer(server.root)
+            .map_err(|_| lost())?
+            .reply()
+            .map_err(|_| lost())?
+            .mask,
+    );
+    if caps_lock_on(state) {
         return Err(SendError::CapsLockOn);
     }
-    Ok(())
+    Ok(state)
 }
 
 /// Why the send must stop before the next batch, if it must: `Escape` first, as on
@@ -326,8 +347,29 @@ fn assign_all(server: &Server, remapped: &mut Remapped<'_>, keysyms: &[u32]) -> 
     Ok(())
 }
 
+/// One key of the layout pressed and released, with Shift held around it when the
+/// character is on the second level. Shift is let go whether or not the key went: a
+/// Shift left down would change everything the person types next.
+fn tap_layout_key(server: &Server, shift_key: Option<u8>, key: LayoutKey) -> Result<(), Lost> {
+    let shift = if key.shift {
+        let shift = shift_key.ok_or(Lost)?;
+        fake(&server.conn, server.root, true, shift)?;
+        Some(shift)
+    } else {
+        None
+    };
+    let typed = fake(&server.conn, server.root, true, key.keycode)
+        .and_then(|()| fake(&server.conn, server.root, false, key.keycode));
+    let released = shift.map_or(Ok(()), |shift| {
+        fake(&server.conn, server.root, false, shift)
+    });
+    typed.and(released)
+}
+
 /// One batch on the wire: the keys pressed and released, after the spare keys were
-/// rewritten when `rewrite` says they were not assigned for the whole value.
+/// rewritten when `rewrite` says they were not assigned for the whole value. Tells
+/// whether a spare key was pressed, because only then is there a layout to keep for
+/// an application that has not read the keys yet.
 fn type_batch(
     server: &Server,
     remapped: &mut Remapped<'_>,
@@ -335,20 +377,23 @@ fn type_batch(
     keysyms: &[u32],
     layout: &LayoutKeys,
     rewrite: bool,
-) -> Result<(), Lost> {
-    if rewrite {
+) -> Result<bool, Lost> {
+    if rewrite && !batch.keysyms.is_empty() {
         assign_all(server, remapped, &batch.keysyms)?;
     }
+    let mut used_spare = false;
     for keysym in &keysyms[batch.first..batch.end] {
-        let keycode = match layout.key_for(*keysym) {
-            Some(keycode) => keycode,
-            None => remapped.spare[batch.slot(*keysym).ok_or(Lost)?],
-        };
+        if let Some(key) = layout.key_for(*keysym) {
+            tap_layout_key(server, layout.shift_key(), key)?;
+            continue;
+        }
+        let keycode = remapped.spare[batch.slot(*keysym).ok_or(Lost)?];
         fake(&server.conn, server.root, true, keycode)?;
         fake(&server.conn, server.root, false, keycode)?;
+        used_spare = true;
     }
     server.conn.flush()?;
-    Ok(())
+    Ok(used_spare)
 }
 
 /// The tap that makes the server announce its map, before any key is rewritten.
@@ -358,6 +403,66 @@ fn warm_up(server: &Server, keycode: u8) -> Result<(), Lost> {
     roundtrip(&server.conn)?;
     std::thread::sleep(WARMUP_SETTLE);
     Ok(())
+}
+
+/// Asks the window once, before any key goes, whether the application is reading at
+/// all. A key of the layout stays with the application and is typed whenever it runs
+/// again, so a stopped program found out only after the keys went would be reported
+/// as having taken nothing while the field fills up later (measured with `SIGSTOP`
+/// on the first batch, `OBS-212`). Found out here, nothing was sent and that is what
+/// the person is told.
+fn confirm_alive(server: &Server, pinged: Pinged, expected: usize) -> Result<(), SendError> {
+    let token = ping_token(std::process::id(), u32::MAX);
+    match ping(server, pinged, token) {
+        Ok(Answer::TimedOut) => Err(truncated(0, expected, StopReason::NotTaking)),
+        Ok(_) => Ok(()),
+        Err(Lost) => Err(truncated(0, expected, StopReason::Dropped)),
+    }
+}
+
+/// What the batch just answered tells the rest of the send.
+struct Kept {
+    /// Characters in the batch.
+    sent: usize,
+    /// Whether a spare key was pressed in it: only then is there a layout to keep,
+    /// because the keys of the layout are never rewritten.
+    used_spare: bool,
+    input_method: bool,
+}
+
+/// What the answer of the application changes: the length the next batch may have,
+/// or the end of the send.
+fn take_answer(
+    answer: Answer,
+    limit: usize,
+    kept: &Kept,
+    remapped: &mut Remapped<'_>,
+) -> Result<usize, StopReason> {
+    match answer {
+        // An application that does not answer is not reading, and holding the
+        // layout for it would only keep the send waiting.
+        Answer::TimedOut => Err(StopReason::NotTaking),
+        // The next batch is as long as the pace just seen allows (`OBS-204`).
+        // The answer says the keys were taken, not that they were read, so the
+        // spare keys are kept a while longer (`OBS-210`).
+        Answer::Taken(took) => {
+            if kept.used_spare {
+                remapped.owe(give_back_wait(kept.sent, kept.input_method));
+            }
+            Ok(next_limit(kept.sent, took))
+        }
+        // The pause that stands in for the answer was part of the wait already:
+        // an application that takes no part in the ping reads its keys as late
+        // as any other (xterm through IBus, `OBS-211`).
+        Answer::Unpaced => {
+            if kept.used_spare {
+                remapped.owe(
+                    give_back_wait(kept.sent, kept.input_method).saturating_sub(UNPACED_SETTLE),
+                );
+            }
+            Ok(limit)
+        }
+    }
 }
 
 pub(crate) fn send_text(
@@ -379,11 +484,17 @@ pub(crate) fn send_text(
     let server = connect(address).map_err(unsupported)?;
     let lost = |_: Lost| unsupported(Refusal::NoLocalServer);
     let keyboard = read_keyboard(&server.conn).map_err(lost)?;
+    let state = wait_for_keys_released(&server, &keyboard)?;
+    // What the keys of the layout type depends on the state just read, so the table of
+    // them is made after the wait. A value they type alone needs no spare key.
+    let layout = LayoutKeys::typing(&keyboard.keymap, keyboard.shift_key, state);
     let spare = keyboard.keymap.spare_keycodes();
-    if spare.is_empty() {
+    let needs_spare = keysyms
+        .iter()
+        .any(|keysym| layout.key_for(*keysym).is_none());
+    if needs_spare && spare.is_empty() {
         return Err(unsupported(Refusal::NoSpareKeys));
     }
-    wait_for_keys_released(&server, &keyboard)?;
 
     let expected = utf16_units(&characters);
     let Some(front) = focused_toplevel(&server.conn, server.root).map_err(lost)? else {
@@ -393,7 +504,9 @@ pub(crate) fn send_text(
     // Declared before the keys, so the keys are given back first: the wait for
     // `Escape` to come up must not keep the layout rewritten.
     let mut escape = XEscape::reserve(address, keyboard.keymap.find_keycode(KEYSYM_ESCAPE));
-    warm_up(&server, spare[0]).map_err(lost)?;
+    if needs_spare {
+        warm_up(&server, spare[0]).map_err(lost)?;
+    }
     let mut remapped = Remapped {
         conn: &server.conn,
         spare: &spare,
@@ -403,11 +516,17 @@ pub(crate) fn send_text(
     // A value that fits the spare keys is assigned once, here, and the keys are not
     // touched again until the send is over. One that does not fit is rewritten
     // between batches, after the wait the last batch is owed.
-    let layout = LayoutKeys::from_keymap(&keyboard.keymap);
     let input_method = names_an_input_method(std::env::var("XMODIFIERS").ok().as_deref());
     let plan = slots_for_value(&keysyms, spare.len(), &layout);
-    if let Some(slots) = &plan {
+    if let Some(slots) = plan.as_ref().filter(|slots| !slots.is_empty()) {
         assign_all(&server, &mut remapped, slots).map_err(lost)?;
+    }
+
+    let uses_layout = keysyms
+        .iter()
+        .any(|keysym| layout.key_for(*keysym).is_some());
+    if let (true, Some(pinged)) = (uses_layout, pinged) {
+        confirm_alive(&server, pinged, expected)?;
     }
 
     let mut cadence = Cadence::starting(Instant::now(), PROGRESS_INTERVAL);
@@ -424,18 +543,16 @@ pub(crate) fn send_text(
             None => next_batch(&keysyms, first, spare.len(), limit, &layout),
         };
         let batch_units = utf16_units(&characters[batch.first..batch.end]);
-        if type_batch(
+        let Ok(used_spare) = type_batch(
             &server,
             &mut remapped,
             &batch,
             &keysyms,
             &layout,
             plan.is_none(),
-        )
-        .is_err()
-        {
+        ) else {
             return Err(truncated(arrived, expected, StopReason::Dropped));
-        }
+        };
         // From here the batch is on the wire, and it counts only once the
         // application has answered: the layout is given back as the send ends, and
         // an application that has not looked yet reads the keys of this batch in
@@ -451,27 +568,13 @@ pub(crate) fn send_text(
                 Answer::Unpaced
             }
         };
-        match answer {
-            // An application that does not answer is not reading, and holding the
-            // layout for it would only keep the send waiting.
-            Answer::TimedOut => return Err(truncated(arrived, expected, StopReason::NotTaking)),
-            // The next batch is as long as the pace just seen allows (`OBS-204`).
-            // The answer says the keys were taken, not that they were read, so the
-            // layout is kept a while longer (`OBS-210`).
-            Answer::Taken(took) => {
-                limit = next_limit(batch.end - batch.first, took);
-                remapped.owe(give_back_wait(batch.end - batch.first, input_method));
-            }
-            // The pause that stands in for the answer was part of the wait already:
-            // an application that takes no part in the ping reads its keys as late
-            // as any other (xterm through IBus, `OBS-211`).
-            Answer::Unpaced => {
-                remapped.owe(
-                    give_back_wait(batch.end - batch.first, input_method)
-                        .saturating_sub(UNPACED_SETTLE),
-                );
-            }
-        }
+        let kept = Kept {
+            sent: batch.end - batch.first,
+            used_spare,
+            input_method,
+        };
+        limit = take_answer(answer, limit, &kept, &mut remapped)
+            .map_err(|reason| truncated(arrived, expected, reason))?;
         arrived += batch_units;
         first = batch.end;
         number = number.wrapping_add(1);
