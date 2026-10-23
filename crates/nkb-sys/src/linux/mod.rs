@@ -16,23 +16,69 @@
 //! The decisions that need no server are in `linux_rules.rs` and tested on every
 //! system.
 //!
-//! Wayland is not here, on purpose: through the portal and through XWayland only
-//! the characters of the compositor's layout arrive (`OBS-203`), and a send that
-//! types half a value and says it sent it is the one thing this program does not
-//! do (untouchable rule 1). A Wayland session is refused by name instead.
+//! A Wayland session is not typed into through the X server: through the portal and
+//! through XWayland only the characters of the compositor's layout arrive (`OBS-203`),
+//! and a send that types half a value and says it sent it is the one thing this program
+//! does not do (untouchable rule 1). The text goes to the desktop's input method instead
+//! (`ibus`), and the palette, which needs a shortcut and a window this route does not
+//! have yet, is refused on Wayland by name.
+//!
+//! - `ibus` - typing on a Wayland session, by committing text from an engine of ours.
 
 mod connect;
 mod escape;
 mod front;
 pub(crate) mod hotkey;
+mod ibus;
 mod send;
 pub(crate) mod window;
 
+use crate::{SendError, SendOutcome, SendProgress, WindowRef};
+
+// `route_refusal` is the question of the X server alone, which is what the shortcuts and
+// the palette window ask: they have no Wayland route yet, whatever typing has.
 pub(crate) use connect::route_refusal;
-pub(crate) use front::{foreground_window, window_pid};
-pub(crate) use send::{send_allowed, send_chords, send_text};
+pub(crate) use front::window_pid;
+pub(crate) use send::send_chords;
 
 use x11rb::errors::{ConnectionError, ReplyError, ReplyOrIdError};
+
+/// Why this program does not type here, in the words that follow `on`, or `None`.
+/// A Wayland session is asked of the input method, every other of the X server.
+pub(crate) fn typing_refusal() -> Option<&'static str> {
+    if connect::wayland_session() {
+        ibus::refusal()
+    } else {
+        connect::route_refusal()
+    }
+}
+
+/// Whether this program may type here right now.
+pub(crate) fn send_allowed() -> bool {
+    typing_refusal().is_none()
+}
+
+/// The window in front. A Wayland session cannot name it (`ibus::front`).
+pub(crate) fn foreground_window() -> Option<WindowRef> {
+    if connect::wayland_session() {
+        ibus::front()
+    } else {
+        front::foreground_window()
+    }
+}
+
+/// Types `text`, through the input method on a Wayland session and through the keys of
+/// the X server on every other.
+pub(crate) fn send_text(
+    text: &str,
+    progress: &mut dyn FnMut(SendProgress),
+) -> Result<SendOutcome, SendError> {
+    if connect::wayland_session() {
+        ibus::send_text(text, progress)
+    } else {
+        send::send_text(text, progress)
+    }
+}
 
 /// The connection to the server failed in the middle of a question. Nothing more
 /// is known than that, and nothing more is needed: the caller reports what it had

@@ -340,22 +340,52 @@ const LINUX_WINDOW_GRANTED: &[Entry] = &[
     ("posix_spawnp", "the same process start"),
 ];
 
-/// What `nkb` itself is granted on Linux: the one connection of `nkb send`, to the
-/// X server of this machine (`D145`).
+/// What `nkb` itself is granted on Linux: the connection of `nkb send` to the X server of
+/// this machine, and on a Wayland session to the IBus daemon of this machine (`D145`).
+///
+/// The last four come with the bus library that the second connection speaks through
+/// (`zbus`, `D145` point 41). They are code the library carries for transports this
+/// program never uses: `tcp:` addresses (which resolve a host name) and `autolaunch:`
+/// (which starts `dbus-launch`). They are linked and cannot run, because the library is
+/// never given an address: the stream is opened by one call in
+/// crates/nkb-sys/src/linux/ibus/daemon.rs and handed over, the calls that take an
+/// address are forbidden in the source (nothing_reaches_the_network.rs), and
+/// linux_ibus_rules.rs refuses every address that is not a file socket before any
+/// connection.
 const LINUX_CLI_GRANTED: &[Entry] = &[
     (
         "socket",
-        "nkb send types through the X server of this machine. The standard library's Unix \
-         socket is the way there, opened by one call in crates/nkb-sys/src/linux/connect.rs \
-         and by nothing else (nothing_reaches_the_network.rs, register 4). The path is built \
-         from the display number, never from an address",
+        "nkb send types through the X server of this machine, or hands the text to the IBus \
+         daemon of this machine. The standard library's Unix socket is the way to both, opened \
+         by one call in crates/nkb-sys/src/linux/connect.rs and one in \
+         crates/nkb-sys/src/linux/ibus/daemon.rs and by nothing else \
+         (nothing_reaches_the_network.rs, register 4). The X path is built from the display \
+         number and the daemon's from its own address file, never from an address of ours",
     ),
     (
         "connect",
-        "the same Unix socket. A DISPLAY that names a host is refused before the call \
-         (linux_rules.rs), and the X11 library's own connect, which would follow it over TCP, \
-         is forbidden in the source",
+        "the same Unix sockets. A DISPLAY that names a host is refused before the call \
+         (linux_rules.rs), an IBus address that is not a file socket is refused before it \
+         (linux_ibus_rules.rs), and the X11 library's own connect, which would follow a host \
+         over TCP, is forbidden in the source",
     ),
+    (
+        "socketpair",
+        "the bus library's executor wakes its own threads through a pair of local sockets. \
+         Nothing in it is connected to an address",
+    ),
+    (
+        "getaddrinfo",
+        "the bus library's TCP transport resolves the host of a `tcp:` address. The library is \
+         never given an address, so this cannot run",
+    ),
+    (
+        "execvp",
+        "the bus library's `autolaunch:` transport starts `dbus-launch`, with the standard \
+         library's process start. The library is never given an address, so this cannot run",
+    ),
+    ("fork", "the same process start"),
+    ("posix_spawnp", "the same process start"),
 ];
 
 const MACOS_BOTH: &[Entry] = &[

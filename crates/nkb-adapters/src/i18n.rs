@@ -239,6 +239,9 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::NotPaced => {
             "This application's pace could not be followed, so characters may be missing if it was busy. Check the field before testing."
         }
+        Message::HandedOver => {
+            "The value was handed to the desktop's input method, which gives it to whatever has the keyboard focus. Check the field before testing."
+        }
         Message::EndOfPack { .. } => "End of pack ({total}/{total}). Press again to start over.",
         Message::AtFirstValue { .. } => "Already at the first value (1/{total}).",
         Message::NothingBefore => "Nothing to go back to: value 1 is the first of this pack.",
@@ -316,6 +319,7 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
         | Message::NoTarget
         | Message::ClearingFailed
         | Message::NotPaced
+        | Message::HandedOver
         | Message::NothingBefore
         | Message::NothingToReport => pattern.to_owned(),
         Message::NoDirectRoute { system } => fill(pattern, &[("system", system)]),
@@ -1119,6 +1123,7 @@ mod tests {
                 reason: StopReason::FocusMoved,
             },
             Message::NotPaced,
+            Message::HandedOver,
             Message::EndOfPack { total: 34 },
             Message::AtFirstValue { total: 34 },
             Message::NothingBefore,
@@ -1453,10 +1458,11 @@ mod tests {
             Message::NeedsPermission => 34,
             Message::MayBeAltered(_) => 35,
             Message::CapsLockOn => 36,
+            Message::HandedOver => 37,
         }
     }
 
-    const SLOTS: usize = 37;
+    const SLOTS: usize = 38;
 
     #[test]
     fn every_message_variant_is_listed_here() {

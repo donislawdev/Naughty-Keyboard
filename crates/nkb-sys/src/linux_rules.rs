@@ -178,9 +178,14 @@ pub(crate) struct Environment<'a> {
 /// after `on` (`Unsupported { system }`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Refusal {
-    /// A Wayland session: the X server there is XWayland, and through it only the
-    /// characters of the compositor's layout arrive (`OBS-203`).
+    /// The server found is XWayland, and through it only the characters of the
+    /// compositor's layout arrive (`OBS-203`). A Wayland session the environment
+    /// names is typed into through the input method instead (`linux/ibus`), so this
+    /// is the one the environment did not name, such as a shell started over SSH.
     Wayland,
+    /// A Wayland session with no IBus daemon to hand the text to: not running, or its
+    /// address is not a file socket on this machine (`D145` point 37).
+    NoInputMethod,
     /// No local X server to type through.
     NoLocalServer,
     /// The server has no XTEST extension, the only way to inject key events.
@@ -194,6 +199,7 @@ impl Refusal {
     pub(crate) const fn system(self) -> &'static str {
         match self {
             Self::Wayland => "Linux under Wayland",
+            Self::NoInputMethod => "Linux under Wayland without an IBus daemon to type through",
             Self::NoLocalServer => "Linux without a local X server",
             Self::NoXtest => "Linux on an X server without the XTEST extension",
             Self::NoSpareKeys => "Linux on an X server with no spare keys to type through",
@@ -778,6 +784,7 @@ mod tests {
     fn every_refusal_names_linux_and_its_own_cause() {
         let all = [
             Refusal::Wayland,
+            Refusal::NoInputMethod,
             Refusal::NoLocalServer,
             Refusal::NoXtest,
             Refusal::NoSpareKeys,

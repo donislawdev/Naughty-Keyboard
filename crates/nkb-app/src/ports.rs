@@ -59,11 +59,26 @@ impl fmt::Display for SourceError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Delivered {
     pub utf16_units: usize,
-    /// Whether the application holding the focus took every key, not only the
-    /// system (`D95`). False when the route could not follow its queue - then
-    /// characters may be missing if it was busy (`OBS-158`), and that has to be
-    /// said. The clipboard route has no keys to follow and reports true.
-    pub paced: bool,
+    /// How far the route could follow the value after it left, and so what may
+    /// be said about where it went (`D95`, `D145`). The clipboard route has no
+    /// keys to follow and reports [`Following::Application`].
+    pub following: Following,
+}
+
+/// How far a delivery could be followed after it left (`D95`, `OBS-158`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Following {
+    /// The application holding the focus took every key, not only the system.
+    Application,
+    /// Only the system took the keys: the route could not follow the queue of
+    /// the application, so characters may be missing if it was busy, and that
+    /// has to be said.
+    System,
+    /// The value was handed whole to the desktop's input method, which gives
+    /// it to whatever has the keyboard focus (Wayland, `D145`). No key was
+    /// pressed, and not even whether anything with a field had the focus can
+    /// be followed, so the route says "handed", never "in the field".
+    HandedOver,
 }
 
 /// How far a value got on its way into the field, said while it goes
@@ -209,6 +224,20 @@ impl fmt::Display for DeliveryError {
 /// handle to compare there is nothing to say it with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TargetRef(pub u64);
+
+impl TargetRef {
+    /// "Whatever has the keyboard focus", on a session that cannot name the window in
+    /// front: a Wayland compositor does not tell a client which window has it (`D145`).
+    /// Two of these are equal whatever happened between, so a caller that compares
+    /// targets to see whether the focus moved learns nothing from them.
+    pub const UNNAMED: Self = Self(u64::MAX);
+
+    /// Whether this is [`TargetRef::UNNAMED`].
+    #[must_use]
+    pub const fn is_unnamed(self) -> bool {
+        self.0 == Self::UNNAMED.0
+    }
+}
 
 /// Whether a delivery route can be used here at all.
 ///

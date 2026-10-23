@@ -1019,7 +1019,7 @@ fn the_discard_scan_finds_each_shape_and_leaves_comments_alone() {
 /// a test uses ships.
 const ALLOWED_DEPENDENCIES: &[(&str, &[&str])] = &[
     ("nkb-core", &[]),
-    ("nkb-sys", &["windows-sys", "x11rb"]),
+    ("nkb-sys", &["windows-sys", "x11rb", "zbus"]),
     ("nkb-app", &["nkb-core"]),
     (
         "nkb-adapters",

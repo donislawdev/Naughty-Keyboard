@@ -166,6 +166,35 @@ const FORBIDDEN: &[(&str, &str)] = &[
         "DefaultStream::connect",
         "the X11 library's stream, which opens TCP when DISPLAY names a host",
     ),
+    // The bus library of the Wayland route (`zbus`) is given a stream the program opened
+    // itself, and never an address: it would follow `tcp:` to a host and start
+    // `dbus-launch` for `autolaunch:`. The calls that take or find an address are the
+    // ones that could make it do either.
+    (
+        "Builder::address(",
+        "the bus library's own address, which it follows over TCP or starts a program for",
+    ),
+    (
+        "Builder::session(",
+        "the session bus, which the bus library finds from the environment",
+    ),
+    (
+        "Builder::system(",
+        "the system bus, which the bus library finds from the environment",
+    ),
+    (
+        "Builder::ibus(",
+        "the IBus address, which the bus library finds and follows by itself",
+    ),
+    (
+        "Connection::session(",
+        "the session bus, which the bus library finds from the environment",
+    ),
+    (
+        "Connection::system(",
+        "the system bus, which the bus library finds from the environment",
+    ),
+    ("tcp_stream(", "a TCP stream handed to the bus library"),
     ("libc::socket", "a socket through the C library"),
     ("libc::connect", "a connection through the C library"),
     ("SYS_socket", "a socket by system call number"),
@@ -270,29 +299,63 @@ const GRANTED_TO_THE_PRODUCT: (&str, &str, &[&str], &str) = (
      decisions of 2026-10-14). The browser makes the connection, the program makes none",
 );
 
+/// Spellings of register 1 that one file of the product may use, with the reason. They
+/// are names that look like the network and are not, and each is held to live code
+/// like the grants above. The network types themselves stay forbidden by name in the
+/// granted file as in every other: only this spelling is opened.
+const SPELLINGS_GRANTED_TO_THE_PRODUCT: &[(&str, &str, &str)] = &[(
+    "crates/nkb-sys/src/linux/ibus/daemon.rs",
+    "std::net",
+    "`std::net::Shutdown` is the argument of `UnixStream::shutdown`, which shuts the file \
+     socket of the input method daemon when a send runs past its deadline. The enum lives in \
+     `std::net` for historical reasons and has nothing to do with the network: `TcpStream`, \
+     `SocketAddr` and the rest stay forbidden here as everywhere",
+)];
+
 /// Whether `name` is the spelling granted to the file `rel`.
 fn granted(rel: &str, name: &str) -> bool {
-    rel == GRANTED_TO_THE_PRODUCT.0 && name == GRANTED_TO_THE_PRODUCT.1
+    (rel == GRANTED_TO_THE_PRODUCT.0 && name == GRANTED_TO_THE_PRODUCT.1)
+        || SPELLINGS_GRANTED_TO_THE_PRODUCT
+            .iter()
+            .any(|(file, spelling, _)| *file == rel && *spelling == name)
 }
 
 // ---------------------------------------------------------------------------
-// Register 4: the one local socket the product opens
+// Register 4: the local sockets the product opens
 // ---------------------------------------------------------------------------
 
-/// The one local socket the PRODUCT may open: the file, the call, and why. On
-/// Linux `nkb send` types through the X server of this machine (`D145`), and the
-/// way there is a Unix socket. It leaves the machine nowhere: the address is
-/// built from the display NUMBER by `linux_rules::socket_path`, a `DISPLAY` that
-/// names a host is refused before any connection (`parse_display`), and the
-/// library's own `connect`, which would follow it over TCP, is forbidden above.
-const LOCAL_SOCKET_GRANTED_TO_THE_PRODUCT: (&str, &str, &str) = (
-    "crates/nkb-sys/src/linux/connect.rs",
-    "UnixStream::connect(socket_path(address))",
-    "nkb send on Linux types through the X server of this machine, reached by the Unix socket \
-     /tmp/.X11-unix/X<N>. The path is built from the display number alone, a DISPLAY that \
-     names a host is refused before a connection is made, and the X11 library's own connect \
-     (TCP) is forbidden",
-);
+/// The local sockets the PRODUCT may open: the file, the call, and why. On Linux
+/// `nkb send` types through the X server of this machine (`D145`), and the way there
+/// is a Unix socket. It leaves the machine nowhere: the address is built from the
+/// display NUMBER by `linux_rules::socket_path`, a `DISPLAY` that names a host is
+/// refused before any connection (`parse_display`), and the library's own `connect`,
+/// which would follow it over TCP, is forbidden above.
+///
+/// On a Wayland session the same command hands the text to the input method daemon
+/// of the desktop, which listens on a file socket of the person's configuration
+/// directory. The path is read from the daemon's own address file by
+/// `linux_ibus_rules::socket_in_address`, which accepts `unix:path=...` and refuses
+/// every other form (`tcp:`, `nonce-tcp:`, the abstract namespace) BEFORE any
+/// connection, and the stream is opened in the granted file and handed to the bus
+/// library, which therefore never reads an address and never follows one to a host.
+const LOCAL_SOCKETS_GRANTED_TO_THE_PRODUCT: &[(&str, &str, &str)] = &[
+    (
+        "crates/nkb-sys/src/linux/connect.rs",
+        "UnixStream::connect(socket_path(address))",
+        "nkb send on Linux types through the X server of this machine, reached by the Unix \
+         socket /tmp/.X11-unix/X<N>. The path is built from the display number alone, a \
+         DISPLAY that names a host is refused before a connection is made, and the X11 \
+         library's own connect (TCP) is forbidden",
+    ),
+    (
+        "crates/nkb-sys/src/linux/ibus/daemon.rs",
+        "UnixStream::connect(path)",
+        "nkb send on a Wayland session hands the text to the IBus daemon of this machine, \
+         reached by the file socket its own address file names. Only a `unix:path=` address is \
+         accepted, TCP and the abstract namespace are refused before a connection is made, and \
+         the stream is opened here and given to the bus library, which never sees an address",
+    ),
+];
 
 /// Files whose string literals NAME what they refuse, so their literals are not
 /// read for either register. Their code is read like any other file's.
@@ -332,7 +395,10 @@ fn is_allowed(rel: &str, kind: &str) -> bool {
     ALLOWED
         .iter()
         .any(|(file, granted, _)| *file == rel && *granted == kind)
-        || (kind == "local-socket" && rel == LOCAL_SOCKET_GRANTED_TO_THE_PRODUCT.0)
+        || (kind == "local-socket"
+            && LOCAL_SOCKETS_GRANTED_TO_THE_PRODUCT
+                .iter()
+                .any(|(file, _, _)| *file == rel))
 }
 
 fn refuses(rel: &str) -> bool {
@@ -516,34 +582,70 @@ fn the_one_grant_to_the_product_opens_its_named_addresses_and_nothing_else() {
     }
 }
 
-/// Register 4 opens one call from one file. The canary sees both refusals - the
-/// socket in any other file, and TCP in the granted one - and the grant is held
+/// Register 4 opens one call from each of its files. The canary sees both refusals -
+/// the socket in any other file, and TCP in a granted one - and every grant is held
 /// to live code, so a file that stopped using the socket does not keep it open.
 #[test]
-fn the_one_local_socket_of_the_product_is_the_x_server_and_nothing_else() {
-    let (file, call, reason) = LOCAL_SOCKET_GRANTED_TO_THE_PRODUCT;
-    assert!(!reason.is_empty());
-    let source = read(&workspace_root().join(file));
-    assert!(
-        source.contains(call),
-        "{file} no longer opens the socket this way - take register 4 out rather than keep the \
-         door open, or change the call here on purpose"
+fn the_local_sockets_of_the_product_are_the_x_server_and_the_input_method_and_nothing_else() {
+    assert_eq!(
+        LOCAL_SOCKETS_GRANTED_TO_THE_PRODUCT.len(),
+        2,
+        "a third local socket is a decision to write down here, not a line to add"
     );
-    let right = format!("fn open(address: Display) {{ let _ = {call}; }}\n");
-    assert_eq!(findings(Syntax::Rust, &right, file), Vec::new());
-    assert!(
-        findings(Syntax::Rust, &right, "crates/nkb-sys/src/linux/send.rs")
-            .iter()
-            .any(|finding| finding.0 == "unregistered"),
-        "the socket is for one file, and the same call anywhere else is unregistered"
-    );
-    let tcp = "fn open(a: A) { let _ = TcpStream::connect(a); }\n";
-    assert!(
-        findings(Syntax::Rust, tcp, file)
-            .iter()
-            .any(|finding| finding.0 == "forbidden"),
-        "the granted file may open a Unix socket and never a TCP one"
-    );
+    for (file, call, reason) in LOCAL_SOCKETS_GRANTED_TO_THE_PRODUCT {
+        assert!(!reason.is_empty());
+        let source = read(&workspace_root().join(file));
+        assert!(
+            source.contains(call),
+            "{file} no longer opens the socket this way - take register 4 out rather than keep \
+             the door open, or change the call here on purpose"
+        );
+        let right = format!("fn open(address: Display) {{ let _ = {call}; }}\n");
+        assert_eq!(findings(Syntax::Rust, &right, file), Vec::new(), "{file}");
+        assert!(
+            findings(Syntax::Rust, &right, "crates/nkb-sys/src/linux/send.rs")
+                .iter()
+                .any(|finding| finding.0 == "unregistered"),
+            "the socket is for the granted files, and the same call anywhere else is unregistered"
+        );
+        let tcp = "fn open(a: A) { let _ = TcpStream::connect(a); }\n";
+        assert!(
+            findings(Syntax::Rust, tcp, file)
+                .iter()
+                .any(|finding| finding.0 == "forbidden"),
+            "a granted file may open a Unix socket and never a TCP one: {file}"
+        );
+    }
+}
+
+/// A spelling granted to one file is live code there, opens nothing else in that file
+/// and is forbidden in every other file.
+#[test]
+fn a_spelling_granted_to_one_file_is_forbidden_everywhere_else() {
+    for (file, spelling, reason) in SPELLINGS_GRANTED_TO_THE_PRODUCT {
+        assert!(!reason.is_empty());
+        let source = read(&workspace_root().join(file));
+        assert!(
+            source.contains(spelling),
+            "{file} no longer uses {spelling} - take the grant out rather than keep the door \
+             open"
+        );
+        let shutdown = "use std::net::Shutdown;\n";
+        assert_eq!(findings(Syntax::Rust, shutdown, file), Vec::new(), "{file}");
+        assert!(
+            findings(Syntax::Rust, shutdown, "crates/nkb-sys/src/linux/send.rs")
+                .iter()
+                .any(|finding| finding.0 == "forbidden"),
+            "the spelling is for the granted file only"
+        );
+        let tcp = "use std::net::TcpStream;\n";
+        assert!(
+            findings(Syntax::Rust, tcp, file)
+                .iter()
+                .any(|finding| finding.0 == "forbidden"),
+            "the granted file may name Shutdown and never a network type: {file}"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -849,6 +951,21 @@ const BAD_RUST: &[(&str, &str, &str)] = &[
     (
         "the X11 library's stream",
         "let (s, peer) = DefaultStream::connect(&address)?;",
+        "forbidden",
+    ),
+    (
+        "the bus library's own address",
+        "let c = Builder::address(address)?.build()?;",
+        "forbidden",
+    ),
+    (
+        "the session bus",
+        "let c = Connection::session()?;",
+        "forbidden",
+    ),
+    (
+        "a TCP stream handed to the bus library",
+        "let b = Builder::async_io_tcp_stream(stream);",
         "forbidden",
     ),
 ];
