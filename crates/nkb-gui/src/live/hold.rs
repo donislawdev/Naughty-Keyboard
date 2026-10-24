@@ -37,6 +37,8 @@ use nkb_adapters::i18n::{self, PaletteLabel};
 use nkb_app::ports::{HotkeyRegistrar, LiveShortcuts, ShortcutRegistration, ShortcutsUnavailable};
 use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord};
 
+use super::Apart;
+
 /// What a registrar answered.
 type Answer = Result<Box<dyn LiveShortcuts + Send>, ShortcutsUnavailable>;
 
@@ -128,6 +130,32 @@ impl<'a> Hold<'a> {
             Holding::Asking { .. } => Some(PaletteLabel::WaitingForTheDesktop),
             Holding::Held(_) | Holding::Lost => None,
         }
+    }
+
+    /// The table the words of the palette follow, and the shortcuts they cannot
+    /// name: what a desktop that chooses the chords gave, on top of `asked`.
+    ///
+    /// The chord it gave replaces the chord asked for wherever the palette reads
+    /// it, so a chord the person changed in the system's own window is the one
+    /// the hint bar and the sentences show. A shortcut it gave in words that are
+    /// no chord of ours, and one it gave none of, are [`Apart`]. Where no desktop
+    /// is asked there is nothing given, and the table is `asked` as it was.
+    pub(super) fn as_given(&self, asked: Bindings) -> (Bindings, Vec<(HotkeyAction, Apart)>) {
+        let given = self.live().map_or(&[][..], |live| live.given());
+        let chords: Vec<(HotkeyAction, HotkeyChord)> = given
+            .iter()
+            .filter_map(|(action, one)| one.chord.map(|chord| (*action, chord)))
+            .collect();
+        let worded = given
+            .iter()
+            .filter(|(_, one)| one.chord.is_none())
+            .map(|(action, one)| (*action, Apart::Worded(one.words.clone())));
+        let left = self
+            .registered
+            .iter()
+            .filter(|(_, _, outcome)| *outcome == ShortcutRegistration::NotGiven)
+            .map(|(action, _, _)| (*action, Apart::Left));
+        (asked.as_given(&chords), worded.chain(left).collect())
     }
 
     /// Gives the shortcuts back. Dropping the handle is the release, and it
@@ -248,18 +276,24 @@ mod tests {
 
     use nkb_adapters::i18n::{self, PaletteLabel};
     use nkb_app::ports::{
-        DesktopRefusal, HotkeyRegistrar, LiveShortcuts, ShortcutRegistration, ShortcutsUnavailable,
-        Wait,
+        DesktopRefusal, GivenShortcut, HotkeyRegistrar, LiveShortcuts, ShortcutRegistration,
+        ShortcutsUnavailable, Wait,
     };
     use nkb_core::hotkeys::{HotkeyAction, HotkeyChord};
 
     use super::{Answer, Hold};
     use crate::live::tests::{Registrar, a_store, paused_line, with_worker};
-    use crate::live::{Command, Next, ShortcutsNow, Told, next_command, wired};
+    use crate::live::{Command, Next, ShortcutsNow, Told, legend, next_command, wired};
 
     /// What a person at the window of the desktop decides.
     enum Verdict {
         Give,
+        /// Gives what was asked for less `left_out`, and holds `held`, which
+        /// the person may have changed in the window of the system.
+        Keep {
+            left_out: Vec<HotkeyAction>,
+            held: Vec<(HotkeyAction, GivenShortcut)>,
+        },
         Refuse(ShortcutsUnavailable),
     }
 
@@ -277,6 +311,8 @@ mod tests {
 
     struct Given {
         outcomes: Vec<(HotkeyAction, ShortcutRegistration)>,
+        /// What the desktop says it holds, in its own words.
+        held: Vec<(HotkeyAction, GivenShortcut)>,
         alive: Arc<AtomicUsize>,
     }
 
@@ -293,6 +329,38 @@ mod tests {
         fn next(&self, _: Duration) -> Wait {
             Wait::Nothing
         }
+        fn given(&self) -> &[(HotkeyAction, GivenShortcut)] {
+            &self.held
+        }
+    }
+
+    impl Person {
+        /// The handle of a desktop that gave what was asked for, less
+        /// `left_out`, and says in `held` what it holds.
+        fn gives(
+            &self,
+            asked: &[(HotkeyAction, HotkeyChord)],
+            left_out: &[HotkeyAction],
+            held: Vec<(HotkeyAction, GivenShortcut)>,
+        ) -> Answer {
+            self.alive.fetch_add(1, Ordering::SeqCst);
+            self.gave.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::new(Given {
+                outcomes: asked
+                    .iter()
+                    .map(|(action, _)| {
+                        let outcome = if left_out.contains(action) {
+                            ShortcutRegistration::NotGiven
+                        } else {
+                            ShortcutRegistration::Registered
+                        };
+                        (*action, outcome)
+                    })
+                    .collect(),
+                held,
+                alive: Arc::clone(&self.alive),
+            }))
+        }
     }
 
     impl HotkeyRegistrar for Person {
@@ -307,17 +375,8 @@ mod tests {
                 .expect("the test holds the lock briefly")
                 .recv_timeout(Duration::from_secs(4));
             match verdict {
-                Ok(Verdict::Give) => {
-                    self.alive.fetch_add(1, Ordering::SeqCst);
-                    self.gave.fetch_add(1, Ordering::SeqCst);
-                    Ok(Box::new(Given {
-                        outcomes: bindings
-                            .iter()
-                            .map(|(action, _)| (*action, ShortcutRegistration::Registered))
-                            .collect(),
-                        alive: Arc::clone(&self.alive),
-                    }))
-                }
+                Ok(Verdict::Give) => self.gives(bindings, &[], Vec::new()),
+                Ok(Verdict::Keep { left_out, held }) => self.gives(bindings, &left_out, held),
                 Ok(Verdict::Refuse(error)) => Err(error),
                 Err(_) => Err(ShortcutsUnavailable::CouldNotStart),
             }
@@ -778,6 +837,89 @@ mod tests {
             assert!(carried.view.is_none() && carried.told.is_none());
             assert_eq!(registrar.asked.borrow().len(), asked);
             assert_eq!(registrar.alive(), 1);
+        });
+    }
+
+    /// The person may change a chord in the window of the system, leave one out,
+    /// or choose one the palette has no name for. What the palette says follows
+    /// what the desktop holds: the hint bar and the bands, and every sentence
+    /// that names a shortcut, from the table the answer leaves behind.
+    #[test]
+    fn what_the_desktop_gave_is_what_the_words_of_the_palette_name() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        let (person, decide) = a_person();
+        with_worker(&store, &registrar, false, |worker, memory| {
+            worker.hold.desktop = Some(person.clone());
+            let asked = memory.bindings.get();
+            worker.take(asked);
+            let chosen = HotkeyChord::parse("Ctrl+Shift+K").expect("a chord of the palette");
+            let worded = String::from("Press <Control><Alt>Return");
+            decide
+                .send(Verdict::Keep {
+                    left_out: vec![HotkeyAction::RestartPack],
+                    held: vec![
+                        (
+                            HotkeyAction::NextValue,
+                            GivenShortcut {
+                                words: String::from("Press <Control><Shift>k"),
+                                chord: Some(chosen),
+                            },
+                        ),
+                        (
+                            HotkeyAction::PreviousValue,
+                            GivenShortcut {
+                                words: worded.clone(),
+                                chord: None,
+                            },
+                        ),
+                    ],
+                })
+                .expect("the desktop is listening");
+            let lines = answer_of(&mut worker.hold);
+            assert_eq!(lines.len(), 1, "the one left out is said: {lines:?}");
+
+            let legend = worker.answered(lines).legend.expect("the words are drawn");
+
+            let key_of = |action: HotkeyAction| {
+                let name = i18n::action_name(action);
+                legend
+                    .hints
+                    .iter()
+                    .find(|(_, hint)| hint == name)
+                    .map(|(key, _)| key.clone())
+            };
+            assert_eq!(key_of(HotkeyAction::NextValue), Some(i18n::chord(chosen)));
+            assert_eq!(key_of(HotkeyAction::PreviousValue), Some(worded));
+            assert_eq!(key_of(HotkeyAction::RestartPack), None, "left out");
+            assert_eq!(
+                key_of(HotkeyAction::OpenPacks),
+                Some(i18n::chord(asked.chord(HotkeyAction::OpenPacks))),
+                "a chord the desktop said nothing about stays as asked"
+            );
+            assert_eq!(legend.next, Some(chosen));
+            assert_eq!(legend.previous, None, "worded, not a chord to name");
+            assert_eq!(legend.no_value, i18n::no_value_yet(Some(chosen)));
+
+            let now = memory.bindings.get();
+            assert_eq!(now.chord(HotkeyAction::NextValue), chosen);
+            assert_eq!(
+                now.chord(HotkeyAction::OpenPacks),
+                asked.chord(HotkeyAction::OpenPacks)
+            );
+        });
+    }
+
+    /// Where no desktop is asked nothing is given, so the words are the table
+    /// asked for, as they were before a desktop could give anything.
+    #[test]
+    fn without_a_desktop_the_words_follow_the_table_asked_for() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        with_worker(&store, &registrar, true, |worker, memory| {
+            let asked = memory.bindings.get();
+            assert_eq!(worker.naming(asked), legend(&asked));
+            assert_eq!(memory.bindings.get(), asked);
         });
     }
 }

@@ -1677,8 +1677,8 @@
       "id": "M325",
       "why": "a resume does not refresh the hint bar and the empty value band - the palette names the old shortcut",
       "file": "crates/nkb-gui/src/live.rs",
-      "find": "        lines.extend(self.take(bindings));\n        self.view(lines, ValueBand::Keep, Some(legend(&bindings)))",
-      "replace": "        lines.extend(self.take(bindings));\n        self.view(lines, ValueBand::Keep, None)",
+      "find": "        lines.extend(self.take(bindings));\n        let legend = self.naming(bindings);\n        self.view(lines, ValueBand::Keep, Some(legend))",
+      "replace": "        lines.extend(self.take(bindings));\n        let _ = self.naming(bindings);\n        self.view(lines, ValueBand::Keep, None)",
       "test": "live::tests::a_change_while_paused_is_tried_saved_told_and_taken_on_resume",
       "runner": "rust:nkb-gui:lib"
     },
@@ -10299,6 +10299,141 @@
       "find": "            Some(desktop) => self.ask(desktop, *bindings),",
       "replace": "            Some(desktop) => {\n                let answer = desktop.register(bindings.as_slice());\n                self.settle(answer, bindings)\n            }",
       "test": "live::hold::tests::a_desktop_is_asked_without_waiting_and_every_view_says_it_is_waited_on",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1357",
+      "why": "a chord the desktop gave is put on the wrong action, so the palette names a key that belongs to another",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "if let Some(at) = table.iter().position(|(candidate, _)| candidate == action) {",
+      "replace": "if let Some(at) = table.iter().position(|(candidate, _)| candidate != action) {",
+      "test": "hotkeys::tests::the_chords_a_system_gave_are_named_in_place_of_the_ones_asked_for",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1358",
+      "why": "the heading of the next value names no key but is worded as if a shortcut stood in it",
+      "file": "crates/nkb-adapters/src/i18n/palette.rs",
+      "find": "(PaletteLabel::NextValueUnnamed, String::new())",
+      "replace": "(PaletteLabel::NextValue, String::new())",
+      "test": "i18n::palette::tests::where_no_shortcut_can_be_named_the_bands_claim_no_key",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1359",
+      "why": "the heading at the end of the pack names no key but is worded as if a shortcut stood in it",
+      "file": "crates/nkb-adapters/src/i18n/palette.rs",
+      "find": "(PaletteLabel::NextEndOfPackUnnamed, String::new())",
+      "replace": "(PaletteLabel::NextEndOfPack, String::new())",
+      "test": "i18n::palette::tests::where_no_shortcut_can_be_named_the_bands_claim_no_key",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1360",
+      "why": "the empty value band claims a shortcut it cannot name",
+      "file": "crates/nkb-adapters/src/i18n/palette.rs",
+      "find": "pattern_palette_label(PaletteLabel::NoValueYetUnnamed),",
+      "replace": "pattern_palette_label(PaletteLabel::NoValueYet),",
+      "test": "i18n::palette::tests::where_no_shortcut_can_be_named_the_bands_claim_no_key",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1361",
+      "why": "a shortcut the desktop gave none of stays on the hint bar as an empty key",
+      "file": "crates/nkb-gui/src/live/view.rs",
+      "find": "Some(Apart::Left) => return None,",
+      "replace": "Some(Apart::Left) => String::new(),",
+      "test": "live::view::tests::the_hint_bar_lists_a_worded_shortcut_as_it_came_and_leaves_out_one_not_given",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1362",
+      "why": "a shortcut the desktop gave in words of its own is listed by the chord that was asked for",
+      "file": "crates/nkb-gui/src/live/view.rs",
+      "find": "Some(Apart::Worded(words)) => words.clone(),",
+      "replace": "Some(Apart::Worded(_)) => i18n::chord(bindings.chord(*action)),",
+      "test": "live::view::tests::the_hint_bar_lists_a_worded_shortcut_as_it_came_and_leaves_out_one_not_given",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1363",
+      "why": "a shortcut the palette cannot name is named by the chord that was asked for",
+      "file": "crates/nkb-gui/src/live/view.rs",
+      "find": "how(action).is_none().then(|| bindings.chord(action))",
+      "replace": "how(action).is_some().then(|| bindings.chord(action))",
+      "test": "live::view::tests::the_bands_name_no_key_for_a_shortcut_that_is_apart",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1364",
+      "why": "the band under the next value names a way back the desktop did not give",
+      "file": "crates/nkb-gui/src/live/view.rs",
+      "find": "previous: named(HotkeyAction::PreviousValue),",
+      "replace": "previous: Some(bindings.chord(HotkeyAction::PreviousValue)),",
+      "test": "live::view::tests::the_hint_bar_lists_a_worded_shortcut_as_it_came_and_leaves_out_one_not_given",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1365",
+      "why": "the line under the next value names the default way back where the palette cannot name one",
+      "file": "crates/nkb-gui/src/live/view.rs",
+      "find": ".zip(steps_back)",
+      "replace": ".zip(Some(nkb_adapters::default_bindings().chord(HotkeyAction::PreviousValue)))",
+      "test": "live::view::tests::the_bands_name_no_key_for_a_shortcut_that_is_apart",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1366",
+      "why": "the bands keep the chords of the first legend after the desktop answered",
+      "file": "crates/nkb-gui/src/live/view.rs",
+      "find": "NAMED.set(Some((legend.next, legend.previous)));",
+      "replace": "NAMED.set(None);",
+      "test": "live::view::tests::the_bands_name_no_key_for_a_shortcut_that_is_apart",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1367",
+      "why": "a chord the person changed in the window of the system is not the one the palette names",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": ".filter_map(|(action, one)| one.chord.map(|chord| (*action, chord)))",
+      "replace": ".filter_map(|(action, one)| one.chord.map(|chord| (*action, chord)).filter(|_| false))",
+      "test": "live::hold::tests::what_the_desktop_gave_is_what_the_words_of_the_palette_name",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1368",
+      "why": "the words of the desktop are shown for the shortcuts the palette reads and not for those it cannot",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": ".filter(|(_, one)| one.chord.is_none())",
+      "replace": ".filter(|(_, one)| one.chord.is_some())",
+      "test": "live::hold::tests::what_the_desktop_gave_is_what_the_words_of_the_palette_name",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1369",
+      "why": "a shortcut the desktop gave none of is not told apart from the ones it gave",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": ".filter(|(_, _, outcome)| *outcome == ShortcutRegistration::NotGiven)",
+      "replace": ".filter(|(_, _, outcome)| *outcome != ShortcutRegistration::NotGiven)",
+      "test": "live::hold::tests::what_the_desktop_gave_is_what_the_words_of_the_palette_name",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1370",
+      "why": "the table the words follow ignores what the desktop gave",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "(asked.as_given(&chords), worded.chain(left).collect())",
+      "replace": "(asked, worded.chain(left).collect())",
+      "test": "live::hold::tests::what_the_desktop_gave_is_what_the_words_of_the_palette_name",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1371",
+      "why": "the sentences of the palette keep naming the chords that were asked for after the desktop answered",
+      "file": "crates/nkb-gui/src/live.rs",
+      "find": "self.memory.bindings.set(shown);",
+      "replace": "let _ = &shown;",
+      "test": "live::hold::tests::what_the_desktop_gave_is_what_the_words_of_the_palette_name",
       "runner": "rust:nkb-gui:lib"
     }
   ]
