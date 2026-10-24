@@ -24,6 +24,7 @@
 //! program its identifier is and what is in it.
 
 use core::time::Duration;
+use std::time::Instant;
 
 use crate::hotkey::{Hotkey, HotkeyId};
 use crate::linux_hotkeys::keysym_for_vk;
@@ -251,6 +252,51 @@ pub(crate) fn bound_hotkey(id: HotkeyId, description: &str) -> Option<Hotkey> {
 }
 
 // ---------------------------------------------------------------------------
+// A held key is not a press again
+// ---------------------------------------------------------------------------
+
+/// How long a shortcut that was announced and never announced as let go is taken to be held.
+///
+/// Measured on GNOME 50 with a keyboard of the kernel and a chord held for 1.5 s: `Activated`
+/// at the press, then, after the repeat delay of the person's keyboard (500 ms), `Activated`
+/// again every 30 ms, 37 in all, and one `Deactivated` when the keys came up. Every one of
+/// them would have been a press of the shortcut, and `ux-spec.md` 3 does not allow a held
+/// "next value" to insert a dozen values. The repeat delay of a keyboard can be set up to
+/// about a second, so the limit is twice that: a `Deactivated` that never comes (a desktop
+/// that does not send it) costs a press that follows the last signal within this time.
+pub(crate) const HELD_FORGOTTEN: Duration = Duration::from_secs(2);
+
+/// Tells a press of a shortcut from the repeat of the key that is held, by the word of the
+/// portal: `Deactivated` is the keys coming up, and what was announced before it is one press.
+#[derive(Debug, Default)]
+pub(crate) struct Held {
+    down: Vec<(String, Instant)>,
+}
+
+impl Held {
+    /// Whether this `Activated` of `name` is a new press, which is to be acted on. The
+    /// repeats of a key that is held are not, and each of them keeps the shortcut held.
+    pub(crate) fn pressed(&mut self, name: &str, now: Instant) -> bool {
+        match self.down.iter_mut().find(|(held, _)| held == name) {
+            Some((_, last)) => {
+                let repeat = now.saturating_duration_since(*last) < HELD_FORGOTTEN;
+                *last = now;
+                !repeat
+            }
+            None => {
+                self.down.push((name.to_owned(), now));
+                true
+            }
+        }
+    }
+
+    /// The keys of `name` came up: the next `Activated` is a press.
+    pub(crate) fn released(&mut self, name: &str) {
+        self.down.retain(|(held, _)| held != name);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // The entry that gives the program its identifier
 // ---------------------------------------------------------------------------
 
@@ -395,6 +441,91 @@ mod tests {
             win,
             vk,
         }
+    }
+
+    #[test]
+    fn a_key_held_down_is_one_press_however_often_the_portal_says_it() {
+        // GNOME 50, measured: the press, then 37 `Activated` in 1.5 s, then one `Deactivated`.
+        let start = Instant::now();
+        let mut held = Held::default();
+        assert!(
+            held.pressed("next-value", start),
+            "the first word is a press"
+        );
+        assert!(
+            !held.pressed("next-value", start + Duration::from_millis(500)),
+            "the first repeat comes after the delay of the keyboard"
+        );
+        for step in 1..=36 {
+            assert!(
+                !held.pressed("next-value", start + Duration::from_millis(500 + 30 * step)),
+                "repeat {step} is not a press"
+            );
+        }
+    }
+
+    #[test]
+    fn a_key_that_came_up_can_be_pressed_again_at_once() {
+        let start = Instant::now();
+        let mut held = Held::default();
+        assert!(held.pressed("next-value", start));
+        held.released("next-value");
+        assert!(
+            held.pressed("next-value", start + Duration::from_millis(20)),
+            "a person who lets go and presses again is not repeating"
+        );
+        assert!(!held.pressed("next-value", start + Duration::from_millis(60)));
+    }
+
+    #[test]
+    fn a_hold_longer_than_the_limit_stays_one_press_while_the_repeats_keep_coming() {
+        // The limit is measured from the last word, not from the press: a key held for ten
+        // seconds repeats every 30 ms and must not be forgotten on the way.
+        let start = Instant::now();
+        let mut held = Held::default();
+        assert!(held.pressed("next-value", start));
+        let mut at = Duration::from_millis(500);
+        while at < Duration::from_secs(10) {
+            assert!(!held.pressed("next-value", start + at), "at {at:?}");
+            at += Duration::from_millis(30);
+        }
+    }
+
+    #[test]
+    fn a_let_go_that_was_never_announced_is_forgotten_after_the_limit() {
+        let start = Instant::now();
+        let mut held = Held::default();
+        assert!(held.pressed("next-value", start));
+        assert!(
+            !held.pressed(
+                "next-value",
+                start + HELD_FORGOTTEN - Duration::from_millis(1)
+            ),
+            "just inside the limit it is still a repeat"
+        );
+        let last = start + HELD_FORGOTTEN - Duration::from_millis(1);
+        assert!(
+            held.pressed("next-value", last + HELD_FORGOTTEN),
+            "a press after the limit is a press, or a desktop without `Deactivated` would end the shortcut"
+        );
+    }
+
+    #[test]
+    fn the_shortcuts_are_held_each_on_its_own() {
+        let start = Instant::now();
+        let mut held = Held::default();
+        assert!(held.pressed("next-value", start));
+        assert!(
+            held.pressed("previous-value", start + Duration::from_millis(10)),
+            "another shortcut is its own press"
+        );
+        held.released("next-value");
+        assert!(held.pressed("next-value", start + Duration::from_millis(20)));
+        assert!(
+            !held.pressed("previous-value", start + Duration::from_millis(30)),
+            "letting go of one does not let go of the other"
+        );
+        held.released("never-pressed");
     }
 
     /// Whether `id` is an identifier of an application as the desktop reads it: elements
