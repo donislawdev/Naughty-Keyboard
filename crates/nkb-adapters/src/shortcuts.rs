@@ -194,17 +194,32 @@ impl GlobalShortcuts {
         if refused {
             return Ok(Box::new(Live::refused(bindings)));
         }
+        // A chord asked for twice is held by the first and taken for the second, on every
+        // system. The system is not asked for the second: Windows refuses it, and the macOS
+        // 26 image of a hosted runner accepted it (2026-10-24), which would have made two
+        // shortcuts of one press.
+        let repeated = repeats(bindings);
         let hotkeys: Vec<Hotkey> = bindings
             .iter()
             .enumerate()
+            .filter(|(index, _)| !repeated[*index])
             .map(|(index, (_, chord))| hotkey_for(index, chord))
             .collect();
         let listening = hotkey::listen(&hotkeys).map_err(unavailable)?;
         let actions: Vec<HotkeyAction> = bindings.iter().map(|(action, _)| *action).collect();
+        let mut answered = listening.outcomes.into_iter().map(registration);
         let outcomes = actions
             .iter()
             .copied()
-            .zip(listening.outcomes.into_iter().map(registration))
+            .zip(repeated)
+            .map(|(action, repeat)| {
+                let outcome = if repeat {
+                    ShortcutRegistration::Taken
+                } else {
+                    answered.next().unwrap_or(ShortcutRegistration::NotGiven)
+                };
+                (action, outcome)
+            })
             .collect();
         Ok(Box::new(Live {
             _listener: Some(listening.listener),
@@ -213,6 +228,19 @@ impl GlobalShortcuts {
             outcomes,
         }))
     }
+}
+
+/// Which bindings ask for a chord that an earlier binding of the set asked for already.
+fn repeats(bindings: &[(HotkeyAction, HotkeyChord)]) -> Vec<bool> {
+    bindings
+        .iter()
+        .enumerate()
+        .map(|(index, (_, chord))| {
+            bindings[..index]
+                .iter()
+                .any(|(_, earlier)| earlier == chord)
+        })
+        .collect()
 }
 
 impl Live {
@@ -638,6 +666,30 @@ mod tests {
                 key,
             },
         )
+    }
+
+    #[test]
+    fn a_chord_asked_for_again_is_a_repeat_from_its_second_asking_on() {
+        let a = obscure(HotkeyKey::Digit4);
+        let b = obscure(HotkeyKey::Digit5);
+        assert_eq!(
+            repeats(&[a, b, a, a, b]),
+            [false, false, true, true, true],
+            "the first of each chord is the one that holds it"
+        );
+        assert!(repeats(&[]).is_empty());
+        assert_eq!(repeats(&[a]), [false]);
+    }
+
+    #[test]
+    fn two_actions_on_one_chord_are_a_repeat_whichever_action_asks() {
+        // The chord is what the system holds, not the action that wants it.
+        let chord = obscure(HotkeyKey::Digit4).1;
+        let bindings = [
+            (HotkeyAction::MarkSuspect, chord),
+            (HotkeyAction::NextValue, chord),
+        ];
+        assert_eq!(repeats(&bindings), [false, true]);
     }
 
     #[test]

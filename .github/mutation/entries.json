@@ -11425,6 +11425,33 @@
       "replace": "    let token = token;",
       "test": "linux::portal::remote::tests::what_is_not_a_token_is_not_kept",
       "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1482",
+      "why": "a chord asked for twice is not a repeat, so the system is asked for the second as well",
+      "file": "crates/nkb-adapters/src/shortcuts.rs",
+      "find": ".any(|(_, earlier)| earlier == chord)",
+      "replace": ".any(|(_, earlier)| earlier != chord)",
+      "test": "shortcuts::tests::a_chord_asked_for_again_is_a_repeat_from_its_second_asking_on",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1483",
+      "why": "the system is asked only for the repeats, so the first of each chord is never registered",
+      "file": "crates/nkb-adapters/src/shortcuts.rs",
+      "find": ".filter(|(index, _)| !repeated[*index])",
+      "replace": ".filter(|(index, _)| repeated[*index])",
+      "test": "shortcuts::tests::registering_for_real_reports_per_binding_and_releases_on_drop",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1484",
+      "why": "a repeated chord is said to be not given instead of taken by the first",
+      "file": "crates/nkb-adapters/src/shortcuts.rs",
+      "find": "                let outcome = if repeat {\n                    ShortcutRegistration::Taken\n",
+      "replace": "                let outcome = if repeat {\n                    ShortcutRegistration::NotGiven\n",
+      "test": "shortcuts::tests::a_taken_combination_is_reported_beside_the_others_not_as_an_error",
+      "runner": "rust:nkb-adapters:lib"
     }
   ]
 }
