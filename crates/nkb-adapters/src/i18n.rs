@@ -2116,6 +2116,7 @@ mod tests {
             PaletteLabel::Recipe,
             PaletteLabel::NoValueYet,
             PaletteLabel::ShortcutsPaused,
+            PaletteLabel::WaitingForTheDesktop,
             PaletteLabel::ShortcutsLink,
             PaletteLabel::AboutLink,
             PaletteLabel::ShortcutList,
@@ -2192,6 +2193,7 @@ mod tests {
                 | PaletteLabel::ClipboardMode
                 | PaletteLabel::ClipboardForWindow
                 | PaletteLabel::ShortcutsPaused
+                | PaletteLabel::WaitingForTheDesktop
                 | PaletteLabel::ShortcutsLink
                 | PaletteLabel::AboutLink
                 | PaletteLabel::DonateLink
@@ -2233,8 +2235,7 @@ mod tests {
             assert_eq!(
                 pattern.contains('{'),
                 takes_numbers,
-                "{label:?}: a pattern with a placeholder needs a typed accessor, and one \
-                 without must be reachable through `label()` - pattern was {pattern:?}"
+                "{label:?}: a placeholder needs a typed accessor, none must reach label(): {pattern:?}"
             );
             if !takes_numbers {
                 assert!(

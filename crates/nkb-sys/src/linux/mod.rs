@@ -40,10 +40,11 @@ pub(crate) mod window;
 
 use crate::{SendError, SendOutcome, SendProgress, WindowRef};
 
-// `route_refusal` is the question of a real X server alone, which is what the shortcuts
-// ask: they have no Wayland route yet, whatever typing has. The windows are at home on
-// XWayland too (`window_refusal`, `on_xwayland`).
-pub(crate) use connect::{on_xwayland, route_refusal, window_refusal};
+// `route_refusal` is the question of a real X server alone, which is what the grab of a
+// shortcut asks: a Wayland session has the portal instead (`grab_refused_by_wayland` says
+// when), whatever typing has. The windows are at home on XWayland too (`window_refusal`,
+// `on_xwayland`).
+pub(crate) use connect::{grab_refused_by_wayland, on_xwayland, route_refusal, window_refusal};
 pub(crate) use front::window_pid;
 pub(crate) use send::send_chords;
 

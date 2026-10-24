@@ -261,20 +261,22 @@ pub(super) fn with_standing(mut messages: Vec<String>, standing: &Standing) -> V
 /// A view made between presses, with no outcome behind it: the palette
 /// opening, a pack chosen, the shortcuts paused, taken again or gone.
 ///
-/// While the shortcuts are paused every such view says so, first among its
-/// own lines and behind the standing sentence: the band is rebuilt from
-/// scratch each time, so a line said once would last exactly one view - and a
-/// pack chosen in the pack window during the pause would take it away.
+/// While the shortcuts are held back - paused, or asked of a desktop that has
+/// not answered - every such view says so (`held_back`, the label that does),
+/// first among its own lines and behind the standing sentence: the band is
+/// rebuilt from scratch each time, so a line said once would last exactly one
+/// view - and a pack chosen in the pack window during the pause would take it
+/// away.
 pub(super) fn view_between(
     sequence: &AdvanceSequence,
     pack: &str,
     mut messages: Vec<String>,
     value: ValueBand,
     standing: &Standing,
-    paused: bool,
+    held_back: Option<PaletteLabel>,
 ) -> View {
-    if paused {
-        messages.insert(0, i18n::label(PaletteLabel::ShortcutsPaused).to_owned());
+    if let Some(label) = held_back {
+        messages.insert(0, i18n::label(label).to_owned());
     }
     View {
         pack: shown(sequence, pack),
