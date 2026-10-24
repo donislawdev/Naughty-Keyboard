@@ -2115,6 +2115,7 @@ mod tests {
             PaletteLabel::NotGuaranteedMore,
             PaletteLabel::Recipe,
             PaletteLabel::NoValueYet,
+            PaletteLabel::NoValueYetUnnamed,
             PaletteLabel::ShortcutsPaused,
             PaletteLabel::WaitingForTheDesktop,
             PaletteLabel::ShortcutsLink,
@@ -2126,6 +2127,8 @@ mod tests {
             PaletteLabel::StopTyping,
             PaletteLabel::NextValue,
             PaletteLabel::NextEndOfPack,
+            PaletteLabel::NextValueUnnamed,
+            PaletteLabel::NextEndOfPackUnnamed,
             PaletteLabel::LastSent,
             PaletteLabel::Copy,
             PaletteLabel::CopyNext,
@@ -2174,9 +2177,12 @@ mod tests {
                 | PaletteLabel::NotGuaranteedMore
                 | PaletteLabel::Recipe
                 | PaletteLabel::NoValueYet
+                | PaletteLabel::NoValueYetUnnamed
                 | PaletteLabel::TypingCounter
                 | PaletteLabel::NextValue
                 | PaletteLabel::NextEndOfPack
+                | PaletteLabel::NextValueUnnamed
+                | PaletteLabel::NextEndOfPackUnnamed
                 | PaletteLabel::PreviousTypes
                 | PaletteLabel::Back
                 | PaletteLabel::Skip
@@ -2260,9 +2266,10 @@ mod tests {
             preview_elided(100, 100_000),
             recipe(1, "a"),
             recipe(100_000, "\u{2423}"),
-            no_value_yet(nkb_core::hotkeys::DEFAULT_BINDINGS[0].1),
-            next_value(4, 12, nkb_core::hotkeys::DEFAULT_BINDINGS[0].1),
-            next_end_of_pack(12, nkb_core::hotkeys::DEFAULT_BINDINGS[0].1),
+            no_value_yet(Some(nkb_core::hotkeys::DEFAULT_BINDINGS[0].1)),
+            no_value_yet(None),
+            next_value(4, 12, Some(nkb_core::hotkeys::DEFAULT_BINDINGS[0].1)),
+            next_end_of_pack(12, Some(nkb_core::hotkeys::DEFAULT_BINDINGS[0].1)),
             previous_types(2, nkb_core::hotkeys::DEFAULT_BINDINGS[1].1),
             back_to(3),
             skip_to(5),
@@ -2272,13 +2279,6 @@ mod tests {
             assert!(!text.contains('{'), "a label left a placeholder: {text}");
         }
         assert_eq!(counter(7, 34), "7 / 34");
-        assert_eq!(
-            no_value_yet(nkb_core::hotkeys::DEFAULT_BINDINGS[0].1),
-            format!(
-                "Nothing sent yet. Put the cursor in any field and press {}.",
-                chord(nkb_core::hotkeys::DEFAULT_BINDINGS[0].1)
-            )
-        );
         // The count after the label, so one of anything reads right in every
         // language without a plural rule (`D80`, `OBS-120`).
         assert_eq!(

@@ -672,11 +672,12 @@ pub const fn default_bindings(
 /// with the tester's own choices on top where they can be used.
 ///
 /// Every action exactly once, in the order of [`HotkeyAction::ALL`], and no
-/// two on the same chord - by construction: the only ways to get one are
-/// [`Bindings::defaults`], whose tables are checked by the tests below, and
-/// [`Bindings::with`], which keeps both properties. So [`Bindings::chord`]
-/// needs no `Option`, and registering never reports one action as `Taken`
-/// against another of our own.
+/// two on the same chord - by construction: the only ways to get one to
+/// register are [`Bindings::defaults`], whose tables are checked by the tests
+/// below, and [`Bindings::with`], which keeps both properties. So
+/// [`Bindings::chord`] needs no `Option`, and registering never reports one
+/// action as `Taken` against another of our own. [`Bindings::as_given`] is the
+/// table for WORDS only: it keeps the first property and not the second.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bindings {
     /// The convention these bindings follow: it decides which chords a layout
@@ -711,6 +712,26 @@ impl Bindings {
     #[must_use]
     pub fn as_slice(&self) -> &[(HotkeyAction, HotkeyChord)] {
         &self.table
+    }
+
+    /// These bindings as a system that chooses the chords holds them: the chord
+    /// it gave for an action in place of the one that was asked for.
+    ///
+    /// For the words that name a shortcut, never to register or to save. The
+    /// system's chord is not ours to check - the person chose it in a window of
+    /// the desktop - so nothing here refuses one, and two actions may end up on
+    /// the same chord, which then names both truthfully. An action the system
+    /// gave nothing for keeps the chord asked for, and is the caller's to leave
+    /// unnamed.
+    #[must_use]
+    pub fn as_given(self, given: &[(HotkeyAction, HotkeyChord)]) -> Self {
+        let mut table = self.table;
+        for (action, chord) in given {
+            if let Some(at) = table.iter().position(|(candidate, _)| candidate == action) {
+                table[at].1 = *chord;
+            }
+        }
+        Self { table, ..self }
     }
 
     /// Why a keyboard layout of this system refuses `chord` as a global
@@ -1314,6 +1335,43 @@ mod tests {
             );
         }
         assert_eq!(HotkeyAction::from_id("Next-Value"), None, "written exactly");
+    }
+
+    /// What a desktop gave is named as it gave it, for the actions it gave, and
+    /// nothing else moves: the table keeps every action once, in its order.
+    #[test]
+    fn the_chords_a_system_gave_are_named_in_place_of_the_ones_asked_for() {
+        let k = chord(true, false, true, false, HotkeyKey::K);
+        let bindings = DEFAULTS.as_given(&[(HotkeyAction::PreviousValue, k)]);
+        assert_eq!(bindings.chord(HotkeyAction::PreviousValue), k);
+        for action in HotkeyAction::ALL {
+            if action != HotkeyAction::PreviousValue {
+                assert_eq!(bindings.chord(action), DEFAULTS.chord(action));
+            }
+        }
+        let actions: Vec<HotkeyAction> = bindings.as_slice().iter().map(|(a, _)| *a).collect();
+        assert_eq!(actions, HotkeyAction::ALL);
+        assert_eq!(
+            DEFAULTS.as_given(&[]),
+            DEFAULTS,
+            "nothing given, nothing moved"
+        );
+    }
+
+    /// The system's own choice is not checked: a chord the settings would
+    /// refuse is named when the desktop holds it, and so is one two actions share.
+    #[test]
+    fn a_chord_the_system_holds_is_named_even_where_the_settings_would_refuse_it() {
+        let alone = chord(false, false, false, false, HotkeyKey::K);
+        let shared = DEFAULTS.chord(HotkeyAction::NextValue);
+        let bindings = DEFAULTS.as_given(&[
+            (HotkeyAction::RepeatLast, alone),
+            (HotkeyAction::PreviousValue, shared),
+        ]);
+        assert_eq!(bindings.chord(HotkeyAction::RepeatLast), alone);
+        assert!(alone.problem().is_some(), "a chord the file would refuse");
+        assert_eq!(bindings.chord(HotkeyAction::PreviousValue), shared);
+        assert_eq!(bindings.chord(HotkeyAction::NextValue), shared);
     }
 
     #[test]

@@ -91,6 +91,10 @@ pub enum PaletteLabel {
     /// from the start and never disappears (`D83`), so its empty state is a
     /// sentence that tells the tester the one thing to do next.
     NoValueYet,
+    /// The same, when the palette cannot name the shortcut that sends one: the
+    /// desktop that chooses the chords gave none for it, or gave one in words
+    /// this palette does not read. It names the action instead, and claims no key.
+    NoValueYetUnnamed,
     /// The palette's shortcuts are given back to the system while the
     /// shortcuts window is open (`ux-spec.md` 5.4), so a press reaches the
     /// application in front and no value goes out. Said in the message band
@@ -145,6 +149,12 @@ pub enum PaletteLabel {
     /// The same heading when the next press only says the pack is finished.
     /// The numbers repeat the ones the end-of-pack message quotes.
     NextEndOfPack,
+    /// The heading of the band of the next value when the palette cannot name
+    /// the shortcut that types it (`NoValueYetUnnamed` says when): the value,
+    /// and no key.
+    NextValueUnnamed,
+    /// The same heading at the end of the pack, with no key named.
+    NextEndOfPackUnnamed,
     /// Under the next value: which value the shortcut that steps back types,
     /// and by which shortcut (the owner's point 6, 2026-10-14) - it types the
     /// one before the last value typed, which is not the one above it.
@@ -262,6 +272,9 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::NoValueYet => {
             "Nothing sent yet. Put the cursor in any field and press {shortcut}."
         }
+        PaletteLabel::NoValueYetUnnamed => {
+            "Nothing sent yet. Put the cursor in any field and use the desktop's shortcut for \"{action}\", if it has one."
+        }
         PaletteLabel::ShortcutsPaused => "Shortcuts are paused while the Shortcuts window is open.",
         PaletteLabel::WaitingForTheDesktop => {
             "Waiting for the desktop to give the shortcuts. Choose them in the window it shows."
@@ -278,6 +291,8 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::StopTyping => "Press Esc to stop.",
         PaletteLabel::NextValue => "{shortcut} types: value {index} of {total}",
         PaletteLabel::NextEndOfPack => "{shortcut}: end of pack ({total}/{total})",
+        PaletteLabel::NextValueUnnamed => "Next to type: value {index} of {total}",
+        PaletteLabel::NextEndOfPackUnnamed => "Next to type: end of pack ({total}/{total})",
         PaletteLabel::PreviousTypes => "{shortcut} goes back and types value {index}",
         PaletteLabel::LastSent => "Last sent",
         PaletteLabel::Copy => "Copy",
@@ -360,13 +375,18 @@ pub fn sent_to(target: &Target) -> String {
 
 /// The heading over the value the next press sends:
 /// `Alt+Shift+N types: value 4 of 12`. Takes the chord the palette registered,
-/// for the reason [`no_value_yet`] gives.
+/// for the reason [`no_value_yet`] gives, and `None` where it cannot name one:
+/// the heading then names the value and no key.
 #[must_use]
-pub fn next_value(index: usize, total: usize, next_value: HotkeyChord) -> String {
+pub fn next_value(index: usize, total: usize, next_value: Option<HotkeyChord>) -> String {
+    let (label, shortcut) = match next_value {
+        Some(next_value) => (PaletteLabel::NextValue, chord(next_value)),
+        None => (PaletteLabel::NextValueUnnamed, String::new()),
+    };
     fill(
-        pattern_palette_label(PaletteLabel::NextValue),
+        pattern_palette_label(label),
         &[
-            ("shortcut", &chord(next_value)),
+            ("shortcut", &shortcut),
             ("index", &index.to_string()),
             ("total", &total.to_string()),
         ],
@@ -375,13 +395,14 @@ pub fn next_value(index: usize, total: usize, next_value: HotkeyChord) -> String
 
 /// The same heading when the next press only says the pack is finished.
 #[must_use]
-pub fn next_end_of_pack(total: usize, next_value: HotkeyChord) -> String {
+pub fn next_end_of_pack(total: usize, next_value: Option<HotkeyChord>) -> String {
+    let (label, shortcut) = match next_value {
+        Some(next_value) => (PaletteLabel::NextEndOfPack, chord(next_value)),
+        None => (PaletteLabel::NextEndOfPackUnnamed, String::new()),
+    };
     fill(
-        pattern_palette_label(PaletteLabel::NextEndOfPack),
-        &[
-            ("shortcut", &chord(next_value)),
-            ("total", &total.to_string()),
-        ],
+        pattern_palette_label(label),
+        &[("shortcut", &shortcut), ("total", &total.to_string())],
     )
 }
 
@@ -490,13 +511,22 @@ pub fn counts(graphemes: usize, code_points: usize, bytes: usize, utf16_units: u
 /// The value band before the first value: names the shortcut that sends one.
 ///
 /// Takes the chord rather than looking it up, because the palette knows which
-/// chord it registered and a default read here could be the wrong one.
+/// chord it registered and a default read here could be the wrong one. `None`
+/// is a shortcut it cannot name - the desktop that chooses the chords gave none,
+/// or gave one in words the palette does not read - and the sentence then names
+/// the action.
 #[must_use]
-pub fn no_value_yet(next_value: HotkeyChord) -> String {
-    fill(
-        pattern_palette_label(PaletteLabel::NoValueYet),
-        &[("shortcut", &chord(next_value))],
-    )
+pub fn no_value_yet(next_value: Option<HotkeyChord>) -> String {
+    match next_value {
+        Some(next_value) => fill(
+            pattern_palette_label(PaletteLabel::NoValueYet),
+            &[("shortcut", &chord(next_value))],
+        ),
+        None => fill(
+            pattern_palette_label(PaletteLabel::NoValueYetUnnamed),
+            &[("action", action_name(HotkeyAction::NextValue))],
+        ),
+    }
 }
 
 /// Which half of a pair a value is, in the words the palette writes beside it.
@@ -564,4 +594,52 @@ pub fn not_guaranteed(outside: &[char]) -> Option<String> {
             &[("list", &list), ("rest", &rest.to_string())],
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const NEXT_VALUE: HotkeyChord = nkb_core::hotkeys::DEFAULT_BINDINGS[0].1;
+
+    #[test]
+    fn the_bands_name_the_shortcut_where_there_is_one() {
+        assert_eq!(
+            no_value_yet(Some(NEXT_VALUE)),
+            format!(
+                "Nothing sent yet. Put the cursor in any field and press {}.",
+                chord(NEXT_VALUE)
+            )
+        );
+        assert_eq!(
+            next_value(4, 12, Some(NEXT_VALUE)),
+            format!("{} types: value 4 of 12", chord(NEXT_VALUE))
+        );
+        assert_eq!(
+            next_end_of_pack(12, Some(NEXT_VALUE)),
+            format!("{}: end of pack (12/12)", chord(NEXT_VALUE))
+        );
+    }
+
+    /// A shortcut the palette cannot name is not guessed at: the sentences name
+    /// the value, or the action, and hold no key at all.
+    #[test]
+    fn where_no_shortcut_can_be_named_the_bands_claim_no_key() {
+        assert_eq!(
+            no_value_yet(None),
+            "Nothing sent yet. Put the cursor in any field and use the desktop's shortcut for \"Type the value shown\", if it has one."
+        );
+        assert_eq!(next_value(4, 12, None), "Next to type: value 4 of 12");
+        assert_eq!(
+            next_end_of_pack(12, None),
+            "Next to type: end of pack (12/12)"
+        );
+        for text in [
+            no_value_yet(None),
+            next_value(4, 12, None),
+            next_end_of_pack(12, None),
+        ] {
+            assert!(!text.contains('+'), "a key stands in: {text}");
+        }
+    }
 }

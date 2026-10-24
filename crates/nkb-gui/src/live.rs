@@ -534,7 +534,11 @@ pub fn drive(
         };
         match next {
             Next::Stop => break,
-            Next::Answered(lines) => show(palette, worker.answered(lines)),
+            Next::Answered(lines) => {
+                show(palette, worker.answered(lines));
+                // The pack window names the shortcut the desktop gave.
+                publish(in_use, &worker.sequence, &memory.bindings.get());
+            }
             Next::Gone => {
                 worker.hold.lose();
                 // `ShortcutsGone` always has a sentence, and the window is up:
@@ -878,7 +882,17 @@ impl Worker<'_> {
             .filter_map(|message| i18n::settings_message(message, &self.memory.file, &bindings))
             .collect();
         lines.extend(self.take(bindings));
-        self.view(lines, ValueBand::Keep, Some(legend(&bindings)))
+        let legend = self.naming(bindings);
+        self.view(lines, ValueBand::Keep, Some(legend))
+    }
+
+    /// The words that name the shortcuts, with what the desktop gave where it
+    /// chose the chords. The table they follow is the one every sentence of the
+    /// palette reads from now on, and it is never saved or registered.
+    fn naming(&mut self, asked: Bindings) -> Legend {
+        let (shown, apart) = self.hold.as_given(asked);
+        self.memory.bindings.set(shown);
+        legend_of(&shown, &apart)
     }
 
     /// Registers `bindings` in place of whatever is held, and what is worth
@@ -892,9 +906,10 @@ impl Worker<'_> {
     /// What the palette draws when the desktop has answered the shortcuts it was
     /// asked for: the legend of the table, as after a resume.
     fn answered(&mut self, lines: Vec<String>) -> View {
-        let bindings = self.memory.bindings.get();
-        let lines = self.with_the_route(lines, bindings);
-        self.view(lines, ValueBand::Keep, Some(legend(&bindings)))
+        let asked = self.in_effect().0;
+        let legend = self.naming(asked);
+        let lines = self.with_the_route(lines, self.memory.bindings.get());
+        self.view(lines, ValueBand::Keep, Some(legend))
     }
 
     /// `lines`, and what the route asked for at start adds once the shortcuts are
@@ -2895,7 +2910,7 @@ mod tests {
         );
         assert_eq!(
             words.no_value,
-            i18n::no_value_yet(defaults.chord(HotkeyAction::NextValue))
+            i18n::no_value_yet(Some(defaults.chord(HotkeyAction::NextValue)))
         );
     }
 

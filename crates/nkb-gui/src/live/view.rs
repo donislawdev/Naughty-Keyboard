@@ -705,7 +705,10 @@ pub(super) fn show_next(palette: &Palette, next: Option<NextView>) {
     // (`D110`), so the line coming and going moves nothing below it.
     palette.set_previous_line(
         next.previous
-            .map_or_else(String::new, |index| i18n::previous_types(index, steps_back))
+            .zip(steps_back)
+            .map_or_else(String::new, |(index, chord)| {
+                i18n::previous_types(index, chord)
+            })
             .into(),
     );
     let (back, skip) = arrow_targets(next.index, next.total, next.can_go_back);
@@ -826,30 +829,59 @@ pub struct Legend {
     pub(super) no_value: String,
     /// The two shortcuts the band of the next value names (the owner's points
     /// 4 and 6, 2026-10-14): the one that types it, and the one that steps
-    /// back and types.
-    pub(super) next: HotkeyChord,
-    pub(super) previous: HotkeyChord,
+    /// back and types. `None` where the palette cannot name one ([`Apart`]).
+    pub(super) next: Option<HotkeyChord>,
+    pub(super) previous: Option<HotkeyChord>,
+}
+
+/// A shortcut the palette cannot name by a chord of its own, because of what
+/// the desktop that chooses the chords did with it (`D145` point 67).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Apart {
+    /// The desktop gave none: the person left it out. Nothing responds, so the
+    /// hint bar does not list it and the bands name no key for it.
+    Left,
+    /// The desktop gave one, in words that are none of the chords the palette
+    /// knows. The hint bar shows the words as they came, and the bands name no key.
+    Worded(String),
 }
 
 /// The words naming the shortcuts of `bindings`. One function for the start
 /// and for every change, so the two cannot word it differently.
 #[must_use]
 pub fn legend(bindings: &Bindings) -> Legend {
+    legend_of(bindings, &[])
+}
+
+/// The same words once a desktop that chooses the chords has answered:
+/// `bindings` hold the chords it gave, and `apart` the shortcuts it gave none
+/// of, or none of ours.
+pub(super) fn legend_of(bindings: &Bindings, apart: &[(HotkeyAction, Apart)]) -> Legend {
+    let how = |action: HotkeyAction| {
+        apart
+            .iter()
+            .find(|(one, _)| *one == action)
+            .map(|(_, how)| how)
+    };
+    // The chord of an action, or `None` where it has none to name.
+    let named = |action: HotkeyAction| how(action).is_none().then(|| bindings.chord(action));
     Legend {
         // In the order a person reads them, not the table's (`D120`).
         hints: HotkeyAction::READING_ORDER
             .iter()
             .filter(|action| wired(**action))
-            .map(|action| {
-                (
-                    i18n::chord(bindings.chord(*action)),
-                    i18n::action_name(*action).to_owned(),
-                )
+            .filter_map(|action| {
+                let key = match how(*action) {
+                    None => i18n::chord(bindings.chord(*action)),
+                    Some(Apart::Worded(words)) => words.clone(),
+                    Some(Apart::Left) => return None,
+                };
+                Some((key, i18n::action_name(*action).to_owned()))
             })
             .collect(),
-        no_value: i18n::no_value_yet(bindings.chord(HotkeyAction::NextValue)),
-        next: bindings.chord(HotkeyAction::NextValue),
-        previous: bindings.chord(HotkeyAction::PreviousValue),
+        no_value: i18n::no_value_yet(named(HotkeyAction::NextValue)),
+        next: named(HotkeyAction::NextValue),
+        previous: named(HotkeyAction::PreviousValue),
     }
 }
 
@@ -869,21 +901,25 @@ pub fn show_legend(palette: &Palette, legend: Legend) {
     NAMED.set(Some((legend.next, legend.previous)));
 }
 
+/// The two chords the band of the next value names, either `None` where the
+/// palette cannot name it.
+type Named = (Option<HotkeyChord>, Option<HotkeyChord>);
+
 thread_local! {
     /// The two chords of the last legend shown, on the MAIN thread, where the
     /// band of the next value is put into words. `None` until the first
     /// legend, which comes before the first view (`main.rs`).
-    static NAMED: Cell<Option<(HotkeyChord, HotkeyChord)>> = const { Cell::new(None) };
+    static NAMED: Cell<Option<Named>> = const { Cell::new(None) };
 }
 
 /// The chords that type the next value and step back to type: the last
 /// legend's, or the defaults before there was one.
-fn named() -> (HotkeyChord, HotkeyChord) {
+fn named() -> Named {
     NAMED.get().unwrap_or_else(|| {
         let defaults = nkb_adapters::default_bindings();
         (
-            defaults.chord(HotkeyAction::NextValue),
-            defaults.chord(HotkeyAction::PreviousValue),
+            Some(defaults.chord(HotkeyAction::NextValue)),
+            Some(defaults.chord(HotkeyAction::PreviousValue)),
         )
     })
 }
@@ -919,7 +955,10 @@ mod tests {
             can_go_back: index > 1,
         };
         show_next(&palette, Some(at(4, Some(2))));
-        let (types, steps_back) = named();
+        let defaults = nkb_adapters::default_bindings();
+        let types = defaults.chord(HotkeyAction::NextValue);
+        let steps_back = defaults.chord(HotkeyAction::PreviousValue);
+        assert_eq!(named(), (Some(types), Some(steps_back)), "no legend yet");
         assert_eq!(
             palette.get_next_heading(),
             format!("{} types: value 4 of 12", i18n::chord(types))
@@ -933,6 +972,72 @@ mod tests {
         show_next(&palette, Some(at(1, None)));
         assert_eq!(palette.get_previous_line(), "", "nothing behind");
         assert_eq!(palette.get_back_label(), "", "nothing before value 1");
+    }
+
+    /// A shortcut the desktop gave in words of its own is listed as it came, one
+    /// it gave none of is not listed, and the rest of the bar is as it was.
+    #[test]
+    fn the_hint_bar_lists_a_worded_shortcut_as_it_came_and_leaves_out_one_not_given() {
+        let defaults = nkb_adapters::default_bindings();
+        let plain = legend(&defaults);
+        let words = String::from("Press <Control><Alt>Return");
+        let apart = [
+            (HotkeyAction::PreviousValue, Apart::Worded(words.clone())),
+            (HotkeyAction::RestartPack, Apart::Left),
+        ];
+
+        let shown = legend_of(&defaults, &apart);
+
+        let rows = |legend: &Legend| legend.hints.clone();
+        let mut expected = rows(&plain);
+        let previous = i18n::action_name(HotkeyAction::PreviousValue);
+        let restart = i18n::action_name(HotkeyAction::RestartPack);
+        expected.retain(|(_, action)| action != restart);
+        for (key, action) in &mut expected {
+            if action == previous {
+                key.clone_from(&words);
+            }
+        }
+        assert_eq!(rows(&shown), expected);
+        assert_eq!(shown.next, plain.next, "typing the value is still named");
+        assert_eq!(shown.previous, None, "worded, so no chord to name");
+        assert_eq!(legend_of(&defaults, &[]), plain);
+    }
+
+    /// The bands name no key where the palette cannot: the heading names the
+    /// value, the line about the way back stands empty, and the sentence of the
+    /// empty band names the action.
+    #[test]
+    fn the_bands_name_no_key_for_a_shortcut_that_is_apart() {
+        let palette = a_palette();
+        let defaults = nkb_adapters::default_bindings();
+        let at = |index, total| NextView {
+            index,
+            total,
+            previous: Some(2),
+            value: None,
+            can_go_back: true,
+        };
+        show_legend(
+            &palette,
+            legend_of(
+                &defaults,
+                &[
+                    (HotkeyAction::NextValue, Apart::Left),
+                    (
+                        HotkeyAction::PreviousValue,
+                        Apart::Worded(String::from("Press <Control><Alt>Return")),
+                    ),
+                ],
+            ),
+        );
+
+        show_next(&palette, Some(at(Some(4), 12)));
+        assert_eq!(palette.get_next_heading(), i18n::next_value(4, 12, None));
+        assert_eq!(palette.get_previous_line(), "", "no key to name");
+        show_next(&palette, Some(at(None, 12)));
+        assert_eq!(palette.get_next_heading(), i18n::next_end_of_pack(12, None));
+        assert_eq!(palette.get_no_value(), i18n::no_value_yet(None));
     }
 
     /// Another pack in use (`ValueBand::Clear`): the band goes back to its
