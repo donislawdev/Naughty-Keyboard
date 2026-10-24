@@ -12,6 +12,16 @@
 //! the worker may have changed since (`D90`). The wait is at most one tick of
 //! the worker, or the end of a value being typed.
 //!
+//! # Where a desktop chooses the shortcuts (`D145` point 70)
+//!
+//! On a Wayland session the desktop holds the shortcuts, and giving them back
+//! would close its session and ask the person again when the window closed. So
+//! the worker pauses nothing and answers with what the desktop gave, the window
+//! shows it and records nothing ([`ShortcutList::read_only`]), its words are the
+//! ones that fit (`describe`), and an answer of the desktop while the window is
+//! open is drawn at once ([`Told::Given`]). Closing still asks the worker to
+//! resume, which does nothing there.
+//!
 //! # What runs where
 //!
 //! All of it on the MAIN thread, like `packs`. The worker's answers arrive
@@ -307,6 +317,11 @@ impl Shortcuts {
     pub fn told(self: &Rc<Self>, told: Told) {
         match told {
             Told::Paused(now) => self.paused(now),
+            Told::Given(desktop) => {
+                if self.with_list(|list| list.given(desktop)).is_some() {
+                    self.show_all();
+                }
+            }
             Told::Shortcut {
                 action,
                 change,
@@ -366,7 +381,9 @@ impl Shortcuts {
             }
             return;
         }
-        *self.list.borrow_mut() = Some(ShortcutList::new(default_bindings(), now));
+        let list = ShortcutList::new(default_bindings(), now);
+        describe(&self.window, list.read_only());
+        *self.list.borrow_mut() = Some(list);
         self.show_all();
         if let Err(error) = on_request::bring_up(self.window.window()) {
             self.cannot_show(&error);
@@ -464,7 +481,7 @@ impl Shortcuts {
             .set_selected(i32::try_from(list.selected()).unwrap_or(-1));
         self.window.set_summary(list.summary().into());
         self.window.set_messages(ModelRc::new(VecModel::from(
-            list.messages()
+            list.lines()
                 .iter()
                 .map(|line| SharedString::from(line.as_str()))
                 .collect::<Vec<_>>(),
@@ -478,24 +495,42 @@ impl Shortcuts {
     }
 }
 
-/// Every word that does not change while the window is open.
+/// Every word that does not change while the window is open, and the words of
+/// the window that records shortcuts - which an opening over a desktop's shortcuts
+/// replaces ([`describe`]).
 fn label(window: &ShortcutsWindow) {
     window.set_window_title(i18n::shortcuts_label(ShortcutsLabel::Title).into());
     window.set_heading(i18n::shortcuts_label(ShortcutsLabel::Heading).into());
-    window.set_intro(i18n::shortcuts_label(ShortcutsLabel::Intro).into());
     window.set_current_label(i18n::shortcuts_label(ShortcutsLabel::Recording).into());
-    let hints: Vec<HintRow> = [
+    describe(window, false);
+}
+
+/// What the window says it does, and the keys it answers: both depend on who
+/// chooses the shortcuts. Where a desktop does, nothing here records or restores,
+/// so those two keys are not offered.
+fn describe(window: &ShortcutsWindow, desktop_chooses: bool) {
+    let intro = if desktop_chooses {
+        ShortcutsLabel::IntroDesktop
+    } else {
+        ShortcutsLabel::Intro
+    };
+    window.set_intro(i18n::shortcuts_label(intro).into());
+    let recording = [
         (ShortcutsLabel::KeyEnter, ShortcutsLabel::Record),
         (ShortcutsLabel::KeyDelete, ShortcutsLabel::Restore),
-        (ShortcutsLabel::KeyArrows, ShortcutsLabel::Move),
-        (ShortcutsLabel::KeyEscape, ShortcutsLabel::Close),
-    ]
-    .into_iter()
-    .map(|(key, action)| HintRow {
-        key: i18n::shortcuts_label(key).into(),
-        action: i18n::shortcuts_label(action).into(),
-    })
-    .collect();
+    ];
+    let hints: Vec<HintRow> = recording
+        .into_iter()
+        .filter(|_| !desktop_chooses)
+        .chain([
+            (ShortcutsLabel::KeyArrows, ShortcutsLabel::Move),
+            (ShortcutsLabel::KeyEscape, ShortcutsLabel::Close),
+        ])
+        .map(|(key, action)| HintRow {
+            key: i18n::shortcuts_label(key).into(),
+            action: i18n::shortcuts_label(action).into(),
+        })
+        .collect();
     window.set_hints(ModelRc::new(VecModel::from(hints)));
 }
 
@@ -519,7 +554,8 @@ fn pick_row(row: &ShortcutRow) -> PickRow {
         single_line: true,
         heading: false,
         key: row.key.as_str().into(),
-        has_key: true,
+        // A shortcut the desktop did not give has no key to show.
+        has_key: !row.key.is_empty(),
         // A flat list: no tree, no folds, no second line.
         ..PickRow::default()
     }

@@ -65,6 +65,13 @@
 //!   carried in the command - so what is registered is what the next start
 //!   would register. The hint bar and the empty value band follow it.
 //!
+//! Where a desktop holds the shortcuts and the person chooses them there, none of
+//! this applies (`D145` point 70): giving them back would close the session, and
+//! taking them again would ask the person a second time, with the window of the
+//! system. So [`Command::Pause`] gives nothing back and answers with what the
+//! desktop gave ([`DesktopNow`]), [`Command::Resume`] does nothing, and the window
+//! only shows. [`Told::Given`] follows the desktop's answer into an open window.
+//!
 //! While nothing is held this thread waits on the channel instead of on the
 //! shortcuts. That is also where it goes when the shortcuts could not be
 //! registered or their thread ended: a pack can still be chosen, and the next
@@ -93,7 +100,7 @@ use nkb_adapters::{
 use nkb_app::advance_sequence::{InFlight, Ports, RouteRequest, Sent};
 use nkb_app::browse_packs::{Direction, list_packs};
 use nkb_app::ports::{
-    Clearing, LiveShortcuts, Progress, SettingChange, Settings, SettingsStore,
+    Clearing, GivenShortcut, LiveShortcuts, Progress, SettingChange, Settings, SettingsStore,
     ShortcutRegistration, Wait,
 };
 use nkb_app::{
@@ -262,6 +269,9 @@ pub enum Told {
     /// The palette's shortcuts are given back, and this is the table the
     /// window edits, as it stands now.
     Paused(ShortcutsNow),
+    /// Where a desktop holds the shortcuts: it has answered, or something about
+    /// them changed, while the window is open (`D145` point 70).
+    Given(DesktopNow),
     /// What came of one [`Command::Shortcut`], and a line when saving it
     /// failed for a reason not said before.
     Shortcut {
@@ -285,6 +295,23 @@ pub struct ShortcutsNow {
     /// differs from `bindings` has not been registered since it changed, so
     /// nothing is known about it yet.
     pub registered: Vec<(HotkeyAction, HotkeyChord, ShortcutRegistration)>,
+    /// `Some` where a desktop holds the shortcuts and the person chooses them
+    /// there: the window shows what it gave and records nothing.
+    pub desktop: Option<DesktopNow>,
+}
+
+/// What a desktop that chooses the shortcuts holds for the palette now.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DesktopNow {
+    /// The shortcuts it gave, as it names them.
+    pub given: Vec<(HotkeyAction, GivenShortcut)>,
+    /// It has been asked and has not answered: a shortcut not given yet is
+    /// waited for, not left out.
+    pub waiting: bool,
+    /// The sentence that stands while the shortcuts are not in hand for a reason
+    /// the person can read about: the wait, the offer to make the entry, or why
+    /// the desktop gave none.
+    pub standing: Option<String>,
 }
 
 /// The palette's own actions: about windows rather than the pack in use, so
@@ -552,6 +579,9 @@ pub fn drive(
                 show(palette, worker.answered(lines));
                 // The pack window names the shortcut the desktop gave.
                 publish(in_use, &worker.sequence, &memory.bindings.get());
+                if let Some(told) = worker.given_news() {
+                    tell(told);
+                }
             }
             Next::Gone => {
                 worker.hold.lose();
@@ -559,6 +589,9 @@ pub fn drive(
                 // the stop flag was not set, or this would be `Stop`.
                 let said = i18n::ended(Ended::ShortcutsGone).into_iter().collect();
                 show(palette, worker.view(said, ValueBand::Keep, None));
+                if let Some(told) = worker.given_news() {
+                    tell(told);
+                }
             }
             Next::Command(command) => {
                 let carried = carry_out_noting(&mut worker, in_use, command);
@@ -727,25 +760,19 @@ impl Worker<'_> {
                 told: None,
                 toggled: None,
             },
-            Command::Pause => {
-                self.hold.pause();
+            Command::Pause => self.pause(),
+            // Held already: the window did not pause, or a second close came.
+            // Taking them again would say every line about them twice. Where a
+            // desktop holds them nothing was given back, so there is nothing to
+            // take, and asking it again would put its window in front of the
+            // person a second time.
+            Command::Resume if self.hold.live().is_some() || self.hold.on_the_desktop() => {
                 Carried {
-                    view: Some(self.view(Vec::new(), ValueBand::Keep, None)),
-                    told: Some(Told::Paused(ShortcutsNow {
-                        bindings: self.in_effect().0,
-                        registered: self.hold.registered.clone(),
-                    })),
+                    view: None,
+                    told: None,
                     toggled: None,
                 }
             }
-            // Held already, or asked of the desktop and not answered: the window
-            // did not pause, or a second close came. Taking them again would say
-            // every line about them twice, and ask the person a second time.
-            Command::Resume if self.hold.live().is_some() || self.hold.asking_now() => Carried {
-                view: None,
-                told: None,
-                toggled: None,
-            },
             Command::Resume => Carried {
                 view: Some(self.resume()),
                 told: None,

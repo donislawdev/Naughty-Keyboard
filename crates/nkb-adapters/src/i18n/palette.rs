@@ -683,6 +683,18 @@ mod tests {
     }
 
     #[test]
+    fn the_plural_of_a_refused_pack_is_handled_rather_than_parenthesised() {
+        assert_eq!(
+            choose_error(&ChooseError::Refused { errors: 1 }, "locale-cz"),
+            "Pack \"locale-cz\" has 1 problem. Run: nkb lint locale-cz"
+        );
+        assert_eq!(
+            choose_error(&ChooseError::Refused { errors: 3 }, "locale-cz"),
+            "Pack \"locale-cz\" has 3 problems. Run: nkb lint locale-cz"
+        );
+    }
+
+    #[test]
     fn the_bands_name_the_shortcut_where_there_is_one() {
         assert_eq!(
             no_value_yet(Some(NEXT_VALUE)),

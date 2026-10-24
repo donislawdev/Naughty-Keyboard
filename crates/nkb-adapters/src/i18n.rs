@@ -1748,18 +1748,6 @@ mod tests {
     }
 
     #[test]
-    fn the_plural_of_a_refused_pack_is_handled_rather_than_parenthesised() {
-        assert_eq!(
-            choose_error(&ChooseError::Refused { errors: 1 }, "locale-cz"),
-            "Pack \"locale-cz\" has 1 problem. Run: nkb lint locale-cz"
-        );
-        assert_eq!(
-            choose_error(&ChooseError::Refused { errors: 3 }, "locale-cz"),
-            "Pack \"locale-cz\" has 3 problems. Run: nkb lint locale-cz"
-        );
-    }
-
-    #[test]
     fn the_character_the_clipboard_refuses_is_named_as_a_code_point() {
         // The character itself would do in the palette what it does in the
         // clipboard: a NUL cuts the sentence short.
@@ -2511,6 +2499,7 @@ mod tests {
             ShortcutsLabel::Heading,
             ShortcutsLabel::Summary,
             ShortcutsLabel::Intro,
+            ShortcutsLabel::IntroDesktop,
             ShortcutsLabel::Recording,
             ShortcutsLabel::Changed,
             ShortcutsLabel::Taken,
@@ -2539,6 +2528,7 @@ mod tests {
             ShortcutsLabel::NotAKey,
             ShortcutsLabel::SeveralKeys,
             ShortcutsLabel::CannotTell,
+            ShortcutsLabel::DesktopChooses,
         ] {
             let takes_values = match label {
                 ShortcutsLabel::Summary
@@ -2557,6 +2547,7 @@ mod tests {
                 ShortcutsLabel::Title
                 | ShortcutsLabel::Heading
                 | ShortcutsLabel::Intro
+                | ShortcutsLabel::IntroDesktop
                 | ShortcutsLabel::Recording
                 | ShortcutsLabel::Changed
                 | ShortcutsLabel::Taken
@@ -2572,7 +2563,8 @@ mod tests {
                 | ShortcutsLabel::Close
                 | ShortcutsLabel::NotAKey
                 | ShortcutsLabel::SeveralKeys
-                | ShortcutsLabel::CannotTell => false,
+                | ShortcutsLabel::CannotTell
+                | ShortcutsLabel::DesktopChooses => false,
             };
             let pattern = pattern_shortcuts_label(label);
             assert_eq!(
@@ -2581,6 +2573,14 @@ mod tests {
                 "{label:?}: pattern was {pattern:?}"
             );
             assert!(!pattern.is_empty(), "{label:?} produced nothing");
+        }
+    }
+
+    #[test]
+    fn the_words_over_a_desktop_send_the_tester_to_the_settings_of_the_desktop() {
+        for label in [ShortcutsLabel::IntroDesktop, ShortcutsLabel::DesktopChooses] {
+            assert!(pattern_shortcuts_label(label).contains("settings"));
+            assert!(!pattern_shortcuts_label(label).contains("record"));
         }
     }
 

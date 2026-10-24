@@ -26,12 +26,13 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc;
 
+use nkb_adapters::i18n::ShortcutsLabel;
 use nkb_adapters::{ChordHeld, default_bindings, i18n};
 use nkb_app::ShortcutChange;
-use nkb_app::ports::ShortcutRegistration;
+use nkb_app::ports::{GivenShortcut, ShortcutRegistration};
 use nkb_core::hotkeys::{HotkeyAction, HotkeyChord};
 use nkb_gui::ShortcutsWindow;
-use nkb_gui::live::{Command, ShortcutsNow, Told};
+use nkb_gui::live::{Command, DesktopNow, ShortcutsNow, Told};
 use nkb_gui::packs::Keyboard;
 use nkb_gui::shortcuts::{Shortcuts, SystemKeys};
 use slint::platform::{Key, WindowEvent};
@@ -129,6 +130,7 @@ fn now() -> ShortcutsNow {
             .iter()
             .map(|(action, held)| (*action, *held, ShortcutRegistration::Registered))
             .collect(),
+        desktop: None,
     }
 }
 
@@ -337,4 +339,86 @@ fn the_shortcuts_window_pauses_records_and_always_takes_the_shortcuts_back() {
         "{lines:?}"
     );
     assert_eq!(lines[1], "not saved");
+
+    over_a_desktop_that_chooses_them(&shortcuts, &commands);
+}
+
+/// Over a desktop that chooses the shortcuts the window is a reading, in the
+/// desktop's own words. It is the same window that records, so each opening
+/// says which words it needs, and the ordinary ones come back.
+fn over_a_desktop_that_chooses_them(shortcuts: &Rc<Shortcuts>, commands: &mpsc::Receiver<Command>) {
+    let window = shortcuts.window();
+    let chosen = chord("Ctrl+Shift+K");
+    let standing = String::from("The palette is waiting for the desktop.");
+    let (given_at, left_out_at) = (0, 1);
+    let order = HotkeyAction::READING_ORDER;
+    let holds = |waiting: bool, standing: Option<String>| DesktopNow {
+        given: vec![(
+            order[given_at],
+            GivenShortcut {
+                words: String::from("Press <Control><Shift>k"),
+                chord: Some(chosen),
+            },
+        )],
+        waiting,
+        standing,
+    };
+    shortcuts.open();
+    assert_eq!(commands.try_recv(), Ok(Command::Pause));
+    shortcuts.told(Told::Paused(ShortcutsNow {
+        desktop: Some(holds(true, Some(standing.clone()))),
+        ..now()
+    }));
+    assert!(shortcuts.is_open());
+    assert_eq!(
+        window.get_intro(),
+        i18n::shortcuts_label(ShortcutsLabel::IntroDesktop)
+    );
+    assert_eq!(window.get_hints().row_count(), 2, "Enter and Delete record");
+    assert_eq!(window.get_summary(), "");
+    assert_eq!(keys_of(window)[given_at], i18n::chord(chosen));
+    let rows = window.get_rows();
+    assert!(rows.row_data(given_at).expect("a row").has_key);
+    let missing = rows.row_data(left_out_at).expect("a row");
+    assert!(!missing.has_key, "a key was drawn for a shortcut not given");
+    assert_eq!(missing.badge, "");
+    assert_eq!(messages(window), vec![standing.clone()]);
+
+    // Enter says who chooses and asks the worker for nothing.
+    tap_key(window, Key::Return);
+    let chooses = i18n::shortcuts_label(ShortcutsLabel::DesktopChooses).to_owned();
+    assert_eq!(messages(window), vec![standing, chooses.clone()]);
+    assert_eq!(commands.try_recv(), Err(mpsc::TryRecvError::Empty));
+    tap_key(window, Key::Delete);
+    assert_eq!(commands.try_recv(), Err(mpsc::TryRecvError::Empty));
+
+    // The desktop answers while the window is open.
+    shortcuts.told(Told::Given(holds(false, None)));
+    let rows = window.get_rows();
+    assert_eq!(
+        rows.row_data(left_out_at).expect("a row").badge,
+        i18n::shortcuts_label(ShortcutsLabel::NotRegistered)
+    );
+    assert_eq!(messages(window), vec![chooses]);
+
+    tap_key(window, Key::Escape);
+    assert!(!shortcuts.is_open());
+    assert_eq!(commands.try_recv(), Ok(Command::Resume));
+    // An answer with no window open is for nobody.
+    shortcuts.told(Told::Given(holds(false, None)));
+    assert!(!shortcuts.is_open());
+
+    shortcuts.open();
+    assert_eq!(commands.try_recv(), Ok(Command::Pause));
+    shortcuts.told(Told::Paused(now()));
+    assert_eq!(
+        window.get_intro(),
+        i18n::shortcuts_label(ShortcutsLabel::Intro)
+    );
+    assert_eq!(window.get_hints().row_count(), 4);
+    assert!(rows_all_keyed(window), "a shortcut of ours lost its key");
+}
+
+fn rows_all_keyed(window: &ShortcutsWindow) -> bool {
+    window.get_rows().iter().all(|row| row.has_key)
 }

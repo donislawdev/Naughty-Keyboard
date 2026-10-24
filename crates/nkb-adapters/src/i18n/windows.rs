@@ -443,6 +443,10 @@ pub enum ShortcutsLabel {
     Summary,
     /// What the window does, and that the palette does not answer meanwhile.
     Intro,
+    /// What the window shows where a desktop chooses the shortcuts: that it does,
+    /// where to change them, and that its giving one does not prove it works
+    /// (`OBS-217` point 5).
+    IntroDesktop,
     /// The pill on the row being recorded.
     Recording,
     /// The pill on a shortcut that is not the default.
@@ -494,6 +498,8 @@ pub enum ShortcutsLabel {
     SeveralKeys,
     /// This system cannot tell which key was pressed.
     CannotTell,
+    /// Enter, Delete or a click where a desktop chooses the shortcuts: who does.
+    DesktopChooses,
 }
 
 /// The words of the welcome window (`ux-spec.md` 5.1 and 6 N, UX7, `D105`).
@@ -677,6 +683,9 @@ pub(super) fn pattern_shortcuts_label(label: ShortcutsLabel) -> &'static str {
         ShortcutsLabel::Intro => {
             "The palette answers these in every application. They are paused while this window is open, and a change takes effect when it closes."
         }
+        ShortcutsLabel::IntroDesktop => {
+            "The palette answers the shortcuts your desktop gives it, and you change them in the settings of the desktop. That the desktop gave one does not prove it works, so press it in the application you test."
+        }
         ShortcutsLabel::Recording => "recording",
         ShortcutsLabel::Changed => "changed",
         ShortcutsLabel::Taken => "taken",
@@ -728,6 +737,9 @@ pub(super) fn pattern_shortcuts_label(label: ShortcutsLabel) -> &'static str {
         }
         ShortcutsLabel::CannotTell => {
             "This system cannot tell which key was pressed, so a shortcut cannot be recorded here yet."
+        }
+        ShortcutsLabel::DesktopChooses => {
+            "The desktop chooses these shortcuts, so this window cannot change them. Change them in the settings of the desktop."
         }
     }
 }
