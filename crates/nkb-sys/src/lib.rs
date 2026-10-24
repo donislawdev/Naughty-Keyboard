@@ -46,6 +46,8 @@ mod linux;
 #[cfg(any(target_os = "linux", test))]
 mod linux_atspi_rules;
 #[cfg(any(target_os = "linux", test))]
+mod linux_clearing_rules;
+#[cfg(any(target_os = "linux", test))]
 mod linux_hotkeys;
 #[cfg(any(target_os = "linux", test))]
 mod linux_ibus_rules;
@@ -782,12 +784,26 @@ pub fn send_allowed() -> bool {
     platform::send_allowed()
 }
 
-/// Whether this build can press the keys that clear a field (`Home`, `Shift+End`, `Delete`),
-/// which is a route of its own from typing text. Linux types, through the keys of the X
-/// server and through the input method of the desktop, and does not press these yet.
+/// Whether this build, in this session, can press the keys that clear a field (`Home`,
+/// `Shift+End`, `Delete`), which is a route of its own from typing text. Windows and macOS
+/// always can. Linux can on a Wayland session with an input method (`D145` point 74): the
+/// keys go through the remote-desktop portal, which the person allows once, and the engine of
+/// the input method stands guard over each. It does not on an X11 session yet. On Linux this
+/// makes one connection, to the input method daemon, and drops it.
 #[must_use]
-pub const fn can_press_chords() -> bool {
-    cfg!(any(windows, target_os = "macos"))
+pub fn can_press_chords() -> bool {
+    #[cfg(any(windows, target_os = "macos"))]
+    {
+        true
+    }
+    #[cfg(target_os = "linux")]
+    {
+        linux::can_press_chords()
+    }
+    #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+    {
+        false
+    }
 }
 
 /// Whether this build can deliver keystrokes at all.

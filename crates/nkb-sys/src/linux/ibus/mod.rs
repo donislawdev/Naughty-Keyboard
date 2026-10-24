@@ -29,14 +29,19 @@
 //! desktop, so the text is HANDED OVER to the input method, and what the application did
 //! with it is for the person to look at (`Following::HandedOver`). `Escape`, a held
 //! modifier and Caps Lock do not apply: a commit is not a key.
+//!
+//! The keys that clear a field are keys, and the same engine stands guard over them
+//! (`keys`, `OBS-229`): they go through the remote-desktop portal, and the engine sees each
+//! before the application, with the modifiers the hand holds.
 
 mod daemon;
 mod engine;
+mod keys;
 
 use core::time::Duration;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use zbus::blocking::Connection;
@@ -44,14 +49,18 @@ use zbus::zvariant::Value;
 
 use self::daemon::Opened;
 use self::engine::{
-    BUS, BUS_PATH, ENGINE_INTERFACE, Event, Factory, component, ibus_text, name_of_engine,
+    BUS, BUS_PATH, ENGINE_INTERFACE, Event, Factory, Gate, component, expect, ibus_text,
+    name_of_engine,
 };
+pub(crate) use self::keys::press_chords;
 use crate::cadence::{Cadence, PROGRESS_INTERVAL};
+use crate::linux_clearing_rules::{Expected, Judgement, keys_refusal};
 use crate::linux_ibus_rules::{
     COMMIT_GAP, DEADLINE, ESCAPE_LOOK, FOCUS_SETTLE, FOCUS_WAIT, FORGET_LOOK, FORGET_WAIT,
     SETTLE_AFTER_COMMIT, deadline_for, engine_name, engine_to_restore, is_our_engine, pieces,
 };
 use crate::linux_rules::Refusal;
+use crate::portal::Unavailable;
 use crate::{
     Following, SendError, SendOutcome, SendProgress, StopReason, UNNAMED_WINDOW, WindowRef,
 };
@@ -116,6 +125,21 @@ fn truncated(units_sent: usize, units_expected: usize, reason: StopReason) -> Se
     }
 }
 
+fn stopped_chords(chords_sent: usize, chords_expected: usize, reason: StopReason) -> SendError {
+    SendError::ChordsTruncated {
+        chords_sent,
+        chords_expected,
+        reason,
+    }
+}
+
+/// The keys cannot be pressed on this session, and `why` is what the portal said.
+fn unsupported_keys(why: Unavailable) -> SendError {
+    SendError::Unsupported {
+        system: keys_refusal(why).system(),
+    }
+}
+
 /// One send's engine, registered and made the global one, and the way back.
 struct Session {
     opened: Opened,
@@ -126,6 +150,8 @@ struct Session {
     path: Option<String>,
     /// Set by the engine when the person presses `Escape`.
     escape: Arc<AtomicBool>,
+    /// The key of the recipe the engine waits for, while the keys that clear a field are sent.
+    gate: Gate,
 }
 
 impl Session {
@@ -133,7 +159,8 @@ impl Session {
         let name = engine_name(std::process::id());
         let (sender, events) = mpsc::channel();
         let escape = Arc::new(AtomicBool::new(false));
-        let factory = Factory::new(name.clone(), sender, Arc::clone(&escape));
+        let gate: Gate = Arc::new(Mutex::new(None));
+        let factory = Factory::new(name.clone(), sender, Arc::clone(&escape), Arc::clone(&gate));
         let opened = daemon::open(socket, Some(factory), deadline)?;
         let connection = &opened.connection;
         connection.call_method(
@@ -159,7 +186,33 @@ impl Session {
             previous,
             path: None,
             escape,
+            gate,
         })
+    }
+
+    /// Tells the engine which key of the recipe to wait for next, or none.
+    fn expect(&self, expected: Option<Expected>) {
+        expect(&self.gate, expected);
+    }
+
+    /// What the engine found on the next key of the recipe, if it said within `wait`. The
+    /// answers that came before the key was sent are not this key's, so they are dropped
+    /// first by [`Session::forget_echoes`].
+    fn echo(&self, wait: Duration) -> Option<Judgement> {
+        let end = Instant::now() + wait;
+        while let Some(left) = end.checked_duration_since(Instant::now()) {
+            match self.events.recv_timeout(left) {
+                Ok(Event::Key(judged)) => return Some(judged),
+                Ok(Event::Created(_) | Event::FocusIn) => {}
+                Err(_) => return None,
+            }
+        }
+        None
+    }
+
+    /// Drops what the engine said before now.
+    fn forget_echoes(&self) {
+        while self.events.try_recv().is_ok() {}
     }
 
     /// Whether the person pressed `Escape` since the engine was made the global one.
@@ -188,6 +241,7 @@ impl Session {
             match self.events.recv_timeout(left) {
                 Ok(Event::Created(path)) => self.path = Some(path),
                 Ok(Event::FocusIn) => focused = true,
+                Ok(Event::Key(_)) => {}
                 Err(RecvTimeoutError::Timeout) => break,
                 Err(RecvTimeoutError::Disconnected) => return Err(Failed),
             }

@@ -46,12 +46,12 @@ pub(crate) const ESCAPE_LOOK: Duration = Duration::from_millis(10);
 
 /// The bit of the key state that marks a key being let go, in the form IBus hands it to
 /// an engine.
-const IBUS_RELEASE_MASK: u32 = 1 << 30;
+pub(crate) const IBUS_RELEASE_MASK: u32 = 1 << 30;
 
 /// The modifiers of the key state that make a key something other than itself: Shift,
 /// Control, Alt (Mod1), Mod4, Super, Hyper and Meta. The lock bits and Num Lock are not
 /// among them.
-const IBUS_MODIFIER_MASK: u32 =
+pub(crate) const IBUS_MODIFIER_MASK: u32 =
     (1 << 0) | (1 << 2) | (1 << 3) | (1 << 6) | (1 << 26) | (1 << 27) | (1 << 28);
 
 /// Whether the key an engine was handed is `Escape` pressed or let go, on its own. While

@@ -49,7 +49,6 @@ use crate::{SendError, SendOutcome, SendProgress, WindowRef};
 // `on_xwayland`).
 pub(crate) use connect::{grab_refused_by_wayland, on_xwayland, route_refusal, window_refusal};
 pub(crate) use front::window_pid;
-pub(crate) use send::send_chords;
 
 use x11rb::errors::{ConnectionError, ReplyError, ReplyOrIdError};
 
@@ -94,6 +93,24 @@ pub(crate) fn send_text(
     } else {
         send::send_text(text, progress)
     }
+}
+
+/// Presses the keys that clear a field. On a Wayland session they go through the remote-desktop
+/// portal with the engine of the input method standing guard over each (`ibus::press_chords`).
+/// On an X11 session this build does not press them yet.
+pub(crate) fn send_chords(chords: &[crate::Chord]) -> Result<usize, SendError> {
+    if connect::wayland_session() {
+        ibus::press_chords(chords)
+    } else {
+        send::send_chords(chords)
+    }
+}
+
+/// Whether this session has a route for the keys that clear a field: a Wayland session with an
+/// input method to stand guard. Whether the person allows the portal to press them is asked
+/// when they are pressed, because the answer is a window of the system.
+pub(crate) fn can_press_chords() -> bool {
+    connect::wayland_session() && ibus::refusal().is_none()
 }
 
 /// The connection to the server failed in the middle of a question. Nothing more
