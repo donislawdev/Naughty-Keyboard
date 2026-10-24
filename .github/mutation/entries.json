@@ -11209,6 +11209,222 @@
       "replace": "SkipReason::NoClearingKeys => CLEARING_SKIPPED.to_owned(),",
       "test": "clearing::tests::a_system_whose_clearing_keys_are_not_pressed_says_so_and_not_that_the_focus_is_no_field",
       "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1458",
+      "why": "a Ctrl held by the hand is not found on the key, so the clearing keys wipe the document",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "    match held_name(held & !ours) {",
+      "replace": "    match held_name(held & !ours & SHIFT) {",
+      "test": "linux_clearing_rules::tests::a_modifier_the_hand_holds_is_named_and_taken",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1459",
+      "why": "AltGr is not a modifier of the recipe, so a key with it is taken for clean",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "const MODIFIERS: u32 = IBUS_MODIFIER_MASK | (1 << 7);",
+      "replace": "const MODIFIERS: u32 = IBUS_MODIFIER_MASK;",
+      "test": "linux_clearing_rules::tests::a_modifier_the_hand_holds_is_named_and_taken",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1460",
+      "why": "a Shift that did not arrive with End is not noticed, so Delete removes one character",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "        None if held & ours != ours => Judgement::NoShift,",
+      "replace": "        None if held & ours > ours => Judgement::NoShift,",
+      "test": "linux_clearing_rules::tests::a_shift_that_did_not_arrive_with_its_key_is_taken",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1461",
+      "why": "the Shift of the recipe is wanted on the keys that have none, so Home is taken for a key without its Shift",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "    let ours = if expected.shifted { SHIFT } else { 0 };",
+      "replace": "    let ours = if expected.shifted { 0 } else { SHIFT };",
+      "test": "linux_clearing_rules::tests::a_key_with_no_modifier_is_clean",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1462",
+      "why": "every key is judged, so a modifier key of the hand is taken and stays down in the application",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "    if keyval != expected.keysym {",
+      "replace": "    if keyval == 0 {",
+      "test": "linux_clearing_rules::tests::only_the_key_waited_for_is_judged",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1463",
+      "why": "a key with a modifier the hand holds is not taken, so the application gets it",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "        matches!(self, Self::Held(_) | Self::NoShift)",
+      "replace": "        matches!(self, Self::NoShift)",
+      "test": "linux_clearing_rules::tests::a_modifier_the_hand_holds_is_named_and_taken",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1464",
+      "why": "Ctrl is called by another name than the refusal of every other send calls it",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "        Some(\"Ctrl\")\n    } else if mask & (1 << 3) != 0 {",
+      "replace": "        Some(\"Control\")\n    } else if mask & (1 << 3) != 0 {",
+      "test": "linux_clearing_rules::tests::a_modifier_the_hand_holds_is_named_and_taken",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1465",
+      "why": "a person who closed the window of the system is told there is no portal",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "        Unavailable::Cancelled => KeysRefusal::NotAllowed,",
+      "replace": "        Unavailable::Cancelled => KeysRefusal::NoPortal,",
+      "test": "linux_clearing_rules::tests::the_refusals_have_words_of_their_own_and_a_cancelled_window_is_a_person_saying_no",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1466",
+      "why": "a portal that did not answer is told as a desktop without the portal",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "        Unavailable::NoAnswer => KeysRefusal::NoAnswer,",
+      "replace": "        Unavailable::NoAnswer => KeysRefusal::NoPortal,",
+      "test": "linux_clearing_rules::tests::the_refusals_have_words_of_their_own_and_a_cancelled_window_is_a_person_saying_no",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1467",
+      "why": "a token one character too long is handed back to the portal",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "        && token.len() <= TOKEN_LONGEST",
+      "replace": "        && token.len() <= TOKEN_LONGEST + 1",
+      "test": "linux_clearing_rules::tests::a_token_is_a_short_string_of_graphic_characters",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1468",
+      "why": "a token with a space in it is handed back to the portal",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "        && token.bytes().all(|byte| byte.is_ascii_graphic()))",
+      "replace": "        && token.bytes().all(|byte| byte.is_ascii()))",
+      "test": "linux_clearing_rules::tests::a_token_is_a_short_string_of_graphic_characters",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1469",
+      "why": "a relative state directory is followed, so the token is kept in whatever folder the program stands in",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "    let base = match dirs.state_home.filter(|dir| dir.starts_with('/')) {",
+      "replace": "    let base = match dirs.state_home.filter(|dir| !dir.is_empty()) {",
+      "test": "linux_clearing_rules::tests::the_token_is_kept_under_the_state_directory_of_the_person",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1470",
+      "why": "End is pressed as Home, so the recipe selects nothing and Delete removes a character",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "        NavKey::End => KEYSYM_END,",
+      "replace": "        NavKey::End => KEYSYM_HOME,",
+      "test": "linux_clearing_rules::tests::the_keys_of_the_recipe_have_the_keysyms_of_the_x_protocol",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1471",
+      "why": "the engine is given less time to hear a key than a chord takes to send, so a busy desktop is taken for a field it does not serve",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "pub(crate) const ECHO_WAIT: Duration = Duration::from_millis(500);",
+      "replace": "pub(crate) const ECHO_WAIT: Duration = Duration::from_millis(5);",
+      "test": "linux_clearing_rules::tests::the_waits_are_ordered_so_that_a_busy_desktop_is_not_a_missing_one",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1472",
+      "why": "a held modifier is refused at once and a free hand is waited for",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "            if wait_left {",
+      "replace": "            if !wait_left {",
+      "test": "linux_clearing_rules::tests::a_modifier_on_the_first_key_is_waited_out_and_then_refused_by_name",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1473",
+      "why": "a key the engine did not hear is told as a key that was dropped",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "        None => Next::Stop(StopReason::NotTaking),",
+      "replace": "        None => Next::Stop(StopReason::Dropped),",
+      "test": "linux_clearing_rules::tests::a_key_the_engine_did_not_hear_is_a_field_it_does_not_serve",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1474",
+      "why": "a clean key is waited out like a held one, so the recipe never goes on",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "        Some(Judgement::Clean) => Next::Go,",
+      "replace": "        Some(Judgement::Clean) => Next::Wait,",
+      "test": "linux_clearing_rules::tests::a_clean_key_lets_the_recipe_go_on_whichever_chord_it_is",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1475",
+      "why": "a modifier on a key after others acted is waited out, so Delete goes after a half-cleared line",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "        Some(Judgement::Held(name)) if first_chord => {",
+      "replace": "        Some(Judgement::Held(name)) if !first_chord => {",
+      "test": "linux_clearing_rules::tests::a_modifier_that_turns_up_after_a_key_acted_stops_the_recipe_and_is_not_waited_for",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1476",
+      "why": "the engine reports a held modifier and does not take the key",
+      "file": "crates/nkb-sys/src/linux/ibus/engine.rs",
+      "find": "        judged.taken()",
+      "replace": "        false",
+      "test": "linux::ibus::engine::tests::the_key_waited_for_is_told_to_the_send_and_taken_only_when_a_modifier_is_held",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1477",
+      "why": "the engine says the release of a key and not its press, so the send hears nothing and stops",
+      "file": "crates/nkb-sys/src/linux/ibus/engine.rs",
+      "find": "        if judged != Judgement::Unrelated && !is_release(state) {",
+      "replace": "        if judged != Judgement::Unrelated && is_release(state) {",
+      "test": "linux::ibus::engine::tests::the_release_of_a_key_is_judged_as_its_press_but_said_once",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1478",
+      "why": "the engine never judges a key of the recipe, so the send hears nothing",
+      "file": "crates/nkb-sys/src/linux/ibus/engine.rs",
+      "find": "            return self.recipe_key(keyval, state);",
+      "replace": "            return false;",
+      "test": "linux::ibus::engine::tests::the_key_waited_for_is_told_to_the_send_and_taken_only_when_a_modifier_is_held",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1479",
+      "why": "the file of the token is readable by other people",
+      "file": "crates/nkb-sys/src/linux/portal/remote.rs",
+      "find": "        .mode(0o600)",
+      "replace": "        .mode(0o644)",
+      "test": "linux::portal::remote::tests::the_file_is_the_persons_alone",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1480",
+      "why": "the token is written to a file of its own and never put in place",
+      "file": "crates/nkb-sys/src/linux/portal/remote.rs",
+      "find": "    let outcome = write_whole(&own, token).and_then(|()| fs::rename(&own, path));",
+      "replace": "    let outcome = write_whole(&own, token).and_then(|()| Ok(()));",
+      "test": "linux::portal::remote::tests::a_token_that_is_kept_is_read_back_and_nothing_else_is_left_in_the_folder",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1481",
+      "why": "a text that is no token is kept as one",
+      "file": "crates/nkb-sys/src/linux/portal/remote.rs",
+      "find": "    let token = usable_token(token).ok_or(std::io::ErrorKind::InvalidInput)?;",
+      "replace": "    let token = token;",
+      "test": "linux::portal::remote::tests::what_is_not_a_token_is_not_kept",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }

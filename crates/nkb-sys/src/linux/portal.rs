@@ -23,6 +23,7 @@
 //! closed on the portal's side as well as can be done in a moment.
 
 pub(crate) mod entry;
+pub(crate) mod remote;
 
 use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -268,6 +269,11 @@ impl Portal {
 
     /// A session of shortcuts, and the path the portal knows it by.
     fn create_session(&mut self) -> Result<String, Unavailable> {
+        self.create_session_on(SHORTCUTS_INTERFACE)
+    }
+
+    /// A session of the portal that `interface` is of, and the path the portal knows it by.
+    fn create_session_on(&mut self, interface: &str) -> Result<String, Unavailable> {
         let session_token = self.next_token("nkbs");
         let (answer, results) = self.request(ANSWER_WAIT, |connection, handle| {
             let mut options: HashMap<&str, Value<'_>> = HashMap::new();
@@ -276,7 +282,7 @@ impl Portal {
             connection.call_method(
                 Some(PORTAL_NAME),
                 PORTAL_PATH,
-                Some(SHORTCUTS_INTERFACE),
+                Some(interface),
                 "CreateSession",
                 &(options,),
             )

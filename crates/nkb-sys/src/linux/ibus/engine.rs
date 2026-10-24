@@ -4,18 +4,30 @@
 //!
 //! The engine does nothing but exist. Every key the person types while it is the global
 //! engine is handed back unconsumed, so the keyboard works as it did, and the one thing
-//! it ever does is the commit that `mod.rs` emits from its path.
+//! it ever does is the commit that `mod.rs` emits from its path. Two keys are the exception:
+//! `Escape`, which is the person asking for a send to stop, and, while the keys that clear a
+//! field are being sent (`keys.rs`), the one key of the recipe that is expected next, which
+//! the engine reports and takes when the hand holds a modifier (`OBS-229`).
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::Sender;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use zbus::zvariant::{OwnedObjectPath, StructureBuilder, Value};
 use zbus::{ObjectServer, interface};
 
 use super::Failed;
+use crate::linux_clearing_rules::{Expected, Judgement, judge_key};
 use crate::linux_ibus_rules::{is_plain_escape, is_release};
+
+/// The key the engine is waiting for, set by the send and read by the engine on every key.
+pub(super) type Gate = Arc<Mutex<Option<Expected>>>;
+
+/// Sets what the engine waits for next. Nothing, outside the dialogue of the recipe.
+pub(super) fn expect(gate: &Gate, expected: Option<Expected>) {
+    *gate.lock().unwrap_or_else(PoisonError::into_inner) = expected;
+}
 
 pub(super) const BUS: &str = "org.freedesktop.IBus";
 pub(super) const BUS_PATH: &str = "/org/freedesktop/IBus";
@@ -30,6 +42,9 @@ pub(super) enum Event {
     /// An input context took the focus, so a commit has somewhere to go. It also comes
     /// when the focus is on the desktop and not in a field (`OBS-219`).
     FocusIn,
+    /// The key the send waited for arrived, and this is what the engine found on it. Said
+    /// once per key, for its press.
+    Key(Judgement),
 }
 
 /// The object the daemon asks to make the engine, once it has been told to make ours the
@@ -38,16 +53,24 @@ pub(super) struct Factory {
     name: String,
     events: Sender<Event>,
     escape: Arc<AtomicBool>,
+    gate: Gate,
     made: AtomicU32,
 }
 
 impl Factory {
-    /// `escape` is set when the person presses `Escape` while the engine is the global one.
-    pub(super) fn new(name: String, events: Sender<Event>, escape: Arc<AtomicBool>) -> Self {
+    /// `escape` is set when the person presses `Escape` while the engine is the global one,
+    /// and `gate` holds the key of the recipe that is waited for, if one is.
+    pub(super) fn new(
+        name: String,
+        events: Sender<Event>,
+        escape: Arc<AtomicBool>,
+        gate: Gate,
+    ) -> Self {
         Self {
             name,
             events,
             escape,
+            gate,
             made: AtomicU32::new(0),
         }
     }
@@ -70,6 +93,7 @@ impl Factory {
         let engine = Engine {
             events: self.events.clone(),
             escape: Arc::clone(&self.escape),
+            gate: Arc::clone(&self.gate),
         };
         server.at(path.as_str(), engine).await?;
         server.at(path.as_str(), Service).await?;
@@ -81,6 +105,21 @@ impl Factory {
 struct Engine {
     events: Sender<Event>,
     escape: Arc<AtomicBool>,
+    gate: Gate,
+}
+
+impl Engine {
+    /// What the engine makes of the key the recipe waits for: told to the send for its press,
+    /// and taken when the hand holds a modifier the recipe does not have. Every other key is
+    /// handed back.
+    fn recipe_key(&self, keyval: u32, state: u32) -> bool {
+        let expected = *self.gate.lock().unwrap_or_else(PoisonError::into_inner);
+        let judged = judge_key(keyval, state, expected);
+        if judged != Judgement::Unrelated && !is_release(state) {
+            let _ = self.events.send(Event::Key(judged));
+        }
+        judged.taken()
+    }
 }
 
 // The daemon calls these on every engine. The focus matters here, and `Escape`, which is
@@ -90,7 +129,7 @@ struct Engine {
 impl Engine {
     fn process_key_event(&self, keyval: u32, _keycode: u32, state: u32) -> bool {
         if !is_plain_escape(keyval, state) {
-            return false;
+            return self.recipe_key(keyval, state);
         }
         // Taken whole, pressed and let go, so that the application does not get half of it
         // (`D96`). It is the person's again once this send is over, because so is the engine.
@@ -237,6 +276,98 @@ mod tests {
             signature(&engine_description("nkb-send-1").expect("a description")),
             "(sa{sv}ssssssssussssssss)"
         );
+    }
+
+    fn engine_with_gate() -> (Engine, Gate, std::sync::mpsc::Receiver<Event>) {
+        let (events, heard) = std::sync::mpsc::channel();
+        let gate: Gate = Arc::new(Mutex::new(None));
+        let engine = Engine {
+            events,
+            escape: Arc::new(AtomicBool::new(false)),
+            gate: Arc::clone(&gate),
+        };
+        (engine, gate, heard)
+    }
+
+    const HOME: u32 = 0xff50;
+    const CTRL: u32 = 1 << 2;
+    const RELEASED: u32 = 1 << 30;
+
+    #[test]
+    fn outside_the_dialogue_of_the_recipe_the_engine_takes_nothing_and_says_nothing() {
+        let (engine, _gate, heard) = engine_with_gate();
+        assert!(!engine.process_key_event(HOME, 0, CTRL));
+        assert!(!engine.process_key_event(HOME, 0, 0));
+        assert!(heard.try_recv().is_err());
+    }
+
+    #[test]
+    fn the_key_waited_for_is_told_to_the_send_and_taken_only_when_a_modifier_is_held() {
+        let (engine, gate, heard) = engine_with_gate();
+        expect(
+            &gate,
+            Some(Expected {
+                keysym: HOME,
+                shifted: false,
+            }),
+        );
+        assert!(!engine.process_key_event(HOME, 0, 0), "clean goes through");
+        assert!(matches!(heard.try_recv(), Ok(Event::Key(Judgement::Clean))));
+        assert!(
+            engine.process_key_event(HOME, 0, CTRL),
+            "held is taken, the document is safe"
+        );
+        assert!(matches!(
+            heard.try_recv(),
+            Ok(Event::Key(Judgement::Held("Ctrl")))
+        ));
+    }
+
+    #[test]
+    fn the_release_of_a_key_is_judged_as_its_press_but_said_once() {
+        let (engine, gate, heard) = engine_with_gate();
+        expect(
+            &gate,
+            Some(Expected {
+                keysym: HOME,
+                shifted: false,
+            }),
+        );
+        assert!(engine.process_key_event(HOME, 0, CTRL | RELEASED));
+        assert!(!engine.process_key_event(HOME, 0, RELEASED));
+        assert!(heard.try_recv().is_err(), "a release says nothing");
+    }
+
+    #[test]
+    fn every_other_key_goes_to_the_application_and_escape_is_still_the_persons() {
+        let (engine, gate, heard) = engine_with_gate();
+        expect(
+            &gate,
+            Some(Expected {
+                keysym: HOME,
+                shifted: false,
+            }),
+        );
+        assert!(!engine.process_key_event(0x61, 0, CTRL), "a letter");
+        assert!(!engine.process_key_event(0xffe3, 0, 0), "a modifier");
+        assert!(heard.try_recv().is_err());
+        assert!(engine.process_key_event(0xff1b, 0, 0), "Escape is taken");
+        assert!(engine.escape.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn a_gate_that_is_emptied_stops_the_judging() {
+        let (engine, gate, heard) = engine_with_gate();
+        expect(
+            &gate,
+            Some(Expected {
+                keysym: HOME,
+                shifted: false,
+            }),
+        );
+        expect(&gate, None);
+        assert!(!engine.process_key_event(HOME, 0, CTRL));
+        assert!(heard.try_recv().is_err());
     }
 
     #[test]
