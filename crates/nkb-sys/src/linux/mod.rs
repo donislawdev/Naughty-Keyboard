@@ -24,10 +24,13 @@
 //! portal of the desktop (`portal`) instead of grabbed, because the X server of a Wayland
 //! session never sees the keys of a window that is not an X client.
 //!
-//! - `bus` - the file socket of a bus of this machine, which `ibus` and `portal` both use,
+//! - `bus` - the file socket of a bus of this machine, which `ibus`, `portal` and `atspi` all use,
 //! - `ibus` - typing on a Wayland session, by committing text from an engine of ours,
-//! - `portal` - global shortcuts on a Wayland session, asked of the portal.
+//! - `portal` - global shortcuts on a Wayland session, asked of the portal,
+//! - `atspi` - the kind of control that holds the keyboard focus, asked of the bus of
+//!   accessibility on either kind of session.
 
+mod atspi;
 mod bus;
 mod connect;
 mod escape;
@@ -58,6 +61,12 @@ pub(crate) fn typing_refusal() -> Option<&'static str> {
     } else {
         connect::route_refusal()
     }
+}
+
+/// What holds the keyboard focus, from the bus of accessibility. The window is not needed:
+/// the bus names the window in front itself, which a Wayland session cannot do for us.
+pub(crate) fn focused_input() -> crate::field::FocusedInput {
+    atspi::focused_input()
 }
 
 /// Whether this program may type here right now.

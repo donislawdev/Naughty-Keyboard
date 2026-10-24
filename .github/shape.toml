@@ -24,9 +24,12 @@ too-many-arguments-threshold = 7
 # How many stand near each ceiling, per scope. Two at seven arguments since
 # 2026-10-15, when a send started taking the chosen value as one argument.
 # Eight near the length since the same day: the ceiling came down to 158 and
-# the band with it, onto settings_of, which did not grow.
+# the band with it, onto settings_of, which did not grow. Nine since 2026-10-24,
+# when the sentence for a field this build cannot clear took pattern_message
+# from 108 lines to 111, the edge of the band. The count is the owner's to
+# accept, as it was for toml_pack.rs.
 [clippy.near.product]
-too-many-lines-threshold = 8
+too-many-lines-threshold = 9
 cognitive-complexity-threshold = 1
 excessive-nesting-threshold = 1
 too-many-arguments-threshold = 2

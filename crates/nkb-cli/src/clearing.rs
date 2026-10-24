@@ -28,6 +28,7 @@ pub(crate) fn not_cleared(reason: SkipReason) -> String {
     match reason {
         SkipReason::Unconfirmed => CLEARING_SKIPPED.to_owned(),
         SkipReason::Terminal => CLEARING_SKIPPED_IN_TERMINAL.to_owned(),
+        SkipReason::NoClearingKeys => CLEARING_SKIPPED_NO_KEYS.to_owned(),
         SkipReason::ClosedToAccessibility => format!(
             "{CLEARING_SKIPPED_CLOSED_TO_ACCESSIBILITY} {}",
             nkb_adapters::i18n::closed_window_cause()
@@ -51,6 +52,11 @@ const CLEARING_SKIPPED: &str = "nkb send: not cleared first - the system does no
 /// text field here, so the sentence above would be false, and this one names
 /// the terminal instead.
 const CLEARING_SKIPPED_IN_TERMINAL: &str = "nkb send: not cleared first - this is a terminal, where the clearing keys go to the program running in it and could act beyond the line. The value went in on top of what was there.";
+
+/// What `nkb send --clear` says when this build types on the system and cannot press
+/// the clearing keys on it (Linux, `D145`). The focus may be a field, so the sentence
+/// above would be false.
+const CLEARING_SKIPPED_NO_KEYS: &str = "nkb send: not cleared first - this build cannot press the clearing keys on this system yet. The value went in on top of what was there.";
 
 /// What `nkb send --clear` says when the window shows the system nothing
 /// inside it (`D125`, `OBS-175`).
@@ -89,6 +95,11 @@ mod tests {
                 closed.contains("the next send has the line cleared"),
                 "{closed}"
             );
+        } else if cfg!(target_os = "linux") {
+            assert!(
+                closed.contains("the accessibility of the desktop is on"),
+                "{closed}"
+            );
         } else {
             assert!(
                 closed.contains("\"Prevent accessibility services from accessing your browser\"")
@@ -96,5 +107,13 @@ mod tests {
                 "{closed}"
             );
         }
+    }
+
+    #[test]
+    fn a_system_whose_clearing_keys_are_not_pressed_says_so_and_not_that_the_focus_is_no_field() {
+        let said = not_cleared(SkipReason::NoClearingKeys);
+        assert_eq!(said, CLEARING_SKIPPED_NO_KEYS);
+        assert!(said.contains("cannot press the clearing keys"), "{said}");
+        assert!(!said.contains("text field"), "{said}");
     }
 }

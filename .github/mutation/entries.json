@@ -11011,6 +11011,204 @@
       "replace": "self.down.iter_mut().find(|(_, _)| true)",
       "test": "linux_portal_rules::tests::the_shortcuts_are_held_each_on_its_own",
       "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1436",
+      "why": "a wait that ran out is taken for a bus that stopped, so a person who has not chosen is told there is no portal",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "Unavailable::Unreachable if waited_out => Unavailable::NoAnswer,",
+      "replace": "Unavailable::Unreachable if !waited_out => Unavailable::NoAnswer,",
+      "test": "linux_portal_rules::tests::a_wait_that_ran_out_is_a_portal_that_did_not_answer",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1437",
+      "why": "a bus that stopped before the wait ran out is told as a portal that did not answer, so a dead bus reads as a person who has not chosen",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "Unavailable::Unreachable if waited_out => Unavailable::NoAnswer,",
+      "replace": "Unavailable::Unreachable => Unavailable::NoAnswer,",
+      "test": "linux_portal_rules::tests::a_bus_that_stopped_before_the_wait_ran_out_stays_a_bus_that_did_not_answer",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1438",
+      "why": "every reason becomes the silence after a wait, so a portal that said no is told as one that said nothing",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "        other => other,\n",
+      "replace": "        _ => Unavailable::NoAnswer,\n",
+      "test": "linux_portal_rules::tests::a_reason_that_says_more_than_the_bus_stopped_is_kept_after_a_wait",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1439",
+      "why": "a state is read from the wrong side of the word, so a state that is set is not and one that is not set is",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "bits & (1 << (state % 32)) != 0",
+      "replace": "bits & (1 << (state % 32)) == 0",
+      "test": "linux_atspi_rules::tests::a_state_is_the_bit_of_its_number_in_the_words",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1440",
+      "why": "a terminal is any control but a terminal, so the clearing keys go to the program running in it",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "if code == role::TERMINAL {",
+      "replace": "if code != role::TERMINAL {",
+      "test": "linux_atspi_rules::tests::a_terminal_is_a_terminal_whatever_its_states_say",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1441",
+      "why": "a text field needs no editable state, so a read-only entry is cleared",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "if editable && TEXT_ROLES.contains(&code) {",
+      "replace": "if TEXT_ROLES.contains(&code) {",
+      "test": "linux_atspi_rules::tests::an_editable_entry_is_a_text_field_and_a_read_only_one_is_not_claimed",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1442",
+      "why": "a control that takes no text is claimed whatever its states say, so a send is refused on something that may take text",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "} else if !editable && NOT_TEXT_ROLES.contains(&code) {",
+      "replace": "} else if NOT_TEXT_ROLES.contains(&code) {",
+      "test": "linux_atspi_rules::tests::a_push_button_that_says_it_is_editable_is_not_a_field_either",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1443",
+      "why": "an editable combo box is a closed list, so a send is refused on a combo box that takes text",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "} else if !editable && code == role::COMBO_BOX {",
+      "replace": "} else if code == role::COMBO_BOX {",
+      "test": "linux_atspi_rules::tests::a_select_is_a_closed_list_and_an_editable_combo_box_is_left_alone",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1444",
+      "why": "a table cell is a role that takes text, so the clearing keys empty a row of a spreadsheet",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "    role::SECTION,\n    role::SPIN_BUTTON,\n    role::EDITBAR,",
+      "replace": "    role::SECTION,\n    56,\n    role::SPIN_BUTTON,\n    role::EDITBAR,",
+      "test": "linux_atspi_rules::tests::a_table_cell_and_a_role_nobody_knows_stay_unknown_even_when_editable",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1445",
+      "why": "a window that is not in front is looked into, so a stale focus in it is taken for the focus",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": ".is_some_and(|states| has(&states, state::ACTIVE))",
+      "replace": ".is_some_and(|states| !has(&states, state::ACTIVE))",
+      "test": "linux_atspi_rules::tests::a_window_not_in_front_is_not_looked_into",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1446",
+      "why": "an element that is gone can hold the focus, so a control that went away is classified",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "        if has(&states, state::DEFUNCT) {\n            continue;\n        }\n",
+      "replace": "",
+      "test": "linux_atspi_rules::tests::an_element_that_is_gone_does_not_hold_the_focus",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1447",
+      "why": "two windows in front with a focus each are guessed between, so the kind of a stale window is taken",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "Some(_) if !holders.is_empty() => Found::Several,",
+      "replace": "Some(_) if holders.is_empty() => Found::Several,",
+      "test": "linux_atspi_rules::tests::two_windows_in_front_with_a_focus_each_are_not_guessed_between",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1448",
+      "why": "the walk has no limit on the elements it visits, so a page of thousands is walked to its end",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "if *left == 0 || !tree.time_left() {",
+      "replace": "if !tree.time_left() {",
+      "test": "linux_atspi_rules::tests::the_walk_stops_at_the_most_elements_it_may_visit",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1449",
+      "why": "the walk does not look at the time, so a hung application holds a press",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "if *left == 0 || !tree.time_left() {",
+      "replace": "if *left == 0 {",
+      "test": "linux_atspi_rules::tests::the_walk_stops_when_the_time_is_out_and_does_not_guess",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1450",
+      "why": "a bus switched on is taken for one switched off, so a window that shows nothing is named for a cause that is not there",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "Found::NoWindow | Found::NoFocus if !switched_on => FocusedInput::ClosedToAccessibility,",
+      "replace": "Found::NoWindow | Found::NoFocus if switched_on => FocusedInput::ClosedToAccessibility,",
+      "test": "linux_atspi_rules::tests::a_window_in_front_of_an_application_that_shows_nothing_is_closed_while_the_bus_is_off",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1451",
+      "why": "an answer is kept past its moment, so a press a moment later is classified by the field before",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "now.saturating_duration_since(*at) < REUSE",
+      "replace": "now.saturating_duration_since(*at) <= REUSE",
+      "test": "linux_atspi_rules::tests::an_answer_is_kept_for_a_moment_and_then_asked_again",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1452",
+      "why": "a field is cleared on a system that cannot press the keys, so the clearing is asked for and the value is not sent",
+      "file": "crates/nkb-adapters/src/keyboard.rs",
+      "find": "nkb_sys::field::FocusedInput::TextField if !nkb_sys::can_press_chords() => {",
+      "replace": "nkb_sys::field::FocusedInput::TextField if nkb_sys::can_press_chords() => {",
+      "test": "keyboard::tests::only_a_confirmed_text_field_is_cleared",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1453",
+      "why": "a silence of the portal is told as a desktop without the portal, so a person who has not chosen is told nothing is offered",
+      "file": "crates/nkb-adapters/src/portal_shortcuts.rs",
+      "find": "Unavailable::NoAnswer => ShortcutsUnavailable::Desktop(DesktopRefusal::NoAnswer),",
+      "replace": "Unavailable::NoAnswer => ShortcutsUnavailable::Desktop(DesktopRefusal::NoPortal),",
+      "test": "portal_shortcuts::tests::every_reason_of_the_route_is_said_in_the_ports_words",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1454",
+      "why": "the sentence for a desktop that did not answer is the one for a desktop that offers nothing",
+      "file": "crates/nkb-adapters/src/i18n/registration.rs",
+      "find": "\"The desktop did not answer the request for shortcuts in time, so none will respond. Restart the palette to be asked again.\"",
+      "replace": "\"The desktop did not offer global shortcuts to programs, so the palette cannot be driven from the keyboard here.\"",
+      "test": "i18n::registration::tests::a_desktop_that_did_not_answer_is_not_said_to_have_no_way",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1455",
+      "why": "a system that cannot press the clearing keys refuses the send, so the value is not sent at all",
+      "file": "crates/nkb-app/src/send_value.rs",
+      "find": "            Err(KeystrokeError::NoClearingKeys) => {\n                ClearingOutcome::Skipped(SkipReason::NoClearingKeys)\n            }\n",
+      "replace": "            Err(error @ KeystrokeError::NoClearingKeys) => return SendOutcome::NotCleared { error },\n",
+      "test": "send_value::tests::a_system_that_cannot_press_the_clearing_keys_gets_the_value_uncleared_and_the_outcome_names_it",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1456",
+      "why": "the skip for the clearing keys is told with the sentence of an unconfirmed field, so a tester is told the field is not one",
+      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "find": "            Some(Message::ClearingSkippedNoKeys)\n",
+      "replace": "            Some(Message::ClearingSkipped)\n",
+      "test": "advance_sequence::tests::a_system_that_cannot_press_the_clearing_keys_gets_the_value_uncleared_and_says_why",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1457",
+      "why": "nkb send says the focus is no text field when it is the keys it cannot press",
+      "file": "crates/nkb-cli/src/clearing.rs",
+      "find": "SkipReason::NoClearingKeys => CLEARING_SKIPPED_NO_KEYS.to_owned(),",
+      "replace": "SkipReason::NoClearingKeys => CLEARING_SKIPPED.to_owned(),",
+      "test": "clearing::tests::a_system_whose_clearing_keys_are_not_pressed_says_so_and_not_that_the_focus_is_no_field",
+      "runner": "rust:nkb-cli:bin=nkb"
     }
   ]
 }

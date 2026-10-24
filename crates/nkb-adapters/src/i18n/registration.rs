@@ -154,6 +154,9 @@ fn pattern_desktop(refusal: DesktopRefusal) -> &'static str {
         DesktopRefusal::Closed => {
             "The window of the system was closed without choosing shortcuts, so none will respond. Restart the palette to be asked again."
         }
+        DesktopRefusal::NoAnswer => {
+            "The desktop did not answer the request for shortcuts in time, so none will respond. Restart the palette to be asked again."
+        }
         DesktopRefusal::Ended { .. } => {
             "The desktop ended the request for shortcuts, so none will respond. The system returned code {code}."
         }
@@ -263,9 +266,20 @@ pub fn ended(ended: Ended) -> Option<String> {
     clippy::panic,
     reason = "a failed expectation in a test is a failed test"
 )]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use crate::shortcuts::default_bindings;
+
+    /// Every refusal of the desktop once, for the tests that hold a sentence of its own for
+    /// each: here, and in the table of every sentence the palette can say (`i18n.rs`).
+    pub(in crate::i18n) const EVERY_REFUSAL: [DesktopRefusal; 6] = [
+        DesktopRefusal::NeedsEntry,
+        DesktopRefusal::NoPortal,
+        DesktopRefusal::Closed,
+        DesktopRefusal::NoAnswer,
+        DesktopRefusal::Ended { code: 2 },
+        DesktopRefusal::NothingGiven,
+    ];
 
     /// A shortcut the desktop did not give is said once for its action, and the
     /// sentence names no chord: the chord asked for is not one anybody holds.
@@ -319,22 +333,26 @@ mod tests {
     /// where a value was to go, and the code of an ended request is in it.
     #[test]
     fn every_refusal_of_the_desktop_is_said_in_words_of_its_own() {
-        let said: Vec<String> = [
-            DesktopRefusal::NeedsEntry,
-            DesktopRefusal::NoPortal,
-            DesktopRefusal::Closed,
-            DesktopRefusal::Ended { code: 2 },
-            DesktopRefusal::NothingGiven,
-        ]
-        .map(|refusal| shortcuts_unavailable(&ShortcutsUnavailable::Desktop(refusal)))
-        .into();
+        let said: Vec<String> = EVERY_REFUSAL
+            .map(|refusal| shortcuts_unavailable(&ShortcutsUnavailable::Desktop(refusal)))
+            .into();
         for (index, one) in said.iter().enumerate() {
             assert!(!one.contains('{'), "a gap is left in: {one}");
             for other in &said[index + 1..] {
                 assert_ne!(one, other);
             }
         }
-        assert!(said[3].contains("code 2"), "{}", said[3]);
+        assert!(said[4].contains("code 2"), "{}", said[4]);
+    }
+
+    /// A desktop that took the request and said nothing is not a desktop without the way,
+    /// and the person who has not chosen is told to ask again, not that nothing is offered.
+    #[test]
+    fn a_desktop_that_did_not_answer_is_not_said_to_have_no_way() {
+        let said = shortcuts_unavailable(&ShortcutsUnavailable::Desktop(DesktopRefusal::NoAnswer));
+        assert!(said.contains("did not answer"), "{said}");
+        assert!(said.contains("Restart the palette"), "{said}");
+        assert!(!said.contains("offer"), "{said}");
     }
 
     /// The sentence that says the desktop does not know the program also says what

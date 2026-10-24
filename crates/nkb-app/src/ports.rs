@@ -388,6 +388,10 @@ pub enum KeystrokeError {
     /// because its cause is known: the caller sends the value without clearing
     /// and names the setting.
     ClosedToAccessibility,
+    /// This build types on this system but cannot press the clearing keys in another
+    /// application (Linux, where the keys are another route than the text, `D145`). No
+    /// key was pressed, so the caller sends the value without clearing and says why.
+    NoClearingKeys,
 }
 
 impl fmt::Display for KeystrokeError {
@@ -408,6 +412,7 @@ impl fmt::Display for KeystrokeError {
             Self::FieldUnconfirmed => f.write_str("field-unconfirmed"),
             Self::InTerminal => f.write_str("in-terminal"),
             Self::ClosedToAccessibility => f.write_str("closed-to-accessibility"),
+            Self::NoClearingKeys => f.write_str("no-clearing-keys"),
         }
     }
 }
@@ -1122,6 +1127,10 @@ pub enum DesktopRefusal {
     NoPortal,
     /// The person closed the window of the system without choosing.
     Closed,
+    /// The desktop took the request and did not answer it in time. Told apart from
+    /// [`DesktopRefusal::NoPortal`] because the desktop does offer the way, and the
+    /// person may simply not have chosen yet.
+    NoAnswer,
     /// The desktop ended the request, with the code it gave.
     Ended { code: u32 },
     /// The desktop answered and gave none of the shortcuts asked for.
@@ -1147,6 +1156,7 @@ impl fmt::Display for DesktopRefusal {
             Self::NeedsEntry => f.write_str("the desktop does not know this program yet"),
             Self::NoPortal => f.write_str("the desktop did not offer global shortcuts to programs"),
             Self::Closed => f.write_str("the window of the system was closed without choosing"),
+            Self::NoAnswer => f.write_str("the desktop did not answer the request in time"),
             Self::Ended { code } => write!(f, "the desktop ended the request with code {code}"),
             Self::NothingGiven => f.write_str("the desktop gave none of the shortcuts asked for"),
         }
@@ -1397,6 +1407,7 @@ mod tests {
             DesktopRefusal::NeedsEntry,
             DesktopRefusal::NoPortal,
             DesktopRefusal::Closed,
+            DesktopRefusal::NoAnswer,
             DesktopRefusal::Ended { code: 2 },
             DesktopRefusal::NothingGiven,
         ];

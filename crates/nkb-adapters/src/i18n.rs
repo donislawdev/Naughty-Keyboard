@@ -210,6 +210,9 @@ fn pattern_message(message: &Message) -> &'static str {
             "Not cleared first: this is a terminal, where the clearing keys go to the program running in it and could act beyond the line. The value went in on top of what was there."
         }
         // `D125`, `D139`, ux-spec.md 6 A. `{cause}` is the program's own, per system.
+        Message::ClearingSkippedNoKeys => {
+            "Not cleared first: this build cannot press the clearing keys on this system yet, so the value went in on top of what was there."
+        }
         Message::ClearingSkippedClosedToAccessibility => {
             "Not cleared first: this window shows the system nothing inside it, so the clearing keys could reach beyond the field, and the value went in on top of what was there. {cause}"
         }
@@ -318,6 +321,7 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
         | Message::CapsLockOn
         | Message::ClearingSkipped
         | Message::ClearingSkippedInTerminal
+        | Message::ClearingSkippedNoKeys
         | Message::ClipboardBusy
         | Message::NoTarget
         | Message::ClearingFailed
@@ -1100,6 +1104,7 @@ mod tests {
             Message::NoTextField,
             Message::ClearingSkipped,
             Message::ClearingSkippedInTerminal,
+            Message::ClearingSkippedNoKeys,
             Message::ClearingSkippedClosedToAccessibility,
             Message::MayBeAltered(Substitutions {
                 capitalization: true,
@@ -1212,14 +1217,8 @@ mod tests {
         }));
         out.push(shortcuts_unavailable(&ShortcutsUnavailable::CouldNotStart));
         out.extend(
-            [
-                DesktopRefusal::NeedsEntry,
-                DesktopRefusal::NoPortal,
-                DesktopRefusal::Closed,
-                DesktopRefusal::Ended { code: 2 },
-                DesktopRefusal::NothingGiven,
-            ]
-            .map(|refusal| shortcuts_unavailable(&ShortcutsUnavailable::Desktop(refusal))),
+            registration::tests::EVERY_REFUSAL
+                .map(|refusal| shortcuts_unavailable(&ShortcutsUnavailable::Desktop(refusal))),
         );
         out.extend(
             [
@@ -1498,10 +1497,11 @@ mod tests {
             Message::MayBeAltered(_) => 35,
             Message::CapsLockOn => 36,
             Message::HandedOver => 37,
+            Message::ClearingSkippedNoKeys => 38,
         }
     }
 
-    const SLOTS: usize = 38;
+    const SLOTS: usize = 39;
 
     #[test]
     fn every_message_variant_is_listed_here() {

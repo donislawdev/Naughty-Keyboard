@@ -412,6 +412,11 @@ pub enum Message {
     /// [`Message::ClearingSkipped`], because this cause is known and the
     /// tester can change it: the sentence names the setting.
     ClearingSkippedClosedToAccessibility,
+    /// The value went in, but the field was NOT cleared first, because this build cannot
+    /// press the clearing keys on this system, though it types. A separate sentence from
+    /// [`Message::ClearingSkipped`], because the focus may well be a field and saying the
+    /// system does not report one would be false.
+    ClearingSkippedNoKeys,
     /// Clipboard mode is on because the tester asked for it: values go to the
     /// clipboard, replacing what was there. Once, at the start, and again each
     /// time the tester turns the mode on in the palette (`D99`).
@@ -1362,6 +1367,9 @@ fn skipped_clearing(clearing: ClearingOutcome) -> Option<Message> {
         ClearingOutcome::Skipped(SkipReason::ClosedToAccessibility) => {
             Some(Message::ClearingSkippedClosedToAccessibility)
         }
+        ClearingOutcome::Skipped(SkipReason::NoClearingKeys) => {
+            Some(Message::ClearingSkippedNoKeys)
+        }
         ClearingOutcome::Done | ClearingOutcome::NotAsked => None,
     }
 }
@@ -1405,9 +1413,8 @@ fn after_clearing(error: KeystrokeError) -> (Event, Message) {
         // nothing was sent - the careful sentence, which asks to check the field.
         KeystrokeError::FieldUnconfirmed
         | KeystrokeError::InTerminal
-        | KeystrokeError::ClosedToAccessibility => {
-            (Event::InsertionRefused, Message::ClearingFailed)
-        }
+        | KeystrokeError::ClosedToAccessibility
+        | KeystrokeError::NoClearingKeys => (Event::InsertionRefused, Message::ClearingFailed),
     }
 }
 
@@ -2759,6 +2766,19 @@ mod tests {
         );
         let sent = outcome.sent.expect("the value went in");
         assert!(!sent.cleared);
+        assert_eq!(advance.counter(), Some((1, 3)));
+    }
+
+    #[test]
+    fn a_system_that_cannot_press_the_clearing_keys_gets_the_value_uncleared_and_says_why() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_keys(FakeKeys::failing(KeystrokeError::NoClearingKeys));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+
+        assert_eq!(*kit.direct.handed.borrow(), vec!["alpha"]);
+        assert!(kit.by_clipboard.handed.borrow().is_empty());
+        assert_eq!(outcome.messages, vec![Message::ClearingSkippedNoKeys]);
+        assert!(!outcome.sent.expect("the value went in").cleared);
         assert_eq!(advance.counter(), Some((1, 3)));
     }
 
