@@ -95,6 +95,16 @@ pub enum PaletteLabel {
     /// desktop that chooses the chords gave none for it, or gave one in words
     /// this palette does not read. It names the action instead, and claims no key.
     NoValueYetUnnamed,
+    /// `Message::CounterKept` when the palette cannot name the shortcut that
+    /// restarts the pack (`D145` point 69, `OBS-225`): it names the action and claims
+    /// no key, as `NoValueYetUnnamed` does.
+    CounterKeptUnnamed,
+    /// `Message::NoPack` when the palette cannot name the shortcut that opens the
+    /// value window.
+    NoPackUnnamed,
+    /// `Message::ReportBusy` when the palette cannot name the shortcut that copies
+    /// the report block.
+    ReportBusyUnnamed,
     /// The palette's shortcuts are given back to the system while the
     /// shortcuts window is open (`ux-spec.md` 5.4), so a press reaches the
     /// application in front and no value goes out. Said in the message band
@@ -284,6 +294,15 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         }
         PaletteLabel::NoValueYetUnnamed => {
             "Nothing sent yet. Put the cursor in any field and use the desktop's shortcut for \"{action}\", if it has one."
+        }
+        PaletteLabel::CounterKeptUnnamed => {
+            "New field - the counter is still at {done}/{total}. Use the desktop's shortcut for \"{action}\" to start this pack from the beginning, if it has one."
+        }
+        PaletteLabel::NoPackUnnamed => {
+            "No pack is chosen, so there is nothing to send. Use the desktop's shortcut for \"{action}\" to choose one, if it has one."
+        }
+        PaletteLabel::ReportBusyUnnamed => {
+            "Another application is holding the clipboard, so the report block was not copied. Use the desktop's shortcut for \"{action}\" again in a moment, if it has one."
         }
         PaletteLabel::ShortcutsPaused => "Shortcuts are paused while the Shortcuts window is open.",
         PaletteLabel::WaitingForTheDesktop => {
@@ -544,6 +563,44 @@ pub fn no_value_yet(next_value: Option<HotkeyChord>) -> String {
     }
 }
 
+/// The sentence of `message` that names a shortcut, for the one case where the
+/// table cannot name it: the desktop that chooses the chords gave none for the
+/// action, or gave it in words the palette does not read (`D145` point 69,
+/// `OBS-225`). The sentence then names the action and claims no key. `None` for
+/// every other message, and for these three while their shortcut can be named - the
+/// caller says it as it always did.
+pub(super) fn message_without_key(message: &Message, bindings: &Bindings) -> Option<String> {
+    let (label, action, counter) = match message {
+        Message::CounterKept { done, total } => (
+            PaletteLabel::CounterKeptUnnamed,
+            HotkeyAction::RestartPack,
+            (done.to_string(), total.to_string()),
+        ),
+        Message::NoPack => (
+            PaletteLabel::NoPackUnnamed,
+            HotkeyAction::OpenPacks,
+            (String::new(), String::new()),
+        ),
+        Message::ReportBusy => (
+            PaletteLabel::ReportBusyUnnamed,
+            HotkeyAction::CopyReport,
+            (String::new(), String::new()),
+        ),
+        _ => return None,
+    };
+    if bindings.named(action).is_some() {
+        return None;
+    }
+    Some(fill(
+        pattern_palette_label(label),
+        &[
+            ("done", &counter.0),
+            ("total", &counter.1),
+            ("action", action_name(action)),
+        ],
+    ))
+}
+
 /// Which half of a pair a value is, in the words the palette writes beside it.
 #[must_use]
 pub fn pair_half(half: PairHalf) -> &'static str {
@@ -618,6 +675,14 @@ mod tests {
     const NEXT_VALUE: HotkeyChord = nkb_core::hotkeys::DEFAULT_BINDINGS[0].1;
 
     #[test]
+    fn a_recipe_reads_the_way_the_sketch_draws_it() {
+        // The sketch in `ux-spec.md` 2, less the digit grouping - see `recipe`.
+        assert_eq!(recipe(100_000, "a"), "100000 \u{D7} \"a\"");
+        // A unit holding braces is copied, never substituted a second time.
+        assert_eq!(recipe(2, "{count}"), "2 \u{D7} \"{count}\"");
+    }
+
+    #[test]
     fn the_bands_name_the_shortcut_where_there_is_one() {
         assert_eq!(
             no_value_yet(Some(NEXT_VALUE)),
@@ -656,5 +721,60 @@ mod tests {
         ] {
             assert!(!text.contains('+'), "a key stands in: {text}");
         }
+    }
+
+    fn counter_kept() -> Message {
+        Message::CounterKept { done: 3, total: 12 }
+    }
+
+    fn defaults() -> Bindings {
+        nkb_core::hotkeys::Bindings::defaults(crate::shortcuts::CONVENTION)
+    }
+
+    /// The three sentences that name a restart, find or copy shortcut say what they
+    /// always said while there is one to name (`OBS-225`).
+    #[test]
+    fn a_sentence_with_a_key_to_name_is_left_to_the_ordinary_pattern() {
+        for message in [counter_kept(), Message::NoPack, Message::ReportBusy] {
+            assert_eq!(message_without_key(&message, &defaults()), None);
+        }
+    }
+
+    /// And name the action, with no key, once the table marks it unnamed. Another
+    /// action unnamed changes nothing, and a message that names no key is never
+    /// touched.
+    #[test]
+    fn a_sentence_whose_shortcut_cannot_be_named_names_the_action_and_claims_no_key() {
+        let unnamed = |action| defaults().unnamed(&[action]);
+        assert_eq!(
+            message_without_key(&counter_kept(), &unnamed(HotkeyAction::RestartPack)).as_deref(),
+            Some(
+                "New field - the counter is still at 3/12. Use the desktop's shortcut for \"Restart pack\" to start this pack from the beginning, if it has one."
+            )
+        );
+        assert_eq!(
+            message_without_key(&Message::NoPack, &unnamed(HotkeyAction::OpenPacks)).as_deref(),
+            Some(
+                "No pack is chosen, so there is nothing to send. Use the desktop's shortcut for \"Find a value\" to choose one, if it has one."
+            )
+        );
+        assert_eq!(
+            message_without_key(&Message::ReportBusy, &unnamed(HotkeyAction::CopyReport))
+                .as_deref(),
+            Some(
+                "Another application is holding the clipboard, so the report block was not copied. Use the desktop's shortcut for \"Copy report block\" again in a moment, if it has one."
+            )
+        );
+        assert_eq!(
+            message_without_key(&Message::NoPack, &unnamed(HotkeyAction::RestartPack)),
+            None
+        );
+        assert_eq!(
+            message_without_key(
+                &Message::NothingBefore,
+                &defaults().unnamed(&HotkeyAction::ALL)
+            ),
+            None
+        );
     }
 }

@@ -677,13 +677,17 @@ pub const fn default_bindings(
 /// below, and [`Bindings::with`], which keeps both properties. So
 /// [`Bindings::chord`] needs no `Option`, and registering never reports one
 /// action as `Taken` against another of our own. [`Bindings::as_given`] is the
-/// table for WORDS only: it keeps the first property and not the second.
+/// table for WORDS only: it keeps the first property and not the second, and
+/// [`Bindings::unnamed`] marks the actions whose chord those words must not name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bindings {
     /// The convention these bindings follow: it decides which chords a layout
     /// is asked about ([`Convention::can_type`]).
     convention: Convention,
     table: [(HotkeyAction, HotkeyChord); HotkeyAction::COUNT],
+    /// Which entries of `table`, by position, hold a chord that is no key anyone
+    /// has: set only by [`Bindings::unnamed`].
+    unnamed: [bool; HotkeyAction::COUNT],
 }
 
 impl Bindings {
@@ -693,6 +697,7 @@ impl Bindings {
         Self {
             convention,
             table: *default_bindings(convention),
+            unnamed: [false; HotkeyAction::COUNT],
         }
     }
 
@@ -732,6 +737,33 @@ impl Bindings {
             }
         }
         Self { table, ..self }
+    }
+
+    /// These bindings with the shortcuts of `actions` marked as ones a sentence must
+    /// not name: a desktop that chooses the chords gave none for them, or gave them in
+    /// words that are no chord of ours (`D145` points 67 and 69). The chord stays in
+    /// the table, because [`Bindings::chord`] answers for every action. It is what
+    /// was asked for and nobody holds it, so [`Bindings::named`] does not give it out.
+    #[must_use]
+    pub fn unnamed(mut self, actions: &[HotkeyAction]) -> Self {
+        for ((action, _), flag) in self.table.iter().zip(self.unnamed.iter_mut()) {
+            if actions.contains(action) {
+                *flag = true;
+            }
+        }
+        self
+    }
+
+    /// The chord of an action, where a sentence may name it as the key that does
+    /// the action: `None` for an action [`Bindings::unnamed`] marked.
+    #[must_use]
+    pub fn named(&self, action: HotkeyAction) -> Option<HotkeyChord> {
+        self.table
+            .iter()
+            .zip(self.unnamed.iter())
+            .find_map(|((candidate, chord), unnamed)| {
+                (*candidate == action && !*unnamed).then_some(*chord)
+            })
     }
 
     /// Why a keyboard layout of this system refuses `chord` as a global
@@ -1372,6 +1404,42 @@ mod tests {
         assert!(alone.problem().is_some(), "a chord the file would refuse");
         assert_eq!(bindings.chord(HotkeyAction::PreviousValue), shared);
         assert_eq!(bindings.chord(HotkeyAction::NextValue), shared);
+    }
+
+    /// An action a sentence must not name has no named chord, though it keeps the one
+    /// asked for, and no other action is touched.
+    #[test]
+    fn an_unnamed_action_gives_no_chord_to_a_sentence_and_the_rest_do() {
+        for action in HotkeyAction::ALL {
+            assert_eq!(DEFAULTS.named(action), Some(DEFAULTS.chord(action)));
+        }
+        let bindings = DEFAULTS.unnamed(&[HotkeyAction::RestartPack, HotkeyAction::CopyReport]);
+        assert_eq!(bindings.named(HotkeyAction::RestartPack), None);
+        assert_eq!(bindings.named(HotkeyAction::CopyReport), None);
+        for action in HotkeyAction::ALL {
+            assert_eq!(bindings.chord(action), DEFAULTS.chord(action));
+            if action != HotkeyAction::RestartPack && action != HotkeyAction::CopyReport {
+                assert_eq!(bindings.named(action), Some(DEFAULTS.chord(action)));
+            }
+        }
+        assert_eq!(
+            DEFAULTS.unnamed(&[]),
+            DEFAULTS,
+            "nothing marked, nothing moved"
+        );
+    }
+
+    /// The mark follows the table through a chord a desktop gave: the chord is
+    /// replaced and the action stays unnamed only if it was marked.
+    #[test]
+    fn the_mark_is_set_on_the_table_the_desktop_gave_and_only_there() {
+        let k = chord(true, false, true, false, HotkeyKey::K);
+        let given = DEFAULTS.as_given(&[(HotkeyAction::PreviousValue, k)]);
+        assert_eq!(given.named(HotkeyAction::PreviousValue), Some(k));
+        let marked = given.unnamed(&[HotkeyAction::PreviousValue]);
+        assert_eq!(marked.named(HotkeyAction::PreviousValue), None);
+        assert_eq!(marked.chord(HotkeyAction::PreviousValue), k);
+        assert_eq!(given.named(HotkeyAction::PreviousValue), Some(k));
     }
 
     #[test]

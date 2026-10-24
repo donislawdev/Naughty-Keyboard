@@ -332,7 +332,9 @@ pub struct InUseNow {
     pub next: Option<String>,
     /// The restart shortcut of the table in effect, which the window's restart
     /// row names at its end (`UX-GUI-007`). Here because the table lives with
-    /// the worker and changes when the shortcuts window closes.
+    /// the worker and changes when the shortcuts window closes. `None` where the
+    /// table cannot name one: a desktop that chose the chords left it out or gave it
+    /// in other words (`OBS-225`).
     pub restart: Option<HotkeyChord>,
     /// The values chosen last in the value window, from any pack, the most
     /// recent first (`UX-GUI-016`, `D106`) - the list itself, not a copy:
@@ -359,7 +361,7 @@ fn publish(in_use: &InUse, sequence: &AdvanceSequence, bindings: &Bindings) {
     if let Ok(mut held) = in_use.lock() {
         held.pack = sequence.pack_id().map(str::to_owned);
         held.next = next_id(sequence.upcoming().as_ref());
-        held.restart = Some(bindings.chord(HotkeyAction::RestartPack));
+        held.restart = bindings.named(HotkeyAction::RestartPack);
     }
 }
 
@@ -2485,6 +2487,14 @@ mod tests {
             Some(&nkb_app::UpcomingValue::EndOfPack { total: 12 }),
         );
         assert_eq!(super::in_use_now(&slot).next, None);
+
+        // `OBS-225`: a restart shortcut the table cannot name is not named by the row.
+        super::publish(
+            &slot,
+            &on("whitespace"),
+            &mine.unnamed(&[HotkeyAction::RestartPack]),
+        );
+        assert_eq!(super::in_use_now(&slot).restart, None);
     }
 
     fn value_key(pack: &str, value: &str) -> ValueKey {
