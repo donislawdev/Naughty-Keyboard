@@ -78,7 +78,7 @@ fn both_ways_of_meeting_the_field_stand_on_one_switch_and_the_one_in_effect_is_f
     let palette = Palette::new().expect("the palette must build");
     palette.set_pack("whitespace".into());
     palette.set_counter("3 / 12".into());
-    palette.set_shortcuts_link("Change shortcuts".into());
+    palette.set_shortcuts_links(ways(&["Change shortcuts"]));
     nkb_gui::header_links::show(&palette);
     palette.set_route_label("Send by".into());
     palette.set_route_options(ways(&ROUTE));
@@ -92,7 +92,7 @@ fn both_ways_of_meeting_the_field_stand_on_one_switch_and_the_one_in_effect_is_f
     let count = Rc::clone(&others);
     palette.on_choose_route(move |_| *count.borrow_mut() += 1);
     let count = Rc::clone(&others);
-    palette.on_open_shortcuts(move || *count.borrow_mut() += 1);
+    palette.on_open_shortcuts(move |_| *count.borrow_mut() += 1);
     palette.show().expect("the palette must show");
     let clicks = || (asked.borrow().clone(), *others.borrow());
 

@@ -249,7 +249,7 @@
       "file": "crates/nkb-adapters/src/i18n/registration.rs",
       "find": "        ShortcutRegistration::Registered => None,",
       "replace": "        ShortcutRegistration::Registered => Some(\"Registered.\"),",
-      "test": "i18n::tests::the_two_silent_outcomes_stay_silent",
+      "test": "i18n::registration::tests::the_two_silent_outcomes_stay_silent",
       "runner": "rust:nkb-adapters:lib"
     },
     {
@@ -310,8 +310,8 @@
       "id": "M55",
       "why": "the sentence about a broken promise lands at the END of the message band - a tester reading from the top sees 'end of pack' before learning the palette took the focus",
       "file": "crates/nkb-gui/src/live/view.rs",
-      "find": "        messages.insert(0, line);",
-      "replace": "        messages.push(line);",
+      "find": "    if let Some(line) = held_back {\n        messages.insert(0, line);",
+      "replace": "    if let Some(line) = held_back {\n        messages.push(line);",
       "test": "live::tests::a_standing_sentence_leads_every_message_band",
       "runner": "rust:nkb-gui:lib"
     },
@@ -1659,15 +1659,15 @@
       "id": "M323",
       "why": "the new table registers before the old one is released - every unchanged chord comes back Taken against ourselves",
       "file": "crates/nkb-gui/src/live/hold.rs",
-      "find": "        self.holding = Holding::Lost;\n        self.registered.clear();\n        match self.desktop.clone() {",
-      "replace": "        self.registered.clear();\n        match self.desktop.clone() {",
+      "find": "        self.holding = Holding::Lost;\n        self.needs_entry = false;\n        self.registered.clear();\n        match self.desktop.clone() {",
+      "replace": "        self.needs_entry = false;\n        self.registered.clear();\n        match self.desktop.clone() {",
       "test": "live::tests::a_change_while_held_is_taken_at_once_releasing_the_old_set_first",
       "runner": "rust:nkb-gui:lib"
     },
     {
       "id": "M324",
       "why": "a resume registers the default table instead of the one in the settings - a change from the window does not work until a restart",
-      "file": "crates/nkb-gui/src/live.rs",
+      "file": "crates/nkb-gui/src/live/taking.rs",
       "find": "        let (bindings, refused) = self.in_effect();",
       "replace": "        let (bindings, refused) = (self.defaults, Vec::<SettingsMessage>::new());",
       "test": "live::tests::a_change_while_paused_is_tried_saved_told_and_taken_on_resume",
@@ -1676,7 +1676,7 @@
     {
       "id": "M325",
       "why": "a resume does not refresh the hint bar and the empty value band - the palette names the old shortcut",
-      "file": "crates/nkb-gui/src/live.rs",
+      "file": "crates/nkb-gui/src/live/taking.rs",
       "find": "        lines.extend(self.take(bindings));\n        let legend = self.naming(bindings);\n        self.view(lines, ValueBand::Keep, Some(legend))",
       "replace": "        lines.extend(self.take(bindings));\n        let _ = self.naming(bindings);\n        self.view(lines, ValueBand::Keep, None)",
       "test": "live::tests::a_change_while_paused_is_tried_saved_told_and_taken_on_resume",
@@ -1685,7 +1685,7 @@
     {
       "id": "M326",
       "why": "a resume does not replace the table in memory - sentences name the shortcut from before the change",
-      "file": "crates/nkb-gui/src/live.rs",
+      "file": "crates/nkb-gui/src/live/taking.rs",
       "find": "        self.memory.bindings.set(bindings);",
       "replace": "        let _ = bindings;",
       "test": "live::tests::a_change_while_paused_is_tried_saved_told_and_taken_on_resume",
@@ -1695,8 +1695,8 @@
       "id": "M327",
       "why": "the palette does not say the shortcuts are paused - it looks ready and does not answer (rule 1)",
       "file": "crates/nkb-gui/src/live/view.rs",
-      "find": "    if let Some(label) = held_back {",
-      "replace": "    if let Some(label) = None::<PaletteLabel> {",
+      "find": "    if let Some(line) = held_back {",
+      "replace": "    if let Some(line) = None::<String> {",
       "test": "live::hold::tests::while_paused_every_view_says_so_and_after_a_resume_none_does",
       "runner": "rust:nkb-gui:lib"
     },
@@ -1857,8 +1857,8 @@
       "id": "M345",
       "why": "the link under the hint bar asks for the pack window instead of the shortcuts window - it lights up under the pointer and opens the wrong one",
       "file": "crates/nkb-gui/ui/screens/palette.slint",
-      "find": "            open-shortcuts => {\n                root.open-shortcuts();",
-      "replace": "            open-shortcuts => {\n                root.open-packs();",
+      "find": "            open-shortcuts(place) => {\n                root.open-shortcuts(place);",
+      "replace": "            open-shortcuts(place) => {\n                root.open-packs();",
       "test": "the_palette_links_answer_the_pointer_and_open_their_windows",
       "runner": "rust:nkb-gui:palette_opener"
     },
@@ -10242,8 +10242,8 @@
       "id": "M1350",
       "why": "the palette does not say it waits for the desktop, so it looks ready and answers no press",
       "file": "crates/nkb-gui/src/live/hold.rs",
-      "find": "Holding::Asking { .. } => Some(PaletteLabel::WaitingForTheDesktop),",
-      "replace": "Holding::Asking { .. } => None,",
+      "find": "Holding::Asking { .. } => PaletteLabel::WaitingForTheDesktop,",
+      "replace": "Holding::Asking { .. } => return None,",
       "test": "live::hold::tests::a_desktop_is_asked_without_waiting_and_every_view_says_it_is_waited_on",
       "runner": "rust:nkb-gui:lib"
     },
@@ -10430,10 +10430,181 @@
     {
       "id": "M1371",
       "why": "the sentences of the palette keep naming the chords that were asked for after the desktop answered",
-      "file": "crates/nkb-gui/src/live.rs",
+      "file": "crates/nkb-gui/src/live/taking.rs",
       "find": "self.memory.bindings.set(shown);",
       "replace": "let _ = &shown;",
       "test": "live::hold::tests::what_the_desktop_gave_is_what_the_words_of_the_palette_name",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1372",
+      "why": "a click on the link that makes the entry is carried out although the desktop never said it does not know the program",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "        (self.needs_entry && !entry.ours()).then(|| entry.make())",
+      "replace": "        (!entry.ours()).then(|| entry.make())",
+      "test": "live::hold::tests::a_click_that_comes_late_changes_nothing",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1373",
+      "why": "the entry is taken away while the person is still choosing in the window of the system, which that window would outlive",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "        if self.asking_now() || !entry.ours() {",
+      "replace": "        if !entry.ours() {",
+      "test": "live::hold::tests::a_desktop_that_does_not_know_the_program_is_offered_the_entry_and_asked_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1374",
+      "why": "an entry taken away leaves the shortcuts held, so the palette claims a route it has taken the ground from",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "        if news == EntryNews::TakenAway && matches!(self.holding, Holding::Held(_)) {",
+      "replace": "        if false {",
+      "test": "live::hold::tests::taking_the_entry_away_lets_the_shortcuts_go_and_offers_it_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1375",
+      "why": "after the entry is taken away the offer to make it again is not made",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "            self.registered.clear();\n            self.needs_entry = true;\n        }\n        Some(news)",
+      "replace": "            self.registered.clear();\n            self.needs_entry = false;\n        }\n        Some(news)",
+      "test": "live::hold::tests::taking_the_entry_away_lets_the_shortcuts_go_and_offers_it_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1376",
+      "why": "a desktop that does not know the program is said once like any refusal, so the offer is gone from the next view",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "            Err(ShortcutsUnavailable::Desktop(DesktopRefusal::NeedsEntry))\n                if self.entry.is_some() =>",
+      "replace": "            Err(ShortcutsUnavailable::Desktop(DesktopRefusal::NeedsEntry))\n                if false =>",
+      "test": "live::hold::tests::a_desktop_that_does_not_know_the_program_is_offered_the_entry_and_asked_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1377",
+      "why": "the link that makes the entry is offered again although the entry is in place",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "            if self.needs_entry && !ours {",
+      "replace": "            if self.needs_entry {",
+      "test": "live::hold::tests::an_entry_in_place_that_the_desktop_does_not_know_is_not_offered_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1378",
+      "why": "the link that takes the entry away stands while the person is choosing in the window of the system",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "            if ours && !self.asking_now() {",
+      "replace": "            if ours {",
+      "test": "live::hold::tests::a_desktop_that_does_not_know_the_program_is_offered_the_entry_and_asked_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1379",
+      "why": "an entry in place that the desktop still does not know is described by the sentence that offers to make it",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "        if self.entry.as_ref().is_some_and(|entry| entry.ours()) {",
+      "replace": "        if false {",
+      "test": "live::hold::tests::an_entry_in_place_that_the_desktop_does_not_know_is_not_offered_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1380",
+      "why": "a made entry does not ask the desktop for the shortcuts again, so nothing says the click came to anything",
+      "file": "crates/nkb-gui/src/live/entry.rs",
+      "find": "            if made && matches!(news, EntryNews::Made(_) | EntryNews::AlreadyThere) {",
+      "replace": "            if false {",
+      "test": "live::hold::tests::a_desktop_that_does_not_know_the_program_is_offered_the_entry_and_asked_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1381",
+      "why": "an applications folder that is not there is reported as a file that could not be written",
+      "file": "crates/nkb-adapters/src/portal_entry.rs",
+      "find": "        EntryError::NotHere | EntryError::NoPlace => EntryRefusal::NoPlace,",
+      "replace": "        EntryError::NotHere | EntryError::NoPlace => EntryRefusal::Io,",
+      "test": "portal_entry::tests::the_reasons_nothing_was_done_stay_apart_where_the_person_can_act_on_them",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1382",
+      "why": "an entry that was there already is reported as one that was not there to remove",
+      "file": "crates/nkb-adapters/src/portal_entry.rs",
+      "find": "        Ok(Written::AlreadyThere) => EntryNews::AlreadyThere,",
+      "replace": "        Ok(Written::AlreadyThere) => EntryNews::NotThere,",
+      "test": "portal_entry::tests::what_the_system_answered_to_a_making_is_told_in_the_ports_words",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1383",
+      "why": "a file somebody else made is reported as no file at all, so the person is not told it was left alone",
+      "file": "crates/nkb-adapters/src/portal_entry.rs",
+      "find": "        Ok(Removed::NotOurs) => EntryNews::NotOurs,",
+      "replace": "        Ok(Removed::NotOurs) => EntryNews::NotThere,",
+      "test": "portal_entry::tests::what_the_system_answered_to_a_taking_away_is_told_in_the_ports_words",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1384",
+      "why": "the sentence about a made entry does not say where it was made, so the person cannot find what to delete",
+      "file": "crates/nkb-adapters/src/i18n/registration.rs",
+      "find": "        EntryNews::Made(place) => place.as_str(),",
+      "replace": "        EntryNews::Made(_) => \"\",",
+      "test": "i18n::registration::tests::every_answer_about_the_entry_is_said_in_words_of_its_own",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1385",
+      "why": "the offer names no file, so the person is not told what a click would write",
+      "file": "crates/nkb-adapters/src/i18n/registration.rs",
+      "find": "                (\"link\", pattern_palette_label(PaletteLabel::EnableShortcuts)),\n                (\"file\", ENTRY_FILE),",
+      "replace": "                (\"link\", pattern_palette_label(PaletteLabel::EnableShortcuts)),\n                (\"file\", \"\"),",
+      "test": "i18n::registration::tests::the_sentence_that_offers_the_entry_names_the_link_and_the_file",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1386",
+      "why": "the legend of a table alone has no link to the shortcuts window",
+      "file": "crates/nkb-gui/src/live/view.rs",
+      "find": "        links: vec![ShortcutLink::Window],",
+      "replace": "        links: Vec::new(),",
+      "test": "live::view::tests::the_plain_legend_offers_the_shortcuts_window_and_nothing_else",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1387",
+      "why": "the links of the palette stay the way into the window after the desktop answered, so the offer never reaches the screen",
+      "file": "crates/nkb-gui/src/live/taking.rs",
+      "find": "            links: self.hold.links(),",
+      "replace": "            links: vec![ShortcutLink::Window],",
+      "test": "live::hold::tests::a_desktop_that_does_not_know_the_program_is_offered_the_entry_and_asked_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1388",
+      "why": "the offer to make the entry is said once and not in every view while it stands",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "            Holding::Lost if self.needs_entry => return Some(self.unknown_to_the_desktop()),",
+      "replace": "            Holding::Lost if false => return Some(self.unknown_to_the_desktop()),",
+      "test": "live::hold::tests::a_desktop_that_does_not_know_the_program_is_offered_the_entry_and_asked_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1389",
+      "why": "a desktop that does not know the program leaves no offer standing",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "                self.registered.clear();\n                self.needs_entry = true;\n                Vec::new()",
+      "replace": "                self.registered.clear();\n                self.needs_entry = false;\n                Vec::new()",
+      "test": "live::hold::tests::a_desktop_that_does_not_know_the_program_is_offered_the_entry_and_asked_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1390",
+      "why": "a line said about a made entry is gone before it is read when the desktop answers at once",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "        let mut said = std::mem::take(&mut self.after_answer);",
+      "replace": "        let mut said = Vec::new();",
+      "test": "live::hold::tests::a_desktop_that_does_not_know_the_program_is_offered_the_entry_and_asked_again",
       "runner": "rust:nkb-gui:lib"
     }
   ]

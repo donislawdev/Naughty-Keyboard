@@ -191,6 +191,11 @@ impl core::fmt::Display for EntryError {
     }
 }
 
+/// The name of the file the entry is kept in, which is also the identifier of the program
+/// for the desktop with `.desktop` after it. Public so that the sentence offering the entry
+/// names the file that would be made, and the two cannot drift apart.
+pub const ENTRY_FILE: &str = "com.donislawdev.NaughtyKeyboard.desktop";
+
 /// Asks the portal for `wishes` and listens for them.
 ///
 /// Blocks until the portal has answered the bind, which is at once for a program the person
@@ -208,6 +213,14 @@ pub fn start(wishes: &[Wish]) -> Result<Started, Unavailable> {
 #[must_use]
 pub fn entry_present() -> bool {
     platform::entry_present()
+}
+
+/// Whether the entry in the person's own directory of applications is one this program made.
+/// A file of the same name that somebody else made is not, and neither is one in a
+/// directory of the system: [`remove_entry`] takes away only an entry for which this is true.
+#[must_use]
+pub fn entry_ours() -> bool {
+    platform::entry_ours()
 }
 
 /// Makes the entry that gives this program an identifier, in the person's own directory of
@@ -253,6 +266,10 @@ mod platform {
         portal::entry::present()
     }
 
+    pub fn entry_ours() -> bool {
+        portal::entry::ours()
+    }
+
     pub fn write_entry() -> Result<Written, EntryError> {
         portal::entry::write()
     }
@@ -280,6 +297,10 @@ mod platform {
         false
     }
 
+    pub fn entry_ours() -> bool {
+        false
+    }
+
     pub fn write_entry() -> Result<Written, EntryError> {
         Err(EntryError::NotHere)
     }
@@ -298,6 +319,7 @@ mod tests {
     fn a_system_without_the_portal_says_so_and_makes_nothing() {
         assert_eq!(start(&[]).err(), Some(Unavailable::NotHere));
         assert!(!entry_present());
+        assert!(!entry_ours());
         assert_eq!(write_entry(), Err(EntryError::NotHere));
         assert_eq!(remove_entry(), Err(EntryError::NotHere));
     }

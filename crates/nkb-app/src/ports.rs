@@ -1267,6 +1267,60 @@ pub trait HotkeyRegistrar {
     ) -> Result<Box<dyn LiveShortcuts + Send>, ShortcutsUnavailable>;
 }
 
+/// Why the entry that makes this program known to a desktop was not made or taken
+/// away. Named, never a shrug (untouchable rule 1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntryRefusal {
+    /// This account has no folder of applications to put it in, or this system
+    /// has no such entries.
+    NoPlace,
+    /// The program cannot say where it is, as a path that can be written down.
+    NoProgram,
+    /// The folder or the file could not be written.
+    Io,
+}
+
+/// What came of making the entry that tells a desktop which program is asking for
+/// its shortcuts, or of taking it away.
+///
+/// One vocabulary for both, because one sentence of the palette says each. Making
+/// answers [`EntryNews::Made`], [`EntryNews::AlreadyThere`] or a refusal, and taking
+/// away answers [`EntryNews::TakenAway`], [`EntryNews::NotThere`],
+/// [`EntryNews::NotOurs`] or a refusal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EntryNews {
+    /// It was made now, at this place.
+    Made(String),
+    /// A file of that name was there already - this program's or another's - and was
+    /// left as it is.
+    AlreadyThere,
+    /// The entry this program made was removed.
+    TakenAway,
+    /// There was no entry in the person's folder to take away.
+    NotThere,
+    /// A file of that name is there that this program did not make, and it was left.
+    NotOurs,
+    Refused(EntryRefusal),
+}
+
+/// The entry that tells a desktop which program is asking for its shortcuts.
+///
+/// Only a desktop that chooses the chords wants one (its portal), and making it is a
+/// change to the person's own folder. So nothing here is done by the program on its
+/// own: [`ProgramEntry::make`] and [`ProgramEntry::take_away`] are the answers to a
+/// click, and `take_away` touches only a file this program made (untouchable rule 2).
+pub trait ProgramEntry {
+    /// Whether the entry in the person's folder is one this program made - the only
+    /// one [`ProgramEntry::take_away`] would remove.
+    fn ours(&self) -> bool;
+
+    /// Makes the entry in the person's folder, unless a file of that name is there.
+    fn make(&self) -> EntryNews;
+
+    /// Takes away the entry this program made, and only that one.
+    fn take_away(&self) -> EntryNews;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

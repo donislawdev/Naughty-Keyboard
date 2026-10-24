@@ -32,18 +32,24 @@
 use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 
-use nkb_adapters::PortalShortcuts;
 use nkb_adapters::i18n::{self, PaletteLabel};
-use nkb_app::ports::{HotkeyRegistrar, LiveShortcuts, ShortcutRegistration, ShortcutsUnavailable};
+use nkb_adapters::{PortalEntry, PortalShortcuts};
+use nkb_app::ports::{
+    DesktopRefusal, EntryNews, HotkeyRegistrar, LiveShortcuts, ProgramEntry, ShortcutRegistration,
+    ShortcutsUnavailable,
+};
 use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord};
 
-use super::Apart;
+use super::{Apart, ShortcutLink};
 
 /// What a registrar answered.
 type Answer = Result<Box<dyn LiveShortcuts + Send>, ShortcutsUnavailable>;
 
 /// A registrar that may be asked from a thread of its own.
 type Desktop = Arc<dyn HotkeyRegistrar + Send + Sync>;
+
+/// The entry that tells that desktop which program is asking.
+type Entry = Arc<dyn ProgramEntry + Send + Sync>;
 
 /// Whether the palette's shortcuts are held by this process now.
 enum Holding {
@@ -72,6 +78,16 @@ pub(super) struct Hold<'a> {
     pub(super) registrar: &'a dyn HotkeyRegistrar,
     /// The desktop to ask instead, when it holds the keys (see the module).
     desktop: Option<Desktop>,
+    /// The entry that same desktop wants before it gives a program shortcuts, when
+    /// it is one that does (`D145` point 68).
+    entry: Option<Entry>,
+    /// The desktop has said it does not know the program, and nothing has been asked
+    /// of it since. The offer to make the entry stands for as long as this is true.
+    needs_entry: bool,
+    /// What was said about the entry while the desktop was being asked again, to say
+    /// once more in front of what the desktop answers: an answer that comes at once
+    /// would otherwise take the line off the screen before it was read.
+    after_answer: Vec<String>,
     holding: Holding,
     /// What the last registration said, chord by chord - see
     /// [`ShortcutsNow`](super::ShortcutsNow).
@@ -83,6 +99,9 @@ impl<'a> Hold<'a> {
         Self {
             registrar,
             desktop: None,
+            entry: None,
+            needs_entry: false,
+            after_answer: Vec::new(),
             holding: Holding::Lost,
             registered: Vec::new(),
         }
@@ -94,6 +113,7 @@ impl<'a> Hold<'a> {
         let hold = Self::new(registrar);
         if PortalShortcuts::is_the_route() {
             hold.asking(Arc::new(PortalShortcuts))
+                .with_entry(Arc::new(PortalEntry))
         } else {
             hold
         }
@@ -102,6 +122,13 @@ impl<'a> Hold<'a> {
     /// This hold asks `desktop` for its shortcuts, on a thread of its own.
     pub(super) fn asking(mut self, desktop: Desktop) -> Self {
         self.desktop = Some(desktop);
+        self
+    }
+
+    /// This hold offers to make `entry` when the desktop it asks does not know the
+    /// program.
+    pub(super) fn with_entry(mut self, entry: Entry) -> Self {
+        self.entry = Some(entry);
         self
     }
 
@@ -122,14 +149,73 @@ impl<'a> Hold<'a> {
     }
 
     /// The sentence every view says first while the shortcuts are not in hand for
-    /// a reason that will pass: given back to the system, or not yet given. A line
-    /// said once would last one view - the band is rebuilt each time.
-    pub(super) const fn held_back(&self) -> Option<PaletteLabel> {
-        match self.holding {
-            Holding::Paused => Some(PaletteLabel::ShortcutsPaused),
-            Holding::Asking { .. } => Some(PaletteLabel::WaitingForTheDesktop),
-            Holding::Held(_) | Holding::Lost => None,
+    /// a reason that will pass: given back to the system, not yet given, or not
+    /// given because the desktop does not know the program and the person can
+    /// change that. A line said once would last one view - the band is rebuilt
+    /// each time.
+    pub(super) fn held_back(&self) -> Option<String> {
+        let label = match self.holding {
+            Holding::Paused => PaletteLabel::ShortcutsPaused,
+            Holding::Asking { .. } => PaletteLabel::WaitingForTheDesktop,
+            Holding::Lost if self.needs_entry => return Some(self.unknown_to_the_desktop()),
+            Holding::Held(_) | Holding::Lost => return None,
+        };
+        Some(i18n::label(label).to_owned())
+    }
+
+    /// What is said while the desktop does not know the program: the offer to make
+    /// the entry, or - when the entry is in place and the desktop still does not
+    /// know it - that there is nothing left to offer.
+    fn unknown_to_the_desktop(&self) -> String {
+        if self.entry.as_ref().is_some_and(|entry| entry.ours()) {
+            i18n::label(PaletteLabel::EntryInPlace).to_owned()
+        } else {
+            i18n::shortcuts_unavailable(&ShortcutsUnavailable::Desktop(DesktopRefusal::NeedsEntry))
         }
+    }
+
+    /// The links under the switches: the way into the shortcuts window always, the
+    /// entry the desktop wants while it does not know the program and none is
+    /// there, and the way to take back an entry this program made - not while the
+    /// person is choosing in the window of the system, which that would outlive.
+    pub(super) fn links(&self) -> Vec<ShortcutLink> {
+        let mut links = vec![ShortcutLink::Window];
+        if let Some(entry) = &self.entry {
+            let ours = entry.ours();
+            if self.needs_entry && !ours {
+                links.push(ShortcutLink::EnableEntry);
+            }
+            if ours && !self.asking_now() {
+                links.push(ShortcutLink::RemoveEntry);
+            }
+        }
+        links
+    }
+
+    /// Makes the entry, when the offer stands: the desktop said it does not know the
+    /// program and no entry of ours is there. `None` for a click that comes late,
+    /// after the offer is gone.
+    pub(super) fn make_entry(&mut self) -> Option<EntryNews> {
+        let entry = self.entry.clone()?;
+        (self.needs_entry && !entry.ours()).then(|| entry.make())
+    }
+
+    /// Takes away the entry this program made. Shortcuts that were given are let go
+    /// with it, so the palette does not claim a route it has taken the ground from,
+    /// and the offer to make it again stands. `None` for an entry that is not ours,
+    /// and while the person is choosing in the window of the system.
+    pub(super) fn remove_entry(&mut self) -> Option<EntryNews> {
+        let entry = self.entry.clone()?;
+        if self.asking_now() || !entry.ours() {
+            return None;
+        }
+        let news = entry.take_away();
+        if news == EntryNews::TakenAway && matches!(self.holding, Holding::Held(_)) {
+            self.holding = Holding::Lost;
+            self.registered.clear();
+            self.needs_entry = true;
+        }
+        Some(news)
     }
 
     /// The table the words of the palette follow, and the shortcuts they cannot
@@ -162,6 +248,12 @@ impl<'a> Hold<'a> {
     /// returns only once the system has let them go.
     pub(super) fn pause(&mut self) {
         self.holding = Holding::Paused;
+        self.after_answer.clear();
+    }
+
+    /// Says `lines` once more when the desktop answers what it is being asked now.
+    pub(super) fn say_on_answer(&mut self, lines: Vec<String>) {
+        self.after_answer = lines;
     }
 
     /// The thread behind the shortcuts has ended.
@@ -185,6 +277,7 @@ impl<'a> Hold<'a> {
     /// [`Holding::Asking`], until [`Hold::arrived`] has it.
     pub(super) fn take(&mut self, bindings: &Bindings) -> Vec<String> {
         self.holding = Holding::Lost;
+        self.needs_entry = false;
         self.registered.clear();
         match self.desktop.clone() {
             Some(desktop) => self.ask(desktop, *bindings),
@@ -237,7 +330,9 @@ impl<'a> Hold<'a> {
         };
         let bindings = *bindings;
         self.holding = Holding::Lost;
-        Some(self.settle(answer, &bindings))
+        let mut said = std::mem::take(&mut self.after_answer);
+        said.extend(self.settle(answer, &bindings));
+        Some(said)
     }
 
     /// What a registrar answered, made the hold and the lines about it.
@@ -253,6 +348,15 @@ impl<'a> Hold<'a> {
                     self.holding = Holding::Held(live);
                 }
                 i18n::registrations(&self.registered)
+            }
+            // The offer to make the entry is said by `held_back` for as long as it
+            // stands, not once: it is the sentence the link under the switches needs.
+            Err(ShortcutsUnavailable::Desktop(DesktopRefusal::NeedsEntry))
+                if self.entry.is_some() =>
+            {
+                self.registered.clear();
+                self.needs_entry = true;
+                Vec::new()
             }
             Err(error) => {
                 self.registered.clear();
@@ -276,14 +380,16 @@ mod tests {
 
     use nkb_adapters::i18n::{self, PaletteLabel};
     use nkb_app::ports::{
-        DesktopRefusal, GivenShortcut, HotkeyRegistrar, LiveShortcuts, ShortcutRegistration,
-        ShortcutsUnavailable, Wait,
+        DesktopRefusal, EntryNews, EntryRefusal, GivenShortcut, HotkeyRegistrar, LiveShortcuts,
+        ProgramEntry, ShortcutRegistration, ShortcutsUnavailable, Wait,
     };
     use nkb_core::hotkeys::{HotkeyAction, HotkeyChord};
 
     use super::{Answer, Hold};
     use crate::live::tests::{Registrar, a_store, paused_line, with_worker};
-    use crate::live::{Command, Next, ShortcutsNow, Told, legend, next_command, wired};
+    use crate::live::{
+        Command, Next, ShortcutLink, ShortcutsNow, Told, legend, next_command, wired,
+    };
 
     /// What a person at the window of the desktop decides.
     enum Verdict {
@@ -512,10 +618,7 @@ mod tests {
             assert!(lines.is_empty(), "{lines:?}");
             assert!(worker.hold.asking_now());
             assert!(worker.hold.live().is_none(), "nothing is held yet");
-            assert_eq!(
-                worker.hold.held_back(),
-                Some(PaletteLabel::WaitingForTheDesktop)
-            );
+            assert_eq!(worker.hold.held_back(), Some(waiting_line()));
             let chosen = worker
                 .carry_out(Command::Choose(String::from("unicode-text")))
                 .view
@@ -603,6 +706,280 @@ mod tests {
             worker.carry_out(Command::Resume);
             assert!(worker.hold.asking_now(), "the resume did not ask again");
             wait_asked(&person, 2);
+        });
+    }
+
+    /// An entry the test keeps in memory: made when asked, and ours once made.
+    #[derive(Default)]
+    struct Desk {
+        ours: AtomicBool,
+        made: AtomicUsize,
+        taken: AtomicUsize,
+        refuses: Mutex<Option<EntryRefusal>>,
+    }
+
+    impl ProgramEntry for Desk {
+        fn ours(&self) -> bool {
+            self.ours.load(Ordering::SeqCst)
+        }
+        fn make(&self) -> EntryNews {
+            self.made.fetch_add(1, Ordering::SeqCst);
+            if let Some(why) = *self.refuses.lock().expect("brief lock") {
+                return EntryNews::Refused(why);
+            }
+            if self.ours.swap(true, Ordering::SeqCst) {
+                EntryNews::AlreadyThere
+            } else {
+                EntryNews::Made(String::from("/home/a/applications/entry.desktop"))
+            }
+        }
+        fn take_away(&self) -> EntryNews {
+            self.taken.fetch_add(1, Ordering::SeqCst);
+            if self.ours.swap(false, Ordering::SeqCst) {
+                EntryNews::TakenAway
+            } else {
+                EntryNews::NotThere
+            }
+        }
+    }
+
+    fn made_line() -> String {
+        i18n::entry_news(&EntryNews::Made(String::from(
+            "/home/a/applications/entry.desktop",
+        )))
+    }
+
+    fn the_offer() -> String {
+        i18n::shortcuts_unavailable(&ShortcutsUnavailable::Desktop(DesktopRefusal::NeedsEntry))
+    }
+
+    /// Asks a desktop that does not know the program, with `desk` to make the entry.
+    fn asked_in_vain(
+        worker: &mut crate::live::Worker<'_>,
+        memory: &crate::live::Memory<'_>,
+        person: &Arc<Person>,
+        decide: &Sender<Verdict>,
+        desk: &Arc<Desk>,
+    ) {
+        worker.hold.desktop = Some(person.clone());
+        worker.hold.entry = Some(desk.clone());
+        worker.take(memory.bindings.get());
+        decide
+            .send(Verdict::Refuse(ShortcutsUnavailable::Desktop(
+                DesktopRefusal::NeedsEntry,
+            )))
+            .expect("the desktop is listening");
+        let lines = answer_of(&mut worker.hold);
+        assert!(
+            lines.is_empty(),
+            "the offer is standing, not said once: {lines:?}"
+        );
+    }
+
+    /// A desktop that does not know the program is not a refusal said once: the offer
+    /// to make the entry stands in every view, with the link that makes it, and a click
+    /// makes the entry and asks the desktop again. Once it answers, the link is the one
+    /// that takes the entry away.
+    #[test]
+    fn a_desktop_that_does_not_know_the_program_is_offered_the_entry_and_asked_again() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        let (person, decide) = a_person();
+        let desk = Arc::new(Desk::default());
+        with_worker(&store, &registrar, false, |worker, memory| {
+            asked_in_vain(worker, memory, &person, &decide, &desk);
+
+            assert!(worker.hold.live().is_none());
+            assert_eq!(worker.hold.held_back(), Some(the_offer()));
+            assert_eq!(
+                worker.hold.links(),
+                vec![ShortcutLink::Window, ShortcutLink::EnableEntry]
+            );
+            let drawn = worker.answered(Vec::new()).legend;
+            assert_eq!(
+                drawn.expect("the words are drawn").links,
+                worker.hold.links(),
+                "the links go to the palette with the legend"
+            );
+            let chosen = worker
+                .carry_out(Command::Choose(String::from("unicode-text")))
+                .view
+                .expect("a pack is chosen while the offer stands");
+            assert_eq!(chosen.messages.first(), Some(&the_offer()));
+
+            let view = worker
+                .carry_out(Command::EnableEntry)
+                .view
+                .expect("a click on the link is answered");
+
+            assert_eq!(desk.made.load(Ordering::SeqCst), 1);
+            assert!(worker.hold.asking_now(), "the desktop is asked again");
+            wait_asked(&person, 2);
+            assert_eq!(view.messages, vec![waiting_line(), made_line()]);
+            assert_eq!(
+                worker.hold.links(),
+                vec![ShortcutLink::Window],
+                "nothing is taken away while the person is choosing in the window of the system"
+            );
+            assert!(worker.carry_out(Command::RemoveEntry).view.is_none());
+            assert_eq!(desk.taken.load(Ordering::SeqCst), 0);
+
+            decide
+                .send(Verdict::Give)
+                .expect("the desktop is listening");
+            let lines = answer_of(&mut worker.hold);
+            assert_eq!(
+                lines,
+                vec![made_line()],
+                "said again, in front of the answer"
+            );
+            assert!(worker.hold.live().is_some());
+            assert_eq!(worker.hold.held_back(), None);
+            assert_eq!(
+                worker.hold.links(),
+                vec![ShortcutLink::Window, ShortcutLink::RemoveEntry]
+            );
+        });
+    }
+
+    /// A click that comes after the offer is gone changes nothing and draws nothing,
+    /// and so does a click to take away an entry that is not ours.
+    #[test]
+    fn a_click_that_comes_late_changes_nothing() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        let desk = Arc::new(Desk::default());
+        with_worker(&store, &registrar, false, |worker, _| {
+            worker.hold.entry = Some(desk.clone());
+
+            assert!(worker.carry_out(Command::EnableEntry).view.is_none());
+            assert!(worker.carry_out(Command::RemoveEntry).view.is_none());
+            assert_eq!(desk.made.load(Ordering::SeqCst), 0);
+            assert_eq!(desk.taken.load(Ordering::SeqCst), 0);
+        });
+    }
+
+    /// Taking the entry away lets the shortcuts that were given go, because the
+    /// palette does not claim a route it has taken the ground from, and the offer to make
+    /// the entry again stands in their place.
+    #[test]
+    fn taking_the_entry_away_lets_the_shortcuts_go_and_offers_it_again() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        let (person, decide) = a_person();
+        let desk = Arc::new(Desk::default());
+        desk.ours.store(true, Ordering::SeqCst);
+        with_worker(&store, &registrar, false, |worker, memory| {
+            worker.hold.desktop = Some(person.clone());
+            worker.hold.entry = Some(desk.clone());
+            worker.take(memory.bindings.get());
+            decide
+                .send(Verdict::Give)
+                .expect("the desktop is listening");
+            answer_of(&mut worker.hold);
+            assert!(worker.hold.live().is_some());
+            assert_eq!(person.alive(), 1);
+
+            let view = worker
+                .carry_out(Command::RemoveEntry)
+                .view
+                .expect("a click on the link is answered");
+
+            assert_eq!(desk.taken.load(Ordering::SeqCst), 1);
+            assert!(worker.hold.live().is_none(), "the shortcuts are let go");
+            assert_eq!(person.alive(), 0, "and the session is closed");
+            assert_eq!(
+                view.messages,
+                vec![the_offer(), i18n::entry_news(&EntryNews::TakenAway)]
+            );
+            assert_eq!(
+                worker.hold.links(),
+                vec![ShortcutLink::Window, ShortcutLink::EnableEntry]
+            );
+        });
+    }
+
+    /// An entry that is in place, and a desktop that still does not know the program,
+    /// have nothing left to offer: the sentence says so and the way back is the only link.
+    #[test]
+    fn an_entry_in_place_that_the_desktop_does_not_know_is_not_offered_again() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        let (person, decide) = a_person();
+        let desk = Arc::new(Desk::default());
+        desk.ours.store(true, Ordering::SeqCst);
+        with_worker(&store, &registrar, false, |worker, memory| {
+            asked_in_vain(worker, memory, &person, &decide, &desk);
+
+            assert_eq!(
+                worker.hold.held_back(),
+                Some(i18n::label(PaletteLabel::EntryInPlace).to_owned())
+            );
+            assert_eq!(
+                worker.hold.links(),
+                vec![ShortcutLink::Window, ShortcutLink::RemoveEntry]
+            );
+            assert!(worker.carry_out(Command::EnableEntry).view.is_none());
+            assert_eq!(desk.made.load(Ordering::SeqCst), 0);
+        });
+    }
+
+    /// An entry that could not be made is said, and the offer still stands: nothing was
+    /// done, and nothing is asked of the desktop again.
+    #[test]
+    fn an_entry_that_could_not_be_made_is_said_and_the_offer_stands() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        let (person, decide) = a_person();
+        let desk = Arc::new(Desk::default());
+        *desk.refuses.lock().expect("brief lock") = Some(EntryRefusal::Io);
+        with_worker(&store, &registrar, false, |worker, memory| {
+            asked_in_vain(worker, memory, &person, &decide, &desk);
+
+            let view = worker
+                .carry_out(Command::EnableEntry)
+                .view
+                .expect("a refusal is said");
+
+            assert_eq!(
+                view.messages,
+                vec![
+                    the_offer(),
+                    i18n::entry_news(&EntryNews::Refused(EntryRefusal::Io))
+                ]
+            );
+            assert!(!worker.hold.asking_now());
+            assert_eq!(person.times_asked(), 1);
+            assert_eq!(
+                worker.hold.links(),
+                vec![ShortcutLink::Window, ShortcutLink::EnableEntry]
+            );
+        });
+    }
+
+    /// Where no desktop chooses the chords there is no entry to offer: a refusal that
+    /// says the desktop does not know the program is said once, as any refusal is, and
+    /// the only link is the way into the shortcuts window.
+    #[test]
+    fn without_an_entry_to_make_the_refusal_is_said_once_and_no_link_is_offered() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        let (person, decide) = a_person();
+        with_worker(&store, &registrar, false, |worker, memory| {
+            worker.hold.desktop = Some(person.clone());
+            worker.take(memory.bindings.get());
+            decide
+                .send(Verdict::Refuse(ShortcutsUnavailable::Desktop(
+                    DesktopRefusal::NeedsEntry,
+                )))
+                .expect("the desktop is listening");
+
+            let lines = answer_of(&mut worker.hold);
+
+            assert_eq!(lines, vec![the_offer()]);
+            assert_eq!(worker.hold.held_back(), None);
+            assert_eq!(worker.hold.links(), vec![ShortcutLink::Window]);
+            assert!(worker.carry_out(Command::EnableEntry).view.is_none());
         });
     }
 

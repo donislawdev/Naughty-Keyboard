@@ -34,8 +34,9 @@ use crate::linux_ibus_rules::{AddressRefusal, socket_in_address};
 /// never changed once a release has used it.
 pub(crate) const APP_ID: &str = "com.donislawdev.NaughtyKeyboard";
 
-/// The file that gives the program its identifier, in a directory of applications.
-pub(crate) const ENTRY_FILE: &str = "com.donislawdev.NaughtyKeyboard.desktop";
+/// The file that gives the program its identifier, in a directory of applications. Public
+/// as `portal::ENTRY_FILE`, where the sentence that offers the entry names it.
+pub(crate) use crate::portal::ENTRY_FILE;
 
 /// The line that says the program made the entry, so that a file of the same name that
 /// somebody else made is never rewritten.

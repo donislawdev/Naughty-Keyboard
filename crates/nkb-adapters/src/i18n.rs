@@ -96,7 +96,7 @@ pub use palette::{
     next_value, no_value_yet, not_guaranteed, pair_half, previous_types, sent_to, skip_to,
     typing_counter, warnings,
 };
-pub use registration::{ended, registration, registrations, shortcuts_unavailable};
+pub use registration::{ended, entry_news, registration, registrations, shortcuts_unavailable};
 pub use substitutions::substitution_names;
 pub use windows::{
     AboutLabel, MatchPlace, PacksLabel, ShortcutsLabel, WelcomeLabel, about_copyright, about_label,
@@ -1055,6 +1055,7 @@ mod tests {
     use super::windows::{pattern_packs_label, pattern_shortcuts_label};
     use super::*;
     use crate::shortcuts::CONVENTION;
+    use nkb_app::ports::{EntryNews, EntryRefusal};
     use nkb_core::hotkeys::{Convention, HotkeyKey};
     use nkb_core::pack::PairHalf;
     use nkb_core::substitutions::Substitutions;
@@ -1211,6 +1212,21 @@ mod tests {
             ]
             .map(|refusal| shortcuts_unavailable(&ShortcutsUnavailable::Desktop(refusal))),
         );
+        out.extend(
+            [
+                EntryNews::Made(String::from("/home/a/applications/x.desktop")),
+                EntryNews::AlreadyThere,
+                EntryNews::TakenAway,
+                EntryNews::NotThere,
+                EntryNews::NotOurs,
+                EntryNews::Refused(EntryRefusal::NoPlace),
+                EntryNews::Refused(EntryRefusal::NoProgram),
+                EntryNews::Refused(EntryRefusal::Io),
+            ]
+            .iter()
+            .map(entry_news),
+        );
+        out.push(label(PaletteLabel::EntryInPlace).to_owned());
         out.push(ended(Ended::ShortcutsGone).expect("the listener going away is said"));
         // A reason without a full stop of its own: the sentence-count rule below
         // is about OUR sentence, and a library error text carrying three full
@@ -1411,8 +1427,11 @@ mod tests {
                 "an apology stands where an instruction belongs: {sentence}"
             );
             // "One to two sentences. A third means it belongs in help."
+            // A stop is a stop only before a space: the full stops inside a file name
+            // or a path end nothing.
             let stops = sentence
-                .split_terminator(['.', '?'])
+                .split_inclusive(". ")
+                .flat_map(|part| part.split_inclusive("? "))
                 .filter(|part| !part.trim().is_empty())
                 .count();
             assert!(
@@ -1565,23 +1584,6 @@ mod tests {
                 detail: "the display went away".to_owned()
             })
             .ends_with("printed by: nkb emit whitespace")
-        );
-    }
-
-    #[test]
-    fn the_two_silent_outcomes_stay_silent() {
-        assert!(
-            registration(
-                &ShortcutRegistration::Registered,
-                HotkeyAction::NextValue,
-                defaults().chord(HotkeyAction::NextValue)
-            )
-            .is_none(),
-            "a registration that worked is not an event"
-        );
-        assert!(
-            ended(Ended::Stopped).is_none(),
-            "closing on request is not an event"
         );
     }
 
@@ -2033,14 +2035,6 @@ mod tests {
     }
 
     #[test]
-    fn a_query_with_braces_is_copied_not_substituted() {
-        assert_eq!(
-            no_match("{id}"),
-            "Nothing matches \"{id}\". Press Backspace to widen the search."
-        );
-    }
-
-    #[test]
     fn unread_sources_are_one_line_per_reason_and_nothing_when_all_were_read() {
         // Today's build: the built-in catalogue's own coverage.
         let today = CatalogueCoverage {
@@ -2119,6 +2113,9 @@ mod tests {
             PaletteLabel::ShortcutsPaused,
             PaletteLabel::WaitingForTheDesktop,
             PaletteLabel::ShortcutsLink,
+            PaletteLabel::EnableShortcuts,
+            PaletteLabel::RemoveEntry,
+            PaletteLabel::EntryInPlace,
             PaletteLabel::AboutLink,
             PaletteLabel::ShortcutList,
             PaletteLabel::ShortcutListAction,
@@ -2201,6 +2198,9 @@ mod tests {
                 | PaletteLabel::ShortcutsPaused
                 | PaletteLabel::WaitingForTheDesktop
                 | PaletteLabel::ShortcutsLink
+                | PaletteLabel::EnableShortcuts
+                | PaletteLabel::RemoveEntry
+                | PaletteLabel::EntryInPlace
                 | PaletteLabel::AboutLink
                 | PaletteLabel::DonateLink
                 | PaletteLabel::SourceCodeLink

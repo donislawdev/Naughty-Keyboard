@@ -262,7 +262,7 @@ pub(super) fn with_standing(mut messages: Vec<String>, standing: &Standing) -> V
 /// opening, a pack chosen, the shortcuts paused, taken again or gone.
 ///
 /// While the shortcuts are held back - paused, or asked of a desktop that has
-/// not answered - every such view says so (`held_back`, the label that does),
+/// not answered - every such view says so (`held_back`, the sentence that does),
 /// first among its own lines and behind the standing sentence: the band is
 /// rebuilt from scratch each time, so a line said once would last exactly one
 /// view - and a pack chosen in the pack window during the pause would take it
@@ -273,10 +273,10 @@ pub(super) fn view_between(
     mut messages: Vec<String>,
     value: ValueBand,
     standing: &Standing,
-    held_back: Option<PaletteLabel>,
+    held_back: Option<String>,
 ) -> View {
-    if let Some(label) = held_back {
-        messages.insert(0, i18n::label(label).to_owned());
+    if let Some(line) = held_back {
+        messages.insert(0, line);
     }
     View {
         pack: shown(sequence, pack),
@@ -832,6 +832,9 @@ pub struct Legend {
     /// back and types. `None` where the palette cannot name one ([`Apart`]).
     pub(super) next: Option<HotkeyChord>,
     pub(super) previous: Option<HotkeyChord>,
+    /// The links under the switches: the way into the shortcuts window, and where
+    /// the desktop gives the shortcuts, the entry it wants (`D145` point 68).
+    pub(super) links: Vec<ShortcutLink>,
 }
 
 /// A shortcut the palette cannot name by a chord of its own, because of what
@@ -882,6 +885,7 @@ pub(super) fn legend_of(bindings: &Bindings, apart: &[(HotkeyAction, Apart)]) ->
         no_value: i18n::no_value_yet(named(HotkeyAction::NextValue)),
         next: named(HotkeyAction::NextValue),
         previous: named(HotkeyAction::PreviousValue),
+        links: vec![ShortcutLink::Window],
     }
 }
 
@@ -898,6 +902,7 @@ pub fn show_legend(palette: &Palette, legend: Legend) {
             .collect::<Vec<_>>(),
     )));
     palette.set_no_value(legend.no_value.into());
+    links::show_links(palette, &legend.links);
     NAMED.set(Some((legend.next, legend.previous)));
 }
 
@@ -928,6 +933,14 @@ fn named() -> Named {
 mod tests {
     use super::*;
     use crate::live::tests::{a_palette, a_sent, an_outcome, quiet};
+
+    /// The legend of a table alone has the way into the shortcuts window and no more:
+    /// what the desktop wants is the worker's to add once the desktop has answered.
+    #[test]
+    fn the_plain_legend_offers_the_shortcuts_window_and_nothing_else() {
+        let table = nkb_adapters::default_bindings();
+        assert_eq!(legend(&table).links, vec![ShortcutLink::Window]);
+    }
 
     /// The owner's point 1 (2026-10-14): each arrow carries the number of the
     /// value it steps to, and none where it moves nothing or reaches the end

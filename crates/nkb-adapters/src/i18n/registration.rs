@@ -3,6 +3,9 @@
 //! the `i18n` module, kept in a file of its own as the windows' words are -
 //! see the module above for why every one of them is a key.
 
+use nkb_app::ports::{EntryNews, EntryRefusal};
+use nkb_sys::portal::ENTRY_FILE;
+
 use super::*;
 
 // ---------------------------------------------------------------------------
@@ -143,7 +146,7 @@ fn pattern_unavailable(reason: &ShortcutsUnavailable) -> &'static str {
 fn pattern_desktop(refusal: DesktopRefusal) -> &'static str {
     match refusal {
         DesktopRefusal::NeedsEntry => {
-            "The desktop does not know Naughty Keyboard yet, so it cannot give the palette global shortcuts."
+            "The desktop does not know Naughty Keyboard yet, so it cannot give the palette global shortcuts. \"{link}\" adds one small file, {file}, to your applications folder and changes nothing else."
         }
         DesktopRefusal::NoPortal => {
             "The desktop did not offer global shortcuts to programs, so the palette cannot be driven from the keyboard here."
@@ -169,10 +172,69 @@ pub fn shortcuts_unavailable(reason: &ShortcutsUnavailable) -> String {
         ShortcutsUnavailable::Desktop(DesktopRefusal::Ended { code }) => {
             fill(pattern, &[("code", &code.to_string())])
         }
+        // The sentence names the link that would put it right and the file that
+        // link makes, so the words and the offer cannot drift apart.
+        ShortcutsUnavailable::Desktop(DesktopRefusal::NeedsEntry) => fill(
+            pattern,
+            &[
+                ("link", pattern_palette_label(PaletteLabel::EnableShortcuts)),
+                ("file", ENTRY_FILE),
+            ],
+        ),
         ShortcutsUnavailable::CouldNotStart | ShortcutsUnavailable::Desktop(_) => {
             pattern.to_owned()
         }
     }
+}
+
+/// The pattern for what came of making the entry that tells the desktop which
+/// program is asking, or of taking it away. `ux-spec.md` 6, section E.
+///
+/// Each says what is true now and, where the person may want to undo it, how.
+/// A refusal says what was NOT done: a click that came to nothing and said nothing
+/// would be the silence untouchable rule 1 forbids.
+fn pattern_entry(news: &EntryNews) -> &'static str {
+    match news {
+        EntryNews::Made(_) => "Added {place}. \"{link}\" takes it away again.",
+        EntryNews::AlreadyThere => {
+            "{file} is in a folder of applications already, so nothing was added."
+        }
+        EntryNews::TakenAway => {
+            "Removed the entry. The desktop keeps the shortcuts you chose until you delete them in its settings."
+        }
+        EntryNews::NotThere => {
+            "There was no entry of Naughty Keyboard in your applications folder to remove."
+        }
+        EntryNews::NotOurs => {
+            "{file} in your applications folder was not made by Naughty Keyboard, so it was left alone."
+        }
+        EntryNews::Refused(EntryRefusal::NoPlace) => {
+            "Nothing was changed, because this account has no applications folder to keep the entry in."
+        }
+        EntryNews::Refused(EntryRefusal::NoProgram) => {
+            "Nothing was changed, because Naughty Keyboard cannot tell where it is installed."
+        }
+        EntryNews::Refused(EntryRefusal::Io) => {
+            "Nothing was changed, because the applications folder could not be written."
+        }
+    }
+}
+
+/// What the palette says about the entry after a click made it or took it away.
+#[must_use]
+pub fn entry_news(news: &EntryNews) -> String {
+    let place = match news {
+        EntryNews::Made(place) => place.as_str(),
+        _ => "",
+    };
+    fill(
+        pattern_entry(news),
+        &[
+            ("place", place),
+            ("link", pattern_palette_label(PaletteLabel::RemoveEntry)),
+            ("file", ENTRY_FILE),
+        ],
+    )
 }
 
 /// The pattern for the loop ending, when the ending is worth saying.
@@ -238,6 +300,21 @@ mod tests {
         );
     }
 
+    /// A registration that worked is not an event, and neither is closing on request.
+    #[test]
+    fn the_two_silent_outcomes_stay_silent() {
+        let asked = default_bindings().chord(HotkeyAction::NextValue);
+        assert!(
+            registration(
+                &ShortcutRegistration::Registered,
+                HotkeyAction::NextValue,
+                asked
+            )
+            .is_none()
+        );
+        assert!(ended(Ended::Stopped).is_none());
+    }
+
     /// Each refusal of the desktop is a sentence of its own, with no gap left
     /// where a value was to go, and the code of an ended request is in it.
     #[test]
@@ -258,5 +335,58 @@ mod tests {
             }
         }
         assert!(said[3].contains("code 2"), "{}", said[3]);
+    }
+
+    /// The sentence that says the desktop does not know the program also says what
+    /// the offer would do: the link by its own words and the file by its own name,
+    /// so what is promised is what a click makes.
+    #[test]
+    fn the_sentence_that_offers_the_entry_names_the_link_and_the_file() {
+        let said =
+            shortcuts_unavailable(&ShortcutsUnavailable::Desktop(DesktopRefusal::NeedsEntry));
+        assert!(
+            said.contains(&format!("\"{}\"", label(PaletteLabel::EnableShortcuts))),
+            "{said}"
+        );
+        assert!(said.contains(ENTRY_FILE), "{said}");
+        assert!(!said.contains('{'), "a gap is left in: {said}");
+    }
+
+    /// Every answer to a click on the entry is a sentence of its own with no gap
+    /// left, a made entry says where, and the one that could be undone says how.
+    #[test]
+    fn every_answer_about_the_entry_is_said_in_words_of_its_own() {
+        let said: Vec<String> = [
+            EntryNews::Made(String::from("/home/a/applications/x.desktop")),
+            EntryNews::AlreadyThere,
+            EntryNews::TakenAway,
+            EntryNews::NotThere,
+            EntryNews::NotOurs,
+            EntryNews::Refused(EntryRefusal::NoPlace),
+            EntryNews::Refused(EntryRefusal::NoProgram),
+            EntryNews::Refused(EntryRefusal::Io),
+        ]
+        .iter()
+        .map(entry_news)
+        .collect();
+        for (index, one) in said.iter().enumerate() {
+            assert!(!one.contains('{'), "a gap is left in: {one}");
+            for other in &said[index + 1..] {
+                assert_ne!(one, other);
+            }
+        }
+        assert!(
+            said[0].contains("/home/a/applications/x.desktop"),
+            "{}",
+            said[0]
+        );
+        assert!(
+            said[0].contains(&format!("\"{}\"", label(PaletteLabel::RemoveEntry))),
+            "{}",
+            said[0]
+        );
+        for refused in &said[5..] {
+            assert!(refused.starts_with("Nothing was changed"), "{refused}");
+        }
     }
 }

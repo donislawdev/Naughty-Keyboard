@@ -110,6 +110,16 @@ pub enum PaletteLabel {
     /// The link under the hint bar that opens the shortcuts window - its words,
     /// and what a click does (`ux-spec.md` 5.4).
     ShortcutsLink,
+    /// The link beside it that makes the entry a desktop wants before it gives
+    /// a program shortcuts - its words, and what a click does (`D145` point 68).
+    /// Only where the desktop said it does not know the program.
+    EnableShortcuts,
+    /// The link that takes that entry away again - its words, and what a click
+    /// does. Only where the entry is one this program made.
+    RemoveEntry,
+    /// Said for as long as it lasts, in place of the sentence that offers the entry,
+    /// when the entry is in place and the desktop still does not know the program.
+    EntryInPlace,
     /// The link in the header that opens the About window - its words, and
     /// what a click does (the owner's point 4 of 2026-10-10, moved to the top
     /// by point 2 of 2026-10-14).
@@ -280,6 +290,11 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
             "Waiting for the desktop to give the shortcuts. Choose them in the window it shows."
         }
         PaletteLabel::ShortcutsLink => "Change shortcuts",
+        PaletteLabel::EnableShortcuts => "Enable global shortcuts",
+        PaletteLabel::RemoveEntry => "Remove desktop entry",
+        PaletteLabel::EntryInPlace => {
+            "The desktop still does not know Naughty Keyboard, although its entry is in place. Restart the palette to ask the desktop again."
+        }
         PaletteLabel::AboutLink => "About",
         PaletteLabel::DonateLink => "Donate",
         PaletteLabel::SourceCodeLink => "GitHub",

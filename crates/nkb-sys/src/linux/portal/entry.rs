@@ -53,6 +53,17 @@ pub(crate) fn present() -> bool {
         .any(|path| Path::new(path).is_file())
 }
 
+/// Whether the entry in the person's own directory of applications is one this program
+/// made, which is the only one [`remove`] would take away.
+pub(crate) fn ours() -> bool {
+    user_applications(&Env::read().dirs()).is_some_and(|directory| ours_in(Path::new(&directory)))
+}
+
+/// [`ours`] in `directory`.
+pub(crate) fn ours_in(directory: &Path) -> bool {
+    fs::read_to_string(directory.join(ENTRY_FILE)).is_ok_and(|content| is_our_entry(&content))
+}
+
 /// Makes the entry in the person's own directory of applications, unless one is there.
 pub(crate) fn write() -> Result<Written, EntryError> {
     let env = Env::read();
@@ -212,6 +223,28 @@ mod tests {
         fs::write(&theirs, "[Desktop Entry]\nName=Somebody else's\n").expect("written");
         assert_eq!(remove_in(&scratch.0), Ok(Removed::NotOurs));
         assert!(theirs.exists(), "a file that is not ours is never removed");
+    }
+
+    #[test]
+    fn an_entry_is_ours_only_when_this_program_made_it() {
+        let scratch = Scratch::new("ours");
+        fs::create_dir_all(&scratch.0).expect("directory");
+        assert!(!ours_in(&scratch.0), "no file, no entry of ours");
+
+        let text = entry_text("/opt/nkb/nkb-gui").expect("an entry");
+        write_in(&scratch.0, &text).expect("written");
+        assert!(ours_in(&scratch.0));
+
+        fs::write(
+            scratch.0.join(ENTRY_FILE),
+            "[Desktop Entry]\nName=Somebody else's\n",
+        )
+        .expect("written");
+        assert!(!ours_in(&scratch.0), "a file of the same name is not ours");
+        assert!(
+            !ours_in(&scratch.0.join("absent")),
+            "no directory, no entry"
+        );
     }
 
     #[test]

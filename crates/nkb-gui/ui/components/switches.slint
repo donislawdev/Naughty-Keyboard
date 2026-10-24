@@ -37,9 +37,12 @@ export component SwitchesBand inherits Zone {
     in property <int> clearing-selected;
     in property <bool> clearing-enabled;
     callback choose-clearing(int);
-    // The link to the shortcuts window, whose words say what it does.
-    in property <string> shortcuts-link;
-    callback open-shortcuts();
+    // The links under the switches, each with the words that say what it does, and
+    // the place of the one clicked: the shortcuts window always, and where the
+    // desktop gives the shortcuts, the entry it wants (`D145` point 68). Which link
+    // stands at which place is Rust's, as which way stands at which index is.
+    in property <[string]> shortcuts-links;
+    callback open-shortcuts(int);
 
     GridLayout {
         spacing: Tokens.space-2;
@@ -87,11 +90,13 @@ export component SwitchesBand inherits Zone {
     // pointer one way (GUI rule 2). The About link stood at the right end of
     // this row until the owner's point 2 of 2026-10-14 moved it to the header.
     HorizontalLayout {
-        PickerOpener {
-            text: root.shortcuts-link;
-            action: root.shortcuts-link;
+        alignment: start;
+        spacing: Tokens.space-3;
+        for link[place] in root.shortcuts-links: PickerOpener {
+            text: link;
+            action: link;
             clicked => {
-                root.open-shortcuts();
+                root.open-shortcuts(place);
             }
         }
     }

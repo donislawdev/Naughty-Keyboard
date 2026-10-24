@@ -615,8 +615,9 @@ export component Gallery inherits Window {
             copy-action: "Copy the last sent value";
         }
 
-        // The two switches and the link under them, as the palette carries
-        // them in clipboard mode: the second switch faded in place.
+        // The two switches and the links under them, as the palette carries
+        // them in clipboard mode: the second switch faded in place. Two links, the
+        // longest case: where the desktop does not know the program (`D145` point 68).
         SwitchesBand {
             route-label: "Send by";
             route-options: ["Keyboard", "Clipboard"];
@@ -626,7 +627,7 @@ export component Gallery inherits Window {
             clearing-options: ["Clear line first", "Insert at cursor"];
             clearing-selected: 0;
             clearing-enabled: false;
-            shortcuts-link: "Change shortcuts";
+            shortcuts-links: ["Change shortcuts", "Enable global shortcuts"];
         }
 
         Hairline {}
