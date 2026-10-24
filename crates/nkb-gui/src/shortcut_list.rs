@@ -16,6 +16,14 @@
 //! alone is the tester half way through, and says nothing. Esc stops
 //! recording, and otherwise closes the window. While a change waits for the
 //! worker's answer, nothing else is asked for, so two answers can never cross.
+//!
+//! # Where a desktop chooses the shortcuts
+//!
+//! On a Wayland session the desktop holds the shortcuts and the person chooses
+//! them in its settings, so there is nothing to record and nothing to restore
+//! (`D145` point 70). The list is then a reading of what the desktop gave
+//! ([`DesktopNow`]): each row shows the shortcut it holds, or says it holds none,
+//! and Enter, Delete and a click say who chooses instead of starting anything.
 
 use nkb_adapters::ChordHeld;
 use nkb_adapters::i18n::{self, ShortcutsLabel};
@@ -23,7 +31,7 @@ use nkb_app::ShortcutChange;
 use nkb_app::ports::ShortcutRegistration;
 use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord};
 
-use crate::live::ShortcutsNow;
+use crate::live::{DesktopNow, ShortcutsNow};
 use crate::picker::Badge;
 
 /// What a key press is, to this window.
@@ -196,6 +204,32 @@ impl ShortcutList {
         self.waiting.is_some()
     }
 
+    /// Whether a desktop chooses the shortcuts, so the list only shows them.
+    #[must_use]
+    pub const fn read_only(&self) -> bool {
+        self.now.desktop.is_some()
+    }
+
+    /// The desktop's word on what it holds, as it changes while the list is open.
+    /// A list the desktop does not fill takes nothing.
+    pub fn given(&mut self, desktop: DesktopNow) {
+        if self.read_only() {
+            self.now.desktop = Some(desktop);
+        }
+    }
+
+    /// What stands under the list: the sentence that stands while the desktop has
+    /// not given the shortcuts, then what the last press came to.
+    #[must_use]
+    pub fn lines(&self) -> Vec<String> {
+        self.now
+            .desktop
+            .iter()
+            .filter_map(|desktop| desktop.standing.clone())
+            .chain(self.messages.iter().cloned())
+            .collect()
+    }
+
     #[must_use]
     pub const fn recording(&self) -> bool {
         self.recording
@@ -212,9 +246,13 @@ impl ShortcutList {
         &self.messages
     }
 
-    /// How many shortcuts are not the default.
+    /// How many shortcuts are not the default - nothing where the desktop chooses
+    /// them, because none of them is the tester's to change here.
     #[must_use]
     pub fn summary(&self) -> String {
+        if self.read_only() {
+            return String::new();
+        }
         let changed = HotkeyAction::READING_ORDER
             .iter()
             .filter(|action| self.now.bindings.chord(**action) != self.defaults.chord(**action))
@@ -228,16 +266,50 @@ impl ShortcutList {
         HotkeyAction::READING_ORDER
             .iter()
             .enumerate()
-            .map(|(at, action)| {
-                let chord = self.now.bindings.chord(*action);
-                ShortcutRow {
-                    title: i18n::action_name(*action).to_owned(),
-                    key: i18n::chord(chord),
-                    badge: self.badge(*action, chord),
-                    current: self.recording && at == self.selected,
+            .map(|(at, action)| match &self.now.desktop {
+                Some(desktop) => Self::given_row(*action, desktop),
+                None => {
+                    let chord = self.now.bindings.chord(*action);
+                    ShortcutRow {
+                        title: i18n::action_name(*action).to_owned(),
+                        key: i18n::chord(chord),
+                        badge: self.badge(*action, chord),
+                        current: self.recording && at == self.selected,
+                    }
                 }
             })
             .collect()
+    }
+
+    /// The row of an action over what a desktop gave: the shortcut it holds, in
+    /// its own words when they are no chord of ours, and a pill where it holds
+    /// none - unless it has not answered yet, when a shortcut is waited for and
+    /// not missing. An action this version does not carry out is never asked for,
+    /// so it says that, not that the desktop left it out.
+    fn given_row(action: HotkeyAction, desktop: &DesktopNow) -> ShortcutRow {
+        let given = desktop
+            .given
+            .iter()
+            .find(|(held, _)| *held == action)
+            .map(|(_, one)| one);
+        let pill = match given {
+            Some(_) => None,
+            None if !crate::live::wired(action) => Some(ShortcutsLabel::NotAvailable),
+            None if desktop.waiting => None,
+            None => Some(ShortcutsLabel::NotRegistered),
+        };
+        ShortcutRow {
+            title: i18n::action_name(action).to_owned(),
+            key: given.map_or_else(String::new, |one| {
+                one.chord.map_or_else(|| one.words.clone(), i18n::chord)
+            }),
+            badge: pill.map(|label| Badge {
+                text: i18n::shortcuts_label(label).to_owned(),
+                risky: label == ShortcutsLabel::NotRegistered,
+                current: false,
+            }),
+            current: false,
+        }
     }
 
     /// What the system said about `chord` at the last registration, when it
@@ -289,6 +361,9 @@ impl ShortcutList {
     }
 
     fn start_recording(&mut self) -> Act {
+        if self.read_only() {
+            return self.say(ShortcutsLabel::DesktopChooses);
+        }
         if self.waiting.is_some() {
             return Act::Handled;
         }
@@ -323,6 +398,9 @@ impl ShortcutList {
     }
 
     fn ask(&mut self, chord: Option<HotkeyChord>) -> Act {
+        if self.read_only() {
+            return self.say(ShortcutsLabel::DesktopChooses);
+        }
         if self.waiting.is_some() {
             return Act::Handled;
         }
@@ -344,7 +422,7 @@ impl ShortcutList {
     reason = "a failed expectation in a test is a failed test"
 )]
 mod tests {
-    use nkb_app::ports::ShortcutsUnavailable;
+    use nkb_app::ports::{GivenShortcut, ShortcutsUnavailable};
     use nkb_core::hotkeys::{Refusal, Refused};
 
     use super::*;
@@ -367,6 +445,7 @@ mod tests {
                     .iter()
                     .map(|(action, held)| (*action, *held, ShortcutRegistration::Registered))
                     .collect(),
+                desktop: None,
             },
         )
     }
@@ -537,6 +616,7 @@ mod tests {
                     repeat,
                     ShortcutRegistration::Taken,
                 )],
+                desktop: None,
             },
         );
         // Found by its action, not by a number: the rows follow the reading
@@ -568,6 +648,7 @@ mod tests {
                     wanted,
                     ShortcutRegistration::NotGiven,
                 )],
+                desktop: None,
             },
         );
         let at = HotkeyAction::READING_ORDER
@@ -597,6 +678,7 @@ mod tests {
                     previous,
                     ShortcutRegistration::Taken,
                 )],
+                desktop: None,
             },
         );
         assert_eq!(
@@ -676,5 +758,178 @@ mod tests {
             None,
         );
         assert_eq!(unchecked.messages().len(), 2);
+    }
+
+    /// A list over a desktop that holds `given`, with a sentence standing.
+    fn over_a_desktop(given: Vec<(HotkeyAction, GivenShortcut)>, waiting: bool) -> ShortcutList {
+        ShortcutList::new(
+            defaults(),
+            ShortcutsNow {
+                bindings: defaults(),
+                registered: Vec::new(),
+                desktop: Some(DesktopNow {
+                    given,
+                    waiting,
+                    standing: Some(String::from("A sentence stands.")),
+                }),
+            },
+        )
+    }
+
+    /// The row of `action`, found by it and not by a number.
+    fn row_of(list: &ShortcutList, action: HotkeyAction) -> ShortcutRow {
+        let at = HotkeyAction::READING_ORDER
+            .iter()
+            .position(|candidate| *candidate == action)
+            .expect("every action has a row");
+        list.rows().swap_remove(at)
+    }
+
+    /// The first action that does something in this version and one that does not.
+    fn a_working_and_an_idle_action() -> (HotkeyAction, HotkeyAction) {
+        let working = HotkeyAction::READING_ORDER
+            .iter()
+            .copied()
+            .find(|action| crate::live::wired(*action))
+            .expect("some action works");
+        let idle = HotkeyAction::READING_ORDER
+            .iter()
+            .copied()
+            .find(|action| !crate::live::wired(*action))
+            .expect("some action does nothing yet");
+        (working, idle)
+    }
+
+    /// Over a desktop each row shows what it gave: the chord in the palette's
+    /// writing when the words are one, the desktop's own words when they are not.
+    /// A shortcut it left out says so in the risk colour, one this version does
+    /// not carry out says that and is no risk, and while the desktop has not
+    /// answered nothing is called missing. Nothing is counted as the tester's own.
+    #[test]
+    fn a_list_over_a_desktop_shows_what_it_gave_and_says_what_it_left_out() {
+        let chosen = chord("Ctrl+Shift+K");
+        let (working, idle) = a_working_and_an_idle_action();
+        let given = vec![
+            (
+                working,
+                GivenShortcut {
+                    words: String::from("Press <Control><Shift>k"),
+                    chord: Some(chosen),
+                },
+            ),
+            (
+                HotkeyAction::READING_ORDER[1],
+                GivenShortcut {
+                    words: String::from("Press <Control><Alt>Return"),
+                    chord: None,
+                },
+            ),
+        ];
+        let list = over_a_desktop(given, false);
+
+        assert!(list.read_only());
+        assert_eq!(list.summary(), "");
+        let first = row_of(&list, working);
+        assert_eq!((first.key, first.badge), (i18n::chord(chosen), None));
+        let worded = row_of(&list, HotkeyAction::READING_ORDER[1]);
+        assert_eq!(worded.key, "Press <Control><Alt>Return");
+        assert_eq!(worded.badge, None);
+        let left_out = HotkeyAction::READING_ORDER
+            .iter()
+            .copied()
+            .find(|action| {
+                crate::live::wired(*action)
+                    && *action != working
+                    && *action != HotkeyAction::READING_ORDER[1]
+            })
+            .expect("a working action was left out");
+        let missing = row_of(&list, left_out);
+        assert_eq!(missing.key, "");
+        let pill = missing.badge.expect("a shortcut left out says so");
+        assert!(pill.risky);
+        assert_eq!(
+            pill.text,
+            i18n::shortcuts_label(ShortcutsLabel::NotRegistered)
+        );
+        let idle_pill = row_of(&list, idle).badge.expect("an idle action says so");
+        assert!(!idle_pill.risky);
+        assert_eq!(
+            idle_pill.text,
+            i18n::shortcuts_label(ShortcutsLabel::NotAvailable)
+        );
+
+        // Not answered yet: waited for, not missing - and idle stays idle.
+        let waiting = over_a_desktop(Vec::new(), true);
+        assert_eq!(row_of(&waiting, left_out).badge, None);
+        assert_eq!(
+            row_of(&waiting, idle).badge.map(|pill| pill.text),
+            Some(i18n::shortcuts_label(ShortcutsLabel::NotAvailable).to_owned())
+        );
+    }
+
+    /// Nothing is recorded and nothing is restored where the desktop chooses:
+    /// Enter, Delete and a click say who does, ask the worker for nothing, and
+    /// leave the sentence that stands where it is. Moving and closing work.
+    #[test]
+    fn over_a_desktop_enter_delete_and_a_click_say_who_chooses_and_ask_nothing() {
+        let said = i18n::shortcuts_label(ShortcutsLabel::DesktopChooses).to_owned();
+        let standing = String::from("A sentence stands.");
+        let mut list = over_a_desktop(Vec::new(), false);
+        assert_eq!(list.lines(), std::slice::from_ref(&standing));
+
+        assert_eq!(list.press(Key::Enter, &never), Act::Handled);
+        assert!(!list.recording() && !list.waiting());
+        assert_eq!(list.lines(), [standing.clone(), said.clone()]);
+        assert!(list.rows().iter().all(|row| !row.current));
+
+        let mut restore = over_a_desktop(Vec::new(), false);
+        assert_eq!(restore.press(Key::Restore, &never), Act::Handled);
+        assert!(!restore.waiting(), "a change was asked for");
+        assert_eq!(restore.lines(), [standing.clone(), said.clone()]);
+
+        let mut clicked = over_a_desktop(Vec::new(), false);
+        assert_eq!(clicked.click(4), Act::Handled);
+        assert_eq!(clicked.selected(), 4, "a click selects its row");
+        assert!(!clicked.recording() && !clicked.waiting());
+        assert_eq!(clicked.lines(), [standing, said]);
+
+        assert_eq!(list.press(Key::Down, &never), Act::Handled);
+        assert_eq!(list.selected(), 1);
+        assert_eq!(list.press(Key::Escape, &never), Act::Close);
+    }
+
+    /// The desktop answers while the window is open: the list takes what it
+    /// holds now. A list the desktop does not fill takes nothing, and keeps
+    /// recording its own.
+    #[test]
+    fn the_desktop_answering_changes_the_rows_and_a_list_of_our_own_ignores_it() {
+        let chosen = chord("Ctrl+Shift+K");
+        let (working, _) = a_working_and_an_idle_action();
+        let mut list = over_a_desktop(Vec::new(), true);
+        assert_eq!(row_of(&list, working).key, "");
+
+        list.given(DesktopNow {
+            given: vec![(
+                working,
+                GivenShortcut {
+                    words: String::from("Press <Control><Shift>k"),
+                    chord: Some(chosen),
+                },
+            )],
+            waiting: false,
+            standing: None,
+        });
+
+        assert_eq!(row_of(&list, working).key, i18n::chord(chosen));
+        assert!(list.lines().is_empty(), "the sentence that stood is gone");
+
+        let mut ours = a_list();
+        ours.given(DesktopNow {
+            given: Vec::new(),
+            waiting: false,
+            standing: None,
+        });
+        assert!(!ours.read_only());
+        assert_eq!(ours.summary(), "changed: 0 of 14");
     }
 }

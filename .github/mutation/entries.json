@@ -1649,9 +1649,9 @@
     {
       "id": "M322",
       "why": "Pause does not give the shortcuts back to the system - a press in the Shortcuts window would send a value to it",
-      "file": "crates/nkb-gui/src/live.rs",
-      "find": "                self.hold.pause();",
-      "replace": "                let _ = ();",
+      "file": "crates/nkb-gui/src/live/taking.rs",
+      "find": "            self.hold.pause();",
+      "replace": "            let _ = ();",
       "test": "live::hold::tests::a_pause_gives_the_shortcuts_back_says_so_and_tells_the_window_the_table",
       "runner": "rust:nkb-gui:lib"
     },
@@ -1659,8 +1659,8 @@
       "id": "M323",
       "why": "the new table registers before the old one is released - every unchanged chord comes back Taken against ourselves",
       "file": "crates/nkb-gui/src/live/hold.rs",
-      "find": "        self.holding = Holding::Lost;\n        self.needs_entry = false;\n        self.registered.clear();\n        match self.desktop.clone() {",
-      "replace": "        self.needs_entry = false;\n        self.registered.clear();\n        match self.desktop.clone() {",
+      "find": "        self.holding = Holding::Lost;\n        self.needs_entry = false;\n        self.refusal = None;\n        self.registered.clear();\n        match self.desktop.clone() {",
+      "replace": "        self.needs_entry = false;\n        self.refusal = None;\n        self.registered.clear();\n        match self.desktop.clone() {",
       "test": "live::tests::a_change_while_held_is_taken_at_once_releasing_the_old_set_first",
       "runner": "rust:nkb-gui:lib"
     },
@@ -1704,8 +1704,8 @@
       "id": "M328",
       "why": "Resume with the shortcuts held registers them a second time - every line about them is said twice",
       "file": "crates/nkb-gui/src/live.rs",
-      "find": "            Command::Resume if self.hold.live().is_some() || self.hold.asking_now() => Carried {",
-      "replace": "            Command::Resume if false => Carried {",
+      "find": "            Command::Resume if self.hold.live().is_some() || self.hold.on_the_desktop() => {",
+      "replace": "            Command::Resume if false => {",
       "test": "live::hold::tests::a_resume_while_the_shortcuts_are_held_does_nothing",
       "runner": "rust:nkb-gui:lib"
     },
@@ -1776,8 +1776,8 @@
       "id": "M336",
       "why": "a second change goes out before the answer to the first arrived - two answers can pass each other",
       "file": "crates/nkb-gui/src/shortcut_list.rs",
-      "find": "    fn ask(&mut self, chord: Option<HotkeyChord>) -> Act {\n        if self.waiting.is_some() {",
-      "replace": "    fn ask(&mut self, chord: Option<HotkeyChord>) -> Act {\n        if false {",
+      "find": "        if self.waiting.is_some() {\n            return Act::Handled;\n        }\n        let action = self.action();",
+      "replace": "        if false {\n            return Act::Handled;\n        }\n        let action = self.action();",
       "test": "shortcut_list::tests::enter_records_the_chord_the_system_says_is_held_and_asks_for_it",
       "runner": "rust:nkb-gui:lib"
     },
@@ -10278,8 +10278,8 @@
       "id": "M1354",
       "why": "a resume while the desktop is waited on asks the person a second time",
       "file": "crates/nkb-gui/src/live.rs",
-      "find": "Command::Resume if self.hold.live().is_some() || self.hold.asking_now() => Carried {",
-      "replace": "Command::Resume if self.hold.live().is_some() => Carried {",
+      "find": "Command::Resume if self.hold.live().is_some() || self.hold.on_the_desktop() => {",
+      "replace": "Command::Resume if self.hold.live().is_some() => {",
       "test": "live::hold::tests::a_resume_while_the_desktop_is_waited_on_asks_nothing",
       "runner": "rust:nkb-gui:lib"
     },
@@ -10705,6 +10705,249 @@
       "replace": "    if let Some(line) = palette::message_without_key(message, bindings).filter(|_| false) {",
       "test": "i18n::tests::the_counter_sentence_names_the_shortcut_it_asks_for",
       "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1402",
+      "why": "a window opened over a desktop that has not answered does not know it is waiting - every shortcut not given yet is called missing",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "            waiting: self.asking_now(),",
+      "replace": "            waiting: false,",
+      "test": "live::hold::tests::a_pause_while_the_desktop_is_waited_on_leaves_the_question_standing",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1403",
+      "why": "the window is not told why the desktop gave nothing - it shows rows without keys and no reason",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "            standing: self.held_back().or_else(|| self.refusal.clone()),",
+      "replace": "            standing: self.held_back(),",
+      "test": "live::hold::tests::the_window_hears_why_the_desktop_gave_nothing_until_it_is_asked_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1404",
+      "why": "a reason from an earlier attempt stands on after the desktop gave the shortcuts",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "        self.refusal = None;\n        self.registered.clear();",
+      "replace": "        self.registered.clear();",
+      "test": "live::hold::tests::the_window_hears_why_the_desktop_gave_nothing_until_it_is_asked_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1405",
+      "why": "a refusal is said once and forgotten - the window opened later cannot say why nothing answers",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "        self.refusal = Some(said.clone());",
+      "replace": "        let _ = ();",
+      "test": "live::hold::tests::the_window_hears_why_the_desktop_gave_nothing_until_it_is_asked_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1406",
+      "why": "a resume over a desktop that gave nothing asks the person again, behind the closing window",
+      "file": "crates/nkb-gui/src/live.rs",
+      "find": "|| self.hold.on_the_desktop() => {",
+      "replace": "|| false => {",
+      "test": "live::hold::tests::a_desktop_that_refuses_is_said_once_and_a_resume_does_not_ask_it_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1407",
+      "why": "a window opened over a desktop gives its shortcuts back - the session closes and the person is asked again on closing",
+      "file": "crates/nkb-gui/src/live/taking.rs",
+      "find": "        let given_back = desktop.is_none();",
+      "replace": "        let given_back = true;",
+      "test": "live::hold::tests::a_pause_over_a_desktop_gives_nothing_back_and_tells_the_window_what_it_gave",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1408",
+      "why": "a window opened over a desktop redraws the palette as paused although nothing is paused",
+      "file": "crates/nkb-gui/src/live/taking.rs",
+      "find": "            view: given_back.then(|| self.view(Vec::new(), ValueBand::Keep, None)),",
+      "replace": "            view: Some(self.view(Vec::new(), ValueBand::Keep, None)),",
+      "test": "live::hold::tests::a_pause_over_a_desktop_gives_nothing_back_and_tells_the_window_what_it_gave",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1409",
+      "why": "what the desktop holds never reaches an open shortcuts window after it answers",
+      "file": "crates/nkb-gui/src/live/taking.rs",
+      "find": "        self.hold.desktop_now().map(Told::Given)",
+      "replace": "        None",
+      "test": "live::hold::tests::a_pause_while_the_desktop_is_waited_on_leaves_the_question_standing",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1410",
+      "why": "a click that changed nothing tells the open window all the same",
+      "file": "crates/nkb-gui/src/live/entry.rs",
+      "find": "        let told = view.as_ref().and_then(|_| self.given_news());",
+      "replace": "        let told = self.given_news();",
+      "test": "live::hold::tests::a_click_on_an_entry_link_tells_the_open_window_what_the_desktop_holds",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1411",
+      "why": "a click on the entry link does not tell the open window the desktop is asked again",
+      "file": "crates/nkb-gui/src/live/entry.rs",
+      "find": "        let told = view.as_ref().and_then(|_| self.given_news());",
+      "replace": "        let told = None;",
+      "test": "live::hold::tests::a_click_on_an_entry_link_tells_the_open_window_what_the_desktop_holds",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1412",
+      "why": "a list over a desktop does not know it is read only",
+      "file": "crates/nkb-gui/src/shortcut_list.rs",
+      "find": "        self.now.desktop.is_some()",
+      "replace": "        false",
+      "test": "shortcut_list::tests::a_list_over_a_desktop_shows_what_it_gave_and_says_what_it_left_out",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1413",
+      "why": "a list over a desktop counts changed shortcuts that are the desktop's to choose",
+      "file": "crates/nkb-gui/src/shortcut_list.rs",
+      "find": "        if self.read_only() {\n            return String::new();\n        }",
+      "replace": "        if false {\n            return String::new();\n        }",
+      "test": "shortcut_list::tests::a_list_over_a_desktop_shows_what_it_gave_and_says_what_it_left_out",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1414",
+      "why": "Enter over a desktop starts recording a shortcut nobody can record",
+      "file": "crates/nkb-gui/src/shortcut_list.rs",
+      "find": "    fn start_recording(&mut self) -> Act {\n        if self.read_only() {",
+      "replace": "    fn start_recording(&mut self) -> Act {\n        if false {",
+      "test": "shortcut_list::tests::over_a_desktop_enter_delete_and_a_click_say_who_chooses_and_ask_nothing",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1415",
+      "why": "Delete over a desktop asks the worker to restore a default the desktop owns",
+      "file": "crates/nkb-gui/src/shortcut_list.rs",
+      "find": "    fn ask(&mut self, chord: Option<HotkeyChord>) -> Act {\n        if self.read_only() {",
+      "replace": "    fn ask(&mut self, chord: Option<HotkeyChord>) -> Act {\n        if false {",
+      "test": "shortcut_list::tests::over_a_desktop_enter_delete_and_a_click_say_who_chooses_and_ask_nothing",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1416",
+      "why": "a shortcut the desktop has not answered yet is called not registered",
+      "file": "crates/nkb-gui/src/shortcut_list.rs",
+      "find": "            None if desktop.waiting => None,",
+      "replace": "            None if false => None,",
+      "test": "shortcut_list::tests::a_list_over_a_desktop_shows_what_it_gave_and_says_what_it_left_out",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1417",
+      "why": "an action this version does not carry out is called not registered, as if the desktop had left it out",
+      "file": "crates/nkb-gui/src/shortcut_list.rs",
+      "find": "            None if !crate::live::wired(action) => Some(ShortcutsLabel::NotAvailable),",
+      "replace": "            None if false => Some(ShortcutsLabel::NotAvailable),",
+      "test": "shortcut_list::tests::a_list_over_a_desktop_shows_what_it_gave_and_says_what_it_left_out",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1418",
+      "why": "a shortcut the desktop left out does not wear the risk colour",
+      "file": "crates/nkb-gui/src/shortcut_list.rs",
+      "find": "                risky: label == ShortcutsLabel::NotRegistered,",
+      "replace": "                risky: false,",
+      "test": "shortcut_list::tests::a_list_over_a_desktop_shows_what_it_gave_and_says_what_it_left_out",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1419",
+      "why": "an action that does nothing yet wears the risk colour",
+      "file": "crates/nkb-gui/src/shortcut_list.rs",
+      "find": "                risky: label == ShortcutsLabel::NotRegistered,",
+      "replace": "                risky: true,",
+      "test": "shortcut_list::tests::a_list_over_a_desktop_shows_what_it_gave_and_says_what_it_left_out",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1420",
+      "why": "a shortcut the desktop gave in words the palette cannot name shows no words",
+      "file": "crates/nkb-gui/src/shortcut_list.rs",
+      "find": "                one.chord.map_or_else(|| one.words.clone(), i18n::chord)",
+      "replace": "                one.chord.map_or_else(String::new, i18n::chord)",
+      "test": "shortcut_list::tests::a_list_over_a_desktop_shows_what_it_gave_and_says_what_it_left_out",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1421",
+      "why": "a list of our own takes the desktop's answer and stops recording shortcuts",
+      "file": "crates/nkb-gui/src/shortcut_list.rs",
+      "find": "        if self.read_only() {\n            self.now.desktop = Some(desktop);",
+      "replace": "        if true {\n            self.now.desktop = Some(desktop);",
+      "test": "shortcut_list::tests::the_desktop_answering_changes_the_rows_and_a_list_of_our_own_ignores_it",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1422",
+      "why": "the sentence that stands over a desktop's list is not shown",
+      "file": "crates/nkb-gui/src/shortcut_list.rs",
+      "find": "            .filter_map(|desktop| desktop.standing.clone())",
+      "replace": "            .filter_map(|_| None::<String>)",
+      "test": "shortcut_list::tests::over_a_desktop_enter_delete_and_a_click_say_who_chooses_and_ask_nothing",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1423",
+      "why": "a window over a desktop introduces itself as the one that records and pauses the palette",
+      "file": "crates/nkb-gui/src/shortcuts.rs",
+      "find": "    let intro = if desktop_chooses {",
+      "replace": "    let intro = if false {",
+      "test": "the_shortcuts_window_pauses_records_and_always_takes_the_shortcuts_back",
+      "runner": "rust:nkb-gui:shortcuts_window"
+    },
+    {
+      "id": "M1424",
+      "why": "a window over a desktop offers Enter and Delete, which do nothing there",
+      "file": "crates/nkb-gui/src/shortcuts.rs",
+      "find": "        .filter(|_| !desktop_chooses)",
+      "replace": "        .filter(|_| true)",
+      "test": "the_shortcuts_window_pauses_records_and_always_takes_the_shortcuts_back",
+      "runner": "rust:nkb-gui:shortcuts_window"
+    },
+    {
+      "id": "M1425",
+      "why": "a row without a shortcut still draws an empty key",
+      "file": "crates/nkb-gui/src/shortcuts.rs",
+      "find": "        has_key: !row.key.is_empty(),",
+      "replace": "        has_key: true,",
+      "test": "the_shortcuts_window_pauses_records_and_always_takes_the_shortcuts_back",
+      "runner": "rust:nkb-gui:shortcuts_window"
+    },
+    {
+      "id": "M1426",
+      "why": "the desktop answering while the window is open changes nothing on the screen",
+      "file": "crates/nkb-gui/src/shortcuts.rs",
+      "find": "                if self.with_list(|list| list.given(desktop)).is_some() {",
+      "replace": "                if false {",
+      "test": "the_shortcuts_window_pauses_records_and_always_takes_the_shortcuts_back",
+      "runner": "rust:nkb-gui:shortcuts_window"
+    },
+    {
+      "id": "M1427",
+      "why": "the window describes itself by the route of the last opening, not of this one",
+      "file": "crates/nkb-gui/src/shortcuts.rs",
+      "find": "        describe(&self.window, list.read_only());",
+      "replace": "        describe(&self.window, false);",
+      "test": "the_shortcuts_window_pauses_records_and_always_takes_the_shortcuts_back",
+      "runner": "rust:nkb-gui:shortcuts_window"
+    },
+    {
+      "id": "M1428",
+      "why": "the sentence that stands over a desktop's list is not drawn",
+      "file": "crates/nkb-gui/src/shortcuts.rs",
+      "find": "            list.lines()\n",
+      "replace": "            list.messages()\n",
+      "test": "the_shortcuts_window_pauses_records_and_always_takes_the_shortcuts_back",
+      "runner": "rust:nkb-gui:shortcuts_window"
     }
   ]
 }

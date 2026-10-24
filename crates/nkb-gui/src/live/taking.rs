@@ -1,11 +1,40 @@
 //! Taking the shortcuts, and naming them once the desktop or the system has answered:
 //! the methods of the worker that register the table in effect, say what came of it, and
-//! put the words that name the shortcuts on the palette. Kept apart from the loop so that
-//! `live.rs` stays under the ceiling of `D113`.
+//! put the words that name the shortcuts on the palette. Giving them back for the
+//! shortcuts window belongs here too, as does telling that window what a desktop holds.
+//! Kept apart from the loop so that `live.rs` stays under the ceiling of `D113`.
 
 use super::*;
 
 impl Worker<'_> {
+    /// The shortcuts window is opening: the shortcuts are given back, and the window is
+    /// told the table it edits.
+    ///
+    /// Where a desktop holds them nothing is given back - see the module - so the palette
+    /// is not redrawn and the answer says what the desktop gave instead.
+    pub(super) fn pause(&mut self) -> Carried {
+        let desktop = self.hold.desktop_now();
+        let given_back = desktop.is_none();
+        if given_back {
+            self.hold.pause();
+        }
+        Carried {
+            view: given_back.then(|| self.view(Vec::new(), ValueBand::Keep, None)),
+            told: Some(Told::Paused(ShortcutsNow {
+                bindings: self.in_effect().0,
+                registered: self.hold.registered.clone(),
+                desktop,
+            })),
+            toggled: None,
+        }
+    }
+
+    /// What the shortcuts window is told when the desktop's hold changed, and `None`
+    /// where no desktop holds the shortcuts.
+    pub(super) fn given_news(&self) -> Option<Told> {
+        self.hold.desktop_now().map(Told::Given)
+    }
+
     /// Takes the shortcuts the settings give now, and the palette's view of
     /// it - with the words naming them, which may have changed.
     ///

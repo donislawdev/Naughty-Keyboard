@@ -40,7 +40,7 @@ use nkb_app::ports::{
 };
 use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord};
 
-use super::{Apart, ShortcutLink};
+use super::{Apart, DesktopNow, ShortcutLink};
 
 /// What a registrar answered.
 type Answer = Result<Box<dyn LiveShortcuts + Send>, ShortcutsUnavailable>;
@@ -88,6 +88,10 @@ pub(super) struct Hold<'a> {
     /// once more in front of what the desktop answers: an answer that comes at once
     /// would otherwise take the line off the screen before it was read.
     after_answer: Vec<String>,
+    /// Why the last attempt to take the shortcuts gave none, as the sentence the
+    /// palette said once. The shortcuts window says it for as long as it holds, because
+    /// a person who opens it later is asking why the shortcuts do not answer.
+    refusal: Option<String>,
     holding: Holding,
     /// What the last registration said, chord by chord - see
     /// [`ShortcutsNow`](super::ShortcutsNow).
@@ -102,6 +106,7 @@ impl<'a> Hold<'a> {
             entry: None,
             needs_entry: false,
             after_answer: Vec::new(),
+            refusal: None,
             holding: Holding::Lost,
             registered: Vec::new(),
         }
@@ -146,6 +151,27 @@ impl<'a> Hold<'a> {
     /// Whether a desktop has been asked and has not answered.
     pub(super) const fn asking_now(&self) -> bool {
         matches!(self.holding, Holding::Asking { .. })
+    }
+
+    /// Whether a desktop holds the shortcuts here, and the person chooses them there.
+    pub(super) const fn on_the_desktop(&self) -> bool {
+        self.desktop.is_some()
+    }
+
+    /// What the desktop holds for the palette now, for the shortcuts window - and
+    /// `None` where no desktop does.
+    ///
+    /// The sentence that stands is the one every view says while the shortcuts are
+    /// held back, and failing that the reason the last attempt gave none.
+    pub(super) fn desktop_now(&self) -> Option<DesktopNow> {
+        self.desktop.as_ref()?;
+        Some(DesktopNow {
+            given: self
+                .live()
+                .map_or_else(Vec::new, |live| live.given().to_vec()),
+            waiting: self.asking_now(),
+            standing: self.held_back().or_else(|| self.refusal.clone()),
+        })
     }
 
     /// The sentence every view says first while the shortcuts are not in hand for
@@ -284,6 +310,7 @@ impl<'a> Hold<'a> {
     pub(super) fn take(&mut self, bindings: &Bindings) -> Vec<String> {
         self.holding = Holding::Lost;
         self.needs_entry = false;
+        self.refusal = None;
         self.registered.clear();
         match self.desktop.clone() {
             Some(desktop) => self.ask(desktop, *bindings),
@@ -313,9 +340,7 @@ impl<'a> Hold<'a> {
                 let _ = sender.send(desktop.register(&wanted));
             });
         if started.is_err() {
-            return vec![i18n::shortcuts_unavailable(
-                &ShortcutsUnavailable::CouldNotStart,
-            )];
+            return self.refused(&ShortcutsUnavailable::CouldNotStart);
         }
         self.holding = Holding::Asking { answers, bindings };
         Vec::new()
@@ -366,9 +391,16 @@ impl<'a> Hold<'a> {
             }
             Err(error) => {
                 self.registered.clear();
-                vec![i18n::shortcuts_unavailable(&error)]
+                self.refused(&error)
             }
         }
+    }
+
+    /// The sentence for a refusal, kept to be said again by the window.
+    fn refused(&mut self, error: &ShortcutsUnavailable) -> Vec<String> {
+        let said = i18n::shortcuts_unavailable(error);
+        self.refusal = Some(said.clone());
+        vec![said]
     }
 }
 
@@ -394,7 +426,7 @@ mod tests {
     use super::{Answer, Hold};
     use crate::live::tests::{Registrar, a_store, paused_line, with_worker};
     use crate::live::{
-        Command, Next, ShortcutLink, ShortcutsNow, Told, legend, next_command, wired,
+        Command, DesktopNow, Next, ShortcutLink, ShortcutsNow, Told, legend, next_command, wired,
     };
 
     /// What a person at the window of the desktop decides.
@@ -687,10 +719,12 @@ mod tests {
         });
     }
 
-    /// A desktop that refuses is said once and the hold is lost, not waited on:
-    /// a resume asks again, as it does after any registration that failed.
+    /// A desktop that refuses is said once and the hold is lost, not waited on.
+    /// A resume does not ask it again: the person was asked, the sentence says
+    /// how to be asked once more, and a window closing must not put the question
+    /// to them behind their back (`D145` point 70).
     #[test]
-    fn a_desktop_that_refuses_is_said_and_a_resume_asks_it_again() {
+    fn a_desktop_that_refuses_is_said_once_and_a_resume_does_not_ask_it_again() {
         let store = a_store(false);
         let registrar = Registrar::default();
         let (person, decide) = a_person();
@@ -709,9 +743,11 @@ mod tests {
             assert!(!worker.hold.asking_now(), "a refusal is not a wait");
             assert_eq!(worker.hold.held_back(), None);
 
-            worker.carry_out(Command::Resume);
-            assert!(worker.hold.asking_now(), "the resume did not ask again");
-            wait_asked(&person, 2);
+            let carried = worker.carry_out(Command::Resume);
+            assert!(carried.view.is_none() && carried.told.is_none());
+            assert!(!worker.hold.asking_now(), "the resume asked again");
+            std::thread::sleep(Duration::from_millis(30));
+            assert_eq!(person.times_asked(), 1);
         });
     }
 
@@ -1010,11 +1046,12 @@ mod tests {
         });
     }
 
-    /// The shortcuts window gives the shortcuts back, and a hold that was still
-    /// waiting on the desktop has nothing to give but the question: an answer
-    /// that comes later closes its session at once and is never held.
+    /// 🔴 The shortcuts window opens while the person is still choosing in the
+    /// window of the system: nothing is given back and the question stands, so the
+    /// answer that comes later is held and told to the window, which waits for it.
+    /// Dropping the question would have asked the person again when the window closed.
     #[test]
-    fn a_pause_while_the_desktop_is_waited_on_drops_the_question_and_the_late_answer() {
+    fn a_pause_while_the_desktop_is_waited_on_leaves_the_question_standing() {
         let store = a_store(false);
         let registrar = Registrar::default();
         let (person, decide) = a_person();
@@ -1024,22 +1061,36 @@ mod tests {
 
             let carried = worker.carry_out(Command::Pause);
 
-            assert!(worker.hold.paused());
-            assert!(!worker.hold.asking_now());
-            let view = carried.view.expect("the palette says it is paused");
-            assert_eq!(view.messages, vec![paused_line()]);
+            assert!(!worker.hold.paused());
+            assert!(worker.hold.asking_now(), "the question was dropped");
+            assert!(carried.view.is_none(), "nothing is paused to be said");
+            let Some(Told::Paused(now)) = carried.told else {
+                panic!("the window was not told: {:?}", carried.told);
+            };
+            assert_eq!(
+                now.desktop,
+                Some(DesktopNow {
+                    given: Vec::new(),
+                    waiting: true,
+                    standing: Some(waiting_line()),
+                })
+            );
+
             decide
                 .send(Verdict::Give)
                 .expect("the desktop is listening");
-            // The thread answers into a channel nobody reads: its session is let
-            // go as soon as the answer is dropped, and nothing is held.
-            let until = Instant::now() + Duration::from_secs(5);
-            while person.gave.load(Ordering::SeqCst) == 0 || person.alive() != 0 {
-                assert!(Instant::now() < until, "the late answer was kept");
-                std::thread::sleep(Duration::from_millis(2));
-            }
-            assert!(worker.hold.live().is_none());
-            assert!(worker.hold.arrived().is_none());
+            answer_of(&mut worker.hold);
+
+            assert!(worker.hold.live().is_some());
+            assert_eq!(person.alive(), 1);
+            assert_eq!(
+                worker.given_news(),
+                Some(Told::Given(DesktopNow {
+                    given: Vec::new(),
+                    waiting: false,
+                    standing: None,
+                }))
+            );
         });
     }
 
@@ -1174,6 +1225,7 @@ mod tests {
                         .iter()
                         .map(|(action, chord)| (*action, *chord, ShortcutRegistration::Registered))
                         .collect(),
+                    desktop: None,
                 }))
             );
         });
@@ -1220,6 +1272,158 @@ mod tests {
             assert!(carried.view.is_none() && carried.told.is_none());
             assert_eq!(registrar.asked.borrow().len(), asked);
             assert_eq!(registrar.alive(), 1);
+        });
+    }
+
+    /// 🔴 Where a desktop holds the shortcuts the window opens over what it gave,
+    /// and nothing is given back: giving them back would close the session, and
+    /// taking them again would put the window of the system before the person once
+    /// more. The window is told what the desktop holds, in the desktop's own words,
+    /// and a close that follows changes nothing.
+    #[test]
+    fn a_pause_over_a_desktop_gives_nothing_back_and_tells_the_window_what_it_gave() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        let (person, decide) = a_person();
+        with_worker(&store, &registrar, false, |worker, memory| {
+            worker.hold.desktop = Some(person.clone());
+            worker.take(memory.bindings.get());
+            let chosen = HotkeyChord::parse("Ctrl+Shift+K").expect("a chord of the palette");
+            let held = vec![
+                (
+                    HotkeyAction::NextValue,
+                    GivenShortcut {
+                        words: String::from("Press <Control><Shift>k"),
+                        chord: Some(chosen),
+                    },
+                ),
+                (
+                    HotkeyAction::PreviousValue,
+                    GivenShortcut {
+                        words: String::from("Press <Control><Alt>Return"),
+                        chord: None,
+                    },
+                ),
+            ];
+            decide
+                .send(Verdict::Keep {
+                    left_out: vec![HotkeyAction::RestartPack],
+                    held: held.clone(),
+                })
+                .expect("the desktop is listening");
+            let lines = answer_of(&mut worker.hold);
+            worker.answered(lines);
+            assert_eq!(person.alive(), 1);
+
+            let carried = worker.carry_out(Command::Pause);
+
+            assert_eq!(person.alive(), 1, "the desktop's shortcuts were given back");
+            assert!(!worker.hold.paused());
+            assert!(worker.hold.live().is_some());
+            assert!(carried.view.is_none(), "nothing is paused to be said");
+            let Some(Told::Paused(now)) = carried.told else {
+                panic!("the window was not told: {:?}", carried.told);
+            };
+            assert_eq!(
+                now.desktop,
+                Some(DesktopNow {
+                    given: held,
+                    waiting: false,
+                    standing: None,
+                })
+            );
+
+            let closed = worker.carry_out(Command::Resume);
+            assert!(closed.view.is_none() && closed.told.is_none());
+            assert_eq!(person.alive(), 1);
+            assert_eq!(person.times_asked(), 1);
+        });
+    }
+
+    /// The window says what the palette says while the shortcuts are held back -
+    /// the wait, the offer to make the entry - and, for as long as it is true, why
+    /// the desktop gave none. A person who opens it later is asking exactly that.
+    /// Asked again, the desktop is waited on and the old reason is gone.
+    #[test]
+    fn the_window_hears_why_the_desktop_gave_nothing_until_it_is_asked_again() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        let (person, decide) = a_person();
+        let desk = Arc::new(Desk::default());
+        with_worker(&store, &registrar, false, |worker, memory| {
+            assert_eq!(worker.hold.desktop_now(), None, "no desktop holds them");
+            worker.hold.desktop = Some(person.clone());
+            worker.hold.entry = Some(desk.clone());
+            worker.take(memory.bindings.get());
+            let standing = |worker: &crate::live::Worker<'_>| {
+                worker.hold.desktop_now().expect("a desktop holds them")
+            };
+            assert_eq!(standing(worker).standing, Some(waiting_line()));
+            assert!(standing(worker).waiting);
+
+            let closed = DesktopRefusal::Closed;
+            decide
+                .send(Verdict::Refuse(ShortcutsUnavailable::Desktop(closed)))
+                .expect("the desktop is listening");
+            answer_of(&mut worker.hold);
+
+            let now = standing(worker);
+            assert!(!now.waiting);
+            assert_eq!(
+                now.standing,
+                Some(i18n::shortcuts_unavailable(&ShortcutsUnavailable::Desktop(
+                    closed
+                )))
+            );
+            assert_eq!(worker.hold.held_back(), None, "the palette said it once");
+
+            worker.take(memory.bindings.get());
+            assert_eq!(standing(worker).standing, Some(waiting_line()));
+            decide
+                .send(Verdict::Refuse(ShortcutsUnavailable::Desktop(
+                    DesktopRefusal::NeedsEntry,
+                )))
+                .expect("the desktop is listening");
+            answer_of(&mut worker.hold);
+            assert_eq!(standing(worker).standing, Some(the_offer()));
+
+            worker.take(memory.bindings.get());
+            decide
+                .send(Verdict::Give)
+                .expect("the desktop is listening");
+            answer_of(&mut worker.hold);
+            assert_eq!(
+                standing(worker).standing,
+                None,
+                "a reason from before stands over shortcuts that were given"
+            );
+        });
+    }
+
+    /// A click on a link of the palette changes what the desktop holds while the
+    /// window may be open, so the window is told what came of it: the wait, and the
+    /// answer that follows. A click that changed nothing tells nothing.
+    #[test]
+    fn a_click_on_an_entry_link_tells_the_open_window_what_the_desktop_holds() {
+        let store = a_store(false);
+        let registrar = Registrar::default();
+        let (person, decide) = a_person();
+        let desk = Arc::new(Desk::default());
+        with_worker(&store, &registrar, false, |worker, memory| {
+            asked_in_vain(worker, memory, &person, &decide, &desk);
+
+            let carried = worker.carry_out(Command::EnableEntry);
+
+            assert_eq!(
+                carried.told,
+                Some(Told::Given(DesktopNow {
+                    given: Vec::new(),
+                    waiting: true,
+                    standing: Some(waiting_line()),
+                }))
+            );
+            let late = worker.carry_out(Command::RemoveEntry);
+            assert!(late.view.is_none() && late.told.is_none());
         });
     }
 

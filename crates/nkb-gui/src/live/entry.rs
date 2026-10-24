@@ -31,9 +31,11 @@ impl Worker<'_> {
                 self.answered(said)
             }
         });
+        // An open shortcuts window is looking at what the click has just changed.
+        let told = view.as_ref().and_then(|_| self.given_news());
         Carried {
             view,
-            told: None,
+            told,
             toggled: None,
         }
     }

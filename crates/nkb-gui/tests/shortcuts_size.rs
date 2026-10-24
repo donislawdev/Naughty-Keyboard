@@ -234,6 +234,7 @@ fn the_shortcuts_window_asks_for_the_room_its_rows_and_sentences_need() {
             .iter()
             .map(|(action, held)| (*action, *held, ShortcutRegistration::Registered))
             .collect(),
+        desktop: None,
     }));
     let asked = adapter
         .asked
