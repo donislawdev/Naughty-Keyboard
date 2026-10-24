@@ -84,7 +84,7 @@ fn the_route_switch_turns_clipboard_mode_on_and_off_and_its_bar_turns_it_off() {
     let palette = Palette::new().expect("the palette must build");
     palette.set_pack("whitespace".into());
     palette.set_counter("3 / 12".into());
-    palette.set_shortcuts_link("Change shortcuts".into());
+    palette.set_shortcuts_links(ways(&["Change shortcuts"]));
     nkb_gui::header_links::show(&palette);
     palette.set_clipboard_mode_label("clipboard mode".into());
     palette.set_route_label("Send by".into());
@@ -98,7 +98,7 @@ fn the_route_switch_turns_clipboard_mode_on_and_off_and_its_bar_turns_it_off() {
     let log = Rc::clone(&clicks);
     palette.on_turn_off_clipboard(move || log.borrow_mut().off += 1);
     let log = Rc::clone(&clicks);
-    palette.on_open_shortcuts(move || log.borrow_mut().other += 1);
+    palette.on_open_shortcuts(move |_| log.borrow_mut().other += 1);
     palette.show().expect("the palette must show");
     let seen = |route: &[i32], off: usize| Clicks {
         route: route.to_vec(),

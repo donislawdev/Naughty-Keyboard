@@ -259,8 +259,13 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
     // to the palette - the same render with the words and without them - so the
     // pointer goes where the link IS.
     let asked = Rc::new(Cell::new(0));
+    let place = Rc::new(Cell::new(-1));
     let count = Rc::clone(&asked);
-    palette.on_open_shortcuts(move || count.set(count.get() + 1));
+    let which = Rc::clone(&place);
+    palette.on_open_shortcuts(move |at| {
+        count.set(count.get() + 1);
+        which.set(at);
+    });
     palette.set_hints(ModelRc::new(VecModel::from(vec![
         HintRow {
             key: "Alt+Shift+N".into(),
@@ -271,8 +276,14 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
             action: "Find a value".into(),
         },
     ])));
+    // The row of links is there before it has words, as it is in the product, where the
+    // legend always gives it the way into the shortcuts window: a row that came and
+    // went would move everything below it.
+    palette.set_shortcuts_links(ModelRc::new(VecModel::from(vec!["".into()])));
     let without = offscreen::draw(&surface, WIDTH, HEIGHT);
-    palette.set_shortcuts_link("Change shortcuts".into());
+    palette.set_shortcuts_links(ModelRc::new(VecModel::from(vec![
+        "Change shortcuts".into(),
+    ])));
     let with = offscreen::draw(&surface, WIDTH, HEIGHT);
     let path = offscreen::save(&with, WIDTH, HEIGHT, "palette-link.png");
     let link = added(&without, &with);
@@ -316,6 +327,45 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
         (1, 1),
         "a click on the hint bar above the link asked for a window"
     );
+    assert_eq!(place.get(), 0, "the first link is not at place 0");
+
+    // ---- two links, where the desktop does not know the program (`D145` point 68) ----
+    // The second stands beside the first on the same line and answers with its own
+    // place, so a click on either means the link that was drawn there.
+    palette.set_shortcuts_links(ModelRc::new(VecModel::from(vec![
+        "Change shortcuts".into(),
+        "".into(),
+    ])));
+    let one = offscreen::draw(&surface, WIDTH, HEIGHT);
+    palette.set_shortcuts_links(ModelRc::new(VecModel::from(vec![
+        "Change shortcuts".into(),
+        "Enable global shortcuts".into(),
+    ])));
+    let two = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let second = added(&one, &two);
+    offscreen::save(&two, WIDTH, HEIGHT, "palette-links.png");
+    assert!(
+        second.bottom - second.top < 30 && second.left >= link.right && second.right <= WIDTH,
+        "the second link does not stand beside the first on one line: {second:?}, the first          is {link:?}"
+    );
+    press(
+        &palette,
+        LogicalPosition::new(
+            ((second.left + second.right) / 2) as f32,
+            ((second.top + second.bottom) / 2) as f32,
+        ),
+    );
+    assert_eq!(
+        (asked.get(), place.get()),
+        (2, 1),
+        "a click on the second link"
+    );
+    press(&palette, centre);
+    assert_eq!(
+        (asked.get(), place.get()),
+        (3, 0),
+        "a click on the first link"
+    );
 
     // ---- the links in the header: GitHub, Donate and About, one callback ----
     // At the top since the owner's points of 2026-10-14. The real list, built
@@ -323,6 +373,7 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
     // link added stands where it will stand, the ones already there stay put,
     // and the ink it adds is its own box. Every box is found before the first
     // click, because the pointer lights the link it stays over.
+    let windows_asked = asked.get();
     let clicked: Rc<RefCell<Vec<HeaderLinkKind>>> = Rc::default();
     let record = Rc::clone(&clicked);
     palette.on_open_link(move |link| record.borrow_mut().push(link));
@@ -372,7 +423,7 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
         let wanted: Vec<HeaderLinkKind> = links[..=index].iter().map(|l| l.kind).collect();
         assert_eq!(
             (clicked.borrow().clone(), asked.get(), opened.get()),
-            (wanted, 1, 1),
+            (wanted, windows_asked, 1),
             "a click on {:?} did not hand back that link once, or asked for another window. \
              Look at {}",
             links[index].kind,

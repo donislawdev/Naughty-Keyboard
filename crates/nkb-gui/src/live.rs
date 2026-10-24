@@ -114,10 +114,13 @@ use crate::typeface::SHIPPED;
 use crate::{HintRow, Marker, Palette, ValueKey as ShownKey};
 
 mod copy;
+mod entry;
 mod folds;
 mod hold;
+mod links;
 mod presses;
 mod recent;
+mod taking;
 mod view;
 
 use copy::show_copied;
@@ -125,6 +128,8 @@ pub use copy::{CopyButton, copy_command, label_copies};
 use folds::Collapse;
 pub use folds::{label_shortcut_list, starts_with_shortcut_list, wire_shortcut_list};
 use hold::Hold;
+use links::ShortcutLink;
+pub use links::wire_shortcut_links;
 use presses::{PaletteShortcuts, between_presses};
 use recent::{after_press, carry_out_noting, keep_recent};
 pub(crate) use view::preview_line;
@@ -242,6 +247,13 @@ pub enum Command {
     /// from its first value (`D109`). Here, because the worker owns the
     /// settings and the sequence for the run.
     WelcomeDone,
+    /// Make the entry the desktop wants before it gives the program shortcuts, and
+    /// ask it for them again - the link "Enable global shortcuts" (`D145` point 68).
+    /// Carried out only while the desktop has said it does not know the program.
+    EnableEntry,
+    /// Take that entry away again - the link beside it, carried out only for an
+    /// entry this program made.
+    RemoveEntry,
 }
 
 /// What the worker tells the shortcuts window.
@@ -829,6 +841,14 @@ impl Worker<'_> {
                     toggled: None,
                 }
             }
+            Command::EnableEntry => {
+                let news = self.hold.make_entry();
+                self.entry_news(news, true)
+            }
+            Command::RemoveEntry => {
+                let news = self.hold.remove_entry();
+                self.entry_news(news, false)
+            }
             Command::Shortcut { action, chord } => {
                 let (change, said) = self.memory.kept.borrow_mut().change_shortcut(
                     self.memory.store,
@@ -867,67 +887,6 @@ impl Worker<'_> {
             .kept
             .borrow()
             .bindings(self.defaults, self.types)
-    }
-
-    /// Takes the shortcuts the settings give now, and the palette's view of
-    /// it - with the words naming them, which may have changed.
-    ///
-    /// What the file wishes and cannot have is said again: it is still true,
-    /// and the tester may just have looked at it in the window.
-    fn resume(&mut self) -> View {
-        let (bindings, refused) = self.in_effect();
-        self.memory.bindings.set(bindings);
-        let mut lines: Vec<String> = refused
-            .iter()
-            .filter_map(|message| i18n::settings_message(message, &self.memory.file, &bindings))
-            .collect();
-        lines.extend(self.take(bindings));
-        let legend = self.naming(bindings);
-        self.view(lines, ValueBand::Keep, Some(legend))
-    }
-
-    /// The words that name the shortcuts, with what the desktop gave where it
-    /// chose the chords. The table they follow is the one every sentence of the
-    /// palette reads from now on, and it is never saved or registered.
-    fn naming(&mut self, asked: Bindings) -> Legend {
-        let (shown, apart) = self.hold.as_given(asked);
-        self.memory.bindings.set(shown);
-        legend_of(&shown, &apart)
-    }
-
-    /// Registers `bindings` in place of whatever is held, and what is worth
-    /// saying about it - with the route asked for at start, the first time
-    /// the shortcuts are held.
-    fn take(&mut self, bindings: Bindings) -> Vec<String> {
-        let lines = self.hold.take(&bindings);
-        self.with_the_route(lines, bindings)
-    }
-
-    /// What the palette draws when the desktop has answered the shortcuts it was
-    /// asked for: the legend of the table, as after a resume.
-    fn answered(&mut self, lines: Vec<String>) -> View {
-        let asked = self.in_effect().0;
-        let legend = self.naming(asked);
-        let lines = self.with_the_route(lines, self.memory.bindings.get());
-        self.view(lines, ValueBand::Keep, Some(legend))
-    }
-
-    /// `lines`, and what the route asked for at start adds once the shortcuts are
-    /// held.
-    fn with_the_route(&mut self, mut lines: Vec<String>, bindings: Bindings) -> Vec<String> {
-        if self.hold.live().is_some()
-            && let Some(route) = self.route.take()
-        {
-            // A system with no direct route starts in clipboard mode here,
-            // rather than failing the first press.
-            lines.extend(
-                self.sequence
-                    .choose_route(route, self.ports)
-                    .iter()
-                    .map(|message| i18n::message(message, &self.pack, &bindings)),
-            );
-        }
-        lines
     }
 
     /// A view of the palette as it stands, saying what the sequence said.
@@ -978,7 +937,7 @@ fn choose(
     pack: &mut String,
     asked: &str,
     standing: &Standing,
-    held_back: Option<PaletteLabel>,
+    held_back: Option<String>,
 ) -> Option<View> {
     let (said, value) = match open_pack(sequence, memory, pack, asked) {
         PackOpening::Same => return None,
@@ -1004,7 +963,7 @@ fn choose_value(
     asked: &str,
     value: &str,
     standing: &Standing,
-    held_back: Option<PaletteLabel>,
+    held_back: Option<String>,
 ) -> View {
     let (mut said, band) = match open_pack(sequence, memory, pack, asked) {
         PackOpening::Same => (Vec::new(), ValueBand::Keep),

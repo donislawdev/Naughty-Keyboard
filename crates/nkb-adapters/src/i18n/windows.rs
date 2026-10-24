@@ -860,6 +860,15 @@ pub fn shortcut_answer(
 mod tests {
     use super::*;
 
+    /// A query with braces in it is copied into the sentence, not substituted.
+    #[test]
+    fn a_query_with_braces_is_copied_not_substituted() {
+        assert_eq!(
+            no_match("{id}"),
+            "Nothing matches \"{id}\". Press Backspace to widen the search."
+        );
+    }
+
     /// The About window's one pattern with placeholders goes through its typed
     /// function, which fills both - and no other pattern there has one.
     #[test]

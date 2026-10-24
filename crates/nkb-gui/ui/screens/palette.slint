@@ -340,9 +340,9 @@ export component Palette inherits Window {
     // ⚠️ Declared, not an alias like `open-packs`: the link stands in a band
     // behind `if`, and an element behind `if` cannot be named from here. The
     // link's own click only hands on to this callback - one call, no logic.
-    callback open-shortcuts();
+    callback open-shortcuts(int);
     // The link's words, which are also what the click does.
-    in property <string> shortcuts-link;
+    in property <[string]> shortcuts-links;
     // The links in the header - GitHub, Donate and About since the owner's
     // points of 2026-10-14 - and which one was clicked. What each opens, and
     // the two addresses, live in Rust, never in a view
@@ -510,15 +510,15 @@ export component Palette inherits Window {
             clearing-options: root.clearing-options;
             clearing-selected: root.clearing-selected;
             clearing-enabled: !root.sending && !root.clipboard-mode-on;
-            shortcuts-link: root.shortcuts-link;
+            shortcuts-links: root.shortcuts-links;
             choose-route(index) => {
                 root.choose-route(index);
             }
             choose-clearing(index) => {
                 root.choose-clearing(index);
             }
-            open-shortcuts => {
-                root.open-shortcuts();
+            open-shortcuts(place) => {
+                root.open-shortcuts(place);
             }
         }
 

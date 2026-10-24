@@ -277,10 +277,14 @@ fn run_palette(
         choose.clone(),
         say_in(&palette),
     );
-    palette.on_open_shortcuts({
-        let shortcuts = std::rc::Rc::clone(&shortcuts);
-        move || shortcuts.open()
-    });
+    live::wire_shortcut_links(
+        &palette,
+        {
+            let shortcuts = std::rc::Rc::clone(&shortcuts);
+            move || shortcuts.open()
+        },
+        &choose,
+    );
     // The About window (the owner's point 4): created once, shown on request.
     let about = About::new(
         AboutWindow::new()?,
@@ -427,7 +431,6 @@ fn label_palette(palette: &Palette, bindings: &Bindings, compact: bool, settings
     palette.set_open_packs_label(i18n::action_name(HotkeyAction::OpenPacks).into());
     // The link under the hint bar opens the shortcuts window (K5.5), and the
     // three in the header two pages and the About window.
-    palette.set_shortcuts_link(i18n::label(PaletteLabel::ShortcutsLink).into());
     header_links::show(palette);
     // The value band's heading: since UX-GUI-001 the band of the next value
     // stands above it, and two values on screen need telling apart.
