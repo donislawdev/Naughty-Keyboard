@@ -1104,6 +1104,28 @@ pub enum ShortcutRegistration {
     /// Refused for some other reason, carrying the raw system code. Not every
     /// code can be enumerated, so the truthful thing is the number.
     Failed { code: u32 },
+    /// The system was asked and did not give this one. Where the desktop
+    /// chooses the chords (its portal), the person may leave a shortcut out,
+    /// and the desktop never says that a chord is taken, so this is all that
+    /// can be told. It is no `Taken`: nobody is known to hold anything.
+    NotGiven,
+}
+
+/// Why the desktop's own way to give global shortcuts did not give them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DesktopRefusal {
+    /// The desktop does not know this program yet, because nothing names it
+    /// to the desktop. The person can allow that, and nothing does by itself.
+    NeedsEntry,
+    /// The desktop offers no way to give global shortcuts to a program, or
+    /// does not answer when asked.
+    NoPortal,
+    /// The person closed the window of the system without choosing.
+    Closed,
+    /// The desktop ended the request, with the code it gave.
+    Ended { code: u32 },
+    /// The desktop answered and gave none of the shortcuts asked for.
+    NothingGiven,
 }
 
 /// Why no shortcut could be registered at all - named, never a shrug.
@@ -1115,6 +1137,20 @@ pub enum ShortcutsUnavailable {
     /// be started. Separate from `Unsupported` because it is not about the
     /// platform and can pass on a retry.
     CouldNotStart,
+    /// The route is the desktop's own, and the desktop gave nothing.
+    Desktop(DesktopRefusal),
+}
+
+impl fmt::Display for DesktopRefusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NeedsEntry => f.write_str("the desktop does not know this program yet"),
+            Self::NoPortal => f.write_str("the desktop did not offer global shortcuts to programs"),
+            Self::Closed => f.write_str("the window of the system was closed without choosing"),
+            Self::Ended { code } => write!(f, "the desktop ended the request with code {code}"),
+            Self::NothingGiven => f.write_str("the desktop gave none of the shortcuts asked for"),
+        }
+    }
 }
 
 impl fmt::Display for ShortcutsUnavailable {
@@ -1124,8 +1160,22 @@ impl fmt::Display for ShortcutsUnavailable {
                 write!(f, "global shortcuts are not implemented on {system} yet")
             }
             Self::CouldNotStart => f.write_str("the shortcut listener could not be started"),
+            Self::Desktop(refusal) => refusal.fmt(f),
         }
     }
+}
+
+/// A shortcut the system gave, as the system names it. Only a route on which
+/// the desktop and the person choose the chords has any: where the program names
+/// the chord and the system holds it or refuses it, the chord is the one asked
+/// for and there is nothing to add.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GivenShortcut {
+    /// The words the desktop gave for the chord, as they came, in the language
+    /// of the person. Always there, and all that can be shown when `chord` is not.
+    pub words: String,
+    /// The chord in those words, when it is one the palette has a name for.
+    pub chord: Option<HotkeyChord>,
 }
 
 /// What waiting for a press produced.
@@ -1167,6 +1217,13 @@ pub trait LiveShortcuts {
     /// stop on its own terms waits in short slices and checks between them.
     /// Nothing here blocks for longer than it was asked to.
     fn next(&self, wait: Duration) -> Wait;
+
+    /// What the system gave for each action it holds a shortcut for, when the
+    /// system chose the chord and the program only asked (the desktop's portal).
+    /// Empty where the chord is the one asked for, which is every other route.
+    fn given(&self) -> &[(HotkeyAction, GivenShortcut)] {
+        &[]
+    }
 
     /// Whether any binding took.
     ///
@@ -1263,9 +1320,48 @@ mod tests {
         );
         let took = (HotkeyAction::RestartPack, ShortcutRegistration::Registered);
 
+        let not_given = (HotkeyAction::NextPack, ShortcutRegistration::NotGiven);
+
         assert!(!Outcomes(Vec::new()).holds_any());
-        assert!(!Outcomes(vec![taken, failed]).holds_any());
-        assert!(Outcomes(vec![taken, failed, took]).holds_any());
+        assert!(!Outcomes(vec![taken, failed, not_given]).holds_any());
+        assert!(Outcomes(vec![taken, failed, not_given, took]).holds_any());
         assert!(Outcomes(vec![took]).holds_any());
+    }
+
+    /// A route on which the program names the chord has nothing to add to it,
+    /// and says so by being empty rather than by repeating the chord.
+    #[test]
+    fn a_set_gives_nothing_of_its_own_unless_it_says_so() {
+        assert!(Outcomes(Vec::new()).given().is_empty());
+    }
+
+    /// Every refusal of the desktop has words of its own, and the code of an
+    /// ended request is in them. Two refusals in the same words would be one.
+    #[test]
+    fn every_refusal_of_the_desktop_has_words_of_its_own() {
+        let refusals = [
+            DesktopRefusal::NeedsEntry,
+            DesktopRefusal::NoPortal,
+            DesktopRefusal::Closed,
+            DesktopRefusal::Ended { code: 2 },
+            DesktopRefusal::NothingGiven,
+        ];
+        let words: Vec<String> = refusals.iter().map(ToString::to_string).collect();
+        for (index, one) in words.iter().enumerate() {
+            assert!(!one.is_empty());
+            for other in &words[index + 1..] {
+                assert_ne!(one, other);
+            }
+        }
+        assert!(
+            DesktopRefusal::Ended { code: 77 }
+                .to_string()
+                .contains("77")
+        );
+        assert_eq!(
+            ShortcutsUnavailable::Desktop(DesktopRefusal::Closed).to_string(),
+            DesktopRefusal::Closed.to_string(),
+            "a refusal of the desktop is said in its own words, not wrapped"
+        );
     }
 }

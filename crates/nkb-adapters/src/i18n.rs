@@ -66,7 +66,7 @@ use nkb_app::advance_sequence::{ChooseError, Message};
 use nkb_app::drive_sequence::Ended;
 use nkb_app::keep_settings::{SettingsMessage, ShortcutChange};
 use nkb_app::ports::{
-    CatalogueCoverage, CatalogueSource, SaveError, SettingsNote, SettingsUnusable,
+    CatalogueCoverage, CatalogueSource, DesktopRefusal, SaveError, SettingsNote, SettingsUnusable,
     ShortcutRegistration, ShortcutUnreadable, ShortcutsUnavailable, SourceSkipped, StopReason,
 };
 use nkb_core::hotkeys::{
@@ -1183,6 +1183,7 @@ mod tests {
         for outcome in [
             ShortcutRegistration::Taken,
             ShortcutRegistration::Failed { code: 1409 },
+            ShortcutRegistration::NotGiven,
         ] {
             out.push(
                 registration(
@@ -1190,7 +1191,7 @@ mod tests {
                     HotkeyAction::NextValue,
                     defaults().chord(HotkeyAction::NextValue),
                 )
-                .expect("both of these outcomes have a sentence"),
+                .expect("all of these outcomes have a sentence"),
             );
         }
         out.extend(registrations(&registered_as(|_| {
@@ -1200,6 +1201,16 @@ mod tests {
             system: "macOS".to_owned(),
         }));
         out.push(shortcuts_unavailable(&ShortcutsUnavailable::CouldNotStart));
+        out.extend(
+            [
+                DesktopRefusal::NeedsEntry,
+                DesktopRefusal::NoPortal,
+                DesktopRefusal::Closed,
+                DesktopRefusal::Ended { code: 2 },
+                DesktopRefusal::NothingGiven,
+            ]
+            .map(|refusal| shortcuts_unavailable(&ShortcutsUnavailable::Desktop(refusal))),
+        );
         out.push(ended(Ended::ShortcutsGone).expect("the listener going away is said"));
         // A reason without a full stop of its own: the sentence-count rule below
         // is about OUR sentence, and a library error text carrying three full

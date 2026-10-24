@@ -242,21 +242,32 @@ impl LiveShortcuts for Live {
     }
 
     fn next(&self, wait: Duration) -> Wait {
-        // A zero wait must not block at all - it is the drain after a send -
-        // and `recv_timeout(0)` honours that, but `try_recv` says so by name.
-        let received = if wait.is_zero() {
-            self.fired.try_recv().map_err(|error| match error {
-                std::sync::mpsc::TryRecvError::Empty => RecvTimeoutError::Timeout,
-                std::sync::mpsc::TryRecvError::Disconnected => RecvTimeoutError::Disconnected,
-            })
-        } else {
-            self.fired.recv_timeout(wait)
-        };
-        match received {
-            Ok(id) => pressed(&self.actions, id),
-            Err(RecvTimeoutError::Timeout) => Wait::Nothing,
-            Err(RecvTimeoutError::Disconnected) => Wait::Gone,
-        }
+        wait_for(&self.fired, &self.actions, wait)
+    }
+}
+
+/// Waits up to `wait` for the next fired id and names the action it stands for.
+/// The one wait of every route: a set held by a grab and a set given by the
+/// desktop's portal answer a caller in the same way.
+pub(crate) fn wait_for(
+    fired: &Receiver<HotkeyId>,
+    actions: &[HotkeyAction],
+    wait: Duration,
+) -> Wait {
+    // A zero wait must not block at all - it is the drain after a send -
+    // and `recv_timeout(0)` honours that, but `try_recv` says so by name.
+    let received = if wait.is_zero() {
+        fired.try_recv().map_err(|error| match error {
+            std::sync::mpsc::TryRecvError::Empty => RecvTimeoutError::Timeout,
+            std::sync::mpsc::TryRecvError::Disconnected => RecvTimeoutError::Disconnected,
+        })
+    } else {
+        fired.recv_timeout(wait)
+    };
+    match received {
+        Ok(id) => pressed(actions, id),
+        Err(RecvTimeoutError::Timeout) => Wait::Nothing,
+        Err(RecvTimeoutError::Disconnected) => Wait::Gone,
     }
 }
 
@@ -288,7 +299,7 @@ fn pressed(actions: &[HotkeyAction], id: HotkeyId) -> Wait {
 /// held `ctrl`, and it would have rewritten any chord a tester chose. The macOS
 /// defaults are now their own table (`nkb_core::hotkeys::MACOS_DEFAULT_BINDINGS`),
 /// so nothing here needs to know which system it is on.
-fn hotkey_for(index: usize, chord: &HotkeyChord) -> Hotkey {
+pub(crate) fn hotkey_for(index: usize, chord: &HotkeyChord) -> Hotkey {
     Hotkey {
         // The application id range is `0..=0xBFFF`. A binding table is ten
         // entries, so the narrowing cannot lose anything, and if a table ever
@@ -309,7 +320,7 @@ fn hotkey_for(index: usize, chord: &HotkeyChord) -> Hotkey {
 /// `0x70` to `0x87`, and Space is `VK_SPACE` - Microsoft's virtual-key table.
 /// Written out rather than computed, so the match stays exhaustive and a key
 /// added to the core without a code here does not compile.
-const fn virtual_key(key: HotkeyKey) -> u16 {
+pub(crate) const fn virtual_key(key: HotkeyKey) -> u16 {
     match key {
         HotkeyKey::A => 0x41,
         HotkeyKey::B => 0x42,
@@ -663,6 +674,9 @@ mod tests {
             }
             Err(ShortcutsUnavailable::CouldNotStart) => {
                 panic!("the listener thread could not start on a system with a route")
+            }
+            Err(ShortcutsUnavailable::Desktop(refusal)) => {
+                panic!("a grab asks no desktop, and one answered: {refusal}")
             }
         }
     }

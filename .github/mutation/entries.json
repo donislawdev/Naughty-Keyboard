@@ -9979,11 +9979,11 @@
     },
     {
       "id": "M1321",
-      "why": "an identifier of a shortcut with a leading zero is taken for ours, and so is one nobody here made",
-      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
-      "find": "&& (digits == \"0\" || !digits.starts_with('0'));",
-      "replace": "&& true;",
-      "test": "linux_portal_rules::tests::an_identifier_of_a_shortcut_is_ours_only_in_the_exact_form",
+      "why": "a name that starts with a hyphen is taken for one the desktop can keep, and the chord a person chose is lost under a name it will not hold",
+      "file": "crates/nkb-sys/src/portal.rs",
+      "find": "&& bytes.first().is_some_and(plain)",
+      "replace": "&& true",
+      "test": "portal::tests::a_name_is_lower_case_letters_digits_and_inner_hyphens_only",
       "runner": "rust:nkb-sys:lib"
     },
     {
@@ -10093,6 +10093,150 @@
       "replace": "content.contains(ENTRY_MARK)",
       "test": "linux_portal_rules::tests::an_entry_that_somebody_else_made_is_not_ours",
       "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1334",
+      "why": "a shortcut the person left out is reported as given, and a press of it is then trusted",
+      "file": "crates/nkb-adapters/src/portal_shortcuts.rs",
+      "find": "one.id == wish.hotkey.id",
+      "replace": "true",
+      "test": "portal_shortcuts::tests::a_shortcut_left_out_is_not_given_in_its_place_and_the_rest_stand",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1335",
+      "why": "a desktop that gave nothing is reported as a set, and the palette waits on shortcuts that cannot be pressed",
+      "file": "crates/nkb-adapters/src/portal_shortcuts.rs",
+      "find": "if answers.given.is_empty() {",
+      "replace": "if false {",
+      "test": "portal_shortcuts::tests::a_desktop_that_gave_none_gives_no_set",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1336",
+      "why": "asking for no shortcut opens a session and a window of the system for nothing",
+      "file": "crates/nkb-adapters/src/portal_shortcuts.rs",
+      "find": "if bindings.is_empty() {",
+      "replace": "if false {",
+      "test": "portal_shortcuts::tests::asking_for_nothing_asks_the_desktop_nothing",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1337",
+      "why": "every chord the desktop gave is read as the first key of the vocabulary",
+      "file": "crates/nkb-adapters/src/portal_shortcuts.rs",
+      "find": ".find(|key| virtual_key(*key) == hotkey.vk)?",
+      "replace": ".find(|_| true)?",
+      "test": "portal_shortcuts::tests::every_chord_offered_is_read_back_as_itself",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1338",
+      "why": "a window of the system closed without choosing is said as a refusal of the request",
+      "file": "crates/nkb-adapters/src/portal_shortcuts.rs",
+      "find": "Unavailable::Cancelled => ShortcutsUnavailable::Desktop(DesktopRefusal::Closed),",
+      "replace": "Unavailable::Cancelled => ShortcutsUnavailable::Desktop(DesktopRefusal::NothingGiven),",
+      "test": "portal_shortcuts::tests::every_reason_of_the_route_is_said_in_the_ports_words",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1339",
+      "why": "a desktop that does not know the program is said as one that offers nothing, and the person is not told to allow it",
+      "file": "crates/nkb-adapters/src/portal_shortcuts.rs",
+      "find": "Unavailable::NeedsEntry => ShortcutsUnavailable::Desktop(DesktopRefusal::NeedsEntry),",
+      "replace": "Unavailable::NeedsEntry => ShortcutsUnavailable::Desktop(DesktopRefusal::NoPortal),",
+      "test": "portal_shortcuts::tests::every_reason_of_the_route_is_said_in_the_ports_words",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1340",
+      "why": "the window of the system lists shortcuts with no words beside them",
+      "file": "crates/nkb-adapters/src/portal_shortcuts.rs",
+      "find": "description: i18n::action_name(*action).to_owned(),",
+      "replace": "description: String::new(),",
+      "test": "portal_shortcuts::tests::what_is_asked_is_each_chord_as_written_with_the_name_of_its_action",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1341",
+      "why": "the words the desktop gave for a chord are lost, and a chord the palette cannot name is shown as nothing",
+      "file": "crates/nkb-adapters/src/portal_shortcuts.rs",
+      "find": "words: one.words.clone(),",
+      "replace": "words: String::new(),",
+      "test": "portal_shortcuts::tests::every_shortcut_given_is_registered_with_the_words_of_the_desktop",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1342",
+      "why": "a set whose presses have all been heard is waited on for ever, because the end of its channel reads as quiet",
+      "file": "crates/nkb-adapters/src/shortcuts.rs",
+      "find": "Err(RecvTimeoutError::Disconnected) => Wait::Gone,",
+      "replace": "Err(RecvTimeoutError::Disconnected) => Wait::Nothing,",
+      "test": "portal_shortcuts::tests::a_press_finds_its_action_by_position_when_an_earlier_one_was_left_out",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1343",
+      "why": "the sentence about a shortcut the desktop did not give names a chord nobody holds",
+      "file": "crates/nkb-adapters/src/i18n/registration.rs",
+      "find": "a shortcut, so it will not respond.",
+      "replace": "a shortcut on {shortcut}, so it will not respond.",
+      "test": "i18n::registration::tests::a_shortcut_the_desktop_did_not_give_is_said_by_its_action_and_names_no_chord",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1344",
+      "why": "the code of a request the desktop ended is left out of the sentence",
+      "file": "crates/nkb-adapters/src/i18n/registration.rs",
+      "find": "fill(pattern, &[(\"code\", &code.to_string())])",
+      "replace": "fill(pattern, &[(\"code\", \"\")])",
+      "test": "i18n::registration::tests::every_refusal_of_the_desktop_is_said_in_words_of_its_own",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1345",
+      "why": "a chord the desktop did not give on trial is taken for a free one, and the change claims a check that never happened",
+      "file": "crates/nkb-app/src/keep_settings.rs",
+      "find": "Trial::Unchecked(ShortcutsUnavailable::Desktop(DesktopRefusal::NothingGiven))",
+      "replace": "Trial::Free",
+      "test": "keep_settings::tests::a_chord_the_desktop_did_not_give_on_trial_goes_through_unchecked",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1346",
+      "why": "a shortcut the desktop did not give counts as held, so the palette waits on a set that cannot be pressed",
+      "file": "crates/nkb-app/src/ports.rs",
+      "find": ".any(|(_, outcome)| *outcome == ShortcutRegistration::Registered)",
+      "replace": ".any(|(_, outcome)| *outcome != ShortcutRegistration::Taken)",
+      "test": "ports::tests::a_set_holds_something_only_when_a_shortcut_took",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1347",
+      "why": "a name of any length is asked of the desktop, which keeps none of the long ones",
+      "file": "crates/nkb-sys/src/portal.rs",
+      "find": "&& bytes.len() <= NAME_LONGEST",
+      "replace": "&& true",
+      "test": "portal::tests::a_name_is_lower_case_letters_digits_and_inner_hyphens_only",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1348",
+      "why": "two shortcuts asked for under one name are one to the desktop, and a press belongs to whichever was read last",
+      "file": "crates/nkb-sys/src/portal.rs",
+      "find": ".all(|earlier| earlier.name != wish.name)",
+      "replace": ".all(|_| true)",
+      "test": "portal::tests::wishes_are_asked_together_only_under_names_that_are_usable_and_apart",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1349",
+      "why": "a shortcut is kept under its place in the table, so a later version that reorders the table gives a person's chord to another action",
+      "file": "crates/nkb-adapters/src/portal_shortcuts.rs",
+      "find": "name: action.id().to_owned(),",
+      "replace": "name: index.to_string(),",
+      "test": "portal_shortcuts::tests::a_shortcut_is_kept_under_its_action_not_under_its_place_in_the_table",
+      "runner": "rust:nkb-adapters:lib"
     }
   ]
 }

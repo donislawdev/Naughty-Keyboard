@@ -14,6 +14,7 @@ pub mod focus;
 pub mod fs;
 pub mod i18n;
 pub mod keyboard;
+pub mod portal_shortcuts;
 pub(crate) mod read_pack;
 pub mod report_text;
 pub mod screens;
@@ -30,6 +31,7 @@ pub use clipboard_delivery::ClipboardDelivery;
 pub use focus::{KeptFocus, LentFocus, no_keyboard_menu, stand_over_full_screen};
 pub use fs::{DirectoryPackSink, DirectoryPackSource, SystemClock};
 pub use keyboard::DirectInjection;
+pub use portal_shortcuts::PortalShortcuts;
 pub use report_text::EnglishReport;
 pub use settings_file::SettingsFile;
 pub use shortcuts::{

@@ -148,25 +148,6 @@ pub(crate) const fn answer_of(code: u32) -> Answer {
 // Naming a chord to the portal and reading one back
 // ---------------------------------------------------------------------------
 
-/// The identifier the portal knows a shortcut by: `k` and the number the caller gave it.
-pub(crate) fn shortcut_id(id: HotkeyId) -> String {
-    format!("k{}", id.0)
-}
-
-/// The number in an identifier made by [`shortcut_id`], and `None` for anything else, so
-/// that a shortcut somebody else left in the session is not taken for ours.
-pub(crate) fn hotkey_id_of(shortcut: &str) -> Option<HotkeyId> {
-    let digits = shortcut.strip_prefix('k')?;
-    let plain = !digits.is_empty()
-        && digits.bytes().all(|byte| byte.is_ascii_digit())
-        && (digits == "0" || !digits.starts_with('0'));
-    if plain {
-        digits.parse().ok().map(HotkeyId)
-    } else {
-        None
-    }
-}
-
 /// The name of a key of the shortcut vocabulary in the portal's syntax and in the
 /// accelerators of GTK, which both use the name of the keysym: a letter or a digit as it
 /// is typed, `F1` to `F24`, and `space`. The code is the one the vocabulary is written in
@@ -577,34 +558,6 @@ mod tests {
         assert_eq!(answer_of(1), Answer::Cancelled);
         assert_eq!(answer_of(2), Answer::Ended(2));
         assert_eq!(answer_of(77), Answer::Ended(77));
-    }
-
-    #[test]
-    fn an_identifier_of_a_shortcut_is_ours_only_in_the_exact_form() {
-        for n in [0, 1, 9, 10, 255, 4_000_000_000] {
-            assert_eq!(
-                hotkey_id_of(&shortcut_id(HotkeyId(n))),
-                Some(HotkeyId(n)),
-                "{n}"
-            );
-        }
-        for foreign in [
-            "",
-            "k",
-            "k01",
-            "k+1",
-            "k-1",
-            "k1x",
-            "K1",
-            "x1",
-            "t0",
-            " k1",
-            "k1 ",
-            "k4294967296",
-            "k1.0",
-        ] {
-            assert_eq!(hotkey_id_of(foreign), None, "{foreign:?}");
-        }
     }
 
     /// The accelerator of GTK for a hotkey, written the way the desktop writes it, which
