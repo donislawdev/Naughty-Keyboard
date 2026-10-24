@@ -44,6 +44,8 @@ pub mod layout;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(any(target_os = "linux", test))]
+mod linux_atspi_rules;
+#[cfg(any(target_os = "linux", test))]
 mod linux_hotkeys;
 #[cfg(any(target_os = "linux", test))]
 mod linux_ibus_rules;
@@ -778,6 +780,14 @@ pub fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
 #[must_use]
 pub fn send_allowed() -> bool {
     platform::send_allowed()
+}
+
+/// Whether this build can press the keys that clear a field (`Home`, `Shift+End`, `Delete`),
+/// which is a route of its own from typing text. Linux types, through the keys of the X
+/// server and through the input method of the desktop, and does not press these yet.
+#[must_use]
+pub const fn can_press_chords() -> bool {
+    cfg!(any(windows, target_os = "macos"))
 }
 
 /// Whether this build can deliver keystrokes at all.

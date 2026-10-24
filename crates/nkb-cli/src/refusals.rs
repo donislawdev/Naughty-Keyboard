@@ -62,6 +62,11 @@ pub(crate) fn say_not_cleared(err: &mut impl Write, error: &KeystrokeError) {
             err,
             "nkb send: the window shows the system nothing inside it, so it was not cleared and nothing was sent."
         ),
+        // And for a system whose clearing keys this build cannot press.
+        KeystrokeError::NoClearingKeys => writeln!(
+            err,
+            "nkb send: this build cannot press the clearing keys on this system, so it was not cleared and nothing was sent."
+        ),
     };
 }
 

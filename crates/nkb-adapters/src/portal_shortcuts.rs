@@ -249,6 +249,9 @@ fn refusal(why: Unavailable) -> ShortcutsUnavailable {
         Unavailable::BadWish => ShortcutsUnavailable::CouldNotStart,
         Unavailable::NeedsEntry => ShortcutsUnavailable::Desktop(DesktopRefusal::NeedsEntry),
         Unavailable::Cancelled => ShortcutsUnavailable::Desktop(DesktopRefusal::Closed),
+        // The portal took the request and the time ran out: told apart from a desktop
+        // without the portal, because the person may simply not have chosen yet.
+        Unavailable::NoAnswer => ShortcutsUnavailable::Desktop(DesktopRefusal::NoAnswer),
         Unavailable::Ended(code) => ShortcutsUnavailable::Desktop(DesktopRefusal::Ended { code }),
     }
 }
@@ -540,6 +543,10 @@ mod tests {
         assert_eq!(
             refusal(Unavailable::Cancelled),
             desktop(DesktopRefusal::Closed)
+        );
+        assert_eq!(
+            refusal(Unavailable::NoAnswer),
+            desktop(DesktopRefusal::NoAnswer)
         );
         assert_eq!(
             refusal(Unavailable::Ended(2)),

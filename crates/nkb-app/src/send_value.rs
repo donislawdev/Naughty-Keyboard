@@ -82,6 +82,8 @@ pub enum SkipReason {
     /// The focus is a window closed to accessibility - Firefox with its
     /// accessibility services kept out (`D125`).
     ClosedToAccessibility,
+    /// This system types, and this build cannot press the clearing keys on it.
+    NoClearingKeys,
 }
 
 /// What to send: which value of which pack, and whether to clear first.
@@ -234,7 +236,8 @@ pub enum SendOutcome {
     /// Clearing was asked for and did not go through. The value was NOT sent.
     /// Never [`KeystrokeError::FieldUnconfirmed`],
     /// [`KeystrokeError::InTerminal`] or
-    /// [`KeystrokeError::ClosedToAccessibility`]: those are skips, and the value goes on
+    /// [`KeystrokeError::ClosedToAccessibility`] or [`KeystrokeError::NoClearingKeys`]:
+    /// those are skips, and the value goes on
     /// ([`ClearingOutcome::Skipped`]).
     NotCleared { error: KeystrokeError },
     /// There is a route, and none of the value arrived - refused before a key,
@@ -425,6 +428,9 @@ pub fn deliver_value(
             Err(KeystrokeError::InTerminal) => ClearingOutcome::Skipped(SkipReason::Terminal),
             Err(KeystrokeError::ClosedToAccessibility) => {
                 ClearingOutcome::Skipped(SkipReason::ClosedToAccessibility)
+            }
+            Err(KeystrokeError::NoClearingKeys) => {
+                ClearingOutcome::Skipped(SkipReason::NoClearingKeys)
             }
             Err(error) => return SendOutcome::NotCleared { error },
         },
@@ -824,6 +830,34 @@ mod tests {
         assert_eq!(
             log.borrow().as_slice(),
             ["keys:Home,Shift+End,Delete", "text:ab"]
+        );
+    }
+
+    #[test]
+    fn a_system_that_cannot_press_the_clearing_keys_gets_the_value_uncleared_and_the_outcome_names_it()
+     {
+        // The route types, and the clearing keys are another route that is not there: no
+        // key was pressed, the field is as it was, and the value goes on top of it.
+        let log = log();
+        let spy = Spy::ready(&log);
+        let keys = KeySpy {
+            fail_with: Some(KeystrokeError::NoClearingKeys),
+            log: Rc::clone(&log),
+        };
+        let outcome = send_value(
+            &Shelf,
+            &Scripted::two(),
+            &spy,
+            &keys,
+            &request(1, Clearing::Line),
+            &mut |_| {},
+        );
+        let SendOutcome::Sent { clearing, .. } = outcome else {
+            panic!("a system without the clearing keys is a skip, not a refusal, got {outcome:?}");
+        };
+        assert_eq!(
+            clearing,
+            ClearingOutcome::Skipped(SkipReason::NoClearingKeys)
         );
     }
 

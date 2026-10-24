@@ -1537,6 +1537,7 @@ mod tests {
             KeystrokeError::NoTextField,
             KeystrokeError::FieldUnconfirmed,
             KeystrokeError::InTerminal,
+            KeystrokeError::NoClearingKeys,
         ];
         let mut seen = std::collections::BTreeSet::new();
         for error in &not_cleared {

@@ -40,8 +40,8 @@ use super::bus::{self, Handle};
 use crate::hotkey::HotkeyId;
 use crate::linux_portal_rules::{
     ANSWER_WAIT, APP_ID, Answer, BIND_WAIT, CALL_WAIT, Held, PORTAL_NAME, PORTAL_PATH,
-    REGISTRY_INTERFACE, REQUEST_INTERFACE, SESSION_INTERFACE, SHORTCUTS_INTERFACE, answer_of,
-    bound_hotkey, preferred_trigger, request_path, session_bus_socket, token,
+    REGISTRY_INTERFACE, REQUEST_INTERFACE, SESSION_INTERFACE, SHORTCUTS_INTERFACE, after_wait,
+    answer_of, bound_hotkey, preferred_trigger, request_path, session_bus_socket, token,
 };
 use crate::portal::{Bound, Unavailable, Wish, names_usable};
 
@@ -252,9 +252,16 @@ impl Portal {
         if announced.as_str() != path {
             return Err(Unavailable::Odd);
         }
-        // If the portal never answers, the watch shuts the connection and the wait returns.
-        let _watch = self.stream.watch(wait)?;
-        let message = responses.next().ok_or(Unavailable::Unreachable)??;
+        // If the portal never answers, the watch shuts the connection and the wait returns,
+        // and the watch is what says the wait ran out rather than the bus going away.
+        let watch = self.stream.watch(wait)?;
+        let heard = responses.next();
+        let waited_out = watch.fired();
+        let message = match heard {
+            Some(Ok(message)) => message,
+            Some(Err(error)) => return Err(after_wait(error.into(), waited_out)),
+            None => return Err(after_wait(Unavailable::Unreachable, waited_out)),
+        };
         let (code, results): (u32, Results) = message.body().deserialize()?;
         Ok((answer_of(code), results))
     }

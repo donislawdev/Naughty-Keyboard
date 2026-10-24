@@ -29,6 +29,7 @@ use std::time::Instant;
 use crate::hotkey::{Hotkey, HotkeyId};
 use crate::linux_hotkeys::keysym_for_vk;
 use crate::linux_ibus_rules::{AddressRefusal, socket_in_address};
+use crate::portal::Unavailable;
 
 /// The identifier of the program for the desktop. It names the file of the entry, the
 /// permission the person gives and the page of the program in their settings, so it is
@@ -143,6 +144,18 @@ pub(crate) const fn answer_of(code: u32) -> Answer {
         0 => Answer::Granted,
         1 => Answer::Cancelled,
         other => Answer::Ended(other),
+    }
+}
+
+/// What a request that came to nothing means. A bus that stopped answering is the bus
+/// failing. A request the portal took and left unanswered until the time it is given ran
+/// out is the portal not answering, and a person who has not chosen yet is no desktop
+/// without a portal (`OBS-224`). Only the first kind of failure turns into the second, and
+/// only when the wait ran out: a reason that says more than "the bus stopped" is kept.
+pub(crate) const fn after_wait(said: Unavailable, waited_out: bool) -> Unavailable {
+    match said {
+        Unavailable::Unreachable if waited_out => Unavailable::NoAnswer,
+        other => other,
     }
 }
 
@@ -690,6 +703,36 @@ mod tests {
         assert_eq!(answer_of(1), Answer::Cancelled);
         assert_eq!(answer_of(2), Answer::Ended(2));
         assert_eq!(answer_of(77), Answer::Ended(77));
+    }
+
+    #[test]
+    fn a_wait_that_ran_out_is_a_portal_that_did_not_answer() {
+        assert_eq!(
+            after_wait(Unavailable::Unreachable, true),
+            Unavailable::NoAnswer
+        );
+    }
+
+    #[test]
+    fn a_bus_that_stopped_before_the_wait_ran_out_stays_a_bus_that_did_not_answer() {
+        assert_eq!(
+            after_wait(Unavailable::Unreachable, false),
+            Unavailable::Unreachable
+        );
+    }
+
+    #[test]
+    fn a_reason_that_says_more_than_the_bus_stopped_is_kept_after_a_wait() {
+        for said in [
+            Unavailable::NoPortal,
+            Unavailable::NeedsEntry,
+            Unavailable::Odd,
+            Unavailable::Cancelled,
+            Unavailable::Ended(2),
+        ] {
+            assert_eq!(after_wait(said, true), said);
+            assert_eq!(after_wait(said, false), said);
+        }
     }
 
     /// The accelerator of GTK for a hotkey, written the way the desktop writes it, which

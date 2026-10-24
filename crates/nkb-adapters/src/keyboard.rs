@@ -208,6 +208,10 @@ fn focus_outside_a_text_field() -> bool {
 /// CONFIRMED text field is cleared, and the unknown is left as it is.
 fn clearing_verdict(focus: nkb_sys::field::FocusedInput) -> Result<(), KeystrokeError> {
     match focus {
+        // A field on a system whose clearing keys this build cannot press (Linux, `D145`).
+        nkb_sys::field::FocusedInput::TextField if !nkb_sys::can_press_chords() => {
+            Err(KeystrokeError::NoClearingKeys)
+        }
         nkb_sys::field::FocusedInput::TextField => Ok(()),
         nkb_sys::field::FocusedInput::NotTextField => Err(KeystrokeError::NoTextField),
         nkb_sys::field::FocusedInput::Unknown => Err(KeystrokeError::FieldUnconfirmed),
@@ -451,7 +455,14 @@ mod tests {
     #[test]
     fn only_a_confirmed_text_field_is_cleared() {
         use nkb_sys::field::FocusedInput;
-        assert_eq!(clearing_verdict(FocusedInput::TextField), Ok(()));
+        // A field is cleared where the keys can be pressed, and says why not where they
+        // cannot (Linux, `D145`): the value still goes in, on top of what was there.
+        let field = clearing_verdict(FocusedInput::TextField);
+        if nkb_sys::can_press_chords() {
+            assert_eq!(field, Ok(()));
+        } else {
+            assert_eq!(field, Err(KeystrokeError::NoClearingKeys));
+        }
         assert_eq!(
             clearing_verdict(FocusedInput::NotTextField),
             Err(KeystrokeError::NoTextField)

@@ -96,6 +96,10 @@ pub enum Unavailable {
     NeedsEntry,
     /// The person closed the window of the system without agreeing.
     Cancelled,
+    /// The portal took the request and gave no answer within the time the request is
+    /// given. The person may not have chosen yet, which is not the portal being
+    /// missing.
+    NoAnswer,
     /// The portal ended the request, with the code it gave.
     Ended(u32),
     /// The portal answered in a way its own specification does not allow.
@@ -114,6 +118,7 @@ impl core::fmt::Display for Unavailable {
             Self::NoPortal => f.write_str("the desktop has no portal for global shortcuts"),
             Self::NeedsEntry => f.write_str("the desktop does not know this program yet"),
             Self::Cancelled => f.write_str("the window of the system was closed without agreeing"),
+            Self::NoAnswer => f.write_str("the portal did not answer the request in time"),
             Self::Ended(code) => write!(f, "the portal ended the request with code {code}"),
             Self::Odd => {
                 f.write_str("the portal answered in a way its specification does not allow")
@@ -333,6 +338,7 @@ mod tests {
             Unavailable::NoPortal,
             Unavailable::NeedsEntry,
             Unavailable::Cancelled,
+            Unavailable::NoAnswer,
             Unavailable::Ended(2),
             Unavailable::Odd,
             Unavailable::BadWish,

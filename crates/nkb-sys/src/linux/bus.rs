@@ -12,6 +12,8 @@
 use core::time::Duration;
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::thread::JoinHandle;
 
@@ -61,23 +63,36 @@ pub(super) fn shut_down(stream: &UnixStream) {
 pub(super) struct Watch {
     done: Option<Sender<()>>,
     thread: Option<JoinHandle<()>>,
+    /// Set by the thread BEFORE it shuts the socket, so whoever the shut socket wakes finds
+    /// it set: a call that ended because the deadline passed can tell itself from one that
+    /// ended because the peer went.
+    fired: Arc<AtomicBool>,
 }
 
 impl Watch {
     pub(super) fn start(stream: &UnixStream, deadline: Duration) -> std::io::Result<Self> {
         let shut = stream.try_clone()?;
         let (done, wait) = mpsc::channel::<()>();
+        let fired = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&fired);
         let thread = std::thread::Builder::new()
             .name("nkb-bus-watch".to_owned())
             .spawn(move || {
                 if wait.recv_timeout(deadline) == Err(RecvTimeoutError::Timeout) {
+                    flag.store(true, Ordering::SeqCst);
                     shut_down(&shut);
                 }
             })?;
         Ok(Self {
             done: Some(done),
             thread: Some(thread),
+            fired,
         })
+    }
+
+    /// Whether the deadline passed and the socket was shut because of it.
+    pub(super) fn fired(&self) -> bool {
+        self.fired.load(Ordering::SeqCst)
     }
 }
 
@@ -88,5 +103,41 @@ impl Drop for Watch {
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    reason = "a failed expectation in a test is a failed test"
+)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_watch_whose_deadline_passed_says_so() {
+        let (stream, _peer) = UnixStream::pair().expect("a pair of sockets");
+        let watch = Watch::start(&stream, Duration::from_millis(20)).expect("a watch");
+        let end = std::time::Instant::now() + Duration::from_secs(5);
+        while !watch.fired() && std::time::Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            watch.fired(),
+            "the deadline passed and the watch did not say so"
+        );
+    }
+
+    #[test]
+    fn a_watch_dropped_before_its_deadline_never_says_so() {
+        let (stream, _peer) = UnixStream::pair().expect("a pair of sockets");
+        let watch = Watch::start(&stream, Duration::from_secs(60)).expect("a watch");
+        assert!(!watch.fired());
+        let fired = Arc::clone(&watch.fired);
+        drop(watch);
+        assert!(
+            !fired.load(Ordering::SeqCst),
+            "a watch dropped in time fired"
+        );
     }
 }

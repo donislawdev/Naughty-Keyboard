@@ -115,11 +115,15 @@
 //! default timeouts - seconds - so both are set to [`TIMEOUT_MS`], and a
 //! timeout is `Unknown`, never a frozen palette.
 
-// On macOS the question is answered by accessibility (`macos/ax.rs`), and the
-// machinery below is what Windows and the tests ask it with.
+// On macOS the question is answered by accessibility (`macos/ax.rs`), on Linux by the
+// bus of accessibility (`linux/atspi.rs`), and the machinery below is what Windows and
+// the tests ask it with.
 #![cfg_attr(
-    target_os = "macos",
-    allow(dead_code, reason = "the UI Automation rules are not asked on macOS")
+    any(target_os = "macos", target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "the UI Automation rules are not asked on macOS or on Linux"
+    )
 )]
 
 use crate::WindowRef;
@@ -177,7 +181,12 @@ pub fn focused_input(window: WindowRef) -> FocusedInput {
     {
         crate::macos::focused_input(window)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        let _ = window;
+        crate::linux::focused_input()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         focused_input_by_facts(window)
     }
