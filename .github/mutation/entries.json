@@ -10948,6 +10948,69 @@
       "replace": "            list.messages()\n",
       "test": "the_shortcuts_window_pauses_records_and_always_takes_the_shortcuts_back",
       "runner": "rust:nkb-gui:shortcuts_window"
+    },
+    {
+      "id": "M1429",
+      "why": "every repeat of a held key is taken for a press, so holding the chord types a value every thirty milliseconds",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "                !repeat\n",
+      "replace": "                true\n",
+      "test": "linux_portal_rules::tests::a_key_held_down_is_one_press_however_often_the_portal_says_it",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1430",
+      "why": "a repeat does not keep the shortcut held, so a hold longer than the limit is forgotten on the way and types again",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "                *last = now;\n",
+      "replace": "",
+      "test": "linux_portal_rules::tests::a_hold_longer_than_the_limit_stays_one_press_while_the_repeats_keep_coming",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1431",
+      "why": "a shortcut is held for ever when the desktop never says the keys came up, so the next press is swallowed",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "now.saturating_duration_since(*last) < HELD_FORGOTTEN",
+      "replace": "now.saturating_duration_since(*last) < Duration::MAX",
+      "test": "linux_portal_rules::tests::a_let_go_that_was_never_announced_is_forgotten_after_the_limit",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1432",
+      "why": "the limit is a closed one, so a press exactly at it is still taken for a repeat",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "now.saturating_duration_since(*last) < HELD_FORGOTTEN",
+      "replace": "now.saturating_duration_since(*last) <= HELD_FORGOTTEN",
+      "test": "linux_portal_rules::tests::a_let_go_that_was_never_announced_is_forgotten_after_the_limit",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1433",
+      "why": "the keys coming up is not heard, so the press that follows a let go is taken for a repeat",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "        self.down.retain(|(held, _)| held != name);",
+      "replace": "        let _ = name;",
+      "test": "linux_portal_rules::tests::a_key_that_came_up_can_be_pressed_again_at_once",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1434",
+      "why": "letting go of one shortcut lets go of all of them, so the repeats of another that is still held type",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "        self.down.retain(|(held, _)| held != name);",
+      "replace": "        self.down.clear();",
+      "test": "linux_portal_rules::tests::the_shortcuts_are_held_each_on_its_own",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1435",
+      "why": "a shortcut is told from the others by nothing, so the press of a second one is taken for the repeat of the first",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "self.down.iter_mut().find(|(held, _)| held == name)",
+      "replace": "self.down.iter_mut().find(|(_, _)| true)",
+      "test": "linux_portal_rules::tests::the_shortcuts_are_held_each_on_its_own",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }

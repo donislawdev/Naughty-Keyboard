@@ -27,17 +27,19 @@ pub(crate) mod entry;
 use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::JoinHandle;
+use std::time::Instant;
 
 use zbus::blocking::connection::Builder;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::message::Type as MessageType;
+use zbus::names::MemberName;
 use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
 use zbus::{Error, MatchRule, Message, fdo};
 
 use super::bus::{self, Handle};
 use crate::hotkey::HotkeyId;
 use crate::linux_portal_rules::{
-    ANSWER_WAIT, APP_ID, Answer, BIND_WAIT, CALL_WAIT, PORTAL_NAME, PORTAL_PATH,
+    ANSWER_WAIT, APP_ID, Answer, BIND_WAIT, CALL_WAIT, Held, PORTAL_NAME, PORTAL_PATH,
     REGISTRY_INTERFACE, REQUEST_INTERFACE, SESSION_INTERFACE, SHORTCUTS_INTERFACE, answer_of,
     bound_hotkey, preferred_trigger, request_path, session_bus_socket, token,
 };
@@ -314,12 +316,12 @@ impl Portal {
         Ok(bound_in(&results, wishes))
     }
 
-    /// The presses of the shortcuts of `session`, as the portal announces them.
+    /// The presses of the shortcuts of `session`, as the portal announces them, and the keys
+    /// coming up (`Deactivated`), which is what tells a press from the repeat of a held key.
     fn presses(&self) -> Result<MessageIterator, Unavailable> {
         let rule = MatchRule::builder()
             .msg_type(MessageType::Signal)
             .interface(SHORTCUTS_INTERFACE)?
-            .member("Activated")?
             .path(PORTAL_PATH)?
             .build();
         Ok(MessageIterator::for_match_rule(
@@ -332,15 +334,24 @@ impl Portal {
 
 /// Hears the presses until the connection is shut, and passes on the ones of our session.
 /// `names` is each shortcut asked for, by the name the desktop knows it under.
+///
+/// A key that is held is announced again and again with `Activated`, so only the first word
+/// after the keys were up is a press, and `Deactivated` is the keys coming up (`Held`).
 fn hear(
     presses: MessageIterator,
     session: &str,
     names: &[(String, HotkeyId)],
     fired: &Sender<HotkeyId>,
 ) {
+    let mut held = Held::default();
     for message in presses {
         let Ok(message) = message else {
             break;
+        };
+        let activated = match message.header().member().map(MemberName::as_str) {
+            Some("Activated") => true,
+            Some("Deactivated") => false,
+            _ => continue,
         };
         let Ok((from, shortcut, _time, _options)) =
             message
@@ -352,7 +363,10 @@ fn hear(
         if from.as_str() != session {
             continue;
         }
-        if let Some((_, id)) = names.iter().find(|(name, _)| *name == shortcut)
+        if !activated {
+            held.released(&shortcut);
+        } else if let Some((_, id)) = names.iter().find(|(name, _)| *name == shortcut)
+            && held.pressed(&shortcut, Instant::now())
             && fired.send(*id).is_err()
         {
             break;
