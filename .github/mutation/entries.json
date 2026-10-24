@@ -1652,15 +1652,15 @@
       "file": "crates/nkb-gui/src/live.rs",
       "find": "                self.hold.pause();",
       "replace": "                let _ = ();",
-      "test": "live::tests::a_pause_gives_the_shortcuts_back_says_so_and_tells_the_window_the_table",
+      "test": "live::hold::tests::a_pause_gives_the_shortcuts_back_says_so_and_tells_the_window_the_table",
       "runner": "rust:nkb-gui:lib"
     },
     {
       "id": "M323",
       "why": "the new table registers before the old one is released - every unchanged chord comes back Taken against ourselves",
       "file": "crates/nkb-gui/src/live/hold.rs",
-      "find": "        self.holding = Holding::Lost;\n        match self.registrar.register(bindings.as_slice()) {",
-      "replace": "        match self.registrar.register(bindings.as_slice()) {",
+      "find": "        self.holding = Holding::Lost;\n        self.registered.clear();\n        match self.desktop.clone() {",
+      "replace": "        self.registered.clear();\n        match self.desktop.clone() {",
       "test": "live::tests::a_change_while_held_is_taken_at_once_releasing_the_old_set_first",
       "runner": "rust:nkb-gui:lib"
     },
@@ -1677,8 +1677,8 @@
       "id": "M325",
       "why": "a resume does not refresh the hint bar and the empty value band - the palette names the old shortcut",
       "file": "crates/nkb-gui/src/live.rs",
-      "find": "        self.view(lines, ValueBand::Keep, Some(legend(&bindings)))",
-      "replace": "        self.view(lines, ValueBand::Keep, None)",
+      "find": "        lines.extend(self.take(bindings));\n        self.view(lines, ValueBand::Keep, Some(legend(&bindings)))",
+      "replace": "        lines.extend(self.take(bindings));\n        self.view(lines, ValueBand::Keep, None)",
       "test": "live::tests::a_change_while_paused_is_tried_saved_told_and_taken_on_resume",
       "runner": "rust:nkb-gui:lib"
     },
@@ -1695,18 +1695,18 @@
       "id": "M327",
       "why": "the palette does not say the shortcuts are paused - it looks ready and does not answer (rule 1)",
       "file": "crates/nkb-gui/src/live/view.rs",
-      "find": "    if paused {",
-      "replace": "    if false {",
-      "test": "live::tests::while_paused_every_view_says_so_and_after_a_resume_none_does",
+      "find": "    if let Some(label) = held_back {",
+      "replace": "    if let Some(label) = None::<PaletteLabel> {",
+      "test": "live::hold::tests::while_paused_every_view_says_so_and_after_a_resume_none_does",
       "runner": "rust:nkb-gui:lib"
     },
     {
       "id": "M328",
       "why": "Resume with the shortcuts held registers them a second time - every line about them is said twice",
       "file": "crates/nkb-gui/src/live.rs",
-      "find": "            Command::Resume if self.hold.live().is_some() => Carried {",
+      "find": "            Command::Resume if self.hold.live().is_some() || self.hold.asking_now() => Carried {",
       "replace": "            Command::Resume if false => Carried {",
-      "test": "live::tests::a_resume_while_the_shortcuts_are_held_does_nothing",
+      "test": "live::hold::tests::a_resume_while_the_shortcuts_are_held_does_nothing",
       "runner": "rust:nkb-gui:lib"
     },
     {
@@ -10237,6 +10237,69 @@
       "replace": "name: index.to_string(),",
       "test": "portal_shortcuts::tests::a_shortcut_is_kept_under_its_action_not_under_its_place_in_the_table",
       "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1350",
+      "why": "the palette does not say it waits for the desktop, so it looks ready and answers no press",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "Holding::Asking { .. } => Some(PaletteLabel::WaitingForTheDesktop),",
+      "replace": "Holding::Asking { .. } => None,",
+      "test": "live::hold::tests::a_desktop_is_asked_without_waiting_and_every_view_says_it_is_waited_on",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1351",
+      "why": "the window of the desktop lists a shortcut that does nothing in this build",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": ".filter(|(action, _)| super::wired(*action))",
+      "replace": ".filter(|_| true)",
+      "test": "live::hold::tests::a_desktop_is_asked_only_for_the_shortcuts_that_work",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1352",
+      "why": "an answer that has not come yet is read as a refusal, so a person still choosing is told it failed",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "Err(TryRecvError::Empty) => return None,",
+      "replace": "Err(TryRecvError::Empty) => Err(ShortcutsUnavailable::CouldNotStart),",
+      "test": "live::hold::tests::a_desktop_is_asked_without_waiting_and_every_view_says_it_is_waited_on",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1353",
+      "why": "a question that ended without an answer is waited on for ever",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "Err(TryRecvError::Disconnected) => Err(ShortcutsUnavailable::CouldNotStart),",
+      "replace": "Err(TryRecvError::Disconnected) => return None,",
+      "test": "live::hold::tests::a_desktop_whose_question_ended_without_an_answer_is_a_refusal_and_not_a_wait",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1354",
+      "why": "a resume while the desktop is waited on asks the person a second time",
+      "file": "crates/nkb-gui/src/live.rs",
+      "find": "Command::Resume if self.hold.live().is_some() || self.hold.asking_now() => Carried {",
+      "replace": "Command::Resume if self.hold.live().is_some() => Carried {",
+      "test": "live::hold::tests::a_resume_while_the_desktop_is_waited_on_asks_nothing",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1355",
+      "why": "the wait between commands never hands on the answer of the desktop, so the shortcuts are never held",
+      "file": "crates/nkb-gui/src/live.rs",
+      "find": "        if let Some(lines) = answered() {\n            return Next::Answered(lines);\n        }\n",
+      "replace": "",
+      "test": "live::hold::tests::the_wait_between_commands_hands_on_the_answer_of_the_desktop",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1356",
+      "why": "a desktop is asked on the thread that carries out the tester's clicks, so the palette stands still for the person",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "            Some(desktop) => self.ask(desktop, *bindings),",
+      "replace": "            Some(desktop) => {\n                let answer = desktop.register(bindings.as_slice());\n                self.settle(answer, bindings)\n            }",
+      "test": "live::hold::tests::a_desktop_is_asked_without_waiting_and_every_view_says_it_is_waited_on",
+      "runner": "rust:nkb-gui:lib"
     }
   ]
 }

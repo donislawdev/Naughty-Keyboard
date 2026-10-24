@@ -97,6 +97,12 @@ pub enum PaletteLabel {
     /// for as long as it lasts - a palette that looks ready and answers
     /// nothing is the silence untouchable rule 1 forbids.
     ShortcutsPaused,
+    /// The desktop has been asked for the shortcuts and has not answered. On a
+    /// Wayland session the desktop gives them, and the first time it shows a
+    /// window of its own in which the person chooses - so the palette is up and
+    /// answers its buttons while nothing yet answers a press. Said in the message
+    /// band for as long as it lasts, for the reason `ShortcutsPaused` is.
+    WaitingForTheDesktop,
     /// The link under the hint bar that opens the shortcuts window - its words,
     /// and what a click does (`ux-spec.md` 5.4).
     ShortcutsLink,
@@ -257,6 +263,9 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
             "Nothing sent yet. Put the cursor in any field and press {shortcut}."
         }
         PaletteLabel::ShortcutsPaused => "Shortcuts are paused while the Shortcuts window is open.",
+        PaletteLabel::WaitingForTheDesktop => {
+            "Waiting for the desktop to give the shortcuts. Choose them in the window it shows."
+        }
         PaletteLabel::ShortcutsLink => "Change shortcuts",
         PaletteLabel::AboutLink => "About",
         PaletteLabel::DonateLink => "Donate",

@@ -206,6 +206,25 @@ pub fn can_register() -> bool {
     }
 }
 
+/// Whether the shortcuts of this session are the desktop's to give. On a Wayland session no
+/// program may grab a key, so [`can_register`] is false there and the desktop gives the
+/// ones a person chose, through its portal (`portal`). False wherever a grab is possible,
+/// and on a machine where nothing can be asked at all.
+///
+/// Asked once, before the shortcuts are, to choose the route. On Linux it connects to the
+/// X server and lets go of it again, like [`can_register`].
+#[must_use]
+pub fn desktop_holds_the_keys() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::grab_refused_by_wayland()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        false
+    }
+}
+
 /// Starts listening for the given shortcuts - on a dedicated thread on Windows, and
 /// through the loop of the application on macOS (see the module text).
 ///
@@ -476,6 +495,16 @@ mod tests {
             text.contains("macOS") || text.contains("Linux") || text.contains("this system"),
             "the message must name the system, got: {text}"
         );
+    }
+
+    #[test]
+    fn the_desktop_holds_the_keys_only_where_no_program_may_grab_one() {
+        // The two routes never both stand: a grab that is possible leaves nothing for the
+        // desktop to give, and a system with neither has no keys to hold.
+        assert!(!(can_register() && desktop_holds_the_keys()));
+        if cfg!(any(windows, target_os = "macos")) {
+            assert!(!desktop_holds_the_keys());
+        }
     }
 
     #[test]

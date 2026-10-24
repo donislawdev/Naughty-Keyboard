@@ -462,7 +462,7 @@ pub fn drive(
         // tried. It changes when the tester chooses another one that opens.
         pack: opened.pack,
         memory: &memory,
-        hold: Hold::new(&GlobalShortcuts),
+        hold: Hold::here(&GlobalShortcuts),
         ports: &ports,
         standing,
         defaults: default_bindings(),
@@ -530,10 +530,11 @@ pub fn drive(
                     (None, Ended::ShortcutsGone) => Next::Gone,
                 }
             }
-            None => next_command(stop, commands),
+            None => next_command(stop, commands, &mut || worker.hold.arrived()),
         };
         match next {
             Next::Stop => break,
+            Next::Answered(lines) => show(palette, worker.answered(lines)),
             Next::Gone => {
                 worker.hold.lose();
                 // `ShortcutsGone` always has a sentence, and the window is up:
@@ -572,14 +573,25 @@ enum Next {
     Gone,
     /// Something the main thread asked for.
     Command(Command),
+    /// The desktop has answered the shortcuts it was asked for, with the lines
+    /// worth saying about it.
+    Answered(Vec<String>),
 }
 
 /// Waits for a command while no shortcuts are held - nothing else can happen
-/// then. The stop is read first, as in [`between_presses`].
-fn next_command(stop: &AtomicBool, commands: &Receiver<Command>) -> Next {
+/// then but the answer of a desktop that was asked for them, which `answered`
+/// reads. The stop is read first, as in [`between_presses`].
+fn next_command(
+    stop: &AtomicBool,
+    commands: &Receiver<Command>,
+    answered: &mut dyn FnMut() -> Option<Vec<String>>,
+) -> Next {
     loop {
         if stop.load(Ordering::Relaxed) {
             return Next::Stop;
+        }
+        if let Some(lines) = answered() {
+            return Next::Answered(lines);
         }
         match commands.recv_timeout(TICK) {
             Ok(command) => return Next::Command(command),
@@ -655,7 +667,7 @@ impl Worker<'_> {
                 &mut self.pack,
                 &pack,
                 self.standing,
-                self.hold.paused(),
+                self.hold.held_back(),
             ),
             None => Some(self.view(
                 vec![i18n::label(PaletteLabel::NoOtherPack).to_owned()],
@@ -679,7 +691,7 @@ impl Worker<'_> {
                     &mut self.pack,
                     &asked,
                     self.standing,
-                    self.hold.paused(),
+                    self.hold.held_back(),
                 ),
                 told: None,
                 toggled: None,
@@ -692,7 +704,7 @@ impl Worker<'_> {
                     &pack,
                     &value,
                     self.standing,
-                    self.hold.paused(),
+                    self.hold.held_back(),
                 )),
                 told: None,
                 toggled: None,
@@ -708,9 +720,10 @@ impl Worker<'_> {
                     toggled: None,
                 }
             }
-            // Held already: the window did not pause, or a second close came.
-            // Taking them again would say every line about them twice.
-            Command::Resume if self.hold.live().is_some() => Carried {
+            // Held already, or asked of the desktop and not answered: the window
+            // did not pause, or a second close came. Taking them again would say
+            // every line about them twice, and ask the person a second time.
+            Command::Resume if self.hold.live().is_some() || self.hold.asking_now() => Carried {
                 view: None,
                 told: None,
                 toggled: None,
@@ -872,7 +885,21 @@ impl Worker<'_> {
     /// saying about it - with the route asked for at start, the first time
     /// the shortcuts are held.
     fn take(&mut self, bindings: Bindings) -> Vec<String> {
-        let mut lines = self.hold.take(&bindings);
+        let lines = self.hold.take(&bindings);
+        self.with_the_route(lines, bindings)
+    }
+
+    /// What the palette draws when the desktop has answered the shortcuts it was
+    /// asked for: the legend of the table, as after a resume.
+    fn answered(&mut self, lines: Vec<String>) -> View {
+        let bindings = self.memory.bindings.get();
+        let lines = self.with_the_route(lines, bindings);
+        self.view(lines, ValueBand::Keep, Some(legend(&bindings)))
+    }
+
+    /// `lines`, and what the route asked for at start adds once the shortcuts are
+    /// held.
+    fn with_the_route(&mut self, mut lines: Vec<String>, bindings: Bindings) -> Vec<String> {
         if self.hold.live().is_some()
             && let Some(route) = self.route.take()
         {
@@ -913,7 +940,7 @@ impl Worker<'_> {
                 messages,
                 value,
                 self.standing,
-                self.hold.paused(),
+                self.hold.held_back(),
             )
         }
     }
@@ -936,14 +963,16 @@ fn choose(
     pack: &mut String,
     asked: &str,
     standing: &Standing,
-    paused: bool,
+    held_back: Option<PaletteLabel>,
 ) -> Option<View> {
     let (said, value) = match open_pack(sequence, memory, pack, asked) {
         PackOpening::Same => return None,
         PackOpening::New(said) => (said, ValueBand::Clear),
         PackOpening::Failed(line) => (vec![line], ValueBand::Keep),
     };
-    Some(view_between(sequence, pack, said, value, standing, paused))
+    Some(view_between(
+        sequence, pack, said, value, standing, held_back,
+    ))
 }
 
 /// Opens `asked` when it is another pack, then makes `value` the one the next
@@ -960,7 +989,7 @@ fn choose_value(
     asked: &str,
     value: &str,
     standing: &Standing,
-    paused: bool,
+    held_back: Option<PaletteLabel>,
 ) -> View {
     let (mut said, band) = match open_pack(sequence, memory, pack, asked) {
         PackOpening::Same => (Vec::new(), ValueBand::Keep),
@@ -972,14 +1001,14 @@ fn choose_value(
                 vec![line],
                 ValueBand::Keep,
                 standing,
-                paused,
+                held_back,
             );
         }
     };
     if !sequence.choose_next(value) {
         said.push(i18n::value_gone(value, &shown(sequence, pack)));
     }
-    view_between(sequence, pack, said, band, standing, paused)
+    view_between(sequence, pack, said, band, standing, held_back)
 }
 
 /// What opening a pack came to.
@@ -1527,7 +1556,7 @@ mod tests {
                 Vec::new(),
                 ValueBand::Keep,
                 &quiet(),
-                false,
+                None,
             ),
         );
         // The switch's words, once, and the way in effect filled: the second
@@ -1625,7 +1654,7 @@ mod tests {
                 Vec::new(),
                 ValueBand::Clear,
                 &quiet(),
-                false,
+                None,
             ),
         );
         assert_eq!(palette.get_pack(), "Unicode and text");
@@ -1641,7 +1670,7 @@ mod tests {
                 Vec::new(),
                 ValueBand::Keep,
                 &quiet(),
-                false,
+                None,
             ),
         );
         assert!(!palette.get_has_value(), "keeping nothing showed something");
@@ -1782,7 +1811,7 @@ mod tests {
             &mut pack,
             "unicode-text",
             &quiet(),
-            false,
+            None,
         )
         .expect("another pack is drawn");
 
@@ -1815,7 +1844,7 @@ mod tests {
             &mut pack,
             "no-such-pack",
             &quiet(),
-            false,
+            None,
         )
         .expect("the refusal is drawn");
 
@@ -1852,7 +1881,7 @@ mod tests {
                 &mut pack,
                 "whitespace",
                 &quiet(),
-                false
+                None
             )
             .is_none()
         );
@@ -1877,7 +1906,7 @@ mod tests {
             &mut pack,
             "unicode-text",
             &quiet(),
-            false,
+            None,
         )
         .expect("another pack is drawn");
 
@@ -2184,7 +2213,7 @@ mod tests {
     use nkb_app::ports::{HotkeyRegistrar, ShortcutsUnavailable};
     use nkb_core::hotkeys::HotkeyChord;
 
-    use super::{Hold, Next, ShortcutsNow, Told, Worker, legend, next_command};
+    use super::{Hold, Next, Told, Worker, legend, next_command};
     use crate::clipboard::SystemClipboard;
 
     fn chord(text: &str) -> HotkeyChord {
@@ -2203,13 +2232,13 @@ mod tests {
     pub(super) struct Registrar {
         pub(super) taken: RefCell<Vec<HotkeyChord>>,
         pub(super) unavailable: Cell<bool>,
-        asked: RefCell<Vec<Vec<(HotkeyAction, HotkeyChord)>>>,
+        pub(super) asked: RefCell<Vec<Vec<(HotkeyAction, HotkeyChord)>>>,
         alive_when_asked: RefCell<Vec<usize>>,
         alive: Arc<AtomicUsize>,
     }
 
     impl Registrar {
-        fn alive(&self) -> usize {
+        pub(super) fn alive(&self) -> usize {
             self.alive.load(Ordering::SeqCst)
         }
         fn last_asked(&self) -> Vec<(HotkeyAction, HotkeyChord)> {
@@ -2306,39 +2335,8 @@ mod tests {
         test(&mut worker, &memory)
     }
 
-    fn paused_line() -> String {
+    pub(super) fn paused_line() -> String {
         i18n::label(PaletteLabel::ShortcutsPaused).to_owned()
-    }
-
-    /// 🔴 The window opens on a palette that has let its shortcuts go - a
-    /// press there must reach the window, not send a value into it - and
-    /// hears the table it edits in the answer.
-    #[test]
-    fn a_pause_gives_the_shortcuts_back_says_so_and_tells_the_window_the_table() {
-        let store = a_store(false);
-        let registrar = Registrar::default();
-        with_worker(&store, &registrar, true, |worker, _| {
-            assert_eq!(registrar.alive(), 1);
-
-            let carried = worker.carry_out(Command::Pause);
-
-            assert_eq!(registrar.alive(), 0, "the shortcuts were not given back");
-            assert!(worker.hold.paused());
-            let view = carried.view.expect("the palette says it is paused");
-            assert_eq!(view.messages, vec![paused_line()]);
-            let defaults = nkb_adapters::default_bindings();
-            assert_eq!(
-                carried.told,
-                Some(Told::Paused(ShortcutsNow {
-                    bindings: defaults,
-                    registered: defaults
-                        .as_slice()
-                        .iter()
-                        .map(|(action, chord)| (*action, *chord, ShortcutRegistration::Registered))
-                        .collect(),
-                }))
-            );
-        });
     }
 
     /// `D99`: the two clicks reach the sequence and come back as the bar, the
@@ -2691,35 +2689,6 @@ mod tests {
         });
     }
 
-    /// The pause is said in every view while it lasts - a pack chosen in the
-    /// pack window meanwhile must not take the sentence away - and not after.
-    #[test]
-    fn while_paused_every_view_says_so_and_after_a_resume_none_does() {
-        let store = a_store(false);
-        let registrar = Registrar::default();
-        with_worker(&store, &registrar, true, |worker, _| {
-            worker.carry_out(Command::Pause);
-
-            let chosen = worker
-                .carry_out(Command::Choose(String::from("unicode-text")))
-                .view
-                .expect("another pack is drawn");
-            assert_eq!(chosen.messages.first(), Some(&paused_line()));
-
-            let resumed = worker
-                .carry_out(Command::Resume)
-                .view
-                .expect("the palette says what came of taking them again");
-            assert!(
-                !resumed.messages.contains(&paused_line()),
-                "{:?}",
-                resumed.messages
-            );
-            assert!(!worker.hold.paused());
-            assert_eq!(registrar.alive(), 1);
-        });
-    }
-
     /// 🔴 The whole change: tried alone and released, saved, told to the
     /// window - and registered, with the words naming it, when the window
     /// closes.
@@ -2862,21 +2831,6 @@ mod tests {
         });
     }
 
-    /// Nothing is registered twice: a resume while held changes nothing and
-    /// says nothing.
-    #[test]
-    fn a_resume_while_the_shortcuts_are_held_does_nothing() {
-        let store = a_store(false);
-        let registrar = Registrar::default();
-        with_worker(&store, &registrar, true, |worker, _| {
-            let asked = registrar.asked.borrow().len();
-            let carried = worker.carry_out(Command::Resume);
-            assert!(carried.view.is_none() && carried.told.is_none());
-            assert_eq!(registrar.asked.borrow().len(), asked);
-            assert_eq!(registrar.alive(), 1);
-        });
-    }
-
     /// The window pauses before it changes anything. If a change ever came
     /// while held, what is held would stop being the table in effect - so it
     /// is taken again at once, the old set released first.
@@ -2954,13 +2908,16 @@ mod tests {
         let stop = AtomicBool::new(false);
         send.send(Command::Resume).expect("the receiver is alive");
         assert!(matches!(
-            next_command(&stop, &commands),
+            next_command(&stop, &commands, &mut || None),
             Next::Command(Command::Resume)
         ));
 
         send.send(Command::Resume).expect("the receiver is alive");
         stop.store(true, Ordering::Relaxed);
-        assert!(matches!(next_command(&stop, &commands), Next::Stop));
+        assert!(matches!(
+            next_command(&stop, &commands, &mut || None),
+            Next::Stop
+        ));
         assert_eq!(
             commands.try_recv(),
             Ok(Command::Resume),
@@ -2968,6 +2925,9 @@ mod tests {
         );
 
         drop(send);
-        assert!(matches!(next_command(&stop, &commands), Next::Stop));
+        assert!(matches!(
+            next_command(&stop, &commands, &mut || None),
+            Next::Stop
+        ));
     }
 }

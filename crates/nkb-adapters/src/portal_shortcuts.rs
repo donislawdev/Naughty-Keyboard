@@ -43,6 +43,15 @@ use crate::shortcuts::{hotkey_for, virtual_key, wait_for};
 #[derive(Debug, Default, Clone, Copy)]
 pub struct PortalShortcuts;
 
+impl PortalShortcuts {
+    /// Whether this session is one whose shortcuts the desktop gives, so this is the route
+    /// to take where `GlobalShortcuts` has none. Asked once, before either is.
+    #[must_use]
+    pub fn is_the_route() -> bool {
+        nkb_sys::hotkey::desktop_holds_the_keys()
+    }
+}
+
 /// What the portal answered to a start, in the shape this module reads.
 struct Begun {
     bound: Vec<Bound>,

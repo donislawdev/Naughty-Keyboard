@@ -54,6 +54,16 @@ pub(crate) fn route_refusal() -> Option<&'static str> {
     }
 }
 
+/// Whether the shortcuts are out of reach because this is a Wayland session, which keeps the
+/// keys for the desktop to give (`portal`). The environment is asked first and then the
+/// server, as for [`route_refusal`], so a shell started over SSH is told by its XWayland.
+pub(crate) fn grab_refused_by_wayland() -> bool {
+    match environment_route() {
+        Err(refusal) => refusal == Refusal::Wayland,
+        Ok(address) => connect(address).err() == Some(Refusal::Wayland),
+    }
+}
+
 /// Connects to the local socket of `address`. The server is refused when it is
 /// XWayland (`OBS-203`) or has no `XTEST`, the one way to inject key events.
 pub(crate) fn connect(address: DisplayAddress) -> Result<Server, Refusal> {
