@@ -2739,7 +2739,7 @@
       "id": "M480",
       "why": "the worker thread does not publish the restart shortcut - the value window does not know what to call it (D100)",
       "file": "crates/nkb-gui/src/live.rs",
-      "find": "        held.restart = Some(bindings.chord(HotkeyAction::RestartPack));",
+      "find": "        held.restart = bindings.named(HotkeyAction::RestartPack);",
       "replace": "        held.restart = None;",
       "test": "live::tests::the_slot_says_the_pack_in_use_and_the_value_its_next_press_sends",
       "runner": "rust:nkb-gui:lib"
@@ -3459,8 +3459,8 @@
       "id": "M574",
       "why": "a publish after a command empties the recent list - every change of pack loses it (D106)",
       "file": "crates/nkb-gui/src/live.rs",
-      "find": "        held.restart = Some(bindings.chord(HotkeyAction::RestartPack));\n",
-      "replace": "        held.restart = Some(bindings.chord(HotkeyAction::RestartPack));\n        held.recent.clear();\n",
+      "find": "        held.restart = bindings.named(HotkeyAction::RestartPack);\n",
+      "replace": "        held.restart = bindings.named(HotkeyAction::RestartPack);\n        held.recent.clear();\n",
       "test": "live::tests::a_value_that_went_out_is_not_recent_and_a_publish_keeps_the_list",
       "runner": "rust:nkb-gui:lib"
     },
@@ -10422,8 +10422,8 @@
       "id": "M1370",
       "why": "the table the words follow ignores what the desktop gave",
       "file": "crates/nkb-gui/src/live/hold.rs",
-      "find": "(asked.as_given(&chords), worded.chain(left).collect())",
-      "replace": "(asked, worded.chain(left).collect())",
+      "find": "(asked.as_given(&chords).unnamed(&unnamed), apart)",
+      "replace": "(asked, apart)",
       "test": "live::hold::tests::what_the_desktop_gave_is_what_the_words_of_the_palette_name",
       "runner": "rust:nkb-gui:lib"
     },
@@ -10606,6 +10606,105 @@
       "replace": "        let mut said = Vec::new();",
       "test": "live::hold::tests::a_desktop_that_does_not_know_the_program_is_offered_the_entry_and_asked_again",
       "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1391",
+      "why": "an action marked unnamed is marked in no entry of the table, so a sentence still names a key for it",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "                *flag = true;",
+      "replace": "                *flag = false;",
+      "test": "hotkeys::tests::an_unnamed_action_gives_no_chord_to_a_sentence_and_the_rest_do",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1392",
+      "why": "a sentence is given the chord of an action the table marked unnamed",
+      "file": "crates/nkb-core/src/hotkeys.rs",
+      "find": "(*candidate == action && !*unnamed).then_some(*chord)",
+      "replace": "(*candidate == action).then_some(*chord)",
+      "test": "hotkeys::tests::an_unnamed_action_gives_no_chord_to_a_sentence_and_the_rest_do",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1393",
+      "why": "the table the words follow does not mark the shortcuts the desktop left out or gave in other words",
+      "file": "crates/nkb-gui/src/live/hold.rs",
+      "find": "(asked.as_given(&chords).unnamed(&unnamed), apart)",
+      "replace": "(asked.as_given(&chords), apart)",
+      "test": "live::hold::tests::what_the_desktop_gave_is_what_the_words_of_the_palette_name",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1394",
+      "why": "the restart row of the value window names the chord asked for although the desktop gave none",
+      "file": "crates/nkb-gui/src/live.rs",
+      "find": "        held.restart = bindings.named(HotkeyAction::RestartPack);",
+      "replace": "        held.restart = Some(bindings.chord(HotkeyAction::RestartPack));",
+      "test": "live::tests::the_slot_says_the_pack_in_use_and_the_value_its_next_press_sends",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1395",
+      "why": "the three sentences that name a shortcut are worded without a key even while there is one to name",
+      "file": "crates/nkb-adapters/src/i18n/palette.rs",
+      "find": "    if bindings.named(action).is_some() {",
+      "replace": "    if false {",
+      "test": "i18n::palette::tests::a_sentence_with_a_key_to_name_is_left_to_the_ordinary_pattern",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1396",
+      "why": "the three sentences that name a shortcut are never worded without a key",
+      "file": "crates/nkb-adapters/src/i18n/palette.rs",
+      "find": "    if bindings.named(action).is_some() {",
+      "replace": "    if true {",
+      "test": "i18n::palette::tests::a_sentence_whose_shortcut_cannot_be_named_names_the_action_and_claims_no_key",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1397",
+      "why": "the sentence about a new field names the wrong action when its shortcut cannot be named",
+      "file": "crates/nkb-adapters/src/i18n/palette.rs",
+      "find": "            HotkeyAction::RestartPack,\n            (done.to_string(), total.to_string()),",
+      "replace": "            HotkeyAction::NextValue,\n            (done.to_string(), total.to_string()),",
+      "test": "i18n::palette::tests::a_sentence_whose_shortcut_cannot_be_named_names_the_action_and_claims_no_key",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1398",
+      "why": "the sentence about a missing pack names the wrong action when its shortcut cannot be named",
+      "file": "crates/nkb-adapters/src/i18n/palette.rs",
+      "find": "            PaletteLabel::NoPackUnnamed,\n            HotkeyAction::OpenPacks,",
+      "replace": "            PaletteLabel::NoPackUnnamed,\n            HotkeyAction::NextValue,",
+      "test": "i18n::palette::tests::a_sentence_whose_shortcut_cannot_be_named_names_the_action_and_claims_no_key",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1399",
+      "why": "the sentence about a busy clipboard names the wrong action when its shortcut cannot be named",
+      "file": "crates/nkb-adapters/src/i18n/palette.rs",
+      "find": "            PaletteLabel::ReportBusyUnnamed,\n            HotkeyAction::CopyReport,",
+      "replace": "            PaletteLabel::ReportBusyUnnamed,\n            HotkeyAction::NextValue,",
+      "test": "i18n::palette::tests::a_sentence_whose_shortcut_cannot_be_named_names_the_action_and_claims_no_key",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1400",
+      "why": "the counts of the sentence about a new field are swapped when its shortcut cannot be named",
+      "file": "crates/nkb-adapters/src/i18n/palette.rs",
+      "find": "(done.to_string(), total.to_string())",
+      "replace": "(total.to_string(), done.to_string())",
+      "test": "i18n::palette::tests::a_sentence_whose_shortcut_cannot_be_named_names_the_action_and_claims_no_key",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1401",
+      "why": "the palette never words a sentence without a key, whatever its table says",
+      "file": "crates/nkb-adapters/src/i18n.rs",
+      "find": "    if let Some(line) = palette::message_without_key(message, bindings) {",
+      "replace": "    if let Some(line) = palette::message_without_key(message, bindings).filter(|_| false) {",
+      "test": "i18n::tests::the_counter_sentence_names_the_shortcut_it_asks_for",
+      "runner": "rust:nkb-adapters:lib"
     }
   ]
 }

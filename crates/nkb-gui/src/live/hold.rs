@@ -226,6 +226,10 @@ impl<'a> Hold<'a> {
     /// the hint bar and the sentences show. A shortcut it gave in words that are
     /// no chord of ours, and one it gave none of, are [`Apart`]. Where no desktop
     /// is asked there is nothing given, and the table is `asked` as it was.
+    ///
+    /// The shortcuts that are [`Apart`] are marked in the table as well
+    /// ([`Bindings::unnamed`]), so a sentence that reads the table cannot name a key
+    /// for them whatever it is (`OBS-225`).
     pub(super) fn as_given(&self, asked: Bindings) -> (Bindings, Vec<(HotkeyAction, Apart)>) {
         let given = self.live().map_or(&[][..], |live| live.given());
         let chords: Vec<(HotkeyAction, HotkeyChord)> = given
@@ -241,7 +245,9 @@ impl<'a> Hold<'a> {
             .iter()
             .filter(|(_, _, outcome)| *outcome == ShortcutRegistration::NotGiven)
             .map(|(action, _, _)| (*action, Apart::Left));
-        (asked.as_given(&chords), worded.chain(left).collect())
+        let apart: Vec<(HotkeyAction, Apart)> = worded.chain(left).collect();
+        let unnamed: Vec<HotkeyAction> = apart.iter().map(|(action, _)| *action).collect();
+        (asked.as_given(&chords).unnamed(&unnamed), apart)
     }
 
     /// Gives the shortcuts back. Dropping the handle is the release, and it
@@ -1284,6 +1290,23 @@ mod tests {
                 now.chord(HotkeyAction::OpenPacks),
                 asked.chord(HotkeyAction::OpenPacks)
             );
+
+            // `OBS-225`: what the desktop left out or gave in other words is no key a
+            // sentence may name, and the restart row of the value window follows it.
+            assert_eq!(now.named(HotkeyAction::RestartPack), None, "left out");
+            assert_eq!(now.named(HotkeyAction::PreviousValue), None, "worded");
+            assert_eq!(now.named(HotkeyAction::NextValue), Some(chosen));
+            assert_eq!(
+                now.named(HotkeyAction::OpenPacks),
+                Some(asked.chord(HotkeyAction::OpenPacks))
+            );
+            let kept = nkb_app::advance_sequence::Message::CounterKept { done: 1, total: 2 };
+            let said = i18n::message(&kept, "any-pack", &now);
+            assert!(
+                said.contains(i18n::action_name(HotkeyAction::RestartPack)),
+                "{said}"
+            );
+            assert!(!said.contains(&i18n::chord(now.chord(HotkeyAction::RestartPack))));
         });
     }
 

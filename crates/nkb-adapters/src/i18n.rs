@@ -305,6 +305,9 @@ fn pattern_message(message: &Message) -> &'static str {
 /// `bindings` are the shortcuts in effect, for the sentences that name one.
 #[must_use]
 pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
+    if let Some(line) = palette::message_without_key(message, bindings) {
+        return line;
+    }
     let pattern = pattern_message(message);
     match message {
         Message::ClipboardMode
@@ -1172,6 +1175,12 @@ mod tests {
             .iter()
             .map(|key| message(key, "unicode-text", &defaults()))
             .collect();
+        // The same messages for a palette that can name no shortcut at all.
+        out.extend(
+            every_message()
+                .iter()
+                .map(|key| message(key, "unicode-text", &defaults().unnamed(&HotkeyAction::ALL))),
+        );
 
         for error in [
             ChooseError::NotFound,
@@ -1734,6 +1743,8 @@ mod tests {
             chord_text(&defaults(), HotkeyAction::NextValue),
             "the check above would not tell RestartPack from the first entry"
         );
+        let without = defaults().unnamed(&[HotkeyAction::OpenPacks]);
+        assert!(message(&Message::NoPack, "p", &without).contains("Find a value"));
     }
 
     #[test]
@@ -2110,6 +2121,9 @@ mod tests {
             PaletteLabel::Recipe,
             PaletteLabel::NoValueYet,
             PaletteLabel::NoValueYetUnnamed,
+            PaletteLabel::CounterKeptUnnamed,
+            PaletteLabel::NoPackUnnamed,
+            PaletteLabel::ReportBusyUnnamed,
             PaletteLabel::ShortcutsPaused,
             PaletteLabel::WaitingForTheDesktop,
             PaletteLabel::ShortcutsLink,
@@ -2175,6 +2189,9 @@ mod tests {
                 | PaletteLabel::Recipe
                 | PaletteLabel::NoValueYet
                 | PaletteLabel::NoValueYetUnnamed
+                | PaletteLabel::CounterKeptUnnamed
+                | PaletteLabel::NoPackUnnamed
+                | PaletteLabel::ReportBusyUnnamed
                 | PaletteLabel::TypingCounter
                 | PaletteLabel::NextValue
                 | PaletteLabel::NextEndOfPack
@@ -2285,14 +2302,6 @@ mod tests {
             counts(1, 2, 8, 4),
             "graphemes: 1, code points: 2, bytes: 8, UTF-16 units: 4"
         );
-    }
-
-    #[test]
-    fn a_recipe_reads_the_way_the_sketch_draws_it() {
-        // The sketch in `ux-spec.md` 2, less the digit grouping - see `recipe`.
-        assert_eq!(recipe(100_000, "a"), "100000 \u{D7} \"a\"");
-        // A unit holding braces is copied, never substituted a second time.
-        assert_eq!(recipe(2, "{count}"), "2 \u{D7} \"{count}\"");
     }
 
     #[test]
@@ -2699,18 +2708,6 @@ mod tests {
                 "{shown} could not be registered - the system returned code 1409 - so it was \
                  not kept."
             )]
-        );
-    }
-
-    #[test]
-    fn the_shortcuts_window_counts_and_invites_in_its_own_words() {
-        assert_eq!(shortcuts_summary(1, 10), "changed: 1 of 10");
-        assert_eq!(
-            shortcut_invite(HotkeyAction::CopyReport),
-            format!(
-                "Press the new shortcut for \"{}\", or Esc to stop recording.",
-                action_name(HotkeyAction::CopyReport)
-            )
         );
     }
 

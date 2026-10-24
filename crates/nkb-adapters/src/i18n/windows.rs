@@ -860,6 +860,18 @@ pub fn shortcut_answer(
 mod tests {
     use super::*;
 
+    #[test]
+    fn the_shortcuts_window_counts_and_invites_in_its_own_words() {
+        assert_eq!(shortcuts_summary(1, 10), "changed: 1 of 10");
+        assert_eq!(
+            shortcut_invite(HotkeyAction::CopyReport),
+            format!(
+                "Press the new shortcut for \"{}\", or Esc to stop recording.",
+                action_name(HotkeyAction::CopyReport)
+            )
+        );
+    }
+
     /// A query with braces in it is copied into the sentence, not substituted.
     #[test]
     fn a_query_with_braces_is_copied_not_substituted() {
