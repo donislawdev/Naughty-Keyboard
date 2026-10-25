@@ -2,8 +2,6 @@
 title = "Naughty Keyboard: dane testowe, które psują formularze"
 description = "Wpisuj kłopotliwe wartości testowe w dowolne pole jednym skrótem: niewidoczne spacje, niemożliwe daty, formuły, 65 535 znaków. Za darmo i offline."
 
-limits = "**Gdzie działa dziś.** Wpisywanie w inne okna działa na Windows, macOS i Linuksie, a każdy system ma swoje warunki. Wiersz poleceń i narzędzia do paczek działają wszędzie."
-
 [hero]
 eyebrow = "GUI + CLI"
 title = "Twój formularz działa."

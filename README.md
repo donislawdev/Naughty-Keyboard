@@ -37,8 +37,6 @@ A window and a command line, over one engine.
 ⭐ **If it found the bug your users would have found, leave a star.** That is how the next tester who
 needs it finds out it exists.
 
-![Naughty Keyboard: Your form works. Until someone types this. Eighteen packs of values, and a card showing what null, =1+1, 30.02.2026 and a trailing space do to a form.](.github/social-preview/social-preview.png)
-
 **What it can do**
 
 - **One shortcut, one value** - `Alt+Shift+N` (`Option+Command+N` on macOS, `Ctrl+Alt+N` on Linux)

@@ -2,8 +2,6 @@
 title = "Naughty Keyboard: test data that breaks forms"
 description = "Type awkward test values into any field with one shortcut: invisible spaces, impossible dates, formulas, 65,535 characters. Free, offline, open source."
 
-limits = "**Where it works today.** Typing into other windows works on Windows, macOS and Linux, and each system has its own conditions. The command line and the pack tools work everywhere."
-
 [hero]
 eyebrow = "GUI + CLI"
 title = "Your form works."

@@ -114,9 +114,6 @@ other = "Przeczytaj dokumentację"
 [view_on_github]
 other = "Zobacz na GitHubie"
 
-[honest_limits]
-other = "Uczciwe ograniczenia"
-
 # ---- a value, the way the palette shows it ----------------------------------
 
 [invisible_character]
