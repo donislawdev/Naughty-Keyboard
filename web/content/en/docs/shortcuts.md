@@ -7,7 +7,7 @@ lead: "Every action of the palette has a chord. These are the defaults, and ever
 
 ## Which chords does the palette use?
 
-All the defaults are `Alt+Shift` and a key, so they are learned as one family. On Windows a default is never `Ctrl+Alt`, because Windows reads `Ctrl+Alt` as AltGr, and a global shortcut on it would take a letter away from every application on a keyboard layout that types one there.
+All the defaults are one modifier pair and a key, so they are learned as one family. On Windows it is `Alt+Shift`, and a default is never `Ctrl+Alt`, because Windows reads `Ctrl+Alt` as AltGr, and a global shortcut on it would take a letter away from every application on a keyboard layout that types one there. On macOS it is `Option+Command`, because Option types characters and Command does not, and the chord of Find a value is `Option+Command+F`, because the Finder holds `Option+Command+Space`. On Linux it is `Ctrl+Alt`, because a keyboard layout switch often takes `Alt+Shift`. The table below shows the Windows chords. Under Wayland the desktop decides which keys a shortcut gets, and the palette names the keys the desktop gave.
 
 {{< shortcuts >}}
 
@@ -24,7 +24,7 @@ Or write it in `settings.toml`, under `[shortcuts]`, with the action's name from
 next-value = "Ctrl+Alt+Win+N"
 ```
 
-On Windows the file is `%APPDATA%\Naughty Keyboard\settings.toml`. The palette reads it when it starts.
+The file is the one [the palette's page](/docs/palette/) names. The palette reads it when it starts.
 
 ## Which chords does it refuse?
 

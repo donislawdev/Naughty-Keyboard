@@ -31,8 +31,8 @@ Every value comes with what it usually breaks and what a correct application doe
 them breaks something, one more shortcut copies a report block you can paste straight into a ticket.
 A window and a command line, over one engine.
 
-> **Where it works today.** Typing into other windows works on Windows. On macOS and Linux the command
-> line and the pack tools work, and a value reaches a field through the clipboard.
+> **Where it works today.** Typing into other windows works on Windows, macOS and Linux, and each
+> system has its own conditions. The command line and the pack tools work everywhere.
 > [Honest limits](#honest-limits) has the details.
 
 ⭐ **If it found the bug your users would have found, leave a star.** That is how the next tester who
@@ -42,9 +42,9 @@ needs it finds out it exists.
 
 **What it can do**
 
-- **One shortcut, one value** - `Alt+Shift+N` clears the line and types the next value of the current
-  pack into whatever window has the keyboard. Previous and restart are one chord away, and every chord
-  can be changed.
+- **One shortcut, one value** - `Alt+Shift+N` (`Option+Command+N` on macOS, `Ctrl+Alt+N` on Linux)
+  clears the line and types the next value of the current pack into whatever window has the keyboard.
+  Previous and restart are one chord away, and every chord can be changed.
 - **Values that explain themselves** - each one carries `breaks` (what it usually breaks, and why) and
   `expect` (what a correct application does). The pack file, `nkb show` and the report block all say so.
 - **Invisible characters made visible** - the palette draws one as a marker, `␣`, instead of showing
@@ -84,7 +84,7 @@ needs it finds out it exists.
 > [releases page](https://github.com/donislawdev/Naughty-Keyboard/releases).
 
 Every release has six archives, one for each program and system. `nkb` is the command line and
-`nkb-gui` the palette, and `VERSION` below stands for the version, such as `0.2.0`.
+`nkb-gui` the palette, and `VERSION` below stands for the version, such as `0.3.0`.
 
 | System | Command line | Palette |
 |---|---|---|
@@ -105,7 +105,8 @@ archive into a folder of its own. Nothing is installed and nothing else is neede
 - **Linux.** The programs are not signed, and the commands below say where they came from. The palette
   needs a desktop session, X11 or Wayland.
 
-Typing into other windows works on Windows only for now, see [Honest limits](#honest-limits).
+What each system needs before a program can type into another window is in
+[Honest limits](#honest-limits).
 
 **On Windows there is also an installer**, `nkb-setup_VERSION_windows_amd64.msi`, with both programs in
 it. It asks for administrator rights, because it installs for every account on the machine: both programs
@@ -369,12 +370,24 @@ so `time-zones` always types the next change of the clocks rather than one that 
 This section is here on purpose. A tool that quietly does less than it seems to is worse than one that
 says so.
 
-- **Typing into other windows works on Windows only.** On macOS and Linux this build has no way to
-  register global shortcuts, so the palette cannot be driven from the keyboard there, and `nkb send`
-  answers that there is no way to deliver keystrokes yet. A value reaches a field through the clipboard
-  instead, with the palette's Copy buttons and its clipboard switch. The command line and the pack
-  tools, `packs`, `show`, `emit`, `lint`, `fmt` and `new-pack`, do not touch the system and work
-  everywhere.
+- **Typing into other windows needs something from each system.** Windows needs nothing. On macOS the
+  program that types, `nkb` run from a terminal or the palette, needs the Accessibility permission.
+  Without it `nkb send` says what to turn on, sends nothing and exits with code 4, and the palette puts
+  values on the clipboard. On Linux under X11 it needs a local display. Under Wayland it needs an IBus
+  daemon to type through, and `--clear` and the palette's shortcuts need the desktop's permission, which
+  the desktop asks for in a window of its own the first time. Where a system has no way, `nkb send`
+  says so and exits with code 4, and a value reaches a field through the clipboard, with the palette's
+  Copy buttons and its clipboard switch. The command line and the pack tools, `packs`, `show`, `emit`,
+  `lint`, `fmt` and `new-pack`, do not touch the system and work everywhere.
+- **Linux was measured on one system.** That is Ubuntu 26.04: GNOME 50 on Wayland, and X11 with openbox
+  and xfwm4. KDE and other desktops are untested. Under Wayland `nkb send` hands the text to the input
+  method and cannot tell whether a field had the focus. A program that reads keys through an input method
+  under X11, such as xterm with IBus, can lose the end of a long run of characters the keyboard layout
+  lacks. On Linux the palette does not remember where it stood, and under X11 its shortcuts window cannot
+  record a chord.
+- **The system may change what is typed.** On macOS the text substitutions of the system can turn a
+  typed value into another one, and the palette and `nkb send` say so when one that is switched on could
+  have acted on that very value.
 - **You can write your own packs, but not load them yet.** `nkb new-pack`, `nkb fmt` and `nkb lint` all
   work on a file of your own. Reading a folder of your own packs into the palette and the command line
   is not wired up: `nkb packs` reports the folders for your own and your team's packs as not read.

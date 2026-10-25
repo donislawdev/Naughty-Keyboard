@@ -2,13 +2,23 @@
 title: Uczciwe ograniczenia
 slug: ograniczenia
 seoTitle: Uczciwe ograniczenia - czego program jeszcze nie robi
-description: "Gdzie Naughty Keyboard się dziś kończy: wpisywanie w inne okna tylko na Windows, własnych paczek jeszcze nie da się wczytać, a format paczki nie jest zamrożony."
+description: "Gdzie Naughty Keyboard się kończy: wpisywanie ma warunki w każdym systemie, Linux zmierzono na jednym, własnych paczek nie wczytasz, format nie jest zamrożony."
 lead: "Narzędzie, które po cichu robi mniej, niż się wydaje, jest gorsze od takiego, które to mówi. Oto, czego jeszcze nie robi."
 ---
 
-## Czy wpisuje w inne okna na macOS i Linuksie?
+## Czy wpisuje w inne okna wszędzie?
 
-Jeszcze nie. Na macOS i Linuksie ta wersja programu nie umie rejestrować skrótów globalnych, więc paletą nie da się tam sterować z klawiatury, a `nkb send` odpowiada, że nie ma jeszcze sposobu, żeby dostarczyć naciśnięcia, i kończy kodem 4. Wartość trafia do pola przez schowek, przyciskami Copy palety i jej przełącznikiem schowka. Wiersz poleceń i narzędzia do paczek, `packs`, `show`, `emit`, `lint`, `fmt` i `new-pack`, nie dotykają systemu i działają wszędzie.
+Na Windows, macOS i Linuksie wpisuje, a każdy system najpierw czegoś wymaga. Windows nie wymaga niczego. Na macOS program, który wpisuje, czyli `nkb` uruchomiony z terminala albo paleta, potrzebuje uprawnienia dostępności (Accessibility). Bez niego `nkb send` mówi, co włączyć, niczego nie wysyła i kończy się kodem 4, a paleta kładzie wartości w schowku. Na Linuksie pod X11 potrzebny jest lokalny wyświetlacz. Pod Waylandem potrzebny jest demon IBus, przez który idzie tekst, a `--clear` i skróty palety potrzebują zgody pulpitu, o którą pulpit pyta w osobnym oknie za pierwszym razem.
+
+Tam, gdzie system nie ma sposobu, `nkb send` to mówi i kończy się kodem 4, a wartość trafia do pola przez schowek, przyciskami Copy palety i jej przełącznikiem schowka. Wiersz poleceń i narzędzia do paczek, `packs`, `show`, `emit`, `lint`, `fmt` i `new-pack`, nie dotykają systemu i działają wszędzie.
+
+## Czy sprawdzono to na każdym pulpicie Linuksa?
+
+Nie. Zmierzono to tylko na Ubuntu 26.04: GNOME 50 na Waylandzie i X11 z openbox i xfwm4. KDE i inne pulpity nie były sprawdzane. Pod Waylandem `nkb send` przekazuje tekst metodzie wprowadzania i nie umie powiedzieć, czy jakieś pole miało fokus. Pod X11 program, który czyta klawisze przez metodę wprowadzania, na przykład xterm z IBus, może zgubić koniec długiego ciągu znaków, których układ klawiatury nie ma. Na Linuksie paleta nie pamięta, gdzie stała, a pod X11 jej okno skrótów nie nagra kombinacji.
+
+## Czy system może zmienić to, co zostało wpisane?
+
+Na macOS tak. Podstawienia tekstu w systemie mogą zamienić wpisaną wartość w inną, a paleta i `nkb send` mówią o tym, gdy włączone podstawienie mogło zadziałać na właśnie tę wartość.
 
 ## Czy mogę wczytać własne paczki?
 

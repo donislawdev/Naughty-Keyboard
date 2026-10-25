@@ -1,13 +1,23 @@
 ---
 title: Honest limits
 seoTitle: Honest limits - what Naughty Keyboard does not do yet
-description: Where Naughty Keyboard stops today - typing into other windows works on Windows only, your own packs cannot be loaded yet, and the pack format is not frozen.
+description: "Where Naughty Keyboard stops today: typing has conditions on each system, Linux was measured on one, own packs cannot be loaded, the format is not frozen."
 lead: "A tool that quietly does less than it seems to is worse than one that says so. This is what it does not do yet."
 ---
 
-## Does it type into other windows on macOS and Linux?
+## Does it type into other windows everywhere?
 
-Not yet. On macOS and Linux this build has no way to register global shortcuts, so the palette cannot be driven from the keyboard there, and `nkb send` answers that there is no way to deliver keystrokes yet and exits with code 4. A value reaches a field through the clipboard instead, with the palette's Copy buttons and its clipboard switch. The command line and the pack tools, `packs`, `show`, `emit`, `lint`, `fmt` and `new-pack`, do not touch the system and work everywhere.
+On Windows, macOS and Linux it does, and each system asks for something first. Windows asks for nothing. On macOS the program that types, `nkb` run from a terminal or the palette, needs the Accessibility permission. Without it `nkb send` says what to turn on, sends nothing and exits with code 4, and the palette puts values on the clipboard. On Linux under X11 it needs a local display. Under Wayland it needs an IBus daemon to type through, and `--clear` and the palette's shortcuts need the desktop's permission, which the desktop asks for in a window of its own the first time.
+
+Where a system has no way, `nkb send` says so and exits with code 4, and a value reaches a field through the clipboard instead, with the palette's Copy buttons and its clipboard switch. The command line and the pack tools, `packs`, `show`, `emit`, `lint`, `fmt` and `new-pack`, do not touch the system and work everywhere.
+
+## Was it tried on every Linux desktop?
+
+No. It was measured on Ubuntu 26.04 only: GNOME 50 on Wayland, and X11 with openbox and xfwm4. KDE and other desktops are untested. Under Wayland `nkb send` hands the text to the input method and cannot tell whether a field had the focus. Under X11 a program that reads keys through an input method, such as xterm with IBus, can lose the end of a long run of characters the keyboard layout lacks. On Linux the palette does not remember where it stood, and under X11 its shortcuts window cannot record a chord.
+
+## Can the system change what is typed?
+
+On macOS, yes. The text substitutions of the system can turn a typed value into another one, and the palette and `nkb send` say so when one that is switched on could have acted on that very value.
 
 ## Can I load my own packs?
 

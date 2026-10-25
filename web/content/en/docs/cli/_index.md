@@ -2,7 +2,7 @@
 title: Command line
 seoTitle: The nkb command line - every command and option
 description: The nkb command line lists, prints and checks packs of test values and types one into a field. Every command, every option and every exit code.
-lead: "`nkb` lists, prints and checks packs, and on Windows types one value into the focused field. It runs in a terminal, a script or a CI pipeline."
+lead: "`nkb` lists, prints and checks packs, and types one value into the focused field. It runs in a terminal, a script or a CI pipeline."
 layout: cli
 ---
 

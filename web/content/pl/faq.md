@@ -16,7 +16,7 @@ faq:
   - question: Czy potrzebuje internetu?
     answer: "Nie. Nie otwiera żadnego połączenia sieciowego, nie ma konta i niczego nigdzie nie wysyła. Jak to jest sprawdzane, mówi strona [Bezpieczeństwo](/security/)."
   - question: Na jakich systemach działa?
-    answer: "Windows 10 i 11, macOS 11 lub nowszy na Apple silicon i Linux na x64. Wpisywanie w inne okna działa na Windows. Na macOS i Linuksie wiersz poleceń działa w pełni, a paleta kładzie wartości w schowku, skąd je wklejasz. Szczegóły mają [Uczciwe ograniczenia](/docs/limits/)."
+    answer: "Windows 10 i 11, macOS 11 lub nowszy na Apple silicon i Linux na x64. Wpisywanie w inne okna działa na wszystkich trzech, a każdy system ma swoje warunki. Tam, gdzie system nie ma sposobu na wpisywanie, paleta kładzie wartości w schowku, skąd je wklejasz. Szczegóły mają [Uczciwe ograniczenia](/docs/limits/)."
   - question: Czy mogę użyć wartości w testach automatycznych?
     answer: "Tak. `nkb emit` wypisuje każdą paczkę jako JSON, CSV albo jedną wartość na wiersz, w postaci escapowanej albo surowej, a każde polecenie ma kody wyjścia, według których pipeline może wybrać dalszą drogę. Jak, pokazuje [nkb emit](/docs/cli/emit/)."
   - question: Czy mogę zmienić skróty?

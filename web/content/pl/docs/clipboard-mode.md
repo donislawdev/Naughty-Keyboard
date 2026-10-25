@@ -20,7 +20,7 @@ Paleta nigdy nie wkleja za Ciebie. Wklejenie to naciśnięcie klawisza w cudzym 
 
 Dla okna, które działa z wyższymi uprawnieniami niż paleta, na przykład programu uruchomionego jako administrator. Windows odrzuciłby naciśnięcia bez słowa, więc paleta pyta przed wpisaniem, kładzie tę wartość w schowku i mówi dlaczego. Robi tak dalej dla tego samego okna i wraca do wpisywania, gdy przejdziesz do innego.
 
-Na macOS i Linuksie ta wersja programu nie ma skrótów globalnych, więc wartość trafia do pola przez schowek: przyciskami Copy palety albo jej przełącznikiem schowka.
+Tam, gdzie system nie pozwala palecie wpisywać, na przykład na macOS, dopóki paleta nie ma uprawnienia dostępności (Accessibility), albo na Linuksie bez sposobu na wpisywanie, wartość trafia do pola przez schowek: przyciskami Copy palety albo jej przełącznikiem schowka.
 
 ## Co jeszcze kładzie wartość w schowku?
 
@@ -32,4 +32,4 @@ Nie. Na Windows wartość, którą paleta kładzie w schowku, jest oznaczona tak
 
 ## Czy nkb ma tryb schowka?
 
-Nie. Wiersz poleceń wypisuje wartości na standardowe wyjście, skąd bierze je skrypt albo potok, a `nkb send` wpisuje wartość w pole z fokusem na Windows. Program, który kładzie coś w schowku i kończy działanie, oddałby wartość temu, co przeczyta schowek jako następne, a tego nie robi się ze skryptu.
+Nie. Wiersz poleceń wypisuje wartości na standardowe wyjście, skąd bierze je skrypt albo potok, a `nkb send` wpisuje wartość w pole z fokusem. Program, który kładzie coś w schowku i kończy działanie, oddałby wartość temu, co przeczyta schowek jako następne, a tego nie robi się ze skryptu.

@@ -7,7 +7,7 @@ lead: "From the download to the first awkward value in a field, in about two min
 
 ## What do I need?
 
-A computer with Windows 10 or 11 to type into other applications. On macOS and Linux the command line and the pack tools work in full, and the palette puts a value on the clipboard for you to paste. [Download](/download/) has the archive for each system, and nothing is installed: you unpack it and run it.
+A computer with Windows 10 or 11, macOS 11 or newer on Apple silicon, or Linux on x64. To type into other applications, macOS needs the Accessibility permission for the program, and Linux needs an X11 session or a Wayland session with an IBus daemon. Where a system has no way to type, the palette puts a value on the clipboard for you to paste. [Honest limits](/docs/limits/) says what each system needs. [Download](/download/) has the archive for each system, and nothing is installed: you unpack it and run it.
 
 ## How do I type the first value?
 

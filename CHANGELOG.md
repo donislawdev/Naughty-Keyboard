@@ -10,20 +10,35 @@ Changes wait under Unreleased until then.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-25
+
+This release brings typing into other windows to macOS and Linux. The Linux routes were measured on
+Ubuntu 26.04 only, on GNOME 50 for Wayland and with openbox and xfwm4 for X11, so another desktop may
+behave differently. The Linux programs are still not signed.
+
 ### Added
 
 - On Linux, `nkb send` types into programs running under an X11 session. A character the keyboard
   layout has is pressed as its own key, so a page sees the key events of a person's keyboard. Any
   other character goes through a spare key, rewritten for the moment. A program that reads keys
-  through an input method, such as xterm with IBus, can lose the end of a long run of those. Nothing
-  is sent for a remote display, or while Caps Lock is on or a modifier is held. `--clear` is not
-  available yet.
+  through an input method, such as xterm with IBus, can lose the end of a long run of those.
+  `--clear` clears the line first with Home, Shift+End and Delete. Nothing is sent for a remote
+  display, or while Caps Lock is on or a modifier is held.
 - On Linux, `nkb send` types into a Wayland session by handing the text to the desktop's input
   method, IBus, so every character arrives, those the keyboard layout lacks included. The command
   says the value was handed over and never that it is in the field, because the desktop does not say
   whether a field had the focus. A long value goes in pieces, 100000 characters in about 2.5
-  seconds, and `Escape` stops it. Nothing is sent without an IBus daemon on a local socket. The
-  palette and `--clear` are not available there yet.
+  seconds, and `Escape` stops it. Nothing is sent without an IBus daemon on a local socket.
+- On a Wayland session `nkb send --clear` clears the line with Home, Shift+End and Delete, pressed
+  through the desktop's remote-desktop portal. The first time, the desktop asks in a window of its
+  own whether keys may be pressed, and `nkb send` says it is waiting, for up to five minutes. The
+  permission is kept, so the next clearing asks nothing unless the desktop has forgotten it. Nothing
+  is pressed while a modifier key is held, because Ctrl held would clear the whole document.
+- On Linux both programs ask the accessibility bus what kind of control has the keyboard, and only
+  its kind, never a name or text. A control that takes no text, such as a button, is refused as on
+  Windows. A line is cleared only when the control is confirmed to be a text field. An application
+  that shows the bus nothing is typed into as before, without clearing the line first, and the
+  sentence says why.
 - The palette runs under an X11 session. Its shortcuts, `Ctrl+Alt` with a letter, work while another
   program is in front, and a click on the palette leaves the keyboard where it was. Values go in the
   way `nkb send` puts them in. A layout that switches on the same two keys as a shortcut, as
@@ -31,8 +46,13 @@ Changes wait under Unreleased until then.
   register it. Remembering the window's place and recording a new shortcut come later.
 - The palette opens in a Wayland session as a window without a frame of the system's, run through
   XWayland, so that a click on it does not take the keyboard from the field under test. Its header
-  moves it and a cross at the end closes it. It has no shortcuts there yet and does not type, so its
-  buttons only walk the pack and copy values.
+  moves it and a cross at the end closes it. It types the way `nkb send` does there. While the
+  desktop asks whether keys may be pressed, it steps behind the window that asks and says it waits.
+- On a Wayland session the palette asks the desktop for its shortcuts through the global shortcuts
+  portal, and the desktop decides which keys they are. The palette names the keys the desktop gave
+  and says so when it gave none. Where the desktop wants an entry for the program, a button writes
+  one small file for it and another takes it away. Nothing is written without a click. The shortcuts
+  window shows the keys and cannot change them.
 - On macOS the palette and `nkb send` now say when the system's text substitutions could have changed
   a value that went in: a capital letter at the start of a sentence, a period after two spaces, and
   a straight quote made curly in a rich text document. The field can then hold something other than
@@ -140,5 +160,6 @@ a later release may still change it, and its notes will say how.
   statements of how it was built and of what each archive holds, which `gh attestation verify` checks.
   The README shows the commands.
 
-[Unreleased]: https://github.com/donislawdev/Naughty-Keyboard/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/donislawdev/Naughty-Keyboard/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/donislawdev/Naughty-Keyboard/releases/tag/v0.3.0
 [0.2.0]: https://github.com/donislawdev/Naughty-Keyboard/releases/tag/v0.2.0

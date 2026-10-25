@@ -14,7 +14,7 @@ faq:
   - question: Does it need the internet?
     answer: "No. It opens no network connection, has no account and sends nothing anywhere. [Security](/security/) says how that is checked."
   - question: Which systems does it run on?
-    answer: "Windows 10 and 11, macOS 11 or newer on Apple silicon, and Linux on x64. Typing into other windows works on Windows. On macOS and Linux the command line works in full and the palette puts values on the clipboard for you to paste. [Honest limits](/docs/limits/) has the details."
+    answer: "Windows 10 and 11, macOS 11 or newer on Apple silicon, and Linux on x64. Typing into other windows works on all three, and each system has its own conditions. Where a system has no way to type, the palette puts values on the clipboard for you to paste. [Honest limits](/docs/limits/) has the details."
   - question: Can I use the values in automated tests?
     answer: "Yes. `nkb emit` prints any pack as JSON, CSV or one value per line, escaped or raw, and every command has exit codes a pipeline can branch on. [nkb emit](/docs/cli/emit/) shows how."
   - question: Can I change the shortcuts?

@@ -27,7 +27,7 @@ body:
         `nkb --version` prints it. For the palette, the report block (`Alt+Shift+B`)
         carries it on its `Tool:` line. If you built from source, add the commit
         too: `git rev-parse --short HEAD`.
-      placeholder: "nkb 0.2.0"
+      placeholder: "nkb 0.3.0"
     validations:
       required: true
   - type: dropdown
@@ -45,7 +45,7 @@ body:
     id: system
     attributes:
       label: Operating system
-      description: Typing into other windows works on Windows only, so this decides which part of the tool you were using.
+      description: Each system types into other windows in its own way, so this decides which part of the tool you were using.
       options:
         - Windows 11
         - Windows 10

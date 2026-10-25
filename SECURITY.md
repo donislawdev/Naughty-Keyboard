@@ -39,8 +39,9 @@ reporter unless you prefer to stay anonymous.
 vulnerability.** Everything below follows from that sentence, so it is worth reading before writing
 a report.
 
-On Windows the tool sends a value to the window that has the keyboard focus, the way a keyboard
-does, and reads a very little about that window first so it can say where the value went. A report
+On Windows, macOS and Linux the tool sends a value to the window that has the keyboard focus, the way
+a keyboard does or, under Wayland, the way an input method does, and reads a very little about that
+window first so it can say where the value went. A report
 saying "this program sends keystrokes into other programs" describes the feature rather than a
 defect. What is in scope is the tool doing that to a window **you did not choose**, sending keys it
 says it never sends, or reading more than it says it reads.
@@ -55,11 +56,18 @@ and never its title, and one number: whether that program runs with higher privi
 does. It reads no title, no text and no value of a control, and it does not watch which window
 comes to the front. The tests `field_reads_only_kinds` and `program_reads_only_its_name` in `nkb-sys`
 hold those reads to a list, so a new one fails the build until somebody edits the list on purpose.
+On macOS and Linux it reads the kind of control that holds the keyboard focus through the
+accessibility interface of the system, from a closed list, and never a title, a text or a value. The
+tests `ax_reads_only_kinds` and `atspi_reads_only_kinds` in `nkb-sys` hold those reads to a list in the
+same way.
 
 **It sends no key other than the characters of the value.** The one exception is clearing the line
 first, with Home, Shift+End and Delete, which the palette does by default and `nkb send` does only
 with `--clear`. The test `keystrokes_have_named_doors` fails if a call that sends keys appears
-anywhere except in the places it names.
+anywhere except in the places it names. Under Wayland those three keys go through the desktop's
+remote-desktop portal, so the desktop asks once, in a window of its own, whether this program may
+press keys. The answer is kept in a small file in your state folder, and the session with the portal
+is open only while a line is cleared.
 
 **It refuses to type where the keys would be lost or misread.** A window running with higher
 privileges than the tool would drop the keystrokes without a word, and the tool asks before it
@@ -72,10 +80,17 @@ in its help.
 mode and the palette's Copy buttons, each after a press or a click of yours. It never pastes for you
 and never reads the clipboard. The test `clipboard_has_named_doors` names the places.
 
-**It installs no keyboard hook.** Its shortcuts are registered with the system's hotkey call, which
-tells it only that one of its own chords was pressed. Around a send it asks the system whether Ctrl,
-Alt, Shift, Win and Escape are down, and whether the keys it has just sent arrived, and nothing
-else about the keyboard.
+**It installs no keyboard hook.** Its shortcuts are registered with the system's hotkey call, with a
+key grab on X11 and with the desktop's global shortcuts portal under Wayland, and each tells it only
+that one of its own chords was pressed. Around a send it asks the system whether Ctrl, Alt, Shift,
+Win and Escape are down, and whether the keys it has just sent arrived, and nothing else about the
+keyboard. Under Wayland one thing is different. To hand text to a field, the tool makes a small input
+method engine of its own the active one for the length of the send, because that is how the desktop
+takes text for a field. Every key you type meanwhile passes through it and goes back to the
+application unchanged, with two exceptions: Escape, which stops the send and is taken, and, while a
+line is cleared, the one key the tool has just sent, which is taken if a modifier is held. The
+engine exists only while the program does. If a send is killed, the desktop is left without an
+engine, and you switch input source once.
 
 **It asks for no administrator rights.** The executables carry no manifest that requests them, and
 the tool does not raise its own privileges.
@@ -102,13 +117,17 @@ that file and the same call anywhere else. The browser makes that connection, no
 links a network library, or a call that starts a program or opens a socket, beyond what its
 register names with a reason. One connection on Linux is not this project's to choose: the palette's
 toolkit talks to the X server and the D-Bus session bus that your desktop names in its environment,
-which are sockets on this machine unless the desktop was set up to reach them over a network.
+which are sockets on this machine unless the desktop was set up to reach them over a network. The
+programs' own connections to the X server, the session bus, the IBus daemon and the accessibility bus
+are made only to a socket file on this machine, and an address that names a network one is refused.
 
 **It writes only where it says.** The palette's settings go in `settings.toml` in your
 configuration folder, written through a temporary file, and through the link if the file is a
 symbolic link. `nkb new-pack` writes one file in the current folder and never over an existing one.
 `nkb fmt` rewrites only the file it is given, and refuses and writes nothing if the change would
-alter a value.
+alter a value. Under Wayland the palette also keeps the portal's permission in a small file in your
+state folder, and writes the desktop entry that a desktop wants before it offers shortcuts to a
+program only after you click the button for it. The other button takes it away.
 
 ### In scope
 

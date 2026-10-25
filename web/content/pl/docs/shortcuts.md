@@ -8,7 +8,7 @@ lead: "Każda akcja palety ma kombinację klawiszy. Oto domyślne, a każdą z n
 
 ## Jakich kombinacji używa paleta?
 
-Wszystkie domyślne to `Alt+Shift` i klawisz, więc uczy się ich jak jednej rodziny. Na Windows domyślna kombinacja nigdy nie jest `Ctrl+Alt`, bo Windows czyta `Ctrl+Alt` jako AltGr, a skrót globalny na takiej kombinacji zabrałby literę wszystkim aplikacjom na układzie klawiatury, który ją w tym miejscu pisze. Na polskim układzie to na przykład ą, ę i ś.
+Wszystkie domyślne to jedna para modyfikatorów i klawisz, więc uczy się ich jak jednej rodziny. Na Windows to `Alt+Shift`, a domyślna kombinacja nigdy nie jest `Ctrl+Alt`, bo Windows czyta `Ctrl+Alt` jako AltGr, a skrót globalny na takiej kombinacji zabrałby literę wszystkim aplikacjom na układzie klawiatury, który ją w tym miejscu pisze. Na polskim układzie to na przykład ą, ę i ś. Na macOS to `Option+Command`, bo Option pisze znaki, a Command nie, a kombinacją okna Find a value jest `Option+Command+F`, bo `Option+Command+Space` należy do Findera. Na Linuksie to `Ctrl+Alt`, bo przełącznik układu klawiatury często zabiera `Alt+Shift`. Tabela niżej pokazuje kombinacje z Windows. Pod Waylandem o tym, jakie klawisze dostaje skrót, decyduje pulpit, a paleta nazywa klawisze, które pulpit dał.
 
 {{< shortcuts >}}
 
@@ -25,7 +25,7 @@ Można też wpisać ją w `settings.toml`, pod `[shortcuts]`, z nazwą akcji z o
 next-value = "Ctrl+Alt+Win+N"
 ```
 
-Na Windows ten plik to `%APPDATA%\Naughty Keyboard\settings.toml`. Paleta czyta go przy starcie.
+Ten plik to ten, który nazywa [strona palety](/docs/palette/). Paleta czyta go przy starcie.
 
 ## Których kombinacji nie przyjmie?
 

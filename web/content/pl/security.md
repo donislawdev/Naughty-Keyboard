@@ -8,11 +8,11 @@ lead: "Naughty Keyboard wpisuje tekst w okno, na które patrzysz. To jest cały 
 
 ## Co czyta?
 
-Na Windows, zanim wyśle wartość, czyta rodzaj kontrolki, która ma fokus klawiatury, z zamkniętej listy właściwości, nazwę pliku programu, do którego należy okno, nigdy jego tytuł, i jedną liczbę: czy ten program działa z wyższymi uprawnieniami niż on sam. Nie czyta tytułu, tekstu ani wartości żadnej kontrolki i nie śledzi, które okno wychodzi na wierzch. Testy `field_reads_only_kinds` i `program_reads_only_its_name` trzymają te odczyty w liście, więc nowy odczyt zatrzymuje budowanie, dopóki ktoś świadomie nie zmieni listy.
+Na Windows, zanim wyśle wartość, czyta rodzaj kontrolki, która ma fokus klawiatury, z zamkniętej listy właściwości, nazwę pliku programu, do którego należy okno, nigdy jego tytuł, i jedną liczbę: czy ten program działa z wyższymi uprawnieniami niż on sam. Nie czyta tytułu, tekstu ani wartości żadnej kontrolki i nie śledzi, które okno wychodzi na wierzch. Testy `field_reads_only_kinds` i `program_reads_only_its_name` trzymają te odczyty w liście, więc nowy odczyt zatrzymuje budowanie, dopóki ktoś świadomie nie zmieni listy. Na macOS i Linuksie czyta rodzaj kontrolki, która ma fokus klawiatury, przez interfejs dostępności systemu, z zamkniętej listy, nigdy tytuł, tekst ani wartość żadnej kontrolki. Testy `ax_reads_only_kinds` i `atspi_reads_only_kinds` trzymają te odczyty w liście tak samo.
 
 ## Jakie klawisze wysyła?
 
-Znaki wartości i nic więcej. Jedyny wyjątek to wyczyszczenie wiersza przed wpisaniem klawiszami Home, Shift+End i Delete, które paleta robi domyślnie, a `nkb send` tylko z `--clear`. Test `keystrokes_have_named_doors` nie przechodzi, jeśli wywołanie wysyłające klawisze pojawi się gdziekolwiek poza miejscami, które nazywa.
+Znaki wartości i nic więcej. Jedyny wyjątek to wyczyszczenie wiersza przed wpisaniem klawiszami Home, Shift+End i Delete, które paleta robi domyślnie, a `nkb send` tylko z `--clear`. Test `keystrokes_have_named_doors` nie przechodzi, jeśli wywołanie wysyłające klawisze pojawi się gdziekolwiek poza miejscami, które nazywa. Pod Waylandem te trzy klawisze idą przez portal zdalnego pulpitu, więc pulpit pyta raz, w osobnym oknie, czy ten program może naciskać klawisze. Odpowiedź jest zapisana w małym pliku w Twoim folderze stanu, a sesja z portalem jest otwarta tylko na czas czyszczenia wiersza.
 
 ## Kiedy odmawia?
 
@@ -24,7 +24,9 @@ W trzech miejscach i tylko do zapisu: blok do zgłoszenia, tryb schowka i przyci
 
 ## Czy instaluje hak klawiatury?
 
-Nie. Skróty rejestruje systemowym wywołaniem do skrótów globalnych, które mówi mu tylko tyle, że naciśnięto jedną z jego własnych kombinacji. Przy wysyłaniu pyta system, czy wciśnięte są Ctrl, Alt, Shift, Win i Escape i czy klawisze, które właśnie wysłał, dotarły, i nic więcej o klawiaturze.
+Nie. Skróty rejestruje systemowym wywołaniem do skrótów globalnych, na X11 przechwyceniem klawisza, a pod Waylandem przez portal skrótów globalnych pulpitu, i każde z nich mówi mu tylko tyle, że naciśnięto jedną z jego własnych kombinacji. Przy wysyłaniu pyta system, czy wciśnięte są Ctrl, Alt, Shift, Win i Escape i czy klawisze, które właśnie wysłał, dotarły, i nic więcej o klawiaturze.
+
+Pod Waylandem jedna rzecz jest inna. Żeby przekazać tekst do pola, `nkb send` i paleta robią własny, mały silnik metody wprowadzania aktywnym na czas wysyłania, bo tak pulpit przyjmuje tekst do pola. Każdy klawisz, który w tym czasie naciskasz, przechodzi przez ten silnik i wraca do aplikacji bez zmian, z dwoma wyjątkami: Escape, który przerywa wysyłanie i zostaje zabrany, oraz, w czasie czyszczenia wiersza, jedyny klawisz, który program właśnie wysłał, zabierany, gdy trzymany jest modyfikator. Silnik istnieje tylko tak długo, jak program. Jeśli wysyłanie zostanie zabite, pulpit zostaje bez silnika i raz przełączasz źródło wprowadzania.
 
 ## Czy potrzebuje uprawnień administratora?
 
@@ -32,11 +34,11 @@ Nie. Programy nie mają manifestu, który by o nie prosił, i żaden z nich sam 
 
 ## Czy łączy się z internetem?
 
-Nie. Bez telemetrii, bez sprawdzania aktualizacji, nic nie jest pobierane w trakcie działania. Test `nothing_reaches_the_network` czyta źródła każdego pakietu i widoku i nie przechodzi przy gnieździe sieciowym, zapytaniu DNS, kliencie HTTP albo zależności zakazanej jako klient sieciowy. Test `links_nothing_off_the_machine` czyta tabelę importów obu zbudowanych programów i nie przechodzi, jeśli którykolwiek łączy się z biblioteką sieciową. Na Linuksie biblioteka graficzna palety rozmawia z serwerem X i sesyjną szyną D-Bus wskazanymi przez Twój pulpit. To gniazda na tym komputerze, chyba że pulpit ustawiono tak, żeby sięgał do nich przez sieć.
+Nie. Bez telemetrii, bez sprawdzania aktualizacji, nic nie jest pobierane w trakcie działania. Test `nothing_reaches_the_network` czyta źródła każdego pakietu i widoku i nie przechodzi przy gnieździe sieciowym, zapytaniu DNS, kliencie HTTP albo zależności zakazanej jako klient sieciowy. Test `links_nothing_off_the_machine` czyta tabelę importów obu zbudowanych programów i nie przechodzi, jeśli którykolwiek łączy się z biblioteką sieciową. Na Linuksie biblioteka graficzna palety rozmawia z serwerem X i sesyjną szyną D-Bus wskazanymi przez Twój pulpit. To gniazda na tym komputerze, chyba że pulpit ustawiono tak, żeby sięgał do nich przez sieć. Własne połączenia programów z serwerem X, szyną sesji, demonem IBus i szyną dostępności są zawsze z plikiem gniazda na tym komputerze, a adres, który wskazuje sieciowe, jest odrzucany.
 
 ## Gdzie zapisuje?
 
-Ustawienia palety trafiają do `settings.toml` w Twoim folderze konfiguracji, zapisywanego przez plik tymczasowy. `nkb new-pack` zapisuje jeden plik w bieżącym folderze i nigdy nie nadpisuje istniejącego. `nkb fmt` przepisuje tylko plik, który dostał, a gdy zmiana zmieniłaby wartość, odmawia i nic nie zapisuje.
+Ustawienia palety trafiają do `settings.toml` w Twoim folderze konfiguracji, zapisywanego przez plik tymczasowy. `nkb new-pack` zapisuje jeden plik w bieżącym folderze i nigdy nie nadpisuje istniejącego. `nkb fmt` przepisuje tylko plik, który dostał, a gdy zmiana zmieniłaby wartość, odmawia i nic nie zapisuje. Pod Waylandem paleta zapisuje też zgodę portalu w małym pliku w Twoim folderze stanu, a wpis pulpitu, którego pulpit potrzebuje, zanim zaoferuje programowi skróty, zapisuje dopiero po kliknięciu przycisku do tego. Drugi przycisk go zabiera.
 
 ## Czy kod `unsafe` jest odizolowany?
 
