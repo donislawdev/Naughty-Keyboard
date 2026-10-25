@@ -93,6 +93,8 @@ fn main() {
         // A console has no band to draw it in, and a line per tenth of a
         // second would bury the outcomes this example exists to print.
         progress: &|_| {},
+        // The same console, the same reason: the wait for the person has no band here.
+        waiting: &|_| {},
     };
     let ended = drive_sequence(
         live.as_ref(),

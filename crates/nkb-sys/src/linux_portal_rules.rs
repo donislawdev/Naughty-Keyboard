@@ -24,8 +24,10 @@
 //! program its identifier is and what is in it.
 
 use core::time::Duration;
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Instant;
 
+use crate::Waiting;
 use crate::hotkey::{Hotkey, HotkeyId};
 use crate::linux_hotkeys::keysym_for_vk;
 use crate::linux_ibus_rules::{AddressRefusal, socket_in_address};
@@ -62,6 +64,41 @@ pub(crate) const ANSWER_WAIT: Duration = Duration::from_secs(15);
 /// How long the answer to a bind may take. It is the one that shows a window the first
 /// time, and a person reads it before they choose.
 pub(crate) const BIND_WAIT: Duration = Duration::from_secs(300);
+
+/// How long the question to the person stands before the program says it is waiting for
+/// them (`D145` point 76). A desktop that remembers the answer gives it at once (0.0 s on
+/// GNOME 50), so anything a person does not notice would flash a sentence at every press,
+/// and a second is how long `nkb send` already waits before it says it is still typing.
+pub(crate) const CONSENT_NOTICE_AFTER: Duration = Duration::from_secs(1);
+
+/// Runs `wait`, which blocks until the person or the portal has answered, on a thread of its
+/// own, and tells `noticed` from THIS thread: [`Waiting::ForConsent`] when it has not returned
+/// after `after`, and [`Waiting::Answered`] when it does. A wait that returns in time says
+/// nothing at all. Because the wait is on the other thread and the telling is not, what is
+/// told to needs to be neither `Send` nor `Sync`: it runs where the send runs, between two
+/// things the send does. `None` when the thread ended without an answer.
+pub(crate) fn wait_telling<T: Send>(
+    after: Duration,
+    noticed: &mut dyn FnMut(Waiting),
+    wait: impl FnOnce() -> T + Send,
+) -> Option<T> {
+    std::thread::scope(|scope| {
+        let (sender, receiver) = mpsc::channel();
+        scope.spawn(move || {
+            let _ = sender.send(wait());
+        });
+        match receiver.recv_timeout(after) {
+            Ok(answer) => Some(answer),
+            Err(RecvTimeoutError::Timeout) => {
+                noticed(Waiting::ForConsent);
+                let answer = receiver.recv().ok();
+                noticed(Waiting::Answered);
+                answer
+            }
+            Err(RecvTimeoutError::Disconnected) => None,
+        }
+    })
+}
 
 // ---------------------------------------------------------------------------
 // Where the session bus is
@@ -454,6 +491,67 @@ mod tests {
             win,
             vk,
         }
+    }
+
+    /// What a wait told, from which thread, and how long after it began.
+    fn told_by_waiting(
+        after: Duration,
+        wait_for: Duration,
+    ) -> (Option<u8>, Vec<(Waiting, bool, Duration)>) {
+        let here = std::thread::current().id();
+        let began = Instant::now();
+        let mut told = Vec::new();
+        let answer = wait_telling(
+            after,
+            &mut |waiting| {
+                told.push((
+                    waiting,
+                    std::thread::current().id() == here,
+                    began.elapsed(),
+                ));
+            },
+            move || {
+                std::thread::sleep(wait_for);
+                7_u8
+            },
+        );
+        (answer, told)
+    }
+
+    #[test]
+    fn an_answer_that_comes_in_time_is_returned_and_nothing_is_said() {
+        // A desktop that remembers the permission answers at once: no sentence may flash.
+        let (answer, told) = told_by_waiting(Duration::from_secs(30), Duration::ZERO);
+        assert_eq!(answer, Some(7));
+        assert!(told.is_empty(), "{told:?}");
+    }
+
+    #[test]
+    fn an_answer_that_does_not_come_in_time_is_waited_for_and_said_twice_in_order() {
+        let (answer, told) = told_by_waiting(Duration::from_millis(10), Duration::from_millis(300));
+        assert_eq!(answer, Some(7), "the wait goes on until the answer");
+        assert_eq!(
+            told.iter()
+                .map(|(waiting, ..)| *waiting)
+                .collect::<Vec<_>>(),
+            [Waiting::ForConsent, Waiting::Answered]
+        );
+        // The end is said when the wait ends, not when the question is first noticed.
+        assert!(told[1].2 >= Duration::from_millis(300), "{told:?}");
+    }
+
+    #[test]
+    fn what_is_said_is_said_on_the_thread_that_asked() {
+        // The callbacks of the ports are not `Sync`: they run where the send runs.
+        let (_, told) = told_by_waiting(Duration::from_millis(10), Duration::from_millis(100));
+        assert!(!told.is_empty());
+        assert!(told.iter().all(|(_, here, _)| *here), "{told:?}");
+    }
+
+    #[test]
+    fn the_sentence_waits_for_the_person_only_after_a_moment_that_a_person_does_not_notice() {
+        assert!(CONSENT_NOTICE_AFTER >= Duration::from_millis(500));
+        assert!(CONSENT_NOTICE_AFTER < ANSWER_WAIT);
     }
 
     #[test]

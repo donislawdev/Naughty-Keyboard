@@ -92,6 +92,22 @@ pub struct Progress {
     pub units_total: usize,
 }
 
+/// What a send waits for besides the application it types into, said while it
+/// waits (`D145` point 76). Nothing is pressed meanwhile, and only the person
+/// can end the wait, so a send that stands without saying why looks like one that
+/// hangs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Waiting {
+    /// The system is asking the person whether this program may press keys (a
+    /// Wayland desktop, the first time), and the send stands until they answer.
+    /// Said once, when the question has stood for a moment: a desktop that
+    /// remembers the answer asks nothing, and nothing is said.
+    ForConsent,
+    /// The question is answered, whichever way. Said once after every
+    /// [`Waiting::ForConsent`], so a sentence that was put up can be taken down.
+    Answered,
+}
+
 /// Why a send stopped before its end (`D95`). The same answers for a value and
 /// for the clearing keys, because the route stops for the same reasons.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -445,13 +461,20 @@ impl fmt::Display for KeystrokeError {
 /// implementation gives it a bounded moment to come up and then returns
 /// [`KeystrokeError::ModifierHeld`] without pressing anything.
 pub trait KeystrokeSender {
-    /// Presses `chords` in order, each as a full press-and-release.
+    /// Presses `chords` in order, each as a full press-and-release. `waiting`
+    /// hears what the press stands on besides the keys, on the sending thread
+    /// and before the first key: a route with nothing to wait for never calls
+    /// it, and it must return quickly.
     ///
     /// # Errors
     ///
     /// Returns [`KeystrokeError`] when there is no route, no target, a held
     /// modifier, or when only part of the sequence was accepted.
-    fn send_keystrokes(&self, chords: &[KeyChord]) -> Result<(), KeystrokeError>;
+    fn send_keystrokes(
+        &self,
+        chords: &[KeyChord],
+        waiting: &mut dyn FnMut(Waiting),
+    ) -> Result<(), KeystrokeError>;
 }
 
 /// Why the clipboard did not take the text.

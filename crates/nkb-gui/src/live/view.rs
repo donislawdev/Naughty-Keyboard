@@ -482,6 +482,29 @@ pub(super) fn in_flight_view(in_flight: &InFlight, standing: &Standing) -> InFli
     }
 }
 
+/// What the message band says while a press waits for the person (`D145` point 76): the
+/// sentence while the question stands, and nothing of its own after it. The standing
+/// sentence stays in front, as in every view. What the band said before was about the value
+/// before and is stale once a press is under way, as it is in a view of a value on its way.
+pub(super) fn waiting_messages(waiting: Waiting, standing: &Standing) -> Vec<String> {
+    let own = match waiting {
+        Waiting::ForConsent => vec![i18n::label(PaletteLabel::WaitingForConsent).to_owned()],
+        Waiting::Answered => Vec::new(),
+    };
+    with_standing(own, standing)
+}
+
+/// Runs on the MAIN thread: the message band, and nothing else. The press is still going, so
+/// the rest of the palette stays as it is.
+pub(super) fn apply_waiting(palette: &Palette, messages: Vec<String>) {
+    palette.set_messages(ModelRc::new(VecModel::from(
+        messages
+            .into_iter()
+            .map(SharedString::from)
+            .collect::<Vec<_>>(),
+    )));
+}
+
 /// The markers a value earns before it is in: the two that are facts about
 /// the value. `cleared first`, `interrupted` and `on the clipboard` are facts
 /// about the delivery, and the delivery is not over.
@@ -933,6 +956,52 @@ fn named() -> Named {
 mod tests {
     use super::*;
     use crate::live::tests::{a_palette, a_sent, an_outcome, quiet};
+    use slint::Model;
+
+    /// `D145` point 76: the sentence of a press that waits for the person goes up in the band
+    /// alone and comes down when the question is answered.
+    #[test]
+    fn the_wait_for_the_person_goes_up_in_the_band_and_comes_down_when_it_is_answered() {
+        let palette = a_palette();
+        apply_waiting(&palette, waiting_messages(Waiting::ForConsent, &quiet()));
+        assert_eq!(palette.get_messages().row_count(), 1);
+        assert_eq!(
+            palette.get_messages().row_data(0).unwrap_or_default(),
+            i18n::label(PaletteLabel::WaitingForConsent)
+        );
+        apply_waiting(&palette, waiting_messages(Waiting::Answered, &quiet()));
+        assert_eq!(
+            palette.get_messages().row_count(),
+            0,
+            "answered, the sentence is not there"
+        );
+    }
+
+    #[test]
+    fn the_wait_for_the_person_is_said_behind_the_standing_sentence_and_taken_down_when_answered() {
+        let standing = quiet();
+        let sentence = i18n::label(PaletteLabel::WaitingForConsent).to_owned();
+        assert_eq!(
+            waiting_messages(Waiting::ForConsent, &standing),
+            vec![sentence.clone()]
+        );
+        assert!(waiting_messages(Waiting::Answered, &standing).is_empty());
+        assert!(
+            standing
+                .lock()
+                .map(|mut held| *held = Some(String::from("standing")))
+                .is_ok()
+        );
+        // The standing sentence is the tool saying it cannot keep a promise: it outranks.
+        assert_eq!(
+            waiting_messages(Waiting::ForConsent, &standing),
+            vec![String::from("standing"), sentence]
+        );
+        assert_eq!(
+            waiting_messages(Waiting::Answered, &standing),
+            vec![String::from("standing")]
+        );
+    }
 
     /// The legend of a table alone has the way into the shortcuts window and no more:
     /// what the desktop wants is the worker's to add once the desktop has answered.

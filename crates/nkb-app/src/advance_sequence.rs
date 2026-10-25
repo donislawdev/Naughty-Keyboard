@@ -84,10 +84,10 @@ use crate::load_pack;
 use crate::ports::{
     Availability, Clipboard, ClipboardError, Clock, DeliveryError, Following, History,
     KeystrokeError, KeystrokeSender, PackFormat, PackSource, Progress, ReportText, SourceError,
-    StopReason, TargetInspector, TargetRef, ValueDelivery,
+    StopReason, TargetInspector, TargetRef, ValueDelivery, Waiting,
 };
 use crate::send_value::{
-    Chosen, Clearing, ClearingOutcome, SendOutcome, Sending, SkipReason, ValueFacts, deliver_value,
+    Chosen, Clearing, ClearingOutcome, OnTheWay, SendOutcome, SkipReason, ValueFacts, deliver_value,
 };
 
 mod copy;
@@ -121,6 +121,10 @@ pub struct Ports<'a> {
     /// palette draws it. Called on the thread that sends, so it must return
     /// quickly: the next key waits for it.
     pub progress: &'a dyn Fn(InFlight),
+    /// Hears what the press stands on besides the keys, before the first one: the
+    /// window in which the person allows the keys, on a Wayland desktop (`D145`
+    /// point 76). Called on the thread that sends, so it must return quickly.
+    pub waiting: &'a dyn Fn(Waiting),
 }
 
 /// A value on its way into the field, as the palette shows it while it goes
@@ -913,12 +917,13 @@ impl AdvanceSequence {
             window.map(|window| ports.inspector.inspect(window))
         };
         let mut on_clipboard = on_clipboard;
-        let mut tell = |sending: Sending<'_>| {
-            (ports.progress)(InFlight {
+        let mut tell = |way: OnTheWay<'_>| match way {
+            OnTheWay::Typing(sending) => (ports.progress)(InFlight {
                 facts: sending.facts.clone(),
                 offensive,
                 progress: sending.progress,
-            });
+            }),
+            OnTheWay::Waiting(waiting) => (ports.waiting)(waiting),
         };
         let chosen = Chosen {
             pack: &loaded.pack,
@@ -1542,6 +1547,31 @@ mod tests {
         assert!(outcome.sent.expect("value two").cleared);
         assert_eq!(*kit.keys.requests.borrow(), 1, "the line is cleared again");
         assert_eq!(advance.counter(), Some((2, 3)));
+    }
+
+    /// `D145` point 76: the clearing is the first thing a press does, and on a Wayland
+    /// desktop the first one waits for the person. The palette hears the wait through the
+    /// ports, in order, and the value still goes in once it is over. At the cursor nothing
+    /// is pressed, so nothing is waited for.
+    #[test]
+    fn a_press_that_waits_for_the_person_to_allow_the_keys_is_heard_through_the_ports() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_keys(FakeKeys::asking_the_person());
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert!(outcome.sent.expect("the value went in").cleared);
+        assert_eq!(
+            *kit.waited.borrow(),
+            [Waiting::ForConsent, Waiting::Answered]
+        );
+
+        advance.set_clearing(Clearing::Keep);
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert!(outcome.sent.is_some());
+        assert_eq!(
+            kit.waited.borrow().len(),
+            2,
+            "a press at the cursor waited for no one"
+        );
     }
 
     #[test]

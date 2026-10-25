@@ -37,7 +37,7 @@
 
 use crate::ports::{
     Availability, DeliveryError, Following, KeystrokeError, KeystrokeSender, PackFormat,
-    PackSource, Progress, SourceError, StopReason, ValueDelivery,
+    PackSource, Progress, SourceError, StopReason, ValueDelivery, Waiting,
 };
 use nkb_core::calendar::Day;
 use nkb_core::keys::line_clearing_recipe;
@@ -273,7 +273,7 @@ pub fn send_value(
     delivery: &dyn ValueDelivery,
     keys: &dyn KeystrokeSender,
     request: &SendRequest<'_>,
-    progress: &mut dyn FnMut(Sending<'_>),
+    progress: &mut dyn FnMut(OnTheWay<'_>),
 ) -> SendOutcome {
     // Asked FIRST, before reading anything. A machine with no route should say
     // so rather than spend the work and fail at the last step - and on macOS
@@ -322,7 +322,7 @@ fn deliver_one(
     keys: &dyn KeystrokeSender,
     request: &SendRequest<'_>,
     warnings: usize,
-    progress: &mut dyn FnMut(Sending<'_>),
+    progress: &mut dyn FnMut(OnTheWay<'_>),
 ) -> SendOutcome {
     let available = pack.values.len();
     let position = request.position;
@@ -359,6 +359,18 @@ pub struct Sending<'a> {
     pub progress: Progress,
 }
 
+/// What a send says on its way: the value going into the field, or what the
+/// send stands on while nothing goes (`D145` point 76). One callback for both,
+/// so a caller that wants only the value matches one arm and says nothing for
+/// the other, and a route that has nothing to wait for never speaks the second.
+#[derive(Debug, Clone, Copy)]
+pub enum OnTheWay<'a> {
+    /// The value is going in, and this is how far (`OBS-160`).
+    Typing(Sending<'a>),
+    /// The send waits for the person, before the first key (`D145` point 76).
+    Waiting(Waiting),
+}
+
 /// Delivers one value that is ALREADY in memory, and reports what happened.
 ///
 /// # Why this is public and separate from [`send_value`]
@@ -382,7 +394,7 @@ pub fn deliver_value(
     delivery: &dyn ValueDelivery,
     keys: &dyn KeystrokeSender,
     clearing: Clearing,
-    progress: &mut dyn FnMut(Sending<'_>),
+    progress: &mut dyn FnMut(OnTheWay<'_>),
 ) -> SendOutcome {
     let Chosen {
         pack,
@@ -420,7 +432,9 @@ pub fn deliver_value(
     // is as it was, and the value goes on top of it, said as such (`D76`).
     let clearing = match clearing {
         Clearing::Keep => ClearingOutcome::NotAsked,
-        Clearing::Line => match keys.send_keystrokes(&line_clearing_recipe()) {
+        Clearing::Line => match keys.send_keystrokes(&line_clearing_recipe(), &mut |waiting| {
+            progress(OnTheWay::Waiting(waiting));
+        }) {
             Ok(()) => ClearingOutcome::Done,
             Err(KeystrokeError::FieldUnconfirmed) => {
                 ClearingOutcome::Skipped(SkipReason::Unconfirmed)
@@ -444,10 +458,10 @@ pub fn deliver_value(
     // Counted at the first report, if there is one, and kept for the outcome.
     let mut counted: Option<ValueFacts> = None;
     let delivered = delivery.deliver(&literal, &mut |step| {
-        progress(Sending {
+        progress(OnTheWay::Typing(Sending {
             facts: counted.get_or_insert_with(&facts),
             progress: step,
-        });
+        }));
     });
     let mut facts = || counted.take().unwrap_or_else(&facts);
 
@@ -539,6 +553,8 @@ mod tests {
 
     struct KeySpy {
         fail_with: Option<KeystrokeError>,
+        /// What the press says it waits for before its first key.
+        says: Vec<Waiting>,
         log: Log,
     }
 
@@ -546,13 +562,22 @@ mod tests {
         fn working(log: &Log) -> Self {
             Self {
                 fail_with: None,
+                says: Vec::new(),
                 log: Rc::clone(log),
             }
         }
     }
 
     impl KeystrokeSender for KeySpy {
-        fn send_keystrokes(&self, chords: &[KeyChord]) -> Result<(), KeystrokeError> {
+        fn send_keystrokes(
+            &self,
+            chords: &[KeyChord],
+            waiting: &mut dyn FnMut(Waiting),
+        ) -> Result<(), KeystrokeError> {
+            for said in &self.says {
+                self.log.borrow_mut().push(format!("says:{said:?}"));
+                waiting(*said);
+            }
             let described: Vec<String> = chords
                 .iter()
                 .map(|chord| format!("{}{:?}", if chord.shift { "Shift+" } else { "" }, chord.key))
@@ -749,6 +774,7 @@ mod tests {
         let spy = Spy::ready(&log);
         let keys = KeySpy {
             fail_with: Some(KeystrokeError::FieldUnconfirmed),
+            says: Vec::new(),
             log: Rc::clone(&log),
         };
         let outcome = send_value(
@@ -781,6 +807,7 @@ mod tests {
         let spy = Spy::ready(&log);
         let keys = KeySpy {
             fail_with: Some(KeystrokeError::InTerminal),
+            says: Vec::new(),
             log: Rc::clone(&log),
         };
         let outcome = send_value(
@@ -810,6 +837,7 @@ mod tests {
         let spy = Spy::ready(&log);
         let keys = KeySpy {
             fail_with: Some(KeystrokeError::ClosedToAccessibility),
+            says: Vec::new(),
             log: Rc::clone(&log),
         };
         let outcome = send_value(
@@ -842,6 +870,7 @@ mod tests {
         let spy = Spy::ready(&log);
         let keys = KeySpy {
             fail_with: Some(KeystrokeError::NoClearingKeys),
+            says: Vec::new(),
             log: Rc::clone(&log),
         };
         let outcome = send_value(
@@ -871,6 +900,7 @@ mod tests {
             fail_with: Some(KeystrokeError::ModifierHeld {
                 which: "Ctrl".to_owned(),
             }),
+            says: Vec::new(),
             log: Rc::clone(&log),
         };
         let outcome = send_value(
@@ -1328,7 +1358,11 @@ mod tests {
             &Reporting,
             &keys,
             &request(2, Clearing::Keep),
-            &mut |sending| heard.push((sending.facts.clone(), sending.progress)),
+            &mut |way| {
+                if let OnTheWay::Typing(sending) = way {
+                    heard.push((sending.facts.clone(), sending.progress));
+                }
+            },
         );
         let SendOutcome::Sent { facts, .. } = outcome else {
             panic!("expected a send, got {outcome:?}");
@@ -1346,6 +1380,61 @@ mod tests {
             "the value told on the way must be the value reported at the end"
         );
         assert_eq!(facts.reference, "sample/second");
+    }
+
+    #[test]
+    fn a_wait_for_the_person_is_told_before_the_first_key_and_before_the_value() {
+        // `D145` point 76: the window of the system stands before any key is pressed, and
+        // the caller hears it and hears it end, in that order, ahead of the clearing and
+        // the value.
+        let log = log();
+        let spy = Spy::ready(&log);
+        let mut keys = KeySpy::working(&log);
+        keys.says = vec![Waiting::ForConsent, Waiting::Answered];
+        let mut heard = Vec::new();
+        let outcome = send_value(
+            &Shelf,
+            &Scripted::two(),
+            &spy,
+            &keys,
+            &request(1, Clearing::Line),
+            &mut |way| {
+                if let OnTheWay::Waiting(waiting) = way {
+                    heard.push(waiting);
+                }
+            },
+        );
+        assert!(matches!(outcome, SendOutcome::Sent { .. }), "{outcome:?}");
+        assert_eq!(heard, [Waiting::ForConsent, Waiting::Answered]);
+        let log = log.borrow();
+        assert_eq!(log[0], "says:ForConsent");
+        assert_eq!(log[1], "says:Answered");
+        assert!(log[2].starts_with("keys:"), "{log:?}");
+        assert!(log[3].starts_with("text:"), "{log:?}");
+    }
+
+    #[test]
+    fn a_send_that_presses_no_key_waits_for_no_one() {
+        // At the cursor nothing is pressed but the value, so there is no window to wait for.
+        let log = log();
+        let spy = Spy::ready(&log);
+        let mut keys = KeySpy::working(&log);
+        keys.says = vec![Waiting::ForConsent, Waiting::Answered];
+        let mut heard = 0;
+        let outcome = send_value(
+            &Shelf,
+            &Scripted::two(),
+            &spy,
+            &keys,
+            &request(1, Clearing::Keep),
+            &mut |way| {
+                if matches!(way, OnTheWay::Waiting(_)) {
+                    heard += 1;
+                }
+            },
+        );
+        assert!(matches!(outcome, SendOutcome::Sent { .. }), "{outcome:?}");
+        assert_eq!(heard, 0);
     }
 
     #[test]

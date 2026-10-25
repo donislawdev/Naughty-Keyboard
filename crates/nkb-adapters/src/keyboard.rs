@@ -7,7 +7,7 @@
 
 use nkb_app::ports::{
     Availability, Delivered, DeliveryError, Following, KeystrokeError, KeystrokeSender, Progress,
-    StopReason, TargetInspector, TargetRef, ValueDelivery,
+    StopReason, TargetInspector, TargetRef, ValueDelivery, Waiting,
 };
 use nkb_core::keys::{Key, KeyChord};
 use nkb_core::report::{ControlKind, Target};
@@ -266,6 +266,15 @@ fn value_stopped(
     }
 }
 
+/// What the route waits for, in the words of `app`. Mirrors the enum of `nkb-sys` one to one -
+/// the two crates do not depend on each other (`D145` point 76).
+const fn waiting_of(waiting: nkb_sys::Waiting) -> Waiting {
+    match waiting {
+        nkb_sys::Waiting::ForConsent => Waiting::ForConsent,
+        nkb_sys::Waiting::Answered => Waiting::Answered,
+    }
+}
+
 /// Clearing keys that stopped part way. Zero chords acted means the field is
 /// exactly as it was - no key that could change it went down (`D95` point 5).
 fn chords_stopped(
@@ -300,7 +309,11 @@ fn chord_for(chord: &KeyChord) -> nkb_sys::Chord {
 }
 
 impl KeystrokeSender for DirectInjection {
-    fn send_keystrokes(&self, chords: &[KeyChord]) -> Result<(), KeystrokeError> {
+    fn send_keystrokes(
+        &self,
+        chords: &[KeyChord],
+        waiting: &mut dyn FnMut(Waiting),
+    ) -> Result<(), KeystrokeError> {
         let Some(window) = nkb_sys::foreground_window() else {
             return Err(KeystrokeError::NoTarget);
         };
@@ -311,7 +324,10 @@ impl KeystrokeSender for DirectInjection {
             clearing_verdict(nkb_sys::field::focused_input(window))?;
         }
         let mapped: Vec<nkb_sys::Chord> = chords.iter().map(chord_for).collect();
-        match nkb_sys::send_chords(&mapped) {
+        // The route's own words for what it waits for, mirrored one to one - the two crates
+        // do not depend on each other (`D145` point 76).
+        let mut told = |step: nkb_sys::Waiting| waiting(waiting_of(step));
+        match nkb_sys::send_chords(&mapped, &mut told) {
             Ok(_) => Ok(()),
             Err(nkb_sys::SendError::Unsupported { system }) => Err(KeystrokeError::Unsupported {
                 system: system.to_owned(),
@@ -415,6 +431,17 @@ mod tests {
     }
 
     #[test]
+    fn every_wait_of_the_system_maps_to_its_own_wait() {
+        assert_eq!(
+            [
+                waiting_of(nkb_sys::Waiting::ForConsent),
+                waiting_of(nkb_sys::Waiting::Answered)
+            ],
+            [Waiting::ForConsent, Waiting::Answered]
+        );
+    }
+
+    #[test]
     fn every_reason_of_the_system_maps_to_its_own_reason() {
         let mapped = [
             stop_reason(nkb_sys::StopReason::Dropped),
@@ -513,7 +540,7 @@ mod tests {
         if !nkb_sys::can_send() {
             return;
         }
-        match DirectInjection.send_keystrokes(&[]) {
+        match DirectInjection.send_keystrokes(&[], &mut |_| {}) {
             Ok(()) | Err(KeystrokeError::NoTarget) => {}
             Err(other) => panic!("an empty sequence must not fail this way: {other}"),
         }

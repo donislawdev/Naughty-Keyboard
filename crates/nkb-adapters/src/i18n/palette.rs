@@ -117,6 +117,13 @@ pub enum PaletteLabel {
     /// answers its buttons while nothing yet answers a press. Said in the message
     /// band for as long as it lasts, for the reason `ShortcutsPaused` is.
     WaitingForTheDesktop,
+    /// A press stands on the window in which the person allows the program to press
+    /// keys (`D145` point 76). On a Wayland desktop the first clearing of a field asks,
+    /// and nothing is pressed or typed until it is answered, for as long as five
+    /// minutes. Said in the message band from the moment the question has stood for a
+    /// second until it is answered, and taken down the moment it is, so it is never
+    /// there when it is not true.
+    WaitingForConsent,
     /// The link under the hint bar that opens the shortcuts window - its words,
     /// and what a click does (`ux-spec.md` 5.4).
     ShortcutsLink,
@@ -307,6 +314,9 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::ShortcutsPaused => "Shortcuts are paused while the Shortcuts window is open.",
         PaletteLabel::WaitingForTheDesktop => {
             "Waiting for the desktop to give the shortcuts. Choose them in the window it shows."
+        }
+        PaletteLabel::WaitingForConsent => {
+            "Waiting for the desktop to allow pressing keys. Answer in the window it shows."
         }
         PaletteLabel::ShortcutsLink => "Change shortcuts",
         PaletteLabel::EnableShortcuts => "Enable global shortcuts",
@@ -788,5 +798,183 @@ mod tests {
             ),
             None
         );
+    }
+
+    /// The palette's labels divide in two, and the division has to hold.
+    ///
+    /// ⚠️ The array below is the one thing here that can drift from the enum: a
+    /// new variant left out of it is simply not visited. That is tolerable
+    /// because it is not the only net - `tools/sprawdz-kontrakt.py` reads every
+    /// `pattern_*` function and goes red for a key with no row in `ux-spec.md` 6,
+    /// so a variant added in silence fails a gate either way.
+    #[test]
+    fn a_label_carrying_a_number_has_a_typed_accessor_and_one_without_does_not() {
+        for label in [
+            PaletteLabel::Title,
+            PaletteLabel::Counter,
+            PaletteLabel::Counts,
+            PaletteLabel::Offensive,
+            PaletteLabel::Cleared,
+            PaletteLabel::OnClipboard,
+            PaletteLabel::Interrupted,
+            PaletteLabel::Warnings,
+            PaletteLabel::PairFirst,
+            PaletteLabel::PairSecond,
+            PaletteLabel::ClipboardMode,
+            PaletteLabel::ClipboardForWindow,
+            PaletteLabel::PreviewElided,
+            PaletteLabel::NotGuaranteed,
+            PaletteLabel::NotGuaranteedMore,
+            PaletteLabel::Recipe,
+            PaletteLabel::NoValueYet,
+            PaletteLabel::NoValueYetUnnamed,
+            PaletteLabel::CounterKeptUnnamed,
+            PaletteLabel::NoPackUnnamed,
+            PaletteLabel::ReportBusyUnnamed,
+            PaletteLabel::ShortcutsPaused,
+            PaletteLabel::WaitingForTheDesktop,
+            PaletteLabel::WaitingForConsent,
+            PaletteLabel::ShortcutsLink,
+            PaletteLabel::EnableShortcuts,
+            PaletteLabel::RemoveEntry,
+            PaletteLabel::EntryInPlace,
+            PaletteLabel::AboutLink,
+            PaletteLabel::ShortcutList,
+            PaletteLabel::ShortcutListAction,
+            PaletteLabel::Typing,
+            PaletteLabel::TypingCounter,
+            PaletteLabel::StopTyping,
+            PaletteLabel::NextValue,
+            PaletteLabel::NextEndOfPack,
+            PaletteLabel::NextValueUnnamed,
+            PaletteLabel::NextEndOfPackUnnamed,
+            PaletteLabel::LastSent,
+            PaletteLabel::Copy,
+            PaletteLabel::CopyNext,
+            PaletteLabel::CopyLast,
+            PaletteLabel::Copied,
+            PaletteLabel::ReportBlock,
+            PaletteLabel::ReportBlockAction,
+            PaletteLabel::CopyReport,
+            PaletteLabel::SendBy,
+            PaletteLabel::RouteKeyboard,
+            PaletteLabel::RouteClipboard,
+            PaletteLabel::TurnOff,
+            PaletteLabel::TurnOffClipboard,
+            PaletteLabel::Collapse,
+            PaletteLabel::Expand,
+            PaletteLabel::ClosePalette,
+            PaletteLabel::EachValue,
+            PaletteLabel::ClearLineFirst,
+            PaletteLabel::InsertAtCursor,
+            PaletteLabel::LastSentAction,
+            PaletteLabel::SentTo,
+            PaletteLabel::SentToUnnamed,
+            PaletteLabel::ControlTextField,
+            PaletteLabel::ControlTerminal,
+            PaletteLabel::ControlUnconfirmed,
+            PaletteLabel::ControlNotTextField,
+            PaletteLabel::ControlClosedToAccessibility,
+            PaletteLabel::Back,
+            PaletteLabel::BackAction,
+            PaletteLabel::Skip,
+            PaletteLabel::SkipAction,
+            PaletteLabel::NoOtherPack,
+            PaletteLabel::PreviousTypes,
+            PaletteLabel::DonateLink,
+            PaletteLabel::SourceCodeLink,
+            PaletteLabel::BrowserDidNotOpen,
+        ] {
+            // Exhaustive, so a new variant must be put on one side or the other
+            // before this file compiles.
+            let takes_numbers = match label {
+                PaletteLabel::Counter
+                | PaletteLabel::Counts
+                | PaletteLabel::Warnings
+                | PaletteLabel::PreviewElided
+                | PaletteLabel::NotGuaranteed
+                | PaletteLabel::NotGuaranteedMore
+                | PaletteLabel::Recipe
+                | PaletteLabel::NoValueYet
+                | PaletteLabel::NoValueYetUnnamed
+                | PaletteLabel::CounterKeptUnnamed
+                | PaletteLabel::NoPackUnnamed
+                | PaletteLabel::ReportBusyUnnamed
+                | PaletteLabel::TypingCounter
+                | PaletteLabel::NextValue
+                | PaletteLabel::NextEndOfPack
+                | PaletteLabel::NextValueUnnamed
+                | PaletteLabel::NextEndOfPackUnnamed
+                | PaletteLabel::PreviousTypes
+                | PaletteLabel::Back
+                | PaletteLabel::Skip
+                | PaletteLabel::SentTo
+                | PaletteLabel::SentToUnnamed
+                | PaletteLabel::BrowserDidNotOpen => true,
+                PaletteLabel::Title
+                | PaletteLabel::Offensive
+                | PaletteLabel::Cleared
+                | PaletteLabel::OnClipboard
+                | PaletteLabel::Interrupted
+                | PaletteLabel::PairFirst
+                | PaletteLabel::PairSecond
+                | PaletteLabel::ClipboardMode
+                | PaletteLabel::ClipboardForWindow
+                | PaletteLabel::ShortcutsPaused
+                | PaletteLabel::WaitingForTheDesktop
+                | PaletteLabel::WaitingForConsent
+                | PaletteLabel::ShortcutsLink
+                | PaletteLabel::EnableShortcuts
+                | PaletteLabel::RemoveEntry
+                | PaletteLabel::EntryInPlace
+                | PaletteLabel::AboutLink
+                | PaletteLabel::DonateLink
+                | PaletteLabel::SourceCodeLink
+                | PaletteLabel::ShortcutList
+                | PaletteLabel::ShortcutListAction
+                | PaletteLabel::Typing
+                | PaletteLabel::StopTyping
+                | PaletteLabel::LastSent
+                | PaletteLabel::Copy
+                | PaletteLabel::CopyNext
+                | PaletteLabel::CopyLast
+                | PaletteLabel::Copied
+                | PaletteLabel::ReportBlock
+                | PaletteLabel::ReportBlockAction
+                | PaletteLabel::CopyReport
+                | PaletteLabel::SendBy
+                | PaletteLabel::RouteKeyboard
+                | PaletteLabel::RouteClipboard
+                | PaletteLabel::TurnOff
+                | PaletteLabel::TurnOffClipboard
+                | PaletteLabel::Collapse
+                | PaletteLabel::Expand
+                | PaletteLabel::ClosePalette
+                | PaletteLabel::EachValue
+                | PaletteLabel::ClearLineFirst
+                | PaletteLabel::InsertAtCursor
+                | PaletteLabel::LastSentAction
+                | PaletteLabel::ControlTextField
+                | PaletteLabel::ControlTerminal
+                | PaletteLabel::ControlUnconfirmed
+                | PaletteLabel::ControlNotTextField
+                | PaletteLabel::ControlClosedToAccessibility
+                | PaletteLabel::BackAction
+                | PaletteLabel::SkipAction
+                | PaletteLabel::NoOtherPack => false,
+            };
+            let pattern = pattern_palette_label(label);
+            assert_eq!(
+                pattern.contains('{'),
+                takes_numbers,
+                "{label:?}: a placeholder needs a typed accessor, none must reach label(): {pattern:?}"
+            );
+            if !takes_numbers {
+                assert!(
+                    !crate::i18n::label(label).is_empty(),
+                    "{label:?} produced nothing"
+                );
+            }
+        }
     }
 }

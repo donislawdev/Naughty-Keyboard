@@ -38,11 +38,13 @@ use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
 use zbus::{Error, MatchRule, Message, fdo};
 
 use super::bus::{self, Handle};
+use crate::Waiting;
 use crate::hotkey::HotkeyId;
 use crate::linux_portal_rules::{
-    ANSWER_WAIT, APP_ID, Answer, BIND_WAIT, CALL_WAIT, Held, PORTAL_NAME, PORTAL_PATH,
-    REGISTRY_INTERFACE, REQUEST_INTERFACE, SESSION_INTERFACE, SHORTCUTS_INTERFACE, after_wait,
-    answer_of, bound_hotkey, preferred_trigger, request_path, session_bus_socket, token,
+    ANSWER_WAIT, APP_ID, Answer, BIND_WAIT, CALL_WAIT, CONSENT_NOTICE_AFTER, Held, PORTAL_NAME,
+    PORTAL_PATH, REGISTRY_INTERFACE, REQUEST_INTERFACE, SESSION_INTERFACE, SHORTCUTS_INTERFACE,
+    after_wait, answer_of, bound_hotkey, preferred_trigger, request_path, session_bus_socket,
+    token, wait_telling,
 };
 use crate::portal::{Bound, Unavailable, Wish, names_usable};
 
@@ -239,6 +241,33 @@ impl Portal {
     where
         F: FnOnce(&Connection, &str) -> zbus::Result<Message>,
     {
+        self.ask(wait, None, call)
+    }
+
+    /// [`Self::request`] for a call that may show the person a window of the system: when the
+    /// answer has not come after [`CONSENT_NOTICE_AFTER`], `noticed` is told so, and told again
+    /// when it has (`D145` point 76).
+    fn request_telling<F>(
+        &mut self,
+        wait: core::time::Duration,
+        noticed: &mut dyn FnMut(Waiting),
+        call: F,
+    ) -> Result<(Answer, Results), Unavailable>
+    where
+        F: FnOnce(&Connection, &str) -> zbus::Result<Message>,
+    {
+        self.ask(wait, Some(noticed), call)
+    }
+
+    fn ask<F>(
+        &mut self,
+        wait: core::time::Duration,
+        noticed: Option<&mut dyn FnMut(Waiting)>,
+        call: F,
+    ) -> Result<(Answer, Results), Unavailable>
+    where
+        F: FnOnce(&Connection, &str) -> zbus::Result<Message>,
+    {
         let handle = self.next_token("nkb");
         let path = request_path(&self.unique, &handle).ok_or(Unavailable::Odd)?;
         let rule = MatchRule::builder()
@@ -256,7 +285,12 @@ impl Portal {
         // If the portal never answers, the watch shuts the connection and the wait returns,
         // and the watch is what says the wait ran out rather than the bus going away.
         let watch = self.stream.watch(wait)?;
-        let heard = responses.next();
+        let heard = match noticed {
+            Some(noticed) => {
+                wait_telling(CONSENT_NOTICE_AFTER, noticed, || responses.next()).flatten()
+            }
+            None => responses.next(),
+        };
         let waited_out = watch.fired();
         let message = match heard {
             Some(Ok(message)) => message,
