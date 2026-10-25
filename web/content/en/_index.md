@@ -2,7 +2,7 @@
 title = "Naughty Keyboard: test data that breaks forms"
 description = "Type awkward test values into any field with one shortcut: invisible spaces, impossible dates, formulas, 65,535 characters. Free, offline, open source."
 
-limits = "**Where it works today.** Typing into other windows works on Windows. On macOS and Linux the command line and the pack tools work, and a value reaches a field through the clipboard."
+limits = "**Where it works today.** Typing into other windows works on Windows, macOS and Linux, and each system has its own conditions. The command line and the pack tools work everywhere."
 
 [hero]
 eyebrow = "GUI + CLI"
@@ -12,7 +12,7 @@ lead = "**Naughty Keyboard** types the next awkward value into the field in fron
 facts = [
   "Free and open source, GPL-3.0",
   "No telemetry, no network connection",
-  "Types on Windows, CLI and clipboard on macOS and Linux",
+  "Types on Windows, macOS and Linux",
 ]
 chord_says = "types the next value"
 rows_label = "Four values and what they do to a form"
@@ -41,7 +41,7 @@ link = { page = "/test-cases-for-a-text-field", text = "Test cases for a text fi
 eyebrow = "How it works"
 title = "Three steps, and the cursor never leaves the field"
 items = [
-  { title = "Click a field", text = "In any application on Windows: a browser, a desktop program, a terminal." },
+  { title = "Click a field", text = "In any application: a browser, a desktop program, a terminal." },
   { title = "Press", chord = "Alt+Shift+N", text = "The palette clears the line and types the next value of the pack. It never takes the keyboard focus, so the cursor stays where you put it." },
   { title = "Look at the result", text = "When a value breaks something, [[Alt+Shift+B]] copies a report block for the ticket: which value, typed as what, how large, and whether all of it arrived." },
 ]

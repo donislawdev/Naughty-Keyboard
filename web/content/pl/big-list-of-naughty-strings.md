@@ -17,7 +17,7 @@ Liczby pochodzą z [repozytorium](https://github.com/minimaxir/big-list-of-naugh
 
 Robi resztę pracy wokół takiej listy:
 
-- **Wpisuje wartość w pole.** Jeden skrót wpisuje następną wartość z paczki w pole, które ma fokus klawiatury, w stałej kolejności, a kursor nie opuszcza pola. Na macOS i Linuksie wartość idzie zamiast tego przez schowek.
+- **Wpisuje wartość w pole.** Jeden skrót wpisuje następną wartość z paczki w pole, które ma fokus klawiatury, w stałej kolejności, a kursor nie opuszcza pola. Tam, gdzie system na to nie pozwala, wartość idzie zamiast tego przez schowek.
 - **Każda wartość mówi, co psuje.** Nie jeden wiersz na sekcję, tylko dwa zdania na wartość: co zwykle psuje i dlaczego oraz co zamiast tego robi poprawna aplikacja.
 - **Pokazuje to, czego nie widać.** Niewidoczny znak jest rysowany jako znacznik, a każda wartość jest liczona na cztery sposoby: grafemy, punkty kodowe, bajty i jednostki UTF-16.
 - **Pisze zgłoszenie błędu.** Jeszcze jeden skrót kopiuje blok do zgłoszenia, z wartością zapisaną tak, żeby ktoś inny mógł ją wpisać z powrotem.
@@ -38,7 +38,7 @@ Gdy napisy trafiają do testu automatycznego i nikt nie wpisuje ich ręcznie. Ma
 | Co mówi o wartości | jeden wiersz na sekcję | co psuje i co robi poprawna aplikacja, przy każdej wartości |
 | Wartości od 255 znaków | celowo pominięte | zapisane jako przepisy |
 | Wstrzykiwanie skryptów, SQL i poleceń | tak, ze znanymi CVE | dziś nie |
-| Wartość w polu | kopiuj i wklej | jeden skrót na Windows, schowek na macOS i Linuksie |
+| Wartość w polu | kopiuj i wklej | jeden skrót na Windows, macOS i Linuksie |
 | W teście automatycznym | `blns.json` i pakiety dla kilku języków | `nkb emit`, jako JSON, CSV albo jedna wartość na wiersz |
 | Licencja | MIT | GPL-3.0 dla programów, CC BY 4.0 dla paczek |
 

@@ -3,8 +3,8 @@ title: nkb send
 command: send
 layout: command
 seoTitle: nkb send - wpisz wartość testową w pole z fokusem
-description: nkb send wpisuje jedną wartość testową w pole z fokusem klawiatury na Windows, z --clear najpierw czyści wiersz i odmawia tam, gdzie klawisze by przepadły.
-lead: "Wpisuje jedną wartość z paczki w pole, które ma fokus klawiatury. Na Windows."
+description: nkb send wpisuje jedną wartość w pole z fokusem na Windows, macOS i Linuksie, z --clear najpierw czyści wiersz i odmawia tam, gdzie klawisze by przepadły.
+lead: "Wpisuje jedną wartość z paczki w pole, które ma fokus klawiatury. Na Windows, macOS i Linuksie."
 ---
 
 ## Jak go używać?
@@ -31,6 +31,10 @@ Gdy nie potrafi rozpoznać, co ma fokus, wysyła. Z `--clear` czyści tylko foku
 
 Naciśnij Escape. Nic więcej nie zostanie wpisane, polecenie powie, ile z wartości dotarło, i zakończy się kodem 4. Escape należy do polecenia tylko w trakcie wpisywania. Przed i po klawisz należy do aplikacji.
 
-## Czy działa na macOS i Linuksie?
+## Czego potrzebuje każdy system?
 
-Jeszcze nie. Tam polecenie mówi, że nie ma sposobu, żeby dostarczyć naciśnięcia, i kończy się kodem 4. Więcej mówią [Uczciwe ograniczenia](/docs/limits/).
+Windows nie potrzebuje niczego. Na macOS program, z którego uruchamiasz `nkb`, czyli dla polecenia wpisanego w terminalu ten terminal, potrzebuje uprawnienia dostępności (Accessibility). Bez niego `nkb` mówi, co włączyć, niczego nie wysyła i kończy się kodem 4.
+
+Na Linuksie pod X11 potrzebuje lokalnego wyświetlacza i nie wpisuje niczego na zdalny. Pod Waylandem przekazuje tekst metodzie wprowadzania pulpitu, IBus, więc potrzebuje demona IBus, i mówi, że wartość została przekazana, a nigdy, że jest w polu, bo pulpit nie mówi, czy jakieś pole miało fokus. Tam `--clear` potrzebuje zgody pulpitu na naciskanie klawiszy. Pulpit pyta o nią w osobnym oknie za pierwszym razem, a `nkb` mówi, że czeka.
+
+Tam, gdzie system nie ma sposobu, polecenie to mówi i kończy się kodem 4. Więcej mówią [Uczciwe ograniczenia](/docs/limits/).

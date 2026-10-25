@@ -7,11 +7,11 @@ lead: "Naughty Keyboard types text into the window you are looking at. That is t
 
 ## What does it read?
 
-On Windows, before it sends a value, it reads the kind of control that holds the keyboard focus, from a closed list of properties, the file name of the program that owns the window, never its title, and one number: whether that program runs with higher privileges than it does. It reads no title, no text and no value of any control, and it does not watch which window comes to the front. The tests `field_reads_only_kinds` and `program_reads_only_its_name` hold those reads to a list, so a new one fails the build until somebody changes the list on purpose.
+On Windows, before it sends a value, it reads the kind of control that holds the keyboard focus, from a closed list of properties, the file name of the program that owns the window, never its title, and one number: whether that program runs with higher privileges than it does. It reads no title, no text and no value of any control, and it does not watch which window comes to the front. The tests `field_reads_only_kinds` and `program_reads_only_its_name` hold those reads to a list, so a new one fails the build until somebody changes the list on purpose. On macOS and Linux it reads the kind of control that holds the keyboard focus through the accessibility interface of the system, from a closed list, never a title, a text or a value of any control. The tests `ax_reads_only_kinds` and `atspi_reads_only_kinds` hold those reads to a list in the same way.
 
 ## Which keys does it send?
 
-The characters of the value, and nothing else. The one exception is clearing the line first, with Home, Shift+End and Delete, which the palette does by default and `nkb send` only with `--clear`. The test `keystrokes_have_named_doors` fails if a call that sends keys appears anywhere other than the places it names.
+The characters of the value, and nothing else. The one exception is clearing the line first, with Home, Shift+End and Delete, which the palette does by default and `nkb send` only with `--clear`. The test `keystrokes_have_named_doors` fails if a call that sends keys appears anywhere other than the places it names. Under Wayland those three keys go through the desktop's remote-desktop portal, so the desktop asks you once, in a window of its own, whether this program may press keys. The answer is kept in a small file in your state folder, and the session with the portal is open only while a line is cleared.
 
 ## Where does it refuse?
 
@@ -23,7 +23,9 @@ In three places, and only writing to it: copying the report block, clipboard mod
 
 ## Does it install a keyboard hook?
 
-No. Its shortcuts are registered with the system's hotkey call, which tells it only that one of its own chords was pressed. Around a send it asks the system whether Ctrl, Alt, Shift, Win and Escape are down, and whether the keys it has just sent arrived, and nothing else about the keyboard.
+No. Its shortcuts are registered with the system's hotkey call, with a key grab on X11 and with the desktop's global shortcuts portal under Wayland, and each tells it only that one of its own chords was pressed. Around a send it asks the system whether Ctrl, Alt, Shift, Win and Escape are down, and whether the keys it has just sent arrived, and nothing else about the keyboard.
+
+Under Wayland one thing is different. To hand text to a field, `nkb send` and the palette make a small input method engine of their own the active one for the length of the send, because that is how the desktop takes text for a field. Every key you type meanwhile passes through it and goes back to the application unchanged, with two exceptions: Escape, which stops the send and is taken, and, while a line is cleared, the one key the program has just sent, which is taken if a modifier is held. The engine exists only while the program does. If a send is killed, the desktop is left without an engine, and you switch input source once.
 
 ## Does it need administrator rights?
 
@@ -31,11 +33,11 @@ No. The programs carry no manifest that asks for them, and neither raises its ow
 
 ## Does it connect to the internet?
 
-No. No telemetry, no update check, nothing downloaded while it runs. The test `nothing_reaches_the_network` reads the source of every package and view and fails on a socket, a name lookup, an HTTP client or a dependency banned as a network client. The test `links_nothing_off_the_machine` reads the import table of both built programs and fails if either links a network library. On Linux, the palette's toolkit talks to the X server and the D-Bus session bus that your desktop names, which are sockets on this machine unless the desktop was set up to reach them over a network.
+No. No telemetry, no update check, nothing downloaded while it runs. The test `nothing_reaches_the_network` reads the source of every package and view and fails on a socket, a name lookup, an HTTP client or a dependency banned as a network client. The test `links_nothing_off_the_machine` reads the import table of both built programs and fails if either links a network library. On Linux, the palette's toolkit talks to the X server and the D-Bus session bus that your desktop names, which are sockets on this machine unless the desktop was set up to reach them over a network. The programs' own connections to the X server, the session bus, the IBus daemon and the accessibility bus are made only to a socket file on this machine, and an address that names a network one is refused.
 
 ## Where does it write?
 
-The palette's settings go in `settings.toml` in your configuration folder, written through a temporary file. `nkb new-pack` writes one file in the current folder and never over an existing one. `nkb fmt` rewrites only the file it is given, and refuses and writes nothing if the change would alter a value.
+The palette's settings go in `settings.toml` in your configuration folder, written through a temporary file. `nkb new-pack` writes one file in the current folder and never over an existing one. `nkb fmt` rewrites only the file it is given, and refuses and writes nothing if the change would alter a value. Under Wayland the palette also keeps the portal's permission in a small file in your state folder, and writes the desktop entry that a desktop wants before it offers shortcuts to a program only after you click the button for it. The other button takes it away.
 
 ## Is unsafe code contained?
 

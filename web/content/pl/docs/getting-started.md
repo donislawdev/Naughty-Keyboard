@@ -8,7 +8,7 @@ lead: "Od pobrania do pierwszej kłopotliwej wartości w polu w mniej więcej dw
 
 ## Czego potrzebuję?
 
-Komputera z Windows 10 albo 11, żeby wpisywać w inne aplikacje. Na macOS i Linuksie wiersz poleceń i narzędzia do paczek działają w pełni, a paleta kładzie wartość w schowku, skąd ją wklejasz. Strona [Pobierz](/download/) ma archiwum dla każdego systemu, a nic się nie instaluje: rozpakowujesz i uruchamiasz.
+Komputera z Windows 10 albo 11, macOS 11 lub nowszym na Apple silicon albo Linuksem na x64. Żeby wpisywać w inne aplikacje, macOS wymaga dla programu uprawnienia dostępności (Accessibility), a Linux sesji X11 albo sesji Wayland z demonem IBus. Tam, gdzie system nie ma sposobu na wpisywanie, paleta kładzie wartość w schowku, skąd ją wklejasz. [Uczciwe ograniczenia](/docs/limits/) mówią, czego potrzebuje każdy system. Strona [Pobierz](/download/) ma archiwum dla każdego systemu, a nic się nie instaluje: rozpakowujesz i uruchamiasz.
 
 ## Jak wpisać pierwszą wartość?
 

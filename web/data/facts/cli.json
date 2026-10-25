@@ -1,5 +1,5 @@
 {
-  "version": "nkb 0.2.0",
+  "version": "nkb 0.3.0",
   "general": {
     "name": "nkb",
     "summary": "malicious test data, one shortcut away",
@@ -30,7 +30,7 @@
     ],
     "formats": [],
     "exit_codes": [],
-    "help": "nkb 0.2.0 - malicious test data, one shortcut away\n\nUsage:\n  nkb <command> [options]\n\nCommands:\n  packs             List the packs this build can offer\n  show <pack>       Print one pack in full\n  emit <pack>       Print a pack's values for a script or a file\n  send <pack>       Type one value into the focused field\n  lint <file>       Check a pack file against the format rules\n  fmt <file>        Rewrite a pack file in canonical shape\n  new-pack <name>   Write the skeleton for a new pack\n\nOptions:\n  -h, --help        Show this help and exit with 0\n      --version     Print the version and exit with 0\n\nThe graphical interface is a separate executable: nkb-gui\n"
+    "help": "nkb 0.3.0 - malicious test data, one shortcut away\n\nUsage:\n  nkb <command> [options]\n\nCommands:\n  packs             List the packs this build can offer\n  show <pack>       Print one pack in full\n  emit <pack>       Print a pack's values for a script or a file\n  send <pack>       Type one value into the focused field\n  lint <file>       Check a pack file against the format rules\n  fmt <file>        Rewrite a pack file in canonical shape\n  new-pack <name>   Write the skeleton for a new pack\n\nOptions:\n  -h, --help        Show this help and exit with 0\n      --version     Print the version and exit with 0\n\nThe graphical interface is a separate executable: nkb-gui\n"
   },
   "commands": [
     {

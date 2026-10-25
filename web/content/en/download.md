@@ -11,11 +11,11 @@ Yes. Every release, with its files, is on [the releases page](https://github.com
 
 ## Which file do I need?
 
-`nkb-gui` is the palette, the window that types a value into the field you are in. `nkb` is the command line. Every release has one archive for each program and system, and `VERSION` below stands for the version, such as `0.2.0`:
+`nkb-gui` is the palette, the window that types a value into the field you are in. `nkb` is the command line. Every release has one archive for each program and system, and `VERSION` below stands for the version, such as `0.3.0`:
 
 {{< downloads >}}
 
-Typing into other windows works on Windows. On macOS and Linux the command line works in full and the palette puts values on the clipboard. [Honest limits](/docs/limits/) says more.
+Typing into other windows works on Windows, macOS and Linux, and each system has its own conditions: macOS needs the Accessibility permission, and Linux needs an X11 session or a Wayland session with an IBus daemon. [Honest limits](/docs/limits/) says more.
 
 ## Is there an installer for Windows?
 

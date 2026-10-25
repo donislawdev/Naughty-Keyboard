@@ -17,7 +17,7 @@ The figures are from [the repository](https://github.com/minimaxir/big-list-of-n
 
 It does the rest of the job around a list like that:
 
-- **It types the value into the field.** One shortcut types the next value of a pack into the field that has the keyboard focus, in a fixed order, and the cursor never leaves the field. On macOS and Linux the value goes through the clipboard instead.
+- **It types the value into the field.** One shortcut types the next value of a pack into the field that has the keyboard focus, in a fixed order, and the cursor never leaves the field. Where a system will not allow it, the value goes through the clipboard instead.
 - **Every value says what it breaks.** Not one line per section but two sentences per value: what it usually breaks and why, and what a correct application does instead.
 - **It shows what cannot be seen.** An invisible character is drawn as a marker, and every value is counted four ways: graphemes, code points, bytes and UTF-16 units.
 - **It writes the bug report.** One more shortcut copies a report block, with the value written so that someone else can type it back.
@@ -38,7 +38,7 @@ When the strings go into an automated test and nobody types them by hand. It has
 | What it says about a value | one line for each section | what it breaks and what a correct application does, for each value |
 | Values of 255 characters or more | left out on purpose | kept as recipes |
 | Script, SQL and command injection | yes, with known CVEs | none today |
-| Getting a value into a field | copy and paste | one shortcut on Windows, the clipboard on macOS and Linux |
+| Getting a value into a field | copy and paste | one shortcut on Windows, macOS and Linux |
 | In an automated test | `blns.json`, and packages for several languages | `nkb emit`, as JSON, CSV or one value per line |
 | Licence | MIT | GPL-3.0 for the programs, CC BY 4.0 for the packs |
 

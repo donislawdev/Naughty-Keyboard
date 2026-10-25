@@ -35,4 +35,4 @@ Press {{< kbd "Alt+Shift+Space" >}}. The window that opens shows every pack as a
 
 ## What does it remember?
 
-The pack you chose, whether it is collapsed, whether the list of shortcuts is folded, where it stood on each arrangement of screens, and your shortcuts, in `settings.toml`. On Windows the file is `%APPDATA%\Naughty Keyboard\settings.toml`. A file it cannot use is left as it is and never overwritten.
+The pack you chose, whether it is collapsed, whether the list of shortcuts is folded, where it stood on each arrangement of screens, and your shortcuts, in `settings.toml`. On Windows the file is `%APPDATA%\Naughty Keyboard\settings.toml`, on macOS `~/Library/Application Support/Naughty Keyboard/settings.toml`, and on Linux `~/.config/naughty-keyboard/settings.toml`. A file it cannot use is left as it is and never overwritten.

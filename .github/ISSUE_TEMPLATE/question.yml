@@ -27,7 +27,7 @@ body:
       description: >-
         If the tool is already built, `nkb --version` prints it, and a report
         block from the palette carries it on its `Tool:` line.
-      placeholder: "nkb 0.2.0"
+      placeholder: "nkb 0.3.0"
   - type: dropdown
     id: surface
     attributes:

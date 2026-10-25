@@ -2,7 +2,7 @@
 title: Wiersz poleceń
 seoTitle: Wiersz poleceń nkb - każde polecenie i każda opcja
 description: Wiersz poleceń nkb wypisuje, pokazuje i sprawdza paczki wartości testowych i wpisuje jedną z nich w pole. Każde polecenie, każda opcja i każdy kod wyjścia.
-lead: "`nkb` wypisuje, pokazuje i sprawdza paczki, a na Windows wpisuje jedną wartość w pole z fokusem. Działa w terminalu, w skrypcie i w pipeline CI."
+lead: "`nkb` wypisuje, pokazuje i sprawdza paczki, a także wpisuje jedną wartość w pole z fokusem. Działa w terminalu, w skrypcie i w pipeline CI."
 layout: cli
 ---
 

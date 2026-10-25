@@ -36,7 +36,7 @@ Ten sam werdykt dla pipeline, z `--json`, i nic poza nim na standardowym wyjści
 $ nkb lint my-pack.toml --json
 {
   "schema": 1,
-  "tool_version": "0.2.0",
+  "tool_version": "0.3.0",
   "pack_format": 1,
   "format_frozen": false,
   "accepted": false,

@@ -3,8 +3,8 @@ title: nkb send
 command: send
 layout: command
 seoTitle: nkb send - type a test value into the focused field
-description: nkb send types one test value into the field that has the keyboard focus on Windows, clears the line first with --clear, and refuses where keys get lost.
-lead: "Type one value of a pack into the field that has the keyboard focus. On Windows."
+description: nkb send types one test value into the focused field on Windows, macOS and Linux, clears the line first with --clear, and refuses where keys get lost.
+lead: "Type one value of a pack into the field that has the keyboard focus. On Windows, macOS and Linux."
 ---
 
 ## How do I use it?
@@ -31,6 +31,10 @@ Where it cannot tell what has the focus, it sends. With `--clear` it clears only
 
 Press Escape. Nothing more is typed, the command says how much of the value arrived, and it exits with 4. Escape belongs to the command only while it types. Before and after, the key is the application's.
 
-## Does it work on macOS and Linux?
+## What does each system need?
 
-Not yet. There the command says that it has no way to deliver keystrokes, and exits with 4. [Honest limits](/docs/limits/) says more.
+Windows needs nothing. On macOS the program you run `nkb` from, a terminal for a command typed there, needs the Accessibility permission. Without it `nkb` says what to turn on, sends nothing and exits with 4.
+
+On Linux under X11 it needs a local display, and it types nothing for a remote one. Under Wayland it hands the text to the desktop's input method, IBus, so it needs an IBus daemon, and it says the value was handed over, never that it is in the field, because the desktop does not say whether a field had the focus. There `--clear` needs the desktop's permission to press keys. The desktop asks for it in a window of its own the first time, and `nkb` says it is waiting.
+
+Where a system has no way, the command says so and exits with 4. [Honest limits](/docs/limits/) says more.

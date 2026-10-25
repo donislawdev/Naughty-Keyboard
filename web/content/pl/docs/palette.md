@@ -36,4 +36,4 @@ Naciśnij {{< kbd "Alt+Shift+Space" >}}. Okno, które się otworzy, pokazuje ka�
 
 ## Co pamięta?
 
-Wybraną paczkę, to, czy jest zwinięta i czy zwinięta jest lista skrótów, gdzie stała przy każdym układzie ekranów, i Twoje skróty, w `settings.toml`. Na Windows ten plik to `%APPDATA%\Naughty Keyboard\settings.toml`. Pliku, którego nie potrafi użyć, nie rusza i nigdy go nie nadpisuje.
+Wybraną paczkę, to, czy jest zwinięta i czy zwinięta jest lista skrótów, gdzie stała przy każdym układzie ekranów, i Twoje skróty, w `settings.toml`. Na Windows ten plik to `%APPDATA%\Naughty Keyboard\settings.toml`, na macOS `~/Library/Application Support/Naughty Keyboard/settings.toml`, a na Linuksie `~/.config/naughty-keyboard/settings.toml`. Pliku, którego nie potrafi użyć, nie rusza i nigdy go nie nadpisuje.

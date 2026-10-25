@@ -19,7 +19,7 @@ The palette never pastes for you. Pasting is a key press in somebody else's wind
 
 For a window running with higher privileges than the palette, such as a program started as administrator. Windows would drop the keystrokes without a word, so the palette asks before it types, puts that value on the clipboard instead, and says why. It keeps doing that for the same window, and goes back to typing when you move to another.
 
-On macOS and Linux this build has no global shortcuts, so a value reaches a field through the clipboard: with the palette's Copy buttons, or with its clipboard switch.
+Where the system will not let the palette type, for example on macOS until the palette has the Accessibility permission, or on Linux with no way to type through, a value reaches a field through the clipboard: with the palette's Copy buttons, or with its clipboard switch.
 
 ## What else puts a value on the clipboard?
 
@@ -31,4 +31,4 @@ No. On Windows a value the palette puts on the clipboard is marked to stay out o
 
 ## Does nkb have a clipboard mode?
 
-No. The command line prints values to standard output, where a script or a pipe takes them, and `nkb send` types a value into the focused field on Windows. A program that puts something on the clipboard and exits would hand a value to whatever reads the clipboard next, which is not something to do from a script.
+No. The command line prints values to standard output, where a script or a pipe takes them, and `nkb send` types a value into the focused field. A program that puts something on the clipboard and exits would hand a value to whatever reads the clipboard next, which is not something to do from a script.

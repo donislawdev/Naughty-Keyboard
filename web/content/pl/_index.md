@@ -2,7 +2,7 @@
 title = "Naughty Keyboard: dane testowe, które psują formularze"
 description = "Wpisuj kłopotliwe wartości testowe w dowolne pole jednym skrótem: niewidoczne spacje, niemożliwe daty, formuły, 65 535 znaków. Za darmo i offline."
 
-limits = "**Gdzie działa dziś.** Wpisywanie w inne okna działa na Windows. Na macOS i Linuksie działają wiersz poleceń i narzędzia do paczek, a wartość trafia do pola przez schowek."
+limits = "**Gdzie działa dziś.** Wpisywanie w inne okna działa na Windows, macOS i Linuksie, a każdy system ma swoje warunki. Wiersz poleceń i narzędzia do paczek działają wszędzie."
 
 [hero]
 eyebrow = "GUI + CLI"
@@ -12,7 +12,7 @@ lead = "**Naughty Keyboard** jednym skrótem wpisuje następną kłopotliwą war
 facts = [
   "Darmowy i otwarty, GPL-3.0",
   "Bez telemetrii i bez połączeń sieciowych",
-  "Wpisuje na Windows, CLI i schowek na macOS i Linuksie",
+  "Wpisuje na Windows, macOS i Linuksie",
 ]
 chord_says = "wpisuje następną wartość"
 rows_label = "Cztery wartości i to, co robią z formularzem"
@@ -41,7 +41,7 @@ link = { page = "/test-cases-for-a-text-field", text = "Przypadki testowe pola t
 eyebrow = "Jak to działa"
 title = "Trzy kroki, a kursor nie opuszcza pola"
 items = [
-  { title = "Kliknij pole", text = "W dowolnej aplikacji na Windows: w przeglądarce, w programie na komputer, w terminalu." },
+  { title = "Kliknij pole", text = "W dowolnej aplikacji: w przeglądarce, w programie na komputer, w terminalu." },
   { title = "Naciśnij", chord = "Alt+Shift+N", text = "Paleta czyści wiersz i wpisuje następną wartość z paczki. Nigdy nie zabiera fokusu klawiatury, więc kursor zostaje tam, gdzie był." },
   { title = "Spójrz na wynik", text = "Gdy wartość coś zepsuje, [[Alt+Shift+B]] kopiuje blok do zgłoszenia: która wartość, wpisana jako co, jak duża i czy dotarła w całości." },
 ]
