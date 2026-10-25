@@ -1390,7 +1390,7 @@ mod tests {
         let log = log();
         let spy = Spy::ready(&log);
         let mut keys = KeySpy::working(&log);
-        keys.says = vec![Waiting::ForConsent, Waiting::Answered];
+        keys.says = vec![Waiting::Asking, Waiting::ForConsent, Waiting::Answered];
         let mut heard = Vec::new();
         let outcome = send_value(
             &Shelf,
@@ -1405,12 +1405,16 @@ mod tests {
             },
         );
         assert!(matches!(outcome, SendOutcome::Sent { .. }), "{outcome:?}");
-        assert_eq!(heard, [Waiting::ForConsent, Waiting::Answered]);
+        assert_eq!(
+            heard,
+            [Waiting::Asking, Waiting::ForConsent, Waiting::Answered]
+        );
         let log = log.borrow();
-        assert_eq!(log[0], "says:ForConsent");
-        assert_eq!(log[1], "says:Answered");
-        assert!(log[2].starts_with("keys:"), "{log:?}");
-        assert!(log[3].starts_with("text:"), "{log:?}");
+        assert_eq!(log[0], "says:Asking");
+        assert_eq!(log[1], "says:ForConsent");
+        assert_eq!(log[2], "says:Answered");
+        assert!(log[3].starts_with("keys:"), "{log:?}");
+        assert!(log[4].starts_with("text:"), "{log:?}");
     }
 
     #[test]
@@ -1419,7 +1423,7 @@ mod tests {
         let log = log();
         let spy = Spy::ready(&log);
         let mut keys = KeySpy::working(&log);
-        keys.says = vec![Waiting::ForConsent, Waiting::Answered];
+        keys.says = vec![Waiting::Asking, Waiting::ForConsent, Waiting::Answered];
         let mut heard = 0;
         let outcome = send_value(
             &Shelf,

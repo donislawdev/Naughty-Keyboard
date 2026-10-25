@@ -196,6 +196,38 @@ pub fn no_keyboard_menu(window: Option<u64>) -> Result<(), KeyMenuError> {
     nkb_sys::window::no_keyboard_menu(WindowRef(window.ok_or(KeyMenuError::HandleUnavailable)?))
 }
 
+/// What the palette's window stood as before it stepped aside, and how it can fail
+/// (`D145` point 77). Types of `nkb-sys` passed on as they are: the graphical package does
+/// not depend on it.
+pub use nkb_sys::window::{Aside, StackingError};
+
+/// Takes `window` - the raw handle of the palette's own window, `None` while the library has
+/// none to give - off the top of the other windows, for the time the system shows a window of
+/// its own that asks the person something (`D145` point 77, `OBS-232`).
+///
+/// Call it BEFORE the question is put and keep what it returns until the answer: a window that
+/// leaves the top after the window of the system has opened stays above it.
+///
+/// # Errors
+///
+/// The handle missing, or the window manager keeping the palette on top.
+pub fn step_aside(window: Option<u64>) -> Result<Aside, StackingError> {
+    nkb_sys::window::step_aside(WindowRef(window.ok_or(StackingError::HandleUnavailable)?))
+}
+
+/// Puts `window` back on top, as `aside` says it stood.
+///
+/// # Errors
+///
+/// The handle missing, or the window manager not putting the palette back, which leaves it
+/// behind the application under test.
+pub fn step_back(window: Option<u64>, aside: &Aside) -> Result<(), StackingError> {
+    nkb_sys::window::step_back(
+        WindowRef(window.ok_or(StackingError::HandleUnavailable)?),
+        aside,
+    )
+}
+
 /// Lets every window of this program that exists now stand in the space of an
 /// application in full screen, and answers how many it did that for (`OBS-193`).
 ///
@@ -245,6 +277,22 @@ mod tests {
             assert_eq!(outcome, Ok(()));
         } else {
             assert!(matches!(outcome, Err(FocusError::Unsupported { .. })));
+        }
+    }
+
+    #[test]
+    fn stepping_aside_with_no_handle_says_the_handle_is_missing_on_every_system() {
+        // The same answer everywhere, as for the focus: the branch is ours, not the system's.
+        assert_eq!(
+            step_aside(None).err(),
+            Some(StackingError::HandleUnavailable)
+        );
+        // A window that was never put aside can be put back only where there is a window.
+        if let Ok(aside) = step_aside(Some(0)) {
+            assert_eq!(
+                step_back(None, &aside),
+                Err(StackingError::HandleUnavailable)
+            );
         }
     }
 

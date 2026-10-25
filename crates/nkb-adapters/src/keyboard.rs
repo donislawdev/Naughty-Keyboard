@@ -270,6 +270,7 @@ fn value_stopped(
 /// the two crates do not depend on each other (`D145` point 76).
 const fn waiting_of(waiting: nkb_sys::Waiting) -> Waiting {
     match waiting {
+        nkb_sys::Waiting::Asking => Waiting::Asking,
         nkb_sys::Waiting::ForConsent => Waiting::ForConsent,
         nkb_sys::Waiting::Answered => Waiting::Answered,
     }
@@ -434,10 +435,11 @@ mod tests {
     fn every_wait_of_the_system_maps_to_its_own_wait() {
         assert_eq!(
             [
+                waiting_of(nkb_sys::Waiting::Asking),
                 waiting_of(nkb_sys::Waiting::ForConsent),
                 waiting_of(nkb_sys::Waiting::Answered)
             ],
-            [Waiting::ForConsent, Waiting::Answered]
+            [Waiting::Asking, Waiting::ForConsent, Waiting::Answered]
         );
     }
 

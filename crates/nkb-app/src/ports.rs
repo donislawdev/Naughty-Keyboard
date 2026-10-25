@@ -98,13 +98,19 @@ pub struct Progress {
 /// hangs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Waiting {
-    /// The system is asking the person whether this program may press keys (a
-    /// Wayland desktop, the first time), and the send stands until they answer.
-    /// Said once, when the question has stood for a moment: a desktop that
-    /// remembers the answer asks nothing, and nothing is said.
+    /// The system is about to ask the person whether this program may press keys,
+    /// because it holds no answer of theirs from before (a Wayland desktop, the
+    /// first time). Said BEFORE the question is put, so that a window that stands
+    /// over everything can get out of the way of the window the system is about
+    /// to show (`D145` point 77).
+    Asking,
+    /// The system is asking the person whether this program may press keys, and the
+    /// send stands until they answer. Said once, when the question has stood for a
+    /// moment: a desktop that remembers the answer asks nothing, and nothing is said.
     ForConsent,
     /// The question is answered, whichever way. Said once after every
-    /// [`Waiting::ForConsent`], so a sentence that was put up can be taken down.
+    /// [`Waiting::Asking`] or [`Waiting::ForConsent`], so what was done for the
+    /// question can be undone.
     Answered,
 }
 

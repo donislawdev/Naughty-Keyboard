@@ -1561,7 +1561,7 @@ mod tests {
         assert!(outcome.sent.expect("the value went in").cleared);
         assert_eq!(
             *kit.waited.borrow(),
-            [Waiting::ForConsent, Waiting::Answered]
+            [Waiting::Asking, Waiting::ForConsent, Waiting::Answered]
         );
 
         advance.set_clearing(Clearing::Keep);
@@ -1569,7 +1569,7 @@ mod tests {
         assert!(outcome.sent.is_some());
         assert_eq!(
             kit.waited.borrow().len(),
-            2,
+            3,
             "a press at the cursor waited for no one"
         );
     }

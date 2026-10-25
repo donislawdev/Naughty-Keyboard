@@ -190,7 +190,7 @@ impl FakeKeys {
     /// A press that stands on a window of the system, and says so (`D145` point 76).
     pub(crate) fn asking_the_person() -> Self {
         Self {
-            says: vec![Waiting::ForConsent, Waiting::Answered],
+            says: vec![Waiting::Asking, Waiting::ForConsent, Waiting::Answered],
             ..Self::working()
         }
     }

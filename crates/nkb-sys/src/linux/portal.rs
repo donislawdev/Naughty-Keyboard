@@ -245,8 +245,8 @@ impl Portal {
     }
 
     /// [`Self::request`] for a call that may show the person a window of the system: when the
-    /// answer has not come after [`CONSENT_NOTICE_AFTER`], `noticed` is told so, and told again
-    /// when it has (`D145` point 76).
+    /// answer has not come after [`CONSENT_NOTICE_AFTER`], `noticed` is told so (`D145`
+    /// point 76). That the answer came is for the caller to tell (`linux_portal_rules::Told`).
     fn request_telling<F>(
         &mut self,
         wait: core::time::Duration,

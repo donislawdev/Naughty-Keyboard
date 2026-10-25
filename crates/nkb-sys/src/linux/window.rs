@@ -24,6 +24,14 @@
 //! So the two jobs of the Windows account (`window.rs`) are done by one property and one
 //! request here, and as there the verdict is a READ and not the return of a call.
 //!
+//! # Stepping aside from a window of the system
+//!
+//! The palette on XWayland is a notification, and mutter keeps that type in the top layer
+//! whatever the state says, so taking `_NET_WM_STATE_ABOVE` off it changes nothing. The
+//! type goes with the state, and both go BEFORE the window of the system opens, because a
+//! window that is moved to the normal layer is put on top of the layer, above a window that
+//! is in it (`step_aside`, and `linux_window_rules.rs` for the table of what was measured).
+//!
 //! # XWayland: the same property and request, and no frame besides
 //!
 //! On a Wayland session the palette is a client of XWayland (`D145` point 38). Probed
@@ -49,17 +57,20 @@ use std::time::{Duration, Instant};
 use x11rb::connection::Connection;
 use x11rb::properties::WmHints;
 use x11rb::protocol::xproto::{
-    AtomEnum, ClientMessageEvent, ConnectionExt as _, EventMask, InputFocus,
+    AtomEnum, ClientMessageEvent, ConnectionExt as _, EventMask, InputFocus, PropMode,
 };
 use x11rb::rust_connection::RustConnection;
+use x11rb::wrapper::ConnectionExt as _;
 
 use super::Lost;
 use super::connect::{Display, Server, Windows, connect_windows};
 use super::front::{focused_toplevel, toplevel};
 use crate::WindowRef;
 use crate::linux_rules::Refusal;
-use crate::linux_window_rules::{StillHeld, hand_back, holds_keyboard, is_frameless};
-use crate::window::{FocusError, KeyMenuError};
+use crate::linux_window_rules::{
+    StillHeld, Stood, hand_back, holds_keyboard, is_aside, is_back, is_frameless,
+};
+use crate::window::{FocusError, KeyMenuError, StackingError};
 
 /// How long the manager is given to show a change of the focus. Measured 2026-10-23: both
 /// managers had moved it by the first look after the request, a few milliseconds. This is
@@ -88,6 +99,9 @@ const ATOM_LIST_LONGEST: u32 = 64;
 
 /// `_NET_WM_STATE_ADD`.
 const STATE_ADD: u32 = 1;
+
+/// `_NET_WM_STATE_REMOVE`.
+const STATE_REMOVE: u32 = 0;
 
 fn refused(refusal: Refusal) -> FocusError {
     FocusError::Unsupported {
@@ -330,6 +344,137 @@ pub(crate) fn take_foreground(window: WindowRef) -> Result<(), FocusError> {
         Ok(())
     } else {
         Err(FocusError::NotTaken)
+    }
+}
+
+/// The atoms the stacking of a window is read and told in.
+struct StackAtoms {
+    kind: u32,
+    normal: u32,
+    state: u32,
+    above: u32,
+    skip_taskbar: u32,
+    skip_pager: u32,
+}
+
+fn stack_atoms(conn: &RustConnection) -> Result<StackAtoms, Lost> {
+    Ok(StackAtoms {
+        kind: atom(conn, b"_NET_WM_WINDOW_TYPE")?,
+        normal: atom(conn, b"_NET_WM_WINDOW_TYPE_NORMAL")?,
+        state: atom(conn, b"_NET_WM_STATE")?,
+        above: atom(conn, b"_NET_WM_STATE_ABOVE")?,
+        skip_taskbar: atom(conn, b"_NET_WM_STATE_SKIP_TASKBAR")?,
+        skip_pager: atom(conn, b"_NET_WM_STATE_SKIP_PAGER")?,
+    })
+}
+
+/// Looks at the type and the state of the window until `done` says so, for at most `SETTLE`.
+fn wait_stack(
+    server: &Server,
+    window: u32,
+    done: impl Fn(&[u32], &[u32]) -> bool,
+) -> Result<bool, Lost> {
+    let started = Instant::now();
+    loop {
+        let types = atoms_of(&server.conn, window, b"_NET_WM_WINDOW_TYPE")?;
+        let state = atoms_of(&server.conn, window, b"_NET_WM_STATE")?;
+        if done(&types, &state) {
+            return Ok(true);
+        }
+        if started.elapsed() >= SETTLE {
+            return Ok(false);
+        }
+        std::thread::sleep(LOOK);
+    }
+}
+
+/// Writes the type of the window and tells the manager to take it off the top, and answers
+/// whether the manager shows it so. The type goes first: the layer of the window is worked
+/// out from the type, and the state that is asked for after it is worked out with it.
+/// Out of the taskbar and the switcher it is kept, which the notification type did and the
+/// normal type does not.
+fn put_aside(server: &Server, window: u32, atoms: &StackAtoms) -> Result<bool, Lost> {
+    set_types(server, window, atoms.kind, &[atoms.normal])?;
+    let keep_out = [
+        STATE_ADD,
+        atoms.skip_taskbar,
+        atoms.skip_pager,
+        SOURCE_APPLICATION,
+        0,
+    ];
+    ask_manager(server, window, atoms.state, keep_out)?;
+    let leave = [STATE_REMOVE, atoms.above, 0, SOURCE_APPLICATION, 0];
+    ask_manager(server, window, atoms.state, leave)?;
+    wait_stack(server, window, |types, state| {
+        is_aside(types, state, atoms.normal, atoms.above)
+    })
+}
+
+/// Puts the type back, asks for the top again if the window had it, and answers whether the
+/// manager shows the window as it was.
+fn put_back(server: &Server, window: u32, atoms: &StackAtoms, stood: &Stood) -> Result<bool, Lost> {
+    set_types(server, window, atoms.kind, &stood.types)?;
+    if stood.above {
+        let again = [STATE_ADD, atoms.above, 0, SOURCE_APPLICATION, 0];
+        ask_manager(server, window, atoms.state, again)?;
+    }
+    wait_stack(server, window, |types, state| {
+        is_back(types, state, stood, atoms.above)
+    })
+}
+
+fn set_types(server: &Server, window: u32, kind: u32, types: &[u32]) -> Result<(), Lost> {
+    server
+        .conn
+        .change_property32(PropMode::REPLACE, window, kind, AtomEnum::ATOM, types)?
+        .check()?;
+    Ok(())
+}
+
+/// Takes the window off the top of the others, for the time of a question of the system to
+/// the person (`D145` point 77, `linux_window_rules.rs` has the measurement). Only on
+/// XWayland, where a window of the system opens over ours: `None` is the answer on a server
+/// of X11 of our own, and means nothing was done. What the window stood as comes back, to be
+/// given to [`step_back`].
+///
+/// 🔴 Before the question is put and not after, because a window that leaves the top after
+/// the window of the system has opened is put on top of the layer it goes to.
+pub(crate) fn step_aside(window: WindowRef) -> Result<Option<Stood>, StackingError> {
+    let id = u32::try_from(window.0).map_err(|_| StackingError::HandleUnavailable)?;
+    let lost = |Lost| StackingError::NotAside;
+    let Windows { server, display } = connect_windows().map_err(|_| StackingError::NotAside)?;
+    if display == Display::X11 {
+        return Ok(None);
+    }
+    let atoms = stack_atoms(&server.conn).map_err(lost)?;
+    let stood = Stood {
+        types: atoms_of(&server.conn, id, b"_NET_WM_WINDOW_TYPE").map_err(lost)?,
+        above: atoms_of(&server.conn, id, b"_NET_WM_STATE")
+            .map_err(lost)?
+            .contains(&atoms.above),
+    };
+    if put_aside(&server, id, &atoms).map_err(lost)? {
+        return Ok(Some(stood));
+    }
+    // A manager that did not follow leaves the window as it was found, not half changed.
+    let _ = put_back(&server, id, &atoms, &stood);
+    Err(StackingError::NotAside)
+}
+
+/// Puts the window back on top, as it stood before [`step_aside`]. Nothing is done for a
+/// window that was never put aside.
+pub(crate) fn step_back(window: WindowRef, stood: Option<&Stood>) -> Result<(), StackingError> {
+    let Some(stood) = stood else {
+        return Ok(());
+    };
+    let id = u32::try_from(window.0).map_err(|_| StackingError::HandleUnavailable)?;
+    let lost = |Lost| StackingError::NotBack;
+    let Windows { server, .. } = connect_windows().map_err(|_| StackingError::NotBack)?;
+    let atoms = stack_atoms(&server.conn).map_err(lost)?;
+    if put_back(&server, id, &atoms, stood).map_err(lost)? {
+        Ok(())
+    } else {
+        Err(StackingError::NotBack)
     }
 }
 

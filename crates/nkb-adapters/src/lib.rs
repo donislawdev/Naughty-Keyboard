@@ -29,7 +29,10 @@ pub mod toml_pack;
 pub use built_in::BUILT_IN_PACKS;
 pub use catalogue::BuiltInCatalogue;
 pub use clipboard_delivery::ClipboardDelivery;
-pub use focus::{KeptFocus, LentFocus, no_keyboard_menu, stand_over_full_screen};
+pub use focus::{
+    Aside, KeptFocus, LentFocus, StackingError, no_keyboard_menu, stand_over_full_screen,
+    step_aside, step_back,
+};
 pub use fs::{DirectoryPackSink, DirectoryPackSource, SystemClock};
 pub use keyboard::DirectInjection;
 pub use portal_entry::PortalEntry;

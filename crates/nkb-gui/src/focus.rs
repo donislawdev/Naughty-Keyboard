@@ -407,7 +407,7 @@ pub fn hand_back_on_press(palette: &Palette, standing: &Standing) {
 /// sentence at the first shortcut. And the worker may be waiting on a press that
 /// never comes, so writing only to [`Standing`] would leave the tester with a
 /// palette that looks fine.
-fn say(palette: &Palette, standing: &Standing, line: &str) {
+pub(crate) fn say(palette: &Palette, standing: &Standing, line: &str) {
     if let Ok(mut held) = standing.lock() {
         *held = Some(line.to_owned());
     }

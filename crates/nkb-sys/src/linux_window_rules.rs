@@ -68,12 +68,107 @@ pub(crate) fn hand_back(holds: bool, frameless: bool) -> Result<(), StillHeld> {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Standing aside from a window of the system (`D145` point 77, `OBS-232`)
+// ---------------------------------------------------------------------------
+//
+// Measured 2026-10-25 on GNOME 50, mutter 50.1: the palette over the window of the portal
+// that asks whether keys may be pressed, the verdict a screenshot of the machine and the
+// state of the window read from the server (`tools/sondy/linux/pomiar-zejscia-palety.py`):
+//
+// | what was done to the palette | the window of the portal, opened before it |
+// |---|---|
+// | `_NET_WM_STATE_ABOVE` taken off | covered (the notification type keeps the layer) |
+// | type `NORMAL`, then ABOVE off, 1.2 s after the window opened | covered |
+// | the same, and the window lowered | covered |
+// | state `BELOW` | uncovered, and the palette hidden behind the application too |
+// | type `NORMAL` and ABOVE off BEFORE the window opened | uncovered, the palette above the application |
+//
+// So a window that is moved to the normal layer is put on top of it, above a window that
+// is there already, and one that is in it before the window opens is below that window.
+// The type of the window is what holds the palette in the top layer, not the state, and
+// the type has to be changed along with it.
+
+/// What a window stood as before it stepped aside, so that stepping back puts that back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Stood {
+    /// `_NET_WM_WINDOW_TYPE` as it was, the atoms in the order they were in.
+    pub types: Vec<u32>,
+    /// Whether `_NET_WM_STATE_ABOVE` was in `_NET_WM_STATE`.
+    pub above: bool,
+}
+
+/// What the window stands as now, if it stands aside: only the normal type, and not above.
+pub(crate) fn is_aside(types: &[u32], state: &[u32], normal: u32, above: u32) -> bool {
+    types == [normal] && !state.contains(&above)
+}
+
+/// Whether the window stands as it stood before it stepped aside.
+pub(crate) fn is_back(types: &[u32], state: &[u32], stood: &Stood, above: u32) -> bool {
+    types == stood.types.as_slice() && state.contains(&above) == stood.above
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     const FOCUSED: u32 = 7;
     const WINDOW: u32 = 0x00c0_0013;
+    const NORMAL: u32 = 31;
+    const NOTIFICATION: u32 = 32;
+    const ABOVE: u32 = 41;
+    const SKIP: u32 = 42;
+
+    fn stood() -> Stood {
+        Stood {
+            types: vec![NOTIFICATION],
+            above: true,
+        }
+    }
+
+    #[test]
+    fn a_window_is_aside_when_it_is_normal_and_not_above() {
+        assert!(is_aside(&[NORMAL], &[], NORMAL, ABOVE));
+        assert!(is_aside(&[NORMAL], &[SKIP, 5], NORMAL, ABOVE));
+    }
+
+    #[test]
+    fn a_window_that_keeps_either_the_type_or_the_state_is_not_aside() {
+        // Each of the two alone: the measurement showed neither is enough.
+        assert!(!is_aside(&[NORMAL], &[ABOVE], NORMAL, ABOVE));
+        assert!(!is_aside(&[NOTIFICATION], &[], NORMAL, ABOVE));
+        assert!(!is_aside(&[NOTIFICATION], &[ABOVE], NORMAL, ABOVE));
+        assert!(!is_aside(&[], &[], NORMAL, ABOVE));
+        assert!(
+            !is_aside(&[NORMAL, NOTIFICATION], &[], NORMAL, ABOVE),
+            "a list of types that still names the old one is not the normal type"
+        );
+    }
+
+    #[test]
+    fn a_window_is_back_when_it_has_its_types_and_its_state_again() {
+        assert!(is_back(&[NOTIFICATION], &[ABOVE, SKIP], &stood(), ABOVE));
+        let never_above = Stood {
+            types: vec![NOTIFICATION],
+            above: false,
+        };
+        assert!(is_back(&[NOTIFICATION], &[SKIP], &never_above, ABOVE));
+    }
+
+    #[test]
+    fn a_window_that_has_only_part_of_what_it_had_is_not_back() {
+        assert!(!is_back(&[NORMAL], &[ABOVE], &stood(), ABOVE));
+        assert!(!is_back(&[NOTIFICATION], &[], &stood(), ABOVE));
+        assert!(!is_back(&[NOTIFICATION, NORMAL], &[ABOVE], &stood(), ABOVE));
+        let never_above = Stood {
+            types: vec![NOTIFICATION],
+            above: false,
+        };
+        assert!(
+            !is_back(&[NOTIFICATION], &[ABOVE], &never_above, ABOVE),
+            "above is not put on a window that did not have it"
+        );
+    }
 
     #[test]
     fn a_window_holds_the_keyboard_when_either_side_says_so() {

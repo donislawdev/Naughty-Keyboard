@@ -35,7 +35,7 @@ use crate::linux_clearing_rules::{
     token_file, usable_token,
 };
 use crate::linux_portal_rules::{
-    ANSWER_WAIT, Answer, BIND_WAIT, PORTAL_NAME, PORTAL_PATH, SESSION_INTERFACE,
+    ANSWER_WAIT, Answer, BIND_WAIT, PORTAL_NAME, PORTAL_PATH, SESSION_INTERFACE, Told,
 };
 use crate::portal::Unavailable;
 
@@ -47,15 +47,28 @@ pub(crate) struct Keys {
 
 impl Keys {
     /// Opens a session that may press keys. Blocks while the person reads the window of the
-    /// system, the first time, for at most five minutes, and `waiting` hears that it does
-    /// (`D145` point 76).
+    /// system, the first time, for at most five minutes, and `waiting` hears of it
+    /// (`D145` points 76 and 77): first that the desktop is about to be asked, when no
+    /// answer of the person's is kept, BEFORE any call is made, then that the question has
+    /// stood for a moment, and at the end, whatever it came to, that it is answered.
     pub(crate) fn open(waiting: &mut dyn FnMut(Waiting)) -> Result<Self, Unavailable> {
+        let remembered = recall();
+        let mut told = Told::new(waiting);
+        if remembered.is_none() {
+            told.say(Waiting::Asking);
+        }
+        let opened = Self::open_session(remembered.as_deref(), &mut told);
+        told.end();
+        opened
+    }
+
+    fn open_session(remembered: Option<&str>, told: &mut Told<'_>) -> Result<Self, Unavailable> {
         let mut portal = Portal::open()?;
         let session = portal.create_session_on(REMOTE_DESKTOP_INTERFACE)?;
         // From here the session is closed on every way out, an error included.
         let mut keys = Self { portal, session };
-        keys.select_devices(recall().as_deref())?;
-        keys.start(waiting)?;
+        keys.select_devices(remembered)?;
+        keys.start(told)?;
         Ok(keys)
     }
 
@@ -99,22 +112,24 @@ impl Keys {
         }
     }
 
-    fn start(&mut self, waiting: &mut dyn FnMut(Waiting)) -> Result<(), Unavailable> {
+    fn start(&mut self, told: &mut Told<'_>) -> Result<(), Unavailable> {
         let session = ObjectPath::try_from(self.session.as_str()).map_err(|_| Unavailable::Odd)?;
         // The one call that may show the window, so the one the person is told about.
-        let (answer, results) =
-            self.portal
-                .request_telling(BIND_WAIT, waiting, |connection, handle| {
-                    let mut options: HashMap<&str, Value<'_>> = HashMap::new();
-                    options.insert("handle_token", Value::from(handle));
-                    connection.call_method(
-                        Some(PORTAL_NAME),
-                        PORTAL_PATH,
-                        Some(REMOTE_DESKTOP_INTERFACE),
-                        "Start",
-                        &(&session, "", options),
-                    )
-                })?;
+        let (answer, results) = self.portal.request_telling(
+            BIND_WAIT,
+            &mut |what| told.say(what),
+            |connection, handle| {
+                let mut options: HashMap<&str, Value<'_>> = HashMap::new();
+                options.insert("handle_token", Value::from(handle));
+                connection.call_method(
+                    Some(PORTAL_NAME),
+                    PORTAL_PATH,
+                    Some(REMOTE_DESKTOP_INTERFACE),
+                    "Start",
+                    &(&session, "", options),
+                )
+            },
+        )?;
         if answer != Answer::Granted {
             return Err(refusal(answer));
         }

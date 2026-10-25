@@ -44,11 +44,12 @@ fn still_typing(elapsed: Duration, said: &mut bool, progress: Progress) -> Optio
 
 /// The line a wait for the person says, or nothing. The wait is said when the question has stood
 /// for a second (the route decides that), so a desktop that remembers the answer never causes
-/// it, and the end of the wait is not said: what follows says what came of it.
+/// it. That the question is about to be put is for a window that has to get out of its way and
+/// the command has none, and the end of the wait is not said: what follows says what came of it.
 const fn waiting_line(waiting: Waiting) -> Option<&'static str> {
     match waiting {
         Waiting::ForConsent => Some(WAITING_FOR_CONSENT),
-        Waiting::Answered => None,
+        Waiting::Asking | Waiting::Answered => None,
     }
 }
 
@@ -91,6 +92,7 @@ mod tests {
     #[test]
     fn the_wait_for_the_person_is_said_once_and_its_end_is_not_said() {
         assert_eq!(waiting_line(Waiting::ForConsent), Some(WAITING_FOR_CONSENT));
+        assert_eq!(waiting_line(Waiting::Asking), None);
         assert_eq!(waiting_line(Waiting::Answered), None);
         assert!(
             WAITING_FOR_CONSENT.starts_with("nkb send: "),
