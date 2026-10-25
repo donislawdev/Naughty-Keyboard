@@ -27,7 +27,7 @@ use nkb_adapters::report_text::report_text;
 use nkb_adapters::{BuiltInCatalogue, TomlPackFormat};
 use nkb_app::ports::{
     Availability, Delivered, DeliveryError, Following, KeystrokeError, KeystrokeSender,
-    PackCatalogue, PackFormat, PackSource, Progress, TargetRef, ValueDelivery,
+    PackCatalogue, PackFormat, PackSource, Progress, TargetRef, ValueDelivery, Waiting,
 };
 use nkb_app::{Chosen, Clearing, SendOutcome, ValueFacts, deliver_value};
 use nkb_core::calendar::Day;
@@ -64,7 +64,11 @@ impl ValueDelivery for TakesEverything {
 struct NoKeys;
 
 impl KeystrokeSender for NoKeys {
-    fn send_keystrokes(&self, _chords: &[KeyChord]) -> Result<(), KeystrokeError> {
+    fn send_keystrokes(
+        &self,
+        _chords: &[KeyChord],
+        _waiting: &mut dyn FnMut(Waiting),
+    ) -> Result<(), KeystrokeError> {
         Ok(())
     }
 }

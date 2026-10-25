@@ -29,6 +29,7 @@ use std::os::unix::fs::OpenOptionsExt as _;
 use zbus::zvariant::{ObjectPath, Value};
 
 use super::{Portal, refusal, text_of, unwrapped};
+use crate::Waiting;
 use crate::linux_clearing_rules::{
     DEVICE_KEYBOARD, PERSIST_UNTIL_REVOKED, REMOTE_DESKTOP_INTERFACE, StateDirs, split_token_file,
     token_file, usable_token,
@@ -46,14 +47,15 @@ pub(crate) struct Keys {
 
 impl Keys {
     /// Opens a session that may press keys. Blocks while the person reads the window of the
-    /// system, the first time, for at most five minutes.
-    pub(crate) fn open() -> Result<Self, Unavailable> {
+    /// system, the first time, for at most five minutes, and `waiting` hears that it does
+    /// (`D145` point 76).
+    pub(crate) fn open(waiting: &mut dyn FnMut(Waiting)) -> Result<Self, Unavailable> {
         let mut portal = Portal::open()?;
         let session = portal.create_session_on(REMOTE_DESKTOP_INTERFACE)?;
         // From here the session is closed on every way out, an error included.
         let mut keys = Self { portal, session };
         keys.select_devices(recall().as_deref())?;
-        keys.start()?;
+        keys.start(waiting)?;
         Ok(keys)
     }
 
@@ -97,19 +99,22 @@ impl Keys {
         }
     }
 
-    fn start(&mut self) -> Result<(), Unavailable> {
+    fn start(&mut self, waiting: &mut dyn FnMut(Waiting)) -> Result<(), Unavailable> {
         let session = ObjectPath::try_from(self.session.as_str()).map_err(|_| Unavailable::Odd)?;
-        let (answer, results) = self.portal.request(BIND_WAIT, |connection, handle| {
-            let mut options: HashMap<&str, Value<'_>> = HashMap::new();
-            options.insert("handle_token", Value::from(handle));
-            connection.call_method(
-                Some(PORTAL_NAME),
-                PORTAL_PATH,
-                Some(REMOTE_DESKTOP_INTERFACE),
-                "Start",
-                &(&session, "", options),
-            )
-        })?;
+        // The one call that may show the window, so the one the person is told about.
+        let (answer, results) =
+            self.portal
+                .request_telling(BIND_WAIT, waiting, |connection, handle| {
+                    let mut options: HashMap<&str, Value<'_>> = HashMap::new();
+                    options.insert("handle_token", Value::from(handle));
+                    connection.call_method(
+                        Some(PORTAL_NAME),
+                        PORTAL_PATH,
+                        Some(REMOTE_DESKTOP_INTERFACE),
+                        "Start",
+                        &(&session, "", options),
+                    )
+                })?;
         if answer != Answer::Granted {
             return Err(refusal(answer));
         }

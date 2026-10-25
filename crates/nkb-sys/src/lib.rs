@@ -119,6 +119,21 @@ pub struct SendProgress {
     pub units_total: usize,
 }
 
+/// What a send waits for besides the application it types into, said on the way
+/// (`D145` point 76). Nothing is pressed while it waits, so the person is the only one
+/// who can end it, and a send that stands without saying why looks like one that hangs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Waiting {
+    /// The system is asking the person whether this program may press keys (the portal
+    /// of a Wayland session, the first time), and the send stands until they answer.
+    /// Said once, when the question has stood for a moment: a desktop that remembers the
+    /// answer asks nothing, and nothing is said.
+    ForConsent,
+    /// The question is answered, whichever way. Said once after every
+    /// [`Waiting::ForConsent`], so a sentence that was put up can be taken down.
+    Answered,
+}
+
 /// Why a send stopped before its end (`D95`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StopReason {
@@ -768,8 +783,20 @@ pub fn send_text(
 /// to the front, the application stopped taking keys or `Escape` was pressed -
 /// every event is confirmed before the next, as in [`send_text`] - and
 /// [`SendError::Unsupported`] where there is no route.
-pub fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
-    platform::send_chords(chords)
+///
+/// `waiting` hears what the send stands on besides the keys, on the sending thread: only a
+/// Wayland session has anything to say (the window in which the person allows the keys,
+/// `D145` point 76), and every other route never calls it. It must return quickly.
+pub fn send_chords(chords: &[Chord], waiting: &mut dyn FnMut(Waiting)) -> Result<usize, SendError> {
+    #[cfg(target_os = "linux")]
+    {
+        platform::send_chords(chords, waiting)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = waiting;
+        platform::send_chords(chords)
+    }
 }
 
 /// Whether the system lets this program send keystrokes RIGHT NOW.
@@ -893,7 +920,7 @@ mod tests {
 
     #[test]
     fn no_chords_press_nothing_and_say_so() {
-        match send_chords(&[]) {
+        match send_chords(&[], &mut |_| {}) {
             Ok(pressed) => assert_eq!(pressed, 0),
             Err(SendError::Unsupported { .. }) => {}
             Err(other) => panic!("no chords must not fail this way: {other}"),

@@ -101,7 +101,7 @@ use nkb_app::advance_sequence::{InFlight, Ports, RouteRequest, Sent};
 use nkb_app::browse_packs::{Direction, list_packs};
 use nkb_app::ports::{
     Clearing, GivenShortcut, LiveShortcuts, Progress, SettingChange, Settings, SettingsStore,
-    ShortcutRegistration, Wait,
+    ShortcutRegistration, Wait, Waiting,
 };
 use nkb_app::{
     AdvanceSequence, Ended, KeptSettings, Message, Opening, Outcome, SettingsMessage,
@@ -460,6 +460,13 @@ pub fn drive(
         let view = in_flight_view(&in_flight, standing);
         let _ = palette.upgrade_in_event_loop(move |palette| apply_in_flight(&palette, view));
     };
+    // `D145` point 76: a press that stands on the window of the system says so in the message
+    // band, and takes the sentence down when the question is answered. Called on THIS thread,
+    // before the first key, so it too only hands a finished list to the main thread.
+    let on_waiting = |waiting: Waiting| {
+        let messages = waiting_messages(waiting, standing);
+        let _ = palette.upgrade_in_event_loop(move |palette| apply_waiting(&palette, messages));
+    };
     let ports = Ports {
         direct: &DirectInjection,
         by_clipboard: &by_clipboard,
@@ -468,6 +475,7 @@ pub fn drive(
         clipboard: &clipboard,
         report_text: &EnglishReport,
         progress: &on_the_way,
+        waiting: &on_waiting,
     };
 
     let mut kept = kept;
@@ -1679,6 +1687,33 @@ mod tests {
         assert!(!palette.get_has_value(), "keeping nothing showed something");
 
         // ---- a value on its way, then its outcome (`OBS-160`) ---------------
+        the_value_on_its_way_reaches_the_window(&palette);
+        apply(
+            &palette,
+            view_of(
+                &an_outcome(Some(a_sent()), Vec::new()),
+                "Unicode & text",
+                "u",
+                &quiet(),
+                &nkb_adapters::default_bindings(),
+            ),
+        );
+        assert!(
+            !palette.get_sending(),
+            "the outcome took the send band away"
+        );
+        assert_eq!(
+            palette.get_last_key().value,
+            "zero-width",
+            "and the value that went out is the one its Copy button names now"
+        );
+    }
+
+    /// The send band and the value band from one report, every field where it belongs
+    /// (`OBS-160`). Out of the one windowed test below, which stood at the ceiling of
+    /// `D113`: a second test cannot ask for a window (`a_palette`), so the parts of it
+    /// are functions.
+    fn the_value_on_its_way_reaches_the_window(palette: &Palette) {
         // The send band and the value band from one report, every field where
         // it belongs. Then any view of the worker's takes the band away.
         // Any sentence of the product's will do: what matters is that it goes.
@@ -1698,7 +1733,7 @@ mod tests {
             value: "nbsp".into(),
         };
         palette.set_last_key(sent_before.clone());
-        apply_in_flight(&palette, in_flight_view(&in_flight, &quiet()));
+        apply_in_flight(palette, in_flight_view(&in_flight, &quiet()));
         assert!(palette.get_sending(), "the send band is up");
         // `D98`: the value on its way has not been sent, so the Copy button of
         // the value band keeps naming the last one that was - and the band
@@ -1720,25 +1755,6 @@ mod tests {
             palette.get_messages().row_count(),
             0,
             "the sentence about the value before is stale once another goes"
-        );
-        apply(
-            &palette,
-            view_of(
-                &an_outcome(Some(a_sent()), Vec::new()),
-                "Unicode & text",
-                "u",
-                &quiet(),
-                &nkb_adapters::default_bindings(),
-            ),
-        );
-        assert!(
-            !palette.get_sending(),
-            "the outcome took the send band away"
-        );
-        assert_eq!(
-            palette.get_last_key().value,
-            "zero-width",
-            "and the value that went out is the one its Copy button names now"
         );
     }
 
@@ -2317,6 +2333,7 @@ mod tests {
             clipboard: &clipboard,
             report_text: &EnglishReport,
             progress: &|_| {},
+            waiting: &|_| {},
         };
         let standing = quiet();
         let mut worker = Worker {

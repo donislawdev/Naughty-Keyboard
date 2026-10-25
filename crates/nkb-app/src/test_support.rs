@@ -19,7 +19,7 @@ use crate::advance_sequence::{AdvanceSequence, InFlight, Ports};
 use crate::ports::{
     Availability, Clipboard, ClipboardError, Date, Delivered, DeliveryError, Following, History,
     KeystrokeError, KeystrokeSender, PackFormat, PackSource, Progress, ReportText, SourceError,
-    TargetInspector, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery,
+    TargetInspector, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery, Waiting,
 };
 use nkb_core::calendar::Day;
 use nkb_core::keys::KeyChord;
@@ -167,6 +167,8 @@ impl ValueDelivery for FakeDelivery {
 /// a test can prove that a route pressed NOTHING.
 pub(crate) struct FakeKeys {
     fail: Option<KeystrokeError>,
+    /// What a press says it waits for before its first key.
+    says: Vec<Waiting>,
     pub(crate) requests: RefCell<usize>,
 }
 
@@ -174,20 +176,36 @@ impl FakeKeys {
     pub(crate) fn working() -> Self {
         Self {
             fail: None,
+            says: Vec::new(),
             requests: RefCell::new(0),
         }
     }
     pub(crate) fn failing(error: KeystrokeError) -> Self {
         Self {
             fail: Some(error),
+            says: Vec::new(),
             requests: RefCell::new(0),
+        }
+    }
+    /// A press that stands on a window of the system, and says so (`D145` point 76).
+    pub(crate) fn asking_the_person() -> Self {
+        Self {
+            says: vec![Waiting::ForConsent, Waiting::Answered],
+            ..Self::working()
         }
     }
 }
 
 impl KeystrokeSender for FakeKeys {
-    fn send_keystrokes(&self, _chords: &[KeyChord]) -> Result<(), KeystrokeError> {
+    fn send_keystrokes(
+        &self,
+        _chords: &[KeyChord],
+        waiting: &mut dyn FnMut(Waiting),
+    ) -> Result<(), KeystrokeError> {
         *self.requests.borrow_mut() += 1;
+        for said in &self.says {
+            waiting(*said);
+        }
         match &self.fail {
             None => Ok(()),
             Some(error) => Err(error.clone()),
@@ -286,12 +304,18 @@ pub(crate) struct Kit {
     /// What the ports lend as `progress`: it writes into `heard`. Boxed and
     /// sharing `heard` through an `Rc`, so the kit does not borrow itself.
     pub(crate) ear: Box<dyn Fn(InFlight)>,
+    /// Every wait for the person heard before the first key, in order (`D145` point 76).
+    pub(crate) waited: Rc<RefCell<Vec<Waiting>>>,
+    /// What the ports lend as `waiting`: it writes into `waited`.
+    pub(crate) listening: Box<dyn Fn(Waiting)>,
 }
 
 impl Kit {
     pub(crate) fn ready() -> Self {
         let heard = Rc::new(RefCell::new(Vec::new()));
         let into = Rc::clone(&heard);
+        let waited = Rc::new(RefCell::new(Vec::new()));
+        let into_waited = Rc::clone(&waited);
         Self {
             direct: FakeDelivery::ready(),
             by_clipboard: FakeDelivery::ready(),
@@ -306,6 +330,8 @@ impl Kit {
             },
             heard,
             ear: Box::new(move |in_flight| into.borrow_mut().push(in_flight)),
+            waited,
+            listening: Box::new(move |waiting| into_waited.borrow_mut().push(waiting)),
         }
     }
     pub(crate) fn with_delivery(direct: FakeDelivery) -> Self {
@@ -347,6 +373,7 @@ impl Kit {
             clipboard: &self.clipboard,
             report_text: &self.text,
             progress: &*self.ear,
+            waiting: &*self.listening,
         }
     }
 }

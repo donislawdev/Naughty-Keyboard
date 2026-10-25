@@ -39,11 +39,15 @@ use crate::linux_clearing_rules::{
 };
 use crate::linux_ibus_rules::{DEADLINE, FOCUS_SETTLE, engine_to_restore};
 use crate::portal::Unavailable;
-use crate::{Chord, MODIFIER_RELEASE_WAIT, SendError, StopReason};
+use crate::{Chord, MODIFIER_RELEASE_WAIT, SendError, StopReason, Waiting};
 
 /// Presses `chords` in order, each as a complete press and release, on the field that has the
 /// focus, with the engine standing guard over every key. Returns how many were pressed.
-pub(crate) fn press_chords(chords: &[Chord]) -> Result<usize, SendError> {
+/// `waiting` hears that the window of the system stands, if it does (`D145` point 76).
+pub(crate) fn press_chords(
+    chords: &[Chord],
+    waiting: &mut dyn FnMut(Waiting),
+) -> Result<usize, SendError> {
     if chords.is_empty() {
         // Nothing to press, so nothing to ask of anybody.
         return Ok(0);
@@ -51,7 +55,7 @@ pub(crate) fn press_chords(chords: &[Chord]) -> Result<usize, SendError> {
     let socket = daemon::locate().map_err(|_| unsupported_keys(Unavailable::NoBus))?;
     // The agreement first: a window of the system that waits for the person must not have
     // the engine of this program standing in for their keyboard meanwhile.
-    let keys = Keys::open().map_err(unsupported_keys)?;
+    let keys = Keys::open(waiting).map_err(unsupported_keys)?;
     let mut session =
         Session::begin(&socket, DEADLINE).map_err(|_| unsupported_keys(Unavailable::NoBus))?;
     let result = run(&mut session, &keys, chords);

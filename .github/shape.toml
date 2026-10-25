@@ -57,18 +57,22 @@ band = 0.7
 # when the notes under a send went to sent_notes.rs with the one about the
 # system's text substitutions. 983 since 2026-10-23, when the line before a
 # send, where the value is about to go, went to target_line.rs with the sentence
-# for a session that cannot name the window.
+# for a session that cannot name the window. 969 since 2026-10-25, when what
+# nkb send says on its way went to on_the_way.rs with the line for a clearing
+# that waits for the person to allow the keys.
 # near = 4 since 2026-10-19: the ceiling came down by 104, and the band with it,
 # so three files that did not grow joined it (advance_sequence.rs, toml_pack.rs
 # and picker.rs). The count is the owner's to accept, as it was for toml_pack.rs.
+# 5 since 2026-10-25, the owner's choice: the ceiling came down to 969 and
+# nkb-adapters/src/i18n.rs, which did not grow, joined at 688.
 [files.rust-product]
-ceiling = 983
-near = 4
+ceiling = 969
+near = 5
 
 # A whole Rust file, its tests included. nkb-gui/src/live.rs, then
 # nkb-adapters/src/i18n.rs at 2101.
 [files.rust-whole]
-ceiling = 2233
+ceiling = 2204
 # 5 since 2026-10-10, the owner's choice twice that day: the ceiling came down
 # from 2907 to 2481, 2408, 2407 and 2363 as live.rs moved code into modules, the
 # band came down with it, and it reached advance_sequence.rs, settings_file.rs
@@ -81,8 +85,14 @@ ceiling = 2233
 # 2026-10-15, when a test of live.rs named its value by the helper the module
 # already had. Below 2195 it would reach keep_settings.rs at 1536. 5 since
 # 2026-10-23, when nkb-cli's main.rs gave the line before a send and its tests
-# to target_line.rs and fell out of the band at 1679.
-near = 5
+# to target_line.rs and fell out of the band at 1679. 2204 since 2026-10-25,
+# when the test of the palette's labels moved from nkb-adapters/src/i18n.rs,
+# which a new label had taken to the ceiling, to the file that defines the
+# labels, and the tests of the sentence for a clearing that waits for the
+# person went to live/view.rs beside it, and live.rs is the largest again. 6 since
+# the same day, the owner's choice: nkb-app/src/keep_settings.rs, which did not
+# grow, joined the band at 1561.
+near = 6
 
 # A Slint file, the gallery excepted. ui/screens/palette.slint since the fold
 # of its shortcut list (2026-10-11), then ui/components/list.slint at 260 once

@@ -44,9 +44,9 @@ pub use ports::{
     RECENT_KEPT, SaveError, SettingChange, Settings, SettingsLoad, SettingsNote, SettingsStore,
     SettingsUnusable, ShortcutRegistration, ShortcutUnreadable, ShortcutsUnavailable, SinkError,
     SourceError, SourceSkipped, StopReason, TargetInspector, TargetRef, TranslationCheck,
-    TranslationTarget, ValueDelivery, Wait,
+    TranslationTarget, ValueDelivery, Wait, Waiting,
 };
 pub use send_value::{
-    Chosen, Clearing, ClearingOutcome, SendOutcome, SendRequest, Sending, SkipReason, ValueFacts,
-    deliver_value, send_value,
+    Chosen, Clearing, ClearingOutcome, OnTheWay, SendOutcome, SendRequest, Sending, SkipReason,
+    ValueFacts, deliver_value, send_value,
 };

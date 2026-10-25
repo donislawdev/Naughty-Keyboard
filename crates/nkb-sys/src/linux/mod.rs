@@ -41,7 +41,7 @@ pub(crate) mod portal;
 mod send;
 pub(crate) mod window;
 
-use crate::{SendError, SendOutcome, SendProgress, WindowRef};
+use crate::{SendError, SendOutcome, SendProgress, Waiting, WindowRef};
 
 // `route_refusal` is the question of a real X server alone, which is what the grab of a
 // shortcut asks: a Wayland session has the portal instead (`grab_refused_by_wayland` says
@@ -98,10 +98,14 @@ pub(crate) fn send_text(
 /// Presses the keys that clear a field. On a Wayland session they go through the remote-desktop
 /// portal with the engine of the input method standing guard over each (`ibus::press_chords`).
 /// On an X11 session they are the keys of the layout, pressed through XTEST, with the server
-/// saying whether a modifier is in the way (`send::send_chords`).
-pub(crate) fn send_chords(chords: &[crate::Chord]) -> Result<usize, SendError> {
+/// saying whether a modifier is in the way (`send::send_chords`). Only the first has a person
+/// to wait for, and says so through `waiting` (`D145` point 76).
+pub(crate) fn send_chords(
+    chords: &[crate::Chord],
+    waiting: &mut dyn FnMut(Waiting),
+) -> Result<usize, SendError> {
     if connect::wayland_session() {
-        ibus::press_chords(chords)
+        ibus::press_chords(chords, waiting)
     } else {
         send::send_chords(chords)
     }
