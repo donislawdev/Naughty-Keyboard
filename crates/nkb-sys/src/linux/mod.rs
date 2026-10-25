@@ -97,7 +97,8 @@ pub(crate) fn send_text(
 
 /// Presses the keys that clear a field. On a Wayland session they go through the remote-desktop
 /// portal with the engine of the input method standing guard over each (`ibus::press_chords`).
-/// On an X11 session this build does not press them yet.
+/// On an X11 session they are the keys of the layout, pressed through XTEST, with the server
+/// saying whether a modifier is in the way (`send::send_chords`).
 pub(crate) fn send_chords(chords: &[crate::Chord]) -> Result<usize, SendError> {
     if connect::wayland_session() {
         ibus::press_chords(chords)
@@ -107,10 +108,15 @@ pub(crate) fn send_chords(chords: &[crate::Chord]) -> Result<usize, SendError> {
 }
 
 /// Whether this session has a route for the keys that clear a field: a Wayland session with an
-/// input method to stand guard. Whether the person allows the portal to press them is asked
-/// when they are pressed, because the answer is a window of the system.
+/// input method to stand guard, or a local X server with XTEST. Whether the person allows the
+/// portal to press them is asked when they are pressed, because the answer is a window of the
+/// system, and whether the layout has the keys is found out when they are pressed.
 pub(crate) fn can_press_chords() -> bool {
-    connect::wayland_session() && ibus::refusal().is_none()
+    if connect::wayland_session() {
+        ibus::refusal().is_none()
+    } else {
+        connect::route_refusal().is_none()
+    }
 }
 
 /// The connection to the server failed in the middle of a question. Nothing more

@@ -192,6 +192,9 @@ pub(crate) enum Refusal {
     NoXtest,
     /// Every key of the server has a symbol, so there is none to type through.
     NoSpareKeys,
+    /// The layout has no key for `Home`, `End` or `Delete`, or the server names no
+    /// `Shift`, so the keys that clear a field cannot be pressed (`D145` point 75).
+    NoClearingKeys,
 }
 
 impl Refusal {
@@ -203,6 +206,9 @@ impl Refusal {
             Self::NoLocalServer => "Linux without a local X server",
             Self::NoXtest => "Linux on an X server without the XTEST extension",
             Self::NoSpareKeys => "Linux on an X server with no spare keys to type through",
+            Self::NoClearingKeys => {
+                "Linux on an X server whose keyboard has no Home, End, Delete or Shift key"
+            }
         }
     }
 }
@@ -811,6 +817,7 @@ mod tests {
             Refusal::NoLocalServer,
             Refusal::NoXtest,
             Refusal::NoSpareKeys,
+            Refusal::NoClearingKeys,
         ];
         for (index, one) in all.iter().enumerate() {
             assert!(one.system().starts_with("Linux "), "{}", one.system());

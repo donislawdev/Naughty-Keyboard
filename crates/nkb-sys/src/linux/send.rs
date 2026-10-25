@@ -46,6 +46,9 @@ use super::connect::{Server, connect, environment_route};
 use super::escape::{ReservedEscape, XEscape};
 use super::front::{PingAtoms, focus, focused_toplevel, ping_atoms, ping_target};
 use crate::cadence::{Cadence, PROGRESS_INTERVAL};
+use crate::linux_clearing_rules::{
+    NoKey, acted_after_silence, keys_for, modifier_stop, state_holds,
+};
 use crate::linux_rules::{
     Batch, FIRST_BATCH_CHARS, KEYSYM_ESCAPE, Keymap, LOOK_EVERY, LayoutKey, LayoutKeys,
     PING_ANSWER_MASK, PING_WAIT, REMAP_SETTLE, Refusal, UNPACED_SETTLE, WARMUP_SETTLE,
@@ -56,17 +59,123 @@ use crate::{
     Chord, Following, MODIFIER_RELEASE_WAIT, SendError, SendOutcome, SendProgress, StopReason,
 };
 
-/// What this system is called when a route cannot be named more closely.
-const SYSTEM: &str = "Linux";
-
-/// Clearing needs a field that is KNOWN to be one (`D76`), and the kind of field
-/// is read through accessibility, which this route does not have yet.
+/// Presses the keys that clear a field, each as its own key of the layout, with the server
+/// saying before every chord whether a modifier is in the way (`D145` point 75).
+///
+/// The order of one clearing, and the reason for each step:
+///
+/// 1. the layout must have a key for every chord, or nothing is pressed: a recipe that
+///    stops after `Shift+End` leaves the line selected,
+/// 2. the application is asked once whether it is reading at all, because a key of the
+///    layout stays with the application and is taken whenever it runs again: a program
+///    found stopped after the keys went would be said to have taken nothing while it
+///    holds them,
+/// 3. a modifier that is down, latched or locked is waited for. Under `Ctrl`, `Home` is the
+///    start of the document and `Shift+End` selects to its end, so the recipe would delete
+///    the document. The server sees the keys of the hand and says so, which no portal on a
+///    Wayland session does,
+/// 4. before each chord `Escape` and the window in front are looked at as for typing, and the
+///    server is asked again for a modifier: one that turned up since the last chord stops
+///    the clearing where it is, because `Delete` would remove what is left of a line,
+/// 5. each chord is answered by the application before the next goes, as a batch of
+///    characters is.
+///
+/// Clearing needs a field that is KNOWN to be one (`D76`), and that is decided before this.
 pub(crate) fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
     if chords.is_empty() {
-        // Nothing to press, so nothing to be unable to press.
+        // Nothing to press, so nothing to connect to.
         return Ok(0);
     }
-    Err(SendError::Unsupported { system: SYSTEM })
+    let total = chords.len();
+    let address = environment_route().map_err(unsupported)?;
+    let server = connect(address).map_err(unsupported)?;
+    let lost = |_: Lost| unsupported(Refusal::NoLocalServer);
+    let keyboard = read_keyboard(&server.conn).map_err(lost)?;
+    let keys = keys_for(chords, &keyboard.keymap, keyboard.shift_key)
+        .map_err(|NoKey| unsupported(Refusal::NoClearingKeys))?;
+    let Some(front) = focused_toplevel(&server.conn, server.root).map_err(lost)? else {
+        return Err(chords_stopped(0, total, StopReason::FocusMoved));
+    };
+    let pinged = pinged_window(&server).map_err(lost)?;
+    // Declared before the keys, so `Escape` is given back when the clearing is over.
+    let mut escape = XEscape::reserve(address, keyboard.keymap.find_keycode(KEYSYM_ESCAPE));
+    if let Some(pinged) = pinged {
+        alive(&server, pinged).map_err(|reason| chords_stopped(0, total, reason))?;
+    }
+    wait_for_modifiers(&server, &keyboard)?;
+    let recipe = Recipe {
+        server: &server,
+        keyboard: &keyboard,
+        front,
+        pinged,
+        total,
+    };
+    for (number, key) in keys.iter().enumerate() {
+        recipe.press(&mut escape, number, *key)?;
+    }
+    Ok(total)
+}
+
+/// What the chords of one clearing are pressed against.
+struct Recipe<'a> {
+    server: &'a Server,
+    keyboard: &'a Keyboard,
+    /// The window in front when the clearing began.
+    front: u32,
+    pinged: Option<Pinged>,
+    total: usize,
+}
+
+impl Recipe<'_> {
+    /// Chord number `number`, once nothing is found in the way, and its answer.
+    fn press(
+        &self,
+        escape: &mut ReservedEscape,
+        number: usize,
+        key: LayoutKey,
+    ) -> Result<(), SendError> {
+        let stopped = |reason| chords_stopped(number, self.total, reason);
+        if let Some(reason) = stop_before_next(self.server, self.front, escape) {
+            return Err(stopped(reason));
+        }
+        match modifier_in_the_way(self.server, self.keyboard) {
+            Ok(Some(name)) => return Err(modifier_stop(name, number, self.total)),
+            Ok(None) => {}
+            Err(Lost) => return Err(stopped(StopReason::Dropped)),
+        }
+        let sent = tap_layout_key(self.server, self.keyboard.shift_key, key)
+            .and_then(|()| self.server.conn.flush().map_err(Lost::from));
+        if sent.is_err() {
+            return Err(stopped(StopReason::Dropped));
+        }
+        // From here the keys are on the wire. An application that gives no answer holds
+        // them and takes them when it runs again, so the chord counts as having acted.
+        self.answered(number)
+            .map_err(|reason| chords_stopped(acted_after_silence(number), self.total, reason))
+    }
+
+    /// The application's answer to the keys just sent: a ping, or a pause for one that
+    /// does not take part in the protocol.
+    fn answered(&self, number: usize) -> Result<(), StopReason> {
+        let Some(pinged) = self.pinged else {
+            std::thread::sleep(UNPACED_SETTLE);
+            return Ok(());
+        };
+        let counter = u32::try_from(number).unwrap_or(u32::MAX - 1);
+        match ping(self.server, pinged, ping_token(std::process::id(), counter)) {
+            Ok(Answer::TimedOut) => Err(StopReason::NotTaking),
+            Ok(_) => Ok(()),
+            Err(Lost) => Err(StopReason::Dropped),
+        }
+    }
+}
+
+fn chords_stopped(chords_sent: usize, chords_expected: usize, reason: StopReason) -> SendError {
+    SendError::ChordsTruncated {
+        chords_sent,
+        chords_expected,
+        reason,
+    }
 }
 
 fn unsupported(refusal: Refusal) -> SendError {
@@ -276,6 +385,31 @@ fn modifier_down(server: &Server, keyboard: &Keyboard) -> Result<Option<&'static
     ))
 }
 
+/// The modifier that would change what a key of the recipe does, if one is in the way: a
+/// key of it that is down, or one the state of the server says is latched or locked.
+fn modifier_in_the_way(server: &Server, keyboard: &Keyboard) -> Result<Option<&'static str>, Lost> {
+    if let Some(name) = modifier_down(server, keyboard)? {
+        return Ok(Some(name));
+    }
+    let state = server.conn.query_pointer(server.root)?.reply()?.mask;
+    Ok(state_holds(u16::from(state)))
+}
+
+/// Waits for every modifier to come up, for at most `MODIFIER_RELEASE_WAIT`. Caps Lock is
+/// not looked at: the keys of the recipe are not letters, and it does not change them.
+fn wait_for_modifiers(server: &Server, keyboard: &Keyboard) -> Result<(), SendError> {
+    let deadline = Instant::now() + MODIFIER_RELEASE_WAIT;
+    while let Some(key) =
+        modifier_in_the_way(server, keyboard).map_err(|_| unsupported(Refusal::NoLocalServer))?
+    {
+        if Instant::now() >= deadline {
+            return Err(SendError::ModifierHeld { key });
+        }
+        std::thread::sleep(LOOK_EVERY);
+    }
+    Ok(())
+}
+
 /// Waits for every modifier to come up, for at most `MODIFIER_RELEASE_WAIT`, and
 /// then refuses Caps Lock. The modifier is the ordinary case right after a hotkey.
 /// Caps Lock is a state somebody left on, and waiting for it would be waiting for
@@ -409,11 +543,16 @@ fn warm_up(server: &Server, keycode: u8) -> Result<(), Lost> {
 /// on the first batch, `OBS-212`). Found out here, nothing was sent and that is what
 /// the person is told.
 fn confirm_alive(server: &Server, pinged: Pinged, expected: usize) -> Result<(), SendError> {
+    alive(server, pinged).map_err(|reason| truncated(0, expected, reason))
+}
+
+/// Whether the application answers a ping at all, and if it does not, why the send stops.
+fn alive(server: &Server, pinged: Pinged) -> Result<(), StopReason> {
     let token = ping_token(std::process::id(), u32::MAX);
     match ping(server, pinged, token) {
-        Ok(Answer::TimedOut) => Err(truncated(0, expected, StopReason::NotTaking)),
+        Ok(Answer::TimedOut) => Err(StopReason::NotTaking),
         Ok(_) => Ok(()),
-        Err(Lost) => Err(truncated(0, expected, StopReason::Dropped)),
+        Err(Lost) => Err(StopReason::Dropped),
     }
 }
 

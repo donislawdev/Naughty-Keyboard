@@ -11452,6 +11452,87 @@
       "replace": "                let outcome = if repeat {\n                    ShortcutRegistration::NotGiven\n",
       "test": "shortcuts::tests::a_taken_combination_is_reported_beside_the_others_not_as_an_error",
       "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1485",
+      "why": "the state of the server is read without its modifier bits, so a held Ctrl is not named",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "held_name(u32::from(state) & MODIFIERS)",
+      "replace": "held_name(u32::from(state) & !MODIFIERS)",
+      "test": "linux_clearing_rules::tests::the_state_of_the_server_names_the_modifier_that_is_in_the_way",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1486",
+      "why": "a chord with Shift is accepted when the server names no Shift key",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "if chord.shift && shift_key.is_none() {",
+      "replace": "if chord.shift && shift_key.is_some() {",
+      "test": "linux_clearing_rules::tests::shift_is_needed_only_by_a_chord_that_has_it",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1487",
+      "why": "a key that only a level or a group of the layout reaches is taken for the key of that name",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "keymap.find_keycode(keysym_of(chord.key)).ok_or(NoKey)?",
+      "replace": "keymap.find_keycode_anywhere(keysym_of(chord.key)).ok_or(NoKey)?",
+      "test": "linux_clearing_rules::tests::a_key_reached_only_through_a_level_or_a_group_is_not_the_key_of_that_name",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1488",
+      "why": "a key the layout lacks is pressed as key zero instead of refusing the whole recipe",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "keymap.find_keycode(keysym_of(chord.key)).ok_or(NoKey)?;",
+      "replace": "keymap.find_keycode(keysym_of(chord.key)).unwrap_or(0);",
+      "test": "linux_clearing_rules::tests::a_layout_that_lacks_a_key_of_the_recipe_presses_none_of_it",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1489",
+      "why": "the Shift of a chord is dropped from the key that presses it",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "                keycode,\n                shift: chord.shift,\n",
+      "replace": "                keycode,\n                shift: false,\n",
+      "test": "linux_clearing_rules::tests::the_keys_of_the_layout_press_the_chords_in_the_order_of_the_recipe",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1490",
+      "why": "a modifier before the first chord stops the clearing instead of being refused by name",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "    if number == 0 {\n        SendError::ModifierHeld { key: name }",
+      "replace": "    if number != 0 {\n        SendError::ModifierHeld { key: name }",
+      "test": "linux_clearing_rules::tests::a_modifier_before_the_first_chord_is_refused_and_after_it_stops_the_clearing",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1491",
+      "why": "a modifier after the first chord reports no chord as acted",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "            chords_sent: number,\n            chords_expected: total,\n",
+      "replace": "            chords_sent: 0,\n            chords_expected: total,\n",
+      "test": "linux_clearing_rules::tests::a_modifier_before_the_first_chord_is_refused_and_after_it_stops_the_clearing",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1492",
+      "why": "a clearing stopped by a modifier is reported as stopped by Escape",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "            chords_expected: total,\n            reason: StopReason::Dropped,\n",
+      "replace": "            chords_expected: total,\n            reason: StopReason::Escape,\n",
+      "test": "linux_clearing_rules::tests::a_modifier_before_the_first_chord_is_refused_and_after_it_stops_the_clearing",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1493",
+      "why": "a chord whose question got no answer is not counted as having acted",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "    number + 1\n}",
+      "replace": "    number\n}",
+      "test": "linux_clearing_rules::tests::a_chord_whose_question_got_no_answer_has_acted",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }

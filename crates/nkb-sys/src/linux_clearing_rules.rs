@@ -1,5 +1,6 @@
-//! What clearing a field on a Wayland session decides without a bus, so that it is tested on
-//! every system (`D145` point 74, `OBS-229`).
+//! What clearing a field on a Linux session decides without a bus or a server, so that it is
+//! tested on every system (`D145` points 74 and 75, `OBS-229`). The first half is the Wayland
+//! session, the last section is the X11 one.
 //!
 //! # What was measured before this was written
 //!
@@ -28,8 +29,9 @@
 use core::time::Duration;
 
 use crate::linux_ibus_rules::IBUS_MODIFIER_MASK;
+use crate::linux_rules::{Keymap, LayoutKey};
 use crate::portal::Unavailable;
-use crate::{Chord, NavKey, StopReason};
+use crate::{Chord, NavKey, SendError, StopReason};
 
 /// The keysyms of the keys of the recipe and of the `Shift` that goes with one of them.
 pub(crate) const KEYSYM_SHIFT_L: u32 = 0xffe1;
@@ -288,6 +290,72 @@ pub(crate) fn usable_token(content: &str) -> Option<&str> {
         && token.len() <= TOKEN_LONGEST
         && token.bytes().all(|byte| byte.is_ascii_graphic()))
     .then_some(token)
+}
+
+// ---------------------------------------------------------------------------
+// The same keys on an X server
+// ---------------------------------------------------------------------------
+
+/// The modifier the state of an X server holds, down, latched or locked, that would change what
+/// a key of the recipe does. The lock bits, Num Lock, the buttons and the layout group are not
+/// among them. The server sees a key of the hand before any client does and has no portal or
+/// engine between, so this is the sensor that the engine is on a Wayland session. The bits of
+/// the modifiers are the same in the state of a server and in the state an engine is handed.
+pub(crate) fn state_holds(state: u16) -> Option<&'static str> {
+    held_name(u32::from(state) & MODIFIERS)
+}
+
+/// The layout has no key for a chord of the recipe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct NoKey;
+
+/// The keys of the layout that press `chords`, in order, each with whether `Shift` goes with it.
+/// `shift_key` is the key the server counts as `Shift`. Nothing is pressed unless every chord has
+/// its key: a recipe that stops after `Shift+End` leaves the line selected. A key counts when the
+/// layout has its keysym on the first level, as the key of that name is on every layout, and not
+/// when only a level or a group of the layout reaches it.
+pub(crate) fn keys_for(
+    chords: &[Chord],
+    keymap: &Keymap,
+    shift_key: Option<u8>,
+) -> Result<Vec<LayoutKey>, NoKey> {
+    chords
+        .iter()
+        .map(|chord| {
+            if chord.shift && shift_key.is_none() {
+                return Err(NoKey);
+            }
+            let keycode = keymap.find_keycode(keysym_of(chord.key)).ok_or(NoKey)?;
+            Ok(LayoutKey {
+                keycode,
+                shift: chord.shift,
+            })
+        })
+        .collect()
+}
+
+/// What a modifier found in the way before chord number `number` (counting from zero) makes of
+/// the clearing. Before the first chord nothing was pressed, so it is refused by name, as a
+/// modifier held at the start of any send is. From the second chord on, keys acted already and
+/// the clearing stops where it is, because `Delete` would remove what is left of a line.
+pub(crate) fn modifier_stop(name: &'static str, number: usize, total: usize) -> SendError {
+    if number == 0 {
+        SendError::ModifierHeld { key: name }
+    } else {
+        SendError::ChordsTruncated {
+            chords_sent: number,
+            chords_expected: total,
+            reason: StopReason::Dropped,
+        }
+    }
+}
+
+/// How many chords have acted when the application gave no answer after chord number `number`
+/// (counting from zero). Its keys went to the server before the question was asked, and an
+/// application that runs again takes them, so that chord counts: the field is then in a state
+/// between untouched and cleared, and the person is told so.
+pub(crate) const fn acted_after_silence(number: usize) -> usize {
+    number + 1
 }
 
 #[cfg(test)]
@@ -615,5 +683,129 @@ mod tests {
             REMOTE_DESKTOP_INTERFACE,
             "org.freedesktop.portal.RemoteDesktop"
         );
+    }
+
+    /// A map of four columns, two levels of each of two groups, from keycode 9 on.
+    fn map_of(rows: &[[u32; 4]]) -> Keymap {
+        Keymap::new(9, 4, rows.iter().flatten().copied().collect())
+    }
+
+    fn key_on_every_column(keysym: u32) -> [u32; 4] {
+        [keysym, 0, keysym, 0]
+    }
+
+    fn recipe() -> [Chord; 3] {
+        [
+            Chord {
+                key: NavKey::Home,
+                shift: false,
+            },
+            Chord {
+                key: NavKey::End,
+                shift: true,
+            },
+            Chord {
+                key: NavKey::Delete,
+                shift: false,
+            },
+        ]
+    }
+
+    #[test]
+    fn the_keys_of_the_layout_press_the_chords_in_the_order_of_the_recipe() {
+        let keymap = map_of(&[
+            key_on_every_column(KEYSYM_HOME),
+            key_on_every_column(KEYSYM_END),
+            key_on_every_column(KEYSYM_DELETE),
+        ]);
+        assert_eq!(
+            keys_for(&recipe(), &keymap, Some(50)),
+            Ok(vec![
+                LayoutKey {
+                    keycode: 9,
+                    shift: false
+                },
+                LayoutKey {
+                    keycode: 10,
+                    shift: true
+                },
+                LayoutKey {
+                    keycode: 11,
+                    shift: false
+                },
+            ])
+        );
+        assert_eq!(keys_for(&[], &keymap, None), Ok(Vec::new()));
+    }
+
+    #[test]
+    fn a_layout_that_lacks_a_key_of_the_recipe_presses_none_of_it() {
+        // `Home` and `Shift+End` alone would leave the line selected.
+        let keymap = map_of(&[
+            key_on_every_column(KEYSYM_HOME),
+            key_on_every_column(KEYSYM_END),
+        ]);
+        assert_eq!(keys_for(&recipe(), &keymap, Some(50)), Err(NoKey));
+        assert!(keys_for(&recipe()[..2], &keymap, Some(50)).is_ok());
+    }
+
+    #[test]
+    fn shift_is_needed_only_by_a_chord_that_has_it() {
+        let keymap = map_of(&[
+            key_on_every_column(KEYSYM_HOME),
+            key_on_every_column(KEYSYM_END),
+            key_on_every_column(KEYSYM_DELETE),
+        ]);
+        assert_eq!(keys_for(&recipe(), &keymap, None), Err(NoKey));
+        assert!(keys_for(&[recipe()[0], recipe()[2]], &keymap, None).is_ok());
+    }
+
+    #[test]
+    fn a_key_reached_only_through_a_level_or_a_group_is_not_the_key_of_that_name() {
+        let chord = [recipe()[0]];
+        for row in [[0, KEYSYM_HOME, 0, 0], [0, 0, KEYSYM_HOME, 0]] {
+            assert_eq!(keys_for(&chord, &map_of(&[row]), None), Err(NoKey));
+        }
+    }
+
+    #[test]
+    fn the_state_of_the_server_names_the_modifier_that_is_in_the_way() {
+        // The bits of the state of a server: Shift 0, Lock 1, Control 2, Mod1 3, Mod2 4,
+        // Mod4 6, Mod5 7, the buttons from 8 and the layout group from 13.
+        assert_eq!(state_holds(0), None);
+        assert_eq!(state_holds(0x02 | 0x10), None, "Caps Lock and Num Lock");
+        assert_eq!(state_holds(0x1F00), None, "the buttons");
+        assert_eq!(state_holds(0x6000), None, "the layout group");
+        assert_eq!(state_holds(0x04), Some("Ctrl"));
+        assert_eq!(state_holds(0x08), Some("Alt"));
+        assert_eq!(state_holds(0x01), Some("Shift"));
+        assert_eq!(state_holds(0x40), Some("Super"));
+        assert_eq!(state_holds(0x80), Some("AltGr"));
+        assert_eq!(state_holds(0x04 | 0x08 | 0x01), Some("Ctrl"));
+        assert_eq!(state_holds(0x6000 | 0x02 | 0x08), Some("Alt"));
+    }
+
+    #[test]
+    fn a_modifier_before_the_first_chord_is_refused_and_after_it_stops_the_clearing() {
+        assert_eq!(
+            modifier_stop("Ctrl", 0, 3),
+            SendError::ModifierHeld { key: "Ctrl" }
+        );
+        for number in [1, 2] {
+            assert_eq!(
+                modifier_stop("Alt", number, 3),
+                SendError::ChordsTruncated {
+                    chords_sent: number,
+                    chords_expected: 3,
+                    reason: StopReason::Dropped,
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn a_chord_whose_question_got_no_answer_has_acted() {
+        assert_eq!(acted_after_silence(0), 1);
+        assert_eq!(acted_after_silence(2), 3);
     }
 }
