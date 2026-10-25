@@ -114,9 +114,6 @@ other = "Read the documentation"
 [view_on_github]
 other = "View on GitHub"
 
-[honest_limits]
-other = "Honest limits"
-
 # ---- a value, the way the palette shows it ----------------------------------
 
 [invisible_character]

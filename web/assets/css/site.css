@@ -825,21 +825,6 @@ pre .stderr {
   font-size: var(--size-small);
 }
 
-/* callout */
-
-.callout {
-  border-left: 3px solid var(--risk);
-  background: var(--surface-raised);
-  border-radius: 0 var(--radius-card) var(--radius-card) 0;
-  padding: var(--space-4) var(--space-5);
-  color: var(--text-secondary);
-  font-size: var(--size-small);
-}
-
-.callout strong {
-  color: var(--text-primary);
-}
-
 /* call to action */
 
 .cta {
