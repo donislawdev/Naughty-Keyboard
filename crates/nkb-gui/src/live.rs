@@ -120,6 +120,7 @@ use crate::typeface::SHIPPED;
 // The view's own copy of a key: the same two identifiers, as Slint holds them.
 use crate::{HintRow, Marker, Palette, ValueKey as ShownKey};
 
+mod aside;
 mod copy;
 mod entry;
 mod folds;
@@ -130,6 +131,7 @@ mod recent;
 mod taking;
 mod view;
 
+use aside::Question;
 use copy::show_copied;
 pub use copy::{CopyButton, copy_command, label_copies};
 use folds::Collapse;
@@ -460,13 +462,12 @@ pub fn drive(
         let view = in_flight_view(&in_flight, standing);
         let _ = palette.upgrade_in_event_loop(move |palette| apply_in_flight(&palette, view));
     };
-    // `D145` point 76: a press that stands on the window of the system says so in the message
-    // band, and takes the sentence down when the question is answered. Called on THIS thread,
-    // before the first key, so it too only hands a finished list to the main thread.
-    let on_waiting = |waiting: Waiting| {
-        let messages = waiting_messages(waiting, standing);
-        let _ = palette.upgrade_in_event_loop(move |palette| apply_waiting(&palette, messages));
-    };
+    // `D145` points 76 and 77: a press that stands on the window of the system says so in the
+    // message band, takes the sentence down when the question is answered, and has the palette
+    // off the top before the window opens and back on it after. Called on THIS thread, before
+    // the first key, so it only hands finished work to the main thread.
+    let question = Question::new(palette, standing);
+    let on_waiting = |waiting: Waiting| question.on(waiting);
     let ports = Ports {
         direct: &DirectInjection,
         by_clipboard: &by_clipboard,

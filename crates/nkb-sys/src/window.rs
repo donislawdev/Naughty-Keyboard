@@ -163,6 +163,82 @@ pub fn take_foreground(window: WindowRef) -> Result<(), FocusError> {
     platform::take_foreground(window)
 }
 
+/// Why a window could not leave the top of the other windows, or go back there.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StackingError {
+    /// The window manager has not created the window, so there is no handle to act on.
+    HandleUnavailable,
+    /// The window was asked to leave the top and the read-back shows it still there, so it
+    /// may cover the window of the system that asks the person something.
+    NotAside,
+    /// The window was asked to go back to the top and the read-back does not show it, so it
+    /// may stay behind the application under test.
+    NotBack,
+}
+
+impl core::fmt::Display for StackingError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::HandleUnavailable => write!(
+                f,
+                "the window manager did not hand out a window handle in time"
+            ),
+            Self::NotAside => write!(f, "the window manager kept the palette on top"),
+            Self::NotBack => write!(f, "the window manager did not put the palette back on top"),
+        }
+    }
+}
+
+/// What a window stood as before [`step_aside`], so that [`step_back`] puts back exactly
+/// that and nothing else. Hold it for as long as the window is aside.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Aside(#[cfg(target_os = "linux")] Option<crate::linux_window_rules::Stood>);
+
+/// Takes `window`, which stands above the other windows, off the top - for the time the
+/// system shows a window of its own that asks the person something. A window that stays on
+/// top keeps its place above such a window, and one that leaves it AFTER that window has
+/// opened is put on top of the layer it goes to, which is above the window of the system
+/// all the same: measured 2026-10-25 on GNOME 50 (`D145` point 77). So this is to be called
+/// BEFORE the question is put, and [`step_back`] after the answer.
+///
+/// Where no window of the system opens over ours - Windows, macOS, a server of X11 that is
+/// not the one inside a Wayland compositor - there is nothing to step aside from, and
+/// nothing is done.
+///
+/// # Errors
+///
+/// [`StackingError::NotAside`] when the read-back does not show the window off the top,
+/// [`StackingError::HandleUnavailable`] when there is no handle.
+pub fn step_aside(window: WindowRef) -> Result<Aside, StackingError> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::window::step_aside(window).map(Aside)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = window;
+        Ok(Aside())
+    }
+}
+
+/// Puts `window` back where [`step_aside`] took it from: above the other windows.
+///
+/// # Errors
+///
+/// [`StackingError::NotBack`] when the read-back does not show it, and so it may stay behind
+/// the application under test, [`StackingError::HandleUnavailable`] when there is no handle.
+pub fn step_back(window: WindowRef, aside: &Aside) -> Result<(), StackingError> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::window::step_back(window, aside.0.as_ref())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (window, aside);
+        Ok(())
+    }
+}
+
 /// Why a window's menu could not be kept from opening from the keyboard.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KeyMenuError {
@@ -510,5 +586,15 @@ mod tests {
             text.contains("Alt+Space") && text.contains("next key"),
             "the cost is named: {text}"
         );
+    }
+
+    #[test]
+    fn a_window_that_could_not_change_its_place_says_which_way_it_failed() {
+        // The caller shows this to the tester, so the two ways must not read alike.
+        let aside = StackingError::NotAside.to_string();
+        let back = StackingError::NotBack.to_string();
+        assert!(aside.contains("kept"), "{aside}");
+        assert!(back.contains("back on top"), "{back}");
+        assert_ne!(aside, back);
     }
 }

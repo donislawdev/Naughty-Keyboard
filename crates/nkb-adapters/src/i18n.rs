@@ -650,6 +650,10 @@ pub enum Environment {
     /// screen (macOS), so the shortcuts work and the palette is out of sight
     /// there (`OBS-193`).
     NotOverFullScreen,
+    /// The palette stepped aside from the window the desktop shows to ask the person
+    /// whether keys may be pressed, and could not get back on top of the other windows
+    /// (`D145` point 77), so it may stay behind the application under test.
+    NotBackOnTop,
 }
 
 /// The pattern for an environment limit. `ux-spec.md` 6, section B.
@@ -685,6 +689,9 @@ fn pattern_environment(limit: Environment) -> &'static str {
         }
         Environment::NotOverFullScreen => {
             "The palette may stay out of sight while an application is in full screen: {reason}. The shortcuts still work. Leave full screen to see it."
+        }
+        Environment::NotBackOnTop => {
+            "The palette may stay behind the other windows: {reason}. Restart it to bring it back."
         }
     }
 }
@@ -1083,6 +1090,16 @@ mod tests {
         assert!(line.contains("the program has no window yet"), "{line}");
         assert!(line.contains("full screen"), "{line}");
         assert!(line.contains("shortcuts still work"), "{line}");
+    }
+
+    #[test]
+    fn a_palette_that_stayed_behind_says_why_and_how_to_bring_it_back() {
+        let line = environment(
+            Environment::NotBackOnTop,
+            "the window manager did not put the palette back on top",
+        );
+        assert!(line.contains("did not put the palette back"), "{line}");
+        assert!(line.contains("Restart"), "{line}");
     }
 
     /// One of every message, with arguments chosen so the test can check the

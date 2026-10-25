@@ -482,14 +482,24 @@ pub(super) fn in_flight_view(in_flight: &InFlight, standing: &Standing) -> InFli
     }
 }
 
-/// What the message band says while a press waits for the person (`D145` point 76): the
-/// sentence while the question stands, and nothing of its own after it. The standing
-/// sentence stays in front, as in every view. What the band said before was about the value
-/// before and is stale once a press is under way, as it is in a view of a value on its way.
-pub(super) fn waiting_messages(waiting: Waiting, standing: &Standing) -> Vec<String> {
+/// What the message band says while a press waits for the person (`D145` points 76 and 77):
+/// the sentence while the question stands, and nothing of its own after it. `covers` says the
+/// palette could not step aside from the window of the desktop, which changes the words and
+/// nothing else. The standing sentence stays in front, as in every view. What the band said
+/// before was about the value before and is stale once a press is under way, as it is in a
+/// view of a value on its way. The word that the question is about to be put is no concern of
+/// the band: the palette steps aside and the band stays as it is.
+pub(super) fn waiting_messages(waiting: Waiting, covers: bool, standing: &Standing) -> Vec<String> {
     let own = match waiting {
-        Waiting::ForConsent => vec![i18n::label(PaletteLabel::WaitingForConsent).to_owned()],
-        Waiting::Answered => Vec::new(),
+        Waiting::ForConsent => {
+            let label = if covers {
+                PaletteLabel::WaitingForConsentCovered
+            } else {
+                PaletteLabel::WaitingForConsent
+            };
+            vec![i18n::label(label).to_owned()]
+        }
+        Waiting::Asking | Waiting::Answered => Vec::new(),
     };
     with_standing(own, standing)
 }
@@ -963,13 +973,19 @@ mod tests {
     #[test]
     fn the_wait_for_the_person_goes_up_in_the_band_and_comes_down_when_it_is_answered() {
         let palette = a_palette();
-        apply_waiting(&palette, waiting_messages(Waiting::ForConsent, &quiet()));
+        apply_waiting(
+            &palette,
+            waiting_messages(Waiting::ForConsent, false, &quiet()),
+        );
         assert_eq!(palette.get_messages().row_count(), 1);
         assert_eq!(
             palette.get_messages().row_data(0).unwrap_or_default(),
             i18n::label(PaletteLabel::WaitingForConsent)
         );
-        apply_waiting(&palette, waiting_messages(Waiting::Answered, &quiet()));
+        apply_waiting(
+            &palette,
+            waiting_messages(Waiting::Answered, false, &quiet()),
+        );
         assert_eq!(
             palette.get_messages().row_count(),
             0,
@@ -982,10 +998,10 @@ mod tests {
         let standing = quiet();
         let sentence = i18n::label(PaletteLabel::WaitingForConsent).to_owned();
         assert_eq!(
-            waiting_messages(Waiting::ForConsent, &standing),
+            waiting_messages(Waiting::ForConsent, false, &standing),
             vec![sentence.clone()]
         );
-        assert!(waiting_messages(Waiting::Answered, &standing).is_empty());
+        assert!(waiting_messages(Waiting::Answered, false, &standing).is_empty());
         assert!(
             standing
                 .lock()
@@ -994,13 +1010,36 @@ mod tests {
         );
         // The standing sentence is the tool saying it cannot keep a promise: it outranks.
         assert_eq!(
-            waiting_messages(Waiting::ForConsent, &standing),
+            waiting_messages(Waiting::ForConsent, false, &standing),
             vec![String::from("standing"), sentence]
         );
         assert_eq!(
-            waiting_messages(Waiting::Answered, &standing),
+            waiting_messages(Waiting::Answered, false, &standing),
             vec![String::from("standing")]
         );
+    }
+
+    /// `D145` point 77: a palette that could not step aside says where it goes, in the place of
+    /// the plain sentence. The word that the question is about to be put changes nothing in the
+    /// band, because it is the palette that moves and not what it says.
+    #[test]
+    fn a_palette_that_could_not_step_aside_says_so_in_the_place_of_the_plain_sentence() {
+        let standing = quiet();
+        let covered = i18n::label(PaletteLabel::WaitingForConsentCovered).to_owned();
+        assert_eq!(
+            waiting_messages(Waiting::ForConsent, true, &standing),
+            vec![covered.clone()]
+        );
+        assert_ne!(
+            covered,
+            i18n::label(PaletteLabel::WaitingForConsent),
+            "two different sentences"
+        );
+        assert!(covered.contains("drag"), "it says what to do: {covered}");
+        for covers in [false, true] {
+            assert!(waiting_messages(Waiting::Asking, covers, &standing).is_empty());
+            assert!(waiting_messages(Waiting::Answered, covers, &standing).is_empty());
+        }
     }
 
     /// The legend of a table alone has the way into the shortcuts window and no more:

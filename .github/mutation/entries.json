@@ -11538,27 +11538,27 @@
       "id": "M1494",
       "why": "a question that stands is not said to the person",
       "file": "crates/nkb-sys/src/linux_portal_rules.rs",
-      "find": "                noticed(Waiting::ForConsent);\n                let answer",
-      "replace": "                let answer",
-      "test": "linux_portal_rules::tests::an_answer_that_does_not_come_in_time_is_waited_for_and_said_twice_in_order",
+      "find": "                noticed(Waiting::ForConsent);\n                receiver.recv().ok()",
+      "replace": "                receiver.recv().ok()",
+      "test": "linux_portal_rules::tests::an_answer_that_does_not_come_in_time_is_waited_for_and_noticed_once",
       "runner": "rust:nkb-sys:lib"
     },
     {
       "id": "M1495",
       "why": "the sentence of a wait is never taken down",
       "file": "crates/nkb-sys/src/linux_portal_rules.rs",
-      "find": "                noticed(Waiting::Answered);\n                answer",
-      "replace": "                answer",
-      "test": "linux_portal_rules::tests::an_answer_that_does_not_come_in_time_is_waited_for_and_said_twice_in_order",
+      "find": "        if self.begun {\n            (self.waiting)(Waiting::Answered);\n        }",
+      "replace": "",
+      "test": "linux_portal_rules::tests::a_question_that_was_announced_is_ended_once_whether_or_not_it_stood",
       "runner": "rust:nkb-sys:lib"
     },
     {
       "id": "M1496",
-      "why": "the end of a wait is said before the wait has ended",
+      "why": "the end of a question that was never begun is said",
       "file": "crates/nkb-sys/src/linux_portal_rules.rs",
-      "find": "                let answer = receiver.recv().ok();\n                noticed(Waiting::Answered);",
-      "replace": "                noticed(Waiting::Answered);\n                let answer = receiver.recv().ok();",
-      "test": "linux_portal_rules::tests::an_answer_that_does_not_come_in_time_is_waited_for_and_said_twice_in_order",
+      "find": "        if self.begun {\n            (self.waiting)(Waiting::Answered);\n        }",
+      "replace": "        (self.waiting)(Waiting::Answered);",
+      "test": "linux_portal_rules::tests::a_question_that_was_never_begun_is_never_ended",
       "runner": "rust:nkb-sys:lib"
     },
     {
@@ -11583,8 +11583,8 @@
       "id": "M1499",
       "why": "the palette keeps saying it waits after the question is answered",
       "file": "crates/nkb-gui/src/live/view.rs",
-      "find": "        Waiting::Answered => Vec::new(),",
-      "replace": "        Waiting::Answered => vec![i18n::label(PaletteLabel::WaitingForConsent).to_owned()],",
+      "find": "        Waiting::Asking | Waiting::Answered => Vec::new(),",
+      "replace": "        Waiting::Asking => Vec::new(),\n        Waiting::Answered => vec![i18n::label(PaletteLabel::WaitingForConsent).to_owned()],",
       "test": "live::view::tests::the_wait_for_the_person_is_said_behind_the_standing_sentence_and_taken_down_when_answered",
       "runner": "rust:nkb-gui:lib"
     },
@@ -11601,8 +11601,8 @@
       "id": "M1501",
       "why": "the palette does not say it waits for the person",
       "file": "crates/nkb-gui/src/live/view.rs",
-      "find": "        Waiting::ForConsent => vec![i18n::label(PaletteLabel::WaitingForConsent).to_owned()],",
-      "replace": "        Waiting::ForConsent => Vec::new(),",
+      "find": "            vec![i18n::label(label).to_owned()]",
+      "replace": "            {\n                let _ = label;\n                Vec::new()\n            }",
       "test": "live::view::tests::the_wait_for_the_person_is_said_behind_the_standing_sentence_and_taken_down_when_answered",
       "runner": "rust:nkb-gui:lib"
     },
@@ -11610,8 +11610,8 @@
       "id": "M1502",
       "why": "nkb send says a line when the question is over",
       "file": "crates/nkb-cli/src/on_the_way.rs",
-      "find": "        Waiting::Answered => None,",
-      "replace": "        Waiting::Answered => Some(WAITING_FOR_CONSENT),",
+      "find": "        Waiting::Asking | Waiting::Answered => None,",
+      "replace": "        Waiting::Asking => None,\n        Waiting::Answered => Some(WAITING_FOR_CONSENT),",
       "test": "on_the_way::tests::the_wait_for_the_person_is_said_once_and_its_end_is_not_said",
       "runner": "rust:nkb-cli:bin=nkb"
     },
@@ -11641,6 +11641,150 @@
       "replace": "            OnTheWay::Waiting(_) => {}",
       "test": "advance_sequence::tests::a_press_that_waits_for_the_person_to_allow_the_keys_is_heard_through_the_ports",
       "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1506",
+      "why": "the beginning of a question is not remembered, so its end is never said",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "        self.begun = true;\n        (self.waiting)(what);",
+      "replace": "        (self.waiting)(what);",
+      "test": "linux_portal_rules::tests::a_question_that_was_announced_is_ended_once_whether_or_not_it_stood",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1507",
+      "why": "the end of a question is said as another word",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "            (self.waiting)(Waiting::Answered);",
+      "replace": "            (self.waiting)(Waiting::ForConsent);",
+      "test": "linux_portal_rules::tests::a_question_that_stood_without_being_announced_is_ended_too",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1508",
+      "why": "a window that is still above is taken for one that stepped aside",
+      "file": "crates/nkb-sys/src/linux_window_rules.rs",
+      "find": "    types == [normal] && !state.contains(&above)",
+      "replace": "    types == [normal]",
+      "test": "linux_window_rules::tests::a_window_that_keeps_either_the_type_or_the_state_is_not_aside",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1509",
+      "why": "a window that kept its type is taken for one that stepped aside",
+      "file": "crates/nkb-sys/src/linux_window_rules.rs",
+      "find": "    types == [normal] && !state.contains(&above)",
+      "replace": "    !state.contains(&above)",
+      "test": "linux_window_rules::tests::a_window_that_keeps_either_the_type_or_the_state_is_not_aside",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1510",
+      "why": "a window that did not get the top back is taken for one that is back",
+      "file": "crates/nkb-sys/src/linux_window_rules.rs",
+      "find": "    types == stood.types.as_slice() && state.contains(&above) == stood.above",
+      "replace": "    types == stood.types.as_slice()",
+      "test": "linux_window_rules::tests::a_window_that_has_only_part_of_what_it_had_is_not_back",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1511",
+      "why": "a window that has the top again but not its type is taken for one that is back",
+      "file": "crates/nkb-sys/src/linux_window_rules.rs",
+      "find": "    types == stood.types.as_slice() && state.contains(&above) == stood.above",
+      "replace": "    state.contains(&above) == stood.above",
+      "test": "linux_window_rules::tests::a_window_that_has_only_part_of_what_it_had_is_not_back",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1512",
+      "why": "a palette the manager kept on top says it could not be put back",
+      "file": "crates/nkb-sys/src/window.rs",
+      "find": "            Self::NotAside => write!(f, \"the window manager kept the palette on top\"),",
+      "replace": "            Self::NotAside => write!(f, \"the window manager did not put the palette back on top\"),",
+      "test": "window::tests::a_window_that_could_not_change_its_place_says_which_way_it_failed",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1513",
+      "why": "the word that the question is about to be put reaches the port as another word",
+      "file": "crates/nkb-adapters/src/keyboard.rs",
+      "find": "        nkb_sys::Waiting::Asking => Waiting::Asking,",
+      "replace": "        nkb_sys::Waiting::Asking => Waiting::ForConsent,",
+      "test": "keyboard::tests::every_wait_of_the_system_maps_to_its_own_wait",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1514",
+      "why": "the sentence of a palette that may cover the window does not say what to do",
+      "file": "crates/nkb-adapters/src/i18n/palette.rs",
+      "find": "Answer in the window it shows, and drag this palette away if it covers it.",
+      "replace": "Answer in the window it shows.",
+      "test": "i18n::palette::tests::the_sentence_of_a_palette_that_may_cover_the_window_says_where_it_goes",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1515",
+      "why": "a palette left behind the other windows does not say how to bring it back",
+      "file": "crates/nkb-adapters/src/i18n.rs",
+      "find": "{reason}. Restart it to bring it back.",
+      "replace": "{reason}.",
+      "test": "i18n::tests::a_palette_that_stayed_behind_says_why_and_how_to_bring_it_back",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1516",
+      "why": "a palette with no window handle is stepped aside as the window zero",
+      "file": "crates/nkb-adapters/src/focus.rs",
+      "find": "    nkb_sys::window::step_aside(WindowRef(window.ok_or(StackingError::HandleUnavailable)?))",
+      "replace": "    nkb_sys::window::step_aside(WindowRef(window.unwrap_or(0)))",
+      "test": "focus::tests::stepping_aside_with_no_handle_says_the_handle_is_missing_on_every_system",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1517",
+      "why": "any refusal to step aside is taken for a palette that covers the window",
+      "file": "crates/nkb-gui/src/live/aside.rs",
+      "find": "    matches!(outcome, Some(StackingError::NotAside))",
+      "replace": "    outcome.is_some()",
+      "test": "live::aside::tests::a_palette_that_stepped_aside_or_has_no_window_of_the_systems_covers_nothing",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1518",
+      "why": "the sentence of a palette left behind carries no advice",
+      "file": "crates/nkb-gui/src/live/aside.rs",
+      "find": "        .map(|error| i18n::environment(Environment::NotBackOnTop, &error.to_string()))",
+      "replace": "        .map(|error| error.to_string())",
+      "test": "live::aside::tests::a_palette_that_could_not_come_back_says_why_and_how_to_bring_it_back",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1519",
+      "why": "the palette that could not step aside says the plain sentence",
+      "file": "crates/nkb-gui/src/live/view.rs",
+      "find": "            let label = if covers {",
+      "replace": "            let label = if !covers {",
+      "test": "live::view::tests::a_palette_that_could_not_step_aside_says_so_in_the_place_of_the_plain_sentence",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1520",
+      "why": "the palette says the sentence of a wait before the question is put",
+      "file": "crates/nkb-gui/src/live/view.rs",
+      "find": "        Waiting::Asking | Waiting::Answered => Vec::new(),",
+      "replace": "        Waiting::Answered => Vec::new(),\n        Waiting::Asking => vec![i18n::label(PaletteLabel::WaitingForConsent).to_owned()],",
+      "test": "live::view::tests::a_palette_that_could_not_step_aside_says_so_in_the_place_of_the_plain_sentence",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1521",
+      "why": "nkb send says a line before the question is put",
+      "file": "crates/nkb-cli/src/on_the_way.rs",
+      "find": "        Waiting::Asking | Waiting::Answered => None,",
+      "replace": "        Waiting::Asking => Some(WAITING_FOR_CONSENT),\n        Waiting::Answered => None,",
+      "test": "on_the_way::tests::the_wait_for_the_person_is_said_once_and_its_end_is_not_said",
+      "runner": "rust:nkb-cli:bin=nkb"
     }
   ]
 }

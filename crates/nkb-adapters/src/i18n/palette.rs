@@ -124,6 +124,10 @@ pub enum PaletteLabel {
     /// second until it is answered, and taken down the moment it is, so it is never
     /// there when it is not true.
     WaitingForConsent,
+    /// The same wait, said when the palette could not get out of the way of the window the
+    /// desktop shows (`D145` point 77): it may stand over that window, so the sentence says
+    /// where the palette goes. Stands in place of [`Self::WaitingForConsent`], never beside it.
+    WaitingForConsentCovered,
     /// The link under the hint bar that opens the shortcuts window - its words,
     /// and what a click does (`ux-spec.md` 5.4).
     ShortcutsLink,
@@ -317,6 +321,9 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         }
         PaletteLabel::WaitingForConsent => {
             "Waiting for the desktop to allow pressing keys. Answer in the window it shows."
+        }
+        PaletteLabel::WaitingForConsentCovered => {
+            "Waiting for the desktop to allow pressing keys. Answer in the window it shows, and drag this palette away if it covers it."
         }
         PaletteLabel::ShortcutsLink => "Change shortcuts",
         PaletteLabel::EnableShortcuts => "Enable global shortcuts",
@@ -685,6 +692,18 @@ mod tests {
     const NEXT_VALUE: HotkeyChord = nkb_core::hotkeys::DEFAULT_BINDINGS[0].1;
 
     #[test]
+    fn the_sentence_of_a_palette_that_may_cover_the_window_says_where_it_goes() {
+        // `D145` point 77: the same wait, and what to do about a palette that did not step aside.
+        let plain = crate::i18n::label(PaletteLabel::WaitingForConsent);
+        let covered = crate::i18n::label(PaletteLabel::WaitingForConsentCovered);
+        assert!(
+            covered.starts_with(plain.trim_end_matches('.')),
+            "{covered}"
+        );
+        assert!(covered.contains("drag this palette"), "{covered}");
+    }
+
+    #[test]
     fn a_recipe_reads_the_way_the_sketch_draws_it() {
         // The sketch in `ux-spec.md` 2, less the digit grouping - see `recipe`.
         assert_eq!(recipe(100_000, "a"), "100000 \u{D7} \"a\"");
@@ -834,6 +853,7 @@ mod tests {
             PaletteLabel::ShortcutsPaused,
             PaletteLabel::WaitingForTheDesktop,
             PaletteLabel::WaitingForConsent,
+            PaletteLabel::WaitingForConsentCovered,
             PaletteLabel::ShortcutsLink,
             PaletteLabel::EnableShortcuts,
             PaletteLabel::RemoveEntry,
@@ -923,6 +943,7 @@ mod tests {
                 | PaletteLabel::ShortcutsPaused
                 | PaletteLabel::WaitingForTheDesktop
                 | PaletteLabel::WaitingForConsent
+                | PaletteLabel::WaitingForConsentCovered
                 | PaletteLabel::ShortcutsLink
                 | PaletteLabel::EnableShortcuts
                 | PaletteLabel::RemoveEntry

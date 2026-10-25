@@ -72,11 +72,12 @@ pub(crate) const BIND_WAIT: Duration = Duration::from_secs(300);
 pub(crate) const CONSENT_NOTICE_AFTER: Duration = Duration::from_secs(1);
 
 /// Runs `wait`, which blocks until the person or the portal has answered, on a thread of its
-/// own, and tells `noticed` from THIS thread: [`Waiting::ForConsent`] when it has not returned
-/// after `after`, and [`Waiting::Answered`] when it does. A wait that returns in time says
-/// nothing at all. Because the wait is on the other thread and the telling is not, what is
-/// told to needs to be neither `Send` nor `Sync`: it runs where the send runs, between two
-/// things the send does. `None` when the thread ended without an answer.
+/// own, and tells `noticed` from THIS thread [`Waiting::ForConsent`] when it has not returned
+/// after `after`. A wait that returns in time says nothing at all. Because the wait is on the
+/// other thread and the telling is not, what is told to needs to be neither `Send` nor `Sync`:
+/// it runs where the send runs, between two things the send does. The end of the question is
+/// not told here but by [`Told`], which also knows of a question that was begun before the
+/// wait. `None` when the thread ended without an answer.
 pub(crate) fn wait_telling<T: Send>(
     after: Duration,
     noticed: &mut dyn FnMut(Waiting),
@@ -91,13 +92,43 @@ pub(crate) fn wait_telling<T: Send>(
             Ok(answer) => Some(answer),
             Err(RecvTimeoutError::Timeout) => {
                 noticed(Waiting::ForConsent);
-                let answer = receiver.recv().ok();
-                noticed(Waiting::Answered);
-                answer
+                receiver.recv().ok()
             }
             Err(RecvTimeoutError::Disconnected) => None,
         }
     })
+}
+
+/// What has been said about one question to the person, so that its end is said once, and
+/// only for a question that was said to have begun (`D145` points 76 and 77). A listener that
+/// stepped aside at [`Waiting::Asking`] must be told when to step back, whether the question
+/// stood for a second or never stood at all, and a listener that heard nothing is told
+/// nothing: a desktop that remembers the answer says no word at any press.
+pub(crate) struct Told<'a> {
+    waiting: &'a mut dyn FnMut(Waiting),
+    begun: bool,
+}
+
+impl<'a> Told<'a> {
+    pub(crate) fn new(waiting: &'a mut dyn FnMut(Waiting)) -> Self {
+        Self {
+            waiting,
+            begun: false,
+        }
+    }
+
+    /// Says `what`, which begins the question for whoever listens.
+    pub(crate) fn say(&mut self, what: Waiting) {
+        self.begun = true;
+        (self.waiting)(what);
+    }
+
+    /// Says [`Waiting::Answered`] if anything was said before, and nothing otherwise.
+    pub(crate) fn end(self) {
+        if self.begun {
+            (self.waiting)(Waiting::Answered);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -527,17 +558,60 @@ mod tests {
     }
 
     #[test]
-    fn an_answer_that_does_not_come_in_time_is_waited_for_and_said_twice_in_order() {
+    fn an_answer_that_does_not_come_in_time_is_waited_for_and_noticed_once() {
         let (answer, told) = told_by_waiting(Duration::from_millis(10), Duration::from_millis(300));
         assert_eq!(answer, Some(7), "the wait goes on until the answer");
         assert_eq!(
             told.iter()
                 .map(|(waiting, ..)| *waiting)
                 .collect::<Vec<_>>(),
+            [Waiting::ForConsent],
+            "the end of the question is the business of `Told`, not of the wait"
+        );
+        // It is noticed when the question has stood for the time, not when it ends.
+        assert!(told[0].2 < Duration::from_millis(250), "{told:?}");
+    }
+
+    /// What `Told` passes on, in order.
+    fn said_through_told(say: impl FnOnce(&mut Told<'_>)) -> Vec<Waiting> {
+        let mut heard = Vec::new();
+        let mut hear = |waiting| heard.push(waiting);
+        let mut told = Told::new(&mut hear);
+        say(&mut told);
+        told.end();
+        heard
+    }
+
+    #[test]
+    fn a_question_that_was_never_begun_is_never_ended() {
+        // A desktop that remembers the answer: no word at the beginning, so none at the end.
+        assert!(said_through_told(|_| {}).is_empty());
+    }
+
+    #[test]
+    fn a_question_that_was_announced_is_ended_once_whether_or_not_it_stood() {
+        assert_eq!(
+            said_through_told(|told| told.say(Waiting::Asking)),
+            [Waiting::Asking, Waiting::Answered],
+            "a window that stepped aside must be told to come back, though the answer was at once"
+        );
+        assert_eq!(
+            said_through_told(|told| {
+                told.say(Waiting::Asking);
+                told.say(Waiting::ForConsent);
+            }),
+            [Waiting::Asking, Waiting::ForConsent, Waiting::Answered]
+        );
+    }
+
+    #[test]
+    fn a_question_that_stood_without_being_announced_is_ended_too() {
+        // A remembered answer the desktop did not accept: the window of the system opens
+        // all the same, and a sentence put up for it has to come down.
+        assert_eq!(
+            said_through_told(|told| told.say(Waiting::ForConsent)),
             [Waiting::ForConsent, Waiting::Answered]
         );
-        // The end is said when the wait ends, not when the question is first noticed.
-        assert!(told[1].2 >= Duration::from_millis(300), "{told:?}");
     }
 
     #[test]
