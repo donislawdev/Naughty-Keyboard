@@ -24,8 +24,8 @@
     grows. It exists twice, as the groups platforms-today and
     platforms-everywhere, and exactly one of them is shown. To switch, move
     display="none" from one group to the other, then render again. The first is
-    what is true now, the second is for the day typing works on all three
-    systems.
+    for a program that types only on Windows, the second is what is true now,
+    with typing on all three systems since 0.3.0.
   -->
   <defs>
     <radialGradient id="glow" cx="1110" cy="40" r="720" gradientUnits="userSpaceOnUse">
@@ -62,10 +62,10 @@
   </g>
 
   <text x="60" y="556" font-size="22" fill="#7E8797">Free, GPL-3.0 · works offline</text>
-  <g id="platforms-today" font-size="20" fill="#9AA4B4">
+  <g id="platforms-today" display="none" font-size="20" fill="#9AA4B4">
     <text x="60" y="590">Types on Windows · CLI and clipboard on macOS and Linux</text>
   </g>
-  <g id="platforms-everywhere" display="none" font-size="22" fill="#9AA4B4">
+  <g id="platforms-everywhere" font-size="22" fill="#9AA4B4">
     <text x="60" y="590">Windows · macOS · Linux</text>
   </g>
 

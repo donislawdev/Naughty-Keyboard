@@ -14,8 +14,7 @@
 </p>
 
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-![Typing: Windows](https://img.shields.io/badge/typing-Windows-0078D6)
-![CLI: Windows, macOS, Linux](https://img.shields.io/badge/CLI-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
+![Platforms: Windows, macOS, Linux](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux-0078D6)
 ![Status: early development](https://img.shields.io/badge/status-early%20development-orange)
 [![CI](https://github.com/donislawdev/Naughty-Keyboard/actions/workflows/ci.yml/badge.svg)](https://github.com/donislawdev/Naughty-Keyboard/actions/workflows/ci.yml)
 [![Website](https://img.shields.io/badge/website-naughtykeyboard.donislawdev.com-e4573f)](https://naughtykeyboard.donislawdev.com/)
@@ -31,9 +30,9 @@ Every value comes with what it usually breaks and what a correct application doe
 them breaks something, one more shortcut copies a report block you can paste straight into a ticket.
 A window and a command line, over one engine.
 
-> **Where it works today.** Typing into other windows works on Windows, macOS and Linux, and each
-> system has its own conditions. The command line and the pack tools work everywhere.
-> [Honest limits](#honest-limits) has the details.
+<p align="center">
+  <img src=".github/media/naughty.webp" width="860" alt="The palette beside Notepad, typing values of two packs into the document, then collapsed, and the value window opened to find another value.">
+</p>
 
 ⭐ **If it found the bug your users would have found, leave a star.** That is how the next tester who
 needs it finds out it exists.
@@ -62,18 +61,6 @@ needs it finds out it exists.
 - **Made for scripts too** - `nkb emit` prints a pack as JSON, CSV or one value per line, escaped or
   raw, optionally as base64. Every command has exit codes you can branch on.
 - **Offline, free, no telemetry** - GPL-3.0, no account, and it opens no network connection.
-
-<!--
-  PICTURE 1 - the hero GIF. Replace the banner above with it, or keep both.
-  Show: a sign-up form on screen, the palette beside it, Alt+Shift+N typing "Kowalski"
-  plus a trailing space into the name field, the form accepting it, then Alt+Shift+B
-  copying the report, pasted into a ticket. Keep it under about 15 seconds, and crop
-  to the form and the palette.
-
-  Where to put pictures: .github/media/. A new kind of file there has to be taught to
-  crates/nkb-core/tests/prose_punctuation.rs, the way .github/social-preview already is,
-  or that test refuses the file.
--->
 
 ---
 
@@ -201,6 +188,10 @@ chords that work today:
 | `Alt+Shift+Space` | Open the value window, to find a value or change the pack |
 | `Alt+Shift+H` | Collapse the palette to its header, or expand it again |
 
+The table gives the Windows chords. On macOS the pair is `Option+Command` in place of `Alt+Shift`, and
+Find a value is `Option+Command+F`. On Linux the pair is `Ctrl+Alt`, and under Wayland the desktop decides
+which keys a shortcut gets, so the palette names the keys the desktop gave.
+
 Four more chords are registered and do nothing yet, and the shortcuts window marks them as not
 available yet: typing the current value again, `Alt+Shift+R`, and marking the last result as works, a
 problem or suspect, `Alt+Shift+1`, `2` and `3`.
@@ -212,8 +203,10 @@ Every chord can be changed in the shortcuts window, or in `settings.toml` under 
 next-value = "Ctrl+Alt+Win+N"
 ```
 
-The file is `%APPDATA%\Naughty Keyboard\settings.toml` on Windows. The palette's own settings sit
-beside it under `[palette]`, for example `clearing = "none"` to stop it clearing the line first.
+The file is `%APPDATA%\Naughty Keyboard\settings.toml` on Windows,
+`~/Library/Application Support/Naughty Keyboard/settings.toml` on macOS and
+`~/.config/naughty-keyboard/settings.toml` on Linux. The palette's own settings sit beside it under
+`[palette]`, for example `clearing = "none"` to stop it clearing the line first.
 
 <!--
   PICTURE 3 - the pack window: the search box and the tree of packs with their values.
@@ -264,7 +257,7 @@ true
 NaN
 ```
 
-Type one value into the focused field, on Windows. You get three seconds to click the field:
+Type one value into the focused field. You get three seconds to click the field:
 
 ```console
 $ nkb send magic-values --index 2 --delay 3

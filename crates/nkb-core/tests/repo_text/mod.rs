@@ -38,6 +38,10 @@ const ICON_DIR: &str = "crates/nkb-gui/assets";
 /// not read.
 const SOCIAL_PREVIEW_DIR: &str = ".github/social-preview";
 
+/// Where the README's animation lives. Its `.webp` is a recording and is not
+/// read.
+const MEDIA_DIR: &str = ".github/media";
+
 /// Where the scripts the workflows run live, and the pins they install. The
 /// scripts are Python and the pins are a `.txt`, and both are read.
 const CI_SCRIPTS_DIR: &str = ".github/scripts";
@@ -888,6 +892,9 @@ fn walk(root: &Path, dir: &Path, tree: &mut Tree) {
             // The picture GitHub shows beside a link: nothing in it is prose.
             // The drawing it is rendered from is read.
             None if here == SOCIAL_PREVIEW_DIR && extension == "png" => {}
+            // The animation the README plays: nothing in it is prose. The page
+            // that describes it, beside it, is read.
+            None if here == MEDIA_DIR && extension == "webp" => {}
             None => tree.unreadable.push(format!(
                 "{} is a file this test cannot read",
                 relative(root, &path)

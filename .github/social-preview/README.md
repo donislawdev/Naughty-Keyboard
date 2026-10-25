@@ -59,8 +59,8 @@ exactly one of them:
 
 | Group | Says | Use it |
 |---|---|---|
-| `platforms-today` | Types on Windows, CLI and clipboard on macOS and Linux | while typing into other windows works only on Windows |
-| `platforms-everywhere` | Windows, macOS, Linux | once typing works on all three |
+| `platforms-today` | Types on Windows, CLI and clipboard on macOS and Linux | when typing into other windows works only on Windows |
+| `platforms-everywhere` | Windows, macOS, Linux | when typing works on all three, which it does since 0.3.0 and is the one shown |
 
 To switch, move `display="none"` from the group that is shown to the group that is
 hidden, render the picture again, and upload it again. Edit the wording in the
@@ -79,8 +79,7 @@ checked again when its source changes.
 | the open box after `Kowalski` | the marker the palette prints for an invisible character, from `crates/nkb-core/src/preview.rs` |
 | Alt, Shift, N, "types the next value" | the default shortcut for the next value |
 | 18 packs, 207 values, and the nine chips | `nkb packs`, which ends with "18 of 18 packs loaded, 207 values". The chips are the first nine packs it lists, in that order. Counted on 2026-10-14 |
-| Types on Windows | typing into another window exists only there, and `send_text` in `nkb-sys` answers `Unsupported` elsewhere |
-| CLI and clipboard on macOS and Linux | the commands other than `send` do not touch the system, and were run on Linux on 2026-10-07 (`packs`, `emit`). Where there is no direct route the palette starts in clipboard mode, which is read from `crates/nkb-gui/src/live.rs` and was not run on macOS or Linux |
+| Windows, macOS, Linux | typing into another window has a route on each of the three, in `send_text` of `nkb-sys` (`lib.rs`, `macos` and `linux/send.rs`), and the release has an archive of each program for each system. Linux was measured on Ubuntu 26.04 only, and the Honest limits of the front page say so |
 | works offline | nothing in the workspace opens a network connection |
 | GUI + CLI | the two programs, `nkb-gui` and `nkb` |
 | Malicious test data, one shortcut away | the first line of `nkb --help` |
