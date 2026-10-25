@@ -56,6 +56,14 @@
 # beside it is text and stays normalised to LF like the rest.
 /.github/social-preview/*.png binary
 
+# THE README ANIMATION - the bytes the encoder wrote, unaltered.
+#
+# A .webp is binary. `text=auto` would leave it alone only because it happens to
+# contain a NUL byte, and an animation with one rewritten byte does not fail at
+# the commit - it fails as a picture that will not move, on someone else's
+# screen.
+/.github/media/*.webp binary
+
 # THE VENDORED UNICODE DATA - the upstream bytes, unaltered.
 #
 # These files are already LF-only, so `text=auto eol=lf` above would convert
