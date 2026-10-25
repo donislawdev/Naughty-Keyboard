@@ -89,7 +89,7 @@ ceiling = 2204
 # when the test of the palette's labels moved from nkb-adapters/src/i18n.rs,
 # which a new label had taken to the ceiling, to the file that defines the
 # labels, and the tests of the sentence for a clearing that waits for the
-# person went to live/view.rs beside it; live.rs is the largest again. 6 since
+# person went to live/view.rs beside it, and live.rs is the largest again. 6 since
 # the same day, the owner's choice: nkb-app/src/keep_settings.rs, which did not
 # grow, joined the band at 1561.
 near = 6
