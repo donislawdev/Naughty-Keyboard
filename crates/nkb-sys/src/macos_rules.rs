@@ -124,11 +124,13 @@ pub(crate) fn text_steps(scalar: Scalar) -> [Step<MacEvent>; 2] {
             event: event(true),
             key: TEXT_KEY,
             down: true,
+            shift_counts: false,
         },
         Step {
             event: event(false),
             key: TEXT_KEY,
             down: false,
+            shift_counts: false,
         },
     ]
 }
@@ -183,6 +185,9 @@ fn key_event(key: u16, down: bool, flags: u64) -> Step<MacEvent> {
         },
         key,
         down,
+        // The event carries its own flags from a private source (`flags`), so a
+        // modifier the person holds is not part of it (`D149`).
+        shift_counts: false,
     }
 }
 

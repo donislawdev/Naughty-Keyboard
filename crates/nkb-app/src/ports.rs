@@ -130,16 +130,22 @@ pub enum StopReason {
     /// The tester pressed `Escape`, which the route holds for as long as a send
     /// lasts and no longer (race `W3`, `D96`).
     Escape,
+    /// The tester pressed a modifier while the send was going: one that stops it
+    /// at once (`Alt`, which turns characters into menu commands), or one held
+    /// longer than the route waits for it (`D149`). `key` is its name on the
+    /// system the route runs on.
+    KeyPressed { key: &'static str },
 }
 
 impl fmt::Display for StopReason {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::Dropped => "dropped",
-            Self::FocusMoved => "focus-moved",
-            Self::NotTaking => "not-taking",
-            Self::Escape => "escape",
-        })
+        match self {
+            Self::Dropped => f.write_str("dropped"),
+            Self::FocusMoved => f.write_str("focus-moved"),
+            Self::NotTaking => f.write_str("not-taking"),
+            Self::Escape => f.write_str("escape"),
+            Self::KeyPressed { key } => write!(f, "{}-pressed", key.to_ascii_lowercase()),
+        }
     }
 }
 

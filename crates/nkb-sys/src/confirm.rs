@@ -35,8 +35,20 @@
 //! read. Waiting for it before the next event leaves nothing pending to combine:
 //! 20 000 of 20 000 where the unpaced send got 6 832 (`tools/sondy/tempo-celu.ps1`).
 //!
+//! # Why the person's own modifiers are looked at between events
+//!
+//! A send waits for the shortcut's modifiers to come up before its first key,
+//! and a person can press one while a long value is still going. Measured
+//! 2026-10-26 (`OBS-233`, `tools/sondy/modyfikator-w-trakcie.ps1`), with
+//! characters sent as here. Under `Ctrl` a Win32 field takes them, and Edge drops
+//! every one while its page still sees the keys. Under `Alt` each becomes a menu
+//! mnemonic, and one ran a menu command in both WinForms victims. The clearing
+//! recipe under `Ctrl` emptied a field of three lines. `Alt` let go with nothing between
+//! opens the menu bar, so a send that waited for it and went on typed into the
+//! menu. So `Alt` stops a send and the other modifiers make it wait (`D149`).
+//!
 //! The logic is pure - the system is a [`Wire`] - so it is tested on every
-//! system, while only Windows feeds it.
+//! system, while Windows and macOS feed it.
 
 use core::time::Duration;
 
@@ -50,6 +62,54 @@ pub(crate) struct Step<E> {
     pub key: u16,
     /// Whether that key is down once the event is taken.
     pub down: bool,
+    /// Whether a `Shift` held by the person would change what this event does:
+    /// the first event of a chord, before the recipe's own `Shift` is down
+    /// (`D149`). Never for a character, which arrives as itself under `Shift`
+    /// (`OBS-233`) - and while the recipe holds its own `Shift`, the system cannot
+    /// tell it from the person's.
+    pub shift_counts: bool,
+}
+
+/// The modifiers down right now, by the person or any other program: the
+/// system does not say whose (`D149`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct Held {
+    pub ctrl: bool,
+    pub alt: bool,
+    pub shift: bool,
+    pub win: bool,
+}
+
+/// What a held modifier means for the next event of a send (`D149`, `OBS-233`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Hand {
+    /// Nothing held that would change the next event.
+    Free,
+    /// Held, and harmless once it comes up alone, so the send waits for it:
+    /// `Ctrl` makes the recipe's `Home` the start of the document and loses
+    /// characters in Chromium, `Win` belongs to the shell's shortcuts, and
+    /// `Shift` before a chord changes the selection.
+    WaitFor(&'static str),
+    /// Pressed, so the send stops: under `Alt` a character is a menu mnemonic,
+    /// and `Alt` let go with nothing between opens the menu bar, so a send that
+    /// waited for it and went on would type into the menu.
+    StopAt(&'static str),
+}
+
+/// What `held` means for an event whose `shift_counts` is given, as in [`Step`].
+/// `Alt` first: another key held with it never turns the stop into a wait.
+pub(crate) const fn hand(held: Held, shift_counts: bool) -> Hand {
+    if held.alt {
+        Hand::StopAt("Alt")
+    } else if held.ctrl {
+        Hand::WaitFor("Ctrl")
+    } else if held.win {
+        Hand::WaitFor("Win")
+    } else if held.shift && shift_counts {
+        Hand::WaitFor("Shift")
+    } else {
+        Hand::Free
+    }
 }
 
 /// What the window in front looks like between two events.
@@ -79,6 +139,9 @@ pub(crate) trait Wire<E> {
     fn target_down(&mut self, key: u16) -> bool;
     /// What the window in front looks like, and whether `Escape` was pressed.
     fn watch(&mut self) -> Watch;
+    /// Which modifiers are down right now, in the state the next event would
+    /// meet (`D149`).
+    fn held(&mut self) -> Held;
     /// Lets time pass between two looks. A test does nothing here.
     fn pause(&mut self, how_long: Duration);
 }
@@ -91,7 +154,16 @@ pub(crate) struct Waits {
     /// For the application to take it, or `None` when the send is not paced
     /// (`D95` point 2: no queue to follow, said by the caller, never silent).
     pub target: Option<Duration>,
+    /// For a modifier the person holds to come up before the next event
+    /// (`D149`): [`crate::MODIFIER_RELEASE_WAIT`], the time the shortcut's own
+    /// keys are given before the first one.
+    pub release: Duration,
 }
+
+/// How often a held modifier is looked at while the send waits for it - the
+/// step of the wait before the first key. A person's key comes up after
+/// hundreds of milliseconds, so a finer look would only spin.
+pub(crate) const RELEASE_LOOK: Duration = Duration::from_millis(10);
 
 /// How long the system is given to show one event before the send stops.
 ///
@@ -135,6 +207,7 @@ pub(crate) struct Pressed {
 /// pile keys up (`NotTaking`). `Escape` pressed stops it the same way, the token
 /// of race `W3` asked in the same look rather than in a second loop (`D96`) -
 /// but only BEFORE an event, never while one is on its way: see [`target_takes`].
+/// Then the modifiers held by the person: see [`hands_off`].
 /// After each event the system must show it within
 /// [`Waits::system`] (`Dropped` otherwise), and, when paced, the application
 /// must take it within [`Waits::target`], the window being watched meanwhile.
@@ -154,6 +227,9 @@ pub(crate) fn press_confirmed<E: Copy>(
             Watch::Hung => return stopped(StopReason::NotTaking),
             Watch::Escape => return stopped(StopReason::Escape),
         }
+        if let Err(reason) = hands_off(wire, step.shift_counts, waits.release) {
+            return stopped(reason);
+        }
         if !wire.send(step.event) {
             return stopped(StopReason::Dropped);
         }
@@ -169,6 +245,40 @@ pub(crate) fn press_confirmed<E: Copy>(
     Pressed {
         taken: steps.len(),
         stop: None,
+    }
+}
+
+/// Returns once nothing held would change the next event, or says why the send
+/// stops instead (`D149`, `OBS-233`).
+///
+/// Nothing is pressed while a modifier is held, so a waiting send leaves the
+/// application exactly as the person's own keys leave it. The window and
+/// `Escape` are watched meanwhile: a person who holds `Ctrl`, then presses
+/// `Escape` or brings another window to the front, is answered as ever. A key
+/// held past `wait` is held for something else, and the send stops naming it.
+fn hands_off<E>(
+    wire: &mut impl Wire<E>,
+    shift_counts: bool,
+    wait: Duration,
+) -> Result<(), StopReason> {
+    let start = std::time::Instant::now();
+    loop {
+        match hand(wire.held(), shift_counts) {
+            Hand::Free => return Ok(()),
+            Hand::StopAt(key) => return Err(StopReason::KeyPressed { key }),
+            Hand::WaitFor(key) => {
+                if start.elapsed() >= wait {
+                    return Err(StopReason::KeyPressed { key });
+                }
+            }
+        }
+        wire.pause(RELEASE_LOOK);
+        match wire.watch() {
+            Watch::Steady => {}
+            Watch::Moved => return Err(StopReason::FocusMoved),
+            Watch::Hung => return Err(StopReason::NotTaking),
+            Watch::Escape => return Err(StopReason::Escape),
+        }
     }
 }
 
@@ -236,7 +346,8 @@ fn target_takes<E>(
 #[cfg(any(windows, test))]
 /// The steps of one chord: `Shift` down if asked, the key down and up, `Shift`
 /// up if it went down - each with the state it leaves. `event` builds the
-/// system's event from a key and whether it is a release.
+/// system's event from a key and whether it is a release. The person's `Shift`
+/// counts before the first step only, while the recipe's own is not down.
 pub(crate) fn chord_steps<E>(
     key: u16,
     shift: Option<u16>,
@@ -244,10 +355,12 @@ pub(crate) fn chord_steps<E>(
 ) -> Vec<Step<E>> {
     let mut steps = Vec::with_capacity(4);
     let mut step = |key: u16, down: bool| {
+        let shift_counts = steps.is_empty();
         steps.push(Step {
             event: event(key, !down),
             key,
             down,
+            shift_counts,
         });
     };
     if let Some(shift) = shift {
@@ -306,6 +419,10 @@ mod tests {
         /// What `watch` answers from the given look on (counted from zero).
         watch_from: Option<(usize, Watch)>,
         looks: usize,
+        /// What `held` answers on the given looks at the modifiers (counted from
+        /// zero), and nothing held on every other.
+        held_while: Option<(core::ops::Range<usize>, Held)>,
+        held_looks: usize,
     }
 
     impl System {
@@ -319,6 +436,8 @@ mod tests {
                 app_stops_from: None,
                 watch_from: None,
                 looks: 0,
+                held_while: None,
+                held_looks: 0,
             }
         }
     }
@@ -353,16 +472,51 @@ mod tests {
                 _ => Watch::Steady,
             }
         }
+        fn held(&mut self) -> Held {
+            let look = self.held_looks;
+            self.held_looks += 1;
+            match &self.held_while {
+                Some((looks, held)) if looks.contains(&look) => *held,
+                _ => Held::default(),
+            }
+        }
         fn pause(&mut self, _how_long: Duration) {}
     }
 
     const PACED: Waits = Waits {
         system: Duration::ZERO,
         target: Some(Duration::ZERO),
+        release: Duration::ZERO,
     };
     const UNPACED: Waits = Waits {
         system: Duration::ZERO,
         target: None,
+        release: Duration::ZERO,
+    };
+    /// Long enough that no test reaches it: a modifier that comes up is waited
+    /// for, whatever the machine's speed.
+    const PATIENT: Waits = Waits {
+        system: Duration::ZERO,
+        target: None,
+        release: Duration::from_secs(60),
+    };
+    const CTRL: Held = Held {
+        ctrl: true,
+        alt: false,
+        shift: false,
+        win: false,
+    };
+    const ALT: Held = Held {
+        ctrl: false,
+        alt: true,
+        shift: false,
+        win: false,
+    };
+    const SHIFT_HELD: Held = Held {
+        ctrl: false,
+        alt: false,
+        shift: true,
+        win: false,
     };
 
     fn shifted_home() -> Vec<Step<(u16, bool)>> {
@@ -374,21 +528,163 @@ mod tests {
         // A wrong expected state is a send that stops on a key the system DID
         // take, or one that waits for the wrong direction - so the table is
         // checked whole.
-        let shape: Vec<(u16, bool, bool)> = shifted_home()
+        let shape: Vec<(u16, bool, bool, bool)> = shifted_home()
             .iter()
-            .map(|step| (step.key, step.down, step.event.1))
+            .map(|step| (step.key, step.down, step.event.1, step.shift_counts))
             .collect();
         assert_eq!(
             shape,
             vec![
-                (SHIFT, true, false),
-                (HOME, true, false),
-                (HOME, false, true),
-                (SHIFT, false, true),
-            ]
+                (SHIFT, true, false, true),
+                (HOME, true, false, false),
+                (HOME, false, true, false),
+                (SHIFT, false, true, false),
+            ],
+            "the person's Shift counts before the recipe's own goes down, never after"
         );
         let plain = chord_steps(HOME, None, |key, release| (key, release));
         assert_eq!(plain.len(), 2, "no Shift, no Shift steps");
+        assert_eq!(
+            plain
+                .iter()
+                .map(|step| step.shift_counts)
+                .collect::<Vec<_>>(),
+            vec![true, false],
+            "Shift+Home is not Home"
+        );
+    }
+
+    #[test]
+    fn alt_stops_and_every_other_modifier_waits() {
+        // `OBS-233`: under Alt a character runs a menu command, and Alt let go
+        // alone opens the menu bar - so it stops even with another key held.
+        let all = Held {
+            ctrl: true,
+            alt: true,
+            shift: true,
+            win: true,
+        };
+        assert_eq!(hand(all, true), Hand::StopAt("Alt"));
+        assert_eq!(hand(ALT, false), Hand::StopAt("Alt"));
+        assert_eq!(hand(CTRL, false), Hand::WaitFor("Ctrl"));
+        let win = Held {
+            win: true,
+            ..Held::default()
+        };
+        assert_eq!(hand(win, false), Hand::WaitFor("Win"));
+        assert_eq!(hand(SHIFT_HELD, true), Hand::WaitFor("Shift"));
+        assert_eq!(
+            hand(SHIFT_HELD, false),
+            Hand::Free,
+            "a character arrives as itself under Shift"
+        );
+        assert_eq!(hand(Held::default(), true), Hand::Free);
+    }
+
+    #[test]
+    fn alt_pressed_mid_send_stops_it_before_the_next_key_and_names_alt() {
+        let mut system = System::new();
+        system.held_while = Some((2..usize::MAX, ALT));
+        assert_eq!(
+            press_confirmed(&shifted_home(), &mut system, PATIENT),
+            Pressed {
+                taken: 2,
+                stop: Some(StopReason::KeyPressed { key: "Alt" })
+            },
+            "stopped at once, not after the wait for a release"
+        );
+        assert_eq!(system.sent.len(), 2, "the third event never went out");
+    }
+
+    #[test]
+    fn ctrl_pressed_mid_send_holds_the_next_key_until_it_comes_up() {
+        // Ctrl is down on looks 1 to 3, so the second event waits three looks
+        // and goes, and every event after it as well.
+        let mut system = System::new();
+        system.held_while = Some((1..4, CTRL));
+        assert_eq!(
+            press_confirmed(&shifted_home(), &mut system, PATIENT),
+            Pressed {
+                taken: 4,
+                stop: None
+            }
+        );
+        assert_eq!(system.sent.len(), 4);
+        assert_eq!(
+            system.held_looks, 7,
+            "four events and three looks of waiting"
+        );
+        assert_eq!(system.looks, 7, "the window was watched on every look");
+    }
+
+    #[test]
+    fn a_modifier_held_past_the_bound_stops_the_send_naming_it() {
+        let mut system = System::new();
+        system.held_while = Some((0..usize::MAX, CTRL));
+        assert_eq!(
+            press_confirmed(&shifted_home(), &mut system, UNPACED),
+            Pressed {
+                taken: 0,
+                stop: Some(StopReason::KeyPressed { key: "Ctrl" })
+            }
+        );
+        assert!(system.sent.is_empty(), "nothing pressed under Ctrl");
+    }
+
+    #[test]
+    fn the_persons_shift_holds_a_chord_but_not_a_character() {
+        let mut system = System::new();
+        system.held_while = Some((0..usize::MAX, SHIFT_HELD));
+        assert_eq!(
+            press_confirmed(&shifted_home(), &mut system, UNPACED).stop,
+            Some(StopReason::KeyPressed { key: "Shift" }),
+            "Shift+Home before the recipe's own Shift"
+        );
+        let character = [
+            Step {
+                event: (0xE7, false),
+                key: 0xE7,
+                down: true,
+                shift_counts: false,
+            },
+            Step {
+                event: (0xE7, true),
+                key: 0xE7,
+                down: false,
+                shift_counts: false,
+            },
+        ];
+        let mut system = System::new();
+        system.held_while = Some((0..usize::MAX, SHIFT_HELD));
+        assert_eq!(
+            press_confirmed(&character, &mut system, UNPACED).stop,
+            None,
+            "a character goes on under Shift"
+        );
+    }
+
+    #[test]
+    fn escape_and_another_window_are_answered_while_a_modifier_is_waited_for() {
+        for (answer, reason) in [
+            (Watch::Escape, StopReason::Escape),
+            (Watch::Moved, StopReason::FocusMoved),
+            (Watch::Hung, StopReason::NotTaking),
+        ] {
+            let mut system = System::new();
+            // Held for a thousand looks, not for ever: a wait that stopped
+            // watching would end there and press, rather than spin to its bound.
+            system.held_while = Some((0..1000, CTRL));
+            // Look 0 is before the first event, look 1 the first while waiting.
+            system.watch_from = Some((1, answer));
+            assert_eq!(
+                press_confirmed(&shifted_home(), &mut system, PATIENT),
+                Pressed {
+                    taken: 0,
+                    stop: Some(reason)
+                }
+            );
+            assert!(system.sent.is_empty());
+        }
     }
 
     #[test]
@@ -493,6 +789,7 @@ mod tests {
         let waits = Waits {
             system: Duration::ZERO,
             target: Some(Duration::from_secs(5)),
+            release: Duration::ZERO,
         };
         assert_eq!(
             press_confirmed(&shifted_home(), &mut system, waits),
@@ -570,6 +867,9 @@ mod tests {
                     Watch::Steady
                 }
             }
+            fn held(&mut self) -> Held {
+                Held::default()
+            }
             fn pause(&mut self, _how_long: Duration) {
                 self.pauses += 1;
             }
@@ -579,16 +879,19 @@ mod tests {
                 event: true,
                 key: HOME,
                 down: true,
+                shift_counts: false,
             },
             Step {
                 event: false,
                 key: HOME,
                 down: false,
+                shift_counts: false,
             },
         ];
         let waits = Waits {
             system: Duration::from_secs(1),
             target: Some(Duration::from_secs(5)),
+            release: Duration::ZERO,
         };
         let mut late = Late {
             down: false,
@@ -643,6 +946,9 @@ mod tests {
             fn watch(&mut self) -> Watch {
                 Watch::Steady
             }
+            fn held(&mut self) -> Held {
+                Held::default()
+            }
             fn pause(&mut self, how_long: Duration) {
                 std::thread::sleep(how_long);
             }
@@ -672,10 +978,12 @@ mod tests {
             event: (),
             key: HOME,
             down: true,
+            shift_counts: false,
         }];
         let waits = Waits {
             system: bound,
             target: None,
+            release: Duration::ZERO,
         };
         assert_eq!(
             press_confirmed(&steps, &mut Deaf, waits),
@@ -720,6 +1028,9 @@ mod tests {
             fn watch(&mut self) -> Watch {
                 Watch::Steady
             }
+            fn held(&mut self) -> Held {
+                Held::default()
+            }
             fn pause(&mut self, _how_long: Duration) {}
         }
         let steps = [
@@ -727,16 +1038,19 @@ mod tests {
                 event: true,
                 key: HOME,
                 down: true,
+                shift_counts: false,
             },
             Step {
                 event: false,
                 key: HOME,
                 down: false,
+                shift_counts: false,
             },
         ];
         let waits = Waits {
             system: Duration::from_secs(1),
             target: Some(Duration::from_secs(1)),
+            release: Duration::ZERO,
         };
         let mut late = Late {
             looks: 0,

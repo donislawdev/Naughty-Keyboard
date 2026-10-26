@@ -18,6 +18,12 @@ Changes wait under Unreleased until then.
   was in front once the key came up. Now it stops before its first key and says that another window
   came to the front. Windows and X11 compare the window, macOS the program, and Wayland, which does
   not name the window, is unchanged.
+- On Windows a modifier key pressed while a value is being typed no longer changes what the value
+  does. Under Alt the characters became menu commands of the application under test, under Ctrl a
+  browser dropped them while the send said they were typed, and Ctrl during the clearing keys
+  emptied the whole document. Now Alt stops the send and says so, and Ctrl or Win holds the next key
+  until it comes up, for up to two seconds. Shift holds only a clearing key, because a character
+  arrives unchanged under it.
 
 ## [0.3.0] - 2026-10-25
 

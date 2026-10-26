@@ -22,7 +22,7 @@ use super::pulse::Pulse;
 use super::trust;
 use crate::cadence::{Cadence, PROGRESS_INTERVAL};
 use crate::confirm::press_confirmed;
-use crate::confirm::{Step, TAKEN_WAIT, Waits, Watch, Wire};
+use crate::confirm::{Held, Step, TAKEN_WAIT, Waits, Watch, Wire};
 use crate::escape::{ReservedEscape, SystemEscape};
 use crate::macos_rules::{
     MacEvent, PulseVerdict, TEXT_KEY, chord_acted, chord_steps, held_modifier, scalars, text_steps,
@@ -123,6 +123,14 @@ impl Wire<MacEvent> for SystemWire {
             Watch::Steady
         }
     }
+    fn held(&mut self) -> Held {
+        // Nothing the person holds is part of an event of this send: each comes
+        // from a private source with its flags set in full (`post`). Whether a
+        // held modifier still changes what an application does with such an
+        // event is measured on Windows only (`OBS-233`), so nothing is waited for
+        // here (`D149`).
+        Held::default()
+    }
     fn pause(&mut self, how_long: Duration) {
         std::thread::sleep(how_long);
     }
@@ -163,6 +171,7 @@ impl Session {
         Waits {
             system: TAKEN_WAIT,
             target: None,
+            release: MODIFIER_RELEASE_WAIT,
         }
     }
 

@@ -244,6 +244,7 @@ fn stop_reason(reason: nkb_sys::StopReason) -> StopReason {
         nkb_sys::StopReason::FocusMoved => StopReason::FocusMoved,
         nkb_sys::StopReason::NotTaking => StopReason::NotTaking,
         nkb_sys::StopReason::Escape => StopReason::Escape,
+        nkb_sys::StopReason::KeyPressed { key } => StopReason::KeyPressed { key },
     }
 }
 
@@ -454,6 +455,7 @@ mod tests {
             stop_reason(nkb_sys::StopReason::FocusMoved),
             stop_reason(nkb_sys::StopReason::NotTaking),
             stop_reason(nkb_sys::StopReason::Escape),
+            stop_reason(nkb_sys::StopReason::KeyPressed { key: "Alt" }),
         ];
         assert_eq!(
             mapped,
@@ -461,7 +463,8 @@ mod tests {
                 StopReason::Dropped,
                 StopReason::FocusMoved,
                 StopReason::NotTaking,
-                StopReason::Escape
+                StopReason::Escape,
+                StopReason::KeyPressed { key: "Alt" }
             ]
         );
     }

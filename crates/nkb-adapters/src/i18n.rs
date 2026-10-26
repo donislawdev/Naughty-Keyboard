@@ -354,11 +354,11 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
             &[
                 ("sent", &units_sent.to_string()),
                 ("expected", &units_expected.to_string()),
-                ("reason", stop_reason(*reason)),
+                ("reason", &stop_reason(*reason)),
             ],
         ),
         Message::NothingArrived { reason } | Message::ClearedThenNothingArrived { reason } => {
-            fill(pattern, &[("reason", stop_reason(*reason))])
+            fill(pattern, &[("reason", &stop_reason(*reason))])
         }
         Message::EndOfPack { total } | Message::AtFirstValue { total } => {
             fill(pattern, &[("total", &total.to_string())])
@@ -420,13 +420,22 @@ fn pattern_stop_reason(reason: StopReason) -> &'static str {
         StopReason::FocusMoved => "another window came to the front",
         StopReason::NotTaking => "the application stopped taking keys",
         StopReason::Escape => "Escape was pressed",
+        StopReason::KeyPressed { .. } => "{key} was pressed",
     }
 }
 
 /// Why a send stopped, ready to stand inside a sentence.
 #[must_use]
-pub fn stop_reason(reason: StopReason) -> &'static str {
-    pattern_stop_reason(reason)
+pub fn stop_reason(reason: StopReason) -> String {
+    let pattern = pattern_stop_reason(reason);
+    match reason {
+        // The key's name on the system the route runs on (`D149`).
+        StopReason::KeyPressed { key } => fill(pattern, &[("key", key)]),
+        StopReason::Dropped
+        | StopReason::FocusMoved
+        | StopReason::NotTaking
+        | StopReason::Escape => pattern.to_owned(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1809,15 +1818,17 @@ mod tests {
         // `D95`, `D96`: the clause stands between a colon and the full stop its
         // sentence brings, so it carries no full stop of its own, and two
         // reasons that read the same would tell the tester nothing.
-        let clauses: Vec<&str> = [
+        let clauses: Vec<String> = [
             StopReason::Dropped,
             StopReason::FocusMoved,
             StopReason::NotTaking,
             StopReason::Escape,
+            StopReason::KeyPressed { key: "Alt" },
         ]
         .into_iter()
         .map(stop_reason)
         .collect();
+        assert_eq!(clauses[4], "Alt was pressed", "the key is named, D149");
         for (i, clause) in clauses.iter().enumerate() {
             assert!(!clause.is_empty() && !clause.ends_with('.'), "{clause}");
             assert!(!clauses[i + 1..].contains(clause), "\"{clause}\" twice");

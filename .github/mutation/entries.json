@@ -11830,6 +11830,96 @@
       "replace": "            }\n            Ok(TargetRef::UNNAMED)\n        }\n        None => {",
       "test": "target_line::tests::a_named_target_is_said_with_its_window_and_the_unchanged_focus_is_noted",
       "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1529",
+      "why": "a send never looks at the modifiers between events, so Alt pressed mid-send turns the rest of the value into menu commands (OBS-233, D149)",
+      "file": "crates/nkb-sys/src/confirm.rs",
+      "find": "        if let Err(reason) = hands_off(wire, step.shift_counts, waits.release) {",
+      "replace": "        if let Err(reason) = Ok::<(), StopReason>(()) {",
+      "test": "confirm::tests::alt_pressed_mid_send_stops_it_before_the_next_key_and_names_alt",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1530",
+      "why": "Alt makes the send wait instead of stopping, so it goes on once Alt comes up alone and types into the menu bar it opened (OBS-233, D149)",
+      "file": "crates/nkb-sys/src/confirm.rs",
+      "find": "        Hand::StopAt(\"Alt\")\n",
+      "replace": "        Hand::WaitFor(\"Alt\")\n",
+      "test": "confirm::tests::alt_stops_and_every_other_modifier_waits",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1531",
+      "why": "Ctrl held mid-send is ignored, so the clearing recipe empties the whole document and Chromium drops the characters (OBS-233, D149)",
+      "file": "crates/nkb-sys/src/confirm.rs",
+      "find": "        Hand::WaitFor(\"Ctrl\")\n",
+      "replace": "        Hand::Free\n",
+      "test": "confirm::tests::alt_stops_and_every_other_modifier_waits",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1532",
+      "why": "the person's Shift holds back every character as well, although a character arrives as itself under Shift (OBS-233, D149)",
+      "file": "crates/nkb-sys/src/confirm.rs",
+      "find": "    } else if held.shift && shift_counts {",
+      "replace": "    } else if held.shift {",
+      "test": "confirm::tests::the_persons_shift_holds_a_chord_but_not_a_character",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1533",
+      "why": "the person's Shift never counts before a chord, so Shift held at Home selects instead of going to the start of the line (D149)",
+      "file": "crates/nkb-sys/src/confirm.rs",
+      "find": "        let shift_counts = steps.is_empty();",
+      "replace": "        let shift_counts = false;",
+      "test": "confirm::tests::a_shifted_chord_is_four_steps_each_with_the_state_it_leaves",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1534",
+      "why": "Escape pressed while the send waits for a held modifier is not heard, so the person cannot stop it until the modifier comes up (D96, D149)",
+      "file": "crates/nkb-sys/src/confirm.rs",
+      "find": "            Watch::Escape => return Err(StopReason::Escape),",
+      "replace": "            Watch::Escape => {}",
+      "test": "confirm::tests::escape_and_another_window_are_answered_while_a_modifier_is_waited_for",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1535",
+      "why": "a modifier held past the bound is waited for without end, so a send under a held Ctrl hangs instead of stopping with its name (D149)",
+      "file": "crates/nkb-sys/src/confirm.rs",
+      "find": "                if start.elapsed() >= wait {\n                    return Err(StopReason::KeyPressed { key });",
+      "replace": "                if start.elapsed() >= wait && false {\n                    return Err(StopReason::KeyPressed { key });",
+      "test": "confirm::tests::a_modifier_held_past_the_bound_stops_the_send_naming_it",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1536",
+      "why": "the adapter calls a modifier pressed mid-send an Escape, so the palette names a key the person never touched (D149)",
+      "file": "crates/nkb-adapters/src/keyboard.rs",
+      "find": "        nkb_sys::StopReason::KeyPressed { key } => StopReason::KeyPressed { key },",
+      "replace": "        nkb_sys::StopReason::KeyPressed { .. } => StopReason::Escape,",
+      "test": "keyboard::tests::every_reason_of_the_system_maps_to_its_own_reason",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1537",
+      "why": "the palette's clause leaves {key} standing instead of naming the modifier that stopped the value (D149)",
+      "file": "crates/nkb-adapters/src/i18n.rs",
+      "find": "        StopReason::KeyPressed { key } => fill(pattern, &[(\"key\", key)]),",
+      "replace": "        StopReason::KeyPressed { .. } => pattern.to_owned(),",
+      "test": "i18n::tests::every_reason_a_send_stopped_reads_as_its_own_clause",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1538",
+      "why": "nkb send says Escape was pressed when a modifier stopped the value (D149)",
+      "file": "crates/nkb-cli/src/refusals.rs",
+      "find": "        StopReason::KeyPressed { key } => format!(\"{key} was pressed\"),",
+      "replace": "        StopReason::KeyPressed { .. } => \"Escape was pressed\".to_owned(),",
+      "test": "refusals::tests::every_reason_a_send_stopped_reads_as_its_own_and_names_the_key",
+      "runner": "rust:nkb-cli:bin=nkb"
     }
   ]
 }
