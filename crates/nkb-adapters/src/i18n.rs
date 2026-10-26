@@ -421,6 +421,7 @@ fn pattern_stop_reason(reason: StopReason) -> &'static str {
         StopReason::NotTaking => "the application stopped taking keys",
         StopReason::Escape => "Escape was pressed",
         StopReason::KeyPressed { .. } => "{key} was pressed",
+        StopReason::Halted => "the palette was closed",
     }
 }
 
@@ -434,7 +435,8 @@ pub fn stop_reason(reason: StopReason) -> String {
         StopReason::Dropped
         | StopReason::FocusMoved
         | StopReason::NotTaking
-        | StopReason::Escape => pattern.to_owned(),
+        | StopReason::Escape
+        | StopReason::Halted => pattern.to_owned(),
     }
 }
 
@@ -1824,6 +1826,7 @@ mod tests {
             StopReason::NotTaking,
             StopReason::Escape,
             StopReason::KeyPressed { key: "Alt" },
+            StopReason::Halted,
         ]
         .into_iter()
         .map(stop_reason)

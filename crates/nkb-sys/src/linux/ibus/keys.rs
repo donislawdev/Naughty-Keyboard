@@ -29,6 +29,7 @@
 //! as the recipe has them, and a multi-line field is cleared one line at a time, as on every
 //! system (`D54`).
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use super::{Session, daemon, put_back, stopped_chords, unsupported_keys};
@@ -46,6 +47,7 @@ use crate::{Chord, MODIFIER_RELEASE_WAIT, SendError, StopReason, Waiting};
 /// `waiting` hears that the window of the system stands, if it does (`D145` point 76).
 pub(crate) fn press_chords(
     chords: &[Chord],
+    halt: &AtomicBool,
     waiting: &mut dyn FnMut(Waiting),
 ) -> Result<usize, SendError> {
     if chords.is_empty() {
@@ -58,7 +60,7 @@ pub(crate) fn press_chords(
     let keys = Keys::open(waiting).map_err(unsupported_keys)?;
     let mut session =
         Session::begin(&socket, DEADLINE).map_err(|_| unsupported_keys(Unavailable::NoBus))?;
-    let result = run(&mut session, &keys, chords);
+    let result = run(&mut session, &keys, chords, halt);
     // On every way out, a failed clearing included: the person's engine is theirs.
     let previous = session.end();
     if let Some(name) = engine_to_restore(previous.as_deref()) {
@@ -68,7 +70,12 @@ pub(crate) fn press_chords(
     result
 }
 
-fn run(session: &mut Session, keys: &Keys, chords: &[Chord]) -> Result<usize, SendError> {
+fn run(
+    session: &mut Session,
+    keys: &Keys,
+    chords: &[Chord],
+    halt: &AtomicBool,
+) -> Result<usize, SendError> {
     let total = chords.len();
     let focused = session
         .wait_for_focus()
@@ -84,6 +91,11 @@ fn run(session: &mut Session, keys: &Keys, chords: &[Chord]) -> Result<usize, Se
         // `Escape` stops the clearing before the next chord, as it stops every send (`D96`).
         if (number > 0 && session.pause(CHORD_GAP)) || session.escape_pressed() {
             return Err(stopped_chords(number, total, StopReason::Escape));
+        }
+        // And the caller's flag, the same way (R03). The window of the portal that asks
+        // the person, before this, does not look at it.
+        if halt.load(Ordering::Relaxed) {
+            return Err(stopped_chords(number, total, StopReason::Halted));
         }
         press_guarded(session, keys, chord, number, total)?;
     }

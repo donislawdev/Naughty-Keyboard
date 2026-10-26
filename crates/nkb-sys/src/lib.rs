@@ -72,6 +72,8 @@ pub mod startup;
 pub mod text_services;
 pub mod window;
 
+use core::sync::atomic::AtomicBool;
+
 /// What a successful send actually did.
 ///
 /// Both numbers are reported because they differ, and the difference is the
@@ -159,6 +161,9 @@ pub enum StopReason {
     /// once, or another held longer than [`MODIFIER_RELEASE_WAIT`] (`D149`,
     /// `OBS-233`). `key` is its name on this system.
     KeyPressed { key: &'static str },
+    /// The caller asked the send to stop through the flag it handed over: the
+    /// palette is closing (R03). Answered like `Escape`, before the next event.
+    Halted,
 }
 
 impl core::fmt::Display for StopReason {
@@ -169,6 +174,7 @@ impl core::fmt::Display for StopReason {
             Self::NotTaking => f.write_str("the application stopped taking keys"),
             Self::Escape => f.write_str("Escape was pressed"),
             Self::KeyPressed { key } => write!(f, "{key} was pressed"),
+            Self::Halted => f.write_str("the send was asked to stop"),
         }
     }
 }
@@ -334,6 +340,7 @@ mod windows_impl {
     };
     use super::escape::{ReservedEscape, SystemEscape};
     use super::{Chord, MODIFIER_RELEASE_WAIT, NavKey};
+    use core::sync::atomic::{AtomicBool, Ordering};
     use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
@@ -368,15 +375,27 @@ mod windows_impl {
         (state as u16) & 0x8000 != 0
     }
 
-    /// Waits for every modifier to come up, for at most `MODIFIER_RELEASE_WAIT`.
-    fn wait_for_modifiers_released() -> Result<(), SendError> {
+    /// Why the wait before the first key ended with a modifier still down.
+    enum NotReleased {
+        /// Still held when the wait ran out.
+        Held(&'static str),
+        /// The caller asked the send to stop while it waited (R03).
+        Halted,
+    }
+
+    /// Waits for every modifier to come up, for at most `MODIFIER_RELEASE_WAIT`,
+    /// and no longer than the caller lets the send go on.
+    fn wait_for_modifiers_released(halt: &AtomicBool) -> Result<(), NotReleased> {
         let deadline = std::time::Instant::now() + MODIFIER_RELEASE_WAIT;
         loop {
             let Some(key) = held_modifier() else {
                 return Ok(());
             };
+            if halt.load(Ordering::Relaxed) {
+                return Err(NotReleased::Halted);
+            }
             if std::time::Instant::now() >= deadline {
-                return Err(SendError::ModifierHeld { key });
+                return Err(NotReleased::Held(key));
             }
             std::thread::sleep(core::time::Duration::from_millis(10));
         }
@@ -487,13 +506,15 @@ mod windows_impl {
     }
 
     /// The system as `confirm` asks it, around the window that was in front
-    /// when the send began, with `Escape` held for as long as the send lasts.
-    struct SystemWire {
+    /// when the send began, with `Escape` held for as long as the send lasts and
+    /// the caller's flag to stop it (R03).
+    struct SystemWire<'a> {
         window: HWND,
         escape: ReservedEscape,
+        halt: &'a AtomicBool,
     }
 
-    impl super::confirm::Wire<INPUT> for SystemWire {
+    impl super::confirm::Wire<INPUT> for SystemWire<'_> {
         fn send(&mut self, event: INPUT) -> bool {
             send_one(event)
         }
@@ -520,6 +541,8 @@ mod windows_impl {
             // whatever else is true of the window by now.
             if self.escape.pressed() {
                 Watch::Escape
+            } else if self.halt.load(Ordering::Relaxed) {
+                Watch::Halted
             } else if unsafe { GetForegroundWindow() } != self.window {
                 Watch::Moved
             } else if unsafe { IsHungAppWindow(self.window) } != 0 {
@@ -536,15 +559,15 @@ mod windows_impl {
     /// The window in front, the queue joined to it if it could be, and the
     /// waits that follow from that. One per send: `Escape` is given back and the
     /// queue is left on drop - in that order, the fields' own.
-    struct Session {
-        wire: SystemWire,
+    struct Session<'a> {
+        wire: SystemWire<'a>,
         joined: Option<Joined>,
     }
 
-    impl Session {
+    impl<'a> Session<'a> {
         /// The session around `target`, or nothing when another window - or
         /// none - is in front by now (`D148`).
-        fn begin(target: WindowRef) -> Option<Self> {
+        fn begin(target: WindowRef, halt: &'a AtomicBool) -> Option<Self> {
             let window = unsafe { GetForegroundWindow() };
             if !super::still_in_front(target, window_ref(window)) {
                 return None;
@@ -555,6 +578,7 @@ mod windows_impl {
                 wire: SystemWire {
                     window,
                     escape: SystemEscape::reserve(),
+                    halt,
                 },
                 joined: join_focus(window),
             })
@@ -574,19 +598,27 @@ mod windows_impl {
         }
     }
 
-    pub fn send_chords(chords: &[Chord], target: WindowRef) -> Result<usize, SendError> {
+    pub fn send_chords(
+        chords: &[Chord],
+        target: WindowRef,
+        halt: &AtomicBool,
+    ) -> Result<usize, SendError> {
         if chords.is_empty() {
             return Ok(0);
         }
-        wait_for_modifiers_released()?;
-        let Some(mut session) = Session::begin(target) else {
+        let nothing_pressed = |reason| SendError::ChordsTruncated {
+            chords_sent: 0,
+            chords_expected: chords.len(),
+            reason,
+        };
+        wait_for_modifiers_released(halt).map_err(|why| match why {
+            NotReleased::Held(key) => SendError::ModifierHeld { key },
+            NotReleased::Halted => nothing_pressed(StopReason::Halted),
+        })?;
+        let Some(mut session) = Session::begin(target, halt) else {
             // Not the window the clearing was meant for, or none: nothing to
             // press into, and nothing pressed.
-            return Err(SendError::ChordsTruncated {
-                chords_sent: 0,
-                chords_expected: chords.len(),
-                reason: StopReason::FocusMoved,
-            });
+            return Err(nothing_pressed(StopReason::FocusMoved));
         };
         // Each event alone, the next only once it is shown (`D94`) and, when the
         // focused queue could be joined, taken (`D95`). A chord that stopped is
@@ -659,6 +691,7 @@ mod windows_impl {
     pub fn send_text(
         text: &str,
         target: WindowRef,
+        halt: &AtomicBool,
         progress: &mut dyn FnMut(SendProgress),
     ) -> Result<SendOutcome, SendError> {
         let units: Vec<u16> = text.encode_utf16().collect();
@@ -673,13 +706,17 @@ mod windows_impl {
                 following: Following::Application,
             });
         }
-        wait_for_modifiers_released()?;
-        let Some(mut session) = Session::begin(target) else {
-            return Err(SendError::Truncated {
-                units_sent: 0,
-                units_expected: expected,
-                reason: StopReason::FocusMoved,
-            });
+        let nothing_sent = |reason| SendError::Truncated {
+            units_sent: 0,
+            units_expected: expected,
+            reason,
+        };
+        wait_for_modifiers_released(halt).map_err(|why| match why {
+            NotReleased::Held(key) => SendError::ModifierHeld { key },
+            NotReleased::Halted => nothing_sent(StopReason::Halted),
+        })?;
+        let Some(mut session) = Session::begin(target, halt) else {
+            return Err(nothing_sent(StopReason::FocusMoved));
         };
 
         // One unit at a time, each event shown by the system (`D94`) and, when
@@ -749,6 +786,7 @@ mod windows_impl {
 #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
 mod other_impl {
     use super::{SendError, SendOutcome, SendProgress, WindowRef};
+    use core::sync::atomic::AtomicBool;
 
     /// Named rather than "this platform", so the message says something the
     /// reader can act on.
@@ -766,12 +804,17 @@ mod other_impl {
     pub fn send_text(
         _text: &str,
         _target: WindowRef,
+        _halt: &AtomicBool,
         _progress: &mut dyn FnMut(SendProgress),
     ) -> Result<SendOutcome, SendError> {
         Err(SendError::Unsupported { system: SYSTEM })
     }
 
-    pub fn send_chords(_chords: &[super::Chord], _target: WindowRef) -> Result<usize, SendError> {
+    pub fn send_chords(
+        _chords: &[super::Chord],
+        _target: WindowRef,
+        _halt: &AtomicBool,
+    ) -> Result<usize, SendError> {
         Err(SendError::Unsupported { system: SYSTEM })
     }
 }
@@ -812,6 +855,11 @@ pub fn foreground_window() -> Option<WindowRef> {
 /// up (`D149`). A stop ends the send with [`SendError::Truncated`] and its
 /// [`StopReason`].
 ///
+/// `halt` is the caller's way to stop the send from another thread: set, it ends
+/// the send where `Escape` would, with [`StopReason::Halted`] (R03, the palette
+/// closing while a long value is still going). A Wayland session that waits for
+/// the person in the window of its portal does not look at it.
+///
 /// `progress` hears how far the send got, on the sending thread, between two
 /// units: at most once a tenth of a second and never during the first tenth, so
 /// a short send says nothing on the way (`OBS-160`). It must return quickly -
@@ -819,9 +867,10 @@ pub fn foreground_window() -> Option<WindowRef> {
 pub fn send_text(
     text: &str,
     target: WindowRef,
+    halt: &AtomicBool,
     progress: &mut dyn FnMut(SendProgress),
 ) -> Result<SendOutcome, SendError> {
-    platform::send_text(text, target, progress)
+    platform::send_text(text, target, halt, progress)
 }
 
 /// Press `chords` in order, each as a complete press-and-release, in the field
@@ -846,22 +895,25 @@ pub fn send_text(
 /// every event is confirmed before the next, as in [`send_text`] - and
 /// [`SendError::Unsupported`] where there is no route.
 ///
+/// `halt` stops the presses as in [`send_text`].
+///
 /// `waiting` hears what the send stands on besides the keys, on the sending thread: only a
 /// Wayland session has anything to say (the window in which the person allows the keys,
 /// `D145` point 76), and every other route never calls it. It must return quickly.
 pub fn send_chords(
     chords: &[Chord],
     target: WindowRef,
+    halt: &AtomicBool,
     waiting: &mut dyn FnMut(Waiting),
 ) -> Result<usize, SendError> {
     #[cfg(target_os = "linux")]
     {
-        platform::send_chords(chords, target, waiting)
+        platform::send_chords(chords, target, halt, waiting)
     }
     #[cfg(not(target_os = "linux"))]
     {
         let _ = waiting;
-        platform::send_chords(chords, target)
+        platform::send_chords(chords, target, halt)
     }
 }
 
@@ -941,7 +993,7 @@ mod tests {
     fn an_empty_text_sends_nothing_and_says_so() {
         // Whatever the platform, sending nothing must not be reported as having
         // sent something.
-        match send_text("", UNNAMED_WINDOW, &mut |_| {
+        match send_text("", UNNAMED_WINDOW, &AtomicBool::new(false), &mut |_| {
             panic!("nothing to send, nothing to report")
         }) {
             Ok(outcome) => assert_eq!(
@@ -976,7 +1028,8 @@ mod tests {
         if can_send() {
             return;
         }
-        let Err(error) = send_text("x", UNNAMED_WINDOW, &mut |_| {}) else {
+        let Err(error) = send_text("x", UNNAMED_WINDOW, &AtomicBool::new(false), &mut |_| {})
+        else {
             panic!("a build that cannot send must not report success");
         };
         let text = error.to_string();
@@ -988,7 +1041,7 @@ mod tests {
 
     #[test]
     fn no_chords_press_nothing_and_say_so() {
-        match send_chords(&[], UNNAMED_WINDOW, &mut |_| {}) {
+        match send_chords(&[], UNNAMED_WINDOW, &AtomicBool::new(false), &mut |_| {}) {
             Ok(pressed) => assert_eq!(pressed, 0),
             Err(SendError::Unsupported { .. }) => {}
             Err(other) => panic!("no chords must not fail this way: {other}"),
@@ -1051,6 +1104,7 @@ mod tests {
             StopReason::NotTaking,
             StopReason::Escape,
             StopReason::KeyPressed { key: "Alt" },
+            StopReason::Halted,
         ]
         .iter()
         .map(ToString::to_string)

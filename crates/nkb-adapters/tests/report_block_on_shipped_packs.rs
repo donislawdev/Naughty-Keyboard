@@ -22,6 +22,7 @@
 #![allow(clippy::panic, clippy::expect_used)]
 
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
 
 use nkb_adapters::report_text::report_text;
 use nkb_adapters::{BuiltInCatalogue, TomlPackFormat};
@@ -29,7 +30,7 @@ use nkb_app::ports::{
     Availability, Delivered, DeliveryError, Following, KeystrokeError, KeystrokeSender,
     PackCatalogue, PackFormat, PackSource, Progress, TargetRef, ValueDelivery, Waiting,
 };
-use nkb_app::{Chosen, Clearing, SendOutcome, ValueFacts, deliver_value};
+use nkb_app::{Chosen, Clearing, Means, SendOutcome, ValueFacts, deliver_value};
 use nkb_core::calendar::Day;
 use nkb_core::keys::KeyChord;
 use nkb_core::pack::Pack;
@@ -53,6 +54,7 @@ impl ValueDelivery for TakesEverything {
         &self,
         text: &str,
         _target: TargetRef,
+        _halt: &AtomicBool,
         _progress: &mut dyn FnMut(Progress),
     ) -> Result<Delivered, DeliveryError> {
         Ok(Delivered {
@@ -69,6 +71,7 @@ impl KeystrokeSender for NoKeys {
         &self,
         _chords: &[KeyChord],
         _target: TargetRef,
+        _halt: &AtomicBool,
         _waiting: &mut dyn FnMut(Waiting),
     ) -> Result<(), KeystrokeError> {
         Ok(())
@@ -148,8 +151,11 @@ fn every_shipped_value_has_a_block_that_agrees_with_the_palette() {
                     on: ON,
                 },
                 TargetRef(1),
-                &TakesEverything,
-                &NoKeys,
+                Means {
+                    delivery: &TakesEverything,
+                    keys: &NoKeys,
+                    halt: &AtomicBool::new(false),
+                },
                 Clearing::Keep,
                 &mut |_| {},
             )

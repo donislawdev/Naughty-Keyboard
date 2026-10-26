@@ -125,6 +125,10 @@ pub struct Ports<'a> {
     /// window in which the person allows the keys, on a Wayland desktop (`D145`
     /// point 76). Called on the thread that sends, so it must return quickly.
     pub waiting: &'a dyn Fn(Waiting),
+    /// Set from another thread to stop a send that is going, before its next key
+    /// (R03): the palette sets it when it closes, so a long value does not type
+    /// on into a window nobody watches while the process waits for it.
+    pub halt: &'a std::sync::atomic::AtomicBool,
 }
 
 /// A value on its way into the field, as the palette shows it while it goes
@@ -935,7 +939,12 @@ impl AdvanceSequence {
             warnings: loaded.warnings,
             on: self.clock.today(),
         };
-        let mut outcome = deliver_value(chosen, target, route, ports.keys, clearing, &mut tell);
+        let means = |delivery| crate::send_value::Means {
+            delivery,
+            keys: ports.keys,
+            halt: ports.halt,
+        };
+        let mut outcome = deliver_value(chosen, target, means(route), clearing, &mut tell);
 
         // `D72`: the direct route refused a window with higher privileges before
         // pressing a single key. Not a hiccup to retry and not a system without
@@ -953,8 +962,7 @@ impl AdvanceSequence {
             outcome = deliver_value(
                 chosen,
                 target,
-                ports.by_clipboard,
-                ports.keys,
+                means(ports.by_clipboard),
                 Clearing::Keep,
                 &mut tell,
             );
@@ -3010,6 +3018,18 @@ mod tests {
             "the clearing"
         );
         assert_eq!(*kit.direct.aimed.borrow(), vec![TargetRef(42)], "the value");
+    }
+
+    #[test]
+    fn the_palettes_flag_to_stop_reaches_the_clearing_and_the_value() {
+        // R03: the route reads the flag between keys. A port that was handed
+        // another flag, or none, would type on after the palette closed.
+        let kit = Kit::ready();
+        kit.halt.store(true, std::sync::atomic::Ordering::Relaxed);
+        let _ = chosen(Risk::Normal).on_action(HotkeyAction::NextValue, &kit.ports());
+        // The clearing, then the value.
+        let handed = (kit.keys.halted.take(), kit.direct.halted.take());
+        assert_eq!(handed, (vec![true], vec![true]));
     }
 
     #[test]

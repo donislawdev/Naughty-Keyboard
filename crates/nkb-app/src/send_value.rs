@@ -38,6 +38,8 @@
 //! Every one of those belongs to a later piece of step 3, and saying which
 //! parts are missing is untouchable rule 1 applied to a use case.
 
+use std::sync::atomic::AtomicBool;
+
 use crate::ports::{
     Availability, DeliveryError, Following, KeystrokeError, KeystrokeSender, PackFormat,
     PackSource, Progress, SourceError, StopReason, TargetRef, ValueDelivery, Waiting,
@@ -103,6 +105,16 @@ pub struct SendRequest<'a> {
     /// when the person was told where the value goes. Every key of the send is
     /// aimed at it (`D148`).
     pub target: TargetRef,
+}
+
+/// What a value goes by: the route that types it, the keys that clear the line
+/// first, and the flag that stops both before their next key (R03, the palette
+/// closing). One argument rather than three, for the same reason as [`Chosen`].
+#[derive(Clone, Copy)]
+pub struct Means<'a> {
+    pub delivery: &'a dyn ValueDelivery,
+    pub keys: &'a dyn KeystrokeSender,
+    pub halt: &'a AtomicBool,
 }
 
 /// One value of a pack held in memory, chosen to go out on a given day.
@@ -353,11 +365,15 @@ fn deliver_one(
         warnings,
         on: request.on,
     };
+    // `nkb send` has nobody to stop it from another thread: `Escape` is its stop.
     deliver_value(
         chosen,
         request.target,
-        delivery,
-        keys,
+        Means {
+            delivery,
+            keys,
+            halt: &AtomicBool::new(false),
+        },
         request.clearing,
         progress,
     )
@@ -411,8 +427,7 @@ pub enum OnTheWay<'a> {
 pub fn deliver_value(
     chosen: Chosen<'_>,
     target: TargetRef,
-    delivery: &dyn ValueDelivery,
-    keys: &dyn KeystrokeSender,
+    means: Means<'_>,
     clearing: Clearing,
     progress: &mut dyn FnMut(OnTheWay<'_>),
 ) -> SendOutcome {
@@ -422,6 +437,11 @@ pub fn deliver_value(
         warnings,
         on,
     } = chosen;
+    let Means {
+        delivery,
+        keys,
+        halt,
+    } = means;
     // The body for today: a `next-date` value becomes a date here and nowhere
     // earlier, so a palette left open for a week still types the right one.
     let body = value.definition.on(on);
@@ -453,7 +473,7 @@ pub fn deliver_value(
     let clearing = match clearing {
         Clearing::Keep => ClearingOutcome::NotAsked,
         Clearing::Line => {
-            match keys.send_keystrokes(&line_clearing_recipe(), target, &mut |waiting| {
+            match keys.send_keystrokes(&line_clearing_recipe(), target, halt, &mut |waiting| {
                 progress(OnTheWay::Waiting(waiting));
             }) {
                 Ok(()) => ClearingOutcome::Done,
@@ -479,7 +499,7 @@ pub fn deliver_value(
 
     // Counted at the first report, if there is one, and kept for the outcome.
     let mut counted: Option<ValueFacts> = None;
-    let delivered = delivery.deliver(&literal, target, &mut |step| {
+    let delivered = delivery.deliver(&literal, target, halt, &mut |step| {
         progress(OnTheWay::Typing(Sending {
             facts: counted.get_or_insert_with(&facts),
             progress: step,
@@ -561,6 +581,7 @@ mod tests {
             &self,
             text: &str,
             _target: TargetRef,
+            _halt: &AtomicBool,
             _progress: &mut dyn FnMut(Progress),
         ) -> Result<Delivered, DeliveryError> {
             self.log.borrow_mut().push(format!("text:{text}"));
@@ -596,6 +617,7 @@ mod tests {
             &self,
             chords: &[KeyChord],
             _target: TargetRef,
+            _halt: &AtomicBool,
             waiting: &mut dyn FnMut(Waiting),
         ) -> Result<(), KeystrokeError> {
             for said in &self.says {
@@ -1316,6 +1338,7 @@ mod tests {
                 &self,
                 text: &str,
                 _target: TargetRef,
+                _halt: &AtomicBool,
                 _progress: &mut dyn FnMut(Progress),
             ) -> Result<Delivered, DeliveryError> {
                 Ok(Delivered {
@@ -1359,6 +1382,7 @@ mod tests {
                 &self,
                 text: &str,
                 _target: TargetRef,
+                _halt: &AtomicBool,
                 progress: &mut dyn FnMut(Progress),
             ) -> Result<Delivered, DeliveryError> {
                 let total = text.encode_utf16().count();

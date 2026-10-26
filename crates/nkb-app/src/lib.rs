@@ -47,6 +47,6 @@ pub use ports::{
     TranslationTarget, ValueDelivery, Wait, Waiting,
 };
 pub use send_value::{
-    Chosen, Clearing, ClearingOutcome, OnTheWay, SendOutcome, SendRequest, Sending, SkipReason,
-    ValueFacts, deliver_value, send_value,
+    Chosen, Clearing, ClearingOutcome, Means, OnTheWay, SendOutcome, SendRequest, Sending,
+    SkipReason, ValueFacts, deliver_value, send_value,
 };

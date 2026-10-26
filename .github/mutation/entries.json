@@ -67,8 +67,8 @@
       "id": "M41",
       "why": "a second call of KeystrokeSender in the same file - the tool presses keys outside the one place allowed to",
       "file": "crates/nkb-app/src/send_value.rs",
-      "find": "            match keys.send_keystrokes(&line_clearing_recipe(), target, &mut |waiting| {\n                progress(OnTheWay::Waiting(waiting));\n            }) {\n                Ok(()) => ClearingOutcome::Done,",
-      "replace": "            match keys.send_keystrokes(&line_clearing_recipe(), target, &mut |waiting| {\n                progress(OnTheWay::Waiting(waiting));\n            }) {\n                Ok(()) => { let _ = keys.send_keystrokes(&[], target, &mut |_| {}); ClearingOutcome::Done }",
+      "find": "            match keys.send_keystrokes(&line_clearing_recipe(), target, halt, &mut |waiting| {\n                progress(OnTheWay::Waiting(waiting));\n            }) {\n                Ok(()) => ClearingOutcome::Done,",
+      "replace": "            match keys.send_keystrokes(&line_clearing_recipe(), target, halt, &mut |waiting| {\n                progress(OnTheWay::Waiting(waiting));\n            }) {\n                Ok(()) => { let _ = keys.send_keystrokes(&[], target, halt, &mut |_| {}); ClearingOutcome::Done }",
       "test": "the_keystroke_port_is_called_only_through_the_named_doors",
       "runner": "rust:nkb-app:keystrokes_have_named_doors"
     },
@@ -2028,8 +2028,8 @@
       "id": "M376",
       "why": "Escape ends the wait for a key the system already took - the key lands in the field anyway and nkb does not count it (2025 in the victim against 2024, D96)",
       "file": "crates/nkb-sys/src/confirm.rs",
-      "find": "                Watch::Steady | Watch::Escape => {}",
-      "replace": "                Watch::Steady => {}\n                Watch::Escape => return Err(StopReason::Escape),",
+      "find": "                Watch::Steady | Watch::Escape | Watch::Halted => {}",
+      "replace": "                Watch::Steady | Watch::Halted => {}\n                Watch::Escape => return Err(StopReason::Escape),",
       "test": "confirm::tests::escape_pressed_while_the_application_is_late_lets_the_key_in_flight_land",
       "runner": "rust:nkb-sys:lib"
     },
@@ -2388,8 +2388,8 @@
       "id": "M427",
       "why": "Copy writes the value by the DIRECT ROUTE instead of the clipboard - the button types the value into the focused field (D98)",
       "file": "crates/nkb-app/src/advance_sequence/copy.rs",
-      "find": "            .by_clipboard\n            .deliver(&text, TargetRef::UNNAMED, &mut |_| {})",
-      "replace": "            .direct\n            .deliver(&text, TargetRef::UNNAMED, &mut |_| {})",
+      "find": "        match ports.by_clipboard.deliver(",
+      "replace": "        match ports.direct.deliver(",
       "test": "advance_sequence::copy::tests::a_copy_takes_the_clipboard_route_with_the_value_named_and_moves_nothing",
       "runner": "rust:nkb-app:lib"
     },
@@ -11799,8 +11799,8 @@
       "id": "M1523",
       "why": "the clearing is aimed at whatever has the focus, so a window that came to the front meanwhile gets Home, Shift+End, Delete in a field nobody confirmed (D148)",
       "file": "crates/nkb-app/src/send_value.rs",
-      "find": "            match keys.send_keystrokes(&line_clearing_recipe(), target, &mut |waiting| {",
-      "replace": "            match keys.send_keystrokes(&line_clearing_recipe(), TargetRef::UNNAMED, &mut |waiting| {",
+      "find": "            match keys.send_keystrokes(&line_clearing_recipe(), target, halt, &mut |waiting| {",
+      "replace": "            match keys.send_keystrokes(&line_clearing_recipe(), TargetRef::UNNAMED, halt, &mut |waiting| {",
       "test": "advance_sequence::tests::one_press_reads_its_window_once_and_aims_the_clearing_and_the_value_at_it",
       "runner": "rust:nkb-app:lib"
     },
@@ -11808,8 +11808,8 @@
       "id": "M1524",
       "why": "the value is aimed at whatever has the focus, so it follows the focus into a window the tester was never told about (D148)",
       "file": "crates/nkb-app/src/send_value.rs",
-      "find": "    let delivered = delivery.deliver(&literal, target, &mut |step| {",
-      "replace": "    let delivered = delivery.deliver(&literal, TargetRef::UNNAMED, &mut |step| {",
+      "find": "    let delivered = delivery.deliver(&literal, target, halt, &mut |step| {",
+      "replace": "    let delivered = delivery.deliver(&literal, TargetRef::UNNAMED, halt, &mut |step| {",
       "test": "advance_sequence::tests::one_press_reads_its_window_once_and_aims_the_clearing_and_the_value_at_it",
       "runner": "rust:nkb-app:lib"
     },
@@ -11920,6 +11920,69 @@
       "replace": "        StopReason::KeyPressed { .. } => \"Escape was pressed\".to_owned(),",
       "test": "refusals::tests::every_reason_a_send_stopped_reads_as_its_own_and_names_the_key",
       "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1539",
+      "why": "a halt is ignored between events, so a palette that closed goes on typing a long value into whatever window has the focus (R03)",
+      "file": "crates/nkb-sys/src/confirm.rs",
+      "find": "            Watch::Halted => return stopped(StopReason::Halted),",
+      "replace": "            Watch::Halted => {}",
+      "test": "confirm::tests::a_halt_stops_the_send_before_the_next_key_as_escape_does",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1540",
+      "why": "a halt ends the wait for a key the system already took, so the key lands uncounted and the count is one short (R03, D96)",
+      "file": "crates/nkb-sys/src/confirm.rs",
+      "find": "                Watch::Steady | Watch::Escape | Watch::Halted => {}",
+      "replace": "                Watch::Steady | Watch::Escape => {}\n                Watch::Halted => return Err(StopReason::Halted),",
+      "test": "confirm::tests::escape_pressed_while_the_application_is_late_lets_the_key_in_flight_land",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1541",
+      "why": "a halt is not heard while the send waits for a held modifier, so the palette stays up to two seconds after it closed (R03)",
+      "file": "crates/nkb-sys/src/confirm.rs",
+      "find": "            Watch::Halted => return Err(StopReason::Halted),\n        }\n    }\n}",
+      "replace": "            Watch::Halted => {}\n        }\n    }\n}",
+      "test": "confirm::tests::escape_and_another_window_are_answered_while_a_modifier_is_waited_for",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1542",
+      "why": "the clearing keys get a flag nobody sets, so closing the palette does not stop them (R03)",
+      "file": "crates/nkb-app/src/send_value.rs",
+      "find": "            match keys.send_keystrokes(&line_clearing_recipe(), target, halt, &mut |waiting| {",
+      "replace": "            match keys.send_keystrokes(&line_clearing_recipe(), target, &AtomicBool::new(false), &mut |waiting| {",
+      "test": "advance_sequence::tests::the_palettes_flag_to_stop_reaches_the_clearing_and_the_value",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1543",
+      "why": "the value gets a flag nobody sets, so closing the palette does not stop it (R03)",
+      "file": "crates/nkb-app/src/send_value.rs",
+      "find": "    let delivered = delivery.deliver(&literal, target, halt, &mut |step| {",
+      "replace": "    let delivered = delivery.deliver(&literal, target, &AtomicBool::new(false), &mut |step| {",
+      "test": "advance_sequence::tests::the_palettes_flag_to_stop_reaches_the_clearing_and_the_value",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1544",
+      "why": "the adapter calls a halt an Escape, so the reason the palette keeps is one the person never gave (R03)",
+      "file": "crates/nkb-adapters/src/keyboard.rs",
+      "find": "        nkb_sys::StopReason::Halted => StopReason::Halted,",
+      "replace": "        nkb_sys::StopReason::Halted => StopReason::Escape,",
+      "test": "keyboard::tests::every_reason_of_the_system_maps_to_its_own_reason",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1545",
+      "why": "the palette names a halt with the words of Escape, so two reasons read the same (R03)",
+      "file": "crates/nkb-adapters/src/i18n.rs",
+      "find": "        StopReason::Halted => \"the palette was closed\",",
+      "replace": "        StopReason::Halted => \"Escape was pressed\",",
+      "test": "i18n::tests::every_reason_a_send_stopped_reads_as_its_own_clause",
+      "runner": "rust:nkb-adapters:lib"
     }
   ]
 }

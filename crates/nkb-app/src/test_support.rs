@@ -14,6 +14,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::advance_sequence::{AdvanceSequence, InFlight, Ports};
 use crate::ports::{
@@ -54,6 +55,8 @@ pub(crate) struct FakeDelivery {
     pub(crate) aimed: RefCell<Vec<TargetRef>>,
     /// How many times the target was asked for (`D148`: once per send).
     pub(crate) targets_asked: Cell<usize>,
+    /// The halt flag each delivery was handed, as it stood then (R03).
+    pub(crate) halted: RefCell<Vec<bool>>,
 }
 
 impl FakeDelivery {
@@ -68,6 +71,7 @@ impl FakeDelivery {
             handed: RefCell::new(Vec::new()),
             aimed: RefCell::new(Vec::new()),
             targets_asked: Cell::new(0),
+            halted: RefCell::new(Vec::new()),
         }
     }
     /// A route on a system whose text services are on and could act on what it
@@ -152,10 +156,12 @@ impl ValueDelivery for FakeDelivery {
         &self,
         text: &str,
         target: TargetRef,
+        halt: &AtomicBool,
         progress: &mut dyn FnMut(Progress),
     ) -> Result<Delivered, DeliveryError> {
         self.handed.borrow_mut().push(text.to_owned());
         self.aimed.borrow_mut().push(target);
+        self.halted.borrow_mut().push(halt.load(Ordering::Relaxed));
         for report in &self.reports {
             progress(*report);
         }
@@ -181,6 +187,8 @@ pub(crate) struct FakeKeys {
     pub(crate) requests: RefCell<usize>,
     /// The target each request was aimed at.
     pub(crate) aimed: RefCell<Vec<TargetRef>>,
+    /// The halt flag each request was handed, as it stood then (R03).
+    pub(crate) halted: RefCell<Vec<bool>>,
 }
 
 impl FakeKeys {
@@ -190,6 +198,7 @@ impl FakeKeys {
             says: Vec::new(),
             requests: RefCell::new(0),
             aimed: RefCell::new(Vec::new()),
+            halted: RefCell::new(Vec::new()),
         }
     }
     pub(crate) fn failing(error: KeystrokeError) -> Self {
@@ -198,6 +207,7 @@ impl FakeKeys {
             says: Vec::new(),
             requests: RefCell::new(0),
             aimed: RefCell::new(Vec::new()),
+            halted: RefCell::new(Vec::new()),
         }
     }
     /// A press that stands on a window of the system, and says so (`D145` point 76).
@@ -214,10 +224,12 @@ impl KeystrokeSender for FakeKeys {
         &self,
         _chords: &[KeyChord],
         target: TargetRef,
+        halt: &AtomicBool,
         waiting: &mut dyn FnMut(Waiting),
     ) -> Result<(), KeystrokeError> {
         *self.requests.borrow_mut() += 1;
         self.aimed.borrow_mut().push(target);
+        self.halted.borrow_mut().push(halt.load(Ordering::Relaxed));
         for said in &self.says {
             waiting(*said);
         }
@@ -323,6 +335,8 @@ pub(crate) struct Kit {
     pub(crate) waited: Rc<RefCell<Vec<Waiting>>>,
     /// What the ports lend as `waiting`: it writes into `waited`.
     pub(crate) listening: Box<dyn Fn(Waiting)>,
+    /// What the ports lend as `halt` (R03): a test sets it to close the palette.
+    pub(crate) halt: AtomicBool,
 }
 
 impl Kit {
@@ -347,6 +361,7 @@ impl Kit {
             ear: Box::new(move |in_flight| into.borrow_mut().push(in_flight)),
             waited,
             listening: Box::new(move |waiting| into_waited.borrow_mut().push(waiting)),
+            halt: AtomicBool::new(false),
         }
     }
     pub(crate) fn with_delivery(direct: FakeDelivery) -> Self {
@@ -389,6 +404,7 @@ impl Kit {
             report_text: &self.text,
             progress: &*self.ear,
             waiting: &*self.listening,
+            halt: &self.halt,
         }
     }
 }

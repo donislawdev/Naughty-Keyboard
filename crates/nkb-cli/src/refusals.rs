@@ -168,6 +168,9 @@ pub(crate) fn stop_reason(reason: StopReason) -> String {
         StopReason::NotTaking => "the application stopped taking keys".to_owned(),
         StopReason::Escape => "Escape was pressed".to_owned(),
         StopReason::KeyPressed { key } => format!("{key} was pressed"),
+        // `nkb send` hands over a flag nobody sets (`send_value`), so this is never
+        // said today. Should a route ever report it, the words are true.
+        StopReason::Halted => "the send was asked to stop".to_owned(),
     }
 }
 
@@ -215,6 +218,7 @@ mod tests {
             StopReason::NotTaking,
             StopReason::Escape,
             StopReason::KeyPressed { key: "Alt" },
+            StopReason::Halted,
         ]
         .map(stop_reason);
         for (i, reason) in reasons.iter().enumerate() {

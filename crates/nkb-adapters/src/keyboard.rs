@@ -12,6 +12,7 @@ use nkb_app::ports::{
 use nkb_core::keys::{Key, KeyChord};
 use nkb_core::report::{ControlKind, Target};
 use nkb_core::substitutions::{Substitutions, could_act_on};
+use std::sync::atomic::AtomicBool;
 
 /// Sends the value as synthetic keystrokes, straight to the focused field.
 ///
@@ -29,7 +30,8 @@ impl ValueDelivery for DirectInjection {
         if !nkb_sys::can_send() {
             // Asked from nkb-sys rather than decided here, so the answer to
             // "which systems can do this" lives in one place.
-            return match nkb_sys::send_text("", nkb_sys::UNNAMED_WINDOW, &mut |_| {}) {
+            let never = AtomicBool::new(false);
+            return match nkb_sys::send_text("", nkb_sys::UNNAMED_WINDOW, &never, &mut |_| {}) {
                 Err(nkb_sys::SendError::Unsupported { system }) => Availability::Unavailable {
                     reason: system.to_owned(),
                 },
@@ -68,6 +70,7 @@ impl ValueDelivery for DirectInjection {
         &self,
         text: &str,
         target: TargetRef,
+        halt: &AtomicBool,
         progress: &mut dyn FnMut(Progress),
     ) -> Result<Delivered, DeliveryError> {
         if nkb_sys::foreground_window().is_none() {
@@ -90,7 +93,7 @@ impl ValueDelivery for DirectInjection {
                 units_total: step.units_total,
             });
         };
-        match nkb_sys::send_text(text, window, &mut told) {
+        match nkb_sys::send_text(text, window, halt, &mut told) {
             Ok(outcome) => Ok(Delivered {
                 utf16_units: outcome.units,
                 following: following(outcome.following),
@@ -245,6 +248,7 @@ fn stop_reason(reason: nkb_sys::StopReason) -> StopReason {
         nkb_sys::StopReason::NotTaking => StopReason::NotTaking,
         nkb_sys::StopReason::Escape => StopReason::Escape,
         nkb_sys::StopReason::KeyPressed { key } => StopReason::KeyPressed { key },
+        nkb_sys::StopReason::Halted => StopReason::Halted,
     }
 }
 
@@ -315,6 +319,7 @@ impl KeystrokeSender for DirectInjection {
         &self,
         chords: &[KeyChord],
         target: TargetRef,
+        halt: &AtomicBool,
         waiting: &mut dyn FnMut(Waiting),
     ) -> Result<(), KeystrokeError> {
         if nkb_sys::foreground_window().is_none() {
@@ -333,7 +338,7 @@ impl KeystrokeSender for DirectInjection {
         // The route's own words for what it waits for, mirrored one to one - the two crates
         // do not depend on each other (`D145` point 76).
         let mut told = |step: nkb_sys::Waiting| waiting(waiting_of(step));
-        match nkb_sys::send_chords(&mapped, window, &mut told) {
+        match nkb_sys::send_chords(&mapped, window, halt, &mut told) {
             Ok(_) => Ok(()),
             Err(nkb_sys::SendError::Unsupported { system }) => Err(KeystrokeError::Unsupported {
                 system: system.to_owned(),
@@ -456,6 +461,7 @@ mod tests {
             stop_reason(nkb_sys::StopReason::NotTaking),
             stop_reason(nkb_sys::StopReason::Escape),
             stop_reason(nkb_sys::StopReason::KeyPressed { key: "Alt" }),
+            stop_reason(nkb_sys::StopReason::Halted),
         ];
         assert_eq!(
             mapped,
@@ -464,7 +470,8 @@ mod tests {
                 StopReason::FocusMoved,
                 StopReason::NotTaking,
                 StopReason::Escape,
-                StopReason::KeyPressed { key: "Alt" }
+                StopReason::KeyPressed { key: "Alt" },
+                StopReason::Halted
             ]
         );
     }
@@ -549,7 +556,12 @@ mod tests {
         if !nkb_sys::can_send() {
             return;
         }
-        match DirectInjection.send_keystrokes(&[], TargetRef::UNNAMED, &mut |_| {}) {
+        match DirectInjection.send_keystrokes(
+            &[],
+            TargetRef::UNNAMED,
+            &AtomicBool::new(false),
+            &mut |_| {},
+        ) {
             Ok(()) | Err(KeystrokeError::NoTarget) => {}
             Err(other) => panic!("an empty sequence must not fail this way: {other}"),
         }
@@ -617,7 +629,8 @@ mod tests {
         }
         // No assertion on the target here - on a machine with no focused window
         // this is `NoTarget`, which is correct and not a failure of this code.
-        match DirectInjection.deliver("", TargetRef::UNNAMED, &mut |_| {}) {
+        match DirectInjection.deliver("", TargetRef::UNNAMED, &AtomicBool::new(false), &mut |_| {})
+        {
             Ok(delivered) => assert_eq!(delivered.utf16_units, 0),
             Err(DeliveryError::NoTarget) => {}
             Err(other) => panic!("an empty value must not fail this way: {other}"),

@@ -26,6 +26,7 @@
 // A harness prints, and a `println!` that fails to flush is not worth handling.
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
+use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use nkb_adapters::{
@@ -95,6 +96,8 @@ fn main() {
         progress: &|_| {},
         // The same console, the same reason: the wait for the person has no band here.
         waiting: &|_| {},
+        // The loop ends on its clock, between presses, never in the middle of a send.
+        halt: &AtomicBool::new(false),
     };
     let ended = drive_sequence(
         live.as_ref(),
