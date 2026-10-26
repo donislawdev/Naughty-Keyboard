@@ -41,6 +41,21 @@ impl<'a> Collapse<'a> {
     }
 }
 
+/// Draws what a collapse came to - the press and the click alike - and says
+/// the line about saving it, when there is one.
+pub(super) fn draw_toggle(palette: &Weak<Palette>, (compact, line): (bool, Option<String>)) {
+    set_compact_later(palette, compact);
+    if let Some(line) = line {
+        say_later(palette, line);
+    }
+}
+
+/// Hands the compact state to the thread that owns the window.
+fn set_compact_later(palette: &Weak<Palette>, compact: bool) {
+    // Dropped for the reason `show` gives.
+    let _ = palette.upgrade_in_event_loop(move |palette| set_compact(&palette, compact));
+}
+
 /// Whether the list of shortcuts starts open: as the tester last left it, and
 /// open on a first run, when the list is needed most (`D123`).
 #[must_use]

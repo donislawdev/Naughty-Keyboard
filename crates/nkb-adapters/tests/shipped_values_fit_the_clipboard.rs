@@ -19,6 +19,7 @@
 #![allow(clippy::panic, clippy::expect_used)]
 
 use std::cell::RefCell;
+use std::sync::atomic::AtomicBool;
 
 use nkb_adapters::{BuiltInCatalogue, ClipboardDelivery, TomlPackFormat};
 use nkb_app::ports::{
@@ -57,7 +58,12 @@ fn every_shipped_value_goes_through_clipboard_mode_whole() {
                 .unwrap_or_else(|e| panic!("{id}/{}: {e:?}", value.id));
             let clipboard = Recording(RefCell::new(Vec::new()));
             let delivered = ClipboardDelivery::new(&clipboard)
-                .deliver(&literal, TargetRef::UNNAMED, &mut |_| {})
+                .deliver(
+                    &literal,
+                    TargetRef::UNNAMED,
+                    &AtomicBool::new(false),
+                    &mut |_| {},
+                )
                 .unwrap_or_else(|refused| {
                     panic!(
                         "{id}/{}: clipboard mode refuses it ({refused}). The sequence would \

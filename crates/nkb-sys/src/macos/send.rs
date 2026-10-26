@@ -14,6 +14,7 @@
 //! What the system showing an event does not say is whether the application took
 //! it, and that is `pulse.rs`.
 
+use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 
 use super::ffi::{self, MutRef, Owned};
@@ -52,15 +53,20 @@ fn held_key() -> Option<&'static str> {
     unsafe { ffi::CGEventSourceKeyState(ffi::STATE_HID, TEXT_KEY) }.then_some("A")
 }
 
-/// Waits for every such key to come up, for at most `MODIFIER_RELEASE_WAIT`.
-fn wait_for_keys_released() -> Result<(), SendError> {
+/// Waits for every such key to come up, for at most `MODIFIER_RELEASE_WAIT`,
+/// and no longer than the caller lets the send go on. The error names the key
+/// still down, or is `None` when the caller asked the send to stop (R03).
+fn wait_for_keys_released(halt: &AtomicBool) -> Result<(), Option<&'static str>> {
     let deadline = std::time::Instant::now() + MODIFIER_RELEASE_WAIT;
     loop {
         let Some(key) = held_key() else {
             return Ok(());
         };
+        if halt.load(Ordering::Relaxed) {
+            return Err(None);
+        }
         if std::time::Instant::now() >= deadline {
-            return Err(SendError::ModifierHeld { key });
+            return Err(Some(key));
         }
         std::thread::sleep(Duration::from_millis(10));
     }
@@ -68,16 +74,18 @@ fn wait_for_keys_released() -> Result<(), SendError> {
 
 /// The system as `confirm` asks it, around the application that was in front
 /// when the send began.
-struct SystemWire {
+struct SystemWire<'a> {
     /// The source of every event of this send. Private, so nothing the person
     /// holds is added to an event that did not ask for it.
     source: Owned,
     front: i32,
     escape: ReservedEscape,
     pulse: Pulse,
+    /// The caller's flag to stop the send (R03).
+    halt: &'a AtomicBool,
 }
 
-impl SystemWire {
+impl SystemWire<'_> {
     /// One event to the system, which does not say whether it took it.
     fn post(&self, event: MacEvent) -> bool {
         let made = unsafe {
@@ -99,7 +107,7 @@ impl SystemWire {
     }
 }
 
-impl Wire<MacEvent> for SystemWire {
+impl Wire<MacEvent> for SystemWire<'_> {
     fn send(&mut self, event: MacEvent) -> bool {
         self.post(event)
     }
@@ -115,6 +123,8 @@ impl Wire<MacEvent> for SystemWire {
         // First: a person who pressed Escape asked for exactly this stop.
         if self.escape.pressed() {
             Watch::Escape
+        } else if self.halt.load(Ordering::Relaxed) {
+            Watch::Halted
         } else if front_pid() != Some(self.front) {
             Watch::Moved
         } else if self.pulse.tick() == PulseVerdict::Hung {
@@ -138,16 +148,16 @@ impl Wire<MacEvent> for SystemWire {
 
 /// The application in front, `Escape` held for as long as the send lasts, and
 /// the round trips to the application. One per send.
-struct Session {
-    wire: SystemWire,
+struct Session<'a> {
+    wire: SystemWire<'a>,
 }
 
-impl Session {
+impl<'a> Session<'a> {
     /// The session around the application `target` names, or nothing when
     /// another application - or none - is in front by now (`D148`). The
     /// application, not the window: two windows of one program are one target
     /// here.
-    fn begin(target: WindowRef) -> Option<Self> {
+    fn begin(target: WindowRef, halt: &'a AtomicBool) -> Option<Self> {
         let front = front_pid()?;
         let named = u64::try_from(front).ok().map(WindowRef);
         if !still_in_front(target, named) {
@@ -163,6 +173,7 @@ impl Session {
                 // events (`D96`).
                 escape: SystemEscape::reserve(),
                 pulse: Pulse::start(front),
+                halt,
             },
         })
     }
@@ -196,6 +207,7 @@ impl Session {
 pub(crate) fn send_text(
     text: &str,
     target: WindowRef,
+    halt: &AtomicBool,
     progress: &mut dyn FnMut(SendProgress),
 ) -> Result<SendOutcome, SendError> {
     let characters = scalars(text);
@@ -213,13 +225,17 @@ pub(crate) fn send_text(
     if !trust::may_send() {
         return Err(SendError::NeedsPermission);
     }
-    wait_for_keys_released()?;
-    let Some(mut session) = Session::begin(target) else {
-        return Err(SendError::Truncated {
-            units_sent: 0,
-            units_expected: expected,
-            reason: StopReason::FocusMoved,
-        });
+    let nothing_sent = |reason| SendError::Truncated {
+        units_sent: 0,
+        units_expected: expected,
+        reason,
+    };
+    wait_for_keys_released(halt).map_err(|still| match still {
+        Some(key) => SendError::ModifierHeld { key },
+        None => nothing_sent(StopReason::Halted),
+    })?;
+    let Some(mut session) = Session::begin(target, halt) else {
+        return Err(nothing_sent(StopReason::FocusMoved));
     };
 
     let mut cadence = Cadence::starting(std::time::Instant::now(), PROGRESS_INTERVAL);
@@ -256,20 +272,28 @@ pub(crate) fn send_text(
     })
 }
 
-pub(crate) fn send_chords(chords: &[Chord], target: WindowRef) -> Result<usize, SendError> {
+pub(crate) fn send_chords(
+    chords: &[Chord],
+    target: WindowRef,
+    halt: &AtomicBool,
+) -> Result<usize, SendError> {
     if chords.is_empty() {
         return Ok(0);
     }
     if !trust::may_send() {
         return Err(SendError::NeedsPermission);
     }
-    wait_for_keys_released()?;
-    let Some(mut session) = Session::begin(target) else {
-        return Err(SendError::ChordsTruncated {
-            chords_sent: 0,
-            chords_expected: chords.len(),
-            reason: StopReason::FocusMoved,
-        });
+    let nothing_pressed = |reason| SendError::ChordsTruncated {
+        chords_sent: 0,
+        chords_expected: chords.len(),
+        reason,
+    };
+    wait_for_keys_released(halt).map_err(|still| match still {
+        Some(key) => SendError::ModifierHeld { key },
+        None => nothing_pressed(StopReason::Halted),
+    })?;
+    let Some(mut session) = Session::begin(target, halt) else {
+        return Err(nothing_pressed(StopReason::FocusMoved));
     };
     for (index, chord) in chords.iter().enumerate() {
         let (steps, leads) = chord_steps(*chord);

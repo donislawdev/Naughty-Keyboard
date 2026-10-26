@@ -20,6 +20,7 @@ use nkb_core::report::{ReportBlock, Target};
 use nkb_core::screens::{Layout, Point};
 use nkb_core::substitutions::Substitutions;
 use std::fmt;
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 /// Why a pack could not be provided. Carries no path and no free text, because
@@ -135,6 +136,10 @@ pub enum StopReason {
     /// longer than the route waits for it (`D149`). `key` is its name on the
     /// system the route runs on.
     KeyPressed { key: &'static str },
+    /// The program asked the send to stop before its next key: the palette is
+    /// closing (R03). Nobody is left to read the sentence, and the counter stays
+    /// as for `Escape`.
+    Halted,
 }
 
 impl fmt::Display for StopReason {
@@ -145,6 +150,7 @@ impl fmt::Display for StopReason {
             Self::NotTaking => f.write_str("not-taking"),
             Self::Escape => f.write_str("escape"),
             Self::KeyPressed { key } => write!(f, "{}-pressed", key.to_ascii_lowercase()),
+            Self::Halted => f.write_str("halted"),
         }
     }
 }
@@ -327,6 +333,11 @@ pub trait ValueDelivery {
     /// `target`, and in no other window. A route with one target of its own (the
     /// clipboard) takes the value whatever `target` says.
     ///
+    /// `halt`, set from another thread, asks a route that types to stop before its
+    /// next key, as `Escape` does, with [`StopReason::Halted`] (R03: the palette
+    /// closing while a long value is still going). A route that is done at once
+    /// does not look at it.
+    ///
     /// # Errors
     ///
     /// Returns [`DeliveryError`] when there is no route, no target, or when only
@@ -335,6 +346,7 @@ pub trait ValueDelivery {
         &self,
         text: &str,
         target: TargetRef,
+        halt: &AtomicBool,
         progress: &mut dyn FnMut(Progress),
     ) -> Result<Delivered, DeliveryError>;
 
@@ -492,6 +504,9 @@ pub trait KeystrokeSender {
     /// seconds - presses nothing: the recipe keeps "never beyond the field" only
     /// in the field that was confirmed (untouchable rule 17, `D76`).
     ///
+    /// `halt` stops the presses before the next one, as in
+    /// [`ValueDelivery::deliver`].
+    ///
     /// # Errors
     ///
     /// Returns [`KeystrokeError`] when there is no route, no target, a held
@@ -500,6 +515,7 @@ pub trait KeystrokeSender {
         &self,
         chords: &[KeyChord],
         target: TargetRef,
+        halt: &AtomicBool,
         waiting: &mut dyn FnMut(Waiting),
     ) -> Result<(), KeystrokeError>;
 }

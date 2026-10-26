@@ -41,6 +41,8 @@ pub(crate) mod portal;
 mod send;
 pub(crate) mod window;
 
+use core::sync::atomic::AtomicBool;
+
 use crate::{SendError, SendOutcome, SendProgress, Waiting, WindowRef};
 
 // `route_refusal` is the question of a real X server alone, which is what the grab of a
@@ -90,12 +92,13 @@ pub(crate) fn foreground_window() -> Option<WindowRef> {
 pub(crate) fn send_text(
     text: &str,
     target: WindowRef,
+    halt: &AtomicBool,
     progress: &mut dyn FnMut(SendProgress),
 ) -> Result<SendOutcome, SendError> {
     if connect::wayland_session() {
-        ibus::send_text(text, progress)
+        ibus::send_text(text, halt, progress)
     } else {
-        send::send_text(text, target, progress)
+        send::send_text(text, target, halt, progress)
     }
 }
 
@@ -107,12 +110,13 @@ pub(crate) fn send_text(
 pub(crate) fn send_chords(
     chords: &[crate::Chord],
     target: WindowRef,
+    halt: &AtomicBool,
     waiting: &mut dyn FnMut(Waiting),
 ) -> Result<usize, SendError> {
     if connect::wayland_session() {
-        ibus::press_chords(chords, waiting)
+        ibus::press_chords(chords, halt, waiting)
     } else {
-        send::send_chords(chords, target)
+        send::send_chords(chords, target, halt)
     }
 }
 

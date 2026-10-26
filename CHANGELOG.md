@@ -24,6 +24,10 @@ Changes wait under Unreleased until then.
   emptied the whole document. Now Alt stops the send and says so, and Ctrl or Win holds the next key
   until it comes up, for up to two seconds. Shift holds only a clearing key, because a character
   arrives unchanged under it.
+- Closing the palette while a long value is still being typed now stops the value before its next
+  key, and the program ends at once. Until now the window went away and the keys went on, for as
+  long as the value took, into whatever window had the focus. The one exception is a Wayland
+  desktop that is still waiting for the person to allow the keys.
 
 ## [0.3.0] - 2026-10-25
 

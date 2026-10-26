@@ -29,6 +29,7 @@
 //! the field, and that is measured with a victim that reports its field
 //! (`tools/petla-ofiary-linux.py`).
 
+use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 use std::time::Instant;
 
@@ -82,7 +83,11 @@ use crate::{
 ///    characters is.
 ///
 /// Clearing needs a field that is KNOWN to be one (`D76`), and that is decided before this.
-pub(crate) fn send_chords(chords: &[Chord], target: WindowRef) -> Result<usize, SendError> {
+pub(crate) fn send_chords(
+    chords: &[Chord],
+    target: WindowRef,
+    halt: &AtomicBool,
+) -> Result<usize, SendError> {
     if chords.is_empty() {
         // Nothing to press, so nothing to connect to.
         return Ok(0);
@@ -115,6 +120,7 @@ pub(crate) fn send_chords(chords: &[Chord], target: WindowRef) -> Result<usize, 
         front,
         pinged,
         total,
+        halt,
     };
     for (number, key) in keys.iter().enumerate() {
         recipe.press(&mut escape, number, *key)?;
@@ -130,6 +136,8 @@ struct Recipe<'a> {
     front: u32,
     pinged: Option<Pinged>,
     total: usize,
+    /// The caller's flag to stop the clearing (R03).
+    halt: &'a AtomicBool,
 }
 
 impl Recipe<'_> {
@@ -141,7 +149,7 @@ impl Recipe<'_> {
         key: LayoutKey,
     ) -> Result<(), SendError> {
         let stopped = |reason| chords_stopped(number, self.total, reason);
-        if let Some(reason) = stop_before_next(self.server, self.front, escape) {
+        if let Some(reason) = stop_before_next(self.server, self.front, escape, self.halt) {
             return Err(stopped(reason));
         }
         match modifier_in_the_way(self.server, self.keyboard) {
@@ -445,14 +453,18 @@ fn wait_for_keys_released(server: &Server, keyboard: &Keyboard) -> Result<u16, S
 }
 
 /// Why the send must stop before the next batch, if it must: `Escape` first, as on
-/// every system, then the window in front.
+/// every system, then the caller's flag (R03), then the window in front.
 fn stop_before_next(
     server: &Server,
     front: u32,
     escape: &mut ReservedEscape,
+    halt: &AtomicBool,
 ) -> Option<StopReason> {
     if escape.pressed() {
         return Some(StopReason::Escape);
+    }
+    if halt.load(Ordering::Relaxed) {
+        return Some(StopReason::Halted);
     }
     match focused_toplevel(&server.conn, server.root) {
         Ok(Some(window)) if window == front => None,
@@ -610,6 +622,7 @@ fn take_answer(
 pub(crate) fn send_text(
     text: &str,
     target: WindowRef,
+    halt: &AtomicBool,
     progress: &mut dyn FnMut(SendProgress),
 ) -> Result<SendOutcome, SendError> {
     let characters: Vec<char> = text.chars().collect();
@@ -683,7 +696,7 @@ pub(crate) fn send_text(
     let mut limit = FIRST_BATCH_CHARS;
     let mut number = 0u32;
     while first < keysyms.len() {
-        if let Some(reason) = stop_before_next(&server, front, &mut escape) {
+        if let Some(reason) = stop_before_next(&server, front, &mut escape, halt) {
             return Err(truncated(arrived, expected, reason));
         }
         let batch = match &plan {

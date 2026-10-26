@@ -330,6 +330,7 @@ fn global_engine(connection: &Connection) -> Option<String> {
 
 pub(crate) fn send_text(
     text: &str,
+    halt: &AtomicBool,
     progress: &mut dyn FnMut(SendProgress),
 ) -> Result<SendOutcome, SendError> {
     if text.is_empty() {
@@ -350,7 +351,7 @@ pub(crate) fn send_text(
     let socket = daemon::locate().map_err(|_| unsupported())?;
     let mut session =
         Session::begin(&socket, deadline_for(pieces(text).len())).map_err(|_| unsupported())?;
-    let result = hand_over(&mut session, text, expected, progress);
+    let result = hand_over(&mut session, text, expected, halt, progress);
     // On every way out, a failed send included: the person's engine is theirs.
     let previous = session.end();
     if let Some(name) = engine_to_restore(previous.as_deref()) {
@@ -364,6 +365,7 @@ fn hand_over(
     session: &mut Session,
     text: &str,
     expected: usize,
+    halt: &AtomicBool,
     progress: &mut dyn FnMut(SendProgress),
 ) -> Result<SendOutcome, SendError> {
     if !session.wait_for_focus().map_err(|_| unsupported())? {
@@ -382,6 +384,10 @@ fn hand_over(
         // over is counted, and nothing more goes (`D96`).
         if (number > 0 && session.pause(COMMIT_GAP)) || session.escape_pressed() {
             return Err(truncated(handed, expected, StopReason::Escape));
+        }
+        // And the caller's flag, the same way (R03).
+        if halt.load(Ordering::Relaxed) {
+            return Err(truncated(handed, expected, StopReason::Halted));
         }
         session
             .commit(piece)
@@ -411,7 +417,7 @@ mod tests {
     fn a_text_with_a_nul_is_refused_by_name_before_any_connection() {
         // A D-Bus string cannot hold it, and the send must say so rather than drop it.
         assert_eq!(
-            send_text("a\0b", &mut |_| {}),
+            send_text("a\0b", &AtomicBool::new(false), &mut |_| {}),
             Err(SendError::CannotCarry { character: '\0' })
         );
     }
@@ -419,7 +425,7 @@ mod tests {
     #[test]
     fn an_empty_text_needs_no_daemon_and_nothing_followed() {
         assert_eq!(
-            send_text("", &mut |_| {}),
+            send_text("", &AtomicBool::new(false), &mut |_| {}),
             Ok(SendOutcome {
                 units: 0,
                 events: 0,

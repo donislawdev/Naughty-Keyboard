@@ -123,6 +123,9 @@ pub(crate) enum Watch {
     Hung,
     /// The person pressed `Escape` to stop the send (race `W3`, `D96`).
     Escape,
+    /// The caller asked the send to stop: the palette is closing (R03). Answered
+    /// like `Escape`, before the next event and never while one is on its way.
+    Halted,
 }
 
 /// The system, as the five questions a send asks it. A trait rather than four
@@ -226,6 +229,7 @@ pub(crate) fn press_confirmed<E: Copy>(
             Watch::Moved => return stopped(StopReason::FocusMoved),
             Watch::Hung => return stopped(StopReason::NotTaking),
             Watch::Escape => return stopped(StopReason::Escape),
+            Watch::Halted => return stopped(StopReason::Halted),
         }
         if let Err(reason) = hands_off(wire, step.shift_counts, waits.release) {
             return stopped(reason);
@@ -278,6 +282,7 @@ fn hands_off<E>(
             Watch::Moved => return Err(StopReason::FocusMoved),
             Watch::Hung => return Err(StopReason::NotTaking),
             Watch::Escape => return Err(StopReason::Escape),
+            Watch::Halted => return Err(StopReason::Halted),
         }
     }
 }
@@ -334,7 +339,7 @@ fn target_takes<E>(
             // would cost more than the answer itself takes to come.
             match wire.watch() {
                 // Asked again before the next event, which is where it stops.
-                Watch::Steady | Watch::Escape => {}
+                Watch::Steady | Watch::Escape | Watch::Halted => {}
                 Watch::Moved => return Err(StopReason::FocusMoved),
                 Watch::Hung => return Err(StopReason::NotTaking),
             }
@@ -669,6 +674,7 @@ mod tests {
             (Watch::Escape, StopReason::Escape),
             (Watch::Moved, StopReason::FocusMoved),
             (Watch::Hung, StopReason::NotTaking),
+            (Watch::Halted, StopReason::Halted),
         ] {
             let mut system = System::new();
             // Held for a thousand looks, not for ever: a wait that stopped
@@ -831,15 +837,33 @@ mod tests {
     }
 
     #[test]
+    fn a_halt_stops_the_send_before_the_next_key_as_escape_does() {
+        // R03: the palette closing sets the flag, and the send must end before
+        // its next event rather than type on into a window nobody watches.
+        let mut system = System::new();
+        system.watch_from = Some((2, Watch::Halted));
+        assert_eq!(
+            press_confirmed(&shifted_home(), &mut system, PACED),
+            Pressed {
+                taken: 2,
+                stop: Some(StopReason::Halted)
+            }
+        );
+        assert_eq!(system.sent.len(), 2, "the third event never went out");
+    }
+
+    #[test]
     fn escape_pressed_while_the_application_is_late_lets_the_key_in_flight_land() {
         // The system has taken the event, so it reaches the application anyway.
         // Ending the wait at the press reported one unit fewer than the field
         // held (P3 of the probe, 2025 against 2024). So the key in flight lands,
         // counted, and the send stops before the next event.
+        // And a halt the same way (R03): the key in flight lands, counted.
         struct Late {
             down: bool,
             pauses: usize,
             sent: usize,
+            answer: Watch,
         }
         impl Wire<bool> for Late {
             fn send(&mut self, down: bool) -> bool {
@@ -862,7 +886,7 @@ mod tests {
             }
             fn watch(&mut self) -> Watch {
                 if self.sent >= 1 {
-                    Watch::Escape
+                    self.answer
                 } else {
                     Watch::Steady
                 }
@@ -893,25 +917,31 @@ mod tests {
             target: Some(Duration::from_secs(5)),
             release: Duration::ZERO,
         };
-        let mut late = Late {
-            down: false,
-            pauses: 0,
-            sent: 0,
-        };
-        let start = std::time::Instant::now();
-        assert_eq!(
-            press_confirmed(&steps, &mut late, waits),
-            Pressed {
-                taken: 1,
-                stop: Some(StopReason::Escape)
-            },
-            "the key in flight is counted, and nothing goes after it"
-        );
-        assert_eq!(late.sent, 1, "the next event never went out");
-        assert!(
-            start.elapsed() < Duration::from_secs(2),
-            "stopped once the key landed, not at the bound"
-        );
+        for (answer, reason) in [
+            (Watch::Escape, StopReason::Escape),
+            (Watch::Halted, StopReason::Halted),
+        ] {
+            let mut late = Late {
+                down: false,
+                pauses: 0,
+                sent: 0,
+                answer,
+            };
+            let start = std::time::Instant::now();
+            assert_eq!(
+                press_confirmed(&steps, &mut late, waits),
+                Pressed {
+                    taken: 1,
+                    stop: Some(reason)
+                },
+                "the key in flight is counted, and nothing goes after it"
+            );
+            assert_eq!(late.sent, 1, "the next event never went out");
+            assert!(
+                start.elapsed() < Duration::from_secs(2),
+                "stopped once the key landed, not at the bound"
+            );
+        }
     }
 
     #[test]

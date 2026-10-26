@@ -134,7 +134,7 @@ mod view;
 use aside::Question;
 use copy::show_copied;
 pub use copy::{CopyButton, copy_command, label_copies};
-use folds::Collapse;
+use folds::{Collapse, draw_toggle};
 pub use folds::{label_shortcut_list, starts_with_shortcut_list, wire_shortcut_list};
 use hold::Hold;
 use links::ShortcutLink;
@@ -477,6 +477,9 @@ pub fn drive(
         report_text: &EnglishReport,
         progress: &on_the_way,
         waiting: &on_waiting,
+        // The flag the palette sets when it closes: a send that is going stops before
+        // its next key, and the worker it holds can be joined at once (R03).
+        halt: stop,
     };
 
     let mut kept = kept;
@@ -1087,21 +1090,6 @@ impl Memory<'_> {
             .keep(self.store, change)
             .and_then(|message| i18n::settings_message(&message, &self.file, &self.bindings.get()))
     }
-}
-
-/// Draws what a collapse came to - the press and the click alike - and says
-/// the line about saving it, when there is one.
-fn draw_toggle(palette: &Weak<Palette>, (compact, line): (bool, Option<String>)) {
-    set_compact_later(palette, compact);
-    if let Some(line) = line {
-        say_later(palette, line);
-    }
-}
-
-/// Hands the compact state to the thread that owns the window.
-fn set_compact_later(palette: &Weak<Palette>, compact: bool) {
-    // Dropped for the reason `show` gives.
-    let _ = palette.upgrade_in_event_loop(move |palette| set_compact(&palette, compact));
 }
 
 /// Adds one line to the message band, below what is already there.
@@ -2335,6 +2323,7 @@ mod tests {
             report_text: &EnglishReport,
             progress: &|_| {},
             waiting: &|_| {},
+            halt: &AtomicBool::new(false),
         };
         let standing = quiet();
         let mut worker = Worker {

@@ -14,6 +14,8 @@
 //! the last one sent at once in a pack of one value, or once it is chosen again
 //! in the value window. So the button says which band it stands beside.
 
+use std::sync::atomic::AtomicBool;
+
 use nkb_core::calendar::Day;
 
 use super::{AdvanceSequence, Message, Ports};
@@ -86,10 +88,12 @@ impl AdvanceSequence {
         };
         // Meant for no window: the clipboard takes the value whatever the
         // target says, and the tester pastes it wherever they choose.
-        match ports
-            .by_clipboard
-            .deliver(&text, TargetRef::UNNAMED, &mut |_| {})
-        {
+        match ports.by_clipboard.deliver(
+            &text,
+            TargetRef::UNNAMED,
+            &AtomicBool::new(false),
+            &mut |_| {},
+        ) {
             Ok(_) => Message::ValueCopied { reference },
             Err(DeliveryError::Busy) => Message::CopyBusy,
             Err(DeliveryError::CannotCarry { character }) => Message::NotForClipboard {
