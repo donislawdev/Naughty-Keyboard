@@ -305,6 +305,19 @@ pub struct WindowRef(pub u64);
 /// focus having moved.
 pub const UNNAMED_WINDOW: WindowRef = WindowRef(u64::MAX);
 
+/// Whether `front`, the window in front right now, is still `target`, the window
+/// the send was meant for (`D148`).
+///
+/// Asked once the held modifiers are up, which can take two seconds, and before
+/// the first key. `false` presses nothing: the field was looked at in `target`,
+/// and the clearing keys keep "never beyond the field" only in the field that was
+/// confirmed (untouchable rule 17). Nothing in front is not `target` either. Two
+/// unnamed windows are equal (a Wayland session, where the route types into
+/// whatever has the focus and has no other answer to give).
+pub(crate) fn still_in_front(target: WindowRef, front: Option<WindowRef>) -> bool {
+    front == Some(target)
+}
+
 #[cfg(windows)]
 mod windows_impl {
     use super::{Following, SendError, SendOutcome, SendProgress, StopReason, WindowRef};
@@ -512,9 +525,11 @@ mod windows_impl {
     }
 
     impl Session {
-        fn begin() -> Option<Self> {
+        /// The session around `target`, or nothing when another window - or
+        /// none - is in front by now (`D148`).
+        fn begin(target: WindowRef) -> Option<Self> {
             let window = unsafe { GetForegroundWindow() };
-            if window.is_null() {
+            if !super::still_in_front(target, window_ref(window)) {
                 return None;
             }
             // Reserved on THIS thread, the one that asks it between events:
@@ -541,13 +556,14 @@ mod windows_impl {
         }
     }
 
-    pub fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
+    pub fn send_chords(chords: &[Chord], target: WindowRef) -> Result<usize, SendError> {
         if chords.is_empty() {
             return Ok(0);
         }
         wait_for_modifiers_released()?;
-        let Some(mut session) = Session::begin() else {
-            // Nothing in front: nothing to press into, and nothing pressed.
+        let Some(mut session) = Session::begin(target) else {
+            // Not the window the clearing was meant for, or none: nothing to
+            // press into, and nothing pressed.
             return Err(SendError::ChordsTruncated {
                 chords_sent: 0,
                 chords_expected: chords.len(),
@@ -609,8 +625,8 @@ mod windows_impl {
         true
     }
 
-    pub fn foreground_window() -> Option<WindowRef> {
-        let handle = unsafe { GetForegroundWindow() };
+    /// The handle as the rest of the program compares it, or nothing for none.
+    fn window_ref(handle: HWND) -> Option<WindowRef> {
         if handle.is_null() {
             None
         } else {
@@ -618,8 +634,13 @@ mod windows_impl {
         }
     }
 
+    pub fn foreground_window() -> Option<WindowRef> {
+        window_ref(unsafe { GetForegroundWindow() })
+    }
+
     pub fn send_text(
         text: &str,
+        target: WindowRef,
         progress: &mut dyn FnMut(SendProgress),
     ) -> Result<SendOutcome, SendError> {
         let units: Vec<u16> = text.encode_utf16().collect();
@@ -635,7 +656,7 @@ mod windows_impl {
             });
         }
         wait_for_modifiers_released()?;
-        let Some(mut session) = Session::begin() else {
+        let Some(mut session) = Session::begin(target) else {
             return Err(SendError::Truncated {
                 units_sent: 0,
                 units_expected: expected,
@@ -722,12 +743,13 @@ mod other_impl {
 
     pub fn send_text(
         _text: &str,
+        _target: WindowRef,
         _progress: &mut dyn FnMut(SendProgress),
     ) -> Result<SendOutcome, SendError> {
         Err(SendError::Unsupported { system: SYSTEM })
     }
 
-    pub fn send_chords(_chords: &[super::Chord]) -> Result<usize, SendError> {
+    pub fn send_chords(_chords: &[super::Chord], _target: WindowRef) -> Result<usize, SendError> {
         Err(SendError::Unsupported { system: SYSTEM })
     }
 }
@@ -749,12 +771,16 @@ pub fn foreground_window() -> Option<WindowRef> {
     platform::foreground_window()
 }
 
-/// Send `text` to whatever holds the keyboard focus.
+/// Send `text` to the field that holds the keyboard focus in `target`.
 ///
-/// The caller decides WHAT to send and WHERE the focus should be by then. This
-/// function only puts the characters on the wire. It waits up to
-/// [`MODIFIER_RELEASE_WAIT`] for a physically held modifier to come up and
-/// refuses with [`SendError::ModifierHeld`] if it does not. Every event goes
+/// The caller decides WHAT to send and WHERE: `target` is the window the send was
+/// meant for, read once when it began (`D148`). This function only puts the
+/// characters on the wire. It waits up to [`MODIFIER_RELEASE_WAIT`] for a
+/// physically held modifier to come up and refuses with
+/// [`SendError::ModifierHeld`] if it does not. Another window in front once the
+/// modifiers are up ends the send before its first key, with
+/// [`StopReason::FocusMoved`]: the value does not follow the focus into a window
+/// nobody looked at. Every event goes
 /// alone and the next only once the system shows it taken (`D94`) and, where the
 /// queue holding the keyboard focus could be joined, once that application took
 /// it (`D95`) - [`SendOutcome::following`] says which. The window in front is looked
@@ -768,13 +794,17 @@ pub fn foreground_window() -> Option<WindowRef> {
 /// the next key waits for it.
 pub fn send_text(
     text: &str,
+    target: WindowRef,
     progress: &mut dyn FnMut(SendProgress),
 ) -> Result<SendOutcome, SendError> {
-    platform::send_text(text, progress)
+    platform::send_text(text, target, progress)
 }
 
-/// Press `chords` in order, each as a complete press-and-release, on whatever
-/// holds the keyboard focus. Returns how many chords were pressed.
+/// Press `chords` in order, each as a complete press-and-release, in the field
+/// that holds the keyboard focus in `target`. Returns how many chords were
+/// pressed. Another window in front once held modifiers are up presses nothing,
+/// as in [`send_text`] - for the clearing keys that is untouchable rule 17: the
+/// field they may be pressed in was confirmed in `target` (`D148`).
 ///
 /// These are the keys that are NOT content. The caller (one place in the
 /// whole program, guarded there) decides the recipe. This function waits for
@@ -792,15 +822,19 @@ pub fn send_text(
 /// `waiting` hears what the send stands on besides the keys, on the sending thread: only a
 /// Wayland session has anything to say (the window in which the person allows the keys,
 /// `D145` point 76), and every other route never calls it. It must return quickly.
-pub fn send_chords(chords: &[Chord], waiting: &mut dyn FnMut(Waiting)) -> Result<usize, SendError> {
+pub fn send_chords(
+    chords: &[Chord],
+    target: WindowRef,
+    waiting: &mut dyn FnMut(Waiting),
+) -> Result<usize, SendError> {
     #[cfg(target_os = "linux")]
     {
-        platform::send_chords(chords, waiting)
+        platform::send_chords(chords, target, waiting)
     }
     #[cfg(not(target_os = "linux"))]
     {
         let _ = waiting;
-        platform::send_chords(chords)
+        platform::send_chords(chords, target)
     }
 }
 
@@ -880,7 +914,9 @@ mod tests {
     fn an_empty_text_sends_nothing_and_says_so() {
         // Whatever the platform, sending nothing must not be reported as having
         // sent something.
-        match send_text("", &mut |_| panic!("nothing to send, nothing to report")) {
+        match send_text("", UNNAMED_WINDOW, &mut |_| {
+            panic!("nothing to send, nothing to report")
+        }) {
             Ok(outcome) => assert_eq!(
                 outcome,
                 SendOutcome {
@@ -913,7 +949,7 @@ mod tests {
         if can_send() {
             return;
         }
-        let Err(error) = send_text("x", &mut |_| {}) else {
+        let Err(error) = send_text("x", UNNAMED_WINDOW, &mut |_| {}) else {
             panic!("a build that cannot send must not report success");
         };
         let text = error.to_string();
@@ -925,11 +961,28 @@ mod tests {
 
     #[test]
     fn no_chords_press_nothing_and_say_so() {
-        match send_chords(&[], &mut |_| {}) {
+        match send_chords(&[], UNNAMED_WINDOW, &mut |_| {}) {
             Ok(pressed) => assert_eq!(pressed, 0),
             Err(SendError::Unsupported { .. }) => {}
             Err(other) => panic!("no chords must not fail this way: {other}"),
         }
+    }
+
+    #[test]
+    fn only_the_window_the_send_was_meant_for_is_still_in_front() {
+        // `D148`: the window a send was meant for, and no other, takes its keys.
+        let meant = WindowRef(0x20);
+        assert!(still_in_front(meant, Some(WindowRef(0x20))));
+        assert!(
+            !still_in_front(meant, Some(WindowRef(0x30))),
+            "another window"
+        );
+        assert!(
+            !still_in_front(meant, None),
+            "nothing in front is not the window"
+        );
+        // A Wayland session names no window, and its route has no other answer.
+        assert!(still_in_front(UNNAMED_WINDOW, Some(UNNAMED_WINDOW)));
     }
 
     #[test]

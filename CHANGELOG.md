@@ -10,6 +10,15 @@ Changes wait under Unreleased until then.
 
 ## [Unreleased]
 
+### Fixed
+
+- A value no longer goes to a window that comes to the front after the shortcut or after the
+  countdown of `nkb send`. The window is read once, when the send begins, and the clearing keys and
+  the value go to it or nowhere. Before, a send waiting for a held modifier key took whatever window
+  was in front once the key came up. Now it stops before its first key and says that another window
+  came to the front. Windows and X11 compare the window, macOS the program, and Wayland, which does
+  not name the window, is unchanged.
+
 ## [0.3.0] - 2026-10-25
 
 This release brings typing into other windows to macOS and Linux. The Linux routes were measured on

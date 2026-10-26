@@ -33,7 +33,7 @@ use nkb_adapters::{
 };
 use nkb_app::{
     Availability, Clearing, ClearingOutcome, Clock, EmitOutcome, FormatOutcome, LintOutcome,
-    NewPackOutcome, OnTheWay, SendOutcome, SendRequest, ShowOutcome, TargetInspector,
+    NewPackOutcome, OnTheWay, SendOutcome, SendRequest, ShowOutcome, TargetInspector, TargetRef,
     ValueDelivery, ValueFacts, emit_values, format_pack, lint_pack, list_packs, new_pack,
     send_value, show_pack,
 };
@@ -563,20 +563,22 @@ fn send(args: &[String]) -> ExitCode {
         Ok(asked) => asked,
         Err(code) => return code,
     };
-    let wanted = asked.wanted;
 
     let delivery = DirectInjection;
-    if let Err(code) = wait_for_a_target(&delivery, wanted, asked.delay_seconds) {
-        return code;
-    }
+    let target = match wait_for_a_target(&delivery, asked.wanted, asked.delay_seconds) {
+        Ok(target) => target,
+        Err(code) => return code,
+    };
 
-    let catalogue = BuiltInCatalogue::new();
     let request = SendRequest {
-        pack_id: wanted,
+        pack_id: asked.wanted,
         position: usize::try_from(asked.position).unwrap_or(usize::MAX),
         clearing: asked.clearing,
         // Today in UTC, for a `next-date` value (`D133`).
         on: SystemClock.today(),
+        // The window the line above named: the clearing and the value go there
+        // or nowhere (`D148`).
+        target,
     };
 
     // `DirectInjection` is both the delivery and the keystroke route: one
@@ -592,14 +594,14 @@ fn send(args: &[String]) -> ExitCode {
         }
     };
     let outcome = send_value(
-        &catalogue,
+        &BuiltInCatalogue::new(),
         &TomlPackFormat,
         &delivery,
         &delivery,
         &request,
         &mut on_the_way,
     );
-    report_send(&mut std::io::stderr(), wanted, outcome)
+    report_send(&mut std::io::stderr(), asked.wanted, outcome)
 }
 
 /// The arguments of `nkb send`, or the exit code to stop with.
@@ -677,12 +679,13 @@ fn send_args(args: &[String]) -> Result<SendArgs<'_>, ExitCode> {
 }
 
 /// Asks whether this system can send at all, counts down and says where the
-/// value is about to go - or gives the exit code to stop with, having said why.
+/// value is about to go - the target the send is aimed at - or gives the exit
+/// code to stop with, having said why.
 fn wait_for_a_target(
     delivery: &DirectInjection,
     wanted: &str,
     delay_seconds: u64,
-) -> Result<(), ExitCode> {
+) -> Result<TargetRef, ExitCode> {
     // Asked before the countdown, so a machine with no route does not make
     // somebody watch three seconds tick away for nothing.
     match delivery.availability() {

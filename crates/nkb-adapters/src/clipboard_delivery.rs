@@ -76,10 +76,13 @@ impl ValueDelivery for ClipboardDelivery<'_> {
     }
 
     /// Nothing to say on the way: the value is on the clipboard at once, whole
-    /// or not at all, so `progress` is never called.
+    /// or not at all, so `progress` is never called. Whatever window the value
+    /// was meant for, it goes to the one target this route has, the clipboard,
+    /// and the tester carries it from there.
     fn deliver(
         &self,
         text: &str,
+        _target: TargetRef,
         _progress: &mut dyn FnMut(Progress),
     ) -> Result<Delivered, DeliveryError> {
         // Checked BEFORE the clipboard is touched: a refused value must leave
@@ -151,7 +154,7 @@ mod tests {
     fn a_value_goes_on_the_clipboard_whole_and_out_of_the_history() {
         let clipboard = Recording::working();
         let delivered = ClipboardDelivery::new(&clipboard)
-            .deliver("ab\u{200B}cd \u{1F600}", &mut |_| {})
+            .deliver("ab\u{200B}cd \u{1F600}", THE_CLIPBOARD, &mut |_| {})
             .expect("the clipboard took it");
         assert_eq!(
             *clipboard.puts.borrow(),
@@ -167,7 +170,7 @@ mod tests {
     fn a_nul_is_refused_by_name_and_the_clipboard_is_left_alone() {
         let clipboard = Recording::working();
         assert_eq!(
-            ClipboardDelivery::new(&clipboard).deliver("before\0after", &mut |_| {}),
+            ClipboardDelivery::new(&clipboard).deliver("before\0after", THE_CLIPBOARD, &mut |_| {}),
             Err(DeliveryError::CannotCarry { character: '\0' })
         );
         assert!(
@@ -182,7 +185,7 @@ mod tests {
         // empty clipboard text is unmeasured (`D71`). This route does not guess.
         let clipboard = Recording::working();
         let delivered = ClipboardDelivery::new(&clipboard)
-            .deliver("", &mut |_| {})
+            .deliver("", THE_CLIPBOARD, &mut |_| {})
             .expect("an empty value is not refused");
         assert_eq!(delivered.utf16_units, 0);
         assert_eq!(clipboard.puts.borrow().len(), 1);
@@ -192,14 +195,14 @@ mod tests {
     fn a_held_clipboard_is_passing_and_a_refusal_keeps_its_words() {
         let busy = Recording::refusing(ClipboardError::Busy);
         assert_eq!(
-            ClipboardDelivery::new(&busy).deliver("x", &mut |_| {}),
+            ClipboardDelivery::new(&busy).deliver("x", THE_CLIPBOARD, &mut |_| {}),
             Err(DeliveryError::Busy)
         );
         let failed = Recording::refusing(ClipboardError::Failed {
             detail: "no display".to_owned(),
         });
         assert_eq!(
-            ClipboardDelivery::new(&failed).deliver("x", &mut |_| {}),
+            ClipboardDelivery::new(&failed).deliver("x", THE_CLIPBOARD, &mut |_| {}),
             Err(DeliveryError::Refused {
                 detail: "no display".to_owned()
             })

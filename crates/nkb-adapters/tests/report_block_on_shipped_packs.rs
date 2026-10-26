@@ -52,6 +52,7 @@ impl ValueDelivery for TakesEverything {
     fn deliver(
         &self,
         text: &str,
+        _target: TargetRef,
         _progress: &mut dyn FnMut(Progress),
     ) -> Result<Delivered, DeliveryError> {
         Ok(Delivered {
@@ -67,6 +68,7 @@ impl KeystrokeSender for NoKeys {
     fn send_keystrokes(
         &self,
         _chords: &[KeyChord],
+        _target: TargetRef,
         _waiting: &mut dyn FnMut(Waiting),
     ) -> Result<(), KeystrokeError> {
         Ok(())
@@ -145,6 +147,7 @@ fn every_shipped_value_has_a_block_that_agrees_with_the_palette() {
                     warnings: 0,
                     on: ON,
                 },
+                TargetRef(1),
                 &TakesEverything,
                 &NoKeys,
                 Clearing::Keep,

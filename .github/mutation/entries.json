@@ -67,8 +67,8 @@
       "id": "M41",
       "why": "a second call of KeystrokeSender in the same file - the tool presses keys outside the one place allowed to",
       "file": "crates/nkb-app/src/send_value.rs",
-      "find": "        Clearing::Line => match keys.send_keystrokes(&line_clearing_recipe(), &mut |waiting| {\n            progress(OnTheWay::Waiting(waiting));\n        }) {\n            Ok(()) => ClearingOutcome::Done,",
-      "replace": "        Clearing::Line => match keys.send_keystrokes(&line_clearing_recipe(), &mut |waiting| {\n            progress(OnTheWay::Waiting(waiting));\n        }) {\n            Ok(()) => { let _ = keys.send_keystrokes(&[], &mut |_| {}); ClearingOutcome::Done }",
+      "find": "            match keys.send_keystrokes(&line_clearing_recipe(), target, &mut |waiting| {\n                progress(OnTheWay::Waiting(waiting));\n            }) {\n                Ok(()) => ClearingOutcome::Done,",
+      "replace": "            match keys.send_keystrokes(&line_clearing_recipe(), target, &mut |waiting| {\n                progress(OnTheWay::Waiting(waiting));\n            }) {\n                Ok(()) => { let _ = keys.send_keystrokes(&[], target, &mut |_| {}); ClearingOutcome::Done }",
       "test": "the_keystroke_port_is_called_only_through_the_named_doors",
       "runner": "rust:nkb-app:keystrokes_have_named_doors"
     },
@@ -1029,7 +1029,7 @@
       "id": "M105",
       "why": "the message about a window with higher privileges is said at EVERY press - the bar already says it, and a sentence repeated with every value is not read",
       "file": "crates/nkb-app/src/advance_sequence.rs",
-      "find": "            if self.window_on_clipboard != window {",
+      "find": "            if self.window_on_clipboard != Some(target) {",
       "replace": "            if true {",
       "test": "advance_sequence::tests::the_window_is_named_once_and_its_next_values_go_the_same_way",
       "runner": "rust:nkb-app:lib"
@@ -1227,7 +1227,7 @@
       "id": "M152",
       "why": "a skipped clearing becomes a refusal - Notepad++, Terminal and Writer get nothing",
       "file": "crates/nkb-app/src/send_value.rs",
-      "find": "            Err(KeystrokeError::FieldUnconfirmed) => {\n                ClearingOutcome::Skipped(SkipReason::Unconfirmed)\n            }\n",
+      "find": "                Err(KeystrokeError::FieldUnconfirmed) => {\n                    ClearingOutcome::Skipped(SkipReason::Unconfirmed)\n                }\n",
       "replace": "",
       "test": "send_value::tests::an_unconfirmed_field_gets_the_value_uncleared_and_the_outcome_says_so",
       "runner": "rust:nkb-app:lib"
@@ -2388,8 +2388,8 @@
       "id": "M427",
       "why": "Copy writes the value by the DIRECT ROUTE instead of the clipboard - the button types the value into the focused field (D98)",
       "file": "crates/nkb-app/src/advance_sequence/copy.rs",
-      "find": "        match ports.by_clipboard.deliver(&text, &mut |_| {}) {",
-      "replace": "        match ports.direct.deliver(&text, &mut |_| {}) {",
+      "find": "            .by_clipboard\n            .deliver(&text, TargetRef::UNNAMED, &mut |_| {})",
+      "replace": "            .direct\n            .deliver(&text, TargetRef::UNNAMED, &mut |_| {})",
       "test": "advance_sequence::copy::tests::a_copy_takes_the_clipboard_route_with_the_value_named_and_moves_nothing",
       "runner": "rust:nkb-app:lib"
     },
@@ -7011,8 +7011,8 @@
       "id": "M972",
       "why": "nkb send --clear in Firefox without accessibility gives a vague sentence instead of naming the setting (D125)",
       "file": "crates/nkb-app/src/send_value.rs",
-      "find": "            Err(KeystrokeError::ClosedToAccessibility) => {\n                ClearingOutcome::Skipped(SkipReason::ClosedToAccessibility)",
-      "replace": "            Err(KeystrokeError::ClosedToAccessibility) => {\n                ClearingOutcome::Skipped(SkipReason::Unconfirmed)",
+      "find": "                Err(KeystrokeError::ClosedToAccessibility) => {\n                    ClearingOutcome::Skipped(SkipReason::ClosedToAccessibility)",
+      "replace": "                Err(KeystrokeError::ClosedToAccessibility) => {\n                    ClearingOutcome::Skipped(SkipReason::Unconfirmed)",
       "test": "send_value::tests::a_window_closed_to_accessibility_gets_the_value_uncleared_and_the_outcome_names_it",
       "runner": "rust:nkb-app:lib"
     },
@@ -11187,8 +11187,8 @@
       "id": "M1455",
       "why": "a system that cannot press the clearing keys refuses the send, so the value is not sent at all",
       "file": "crates/nkb-app/src/send_value.rs",
-      "find": "            Err(KeystrokeError::NoClearingKeys) => {\n                ClearingOutcome::Skipped(SkipReason::NoClearingKeys)\n            }\n",
-      "replace": "            Err(error @ KeystrokeError::NoClearingKeys) => return SendOutcome::NotCleared { error },\n",
+      "find": "                Err(KeystrokeError::NoClearingKeys) => {\n                    ClearingOutcome::Skipped(SkipReason::NoClearingKeys)\n                }\n",
+      "replace": "                Err(error @ KeystrokeError::NoClearingKeys) => return SendOutcome::NotCleared { error },\n",
       "test": "send_value::tests::a_system_that_cannot_press_the_clearing_keys_gets_the_value_uncleared_and_the_outcome_names_it",
       "runner": "rust:nkb-app:lib"
     },
@@ -11784,6 +11784,51 @@
       "find": "        Waiting::Asking | Waiting::Answered => None,",
       "replace": "        Waiting::Asking => Some(WAITING_FOR_CONSENT),\n        Waiting::Answered => None,",
       "test": "on_the_way::tests::the_wait_for_the_person_is_said_once_and_its_end_is_not_said",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1522",
+      "why": "the window is read again to say where the value goes, so the tester can be told about one window while the keys go to another (D148)",
+      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "find": "            Some(ports.inspector.inspect(target))",
+      "replace": "            route.target().map(|window| ports.inspector.inspect(window))",
+      "test": "advance_sequence::tests::one_press_reads_its_window_once_and_aims_the_clearing_and_the_value_at_it",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1523",
+      "why": "the clearing is aimed at whatever has the focus, so a window that came to the front meanwhile gets Home, Shift+End, Delete in a field nobody confirmed (D148)",
+      "file": "crates/nkb-app/src/send_value.rs",
+      "find": "            match keys.send_keystrokes(&line_clearing_recipe(), target, &mut |waiting| {",
+      "replace": "            match keys.send_keystrokes(&line_clearing_recipe(), TargetRef::UNNAMED, &mut |waiting| {",
+      "test": "advance_sequence::tests::one_press_reads_its_window_once_and_aims_the_clearing_and_the_value_at_it",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1524",
+      "why": "the value is aimed at whatever has the focus, so it follows the focus into a window the tester was never told about (D148)",
+      "file": "crates/nkb-app/src/send_value.rs",
+      "find": "    let delivered = delivery.deliver(&literal, target, &mut |step| {",
+      "replace": "    let delivered = delivery.deliver(&literal, TargetRef::UNNAMED, &mut |step| {",
+      "test": "advance_sequence::tests::one_press_reads_its_window_once_and_aims_the_clearing_and_the_value_at_it",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1525",
+      "why": "any window in front counts as the one the send was meant for, so the keys go to a window that came up during the wait for a held modifier (D148)",
+      "file": "crates/nkb-sys/src/lib.rs",
+      "find": "    front == Some(target)\n",
+      "replace": "    front.is_some()\n",
+      "test": "tests::only_the_window_the_send_was_meant_for_is_still_in_front",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1526",
+      "why": "nkb send names one window and aims the send at whatever has the focus later (D148)",
+      "file": "crates/nkb-cli/src/target_line.rs",
+      "find": "            }\n            Ok(target)\n        }\n        None => {",
+      "replace": "            }\n            Ok(TargetRef::UNNAMED)\n        }\n        None => {",
+      "test": "target_line::tests::a_named_target_is_said_with_its_window_and_the_unchanged_focus_is_noted",
       "runner": "rust:nkb-cli:bin=nkb"
     }
   ]

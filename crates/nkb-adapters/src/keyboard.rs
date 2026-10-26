@@ -29,7 +29,7 @@ impl ValueDelivery for DirectInjection {
         if !nkb_sys::can_send() {
             // Asked from nkb-sys rather than decided here, so the answer to
             // "which systems can do this" lives in one place.
-            return match nkb_sys::send_text("", &mut |_| {}) {
+            return match nkb_sys::send_text("", nkb_sys::UNNAMED_WINDOW, &mut |_| {}) {
                 Err(nkb_sys::SendError::Unsupported { system }) => Availability::Unavailable {
                     reason: system.to_owned(),
                 },
@@ -67,15 +67,19 @@ impl ValueDelivery for DirectInjection {
     fn deliver(
         &self,
         text: &str,
+        target: TargetRef,
         progress: &mut dyn FnMut(Progress),
     ) -> Result<Delivered, DeliveryError> {
         if nkb_sys::foreground_window().is_none() {
             return Err(DeliveryError::NoTarget);
         }
-        if !text.is_empty() && blocked_by_privileges() {
+        // Every question below is about the window the send was meant for, and the
+        // route types into it or into nothing (`D148`).
+        let window = nkb_sys::WindowRef(target.0);
+        if !text.is_empty() && blocked_by_privileges(window) {
             return Err(DeliveryError::HigherPrivileges);
         }
-        if !text.is_empty() && focus_outside_a_text_field() {
+        if !text.is_empty() && focus_outside_a_text_field(window) {
             return Err(DeliveryError::NoTextField);
         }
         // The route's own words for how far it got, mirrored one to one - the
@@ -86,7 +90,7 @@ impl ValueDelivery for DirectInjection {
                 units_total: step.units_total,
             });
         };
-        match nkb_sys::send_text(text, &mut told) {
+        match nkb_sys::send_text(text, window, &mut told) {
             Ok(outcome) => Ok(Delivered {
                 utf16_units: outcome.units,
                 following: following(outcome.following),
@@ -174,10 +178,8 @@ fn control_kind(focus: nkb_sys::field::FocusedInput) -> ControlKind {
 /// Nothing is pressed when there is nothing to press, so an empty value or an
 /// empty recipe is not refused: refusing would report a blocked send that was
 /// never going to happen.
-fn blocked_by_privileges() -> bool {
-    nkb_sys::foreground_window().is_some_and(|window| {
-        nkb_sys::privilege::input_reach(window) == nkb_sys::privilege::InputReach::HigherPrivileges
-    })
+fn blocked_by_privileges(window: nkb_sys::WindowRef) -> bool {
+    nkb_sys::privilege::input_reach(window) == nkb_sys::privilege::InputReach::HigherPrivileges
 }
 
 /// Whether the keyboard focus in the window in front is surely NOT a text field
@@ -191,10 +193,8 @@ fn blocked_by_privileges() -> bool {
 /// one. `FocusedInput::Unknown` sends the value as before: only a type that
 /// takes no text by definition stops a send, never a guess. The clearing door
 /// asks the stricter [`clearing_verdict`].
-fn focus_outside_a_text_field() -> bool {
-    nkb_sys::foreground_window().is_some_and(|window| {
-        nkb_sys::field::focused_input(window) == nkb_sys::field::FocusedInput::NotTextField
-    })
+fn focus_outside_a_text_field(window: nkb_sys::WindowRef) -> bool {
+    nkb_sys::field::focused_input(window) == nkb_sys::field::FocusedInput::NotTextField
 }
 
 /// Whether the clearing recipe may be pressed on this focus (`D76`).
@@ -313,12 +313,16 @@ impl KeystrokeSender for DirectInjection {
     fn send_keystrokes(
         &self,
         chords: &[KeyChord],
+        target: TargetRef,
         waiting: &mut dyn FnMut(Waiting),
     ) -> Result<(), KeystrokeError> {
-        let Some(window) = nkb_sys::foreground_window() else {
+        if nkb_sys::foreground_window().is_none() {
             return Err(KeystrokeError::NoTarget);
-        };
-        if !chords.is_empty() && blocked_by_privileges() {
+        }
+        // The field the recipe may be pressed in is the one of the window the send was
+        // meant for, and the route presses in that window or in none (`D148`).
+        let window = nkb_sys::WindowRef(target.0);
+        if !chords.is_empty() && blocked_by_privileges(window) {
             return Err(KeystrokeError::HigherPrivileges);
         }
         if !chords.is_empty() {
@@ -328,7 +332,7 @@ impl KeystrokeSender for DirectInjection {
         // The route's own words for what it waits for, mirrored one to one - the two crates
         // do not depend on each other (`D145` point 76).
         let mut told = |step: nkb_sys::Waiting| waiting(waiting_of(step));
-        match nkb_sys::send_chords(&mapped, &mut told) {
+        match nkb_sys::send_chords(&mapped, window, &mut told) {
             Ok(_) => Ok(()),
             Err(nkb_sys::SendError::Unsupported { system }) => Err(KeystrokeError::Unsupported {
                 system: system.to_owned(),
@@ -542,7 +546,7 @@ mod tests {
         if !nkb_sys::can_send() {
             return;
         }
-        match DirectInjection.send_keystrokes(&[], &mut |_| {}) {
+        match DirectInjection.send_keystrokes(&[], TargetRef::UNNAMED, &mut |_| {}) {
             Ok(()) | Err(KeystrokeError::NoTarget) => {}
             Err(other) => panic!("an empty sequence must not fail this way: {other}"),
         }
@@ -610,7 +614,7 @@ mod tests {
         }
         // No assertion on the target here - on a machine with no focused window
         // this is `NoTarget`, which is correct and not a failure of this code.
-        match DirectInjection.deliver("", &mut |_| {}) {
+        match DirectInjection.deliver("", TargetRef::UNNAMED, &mut |_| {}) {
             Ok(delivered) => assert_eq!(delivered.utf16_units, 0),
             Err(DeliveryError::NoTarget) => {}
             Err(other) => panic!("an empty value must not fail this way: {other}"),

@@ -30,6 +30,7 @@ use crate::macos_rules::{
 };
 use crate::{
     Chord, Following, MODIFIER_RELEASE_WAIT, SendError, SendOutcome, SendProgress, StopReason,
+    WindowRef, still_in_front,
 };
 
 /// Whether this program is allowed to send keystrokes right now. Asked on every
@@ -134,8 +135,16 @@ struct Session {
 }
 
 impl Session {
-    fn begin() -> Option<Self> {
+    /// The session around the application `target` names, or nothing when
+    /// another application - or none - is in front by now (`D148`). The
+    /// application, not the window: two windows of one program are one target
+    /// here.
+    fn begin(target: WindowRef) -> Option<Self> {
         let front = front_pid()?;
+        let named = u64::try_from(front).ok().map(WindowRef);
+        if !still_in_front(target, named) {
+            return None;
+        }
         let source =
             Owned::new(unsafe { ffi::CGEventSourceCreate(ffi::STATE_PRIVATE) }.cast_const())?;
         Some(Self {
@@ -177,6 +186,7 @@ impl Session {
 
 pub(crate) fn send_text(
     text: &str,
+    target: WindowRef,
     progress: &mut dyn FnMut(SendProgress),
 ) -> Result<SendOutcome, SendError> {
     let characters = scalars(text);
@@ -195,7 +205,7 @@ pub(crate) fn send_text(
         return Err(SendError::NeedsPermission);
     }
     wait_for_keys_released()?;
-    let Some(mut session) = Session::begin() else {
+    let Some(mut session) = Session::begin(target) else {
         return Err(SendError::Truncated {
             units_sent: 0,
             units_expected: expected,
@@ -237,7 +247,7 @@ pub(crate) fn send_text(
     })
 }
 
-pub(crate) fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
+pub(crate) fn send_chords(chords: &[Chord], target: WindowRef) -> Result<usize, SendError> {
     if chords.is_empty() {
         return Ok(0);
     }
@@ -245,7 +255,7 @@ pub(crate) fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
         return Err(SendError::NeedsPermission);
     }
     wait_for_keys_released()?;
-    let Some(mut session) = Session::begin() else {
+    let Some(mut session) = Session::begin(target) else {
         return Err(SendError::ChordsTruncated {
             chords_sent: 0,
             chords_expected: chords.len(),
