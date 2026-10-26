@@ -157,15 +157,17 @@ pub(crate) fn say_not_delivered(err: &mut impl Write, error: &DeliveryError) {
 }
 
 /// Why a send stopped, in the words `nkb send` uses after a dash. The same
-/// reasons the palette names (`D95`, `D96`), said in the command's own sentences.
-pub(crate) fn stop_reason(reason: StopReason) -> &'static str {
+/// reasons the palette names (`D95`, `D96`, `D149`), said in the command's own
+/// sentences.
+pub(crate) fn stop_reason(reason: StopReason) -> String {
     match reason {
         StopReason::Dropped => {
-            "the system did not deliver the keys, another program may be blocking input"
+            "the system did not deliver the keys, another program may be blocking input".to_owned()
         }
-        StopReason::FocusMoved => "another window came to the front",
-        StopReason::NotTaking => "the application stopped taking keys",
-        StopReason::Escape => "Escape was pressed",
+        StopReason::FocusMoved => "another window came to the front".to_owned(),
+        StopReason::NotTaking => "the application stopped taking keys".to_owned(),
+        StopReason::Escape => "Escape was pressed".to_owned(),
+        StopReason::KeyPressed { key } => format!("{key} was pressed"),
     }
 }
 
@@ -198,3 +200,27 @@ pub(crate) const HIGHER_PRIVILEGES: &str = "nkb send: the window in front runs w
 /// while, although the focus is in a field, until the focus moves (`OBS-140`).
 /// Clicking into the field again is what ends that, so it is what is asked for.
 pub(crate) const NO_TEXT_FIELD: &str = "nkb send: the system reports the keyboard focus outside a text field, so nothing was sent - keys there could press buttons or act on list items. Click into the field and run this again.";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_reason_a_send_stopped_reads_as_its_own_and_names_the_key() {
+        // `D149`: the modifier is named, as the palette names it, so the person
+        // knows which key of theirs stopped the value.
+        let reasons = [
+            StopReason::Dropped,
+            StopReason::FocusMoved,
+            StopReason::NotTaking,
+            StopReason::Escape,
+            StopReason::KeyPressed { key: "Alt" },
+        ]
+        .map(stop_reason);
+        for (i, reason) in reasons.iter().enumerate() {
+            assert!(!reason.is_empty() && !reason.ends_with('.'), "{reason}");
+            assert!(!reasons[i + 1..].contains(reason), "\"{reason}\" twice");
+        }
+        assert_eq!(reasons[4], "Alt was pressed");
+    }
+}

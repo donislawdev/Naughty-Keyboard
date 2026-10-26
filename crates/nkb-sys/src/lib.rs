@@ -155,16 +155,21 @@ pub enum StopReason {
     /// The person pressed `Escape`, which the send holds for as long as it
     /// lasts and no longer (race `W3`, `D96`).
     Escape,
+    /// A modifier went down while the send was going: `Alt`, which stops it at
+    /// once, or another held longer than [`MODIFIER_RELEASE_WAIT`] (`D149`,
+    /// `OBS-233`). `key` is its name on this system.
+    KeyPressed { key: &'static str },
 }
 
 impl core::fmt::Display for StopReason {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str(match self {
-            Self::Dropped => "the system did not take the keys",
-            Self::FocusMoved => "another window came to the front",
-            Self::NotTaking => "the application stopped taking keys",
-            Self::Escape => "Escape was pressed",
-        })
+        match self {
+            Self::Dropped => f.write_str("the system did not take the keys"),
+            Self::FocusMoved => f.write_str("another window came to the front"),
+            Self::NotTaking => f.write_str("the application stopped taking keys"),
+            Self::Escape => f.write_str("Escape was pressed"),
+            Self::KeyPressed { key } => write!(f, "{key} was pressed"),
+        }
     }
 }
 
@@ -324,7 +329,7 @@ mod windows_impl {
 
     use super::cadence::{Cadence, PROGRESS_INTERVAL};
     use super::confirm::{
-        Pressed, Step, TAKEN_WAIT, TARGET_WAIT, Waits, Watch, chord_steps, chords_acted,
+        Held, Pressed, Step, TAKEN_WAIT, TARGET_WAIT, Waits, Watch, chord_steps, chords_acted,
         press_confirmed, units_arrived,
     };
     use super::escape::{ReservedEscape, SystemEscape};
@@ -351,12 +356,16 @@ mod windows_impl {
     ];
 
     fn held_modifier() -> Option<&'static str> {
-        MODIFIERS.iter().find_map(|(key, name)| {
-            // The high bit says "down right now". The low bit is history and
-            // is deliberately ignored.
-            let state = unsafe { GetAsyncKeyState(i32::from(*key)) };
-            ((state as u16) & 0x8000 != 0).then_some(*name)
-        })
+        MODIFIERS
+            .iter()
+            .find_map(|(key, name)| is_down(*key).then_some(*name))
+    }
+
+    /// Whether `key` is down right now, for the system. The high bit says "down
+    /// right now". The low bit is history and is deliberately ignored.
+    fn is_down(key: VIRTUAL_KEY) -> bool {
+        let state = unsafe { GetAsyncKeyState(i32::from(key)) };
+        (state as u16) & 0x8000 != 0
     }
 
     /// Waits for every modifier to come up, for at most `MODIFIER_RELEASE_WAIT`.
@@ -489,14 +498,22 @@ mod windows_impl {
             send_one(event)
         }
         fn system_down(&mut self, key: u16) -> bool {
-            // The high bit only, as in `held_modifier`.
-            let state = unsafe { GetAsyncKeyState(i32::from(key)) };
-            (state as u16) & 0x8000 != 0
+            is_down(key)
         }
         fn target_down(&mut self, key: u16) -> bool {
             // Joined, our synchronous state IS the focused queue's (`D95`).
             let state = unsafe { GetKeyState(i32::from(key)) };
             (state as u16) & 0x8000 != 0
+        }
+        fn held(&mut self) -> Held {
+            // The system's state, the one the next event meets: a key down when
+            // `SendInput` takes our event is down for that event (`OBS-233`).
+            Held {
+                ctrl: is_down(VK_CONTROL),
+                alt: is_down(VK_MENU),
+                shift: is_down(VK_SHIFT),
+                win: is_down(VK_LWIN) || is_down(VK_RWIN),
+            }
         }
         fn watch(&mut self) -> Watch {
             // First: a person who pressed Escape asked for exactly this stop,
@@ -547,6 +564,7 @@ mod windows_impl {
             Waits {
                 system: TAKEN_WAIT,
                 target: self.joined.as_ref().map(|_| TARGET_WAIT),
+                release: MODIFIER_RELEASE_WAIT,
             }
         }
 
@@ -674,16 +692,20 @@ mod windows_impl {
         let mut cadence = Cadence::starting(std::time::Instant::now(), PROGRESS_INTERVAL);
         for (index, unit) in units.iter().enumerate() {
             let [down, up] = events_for(*unit);
+            // A character arrives as itself under `Shift` (`OBS-233`), so the
+            // person's `Shift` holds no unit back.
             let steps = [
                 Step {
                     event: down,
                     key: VK_PACKET,
                     down: true,
+                    shift_counts: false,
                 },
                 Step {
                     event: up,
                     key: VK_PACKET,
                     down: false,
+                    shift_counts: false,
                 },
             ];
             let pressed = session.press(&steps);
@@ -785,8 +807,10 @@ pub fn foreground_window() -> Option<WindowRef> {
 /// queue holding the keyboard focus could be joined, once that application took
 /// it (`D95`) - [`SendOutcome::following`] says which. The window in front is looked
 /// at before every event, and so is `Escape`, which the send holds for as long as
-/// it lasts and gives back once the key is up (`D96`). A stop ends the send with
-/// [`SendError::Truncated`] and its [`StopReason`].
+/// it lasts and gives back once the key is up (`D96`), and so are the modifiers on
+/// Windows: `Alt` stops the send, `Ctrl` and `Win` hold the next key until they come
+/// up (`D149`). A stop ends the send with [`SendError::Truncated`] and its
+/// [`StopReason`].
 ///
 /// `progress` hears how far the send got, on the sending thread, between two
 /// units: at most once a tenth of a second and never during the first tenth, so
@@ -809,13 +833,16 @@ pub fn send_text(
 /// These are the keys that are NOT content. The caller (one place in the
 /// whole program, guarded there) decides the recipe. This function waits for
 /// held modifiers exactly as [`send_text`] does and puts the presses on the
-/// wire one chord at a time.
+/// wire one chord at a time. On Windows the person's `Shift` also holds back the
+/// first key of each chord, before the recipe's own `Shift` is down: `Shift+Home`
+/// selects instead of going to the start of the line (`D149`).
 ///
 /// # Errors
 ///
 /// [`SendError::ModifierHeld`] when a modifier stays down past the wait,
 /// [`SendError::ChordsTruncated`] when a press was not taken, another window came
-/// to the front, the application stopped taking keys or `Escape` was pressed -
+/// to the front, the application stopped taking keys, `Escape` was pressed or a
+/// modifier went down -
 /// every event is confirmed before the next, as in [`send_text`] - and
 /// [`SendError::Unsupported`] where there is no route.
 ///
@@ -1023,10 +1050,12 @@ mod tests {
             StopReason::FocusMoved,
             StopReason::NotTaking,
             StopReason::Escape,
+            StopReason::KeyPressed { key: "Alt" },
         ]
         .iter()
         .map(ToString::to_string)
         .collect();
+        assert_eq!(words[4], "Alt was pressed", "the key is named");
         for (i, a) in words.iter().enumerate() {
             assert!(!a.is_empty());
             for b in &words[i + 1..] {
