@@ -29,15 +29,18 @@
 //!   application name and window title before every insert, and that needs
 //!   `TargetInspector` and the `WindowTitle` type - a separate piece, because
 //!   the type is what keeps titles out of the log.
-//! - it does not re-check the target mid-insert (race `W2`), does not handle
-//!   `Escape` (`W3`), and writes nothing to a session file (`W4`).
+//! - it does not read the target itself. The caller reads it once, when the
+//!   send begins, and every key of the send - the clearing and the value - is
+//!   aimed at that window: one that came to the front in its place gets nothing
+//!   (`D148`). Watching the window between keys (`W2`) and `Escape` (`W3`) are
+//!   the route's, and nothing is written to a session file (`W4`).
 //!
 //! Every one of those belongs to a later piece of step 3, and saying which
 //! parts are missing is untouchable rule 1 applied to a use case.
 
 use crate::ports::{
     Availability, DeliveryError, Following, KeystrokeError, KeystrokeSender, PackFormat,
-    PackSource, Progress, SourceError, StopReason, ValueDelivery, Waiting,
+    PackSource, Progress, SourceError, StopReason, TargetRef, ValueDelivery, Waiting,
 };
 use nkb_core::calendar::Day;
 use nkb_core::keys::line_clearing_recipe;
@@ -86,7 +89,7 @@ pub enum SkipReason {
     NoClearingKeys,
 }
 
-/// What to send: which value of which pack, and whether to clear first.
+/// What to send: which value of which pack, where, and whether to clear first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SendRequest<'a> {
     pub pack_id: &'a str,
@@ -96,6 +99,10 @@ pub struct SendRequest<'a> {
     /// Today in UTC, from the clock port: the day a `next-date` value is
     /// worked out for.
     pub on: Day,
+    /// The window the value is meant for: what the route named as its target
+    /// when the person was told where the value goes. Every key of the send is
+    /// aimed at it (`D148`).
+    pub target: TargetRef,
 }
 
 /// One value of a pack held in memory, chosen to go out on a given day.
@@ -346,7 +353,14 @@ fn deliver_one(
         warnings,
         on: request.on,
     };
-    deliver_value(chosen, delivery, keys, request.clearing, progress)
+    deliver_value(
+        chosen,
+        request.target,
+        delivery,
+        keys,
+        request.clearing,
+        progress,
+    )
 }
 
 /// A value on its way into the field, said while it goes (`OBS-160`): which
@@ -389,8 +403,14 @@ pub enum OnTheWay<'a> {
 /// value then goes uncleared ([`ClearingOutcome::Skipped`], `D76`). The returned
 /// [`SendOutcome`] carries both the delivery result and the numbers the palette
 /// shows, so one call answers both questions.
+///
+/// 🔴 `target` is read ONCE, by the caller, and both halves are aimed at it
+/// (`D148`). Read again for each half, the clearing could be confirmed in one
+/// window and pressed in another that came to the front during the wait for a
+/// held modifier, and the value could follow the clearing into a third.
 pub fn deliver_value(
     chosen: Chosen<'_>,
+    target: TargetRef,
     delivery: &dyn ValueDelivery,
     keys: &dyn KeystrokeSender,
     clearing: Clearing,
@@ -432,22 +452,24 @@ pub fn deliver_value(
     // is as it was, and the value goes on top of it, said as such (`D76`).
     let clearing = match clearing {
         Clearing::Keep => ClearingOutcome::NotAsked,
-        Clearing::Line => match keys.send_keystrokes(&line_clearing_recipe(), &mut |waiting| {
-            progress(OnTheWay::Waiting(waiting));
-        }) {
-            Ok(()) => ClearingOutcome::Done,
-            Err(KeystrokeError::FieldUnconfirmed) => {
-                ClearingOutcome::Skipped(SkipReason::Unconfirmed)
+        Clearing::Line => {
+            match keys.send_keystrokes(&line_clearing_recipe(), target, &mut |waiting| {
+                progress(OnTheWay::Waiting(waiting));
+            }) {
+                Ok(()) => ClearingOutcome::Done,
+                Err(KeystrokeError::FieldUnconfirmed) => {
+                    ClearingOutcome::Skipped(SkipReason::Unconfirmed)
+                }
+                Err(KeystrokeError::InTerminal) => ClearingOutcome::Skipped(SkipReason::Terminal),
+                Err(KeystrokeError::ClosedToAccessibility) => {
+                    ClearingOutcome::Skipped(SkipReason::ClosedToAccessibility)
+                }
+                Err(KeystrokeError::NoClearingKeys) => {
+                    ClearingOutcome::Skipped(SkipReason::NoClearingKeys)
+                }
+                Err(error) => return SendOutcome::NotCleared { error },
             }
-            Err(KeystrokeError::InTerminal) => ClearingOutcome::Skipped(SkipReason::Terminal),
-            Err(KeystrokeError::ClosedToAccessibility) => {
-                ClearingOutcome::Skipped(SkipReason::ClosedToAccessibility)
-            }
-            Err(KeystrokeError::NoClearingKeys) => {
-                ClearingOutcome::Skipped(SkipReason::NoClearingKeys)
-            }
-            Err(error) => return SendOutcome::NotCleared { error },
-        },
+        }
     };
 
     let expected_units = literal.encode_utf16().count();
@@ -457,7 +479,7 @@ pub fn deliver_value(
 
     // Counted at the first report, if there is one, and kept for the outcome.
     let mut counted: Option<ValueFacts> = None;
-    let delivered = delivery.deliver(&literal, &mut |step| {
+    let delivered = delivery.deliver(&literal, target, &mut |step| {
         progress(OnTheWay::Typing(Sending {
             facts: counted.get_or_insert_with(&facts),
             progress: step,
@@ -538,6 +560,7 @@ mod tests {
         fn deliver(
             &self,
             text: &str,
+            _target: TargetRef,
             _progress: &mut dyn FnMut(Progress),
         ) -> Result<Delivered, DeliveryError> {
             self.log.borrow_mut().push(format!("text:{text}"));
@@ -572,6 +595,7 @@ mod tests {
         fn send_keystrokes(
             &self,
             chords: &[KeyChord],
+            _target: TargetRef,
             waiting: &mut dyn FnMut(Waiting),
         ) -> Result<(), KeystrokeError> {
             for said in &self.says {
@@ -688,6 +712,7 @@ mod tests {
             position,
             clearing,
             on: crate::test_support::WRITTEN_ON,
+            target: TargetRef(1),
         }
     }
 
@@ -1290,6 +1315,7 @@ mod tests {
             fn deliver(
                 &self,
                 text: &str,
+                _target: TargetRef,
                 _progress: &mut dyn FnMut(Progress),
             ) -> Result<Delivered, DeliveryError> {
                 Ok(Delivered {
@@ -1332,6 +1358,7 @@ mod tests {
             fn deliver(
                 &self,
                 text: &str,
+                _target: TargetRef,
                 progress: &mut dyn FnMut(Progress),
             ) -> Result<Delivered, DeliveryError> {
                 let total = text.encode_utf16().count();

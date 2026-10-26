@@ -307,12 +307,19 @@ pub trait ValueDelivery {
     ///
     /// Asked twice around a wait, so a caller can notice that nothing moved -
     /// which usually means the value is about to go back into the window it was
-    /// launched from.
+    /// launched from. Asked ONCE per send otherwise: the answer is the `target`
+    /// every later step of that send is aimed at.
     fn target(&self) -> Option<TargetRef>;
 
-    /// Sends `text` to the focused field, telling `progress` how far it got on
-    /// the way. `progress` runs on the sending thread between two keys and must
-    /// return quickly - the next key waits for it.
+    /// Sends `text` to the focused field of `target`, telling `progress` how far
+    /// it got on the way. `progress` runs on the sending thread between two keys
+    /// and must return quickly - the next key waits for it.
+    ///
+    /// `target` is what [`ValueDelivery::target`] answered when the send began.
+    /// A route that types stops before its first key when another window is in
+    /// front by then, rather than typing into it: the field was looked at in
+    /// `target`, and in no other window. A route with one target of its own (the
+    /// clipboard) takes the value whatever `target` says.
     ///
     /// # Errors
     ///
@@ -321,6 +328,7 @@ pub trait ValueDelivery {
     fn deliver(
         &self,
         text: &str,
+        target: TargetRef,
         progress: &mut dyn FnMut(Progress),
     ) -> Result<Delivered, DeliveryError>;
 
@@ -467,10 +475,16 @@ impl fmt::Display for KeystrokeError {
 /// implementation gives it a bounded moment to come up and then returns
 /// [`KeystrokeError::ModifierHeld`] without pressing anything.
 pub trait KeystrokeSender {
-    /// Presses `chords` in order, each as a full press-and-release. `waiting`
-    /// hears what the press stands on besides the keys, on the sending thread
-    /// and before the first key: a route with nothing to wait for never calls
-    /// it, and it must return quickly.
+    /// Presses `chords` in order, each as a full press-and-release, in the focused
+    /// field of `target`. `waiting` hears what the press stands on besides the
+    /// keys, on the sending thread and before the first key: a route with nothing
+    /// to wait for never calls it, and it must return quickly.
+    ///
+    /// `target` is the window the send began with, and the field the recipe may
+    /// be pressed in is looked at in that window only. Another window in front by
+    /// the first key - after the wait for a held modifier, which can last two
+    /// seconds - presses nothing: the recipe keeps "never beyond the field" only
+    /// in the field that was confirmed (untouchable rule 17, `D76`).
     ///
     /// # Errors
     ///
@@ -479,6 +493,7 @@ pub trait KeystrokeSender {
     fn send_keystrokes(
         &self,
         chords: &[KeyChord],
+        target: TargetRef,
         waiting: &mut dyn FnMut(Waiting),
     ) -> Result<(), KeystrokeError>;
 }

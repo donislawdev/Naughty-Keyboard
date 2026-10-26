@@ -84,14 +84,18 @@ pub(crate) fn foreground_window() -> Option<WindowRef> {
 
 /// Types `text`, through the input method on a Wayland session and through the keys of
 /// the X server on every other.
+///
+/// `target` is the window the send was meant for (`D148`). A Wayland session cannot name
+/// it, so the input method types into whatever has the focus, as it always did.
 pub(crate) fn send_text(
     text: &str,
+    target: WindowRef,
     progress: &mut dyn FnMut(SendProgress),
 ) -> Result<SendOutcome, SendError> {
     if connect::wayland_session() {
         ibus::send_text(text, progress)
     } else {
-        send::send_text(text, progress)
+        send::send_text(text, target, progress)
     }
 }
 
@@ -102,12 +106,13 @@ pub(crate) fn send_text(
 /// to wait for, and says so through `waiting` (`D145` point 76).
 pub(crate) fn send_chords(
     chords: &[crate::Chord],
+    target: WindowRef,
     waiting: &mut dyn FnMut(Waiting),
 ) -> Result<usize, SendError> {
     if connect::wayland_session() {
         ibus::press_chords(chords, waiting)
     } else {
-        send::send_chords(chords)
+        send::send_chords(chords, target)
     }
 }
 

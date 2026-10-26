@@ -57,6 +57,7 @@ use crate::linux_rules::{
 };
 use crate::{
     Chord, Following, MODIFIER_RELEASE_WAIT, SendError, SendOutcome, SendProgress, StopReason,
+    WindowRef, still_in_front,
 };
 
 /// Presses the keys that clear a field, each as its own key of the layout, with the server
@@ -81,7 +82,7 @@ use crate::{
 ///    characters is.
 ///
 /// Clearing needs a field that is KNOWN to be one (`D76`), and that is decided before this.
-pub(crate) fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
+pub(crate) fn send_chords(chords: &[Chord], target: WindowRef) -> Result<usize, SendError> {
     if chords.is_empty() {
         // Nothing to press, so nothing to connect to.
         return Ok(0);
@@ -93,7 +94,12 @@ pub(crate) fn send_chords(chords: &[Chord]) -> Result<usize, SendError> {
     let keyboard = read_keyboard(&server.conn).map_err(lost)?;
     let keys = keys_for(chords, &keyboard.keymap, keyboard.shift_key)
         .map_err(|NoKey| unsupported(Refusal::NoClearingKeys))?;
-    let Some(front) = focused_toplevel(&server.conn, server.root).map_err(lost)? else {
+    // The window the clearing was meant for (`D148`), and after the wait below every
+    // chord looks again (`Recipe::press`), so a window that comes up meanwhile gets nothing.
+    let Some(front) = focused_toplevel(&server.conn, server.root)
+        .map_err(lost)?
+        .filter(|front| still_in_front(target, Some(WindowRef(u64::from(*front)))))
+    else {
         return Err(chords_stopped(0, total, StopReason::FocusMoved));
     };
     let pinged = pinged_window(&server).map_err(lost)?;
@@ -603,6 +609,7 @@ fn take_answer(
 
 pub(crate) fn send_text(
     text: &str,
+    target: WindowRef,
     progress: &mut dyn FnMut(SendProgress),
 ) -> Result<SendOutcome, SendError> {
     let characters: Vec<char> = text.chars().collect();
@@ -633,7 +640,12 @@ pub(crate) fn send_text(
     }
 
     let expected = utf16_units(&characters);
-    let Some(front) = focused_toplevel(&server.conn, server.root).map_err(lost)? else {
+    // Read after the wait for held keys, which can last two seconds: the window the value
+    // was meant for, or nothing is typed (`D148`).
+    let Some(front) = focused_toplevel(&server.conn, server.root)
+        .map_err(lost)?
+        .filter(|front| still_in_front(target, Some(WindowRef(u64::from(*front)))))
+    else {
         return Err(truncated(0, expected, StopReason::FocusMoved));
     };
     let pinged = pinged_window(&server).map_err(lost)?;

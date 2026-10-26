@@ -893,9 +893,14 @@ impl AdvanceSequence {
         // would otherwise land in the launching window. Measured as real in the
         // step-2 probe, not hypothetical. The clipboard route always has a
         // target, because its value does not go to the focused window at all.
-        if route.target().is_none() {
+        //
+        // 🔴 Read ONCE (`D148`). What the tester is told, the field the
+        // clearing is allowed in and the keys of the value are all about this
+        // window. A window that comes to the front later - during the wait for
+        // a held modifier, or between the clearing and the value - gets nothing.
+        let Some(target) = route.target() else {
             return refuse(&mut self.sequence, vec![Message::NoTarget]);
-        }
+        };
 
         let Some(value) = loaded.pack.values.get(index - 1) else {
             // The machine asked for an index the pack does not hold, which would
@@ -907,14 +912,13 @@ impl AdvanceSequence {
             pack: loaded.pack.id.clone(),
             value: value.id.clone(),
         };
-        let window = route.target();
         // Where a typed value goes, read at the press and before any key
         // (UX8, `D104`): the program and the kind of control. Never for the
         // clipboard route - its value goes wherever the tester pastes it.
         let inspected = if on_clipboard {
             None
         } else {
-            window.map(|window| ports.inspector.inspect(window))
+            Some(ports.inspector.inspect(target))
         };
         let mut on_clipboard = on_clipboard;
         let mut tell = |way: OnTheWay<'_>| match way {
@@ -931,7 +935,7 @@ impl AdvanceSequence {
             warnings: loaded.warnings,
             on: self.clock.today(),
         };
-        let mut outcome = deliver_value(chosen, route, ports.keys, clearing, &mut tell);
+        let mut outcome = deliver_value(chosen, target, route, ports.keys, clearing, &mut tell);
 
         // `D72`: the direct route refused a window with higher privileges before
         // pressing a single key. Not a hiccup to retry and not a system without
@@ -939,13 +943,16 @@ impl AdvanceSequence {
         // clipboard now, and the tester hears why once per window.
         let mut messages = Vec::new();
         if !on_clipboard && refused_for_privileges(&outcome) {
-            if self.window_on_clipboard != window {
+            if self.window_on_clipboard != Some(target) {
                 messages.push(Message::HigherPrivileges);
             }
-            self.window_on_clipboard = window;
+            self.window_on_clipboard = Some(target);
             on_clipboard = true;
+            // Meant for the same window: the clipboard takes it whatever the
+            // target says, and the tester carries it there.
             outcome = deliver_value(
                 chosen,
+                target,
                 ports.by_clipboard,
                 ports.keys,
                 Clearing::Keep,
@@ -2983,6 +2990,26 @@ mod tests {
             Some(in_a_terminal()),
             "the block says what the palette said"
         );
+    }
+
+    #[test]
+    fn one_press_reads_its_window_once_and_aims_the_clearing_and_the_value_at_it() {
+        // `D148`: read again for each step, a window that came to the front
+        // between them would get keys meant for the field confirmed in the first.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        kit.direct.set_target(Some(TargetRef(42)));
+
+        let _ = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+
+        assert_eq!(kit.direct.targets_asked.get(), 1, "read once, at the press");
+        assert_eq!(*kit.inspector.asked.borrow(), vec![TargetRef(42)]);
+        assert_eq!(
+            *kit.keys.aimed.borrow(),
+            vec![TargetRef(42)],
+            "the clearing"
+        );
+        assert_eq!(*kit.direct.aimed.borrow(), vec![TargetRef(42)], "the value");
     }
 
     #[test]

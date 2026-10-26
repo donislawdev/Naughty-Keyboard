@@ -17,7 +17,7 @@
 use nkb_core::calendar::Day;
 
 use super::{AdvanceSequence, Message, Ports};
-use crate::ports::DeliveryError;
+use crate::ports::{DeliveryError, TargetRef};
 
 /// Which band a Copy button stands beside - what decides the day a value of
 /// type `next-date` names when it is copied.
@@ -84,7 +84,12 @@ impl AdvanceSequence {
                 id: held.id.clone(),
             };
         };
-        match ports.by_clipboard.deliver(&text, &mut |_| {}) {
+        // Meant for no window: the clipboard takes the value whatever the
+        // target says, and the tester pastes it wherever they choose.
+        match ports
+            .by_clipboard
+            .deliver(&text, TargetRef::UNNAMED, &mut |_| {})
+        {
             Ok(_) => Message::ValueCopied { reference },
             Err(DeliveryError::Busy) => Message::CopyBusy,
             Err(DeliveryError::CannotCarry { character }) => Message::NotForClipboard {
