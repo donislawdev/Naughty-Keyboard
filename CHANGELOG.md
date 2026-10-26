@@ -12,14 +12,12 @@ Changes wait under Unreleased until then.
 
 ### Fixed
 
-- A value no longer goes to a window that comes to the front after the shortcut, or after the
+- A value no longer goes to a window that comes to the front after the shortcut or after the
   countdown of `nkb send`. The window is read once, when the send begins, and the clearing keys and
-  the value go to it or nowhere. Before, a send that waited for a held modifier key took whatever
-  window was in front once the key came up, so another window could have its line cleared and the
-  value typed into it while the palette or the command named the first one. Now the send stops
-  before its first key and says that another window came to the front. On Windows and X11 the window
-  itself is compared, on macOS the program. A Wayland session does not say which window has the
-  focus, so there the value still goes to whatever has it.
+  the value go to it or nowhere. Before, a send waiting for a held modifier key took whatever window
+  was in front once the key came up. Now it stops before its first key and says that another window
+  came to the front. Windows and X11 compare the window, macOS the program, and Wayland, which does
+  not name the window, is unchanged.
 
 ## [0.3.0] - 2026-10-25
 
