@@ -79,7 +79,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
 
       # The choice reaches the script through the environment, never through the
       # text of the script. A pull request has no inputs and builds every system.
@@ -110,7 +110,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
 
       # On a pull request this run builds the branch merged into main, and CI
       # files its run of that pull request under the commit of the branch.
@@ -137,7 +137,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
 
       # No cache in any job of this workflow, for the reason release.yml gives:
       # a cache is shared with every other run in the repository, and a program
@@ -189,7 +189,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
@@ -309,7 +309,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.14"
+          python-version: "3.15"
 
       - name: Write the links and the words to send
         env:
