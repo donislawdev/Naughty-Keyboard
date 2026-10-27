@@ -112,17 +112,20 @@ pub(crate) fn say_not_delivered(err: &mut impl Write, error: &DeliveryError) {
                 "The field holds a PARTIAL value. Clear it before testing."
             );
         }
-        // The three below belong to the clipboard route of the palette,
-        // which this command does not have and will not have (D71,
-        // OBS-131). Typing reports none of them. They are answered in
-        // plain words rather than folded into a guess, should a route
-        // ever start to.
+        // Typing on X11 waits for another send on the same display for a
+        // while, and then gives up (D157). The clipboard route, the other
+        // one that reports it, is not this command's (D71, OBS-131).
         DeliveryError::Busy => {
             let _ = writeln!(
                 err,
-                "nkb send: the route was held by another application, so nothing was sent - run again in a moment."
+                "nkb send: another send of Naughty Keyboard is typing on this display, so nothing was sent - run again once it has finished."
             );
         }
+        // A refusal in the route's own words belongs to the clipboard
+        // route of the palette, which this command does not have and will
+        // not have (D71, OBS-131). A character the route cannot carry is
+        // typing's too: U+0000 has no key on Linux (D145). Both are
+        // answered in plain words rather than folded into a guess.
         DeliveryError::Refused { detail } => {
             let _ = writeln!(err, "nkb send: the route refused the value: {detail}.");
         }

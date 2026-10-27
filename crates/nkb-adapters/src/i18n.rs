@@ -223,6 +223,10 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::ClipboardBusy => {
             "Another application is holding the clipboard, so the value was not placed on it. Press the shortcut again in a moment."
         }
+        // `D157`. On X11 one send at a time types on a display.
+        Message::TypingBusy => {
+            "Another Naughty Keyboard send is still typing on this display, so the value was not typed. Press the shortcut again once it has finished."
+        }
         Message::ClipboardFailed { .. } => {
             "The value was not placed on the clipboard: {detail}. The counter did not move, so the same shortcut tries this value again."
         }
@@ -323,6 +327,7 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
         | Message::ClearingSkippedInTerminal
         | Message::ClearingSkippedNoKeys
         | Message::ClipboardBusy
+        | Message::TypingBusy
         | Message::NoTarget
         | Message::ClearingFailed
         | Message::NotPaced
@@ -1188,6 +1193,7 @@ mod tests {
                 ..Substitutions::NONE
             }),
             Message::ClipboardBusy,
+            Message::TypingBusy,
             Message::ClipboardFailed {
                 detail: "the display went away".to_owned(),
             },
@@ -1592,10 +1598,11 @@ mod tests {
             Message::CapsLockOn => 36,
             Message::HandedOver => 37,
             Message::ClearingSkippedNoKeys => 38,
+            Message::TypingBusy => 39,
         }
     }
 
-    const SLOTS: usize = 39;
+    const SLOTS: usize = 40;
 
     #[test]
     fn every_message_variant_is_listed_here() {

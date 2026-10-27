@@ -54,6 +54,8 @@ mod linux_ibus_rules;
 #[cfg(any(target_os = "linux", test))]
 mod linux_portal_rules;
 #[cfg(any(target_os = "linux", test))]
+mod linux_remap_rules;
+#[cfg(any(target_os = "linux", test))]
 mod linux_rules;
 #[cfg(any(target_os = "linux", test))]
 mod linux_window_rules;
@@ -228,6 +230,11 @@ pub enum SendError {
     /// The route cannot type this character at all, so nothing was sent. Refused
     /// by name before the first key rather than left out: `U+0000` is no keysym.
     CannotCarry { character: char },
+    /// Another send of this program was typing on the same display for longer than
+    /// one is waited for, so nothing was sent (`D157`). On X11 the keys of one send
+    /// would be read by the other as keys of the layout. Passing: the same send may
+    /// go once the other has ended.
+    Busy,
 }
 
 impl core::fmt::Display for SendError {
@@ -269,6 +276,9 @@ impl core::fmt::Display for SendError {
                 "U+{:04X} cannot be typed on this system, so nothing was sent",
                 u32::from(*character)
             ),
+            Self::Busy => {
+                f.write_str("another send of this program is typing here, so nothing was sent")
+            }
         }
     }
 }

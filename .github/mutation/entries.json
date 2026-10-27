@@ -93,7 +93,7 @@
     {
       "id": "M186",
       "why": "on an interruption the UTF-16 count speaks of the part sent while the preview and the other counts speak of the whole value",
-      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
       "find": "                utf16_units: units_expected,",
       "replace": "                utf16_units: units_sent,",
       "test": "advance_sequence::tests::an_interrupted_send_on_an_uncleared_field_says_both_worst_first",
@@ -102,7 +102,7 @@
     {
       "id": "M187",
       "why": "an interruption on an uncleared field loses the sentence about the skipped clearing - the tester does not know the part sent lies on the old text (D76)",
-      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
       "find": "            })\n            .chain(skipped_clearing(clearing))",
       "replace": "            })\n            .chain(skipped_clearing(ClearingOutcome::NotAsked))",
       "test": "advance_sequence::tests::an_interrupted_send_on_an_uncleared_field_says_both_worst_first",
@@ -1001,7 +1001,7 @@
     {
       "id": "M94",
       "why": "no route reported by the clearing again does not switch to clipboard mode - the palette said the field may hold old text about a field nothing touched (OBS-129)",
-      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
       "find": "            (Event::InsertionFailed, Message::NoDirectRoute { system })",
       "replace": "            (Event::InsertionRefused, Message::NoDirectRoute { system })",
       "test": "advance_sequence::tests::no_route_found_by_the_clearing_is_no_route_not_a_failed_clear",
@@ -1118,7 +1118,7 @@
     {
       "id": "M130",
       "why": "the refusal to clear with the focus outside a field says the field may have been partly cleared - about a field nothing touched, instead of naming the cause",
-      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
       "find": "        KeystrokeError::NoTextField => (Event::InsertionRefused, Message::NoTextField),",
       "replace": "        KeystrokeError::NoTextField => (Event::InsertionRefused, Message::ClearingFailed),",
       "test": "advance_sequence::tests::a_focus_outside_a_field_refuses_before_the_clearing_and_keeps_the_counter",
@@ -1235,7 +1235,7 @@
     {
       "id": "M153",
       "why": "the palette keeps quiet about a skipped clearing - the value lands on the old text without a word (rule 1)",
-      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
       "find": "        ClearingOutcome::Skipped(SkipReason::Unconfirmed) => Some(Message::ClearingSkipped),",
       "replace": "        ClearingOutcome::Skipped(SkipReason::Unconfirmed) => None,",
       "test": "advance_sequence::tests::an_unconfirmed_field_gets_the_value_uncleared_the_counter_moves_and_it_is_said",
@@ -1244,7 +1244,7 @@
     {
       "id": "M154",
       "why": "the 'cleared first' mark lights up when the clearing was skipped - the palette lies about the field",
-      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
       "find": "                utf16_units,\n                offensive,\n                cleared: clearing == ClearingOutcome::Done,",
       "replace": "                utf16_units,\n                offensive,\n                cleared: clearing != ClearingOutcome::NotAsked,",
       "test": "advance_sequence::tests::an_unconfirmed_field_gets_the_value_uncleared_the_counter_moves_and_it_is_said",
@@ -1298,7 +1298,7 @@
     {
       "id": "M164",
       "why": "the palette says the unconfirmed-field sentence at a terminal - untrue, the system reports a field there",
-      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
       "find": "        ClearingOutcome::Skipped(SkipReason::Terminal) => Some(Message::ClearingSkippedInTerminal),",
       "replace": "        ClearingOutcome::Skipped(SkipReason::Terminal) => Some(Message::ClearingSkipped),",
       "test": "advance_sequence::tests::a_terminal_gets_the_value_uncleared_the_counter_moves_and_the_terminal_is_named",
@@ -1991,7 +1991,7 @@
     {
       "id": "M372",
       "why": "a field cleared and then given no value gets the sentence 'nothing arrived' - the tester thinks the field holds its text, and it is empty (OBS-157)",
-      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
       "find": "            vec![if clearing == ClearingOutcome::Done {",
       "replace": "            vec![if clearing != clearing {",
       "test": "advance_sequence::tests::a_cleared_field_whose_value_reached_nothing_is_said_empty_and_the_counter_stays",
@@ -2000,7 +2000,7 @@
     {
       "id": "M373",
       "why": "a send that could not follow the pace of the application keeps quiet - silent loss of characters under 'sent' comes back (OBS-158, D95)",
-      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
       "find": "        Following::System => Some(Message::NotPaced),",
       "replace": "        Following::System => None,",
       "test": "advance_sequence::tests::a_value_sent_without_following_the_application_says_characters_may_be_missing",
@@ -7019,7 +7019,7 @@
     {
       "id": "M973",
       "why": "the palette in Firefox without accessibility gives a vague sentence - the tester takes it for a fault of the program (D125, OBS-175)",
-      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
       "find": "        ClearingOutcome::Skipped(SkipReason::ClosedToAccessibility) => {\n            Some(Message::ClearingSkippedClosedToAccessibility)",
       "replace": "        ClearingOutcome::Skipped(SkipReason::ClosedToAccessibility) => {\n            Some(Message::ClearingSkipped)",
       "test": "advance_sequence::tests::a_window_closed_to_accessibility_gets_the_value_uncleared_and_its_setting_is_named",
@@ -8333,7 +8333,7 @@
     {
       "id": "M1138",
       "why": "a value that a text service of the system may have changed is reported as typed exactly, with no note (D139)",
-      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
       "find": "        .chain((!may_alter.is_empty()).then_some(Message::MayBeAltered(may_alter)))",
       "replace": "        .chain(None)",
       "test": "advance_sequence::tests::a_value_the_system_may_have_changed_says_which_services_could_have_acted",
@@ -9053,7 +9053,7 @@
     {
       "id": "M1218",
       "why": "Caps Lock on degrades the route instead of refusing the press - the next press would send the same value to the clipboard without a word",
-      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
       "find": "        } => (Event::InsertionRefused, None, vec![Message::CapsLockOn]),",
       "replace": "        } => (Event::InsertionFailed, None, vec![Message::CapsLockOn]),",
       "test": "advance_sequence::tests::caps_lock_on_refuses_without_degrading_and_the_same_value_waits",
@@ -9062,7 +9062,7 @@
     {
       "id": "M1219",
       "why": "Caps Lock on says another sentence - the person is told there is no target and turns nothing off",
-      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
       "find": "        } => (Event::InsertionRefused, None, vec![Message::CapsLockOn]),",
       "replace": "        } => (Event::InsertionRefused, None, vec![Message::NoTarget]),",
       "test": "advance_sequence::tests::caps_lock_on_refuses_without_degrading_and_the_same_value_waits",
@@ -11195,7 +11195,7 @@
     {
       "id": "M1456",
       "why": "the skip for the clearing keys is told with the sentence of an unconfirmed field, so a tester is told the field is not one",
-      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
       "find": "            Some(Message::ClearingSkippedNoKeys)\n",
       "replace": "            Some(Message::ClearingSkipped)\n",
       "test": "advance_sequence::tests::a_system_that_cannot_press_the_clearing_keys_gets_the_value_uncleared_and_says_why",
@@ -12181,6 +12181,69 @@
       "replace": "pub(crate) const SERVER_WAIT: Duration = Duration::from_secs(5);",
       "test": "linux_rules::tests::the_pauses_and_limits_keep_the_order_the_measurements_gave_them",
       "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1569",
+      "why": "a key another program wrote one level of after the send is zeroed with it, and the layout it put there is broken",
+      "file": "crates/nkb-sys/src/linux_remap_rules.rs",
+      "find": "        && row.iter().all(|symbol| *symbol == 0 || *symbol == keysym)",
+      "replace": "        && true",
+      "test": "linux_remap_rules::tests::a_key_is_ours_while_it_carries_our_keysym_and_nothing_else",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1570",
+      "why": "a key with nothing on it counts as ours, so a journal makes the next send ask the server to zero keys that are empty",
+      "file": "crates/nkb-sys/src/linux_remap_rules.rs",
+      "find": "        && row.contains(&keysym)\n",
+      "replace": "",
+      "test": "linux_remap_rules::tests::a_key_is_ours_while_it_carries_our_keysym_and_nothing_else",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1571",
+      "why": "a line of the journal naming the keysym of nothing is read as a key to give back",
+      "file": "crates/nkb-sys/src/linux_remap_rules.rs",
+      "find": "    (keysym != 0).then_some(Rewrite { keycode, keysym })",
+      "replace": "    Some(Rewrite { keycode, keysym })",
+      "test": "linux_remap_rules::tests::a_line_this_program_does_not_write_names_no_key",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1572",
+      "why": "the server is asked about one key fewer than the journal names, so the last key named is never given back",
+      "file": "crates/nkb-sys/src/linux_remap_rules.rs",
+      "find": "    let count = u8::try_from(usize::from(last) - usize::from(first) + 1).ok()?;",
+      "replace": "    let count = u8::try_from(usize::from(last) - usize::from(first)).ok()?;",
+      "test": "linux_remap_rules::tests::the_span_covers_the_keys_named_inside_the_server_s_keycodes",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1573",
+      "why": "a key the journal names twice is zeroed twice",
+      "file": "crates/nkb-sys/src/linux_remap_rules.rs",
+      "find": "    keys.dedup();\n",
+      "replace": "",
+      "test": "linux_remap_rules::tests::only_the_keys_that_still_carry_their_keysym_are_given_back",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1574",
+      "why": "a send waits for another one longer than for a held modifier, and the person is kept waiting for a value that is not theirs",
+      "file": "crates/nkb-sys/src/linux_remap_rules.rs",
+      "find": "pub(crate) const LOCK_WAIT: Duration = Duration::from_secs(2);",
+      "replace": "pub(crate) const LOCK_WAIT: Duration = Duration::from_secs(5);",
+      "test": "linux_remap_rules::tests::the_wait_and_the_limit_keep_to_what_they_say",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1575",
+      "why": "a display another send is typing on is said to be a clipboard another application holds",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
+      "find": "    if on_clipboard {\n        Message::ClipboardBusy",
+      "replace": "    if true {\n        Message::ClipboardBusy",
+      "test": "advance_sequence::tests::a_busy_route_refuses_the_value_in_its_own_words_and_keeps_the_counter",
+      "runner": "rust:nkb-app:lib"
     }
   ]
 }

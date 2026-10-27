@@ -12,6 +12,8 @@
 //! - `window` - the keyboard focus of the palette and of the windows that take it,
 //! - `send` - typing: spare keys rewritten to the characters, batches, and the
 //!   answer of the application after every batch.
+//! - `lock` - one send at a time on a display, and the journal of the spare keys it
+//!   rewrote, so a send that did not give them back is put right by the next.
 //! - `stream` - the socket under every connection, which waits for the server for a
 //!   bounded time: the library alone would wait for ever.
 //!
@@ -39,6 +41,7 @@ mod escape;
 mod front;
 pub(crate) mod hotkey;
 mod ibus;
+mod lock;
 pub(crate) mod portal;
 mod send;
 mod stream;
