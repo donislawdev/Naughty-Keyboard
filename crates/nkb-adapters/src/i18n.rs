@@ -237,6 +237,10 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::Interrupted { .. } => {
             "Stopped after {sent} of {expected} UTF-16 units: {reason}. The field holds a partial value - clear it before the next test."
         }
+        // `D158`. The count is a floor: keys were still on their way.
+        Message::InFlight { .. } => {
+            "Stopped after {sent} of {expected} UTF-16 units: {reason}. More of the value may still arrive, so check the field and clear it before the next test."
+        }
         Message::NothingArrived { .. } => {
             "Nothing reached the field: {reason}. The counter did not move, so the same shortcut tries this value again."
         }
@@ -354,6 +358,11 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
             units_sent,
             units_expected,
             reason,
+        }
+        | Message::InFlight {
+            units_sent,
+            units_expected,
+            reason,
         } => fill(
             pattern,
             &[
@@ -414,7 +423,7 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
 
 /// The pattern for one reason a send stopped. `ux-spec.md` 6, section A, byte
 /// for byte. A clause, not a sentence: it stands after a colon in
-/// `Message::Interrupted`, `Message::NothingArrived` and
+/// `Message::Interrupted`, `Message::InFlight`, `Message::NothingArrived` and
 /// `Message::ClearedThenNothingArrived` (`D95`), the way `{detail}` does in
 /// `Message::ClipboardFailed`.
 fn pattern_stop_reason(reason: StopReason) -> &'static str {
@@ -1207,6 +1216,11 @@ mod tests {
                 units_expected: 100_000,
                 reason: StopReason::NotTaking,
             },
+            Message::InFlight {
+                units_sent: 0,
+                units_expected: 64,
+                reason: StopReason::NotTaking,
+            },
             Message::NothingArrived {
                 reason: StopReason::Dropped,
             },
@@ -1599,10 +1613,11 @@ mod tests {
             Message::HandedOver => 37,
             Message::ClearingSkippedNoKeys => 38,
             Message::TypingBusy => 39,
+            Message::InFlight { .. } => 40,
         }
     }
 
-    const SLOTS: usize = 40;
+    const SLOTS: usize = 41;
 
     #[test]
     fn every_message_variant_is_listed_here() {
@@ -1878,6 +1893,11 @@ mod tests {
                 units_expected: 0,
                 reason: StopReason::Dropped,
             },
+            Message::InFlight {
+                units_sent: 0,
+                units_expected: 0,
+                reason: StopReason::Halted,
+            },
             Message::EndOfPack { total: 0 },
             Message::ModifierHeld { key: String::new() },
             Message::ValueTooLarge { id: String::new() },
@@ -1920,6 +1940,19 @@ mod tests {
                 &defaults(),
             ),
             "Stopped after 12480 of 100000 UTF-16 units: Escape was pressed. The field holds a partial value - clear it before the next test."
+        );
+        // A floor does not promise a fragment of that length: it asks to look.
+        assert_eq!(
+            super::message(
+                &Message::InFlight {
+                    units_sent: 0,
+                    units_expected: 64,
+                    reason: StopReason::NotTaking,
+                },
+                "",
+                &defaults(),
+            ),
+            "Stopped after 0 of 64 UTF-16 units: the application stopped taking keys. More of the value may still arrive, so check the field and clear it before the next test."
         );
     }
 

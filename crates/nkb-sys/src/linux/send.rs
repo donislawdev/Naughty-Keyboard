@@ -24,7 +24,11 @@
 //!    around those that need it), and ask the window at the keyboard focus to
 //!    answer `_NET_WM_PING`. The answer comes from the application's own loop after
 //!    the key events before it, so it means they were taken (point 3). The spare
-//!    keys are rewritten again only after it,
+//!    keys are rewritten again only after it. The palette closing ends the wait for
+//!    the answer at once, and `Escape` once the batch has had the time a batch is
+//!    cut to (`unanswered`, R20). A batch left without an answer that held a key of
+//!    the layout makes the count a floor, because the application types those keys
+//!    whenever it reads them (`InFlight`, R18, `D158`),
 //! 6. the spare keys are given back to the layout, the ones that still carry what
 //!    was written on them and no other, and Shift is let go, on every way out of the
 //!    send.
@@ -58,9 +62,9 @@ use crate::linux_clearing_rules::{
 use crate::linux_remap_rules::{Rewrite, ours, span};
 use crate::linux_rules::{
     Batch, FIRST_BATCH_CHARS, KEYSYM_ESCAPE, Keymap, LOOK_EVERY, LayoutKey, LayoutKeys,
-    PING_ANSWER_MASK, PING_WAIT, REMAP_SETTLE, Refusal, UNPACED_SETTLE, WARMUP_SETTLE,
-    batch_of_value, caps_lock_on, give_back_wait, held_modifier, keysym_for, names_an_input_method,
-    next_batch, next_limit, ping_token, slots_for_value, utf16_units,
+    PING_ANSWER_MASK, REMAP_SETTLE, Refusal, UNPACED_SETTLE, WARMUP_SETTLE, batch_of_value,
+    caps_lock_on, give_back_wait, held_modifier, keysym_for, names_an_input_method, next_batch,
+    next_limit, ping_token, slots_for_value, stopped_on_the_wire, unanswered, utf16_units,
 };
 use crate::{
     Chord, Following, MODIFIER_RELEASE_WAIT, SendError, SendOutcome, SendProgress, StopReason,
@@ -117,7 +121,8 @@ pub(crate) fn send_chords(
     // Declared before the keys, so `Escape` is given back when the clearing is over.
     let mut escape = XEscape::reserve(address, keyboard.keymap.find_keycode(KEYSYM_ESCAPE));
     if let Some(pinged) = pinged {
-        alive(&server, pinged).map_err(|reason| chords_stopped(0, total, reason))?;
+        alive(&server, pinged, &mut escape, halt)
+            .map_err(|reason| chords_stopped(0, total, reason))?;
     }
     wait_for_modifiers(&server, &keyboard)?;
     let recipe = Recipe {
@@ -170,20 +175,21 @@ impl Recipe<'_> {
         }
         // From here the keys are on the wire. An application that gives no answer holds
         // them and takes them when it runs again, so the chord counts as having acted.
-        self.answered(number)
+        self.answered(escape, number)
             .map_err(|reason| chords_stopped(acted_after_silence(number), self.total, reason))
     }
 
     /// The application's answer to the keys just sent: a ping, or a pause for one that
     /// does not take part in the protocol.
-    fn answered(&self, number: usize) -> Result<(), StopReason> {
+    fn answered(&self, escape: &mut ReservedEscape, number: usize) -> Result<(), StopReason> {
         let Some(pinged) = self.pinged else {
             std::thread::sleep(UNPACED_SETTLE);
             return Ok(());
         };
         let counter = u32::try_from(number).unwrap_or(u32::MAX - 1);
-        match ping(self.server, pinged, ping_token(std::process::id(), counter)) {
-            Ok(Answer::TimedOut) => Err(StopReason::NotTaking),
+        let token = ping_token(std::process::id(), counter);
+        match ping(self.server, pinged, token, true, escape, self.halt) {
+            Ok(Answer::Unanswered(reason)) => Err(reason),
             Ok(_) => Ok(()),
             Err(Lost) => Err(StopReason::Dropped),
         }
@@ -377,14 +383,14 @@ enum Answer {
     Taken(Duration),
     /// It does not take part in the protocol, so it was given time instead.
     Unpaced,
-    /// No answer in time. The spare keys of the batch were sent, but the layout is
-    /// given back before the application runs again, and a key it reads then types
-    /// nothing (`OBS-206`): the batch is counted as not arrived, and what the
-    /// application took before it stopped is not known. The keys of the layout
-    /// are not given back and are typed when the application runs again, which is
-    /// why a send begins with `confirm_alive`: a program found stopped after those
-    /// keys went would be said to have taken nothing while it holds them.
-    TimedOut,
+    /// No answer, and the wait ended for the reason given (`unanswered`): the
+    /// application took no answer in `PING_WAIT`, or the person stopped the send
+    /// before it came. The spare keys of the batch were sent, but the layout is
+    /// given back before the application runs again, and a key it reads then
+    /// types nothing (`OBS-206`). The keys of the layout are not given back and
+    /// are typed when the application reads them, so a batch that held one is
+    /// counted as on its way, not as lost (`stopped_on_the_wire`, R18).
+    Unanswered(StopReason),
 }
 
 /// Asks `pinged.window` whether it has got through everything the server queued for
@@ -395,7 +401,18 @@ enum Answer {
 /// still answers: a stopped server holds the ping too, and that is the connection
 /// lost, not an application that stopped taking keys. So the server is asked once
 /// before the silence is put on the application.
-fn ping(server: &Server, pinged: Pinged, token: u32) -> Result<Answer, Lost> {
+///
+/// `Escape` and `halt` are looked at every `LOOK_EVERY` meanwhile (R20), and
+/// `keys_out` says whether keys went before this ping: with none, `Escape` has
+/// nothing to wait for (`unanswered`).
+fn ping(
+    server: &Server,
+    pinged: Pinged,
+    token: u32,
+    keys_out: bool,
+    escape: &mut ReservedEscape,
+    halt: &AtomicBool,
+) -> Result<Answer, Lost> {
     let message = ClientMessageEvent::new(
         32,
         pinged.window,
@@ -407,7 +424,8 @@ fn ping(server: &Server, pinged: Pinged, token: u32) -> Result<Answer, Lost> {
         .send_event(false, pinged.window, EventMask::NO_EVENT, message)?;
     server.conn.flush()?;
     let started = Instant::now();
-    while started.elapsed() < PING_WAIT {
+    let mut next_look = started;
+    loop {
         while let Some(event) = server.conn.poll_for_event()? {
             if let Event::ClientMessage(reply) = event {
                 let data = reply.data.as_data32();
@@ -420,10 +438,19 @@ fn ping(server: &Server, pinged: Pinged, token: u32) -> Result<Answer, Lost> {
                 }
             }
         }
+        let now = Instant::now();
+        if now >= next_look {
+            next_look = now + LOOK_EVERY;
+            let halted = halt.load(Ordering::Relaxed);
+            if let Some(reason) = unanswered(now - started, keys_out, escape.pressed(), halted) {
+                if reason == StopReason::NotTaking {
+                    roundtrip(&server.conn)?;
+                }
+                return Ok(Answer::Unanswered(reason));
+            }
+        }
         std::thread::sleep(Duration::from_millis(1));
     }
-    roundtrip(&server.conn)?;
-    Ok(Answer::TimedOut)
 }
 
 /// The window that answers pings, if the one at the focus takes part in the
@@ -608,28 +635,23 @@ fn tap_layout_key(server: &Server, shift_key: Option<u8>, key: LayoutKey) -> Res
     typed.and(released)
 }
 
-/// One batch on the wire: the keys pressed and released, after the spare keys were
-/// rewritten when `rewrite` says they were not assigned for the whole value. Tells
-/// whether a spare key was pressed, because only then is there a layout to keep for
-/// an application that has not read the keys yet.
+/// One batch on the wire: the keys pressed and released, the spare keys already
+/// rewritten for it. Tells whether a spare key was pressed, because only then is there
+/// a layout to keep for an application that has not read the keys yet.
 fn type_batch(
     server: &Server,
-    remapped: &mut Remapped<'_>,
+    spare: &[u8],
     batch: &Batch,
     keysyms: &[u32],
     layout: &LayoutKeys,
-    rewrite: bool,
 ) -> Result<bool, Lost> {
-    if rewrite && !batch.keysyms.is_empty() {
-        assign_all(server, remapped, &batch.keysyms)?;
-    }
     let mut used_spare = false;
     for keysym in &keysyms[batch.first..batch.end] {
         if let Some(key) = layout.key_for(*keysym) {
             tap_layout_key(server, layout.shift_key(), key)?;
             continue;
         }
-        let keycode = remapped.spare[batch.slot(*keysym).ok_or(Lost)?];
+        let keycode = spare[batch.slot(*keysym).ok_or(Lost)?];
         fake(&server.conn, server.root, true, keycode)?;
         fake(&server.conn, server.root, false, keycode)?;
         used_spare = true;
@@ -653,15 +675,27 @@ fn warm_up(server: &Server, keycode: u8) -> Result<(), Lost> {
 /// as having taken nothing while the field fills up later (measured with `SIGSTOP`
 /// on the first batch, `OBS-212`). Found out here, nothing was sent and that is what
 /// the person is told.
-fn confirm_alive(server: &Server, pinged: Pinged, expected: usize) -> Result<(), SendError> {
-    alive(server, pinged).map_err(|reason| truncated(0, expected, reason))
+fn confirm_alive(
+    server: &Server,
+    pinged: Pinged,
+    expected: usize,
+    escape: &mut ReservedEscape,
+    halt: &AtomicBool,
+) -> Result<(), SendError> {
+    alive(server, pinged, escape, halt).map_err(|reason| truncated(0, expected, reason))
 }
 
 /// Whether the application answers a ping at all, and if it does not, why the send stops.
-fn alive(server: &Server, pinged: Pinged) -> Result<(), StopReason> {
+/// No key went before it, so `Escape` ends the wait at once.
+fn alive(
+    server: &Server,
+    pinged: Pinged,
+    escape: &mut ReservedEscape,
+    halt: &AtomicBool,
+) -> Result<(), StopReason> {
     let token = ping_token(std::process::id(), u32::MAX);
-    match ping(server, pinged, token) {
-        Ok(Answer::TimedOut) => Err(StopReason::NotTaking),
+    match ping(server, pinged, token, false, escape, halt) {
+        Ok(Answer::Unanswered(reason)) => Err(reason),
         Ok(_) => Ok(()),
         Err(Lost) => Err(StopReason::Dropped),
     }
@@ -687,8 +721,9 @@ fn take_answer(
 ) -> Result<usize, StopReason> {
     match answer {
         // An application that does not answer is not reading, and holding the
-        // layout for it would only keep the send waiting.
-        Answer::TimedOut => Err(StopReason::NotTaking),
+        // layout for it would only keep the send waiting. Nor is a person who
+        // stopped the send waited on.
+        Answer::Unanswered(reason) => Err(reason),
         // The next batch is as long as the pace just seen allows (`OBS-204`).
         // The answer says the keys were taken, not that they were read, so the
         // spare keys are kept a while longer (`OBS-210`).
@@ -779,11 +814,9 @@ pub(crate) fn send_text(
         assign_all(&server, &mut remapped, slots).map_err(lost)?;
     }
 
-    let uses_layout = keysyms
-        .iter()
-        .any(|keysym| layout.key_for(*keysym).is_some());
+    let uses_layout = layout.types_any(&keysyms);
     if let (true, Some(pinged)) = (uses_layout, pinged) {
-        confirm_alive(&server, pinged, expected)?;
+        confirm_alive(&server, pinged, expected, &mut escape, halt)?;
     }
 
     let mut cadence = Cadence::starting(Instant::now(), PROGRESS_INTERVAL);
@@ -800,25 +833,26 @@ pub(crate) fn send_text(
             None => next_batch(&keysyms, first, spare.len(), limit, &layout),
         };
         let batch_units = utf16_units(&characters[batch.first..batch.end]);
-        let Ok(used_spare) = type_batch(
-            &server,
-            &mut remapped,
-            &batch,
-            &keysyms,
-            &layout,
-            plan.is_none(),
-        ) else {
-            return Err(truncated(arrived, expected, StopReason::Dropped));
-        };
+        if plan.is_none() && !batch.keysyms.is_empty() {
+            assign_all(&server, &mut remapped, &batch.keysyms)
+                .map_err(|_| truncated(arrived, expected, StopReason::Dropped))?;
+        }
         // From here the batch is on the wire, and it counts only once the
         // application has answered: the layout is given back as the send ends, and
-        // an application that has not looked yet reads the keys of this batch in
-        // the layout it finds then, where they type nothing (`OBS-206`).
+        // an application that has not looked yet reads the spare keys of this batch
+        // in the layout it finds then, where they type nothing (`OBS-206`). Its keys
+        // of the layout it types whenever it reads them, so with one of those a stop
+        // leaves a floor, not a count (R18).
+        let layout_keys = layout.types_any(&keysyms[batch.first..batch.end]);
+        let on_the_wire = move |reason| stopped_on_the_wire(arrived, expected, reason, layout_keys);
+        let Ok(used_spare) = type_batch(&server, &spare, &batch, &keysyms, &layout) else {
+            return Err(on_the_wire(StopReason::Dropped));
+        };
         let answer = match pinged {
             Some(pinged) => {
                 let token = ping_token(std::process::id(), number);
-                ping(&server, pinged, token)
-                    .map_err(|_| truncated(arrived, expected, StopReason::Dropped))?
+                ping(&server, pinged, token, true, &mut escape, halt)
+                    .map_err(|_| on_the_wire(StopReason::Dropped))?
             }
             None => {
                 std::thread::sleep(UNPACED_SETTLE);
@@ -830,8 +864,7 @@ pub(crate) fn send_text(
             used_spare,
             input_method,
         };
-        limit = take_answer(answer, limit, &kept, &mut remapped)
-            .map_err(|reason| truncated(arrived, expected, reason))?;
+        limit = take_answer(answer, limit, &kept, &mut remapped).map_err(on_the_wire)?;
         arrived += batch_units;
         first = batch.end;
         number = number.wrapping_add(1);

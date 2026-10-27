@@ -143,6 +143,14 @@ pub enum Arrival {
         units_sent: usize,
         units_expected: usize,
     },
+    /// Delivery stopped while keys were still on their way to the application
+    /// (`D158`): `units_sent` arrived for certain, possibly none, and more may
+    /// have arrived after the stop. A ticket that gave the count as exact would
+    /// describe a fragment shorter than the one the developer finds.
+    InFlight {
+        units_sent: usize,
+        units_expected: usize,
+    },
     /// Put on the clipboard whole, for the tester to paste (`D71`).
     ///
     /// Told apart from [`Arrival::Whole`] because an application that checks

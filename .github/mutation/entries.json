@@ -103,8 +103,8 @@
       "id": "M187",
       "why": "an interruption on an uncleared field loses the sentence about the skipped clearing - the tester does not know the part sent lies on the old text (D76)",
       "file": "crates/nkb-app/src/advance_sequence/classify.rs",
-      "find": "            })\n            .chain(skipped_clearing(clearing))",
-      "replace": "            })\n            .chain(skipped_clearing(ClearingOutcome::NotAsked))",
+      "find": "                std::iter::once(cut_short(arrival, units_sent, units_expected, reason))\n                    .chain(skipped_clearing(clearing))",
+      "replace": "                std::iter::once(cut_short(arrival, units_sent, units_expected, reason))\n                    .chain(skipped_clearing(ClearingOutcome::NotAsked))",
       "test": "advance_sequence::tests::an_interrupted_send_on_an_uncleared_field_says_both_worst_first",
       "runner": "rust:nkb-app:lib"
     },
@@ -112,7 +112,7 @@
       "id": "M188",
       "why": "the palette shows an interrupted value without the interrupted mark - preview and counts look like a value that arrived whole",
       "file": "crates/nkb-gui/src/live/view.rs",
-      "find": "    if matches!(sent.arrival, Arrival::Interrupted { .. }) {",
+      "find": "    if matches!(\n        sent.arrival,\n        Arrival::Interrupted { .. } | Arrival::InFlight { .. }\n    ) {",
       "replace": "    if false {",
       "test": "live::tests::a_value_cut_short_is_marked_interrupted_as_a_risk",
       "runner": "rust:nkb-gui:lib"
@@ -1002,8 +1002,8 @@
       "id": "M94",
       "why": "no route reported by the clearing again does not switch to clipboard mode - the palette said the field may hold old text about a field nothing touched (OBS-129)",
       "file": "crates/nkb-app/src/advance_sequence/classify.rs",
-      "find": "            (Event::InsertionFailed, Message::NoDirectRoute { system })",
-      "replace": "            (Event::InsertionRefused, Message::NoDirectRoute { system })",
+      "find": "        KeystrokeError::Unsupported { system } => {\n            (Event::InsertionFailed, Message::NoDirectRoute { system })",
+      "replace": "        KeystrokeError::Unsupported { system } => {\n            (Event::InsertionRefused, Message::NoDirectRoute { system })",
       "test": "advance_sequence::tests::no_route_found_by_the_clearing_is_no_route_not_a_failed_clear",
       "runner": "rust:nkb-app:lib"
     },
@@ -1992,8 +1992,8 @@
       "id": "M372",
       "why": "a field cleared and then given no value gets the sentence 'nothing arrived' - the tester thinks the field holds its text, and it is empty (OBS-157)",
       "file": "crates/nkb-app/src/advance_sequence/classify.rs",
-      "find": "            vec![if clearing == ClearingOutcome::Done {",
-      "replace": "            vec![if clearing != clearing {",
+      "find": "            if clearing == ClearingOutcome::Done {",
+      "replace": "            if clearing != clearing {",
       "test": "advance_sequence::tests::a_cleared_field_whose_value_reached_nothing_is_said_empty_and_the_counter_stays",
       "runner": "rust:nkb-app:lib"
     },
@@ -9054,8 +9054,8 @@
       "id": "M1218",
       "why": "Caps Lock on degrades the route instead of refusing the press - the next press would send the same value to the clipboard without a word",
       "file": "crates/nkb-app/src/advance_sequence/classify.rs",
-      "find": "        } => (Event::InsertionRefused, None, vec![Message::CapsLockOn]),",
-      "replace": "        } => (Event::InsertionFailed, None, vec![Message::CapsLockOn]),",
+      "find": "        DeliveryError::CapsLockOn => (Event::InsertionRefused, Message::CapsLockOn),",
+      "replace": "        DeliveryError::CapsLockOn => (Event::InsertionFailed, Message::CapsLockOn),",
       "test": "advance_sequence::tests::caps_lock_on_refuses_without_degrading_and_the_same_value_waits",
       "runner": "rust:nkb-app:lib"
     },
@@ -9063,8 +9063,8 @@
       "id": "M1219",
       "why": "Caps Lock on says another sentence - the person is told there is no target and turns nothing off",
       "file": "crates/nkb-app/src/advance_sequence/classify.rs",
-      "find": "        } => (Event::InsertionRefused, None, vec![Message::CapsLockOn]),",
-      "replace": "        } => (Event::InsertionRefused, None, vec![Message::NoTarget]),",
+      "find": "        DeliveryError::CapsLockOn => (Event::InsertionRefused, Message::CapsLockOn),",
+      "replace": "        DeliveryError::CapsLockOn => (Event::InsertionRefused, Message::NoTarget),",
       "test": "advance_sequence::tests::caps_lock_on_refuses_without_degrading_and_the_same_value_waits",
       "runner": "rust:nkb-app:lib"
     },
@@ -12244,6 +12244,96 @@
       "replace": "    if true {\n        Message::ClipboardBusy",
       "test": "advance_sequence::tests::a_busy_route_refuses_the_value_in_its_own_words_and_keeps_the_counter",
       "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1576",
+      "why": "closing the palette no longer ends the wait for the answer to a ping, and the program keeps waiting up to five seconds after its window is gone (R20)",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    if halted {\n        return Some(StopReason::Halted);",
+      "replace": "    if false {\n        return Some(StopReason::Halted);",
+      "test": "linux_rules::tests::a_closed_palette_ends_the_wait_at_once_and_says_so_even_with_escape_down",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1577",
+      "why": "Escape waits the whole five seconds for an application that has stopped, as before R20",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    if escape && (!keys_out || waited >= ANSWER_TARGET) {",
+      "replace": "    if escape && (!keys_out || waited >= PING_WAIT) {",
+      "test": "linux_rules::tests::escape_waits_for_keys_on_the_wire_as_long_as_a_batch_is_cut_to_and_no_longer",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1578",
+      "why": "Escape before any key went still waits for an answer that has nothing to count",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    if escape && (!keys_out || waited >= ANSWER_TARGET) {",
+      "replace": "    if escape && waited >= ANSWER_TARGET {",
+      "test": "linux_rules::tests::escape_waits_for_keys_on_the_wire_as_long_as_a_batch_is_cut_to_and_no_longer",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1579",
+      "why": "keys of the layout left with an application that has not answered are said to be nothing arrived, and the person presses again and gets the value twice (R18)",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    if layout_keys_went {\n        SendError::InFlight {",
+      "replace": "    if false {\n        SendError::InFlight {",
+      "test": "linux_rules::tests::a_stop_with_keys_of_the_layout_on_the_wire_says_more_may_still_arrive",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1580",
+      "why": "a batch with one key of the layout among spare keys is taken for spare keys alone, and its stop says the count is exact",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        keysyms.iter().any(|keysym| self.key_for(*keysym).is_some())",
+      "replace": "        keysyms.iter().all(|keysym| self.key_for(*keysym).is_some())",
+      "test": "linux_rules::tests::a_batch_has_keys_of_the_layout_when_one_of_its_characters_has_one",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1581",
+      "why": "keys still on their way are said in the palette as an exact fragment, and the tester trusts a count the field outgrows (D158)",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
+      "find": "    if matches!(arrival, Arrival::InFlight { .. }) {",
+      "replace": "    if false {",
+      "test": "advance_sequence::tests::keys_still_on_their_way_name_the_value_keep_the_counter_and_ask_to_look",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1582",
+      "why": "keys still on their way leave a value with no name, and the palette and the block go on describing the value before it",
+      "file": "crates/nkb-app/src/send_value.rs",
+      "find": "        }) => SendOutcome::InFlight {",
+      "replace": "        }) if false => SendOutcome::InFlight {",
+      "test": "send_value::tests::keys_on_their_way_name_their_value_even_with_none_known_to_have_arrived",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1583",
+      "why": "the report block gives keys still on their way as an exact count, and the developer finds a longer fragment than the ticket says",
+      "file": "crates/nkb-adapters/src/report_text.rs",
+      "find": "            cut_short(ReportPhrase::InFlight, units_sent, units_expected),",
+      "replace": "            cut_short(ReportPhrase::Interrupted, units_sent, units_expected),",
+      "test": "report_text::tests::keys_still_on_their_way_say_the_count_is_a_floor_in_the_same_place",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1584",
+      "why": "nkb send tells keys still on their way as a partial value of exact length, and a script trusts it",
+      "file": "crates/nkb-cli/src/refusals.rs",
+      "find": "    if in_flight {",
+      "replace": "    if false {",
+      "test": "tests::keys_still_on_their_way_name_the_value_and_ask_to_look_not_to_send_again",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1585",
+      "why": "a value with keys still on their way loses its interrupted mark in the palette, and its preview reads as a value that arrived whole",
+      "file": "crates/nkb-gui/src/live/view.rs",
+      "find": "        Arrival::Interrupted { .. } | Arrival::InFlight { .. }\n    ) {",
+      "replace": "        Arrival::Interrupted { .. }\n    ) {",
+      "test": "live::view::tests::a_value_with_keys_still_on_their_way_is_marked_interrupted_as_a_risk",
+      "runner": "rust:nkb-gui:lib"
     }
   ]
 }

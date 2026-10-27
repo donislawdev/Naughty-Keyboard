@@ -2170,7 +2170,7 @@ mod tests {
     }
 
     /// A value with no marker of its own, for the tests that add exactly one.
-    fn quiet_sent() -> Sent {
+    pub(super) fn quiet_sent() -> Sent {
         let base = a_sent();
         Sent {
             facts: ValueFacts {

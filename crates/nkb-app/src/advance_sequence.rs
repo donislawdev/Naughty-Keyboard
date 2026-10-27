@@ -355,6 +355,15 @@ pub enum Message {
         units_expected: usize,
         reason: StopReason,
     },
+    /// The send stopped while keys were still on their way (`D158`): how much
+    /// arrived for certain, of how much, and why it stopped. More may still
+    /// arrive, so the tester checks the field rather than trusting the count -
+    /// and does not press again for the same value.
+    InFlight {
+        units_sent: usize,
+        units_expected: usize,
+        reason: StopReason,
+    },
     /// The keys stopped before any of them reached the field, so it is as the
     /// tester left it and the counter stays (`OBS-157`): said with why.
     NothingArrived { reason: StopReason },
@@ -1088,6 +1097,24 @@ fn arrival_of(outcome: &SendOutcome, on_clipboard: bool) -> Option<Arrival> {
                 },
             ..
         } => Some(Arrival::Interrupted {
+            units_sent: *units_sent,
+            units_expected: *units_expected,
+        }),
+        // The same two ways for a count that is a floor (`D158`).
+        SendOutcome::InFlight {
+            units_sent,
+            units_expected,
+            ..
+        }
+        | SendOutcome::NotDelivered {
+            error:
+                DeliveryError::InFlight {
+                    units_sent,
+                    units_expected,
+                    ..
+                },
+            ..
+        } => Some(Arrival::InFlight {
             units_sent: *units_sent,
             units_expected: *units_expected,
         }),
@@ -2190,6 +2217,46 @@ mod tests {
         let blocks = kit.text.blocks.borrow();
         assert_eq!(blocks[0].reference, shown.facts.reference);
         assert_eq!(blocks[0].arrival, shown.arrival);
+    }
+
+    #[test]
+    fn keys_still_on_their_way_name_the_value_keep_the_counter_and_ask_to_look() {
+        // `D158`, R18: none is known to have arrived, and the application holds
+        // keys it will type when it reads them. "Nothing reached the field, the
+        // same shortcut tries again" would put the value in twice.
+        let mut advance = chosen(Risk::Normal);
+        let _ = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
+        let outcome = advance.on_action(
+            HotkeyAction::NextValue,
+            &Kit::with_delivery(FakeDelivery::failing(DeliveryError::InFlight {
+                units_sent: 0,
+                units_expected: 4,
+                reason: StopReason::Escape,
+            }))
+            .ports(),
+        );
+        assert_eq!(
+            outcome.messages,
+            vec![Message::InFlight {
+                units_sent: 0,
+                units_expected: 4,
+                reason: StopReason::Escape,
+            }]
+        );
+        let shown = outcome.sent.expect("the value on its way is shown");
+        assert_eq!(shown.facts.reference, "sample/two");
+        assert_eq!(
+            shown.arrival,
+            Arrival::InFlight {
+                units_sent: 0,
+                units_expected: 4,
+            }
+        );
+        assert_eq!(advance.counter(), Some((1, 3)), "not a value sent");
+
+        let kit = Kit::ready();
+        let _ = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+        assert_eq!(kit.text.blocks.borrow()[0].arrival, shown.arrival);
     }
 
     #[test]

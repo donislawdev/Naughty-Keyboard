@@ -107,6 +107,17 @@ impl ValueDelivery for DirectInjection {
                 units_expected,
                 reason,
             }) => Err(value_stopped(units_sent, units_expected, reason)),
+            // Zero included: the count is a floor, and "nothing arrived" would be
+            // the one false answer (`D158`).
+            Err(nkb_sys::SendError::InFlight {
+                units_sent,
+                units_expected,
+                reason,
+            }) => Err(DeliveryError::InFlight {
+                units_sent,
+                units_expected,
+                reason: stop_reason(reason),
+            }),
             Err(nkb_sys::SendError::ModifierHeld { key }) => Err(DeliveryError::ModifierHeld {
                 which: key.to_owned(),
             }),
@@ -367,11 +378,12 @@ impl KeystrokeSender for DirectInjection {
             }) => Err(chords_stopped(chords_sent, chords_expected, reason)),
             // `send_chords` never reports in UTF-16 units. If it ever did, the
             // honest translation is "nothing is known to have acted", not success.
-            Err(nkb_sys::SendError::Truncated { reason, .. }) => {
-                Err(KeystrokeError::NothingArrived {
-                    reason: stop_reason(reason),
-                })
-            }
+            Err(
+                nkb_sys::SendError::Truncated { reason, .. }
+                | nkb_sys::SendError::InFlight { reason, .. },
+            ) => Err(KeystrokeError::NothingArrived {
+                reason: stop_reason(reason),
+            }),
         }
     }
 }

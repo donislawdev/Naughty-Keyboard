@@ -229,7 +229,7 @@ pub enum SendOutcome {
     /// Its own variant rather than [`SendOutcome::NotDelivered`] with a
     /// [`DeliveryError::Partial`] inside, because a caller must be able to say
     /// WHICH value was left half-written - the palette shows it and the command
-    /// line names it (`OBS-126`). `NotDelivered` never carries `Partial`.
+    /// line names it (`OBS-126`). `NotDelivered` never carries `Partial` or `InFlight`.
     Interrupted {
         facts: ValueFacts,
         units_sent: usize,
@@ -238,6 +238,20 @@ pub enum SendOutcome {
         /// know the field is empty-plus-fragment, not old-content-plus-fragment.
         clearing: ClearingOutcome,
         /// Why delivery stopped (`D95`).
+        reason: StopReason,
+    },
+    /// Delivery stopped while keys were still on their way to the application
+    /// (`D158`): `units_sent` arrived for certain, possibly none, and more of
+    /// the value may still arrive. Apart from [`SendOutcome::Interrupted`],
+    /// whose count is exact, because the field may end up holding more than the
+    /// count, up to the whole value - and apart from
+    /// [`SendOutcome::NotDelivered`], because something of THIS value may be in
+    /// the field, so the palette and the block name it.
+    InFlight {
+        facts: ValueFacts,
+        units_sent: usize,
+        units_expected: usize,
+        clearing: ClearingOutcome,
         reason: StopReason,
     },
     /// No pack of that name.
@@ -524,6 +538,15 @@ pub fn deliver_value(
             units_sent,
             // The count this layer knows, so the two halves of the bad news
             // come from the same place and cannot disagree.
+            units_expected: expected_units,
+            clearing,
+            reason,
+        },
+        Err(DeliveryError::InFlight {
+            units_sent, reason, ..
+        }) => SendOutcome::InFlight {
+            facts: facts(),
+            units_sent,
             units_expected: expected_units,
             clearing,
             reason,
@@ -1292,6 +1315,45 @@ mod tests {
             ClearingOutcome::Done,
             "the tester must learn the field is empty-plus-fragment, not old-plus-fragment"
         );
+    }
+
+    #[test]
+    fn keys_on_their_way_name_their_value_even_with_none_known_to_have_arrived() {
+        // `D158`: zero here is a floor, so unlike `NothingArrived` the value is
+        // named - something of it may be in the field by the time anyone looks.
+        let log = log();
+        let spy = Spy {
+            available: Availability::Ready,
+            fail_with: Some(DeliveryError::InFlight {
+                units_sent: 0,
+                units_expected: 0,
+                reason: StopReason::NotTaking,
+            }),
+            log: Rc::clone(&log),
+        };
+        let keys = KeySpy::working(&log);
+        let outcome = send_value(
+            &Shelf,
+            &Scripted::two(),
+            &spy,
+            &keys,
+            &request(2, Clearing::Line),
+            &mut |_| {},
+        );
+        let SendOutcome::InFlight {
+            facts,
+            units_sent,
+            units_expected,
+            clearing,
+            reason,
+        } = outcome
+        else {
+            panic!("keys on their way must stay on their way, got {outcome:?}");
+        };
+        assert_eq!((units_sent, units_expected), (0, 3), "this layer's count");
+        assert_eq!(reason, StopReason::NotTaking);
+        assert_eq!(facts.reference, "sample/second");
+        assert_eq!(clearing, ClearingOutcome::Done);
     }
 
     #[test]

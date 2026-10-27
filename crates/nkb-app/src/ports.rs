@@ -199,6 +199,17 @@ pub enum DeliveryError {
     /// of the value (`OBS-157`): calling this "partial" sent testers to clear a
     /// field that still held only its own content.
     NothingArrived { reason: StopReason },
+    /// The send stopped while keys were still on their way to the application
+    /// (`D158`): `units_sent` arrived for certain - possibly none - and more of
+    /// the value may still arrive when the application reads them. Neither
+    /// [`DeliveryError::Partial`], whose count is exact, nor
+    /// [`DeliveryError::NothingArrived`]: a tester told "nothing" presses again
+    /// and gets the value twice.
+    InFlight {
+        units_sent: usize,
+        units_expected: usize,
+        reason: StopReason,
+    },
     /// The route is held by somebody else for longer than the implementation
     /// waits, and nothing went out. Passing - the same request may work in a
     /// moment. The clipboard route reports it for a clipboard another
@@ -244,6 +255,11 @@ impl fmt::Display for DeliveryError {
                 write!(f, "partial-{units_sent}-of-{units_expected}-{reason}")
             }
             Self::NothingArrived { reason } => write!(f, "nothing-arrived-{reason}"),
+            Self::InFlight {
+                units_sent,
+                units_expected,
+                reason,
+            } => write!(f, "in-flight-{units_sent}-of-{units_expected}-{reason}"),
             Self::Busy => f.write_str("busy"),
             Self::Refused { detail } => write!(f, "refused: {detail}"),
             Self::CannotCarry { character } => {
