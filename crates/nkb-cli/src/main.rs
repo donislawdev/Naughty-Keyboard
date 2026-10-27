@@ -39,7 +39,7 @@ use nkb_app::{
 };
 use output::{out, outln};
 use pack_file::{NamedPack, NotRead, lint_exit, named_pack, say_not_read};
-use refusals::{NEEDS_PERMISSION, say_not_cleared, say_not_delivered, stop_reason};
+use refusals::{NEEDS_PERMISSION, say_cut_short, say_not_cleared, say_not_delivered};
 use sent_notes::{say_pace, say_text_substitutions};
 use std::io::Write;
 use target_line::{Countdown, say_where_it_goes, where_it_goes};
@@ -718,6 +718,7 @@ fn wait_for_a_target(
 /// Every word goes to `err` - standard error in the command, a buffer in the
 /// tests. Standard output stays empty, for the reason given on [`send`].
 fn report_send(err: &mut impl Write, wanted: &str, outcome: SendOutcome) -> ExitCode {
+    let in_flight = matches!(outcome, SendOutcome::InFlight { .. });
     match outcome {
         SendOutcome::Sent {
             facts:
@@ -818,27 +819,16 @@ fn report_send(err: &mut impl Write, wanted: &str, outcome: SendOutcome) -> Exit
             units_expected,
             clearing,
             reason,
+        }
+        | SendOutcome::InFlight {
+            facts,
+            units_sent,
+            units_expected,
+            clearing,
+            reason,
         } => {
             say_clearing_before_failure(err, clearing);
-            // The loudest message in this command on purpose: the field now
-            // holds a fragment, and a person who does not know that will report
-            // the fragment as the application's doing. It names the value, as a
-            // value that arrived whole is named - until `OBS-126` a fragment was
-            // the one outcome that did not say whose it was.
-            let _ = writeln!(
-                err,
-                "nkb send: interrupted {} - {}",
-                facts.reference, facts.name
-            );
-            let _ = writeln!(
-                err,
-                "  only {units_sent} of {units_expected} UTF-16 units arrived - {}.",
-                stop_reason(reason)
-            );
-            let _ = writeln!(
-                err,
-                "The field holds a PARTIAL value. Clear it before testing."
-            );
+            say_cut_short(err, &facts, units_sent, units_expected, reason, in_flight);
             ExitCode::InsertFailed
         }
         SendOutcome::NotDelivered { error, clearing } => {
@@ -1369,6 +1359,35 @@ mod tests {
     }
 
     #[test]
+    fn keys_still_on_their_way_name_the_value_and_ask_to_look_not_to_send_again() {
+        // `D158`: none known to have arrived is a floor, not "nothing arrived".
+        let mut said = Vec::new();
+        let code = report_send(
+            &mut said,
+            "some-pack",
+            SendOutcome::InFlight {
+                facts: some_facts(),
+                units_sent: 0,
+                units_expected: 2,
+                clearing: ClearingOutcome::NotAsked,
+                reason: StopReason::NotTaking,
+            },
+        );
+        let said = String::from_utf8(said).expect("the command writes text");
+        assert_eq!(code, ExitCode::InsertFailed);
+        assert!(
+            said.contains("nkb send: interrupted some-pack/some-value - Some value"),
+            "{said}"
+        );
+        assert!(
+            said.contains("at least 0 of 2 UTF-16 units arrived - the application stopped taking keys, and more may still arrive."),
+            "{said}"
+        );
+        assert!(said.contains("Check the field and clear it"), "{said}");
+        assert!(!said.contains("PARTIAL"), "{said}");
+    }
+
+    #[test]
     fn every_ending_of_a_send_has_its_exit_code_and_only_a_delivery_says_sent() {
         // The exit codes are the table every pipeline reads (`D46`), and a zero
         // with nothing delivered is the bug this command is most likely to grow.
@@ -1388,6 +1407,16 @@ mod tests {
                 SendOutcome::Interrupted {
                     facts: some_facts(),
                     units_sent: 1,
+                    units_expected: 2,
+                    clearing: ClearingOutcome::Done,
+                    reason,
+                },
+                ExitCode::InsertFailed,
+            ),
+            (
+                SendOutcome::InFlight {
+                    facts: some_facts(),
+                    units_sent: 0,
                     units_expected: 2,
                     clearing: ClearingOutcome::Done,
                     reason,

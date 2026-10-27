@@ -129,6 +129,9 @@ pub enum ReportPhrase {
     SessionNotRecorded,
     /// The value arrived in part.
     Interrupted,
+    /// The send stopped with keys still on their way, so the count is a floor
+    /// (`D158`).
+    InFlight,
     /// The value went to the clipboard and the tester pasted it (`D71`).
     /// Chosen by the owner on 2026-09-23: an application that checks every
     /// keystroke meets a paste as one event, so the reader has to know it was
@@ -159,6 +162,9 @@ fn pattern_report_phrase(phrase: ReportPhrase) -> &'static str {
         ReportPhrase::SessionNotRecorded => "not recorded - this version does not save sessions",
         ReportPhrase::Interrupted => {
             "interrupted after {sent} of {expected} UTF-16 units - the field holds a fragment"
+        }
+        ReportPhrase::InFlight => {
+            "interrupted after at least {sent} of {expected} UTF-16 units - more may have arrived after the stop"
         }
         ReportPhrase::Clipboard => "placed on the clipboard - pasted by the tester, not typed",
         ReportPhrase::Tool => "Naughty Keyboard {version}",
@@ -240,13 +246,14 @@ pub fn report_text(block: &ReportBlock) -> String {
             units_expected,
         } => lines.push((
             ReportLabel::Delivery,
-            fill(
-                pattern_report_phrase(ReportPhrase::Interrupted),
-                &[
-                    ("sent", &units_sent.to_string()),
-                    ("expected", &units_expected.to_string()),
-                ],
-            ),
+            cut_short(ReportPhrase::Interrupted, units_sent, units_expected),
+        )),
+        Arrival::InFlight {
+            units_sent,
+            units_expected,
+        } => lines.push((
+            ReportLabel::Delivery,
+            cut_short(ReportPhrase::InFlight, units_sent, units_expected),
         )),
         Arrival::OnClipboard => lines.push((
             ReportLabel::Delivery,
@@ -399,6 +406,17 @@ fn given(text: Option<&str>) -> String {
     )
 }
 
+/// The `Delivery:` line of a value cut short, exact or a floor (`D158`).
+fn cut_short(phrase: ReportPhrase, units_sent: usize, units_expected: usize) -> String {
+    fill(
+        pattern_report_phrase(phrase),
+        &[
+            ("sent", &units_sent.to_string()),
+            ("expected", &units_expected.to_string()),
+        ],
+    )
+}
+
 #[cfg(test)]
 #[allow(
     clippy::expect_used,
@@ -527,6 +545,23 @@ mod tests {
         assert_eq!(
             got[5],
             "Delivery: interrupted after 3 of 7 UTF-16 units - the field holds a fragment"
+        );
+        assert!(got[6].starts_with("Breaks:   "));
+    }
+
+    #[test]
+    fn keys_still_on_their_way_say_the_count_is_a_floor_in_the_same_place() {
+        // D158: the developer may find more of the value than the count.
+        let mut cut = block();
+        cut.arrival = Arrival::InFlight {
+            units_sent: 0,
+            units_expected: 7,
+        };
+        let text = report_text(&cut);
+        let got = lines(&text);
+        assert_eq!(
+            got[5],
+            "Delivery: interrupted after at least 0 of 7 UTF-16 units - more may have arrived after the stop"
         );
         assert!(got[6].starts_with("Breaks:   "));
     }

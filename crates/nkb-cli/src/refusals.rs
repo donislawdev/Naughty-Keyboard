@@ -6,7 +6,48 @@
 
 use std::io::Write;
 
-use nkb_app::{DeliveryError, KeystrokeError, StopReason};
+use nkb_app::{DeliveryError, KeystrokeError, StopReason, ValueFacts};
+
+/// What a value cut short leaves, as `nkb send` says it: the value by name,
+/// how much of it arrived and why it stopped. `in_flight` when keys were still
+/// on their way, and the count is a floor (`D158`).
+///
+/// The loudest message in this command on purpose: the field now holds a
+/// fragment, and a person who does not know that will report the fragment as
+/// the application's doing. It names the value, as a value that arrived whole
+/// is named - until `OBS-126` a fragment was the one outcome that did not say
+/// whose it was.
+pub(crate) fn say_cut_short(
+    err: &mut impl Write,
+    facts: &ValueFacts,
+    units_sent: usize,
+    units_expected: usize,
+    reason: StopReason,
+    in_flight: bool,
+) {
+    let _ = writeln!(
+        err,
+        "nkb send: interrupted {} - {}",
+        facts.reference, facts.name
+    );
+    let reason = stop_reason(reason);
+    if in_flight {
+        let _ = writeln!(
+            err,
+            "  at least {units_sent} of {units_expected} UTF-16 units arrived - {reason}, and more may still arrive."
+        );
+        let _ = writeln!(err, "Check the field and clear it before testing.");
+    } else {
+        let _ = writeln!(
+            err,
+            "  only {units_sent} of {units_expected} UTF-16 units arrived - {reason}."
+        );
+        let _ = writeln!(
+            err,
+            "The field holds a PARTIAL value. Clear it before testing."
+        );
+    }
+}
 
 /// Why the clearing asked for with `--clear` did not go through. Nothing was
 /// sent after it, and every sentence says so.
@@ -71,7 +112,8 @@ pub(crate) fn say_not_cleared(err: &mut impl Write, error: &KeystrokeError) {
 }
 
 /// Why none of the value, or only part of it, reached the field - for a route
-/// that reports it other than through `SendOutcome::Interrupted`.
+/// that reports it other than through `SendOutcome::Interrupted` or
+/// `SendOutcome::InFlight`.
 pub(crate) fn say_not_delivered(err: &mut impl Write, error: &DeliveryError) {
     match error {
         DeliveryError::NoTarget => {
@@ -111,6 +153,19 @@ pub(crate) fn say_not_delivered(err: &mut impl Write, error: &DeliveryError) {
                 err,
                 "The field holds a PARTIAL value. Clear it before testing."
             );
+        }
+        // The same for keys still on their way (`D158`).
+        DeliveryError::InFlight {
+            units_sent,
+            units_expected,
+            reason,
+        } => {
+            let _ = writeln!(
+                err,
+                "nkb send: at least {units_sent} of {units_expected} UTF-16 units arrived - {}, and more may still arrive.",
+                stop_reason(*reason)
+            );
+            let _ = writeln!(err, "Check the field and clear it before testing.");
         }
         // Typing on X11 waits for another send on the same display for a
         // while, and then gives up (D157). The clipboard route, the other
@@ -162,7 +217,7 @@ pub(crate) fn say_not_delivered(err: &mut impl Write, error: &DeliveryError) {
 /// Why a send stopped, in the words `nkb send` uses after a dash. The same
 /// reasons the palette names (`D95`, `D96`, `D149`), said in the command's own
 /// sentences.
-pub(crate) fn stop_reason(reason: StopReason) -> String {
+fn stop_reason(reason: StopReason) -> String {
     match reason {
         StopReason::Dropped => {
             "the system did not deliver the keys, another program may be blocking input".to_owned()

@@ -129,7 +129,7 @@ fn describe(outcome: &Outcome) -> String {
     if let Some(sent) = &outcome.sent {
         // A value cut short is shown too (`OBS-126`), and must not read as sent.
         let verb = match sent.arrival {
-            Arrival::Interrupted { .. } => "interrupted",
+            Arrival::Interrupted { .. } | Arrival::InFlight { .. } => "interrupted",
             Arrival::Whole | Arrival::OnClipboard => "sent",
         };
         line.push_str(&format!(

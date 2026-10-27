@@ -570,8 +570,12 @@ pub(super) fn markers_of(sent: &Sent) -> Vec<(String, bool)> {
         markers.push((i18n::label(PaletteLabel::Offensive).to_owned(), true));
     }
     // A risk, right after the other one: the preview and the counts above are
-    // the WHOLE value, and the field holds only part of it (`OBS-126`).
-    if matches!(sent.arrival, Arrival::Interrupted { .. }) {
+    // the WHOLE value, and the field holds only part of it (`OBS-126`), or an
+    // unknown part, with more perhaps on its way (`D158`).
+    if matches!(
+        sent.arrival,
+        Arrival::Interrupted { .. } | Arrival::InFlight { .. }
+    ) {
         markers.push((i18n::label(PaletteLabel::Interrupted).to_owned(), true));
     }
     if sent.facts.warnings > 0 {
@@ -965,8 +969,25 @@ fn named() -> Named {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::live::tests::{a_palette, a_sent, an_outcome, quiet};
+    use crate::live::tests::{a_palette, a_sent, an_outcome, quiet, quiet_sent};
     use slint::Model;
+
+    /// Keys still on their way are a value cut short too, and a risk: the field
+    /// holds an unknown part of it (`D158`).
+    #[test]
+    fn a_value_with_keys_still_on_their_way_is_marked_interrupted_as_a_risk() {
+        let on_its_way = Sent {
+            arrival: Arrival::InFlight {
+                units_sent: 0,
+                units_expected: 7,
+            },
+            ..quiet_sent()
+        };
+        assert_eq!(
+            markers_of(&on_its_way),
+            vec![(String::from("interrupted"), true)]
+        );
+    }
 
     /// `D145` point 76: the sentence of a press that waits for the person goes up in the band
     /// alone and comes down when the question is answered.

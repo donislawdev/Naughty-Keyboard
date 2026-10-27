@@ -25,6 +25,8 @@
 use core::time::Duration;
 use std::collections::HashMap;
 
+use crate::{SendError, StopReason};
+
 /// Where the X server of this machine keeps its sockets for local clients.
 pub(crate) const SOCKET_DIR: &str = "/tmp/.X11-unix";
 
@@ -346,6 +348,11 @@ impl LayoutKeys {
     pub(crate) fn shift_key(&self) -> Option<u8> {
         self.shift_key
     }
+
+    /// Whether any of `keysyms` goes through a key of the layout.
+    pub(crate) fn types_any(&self, keysyms: &[u32]) -> bool {
+        keysyms.iter().any(|keysym| self.key_for(*keysym).is_some())
+    }
 }
 
 /// The modifiers of an X state that change what a key of the layout types: Shift,
@@ -543,6 +550,56 @@ pub(crate) fn next_limit(characters: usize, answered_in: Duration) -> usize {
     }
     let fit = (ANSWER_TARGET.as_secs_f64() / per_character).min(MAX_CHARS_PER_ACK as f64);
     (fit as usize).clamp(MIN_BATCH_CHARS, MAX_CHARS_PER_ACK)
+}
+
+/// Why the wait for the answer to a ping ends now without one, if it does (R20,
+/// `D158`). The palette closing ends it at once, whatever else holds: nobody is
+/// left to read a count. `Escape` ends it once the keys have had the time a batch
+/// is cut to (`ANSWER_TARGET`): an application that answers in that time leaves an
+/// exact count, as on every system (`D96`), and one that does not is not waited
+/// for the rest of `PING_WAIT`. With no key on the wire there is nothing to count,
+/// and `Escape` ends the wait at once. Nothing else ends it before `PING_WAIT`:
+/// another window in front changes nothing about keys already sent, and is looked
+/// at before the next batch.
+pub(crate) fn unanswered(
+    waited: Duration,
+    keys_out: bool,
+    escape: bool,
+    halted: bool,
+) -> Option<StopReason> {
+    if halted {
+        return Some(StopReason::Halted);
+    }
+    if escape && (!keys_out || waited >= ANSWER_TARGET) {
+        return Some(StopReason::Escape);
+    }
+    (waited >= PING_WAIT).then_some(StopReason::NotTaking)
+}
+
+/// What a send that stopped with a batch on the wire says (R18, `D158`). A key of
+/// the layout stays with the application and is typed whenever it reads it, the
+/// layout given back or not (`OBS-212`), so with one in the batch `units_sent` is
+/// a floor. A spare key read after the layout is given back types nothing
+/// (`OBS-206`), so a batch of spare keys alone leaves the count exact.
+pub(crate) fn stopped_on_the_wire(
+    units_sent: usize,
+    units_expected: usize,
+    reason: StopReason,
+    layout_keys_went: bool,
+) -> SendError {
+    if layout_keys_went {
+        SendError::InFlight {
+            units_sent,
+            units_expected,
+            reason,
+        }
+    } else {
+        SendError::Truncated {
+            units_sent,
+            units_expected,
+            reason,
+        }
+    }
 }
 
 /// The keyboard map of the server, as `GetKeyboardMapping` returns it.
@@ -1134,6 +1191,24 @@ mod tests {
     }
 
     #[test]
+    fn a_batch_has_keys_of_the_layout_when_one_of_its_characters_has_one() {
+        let layout = LayoutKeys::typing(&us_ru_keyboard(), Some(SHIFT_L), 0);
+        let keysyms = |text: &str| -> Vec<u32> {
+            text.chars()
+                .map(|character| keysym_for(character).expect("a carriable character"))
+                .collect()
+        };
+        // Neither is on a key of this layout, so spare keys type both.
+        assert!(!layout.types_any(&keysyms("\u{17C}b")));
+        assert!(!layout.types_any(&[]));
+        assert!(
+            layout.types_any(&keysyms("\u{17C}a")),
+            "one of the layout is enough"
+        );
+        assert!(layout.types_any(&[KEYSYM_RETURN]));
+    }
+
+    #[test]
     fn a_space_on_both_levels_takes_no_shift() {
         let layout = LayoutKeys::typing(&us_ru_keyboard(), Some(SHIFT_L), 0);
         assert_eq!(key_of(&layout, ' '), bare_key(12));
@@ -1538,5 +1613,83 @@ mod tests {
             assert!(!tokens[index + 1..].contains(token));
         }
         assert_ne!(ping_token(4242, 1), ping_token(4243, 1));
+    }
+
+    #[test]
+    fn nothing_but_the_wait_itself_ends_a_wait_for_an_answer_nobody_asked_to_stop() {
+        let at = |millis| Duration::from_millis(millis);
+        assert_eq!(unanswered(Duration::ZERO, true, false, false), None);
+        assert_eq!(unanswered(PING_WAIT - at(1), true, false, false), None);
+        assert_eq!(
+            unanswered(PING_WAIT, true, false, false),
+            Some(StopReason::NotTaking)
+        );
+        assert_eq!(
+            unanswered(PING_WAIT, false, false, false),
+            Some(StopReason::NotTaking)
+        );
+    }
+
+    #[test]
+    fn escape_waits_for_keys_on_the_wire_as_long_as_a_batch_is_cut_to_and_no_longer() {
+        let at = |millis| Duration::from_millis(millis);
+        // A batch is cut to be answered in `ANSWER_TARGET`, so an application that
+        // is alive answers in it and the count stays exact (`D96`).
+        assert_eq!(unanswered(at(10), true, true, false), None);
+        assert_eq!(unanswered(ANSWER_TARGET - at(1), true, true, false), None);
+        assert_eq!(
+            unanswered(ANSWER_TARGET, true, true, false),
+            Some(StopReason::Escape)
+        );
+        // Not the rest of `PING_WAIT`: that is what R20 was.
+        assert!(ANSWER_TARGET < PING_WAIT);
+        // With nothing sent there is nothing to count: at once.
+        assert_eq!(
+            unanswered(Duration::ZERO, false, true, false),
+            Some(StopReason::Escape)
+        );
+    }
+
+    #[test]
+    fn a_closed_palette_ends_the_wait_at_once_and_says_so_even_with_escape_down() {
+        for keys_out in [true, false] {
+            for escape in [true, false] {
+                assert_eq!(
+                    unanswered(Duration::ZERO, keys_out, escape, true),
+                    Some(StopReason::Halted),
+                    "keys out {keys_out}, escape {escape}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_stop_with_keys_of_the_layout_on_the_wire_says_more_may_still_arrive() {
+        assert_eq!(
+            stopped_on_the_wire(64, 128, StopReason::NotTaking, true),
+            SendError::InFlight {
+                units_sent: 64,
+                units_expected: 128,
+                reason: StopReason::NotTaking,
+            }
+        );
+        // Zero is a floor here, not "nothing arrived" (R18).
+        assert_eq!(
+            stopped_on_the_wire(0, 12, StopReason::Escape, true),
+            SendError::InFlight {
+                units_sent: 0,
+                units_expected: 12,
+                reason: StopReason::Escape,
+            }
+        );
+        // Spare keys alone type nothing once the layout is given back (`OBS-206`).
+        assert_eq!(
+            stopped_on_the_wire(0, 12, StopReason::NotTaking, false),
+            SendError::Truncated {
+                units_sent: 0,
+                units_expected: 12,
+                reason: StopReason::NotTaking,
+            }
+        );
     }
 }

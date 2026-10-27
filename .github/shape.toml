@@ -27,9 +27,11 @@ too-many-arguments-threshold = 7
 # the band with it, onto settings_of, which did not grow. Nine since 2026-10-24,
 # when the sentence for a field this build cannot clear took pattern_message
 # from 108 lines to 111, the edge of the band. The count is the owner's to
-# accept, as it was for toml_pack.rs.
+# accept, as it was for toml_pack.rs. Eight since 2026-10-27, when the
+# sentences of a value that did not go into the field left classify for a
+# function of their own.
 [clippy.near.product]
-too-many-lines-threshold = 9
+too-many-lines-threshold = 8
 cognitive-complexity-threshold = 1
 excessive-nesting-threshold = 1
 too-many-arguments-threshold = 2
@@ -61,7 +63,9 @@ band = 0.7
 # nkb send says on its way went to on_the_way.rs with the line for a clearing
 # that waits for the person to allow the keys. 937 since 2026-10-27, when what
 # nkb lint and nkb fmt say about the file they were named went to pack_file.rs
-# with the refusal of a name that does not end in .toml.
+# with the refusal of a name that does not end in .toml. 932 since the same
+# day, when what nkb send says of a value cut short went to refusals.rs with
+# the sentence for keys still on their way.
 # near = 4 since 2026-10-19: the ceiling came down by 104, and the band with it,
 # so three files that did not grow joined it (advance_sequence.rs, toml_pack.rs
 # and picker.rs). The count is the owner's to accept, as it was for toml_pack.rs.
@@ -72,7 +76,7 @@ band = 0.7
 # when what a delivery outcome means went from advance_sequence.rs to
 # advance_sequence/classify.rs.
 [files.rust-product]
-ceiling = 937
+ceiling = 932
 near = 5
 
 # A whole Rust file, its tests included. nkb-gui/src/live.rs, then

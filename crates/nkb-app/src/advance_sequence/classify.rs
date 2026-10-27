@@ -7,7 +7,7 @@ use nkb_core::sequence::Event;
 use nkb_core::substitutions::Substitutions;
 
 use super::{Message, Sent, ValueKey, arrival_of};
-use crate::ports::{DeliveryError, Following, KeystrokeError};
+use crate::ports::{DeliveryError, Following, KeystrokeError, StopReason};
 use crate::send_value::{ClearingOutcome, SendOutcome, SkipReason};
 
 /// Sorts a delivery outcome onto a sequence event and the message that goes with
@@ -21,8 +21,8 @@ pub(super) fn classify(
     key: &ValueKey,
 ) -> (Event, Option<Sent>, Vec<Message>) {
     // The one answer to "how did it get there", shared with the report block.
-    // `Some` for both outcomes that carry a value, so the fallbacks below name
-    // the case it already gave and are never what the palette shows.
+    // `Some` for the three outcomes that carry a value, so the fallbacks below
+    // name the case it already gave and are never what the palette shows.
     let arrival = arrival_of(&outcome, on_clipboard);
     match outcome {
         SendOutcome::Sent {
@@ -47,156 +47,49 @@ pub(super) fn classify(
             }),
             notes_after_landing(following, may_alter, clearing),
         ),
-        // A fragment was left: interrupted, with how far it got - and WHICH
-        // value, so the palette shows the value the report block describes
-        // rather than the one before it (`OBS-126`). The interruption is said
-        // first, because it is the worse news.
+        // A fragment was left, or may be on its way (`D158`): interrupted, with
+        // how far it got - and WHICH value, so the palette shows the value the
+        // report block describes rather than the one before it (`OBS-126`). The
+        // interruption is said first, because it is the worse news.
         SendOutcome::Interrupted {
             facts,
             units_sent,
             units_expected,
             clearing,
             reason,
-        } => (
-            Event::Cancelled,
-            Some(Sent {
-                key: key.clone(),
-                facts,
-                utf16_units: units_expected,
-                offensive,
-                cleared: clearing == ClearingOutcome::Done,
-                arrival: arrival.unwrap_or(Arrival::Interrupted {
-                    units_sent,
-                    units_expected,
-                }),
-                target: None,
-                report: None,
-            }),
-            std::iter::once(Message::Interrupted {
-                units_sent,
-                units_expected,
-                reason,
-            })
-            .chain(skipped_clearing(clearing))
-            .collect(),
-        ),
-        // No route at all: the one outcome that moves to the clipboard, and the
-        // machine asks for the same value there in the same press.
-        SendOutcome::NotDelivered {
-            error: DeliveryError::Unsupported { system },
-            ..
-        } => (
-            Event::InsertionFailed,
-            None,
-            vec![Message::NoDirectRoute { system }],
-        ),
-        // The same move for a route the system holds shut until the person allows
-        // it: clipboard mode, and the value goes there in the same press.
-        SendOutcome::NotDelivered {
-            error: DeliveryError::NeedsPermission,
-            ..
-        } => (Event::InsertionFailed, None, vec![Message::NeedsPermission]),
-        // `deliver_value` reports a fragment as `Interrupted`, with its value.
-        // Reached only if a route ever reports one another way: still said as
-        // an interruption, with how far it got.
-        SendOutcome::NotDelivered {
-            error:
-                DeliveryError::Partial {
-                    units_sent,
-                    units_expected,
-                    reason,
-                },
-            ..
-        } => (
-            Event::Cancelled,
-            None,
-            vec![Message::Interrupted {
-                units_sent,
-                units_expected,
-                reason,
-            }],
-        ),
-        // `OBS-157`: the keys stopped before any reached the field. Nothing of
-        // the value is in it, so this is a refusal - the counter stays and the
-        // same press tries the same value - and NOT a fragment. A field cleared
-        // first is empty now, and the tester has to know that.
-        SendOutcome::NotDelivered {
-            error: DeliveryError::NothingArrived { reason },
+        }
+        | SendOutcome::InFlight {
+            facts,
+            units_sent,
+            units_expected,
             clearing,
-        } => (
-            Event::InsertionRefused,
-            None,
-            vec![if clearing == ClearingOutcome::Done {
-                Message::ClearedThenNothingArrived { reason }
-            } else {
-                Message::NothingArrived { reason }
-            }],
-        ),
-        // Nothing was sent - the field is untouched. Refuse, do NOT degrade.
-        SendOutcome::NotDelivered {
-            error: DeliveryError::NoTarget,
-            ..
-        } => (Event::InsertionRefused, None, vec![Message::NoTarget]),
-        SendOutcome::NotDelivered {
-            error: DeliveryError::ModifierHeld { which },
-            ..
-        } => (
-            Event::InsertionRefused,
-            None,
-            vec![Message::ModifierHeld { key: which }],
-        ),
-        // A state left on, not a key held. Nothing was sent: refuse, and say it.
-        SendOutcome::NotDelivered {
-            error: DeliveryError::CapsLockOn,
-            ..
-        } => (Event::InsertionRefused, None, vec![Message::CapsLockOn]),
-        // `attempt` sends this value to the clipboard before classifying, so
-        // this arm is reached only if a route other than the direct one ever
-        // reported it. Nothing was pressed: refuse, and say why.
-        SendOutcome::NotDelivered {
-            error: DeliveryError::HigherPrivileges,
-            ..
-        } => (
-            Event::InsertionRefused,
-            None,
-            vec![Message::HigherPrivileges],
-        ),
-        // `D73`: the focus is on a button, a link, a list item - nothing was
-        // pressed. Not a window problem, so no clipboard: the tester clicks into
-        // a field and the same value goes on the next press.
-        SendOutcome::NotDelivered {
-            error: DeliveryError::NoTextField,
-            ..
-        } => (Event::InsertionRefused, None, vec![Message::NoTextField]),
-        // A route held by somebody else. Nothing went out, so the counter stays.
-        SendOutcome::NotDelivered {
-            error: DeliveryError::Busy,
-            ..
-        } => (Event::InsertionRefused, None, vec![busy(on_clipboard)]),
-        // The two below are reported by the clipboard route alone - the direct
-        // one presses keys and has no clipboard to refuse. A direct route that
-        // began to report them would need sentences of its own. The words here
-        // name the clipboard, because only it gets here. Nothing reached the
-        // clipboard in either, so the counter stays.
-        SendOutcome::NotDelivered {
-            error: DeliveryError::Refused { detail },
-            ..
-        } => (
-            Event::InsertionRefused,
-            None,
-            vec![Message::ClipboardFailed { detail }],
-        ),
-        SendOutcome::NotDelivered {
-            error: DeliveryError::CannotCarry { character },
-            ..
-        } => (
-            Event::InsertionRefused,
-            None,
-            vec![Message::NotForClipboard {
-                id: key.value.clone(),
-                character,
-            }],
-        ),
+            reason,
+        } => {
+            let arrival = arrival.unwrap_or(Arrival::Interrupted {
+                units_sent,
+                units_expected,
+            });
+            (
+                Event::Cancelled,
+                Some(Sent {
+                    key: key.clone(),
+                    facts,
+                    utf16_units: units_expected,
+                    offensive,
+                    cleared: clearing == ClearingOutcome::Done,
+                    arrival,
+                    target: None,
+                    report: None,
+                }),
+                std::iter::once(cut_short(arrival, units_sent, units_expected, reason))
+                    .chain(skipped_clearing(clearing))
+                    .collect(),
+            )
+        }
+        SendOutcome::NotDelivered { error, clearing } => {
+            let (event, message) = not_delivered(error, clearing, on_clipboard, key);
+            (event, None, vec![message])
+        }
         // Clearing failed, so the value never went. The reason names both the
         // event and the message.
         SendOutcome::NotCleared { error } => {
@@ -210,7 +103,7 @@ pub(super) fn classify(
             None,
             vec![Message::ValueTooLarge { id }],
         ),
-        // deliver_value returns only the four families above. The load-path
+        // deliver_value returns only the five families above. The load-path
         // outcomes cannot arise from an already-loaded value. If one somehow
         // did, nothing is known to have been sent, so refuse and stay quiet
         // rather than invent a message.
@@ -219,6 +112,121 @@ pub(super) fn classify(
         | SendOutcome::Refused { .. }
         | SendOutcome::NoSuchIndex { .. }
         | SendOutcome::RouteUnavailable { .. } => (Event::InsertionRefused, None, Vec::new()),
+    }
+}
+
+/// The sentence of a value cut short, as the block says it: an exact count, or a
+/// floor with more of the value perhaps still on its way (`D158`).
+fn cut_short(
+    arrival: Arrival,
+    units_sent: usize,
+    units_expected: usize,
+    reason: StopReason,
+) -> Message {
+    if matches!(arrival, Arrival::InFlight { .. }) {
+        Message::InFlight {
+            units_sent,
+            units_expected,
+            reason,
+        }
+    } else {
+        Message::Interrupted {
+            units_sent,
+            units_expected,
+            reason,
+        }
+    }
+}
+
+/// What a value that did not go into the field means: the event the machine is
+/// given, and the sentence. `key` names a value the clipboard cannot carry.
+fn not_delivered(
+    error: DeliveryError,
+    clearing: ClearingOutcome,
+    on_clipboard: bool,
+    key: &ValueKey,
+) -> (Event, Message) {
+    match error {
+        // No route at all: the one outcome that moves to the clipboard, and the
+        // machine asks for the same value there in the same press.
+        DeliveryError::Unsupported { system } => {
+            (Event::InsertionFailed, Message::NoDirectRoute { system })
+        }
+        // The same move for a route the system holds shut until the person allows
+        // it: clipboard mode, and the value goes there in the same press.
+        DeliveryError::NeedsPermission => (Event::InsertionFailed, Message::NeedsPermission),
+        // `deliver_value` reports a fragment as `Interrupted` and keys on their
+        // way as `InFlight`, with their value. Reached only if a route ever
+        // reports one another way: still said, with how far it got.
+        DeliveryError::Partial {
+            units_sent,
+            units_expected,
+            reason,
+        } => (
+            Event::Cancelled,
+            Message::Interrupted {
+                units_sent,
+                units_expected,
+                reason,
+            },
+        ),
+        DeliveryError::InFlight {
+            units_sent,
+            units_expected,
+            reason,
+        } => (
+            Event::Cancelled,
+            Message::InFlight {
+                units_sent,
+                units_expected,
+                reason,
+            },
+        ),
+        // `OBS-157`: the keys stopped before any reached the field. Nothing of
+        // the value is in it, so this is a refusal - the counter stays and the
+        // same press tries the same value - and NOT a fragment. A field cleared
+        // first is empty now, and the tester has to know that.
+        DeliveryError::NothingArrived { reason } => (
+            Event::InsertionRefused,
+            if clearing == ClearingOutcome::Done {
+                Message::ClearedThenNothingArrived { reason }
+            } else {
+                Message::NothingArrived { reason }
+            },
+        ),
+        // Nothing was sent - the field is untouched. Refuse, do NOT degrade.
+        DeliveryError::NoTarget => (Event::InsertionRefused, Message::NoTarget),
+        DeliveryError::ModifierHeld { which } => (
+            Event::InsertionRefused,
+            Message::ModifierHeld { key: which },
+        ),
+        // A state left on, not a key held. Nothing was sent: refuse, and say it.
+        DeliveryError::CapsLockOn => (Event::InsertionRefused, Message::CapsLockOn),
+        // `attempt` sends this value to the clipboard before classifying, so
+        // this arm is reached only if a route other than the direct one ever
+        // reported it. Nothing was pressed: refuse, and say why.
+        DeliveryError::HigherPrivileges => (Event::InsertionRefused, Message::HigherPrivileges),
+        // `D73`: the focus is on a button, a link, a list item - nothing was
+        // pressed. Not a window problem, so no clipboard: the tester clicks into
+        // a field and the same value goes on the next press.
+        DeliveryError::NoTextField => (Event::InsertionRefused, Message::NoTextField),
+        // A route held by somebody else. Nothing went out, so the counter stays.
+        DeliveryError::Busy => (Event::InsertionRefused, busy(on_clipboard)),
+        // The two below are reported by the clipboard route alone - the direct
+        // one presses keys and has no clipboard to refuse. A direct route that
+        // began to report them would need sentences of its own. The words here
+        // name the clipboard, because only it gets here. Nothing reached the
+        // clipboard in either, so the counter stays.
+        DeliveryError::Refused { detail } => {
+            (Event::InsertionRefused, Message::ClipboardFailed { detail })
+        }
+        DeliveryError::CannotCarry { character } => (
+            Event::InsertionRefused,
+            Message::NotForClipboard {
+                id: key.value.clone(),
+                character,
+            },
+        ),
     }
 }
 

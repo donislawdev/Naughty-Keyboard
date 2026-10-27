@@ -79,6 +79,12 @@ Changes wait under Unreleased until then.
   another program changed meanwhile is left alone. A send that was killed, or that ended while the
   server was stopped, no longer leaves keys rewritten until the server restarts, because the next
   send gives them back. Without `XDG_RUNTIME_DIR`, sends work as before.
+- On X11 a send that stops while the application has not read its keys yet no longer says that
+  nothing reached the field. Those keys arrive whenever the application reads them, so pressing
+  the shortcut again put the value in twice. Now the palette, `nkb send` and the report block say
+  how much arrived for certain and that more may still arrive. Escape now stops a send to an
+  application that does not answer within a second, where it waited up to five, and closing the
+  palette stops it at once.
 
 ## [0.3.0] - 2026-10-25
 

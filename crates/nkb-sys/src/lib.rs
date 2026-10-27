@@ -198,6 +198,18 @@ pub enum SendError {
         units_expected: usize,
         reason: StopReason,
     },
+    /// The send stopped while keys it had sent were still on their way to the
+    /// application (`D158`): `units_sent` arrived for certain, and the
+    /// application holds keys it has not read yet, which it types whenever it
+    /// reads them. So the count is a floor - possibly zero - and the field may
+    /// get more of the value after the send is over. Apart from
+    /// [`SendError::Truncated`], whose count is exact, because "nothing arrived"
+    /// here would send the person to press again and get the value twice.
+    InFlight {
+        units_sent: usize,
+        units_expected: usize,
+        reason: StopReason,
+    },
     /// A modifier key is physically held and did not come up within the wait.
     /// Nothing was sent. Under a held `Ctrl`, `Home` is the start of the
     /// DOCUMENT and `Shift+End` selects to its end, so the clearing recipe
@@ -251,6 +263,15 @@ impl core::fmt::Display for SendError {
                 f,
                 "{units_sent} of {units_expected} UTF-16 units arrived before the send \
                  stopped: {reason}"
+            ),
+            Self::InFlight {
+                units_sent,
+                units_expected,
+                reason,
+            } => write!(
+                f,
+                "{units_sent} of {units_expected} UTF-16 units are known to have arrived \
+                 before the send stopped: {reason}, and more may still arrive"
             ),
             Self::ModifierHeld { key } => write!(
                 f,
