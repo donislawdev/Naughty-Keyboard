@@ -58,7 +58,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use nkb_adapters::i18n::PaletteLabel;
 use nkb_adapters::{
     KeptFocus, SettingsFile, default_bindings, i18n, layout_character, report_window_failure,
-    screens,
+    report_worker_failure, screens,
 };
 use nkb_app::ports::Settings;
 use nkb_app::{KeptSettings, RouteRequest};
@@ -82,19 +82,45 @@ const DEFAULT_PACK: &str = "whitespace";
 
 fn main() -> ExitCode {
     match start(request()) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
+        // A run whose worker stopped on a fault ends with a failure too, and
+        // says nothing more here: the palette said it while it stood (R08).
+        Ok(code) => code,
+        Err(failure) => {
             // The channel is reported rather than ignored, but there is nothing
             // left to do with `Nowhere` except exit non-zero - which is why the
             // exit code below does not depend on it. Untouchable rule 1 is
             // satisfied by having tried every channel there is, in the order
             // that does not block an unattended run.
-            let _channel = report_window_failure(&error.to_string());
+            failure.report();
             // The same code this binary returned before the attribute went in,
             // so nobody's script changes behaviour. `ux-spec.md` 10 governs the
             // CLI's table and is untouched: this is the other executable.
             ExitCode::FAILURE
         }
+    }
+}
+
+/// Why the palette could not run.
+enum Failure {
+    /// A window could not be made or shown.
+    Window(slint::PlatformError),
+    /// The system would not give the worker its thread (R08).
+    Worker(std::io::Error),
+}
+
+impl From<slint::PlatformError> for Failure {
+    fn from(error: slint::PlatformError) -> Self {
+        Self::Window(error)
+    }
+}
+
+impl Failure {
+    /// Says it through the system, each failure with its own sentence.
+    fn report(&self) {
+        let _channel = match self {
+            Self::Window(error) => report_window_failure(&error.to_string()),
+            Self::Worker(error) => report_worker_failure(&error.to_string()),
+        };
     }
 }
 
@@ -133,9 +159,12 @@ fn request() -> Request {
 }
 
 /// Everything that can fail before there is a window to fail in.
-fn start(request: Request) -> Result<(), slint::PlatformError> {
+fn start(request: Request) -> Result<ExitCode, Failure> {
     match request {
-        Request::Gallery => Gallery::new()?.run(),
+        Request::Gallery => {
+            Gallery::new()?.run()?;
+            Ok(ExitCode::SUCCESS)
+        }
         Request::Palette { pack, route } => {
             // 🔴 Before the first window of the process: on macOS the process and
             // every window are set so that the palette does not take the front.
@@ -201,11 +230,15 @@ fn wire_clicks(palette: &Palette, choose: &std::sync::mpsc::Sender<live::Command
 /// `Ctrl+Alt+N` and nine others taken from whoever wants them next, for as long
 /// as the process lingers. Joining also means a send in flight finishes writing
 /// rather than being cut in half inside somebody's field.
+///
+/// A worker that stops on a fault says so in the palette, which stays until
+/// the tester closes it, and the run then ends with a failure (R08,
+/// `live::guarded`).
 fn run_palette(
     pack: Option<String>,
     route: RouteRequest,
     own_frame: bool,
-) -> Result<(), slint::PlatformError> {
+) -> Result<ExitCode, Failure> {
     // 🔴 BEFORE the window exists. Afterwards the answer is the palette itself,
     // and handing the focus back to ourselves is a no-op that reports success -
     // the failure shape this project keeps meeting (`slint.md` 2.17).
@@ -370,7 +403,10 @@ fn run_palette(
         }
     });
     let remembers = store.clone();
-    let worker = std::thread::spawn({
+    // Through the builder, because `std::thread::spawn` panics when the system
+    // refuses a thread, and a refusal is a sentence (R08).
+    let worker = std::thread::Builder::new().name(String::from("nkb-worker"));
+    let worker = worker.spawn({
         let palette = palette.as_weak();
         let stop = Arc::clone(&stop);
         let standing = std::sync::Arc::clone(&standing);
@@ -389,18 +425,22 @@ fn run_palette(
         // Measured: work handed to the event loop before `run()` is delivered
         // once it starts (`slint.md` 1.9), so this thread may say something
         // before the window is running and nothing is lost.
-        move || live::drive(&palette, &stop, &commands, &in_use, start, &standing)
+        move || {
+            live::guarded(&palette, &standing, || {
+                live::drive(&palette, &stop, &commands, &in_use, start, &standing);
+            })
+        }
     });
+    let worker = worker.map_err(Failure::Worker)?;
 
     // The loop rather than `palette.run()`, which would show the palette at
     // once: on the first run the welcome stands alone until it goes.
     let ran = slint::run_event_loop().and_then(|()| failed.take().map_or(Ok(()), Err));
     stop.store(true, Ordering::Relaxed);
-    // A worker that panicked has already lost its shortcuts to its own unwind,
-    // and the window is closing either way. Nothing is swallowed that anyone
-    // could act on: the workspace denies `unwrap`, `expect` and `panic` in
-    // product code, so a panic here is a bug rather than a path.
-    drop(worker.join());
+    // A worker that stopped on a fault has lost its shortcuts to its own unwind
+    // and said so in the palette (`live::guarded`). A fault that got past the
+    // guard - one while its words were put together - is the same failure.
+    let ended = worker.join().unwrap_or(live::WorkerEnd::Failed);
     // The place is remembered here, with the worker joined: the worker reads
     // the stop flag before any command, so one sent on closing would be lost,
     // and two writers at once is the race `W4` names. On the layout of THIS
@@ -412,7 +452,11 @@ fn run_palette(
         let (mut kept, _) = KeptSettings::open(&remembers);
         let _ = kept.keep_position(&remembers, &layout, at);
     }
-    ran
+    ran?;
+    Ok(match ended {
+        live::WorkerEnd::Closed => ExitCode::SUCCESS,
+        live::WorkerEnd::Failed => ExitCode::FAILURE,
+    })
 }
 
 /// Every word of the palette that does not come with a view, and the state it

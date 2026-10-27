@@ -59,6 +59,11 @@ Changes wait under Unreleased until then.
   longer write over each other's change. A save waits up to a second for the other one, using a
   new empty file `settings.lock` beside the settings file, and then saves anyway. On Linux and
   macOS a new settings file is now readable by its owner only.
+- When the part of the palette that holds its shortcuts stops on a fault in the tool, the palette
+  now says so with the fault's own words, and `nkb-gui` ends with a failure exit code once it is
+  closed. Until now the palette stayed on the screen looking ready while no shortcut did anything,
+  and the program ended with 0. A system that refuses to start that part is reported the way a
+  window that cannot open is.
 
 ## [0.3.0] - 2026-10-25
 

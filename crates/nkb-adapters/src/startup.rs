@@ -36,6 +36,17 @@ pub fn report_window_failure(reason: &str) -> StartupChannel {
     report_startup_failure(PRODUCT_NAME, &text)
 }
 
+/// Says that the thread behind the palette could not be started, and reports
+/// how it was said (R08).
+///
+/// `reason` is the system's own error text, passed through unchanged for the
+/// reason [`report_window_failure`] gives.
+#[must_use]
+pub fn report_worker_failure(reason: &str) -> StartupChannel {
+    let text = i18n::startup_failure(Startup::WorkerFailed, reason);
+    report_startup_failure(PRODUCT_NAME, &text)
+}
+
 #[cfg(test)]
 #[allow(
     clippy::expect_used,
@@ -60,6 +71,16 @@ mod tests {
             text.contains("SLINT_BACKEND=winit-software"),
             "the one thing a tester can actually do must be in the sentence: {text}"
         );
+    }
+
+    #[test]
+    fn a_thread_that_did_not_start_is_not_sent_to_the_renderer() {
+        // The renderer's variable is the remedy for a window that could not be
+        // drawn. Naming it for a thread the system refused would send a tester
+        // after the wrong setting.
+        let text = i18n::startup_failure(Startup::WorkerFailed, "Resource temporarily unavailable");
+        assert!(text.contains("Resource temporarily unavailable"), "{text}");
+        assert!(!text.contains("SLINT_BACKEND"), "{text}");
     }
 
     #[test]
