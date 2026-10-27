@@ -27,7 +27,7 @@
 // shipped code, which is the setting that matters.
 #![allow(clippy::panic, clippy::expect_used)]
 
-use nkb_core::graphemes::{count, last_cluster_start};
+use nkb_core::graphemes::{Tally, count, last_cluster_start};
 use std::path::{Path, PathBuf};
 
 /// The break sign, `U+00F7`. Written as an escape rather than as itself so that
@@ -138,6 +138,39 @@ fn the_whole_official_suite_agrees_with_this_counter() {
         "{} of {} conformance cases disagree:\n{}",
         wrong.len(),
         cases.len(),
+        wrong.join("\n")
+    );
+}
+
+#[test]
+fn the_whole_official_suite_agrees_with_a_tally_fed_in_every_split() {
+    // R11: the welcome box counts a value as it arrives, one key at a time,
+    // so its tally must give the suite's answer however the text was cut. Every
+    // case, at every character boundary, plus one character at a time.
+    let cases = cases();
+    let mut wrong = Vec::new();
+    for case in &cases {
+        let cuts = case.text.char_indices().map(|(at, _)| at).skip(1);
+        for cut in cuts {
+            let (head, rest) = case.text.split_at(cut);
+            let mut tally = Tally::of(head);
+            tally.push_str(rest);
+            if tally.clusters() != case.clusters {
+                wrong.push(format!("  line {}, cut at byte {cut}", case.line));
+            }
+        }
+        let mut one_by_one = Tally::default();
+        for character in case.text.chars() {
+            one_by_one.push_str(character.encode_utf8(&mut [0; 4]));
+        }
+        if one_by_one.clusters() != case.clusters {
+            wrong.push(format!("  line {}, one character at a time", case.line));
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "{} feeds disagree with the suite:\n{}",
+        wrong.len(),
         wrong.join("\n")
     );
 }

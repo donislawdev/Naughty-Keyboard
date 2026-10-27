@@ -346,8 +346,8 @@
       "id": "M61",
       "why": "a shortened preview shows only the START - half of the catalogue matters at the end, where a space or an invisible character sits",
       "file": "crates/nkb-core/src/preview.rs",
-      "find": "    shown.push_str(&tail);",
-      "replace": "    shown.push_str(&shown.clone());",
+      "find": "        .chain(tail)\n        .map(substitute)",
+      "replace": "        .chain(Vec::<char>::new())\n        .map(substitute)",
       "test": "preview::tests::a_long_value_keeps_both_ends_and_reports_the_whole_length",
       "runner": "rust:nkb-core:lib"
     },
@@ -3234,8 +3234,8 @@
       "id": "M547",
       "why": "typed text does not replace the selection (D105)",
       "file": "crates/nkb-gui/src/trial.rs",
-      "find": "                self.remove_selection();\n                self.text.insert_str(self.caret, text);",
-      "replace": "                self.text.insert_str(self.caret, text);",
+      "find": "                let replaced = self.remove_selection();",
+      "replace": "                let replaced = false;",
       "test": "trial::tests::a_selection_is_replaced_by_what_is_typed_over_it",
       "runner": "rust:nkb-gui:lib"
     },
@@ -3261,7 +3261,7 @@
       "id": "M550",
       "why": "under an empty box the counts say zero instead of a sentence that nothing arrived (D105)",
       "file": "crates/nkb-gui/src/welcome.rs",
-      "find": "        let facts = if text.is_empty() {",
+      "find": "        let facts = if trial.text().is_empty() {",
       "replace": "        let facts = if false {",
       "test": "the_welcome_window_takes_a_value_and_remembers_it_was_closed",
       "runner": "rust:nkb-gui:welcome_window"
@@ -3270,8 +3270,8 @@
       "id": "M551",
       "why": "the trial box draws the text after the caret before it (D105)",
       "file": "crates/nkb-gui/src/welcome.rs",
-      "find": "            .set_box_before(preview(trial.before()).shown.into());",
-      "replace": "            .set_box_before(preview(trial.after()).shown.into());",
+      "find": "        self.window.set_box_before(shown(trial.before()).into());",
+      "replace": "        self.window.set_box_before(shown(trial.after()).into());",
       "test": "the_welcome_window_takes_a_value_and_remembers_it_was_closed",
       "runner": "rust:nkb-gui:welcome_window"
     },
@@ -12109,6 +12109,42 @@
       "replace": "            (false, true) => FocusedInput::NotTextField,",
       "test": "macos_rules::tests::a_read_only_text_role_is_not_claimed_and_one_without_a_caret_is_not_a_field",
       "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1564",
+      "why": "every key of a value counts the whole box again, and a long value freezes the welcome window (R11)",
+      "file": "crates/nkb-gui/src/trial.rs",
+      "find": "                if at_end && !replaced {",
+      "replace": "                if false {",
+      "test": "trial::tests::a_long_value_typed_at_the_end_is_counted_without_reading_the_text_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1565",
+      "why": "the box counts UTF-16 units as bytes, so a value with an emoji shows a length no field states (R11)",
+      "file": "crates/nkb-gui/src/trial.rs",
+      "find": "        self.utf16_units += added.encode_utf16().count();",
+      "replace": "        self.utf16_units += added.len();",
+      "test": "trial::tests::a_long_value_typed_at_the_end_is_counted_without_reading_the_text_again",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1566",
+      "why": "a tally that goes on from where it stopped counts no clusters, so the welcome box says a value is empty (R11)",
+      "file": "crates/nkb-core/src/graphemes.rs",
+      "find": "                self.clusters += 1;",
+      "replace": "                self.clusters += 0;",
+      "test": "graphemes::tests::a_tally_goes_on_across_the_seams_a_fresh_count_would_see",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1567",
+      "why": "the end of a long value is shown backwards, and the trailing space a tester looks for moves to the middle (R11)",
+      "file": "crates/nkb-core/src/preview.rs",
+      "find": "    tail.reverse();",
+      "replace": "",
+      "test": "preview::tests::what_is_shown_is_both_ends_in_order_at_every_length_around_the_limit",
+      "runner": "rust:nkb-core:lib"
     }
   ]
 }

@@ -42,7 +42,7 @@ use std::time::Instant;
 
 use nkb_adapters::i18n::{self, Environment, Startup, WelcomeLabel};
 use nkb_core::hotkeys::{Bindings, HotkeyAction};
-use nkb_core::preview::preview;
+use nkb_core::preview::shown;
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::focus::{HANDLE_WAIT, POLL, window_handle};
@@ -265,21 +265,22 @@ impl Welcome {
     /// The box as the window draws it: the text before and after the caret
     /// with the invisible characters as the palette's marker, and what
     /// arrived, counted the way the palette counts.
+    ///
+    /// Called after every key, so nothing here reads the whole text: the ends
+    /// shown and the counts carried by the box are bounded per key (R11).
     fn show_box(&self) {
         let trial = self.trial.borrow();
-        self.window
-            .set_box_before(preview(trial.before()).shown.into());
-        self.window
-            .set_box_after(preview(trial.after()).shown.into());
-        let text = trial.text();
-        let facts = if text.is_empty() {
+        self.window.set_box_before(shown(trial.before()).into());
+        self.window.set_box_after(shown(trial.after()).into());
+        let facts = if trial.text().is_empty() {
             i18n::welcome_label(WelcomeLabel::Empty).to_owned()
         } else {
+            let counts = trial.counts();
             i18n::counts(
-                nkb_core::graphemes::count(text),
-                text.chars().count(),
-                text.len(),
-                text.encode_utf16().count(),
+                counts.graphemes,
+                counts.code_points,
+                counts.bytes,
+                counts.utf16_units,
             )
         };
         self.window.set_box_facts(facts.into());

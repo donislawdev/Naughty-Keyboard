@@ -195,7 +195,7 @@ fn properties(c: char) -> Properties {
 ///   with `Extend` characters mixed in.
 ///
 /// Each field says what is true of the text ENDING AT the character just read.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Trail {
     /// How many regional indicators end the text so far.
     regional_indicators: usize,
@@ -314,6 +314,69 @@ pub fn last_cluster_start(text: &str) -> usize {
     ClusterStarts::new(text).last().unwrap_or(0)
 }
 
+/// The clusters of a text that grows only at its end, counted as it grows.
+///
+/// [`count`] reads the whole text every time, which is right for a value
+/// counted once. A box that takes a value one key at a time and shows the
+/// count after each would read the text once per key - quadratic in its length
+/// (R11 of the stability report). The scan is a fold over the characters, and
+/// what it carries at the end of the text is all the next character needs, so
+/// [`Tally::push_str`] goes on from there. Every rule decides a boundary from
+/// the characters before it and the one at it, never from one further on, so a
+/// boundary already found never moves when text is added. The same step as
+/// [`count`], and `tests/grapheme_conformance.rs` feeds the official suite
+/// through both.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Tally {
+    /// The last character read and the trail it ends. `None` before the first.
+    seen: Option<(Properties, Trail)>,
+    clusters: usize,
+}
+
+impl Tally {
+    /// The tally of `text`, read once.
+    #[must_use]
+    pub fn of(text: &str) -> Self {
+        let mut tally = Self::default();
+        tally.push_str(text);
+        tally
+    }
+
+    /// Goes on with `more`, as if it had been there from the start.
+    pub fn push_str(&mut self, more: &str) {
+        for character in more.chars() {
+            if step(&mut self.seen, character) {
+                self.clusters += 1;
+            }
+        }
+    }
+
+    /// How many clusters the text read so far holds - what [`count`] says of it.
+    #[must_use]
+    pub const fn clusters(&self) -> usize {
+        self.clusters
+    }
+}
+
+/// Reads one character more: whether a cluster begins at it.
+///
+/// The one place the rules are applied, so [`count`], [`last_cluster_start`]
+/// and [`Tally`] cannot disagree about where a cluster ends.
+fn step(seen: &mut Option<(Properties, Trail)>, character: char) -> bool {
+    let current = properties(character);
+    let Some((previous, trail)) = seen.as_mut() else {
+        // GB1: the start of a non-empty text is always a boundary.
+        let mut trail = Trail::new();
+        trail.push(current);
+        *seen = Some((current, trail));
+        return true;
+    };
+    let boundary = is_boundary(trail, *previous, current);
+    trail.push(current);
+    *previous = current;
+    boundary
+}
+
 /// The byte offsets at which the clusters of a text begin, in order.
 ///
 /// The one place the rules are applied, so the count and the erasing point
@@ -339,18 +402,7 @@ impl Iterator for ClusterStarts<'_> {
 
     fn next(&mut self) -> Option<usize> {
         for (at, character) in self.rest.by_ref() {
-            let current = properties(character);
-            let Some((previous, trail)) = self.seen.as_mut() else {
-                // GB1: the start of a non-empty text is always a boundary.
-                let mut trail = Trail::new();
-                trail.push(current);
-                self.seen = Some((current, trail));
-                return Some(at);
-            };
-            let boundary = is_boundary(trail, *previous, current);
-            trail.push(current);
-            *previous = current;
-            if boundary {
+            if step(&mut self.seen, character) {
                 return Some(at);
             }
         }
@@ -481,6 +533,31 @@ mod tests {
         let text = format!("x{}{}", cp(0x1F468), cp(0x200D));
         let at = last_cluster_start(&text);
         assert!(text.is_char_boundary(at));
+    }
+
+    #[test]
+    fn a_tally_goes_on_across_the_seams_a_fresh_count_would_see() {
+        // A flag split between two pushes, a family emoji joined across one,
+        // and a combining mark arriving after its letter: each changes what
+        // the last cluster is, and the tally must know it as count does.
+        let flag = format!("{}{}", cp(0x1F1F5), cp(0x1F1F1));
+        let man = cp(0x1F468);
+        let zwj = cp(0x200D);
+        for pieces in [
+            vec![cp(0x1F1F5), cp(0x1F1F1), cp(0x1F1F5)],
+            vec![man.clone(), zwj.clone(), man.clone()],
+            vec![String::from("e"), cp(0x0301), String::from("x")],
+            vec![String::new(), flag.clone(), String::new(), flag],
+        ] {
+            let mut tally = Tally::default();
+            let mut text = String::new();
+            for piece in &pieces {
+                tally.push_str(piece);
+                text.push_str(piece);
+                assert_eq!(tally.clusters(), count(&text), "{text:?}");
+            }
+        }
+        assert_eq!(Tally::default().clusters(), 0, "empty text is no clusters");
     }
 
     #[test]
