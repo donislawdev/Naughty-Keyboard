@@ -49,10 +49,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  HUGO_VERSION: "0.167.0"
-  # The SHA-256 of hugo_0.167.0_linux-amd64.tar.gz, from the release's
-  # hugo_0.167.0_checksums.txt. A new version is a new digest, set by hand.
-  HUGO_SHA256: "4d84519b9f619e6d4c3fb45a50157abeabeb724f859c60605f44c23def6e1169"
+  HUGO_VERSION: "0.168.0"
+  # The SHA-256 of hugo_0.168.0_linux-amd64.tar.gz, from the release's
+  # hugo_0.168.0_checksums.txt. A new version is a new digest, set by hand.
+  HUGO_SHA256: "fada83ad56bb27ed4cb7dd81590303bdac16140f944ac4e66fc248117e2d5594"
   # Whether this run puts the site up. Written once here and read by the step
   # that hands the pages over and by the job that publishes them.
   PUBLISH: ${{ github.event_name == 'workflow_run' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') }}
