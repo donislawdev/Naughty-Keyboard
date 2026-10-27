@@ -10,6 +10,14 @@ Changes wait under Unreleased until then.
 
 ## [Unreleased]
 
+### Changed
+
+- A text field that says it is read-only is no longer treated as a field that takes typing. On
+  Windows the clearing keys no longer go to it, and on macOS the value is no longer refused there.
+  The value is typed without clearing first, as for any focus that is not confirmed as a field,
+  which is what Linux already did. Sending a value into a read-only field to check that it stays
+  unchanged now works the same on every system.
+
 ### Fixed
 
 - A value no longer goes to a window that comes to the front after the shortcut or after the
