@@ -138,11 +138,15 @@ fn explain_skip(source: CatalogueSource, reason: SourceSkipped) -> &'static str 
     }
 }
 
-fn source_error(reason: SourceError) -> &'static str {
+fn source_error(reason: SourceError) -> String {
     match reason {
-        SourceError::NotFound => "the file is gone",
-        SourceError::Unreadable => "the file would not open",
-        SourceError::NotUtf8 => "the file is not valid UTF-8, which the format requires",
+        SourceError::NotFound => "the file is gone".to_owned(),
+        SourceError::Unreadable => "the file would not open".to_owned(),
+        SourceError::NotUtf8 => "the file is not valid UTF-8, which the format requires".to_owned(),
+        SourceError::TooLarge => format!(
+            "the file is larger than {}, the most a pack file may be",
+            crate::lint_report::pack_file_limit()
+        ),
     }
 }
 

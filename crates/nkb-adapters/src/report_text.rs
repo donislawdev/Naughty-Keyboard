@@ -37,9 +37,9 @@
 //! white-space characters become `\uXXXX`, visible and inert.
 
 use nkb_app::ports::ReportText;
-use nkb_core::preview::{ShapeFact, is_invisible};
+use nkb_core::preview::ShapeFact;
 use nkb_core::report::{Arrival, ControlKind, ReportBlock, SpelledOut, Target, Typed};
-use nkb_core::text::{escaped_char, needs_escaping};
+use nkb_core::text::escaped_prose;
 
 use crate::i18n::{fill, shape_line};
 
@@ -207,12 +207,12 @@ pub fn report_text(block: &ReportBlock) -> String {
             fill(
                 pattern_report_phrase(ReportPhrase::Reference),
                 &[
-                    ("reference", &prose(&block.reference)),
-                    ("version", &prose(&block.pack_version)),
+                    ("reference", &escaped_prose(&block.reference)),
+                    ("version", &escaped_prose(&block.pack_version)),
                 ],
             ),
         ),
-        (ReportLabel::Name, prose(&block.name)),
+        (ReportLabel::Name, escaped_prose(&block.name)),
         (ReportLabel::Typed, typed(&block.typed)),
     ];
     if let Some(spelled) = &block.spelled_out {
@@ -377,7 +377,7 @@ fn target(block: &ReportBlock) -> String {
             match program {
                 Some(program) => fill(
                     pattern_report_phrase(ReportPhrase::Target),
-                    &[("program", &prose(program)), ("control", control)],
+                    &[("program", &escaped_prose(program)), ("control", control)],
                 ),
                 None => fill(
                     pattern_report_phrase(ReportPhrase::TargetUnnamed),
@@ -395,35 +395,8 @@ fn target(block: &ReportBlock) -> String {
 fn given(text: Option<&str>) -> String {
     text.map_or_else(
         || pattern_report_phrase(ReportPhrase::NotGiven).to_owned(),
-        prose,
+        escaped_prose,
     )
-}
-
-/// Somebody else's text, made safe to put on a line of its own.
-fn prose(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for character in text.chars() {
-        if escapes_in_prose(character) {
-            out.push_str(&escaped_char(character));
-        } else {
-            out.push(character);
-        }
-    }
-    out
-}
-
-/// Whether a character of pack prose is written escaped in the block.
-///
-/// 🔴 The UNION of the core's two rules, minus the ordinary space - and the
-/// union is not decoration. `needs_escaping` is the pack format's rule and
-/// `is_invisible` the preview's, and the two drifted apart once: the format's
-/// did not know the bidi isolates `U+2066`-`U+2069`, so a name holding `U+2067`
-/// would have reordered a developer's ticket - half of what "Trojan Source" is
-/// made of. `D69` aligned them and a core test now walks every code point, but
-/// the union stays: it costs nothing, and a ticket is where a future drift
-/// would do its damage before anyone read the test.
-fn escapes_in_prose(character: char) -> bool {
-    character != ' ' && (needs_escaping(character, false) || is_invisible(character))
 }
 
 #[cfg(test)]

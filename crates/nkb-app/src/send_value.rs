@@ -315,7 +315,9 @@ pub fn send_value(
     let text = match source.read(request.pack_id) {
         Ok(text) => text,
         Err(SourceError::NotFound) => return SendOutcome::NotFound,
-        Err(SourceError::Unreadable | SourceError::NotUtf8) => return SendOutcome::Unreadable,
+        Err(SourceError::Unreadable | SourceError::NotUtf8 | SourceError::TooLarge) => {
+            return SendOutcome::Unreadable;
+        }
     };
 
     // check first, refuse on any error, parse after - pack-format.md 11 and the

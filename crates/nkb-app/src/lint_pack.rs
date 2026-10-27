@@ -27,6 +27,8 @@ pub enum LintOutcome {
     NotFound,
     /// The pack is there and could not be read: permissions, a device, a handle.
     Unreadable,
+    /// The pack is larger than [`crate::PACK_FILE_LIMIT`] and was not read (R06).
+    TooLarge,
 }
 
 /// Validates one pack file.
@@ -39,6 +41,7 @@ pub fn lint_pack(source: &dyn PackSource, format: &dyn PackFormat, id: &str) -> 
         Ok(text) => text,
         Err(SourceError::NotFound) => return LintOutcome::NotFound,
         Err(SourceError::Unreadable) => return LintOutcome::Unreadable,
+        Err(SourceError::TooLarge) => return LintOutcome::TooLarge,
         Err(SourceError::NotUtf8) => {
             // Not a failure of the tool - a finding about the pack, and the format
             // has a rule with its name on it. Reporting this as a read error would
@@ -117,6 +120,7 @@ fn resolve_translation(
                         SourceError::NotFound => SkipReason::TranslatedPackNotFound,
                         SourceError::Unreadable => SkipReason::TranslatedPackUnreadable,
                         SourceError::NotUtf8 => SkipReason::TranslatedPackNotUtf8,
+                        SourceError::TooLarge => SkipReason::TranslatedPackTooLarge,
                     },
                 )
                 .about(&target),

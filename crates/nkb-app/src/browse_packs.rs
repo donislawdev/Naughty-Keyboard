@@ -196,7 +196,9 @@ pub fn show_pack(source: &dyn PackSource, format: &dyn PackFormat, id: &str) -> 
         Err(SourceError::NotFound) => return ShowOutcome::NotFound,
         // Not UTF-8 is E005 and a finding about the pack, which `nkb lint`
         // reports. Here both mean the same thing: no text to show.
-        Err(SourceError::Unreadable | SourceError::NotUtf8) => return ShowOutcome::Unreadable,
+        Err(SourceError::Unreadable | SourceError::NotUtf8 | SourceError::TooLarge) => {
+            return ShowOutcome::Unreadable;
+        }
     };
 
     match load(format, id, &text) {

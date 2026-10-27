@@ -11,9 +11,23 @@
 //! includes, no addresses and nothing executable, so reading a pack can do
 //! nothing but add values to a list.
 
-use nkb_app::{Clock, PackSink, PackSource, SinkError, SourceError};
+use nkb_app::{Clock, PACK_FILE_LIMIT, PackSink, PackSource, SinkError, SourceError};
 use nkb_core::calendar::Day;
+use std::ffi::OsStr;
+use std::io::Read;
 use std::path::{Path, PathBuf};
+
+/// Why a path a person typed does not name a pack file this tool reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotAPackFile {
+    /// No file name at all: a bare directory, or a path ending in a parent
+    /// marker.
+    NoFileName,
+    /// A file name that does not end in `.toml`. Until R04 such a path was read
+    /// as `<stem>.toml`, which is ANOTHER file: `nkb fmt notes.txt` rewrote
+    /// `notes.toml` beside it, and `nkb lint notes` judged a file nobody named.
+    NotToml,
+}
 
 /// Reads packs from one directory, addressing them by their pack identifier.
 ///
@@ -37,11 +51,28 @@ impl DirectoryPackSource {
     /// identifier to read, so that `nkb lint packs/whitespace.toml` works without
     /// the layer above ever learning what a path is.
     ///
-    /// Returns nothing when the path has no file name at all - a bare directory,
-    /// or a path ending in a parent marker.
-    #[must_use]
-    pub fn split(path: &Path) -> Option<(Self, String)> {
-        let stem = path.file_stem()?.to_str()?.to_owned();
+    /// 🔴 Only a name ending in `.toml`, lower case on every system, so that the
+    /// file [`Self::path_of`] reads back is the very file named (R04). A pack's
+    /// file name is its identifier plus `.toml` (`pack-format.md` 7), and a
+    /// `.TOML` that Windows would open is refused there too, so one command
+    /// means one thing on all three systems.
+    ///
+    /// # Errors
+    ///
+    /// [`NotAPackFile`] when the path has no file name or the name does not end
+    /// in `.toml`.
+    pub fn split(path: &Path) -> Result<(Self, String), NotAPackFile> {
+        if path.file_name().is_none() {
+            return Err(NotAPackFile::NoFileName);
+        }
+        if path.extension() != Some(OsStr::new("toml")) {
+            return Err(NotAPackFile::NotToml);
+        }
+        let stem = path
+            .file_stem()
+            .and_then(OsStr::to_str)
+            .ok_or(NotAPackFile::NoFileName)?
+            .to_owned();
         let directory = path
             .parent()
             .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
@@ -50,7 +81,7 @@ impl DirectoryPackSource {
         } else {
             directory
         };
-        Some((Self::new(directory), stem))
+        Ok((Self::new(directory), stem))
     }
 
     #[must_use]
@@ -72,10 +103,21 @@ impl DirectoryPackSource {
 impl PackSource for DirectoryPackSource {
     fn read(&self, id: &str) -> Result<String, SourceError> {
         let path = self.path_of(id);
-        let bytes = std::fs::read(&path).map_err(|error| match error.kind() {
+        let file = std::fs::File::open(&path).map_err(|error| match error.kind() {
             std::io::ErrorKind::NotFound => SourceError::NotFound,
             _ => SourceError::Unreadable,
         })?;
+        // At most one byte past the limit (R06): enough to tell "too large" from
+        // "exactly at the limit" without holding more of a stranger's file than
+        // the limit allows.
+        let mut bytes = Vec::new();
+        file.take(PACK_FILE_LIMIT + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| SourceError::Unreadable)?;
+        let within = u64::try_from(bytes.len()).is_ok_and(|read| read <= PACK_FILE_LIMIT);
+        if !within {
+            return Err(SourceError::TooLarge);
+        }
 
         // Read as bytes and converted here rather than read as text, so that a
         // file which is not valid UTF-8 comes back as its own answer instead of
@@ -274,7 +316,54 @@ mod tests {
 
     #[test]
     fn a_path_without_a_file_name_does_not_pretend_to_be_a_pack() {
-        assert!(DirectoryPackSource::split(Path::new("..")).is_none());
+        assert_eq!(
+            DirectoryPackSource::split(Path::new("..")).err(),
+            Some(NotAPackFile::NoFileName)
+        );
+    }
+
+    #[test]
+    fn only_a_name_ending_in_toml_is_a_pack_file() {
+        // R04: each of these was read as `<stem>.toml`, a file nobody named, and
+        // `nkb fmt` wrote that file. A pack is never in any of them.
+        for named in [
+            "notes.txt",
+            "packs/whitespace",
+            "whitespace.TOML",
+            "whitespace.toml.bak",
+            ".toml",
+        ] {
+            assert_eq!(
+                DirectoryPackSource::split(Path::new(named)).err(),
+                Some(NotAPackFile::NotToml),
+                "{named}"
+            );
+        }
+    }
+
+    /// A file of `size` bytes of `a` in a folder of its own, read through the
+    /// source. The folder goes when the test ends.
+    fn read_back(name: &str, size: u64) -> Result<String, SourceError> {
+        let dir = std::env::temp_dir().join(format!("nkb-limit-{}-{name}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("a temporary directory");
+        let path = dir.join(format!("{name}.toml"));
+        let file = std::fs::File::create(&path).expect("a file");
+        std::io::copy(&mut std::io::repeat(b'a').take(size), &mut &file).expect("written");
+        drop(file);
+        let read = DirectoryPackSource::new(&dir).read(name);
+        std::fs::remove_dir_all(&dir).ok();
+        read
+    }
+
+    #[test]
+    fn a_pack_file_larger_than_the_limit_is_refused_and_one_at_the_limit_is_read() {
+        // R06: one byte decides, read as bytes on a real disk.
+        let at = read_back("at-limit", PACK_FILE_LIMIT).expect("read whole");
+        assert_eq!(at.len(), usize::try_from(PACK_FILE_LIMIT).expect("fits"));
+        assert_eq!(
+            read_back("past-limit", PACK_FILE_LIMIT + 1),
+            Err(SourceError::TooLarge)
+        );
     }
 
     #[test]

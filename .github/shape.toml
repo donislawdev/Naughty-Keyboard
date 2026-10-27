@@ -59,15 +59,19 @@ band = 0.7
 # send, where the value is about to go, went to target_line.rs with the sentence
 # for a session that cannot name the window. 969 since 2026-10-25, when what
 # nkb send says on its way went to on_the_way.rs with the line for a clearing
-# that waits for the person to allow the keys.
+# that waits for the person to allow the keys. 937 since 2026-10-27, when what
+# nkb lint and nkb fmt say about the file they were named went to pack_file.rs
+# with the refusal of a name that does not end in .toml.
 # near = 4 since 2026-10-19: the ceiling came down by 104, and the band with it,
 # so three files that did not grow joined it (advance_sequence.rs, toml_pack.rs
 # and picker.rs). The count is the owner's to accept, as it was for toml_pack.rs.
 # 5 since 2026-10-25, the owner's choice: the ceiling came down to 969 and
-# nkb-adapters/src/i18n.rs, which did not grow, joined at 688.
+# nkb-adapters/src/i18n.rs, which did not grow, joined at 688. 6 since
+# 2026-10-27, the owner's choice: the ceiling came down to 937 and
+# nkb-gui/src/live.rs, which did not grow, joined at 663.
 [files.rust-product]
-ceiling = 969
-near = 5
+ceiling = 937
+near = 6
 
 # A whole Rust file, its tests included. nkb-gui/src/live.rs, then
 # nkb-adapters/src/i18n.rs at 2101.

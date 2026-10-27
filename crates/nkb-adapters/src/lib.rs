@@ -33,7 +33,7 @@ pub use focus::{
     Aside, KeptFocus, LentFocus, StackingError, no_keyboard_menu, stand_over_full_screen,
     step_aside, step_back,
 };
-pub use fs::{DirectoryPackSink, DirectoryPackSource, SystemClock};
+pub use fs::{DirectoryPackSink, DirectoryPackSource, NotAPackFile, SystemClock};
 pub use keyboard::DirectInjection;
 pub use portal_entry::PortalEntry;
 pub use portal_shortcuts::PortalShortcuts;

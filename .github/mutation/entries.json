@@ -902,9 +902,9 @@
     {
       "id": "M80",
       "why": "the prose of a pack is no longer escaped in the block - a name with a newline forges a Target: line, and U+202E reverses the reading order (rule 24)",
-      "file": "crates/nkb-adapters/src/report_text.rs",
-      "find": "        if escapes_in_prose(character) {",
-      "replace": "        if false && escapes_in_prose(character) {",
+      "file": "crates/nkb-core/src/text.rs",
+      "find": "        if character != ' '\n            && (needs_escaping(character, false) || crate::preview::is_invisible(character))",
+      "replace": "        if false\n            && (needs_escaping(character, false) || crate::preview::is_invisible(character))",
       "test": "report_text::tests::a_hostile_pack_cannot_forge_a_line_or_reorder_the_ticket",
       "runner": "rust:nkb-adapters:lib"
     },
@@ -3144,7 +3144,7 @@
       "id": "M537",
       "why": "the program name in the block is not escaped - a control character forges a line of the report (D104)",
       "file": "crates/nkb-adapters/src/report_text.rs",
-      "find": "                    &[(\"program\", &prose(program)), (\"control\", control)],",
+      "find": "                    &[(\"program\", &escaped_prose(program)), (\"control\", control)],",
       "replace": "                    &[(\"program\", program.as_str()), (\"control\", control)],",
       "test": "report_text::tests::a_program_name_cannot_forge_a_line_of_the_block",
       "runner": "rust:nkb-adapters:lib"
@@ -11983,6 +11983,60 @@
       "replace": "        StopReason::Halted => \"Escape was pressed\",",
       "test": "i18n::tests::every_reason_a_send_stopped_reads_as_its_own_clause",
       "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1547",
+      "why": "a name not ending in .toml is read as <stem>.toml again - nkb fmt notes.txt rewrites notes.toml (R04)",
+      "file": "crates/nkb-adapters/src/fs.rs",
+      "find": "        if path.extension() != Some(OsStr::new(\"toml\")) {",
+      "replace": "        if false {",
+      "test": "fs::tests::only_a_name_ending_in_toml_is_a_pack_file",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1548",
+      "why": "a pack file past the limit is read anyway - a file of gigabytes is held whole in memory (R06)",
+      "file": "crates/nkb-adapters/src/fs.rs",
+      "find": "        if !within {",
+      "replace": "        if false && !within {",
+      "test": "fs::tests::a_pack_file_larger_than_the_limit_is_refused_and_one_at_the_limit_is_read",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1549",
+      "why": "nkb lint ends with 3 for a file it could not read, as the JSON branch did before (OBS-234)",
+      "file": "crates/nkb-cli/src/pack_file.rs",
+      "find": "            Self::Unreadable | Self::TooLarge => ExitCode::IoFailed,",
+      "replace": "            Self::Unreadable | Self::TooLarge => ExitCode::NotFound,",
+      "test": "pack_file::tests::a_file_that_was_not_read_ends_lint_with_the_same_code_in_both_modes",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1550",
+      "why": "the path lint and fmt print is not escaped - ESC in a file name reaches the terminal (R25)",
+      "file": "crates/nkb-cli/src/pack_file.rs",
+      "find": "    let shown = escaped_prose(path);",
+      "replace": "    let shown = path.to_owned();",
+      "test": "pack_file::tests::the_path_is_printed_with_what_would_act_on_a_terminal_escaped",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1551",
+      "why": "the file name on each lint line is not escaped - ESC in it reaches the terminal (R25)",
+      "file": "crates/nkb-cli/src/lint_report.rs",
+      "find": "    let file = escaped_prose(file);",
+      "replace": "    let file = file.to_owned();",
+      "test": "lint_report::tests::a_hostile_file_name_key_or_identifier_is_printed_escaped",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1552",
+      "why": "the key and identifier a lint problem names are not escaped - a direction override reorders the line (R25)",
+      "file": "crates/nkb-cli/src/lint_report.rs",
+      "find": "        shown(problem.subject.as_deref()),\n        shown(problem.owner.as_deref()),",
+      "replace": "        problem.subject.clone().unwrap_or_default(),\n        problem.owner.clone().unwrap_or_default(),",
+      "test": "lint_report::tests::a_hostile_file_name_key_or_identifier_is_printed_escaped",
+      "runner": "rust:nkb-cli:bin=nkb"
     }
   ]
 }
