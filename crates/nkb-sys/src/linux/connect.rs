@@ -176,19 +176,122 @@ fn open(address: DisplayAddress, wait: Wait) -> Result<Server, Refusal> {
     Ok(Server { conn, root })
 }
 
-/// Two connected sockets with no address, made inside this process: the side of the tests of
-/// `stream` that stands in for a server, silent or answering. Made here, where the product
-/// opens its one socket to the X server, so the guard of the network sees it in that file.
-#[cfg(test)]
-pub(super) fn socket_pair() -> std::io::Result<(DefaultStream, UnixStream)> {
-    let (ours, theirs) = UnixStream::pair()?;
-    let (ours, _peer) = DefaultStream::from_unix_stream(ours)?;
-    Ok((ours, theirs))
-}
-
 /// Whether the server has the extension. A server that cannot say has not.
 fn has_extension(conn: &Conn, name: &'static str) -> bool {
     use x11rb::connection::RequestConnection;
     conn.extension_information(name)
         .is_ok_and(|information| information.is_some())
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    clippy::panic,
+    reason = "a failed expectation in a test is a failed test"
+)]
+mod tests {
+    //! The bounded wait of `stream`, tested here because this is the file where the
+    //! product opens its socket, and so the one the guard of the network lets a test
+    //! open a socket in.
+
+    use core::time::Duration;
+    use std::io::{self, Read as _, Write as _};
+    use std::time::Instant;
+
+    use x11rb::rust_connection::{PollMode, RustConnection, Stream as _};
+
+    use super::*;
+
+    const SHORT: Duration = Duration::from_millis(50);
+
+    /// Two connected sockets with no address, made inside this process: ours, as the
+    /// library holds it, and the side that stands in for a server, silent or answering.
+    fn socket_pair() -> io::Result<(DefaultStream, UnixStream)> {
+        let (ours, theirs) = UnixStream::pair()?;
+        let (ours, _peer) = DefaultStream::from_unix_stream(ours)?;
+        Ok((ours, theirs))
+    }
+
+    #[test]
+    fn a_silent_server_is_given_up_after_the_limit_and_then_at_once() {
+        let (inner, _server) = socket_pair().expect("a socket pair");
+        let stream = LocalStream::new(inner, Wait::Bounded(SHORT));
+        let started = Instant::now();
+        let first = stream
+            .poll(PollMode::Readable)
+            .expect_err("nothing was written");
+        let took = started.elapsed();
+        assert_eq!(first.kind(), io::ErrorKind::TimedOut);
+        assert!(took >= SHORT, "waited the limit: {took:?}");
+        assert!(took < SHORT * 20, "and not much longer: {took:?}");
+
+        let again = Instant::now();
+        let second = stream.poll(PollMode::Readable).expect_err("given up");
+        assert_eq!(second.kind(), io::ErrorKind::TimedOut);
+        assert!(
+            again.elapsed() < SHORT,
+            "not waited twice: {:?}",
+            again.elapsed()
+        );
+    }
+
+    #[test]
+    fn an_answer_ends_the_wait() {
+        let (inner, mut server) = socket_pair().expect("a socket pair");
+        let stream = LocalStream::new(inner, Wait::Bounded(Duration::from_secs(10)));
+        server.write_all(b"x").expect("the answer");
+        stream
+            .poll(PollMode::Readable)
+            .expect("a readable socket is not a silent server");
+        let mut fds = Vec::new();
+        let mut buf = [0u8; 4];
+        assert_eq!(stream.read(&mut buf, &mut fds).expect("the byte"), 1);
+    }
+
+    #[test]
+    fn writes_still_go_once_the_server_is_given_up() {
+        // Giving up refuses waiting, not writing: the requests that give the spare
+        // keys back are still written after the wait that ran out.
+        let (inner, mut server) = socket_pair().expect("a socket pair");
+        let stream = LocalStream::new(inner, Wait::Bounded(SHORT));
+        let _ = stream.poll(PollMode::Readable);
+        let mut fds = Vec::new();
+        assert_eq!(stream.write(b"give back", &mut fds).expect("written"), 9);
+        let mut buf = [0u8; 9];
+        server.read_exact(&mut buf).expect("what was written");
+        assert_eq!(&buf, b"give back");
+    }
+
+    #[test]
+    fn a_connection_to_a_silent_server_ends_within_the_limit() {
+        // The handshake waits for the server's setup like any answer: a socket that
+        // accepts and never speaks is a refusal, not a hang.
+        let (inner, _server) = socket_pair().expect("a socket pair");
+        let stream = LocalStream::new(inner, Wait::Bounded(SHORT));
+        let started = Instant::now();
+        let refused = RustConnection::connect_to_stream(stream, 0);
+        assert!(refused.is_err(), "no setup was ever sent");
+        assert!(
+            started.elapsed() < SHORT * 20,
+            "ended within the limit: {:?}",
+            started.elapsed()
+        );
+    }
+
+    #[test]
+    fn the_listener_of_the_shortcuts_waits_as_long_as_it_takes() {
+        // The thread of the shortcuts waits for the person, and an answer that comes
+        // after a bounded wait would have run out still ends its wait.
+        let (inner, mut server) = socket_pair().expect("a socket pair");
+        let stream = LocalStream::new(inner, Wait::Forever);
+        let writer = std::thread::spawn(move || {
+            std::thread::sleep(SHORT * 2);
+            server.write_all(b"x").expect("the answer");
+            server
+        });
+        stream
+            .poll(PollMode::Readable)
+            .expect("waited until the answer");
+        let _server = writer.join().expect("the writer");
+    }
 }
