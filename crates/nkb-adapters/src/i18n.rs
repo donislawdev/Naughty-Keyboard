@@ -264,7 +264,7 @@ fn pattern_message(message: &Message) -> &'static str {
             "The field could not be cleared, so nothing was sent. It may hold part of its old content - check it before trying again."
         }
         Message::ValueTooLarge { .. } => {
-            "Value \"{id}\" describes more text than this build can hold, so it was not sent. Run: nkb lint {pack}"
+            "Value \"{id}\" passed validation but describes more text than this build can hold, so it was not sent. This is a fault in the tool, not in the pack."
         }
         Message::Unhandled { .. } => {
             "\"{action}\" is not wired in this build yet, so nothing happened. The shortcut stays reserved so another application cannot take it."
@@ -379,7 +379,7 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
             &[("shortcut", &chord_text(bindings, HotkeyAction::OpenPacks))],
         ),
         Message::ModifierHeld { key } => fill(pattern, &[("key", key)]),
-        Message::ValueTooLarge { id } => fill(pattern, &[("id", id), ("pack", pack)]),
+        Message::ValueTooLarge { id } => fill(pattern, &[("id", id)]),
         Message::Unhandled { action } | Message::PressedWhileBusy { action } => {
             fill(pattern, &[("action", action_name(*action))])
         }
@@ -457,11 +457,14 @@ fn pattern_choose_error(error: &ChooseError) -> &'static str {
         ChooseError::Unreadable => {
             "Pack \"{pack}\" could not be read. Check that the file is there and is valid UTF-8."
         }
+        // `nkb lint` reads exactly the file it is named (R04), and the palette
+        // knows a pack by its identifier, not by its file. So the sentence
+        // names the command and not an argument it cannot give (`OBS-235`).
         ChooseError::Refused { errors } if *errors == 1 => {
-            "Pack \"{pack}\" has 1 problem. Run: nkb lint {pack}"
+            "Pack \"{pack}\" has 1 problem. Run nkb lint on its file to see it."
         }
         ChooseError::Refused { .. } => {
-            "Pack \"{pack}\" has {errors} problems. Run: nkb lint {pack}"
+            "Pack \"{pack}\" has {errors} problems. Run nkb lint on its file to see them."
         }
     }
 }
@@ -1440,6 +1443,21 @@ mod tests {
                 !sentence.contains('{') && !sentence.contains('}'),
                 "a placeholder was left unfilled: {sentence}"
             );
+        }
+    }
+
+    #[test]
+    fn no_sentence_hands_nkb_lint_a_pack_identifier() {
+        // `OBS-235`: `nkb lint` reads exactly the file it is named, so an
+        // identifier after it is a usage error. These are the two identifiers
+        // `every_sentence` fills in.
+        for sentence in every_sentence() {
+            for id in ["unicode-text", "locale-cz"] {
+                assert!(
+                    !sentence.contains(&format!("nkb lint {id}")),
+                    "a sentence sends the tester to a usage error: {sentence}"
+                );
+            }
         }
     }
 
