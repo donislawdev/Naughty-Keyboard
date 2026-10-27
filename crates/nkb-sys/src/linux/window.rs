@@ -59,12 +59,12 @@ use x11rb::properties::WmHints;
 use x11rb::protocol::xproto::{
     AtomEnum, ClientMessageEvent, ConnectionExt as _, EventMask, InputFocus, PropMode,
 };
-use x11rb::rust_connection::RustConnection;
 use x11rb::wrapper::ConnectionExt as _;
 
 use super::Lost;
 use super::connect::{Display, Server, Windows, connect_windows};
 use super::front::{focused_toplevel, toplevel};
+use super::stream::Conn;
 use crate::WindowRef;
 use crate::linux_rules::Refusal;
 use crate::linux_window_rules::{
@@ -117,7 +117,7 @@ fn id_of(window: WindowRef) -> Result<u32, FocusError> {
     u32::try_from(window.0).map_err(|_| FocusError::HandleUnavailable)
 }
 
-fn atom(conn: &RustConnection, name: &[u8]) -> Result<u32, Lost> {
+fn atom(conn: &Conn, name: &[u8]) -> Result<u32, Lost> {
     Ok(conn.intern_atom(false, name)?.reply()?.atom)
 }
 
@@ -136,12 +136,7 @@ fn ask_manager(server: &Server, window: u32, kind: u32, data: [u32; 5]) -> Resul
 }
 
 /// The window the manager manages inside `window`, which has `WM_STATE`.
-fn managed_below(
-    conn: &RustConnection,
-    window: u32,
-    wm_state: u32,
-    depth: u8,
-) -> Result<Option<u32>, Lost> {
+fn managed_below(conn: &Conn, window: u32, wm_state: u32, depth: u8) -> Result<Option<u32>, Lost> {
     let property = conn
         .get_property(false, window, wm_state, AtomEnum::ANY, 0, 0)?
         .reply()?;
@@ -222,7 +217,7 @@ pub(crate) fn refuse_activation(window: WindowRef) -> Result<(), FocusError> {
 }
 
 /// The atoms a property of `window` holds, for a property of that type.
-fn atoms_of(conn: &RustConnection, window: u32, property: &[u8]) -> Result<Vec<u32>, Lost> {
+fn atoms_of(conn: &Conn, window: u32, property: &[u8]) -> Result<Vec<u32>, Lost> {
     let property = atom(conn, property)?;
     let reply = conn
         .get_property(
@@ -357,7 +352,7 @@ struct StackAtoms {
     skip_pager: u32,
 }
 
-fn stack_atoms(conn: &RustConnection) -> Result<StackAtoms, Lost> {
+fn stack_atoms(conn: &Conn) -> Result<StackAtoms, Lost> {
     Ok(StackAtoms {
         kind: atom(conn, b"_NET_WM_WINDOW_TYPE")?,
         normal: atom(conn, b"_NET_WM_WINDOW_TYPE_NORMAL")?,

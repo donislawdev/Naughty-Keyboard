@@ -12172,6 +12172,15 @@
       "replace": "",
       "test": "preview::tests::what_is_shown_is_both_ends_in_order_at_every_length_around_the_limit",
       "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1568",
+      "why": "the X server is given as long as the application, so a stopped server cannot be told from a stopped application after a ping that went unanswered",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "pub(crate) const SERVER_WAIT: Duration = Duration::from_secs(2);",
+      "replace": "pub(crate) const SERVER_WAIT: Duration = Duration::from_secs(5);",
+      "test": "linux_rules::tests::the_pauses_and_limits_keep_the_order_the_measurements_gave_them",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }

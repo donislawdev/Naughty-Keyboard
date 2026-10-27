@@ -8,21 +8,21 @@
 //! frame, which lives exactly as long as the window inside it.
 
 use x11rb::protocol::xproto::{AtomEnum, ConnectionExt as _};
-use x11rb::rust_connection::RustConnection;
 
 use super::Lost;
 use super::connect::{connect, environment_route};
+use super::stream::Conn;
 use crate::WindowRef;
 use crate::linux_rules::focus_window;
 
 /// The window the keyboard focus is in, if it is in one.
-pub(super) fn focus(conn: &RustConnection, root: u32) -> Result<Option<u32>, Lost> {
+pub(super) fn focus(conn: &Conn, root: u32) -> Result<Option<u32>, Lost> {
     let raw = conn.get_input_focus()?.reply()?.focus;
     Ok(focus_window(raw, root))
 }
 
 /// The top-level window `window` belongs to, found by walking up.
-pub(super) fn toplevel(conn: &RustConnection, root: u32, window: u32) -> Result<u32, Lost> {
+pub(super) fn toplevel(conn: &Conn, root: u32, window: u32) -> Result<u32, Lost> {
     let mut current = window;
     // No window tree is this deep. The bound is for a server that answers in a
     // loop, which would otherwise be waited for for ever.
@@ -37,7 +37,7 @@ pub(super) fn toplevel(conn: &RustConnection, root: u32, window: u32) -> Result<
 }
 
 /// The top-level window the keyboard focus is in.
-pub(super) fn focused_toplevel(conn: &RustConnection, root: u32) -> Result<Option<u32>, Lost> {
+pub(super) fn focused_toplevel(conn: &Conn, root: u32) -> Result<Option<u32>, Lost> {
     match focus(conn, root)? {
         Some(window) => toplevel(conn, root, window).map(Some),
         None => Ok(None),
@@ -73,7 +73,7 @@ pub(crate) fn window_pid(window: WindowRef) -> Option<u32> {
     pid_below(&server.conn, u32::try_from(window.0).ok()?, atom, 3)
 }
 
-fn pid_below(conn: &RustConnection, window: u32, atom: u32, depth: u8) -> Option<u32> {
+fn pid_below(conn: &Conn, window: u32, atom: u32, depth: u8) -> Option<u32> {
     let property = conn
         .get_property(false, window, atom, AtomEnum::CARDINAL, 0, 1)
         .ok()?
@@ -98,7 +98,7 @@ pub(super) struct PingAtoms {
     pub ping: u32,
 }
 
-pub(super) fn ping_atoms(conn: &RustConnection) -> Result<PingAtoms, Lost> {
+pub(super) fn ping_atoms(conn: &Conn) -> Result<PingAtoms, Lost> {
     let protocols = conn.intern_atom(false, b"WM_PROTOCOLS")?;
     let ping = conn.intern_atom(false, b"_NET_WM_PING")?;
     Ok(PingAtoms {
@@ -112,7 +112,7 @@ pub(super) fn ping_atoms(conn: &RustConnection) -> Result<PingAtoms, Lost> {
 /// speaks the protocol, so this walks up to the first that does - and stops below
 /// the root, which is the window manager's.
 pub(super) fn ping_target(
-    conn: &RustConnection,
+    conn: &Conn,
     root: u32,
     focus: u32,
     atoms: PingAtoms,

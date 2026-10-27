@@ -83,7 +83,7 @@ too_many_arguments = "warn"
 # calls, and the register of imports (`crates/nkb-cli/tests/imports/mod.rs`) names each
 # framework `nkb` links with its reason. A function is added to `ffi.rs` with the header
 # it comes from in mind, not from memory.
-# Linux has ONE dependency, and only where the X11 route lives (`D145`).
+# Linux has three dependencies, and only where its routes live (`D145`).
 #
 # `x11rb` 0.14.0 is the current stable release (crates.io, checked 2026-10-20, rule 19).
 # Licence sieve, both questions:
@@ -124,8 +124,15 @@ too_many_arguments = "warn"
 # The connection is made to the LOCAL file socket of the IBus daemon and nothing else
 # (`linux/ibus/daemon.rs`): the stream is opened here and handed to the crate, so the
 # crate never reads an address and never follows one over TCP.
+#
+# The third is `rustix` 1.1.5, which `x11rb` 0.14.0 already brings with the same features,
+# so the lock gains an edge and no new crate version (licence above, with `x11rb`). It gives
+# `poll` with a timeout: the library waits for the X server with no limit, and a server that
+# stops answering would keep a send for ever (`linux/stream.rs`). `default-features = false`
+# with `event`, which is `poll`, and `std`, which the conversion to `std::io::Error` needs.
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = { version = "=0.14.0", default-features = false, features = ["xtest"] }
+rustix = { version = "=1.1.5", default-features = false, features = ["event", "std"] }
 zbus = { version = "=5.19.0", default-features = false, features = ["async-io", "blocking-api"] }
 
 [target.'cfg(windows)'.dependencies]

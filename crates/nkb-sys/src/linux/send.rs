@@ -40,12 +40,12 @@ use x11rb::protocol::xproto::{
     EventMask, KEY_PRESS_EVENT, KEY_RELEASE_EVENT,
 };
 use x11rb::protocol::xtest::ConnectionExt as _;
-use x11rb::rust_connection::RustConnection;
 
 use super::Lost;
 use super::connect::{Server, connect, environment_route};
 use super::escape::{ReservedEscape, XEscape};
 use super::front::{PingAtoms, focus, focused_toplevel, ping_atoms, ping_target};
+use super::stream::Conn;
 use crate::cadence::{Cadence, PROGRESS_INTERVAL};
 use crate::linux_clearing_rules::{
     NoKey, acted_after_silence, keys_for, modifier_stop, state_holds,
@@ -207,7 +207,7 @@ fn truncated(units_sent: usize, units_expected: usize, reason: StopReason) -> Se
 }
 
 /// One key event to the server, which does not say whether anyone took it.
-fn fake(conn: &RustConnection, root: u32, press: bool, keycode: u8) -> Result<(), Lost> {
+fn fake(conn: &Conn, root: u32, press: bool, keycode: u8) -> Result<(), Lost> {
     let kind = if press {
         KEY_PRESS_EVENT
     } else {
@@ -218,7 +218,7 @@ fn fake(conn: &RustConnection, root: u32, press: bool, keycode: u8) -> Result<()
 }
 
 /// Waits until the server has handled everything sent to it so far.
-fn roundtrip(conn: &RustConnection) -> Result<(), Lost> {
+fn roundtrip(conn: &Conn) -> Result<(), Lost> {
     conn.get_input_focus()?.reply()?;
     Ok(())
 }
@@ -226,7 +226,7 @@ fn roundtrip(conn: &RustConnection) -> Result<(), Lost> {
 /// The spare keys that were rewritten, given back to the layout when this is
 /// dropped - on every way out of the send, a panic included.
 struct Remapped<'a> {
-    conn: &'a RustConnection,
+    conn: &'a Conn,
     spare: &'a [u8],
     used: usize,
     /// How long the keys must stay as they are, because keys were sent through
@@ -304,6 +304,11 @@ enum Answer {
 /// Asks `pinged.window` whether it has got through everything the server queued for
 /// it before this message, and waits for the answer. Events reach a client in the
 /// order the server queued them, and a toolkit answers from its event loop.
+///
+/// A ping that is not answered is the application's silence only while the server
+/// still answers: a stopped server holds the ping too, and that is the connection
+/// lost, not an application that stopped taking keys. So the server is asked once
+/// before the silence is put on the application.
 fn ping(server: &Server, pinged: Pinged, token: u32) -> Result<Answer, Lost> {
     let message = ClientMessageEvent::new(
         32,
@@ -331,6 +336,7 @@ fn ping(server: &Server, pinged: Pinged, token: u32) -> Result<Answer, Lost> {
         }
         std::thread::sleep(Duration::from_millis(1));
     }
+    roundtrip(&server.conn)?;
     Ok(Answer::TimedOut)
 }
 
@@ -365,7 +371,7 @@ pub(super) struct Keyboard {
     shift_key: Option<u8>,
 }
 
-pub(super) fn read_keyboard(conn: &RustConnection) -> Result<Keyboard, Lost> {
+pub(super) fn read_keyboard(conn: &Conn) -> Result<Keyboard, Lost> {
     let setup = conn.setup();
     let (min, max) = (setup.min_keycode, setup.max_keycode);
     let mapping = conn.get_keyboard_mapping(min, max - min + 1)?.reply()?;

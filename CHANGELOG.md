@@ -68,6 +68,12 @@ Changes wait under Unreleased until then.
   counted the whole text again after every key, so the work for a value grew with the square of
   its length. It now adds each key to the counts it already holds, and shows the two ends of a
   long text without reading the middle.
+- On X11 an X server that stops answering no longer keeps `nkb send` or the palette waiting for
+  ever. Each question to the server now waits at most two seconds, so a send ends and says the
+  system did not deliver the keys, and a command started while the server is stopped refuses as
+  when there is no local server. A ping left unanswered is no longer blamed on the application
+  when the server itself has stopped. A spare key the send had rewritten stays rewritten if the
+  server is stopped until the send has ended.
 
 ## [0.3.0] - 2026-10-25
 

@@ -12,6 +12,8 @@
 //! - `window` - the keyboard focus of the palette and of the windows that take it,
 //! - `send` - typing: spare keys rewritten to the characters, batches, and the
 //!   answer of the application after every batch.
+//! - `stream` - the socket under every connection, which waits for the server for a
+//!   bounded time: the library alone would wait for ever.
 //!
 //! The decisions that need no server are in `linux_rules.rs` and tested on every
 //! system.
@@ -39,6 +41,7 @@ pub(crate) mod hotkey;
 mod ibus;
 pub(crate) mod portal;
 mod send;
+mod stream;
 pub(crate) mod window;
 
 use core::sync::atomic::AtomicBool;
