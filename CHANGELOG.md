@@ -72,8 +72,13 @@ Changes wait under Unreleased until then.
   ever. Each question to the server now waits at most two seconds, so a send ends and says the
   system did not deliver the keys, and a command started while the server is stopped refuses as
   when there is no local server. A ping left unanswered is no longer blamed on the application
-  when the server itself has stopped. A spare key the send had rewritten stays rewritten if the
-  server is stopped until the send has ended.
+  when the server itself has stopped.
+- On X11 two sends on one display no longer spoil each other. A send waits up to two seconds for
+  another one to end, and then says that another send is typing there and types nothing. A spare
+  key a send rewrote is given back only while it still carries what the send wrote, so a key
+  another program changed meanwhile is left alone. A send that was killed, or that ended while the
+  server was stopped, no longer leaves keys rewritten until the server restarts, because the next
+  send gives them back. Without `XDG_RUNTIME_DIR`, sends work as before.
 
 ## [0.3.0] - 2026-10-25
 

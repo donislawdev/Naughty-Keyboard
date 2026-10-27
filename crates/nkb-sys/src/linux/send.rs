@@ -7,7 +7,10 @@
 //! 1. the characters become keysyms, and the send is refused by name if one has
 //!    none (`U+0000`), before anything is touched,
 //! 2. the connection is made to the LOCAL socket, or the send is refused (Wayland,
-//!    no server, no `XTEST`),
+//!    no server, no `XTEST`). Then the display is locked for the whole send, and the
+//!    spare keys a send before this one left rewritten are given back (`D157`,
+//!    `lock`): a second send would read the keys of the first as keys of the layout,
+//!    and the map is read only after this,
 //! 3. a held modifier is waited for, and Caps Lock on is refused: GTK turns the
 //!    letters to capitals under it whatever key typed them (point 8). The state
 //!    then read decides whether the keys of the layout may type the characters
@@ -22,8 +25,9 @@
 //!    answer `_NET_WM_PING`. The answer comes from the application's own loop after
 //!    the key events before it, so it means they were taken (point 3). The spare
 //!    keys are rewritten again only after it,
-//! 6. the spare keys are given back to the layout, and Shift is let go, on every
-//!    way out of the send.
+//! 6. the spare keys are given back to the layout, the ones that still carry what
+//!    was written on them and no other, and Shift is let go, on every way out of the
+//!    send.
 //!
 //! What the answer does not say is whether the application put the character in
 //! the field, and that is measured with a victim that reports its field
@@ -45,11 +49,13 @@ use super::Lost;
 use super::connect::{Server, connect, environment_route};
 use super::escape::{ReservedEscape, XEscape};
 use super::front::{PingAtoms, focus, focused_toplevel, ping_atoms, ping_target};
+use super::lock::{DisplayLock, NotTaken};
 use super::stream::Conn;
 use crate::cadence::{Cadence, PROGRESS_INTERVAL};
 use crate::linux_clearing_rules::{
     NoKey, acted_after_silence, keys_for, modifier_stop, state_holds,
 };
+use crate::linux_remap_rules::{Rewrite, ours, span};
 use crate::linux_rules::{
     Batch, FIRST_BATCH_CHARS, KEYSYM_ESCAPE, Keymap, LOOK_EVERY, LayoutKey, LayoutKeys,
     PING_ANSWER_MASK, PING_WAIT, REMAP_SETTLE, Refusal, UNPACED_SETTLE, WARMUP_SETTLE,
@@ -228,22 +234,52 @@ fn roundtrip(conn: &Conn) -> Result<(), Lost> {
 struct Remapped<'a> {
     conn: &'a Conn,
     spare: &'a [u8],
-    used: usize,
+    /// The keysym written on each spare key, zero for a key not rewritten.
+    written: Vec<u32>,
     /// How long the keys must stay as they are, because keys were sent through
     /// them and the application may not have read them yet (`give_back_wait`).
     owed: Duration,
+    /// The lock of the display, whose journal names every key rewritten (`D157`).
+    journal: Option<&'a mut DisplayLock>,
 }
 
 impl Remapped<'_> {
     /// Makes the `slot`-th spare key type `keysym`, on both levels: a keysym alone
     /// on a key is changed to lower case by the server, and one copy makes the key
-    /// a letter that Caps Lock acts on (`OBS-202` point 7).
+    /// a letter that Caps Lock acts on (`OBS-202` point 7). The journal is told
+    /// first, so a send that stops right after leaves the key named.
     fn assign(&mut self, slot: usize, keysym: u32) -> Result<(), Lost> {
         self.pay();
-        self.used = self.used.max(slot + 1);
+        let keycode = self.spare[slot];
+        if let Some(journal) = self.journal.as_deref_mut() {
+            journal.note(Rewrite { keycode, keysym });
+        }
+        self.written[slot] = keysym;
         self.conn
-            .change_keyboard_mapping(1, self.spare[slot], 2, &[keysym, keysym])?;
+            .change_keyboard_mapping(1, keycode, 2, &[keysym, keysym])?;
         Ok(())
+    }
+
+    /// The keys rewritten, each with what is written on it.
+    fn rewrites(&self) -> Vec<Rewrite> {
+        self.spare
+            .iter()
+            .zip(&self.written)
+            .filter(|(_, keysym)| **keysym != 0)
+            .map(|(keycode, keysym)| Rewrite {
+                keycode: *keycode,
+                keysym: *keysym,
+            })
+            .collect()
+    }
+
+    /// The server has carried out every rewrite asked of it, so the journal needs to
+    /// name only what the keys carry now.
+    fn settled(&mut self) {
+        let rewrites = self.rewrites();
+        if let Some(journal) = self.journal.as_deref_mut() {
+            journal.settle(&rewrites);
+        }
     }
 }
 
@@ -265,15 +301,65 @@ impl Remapped<'_> {
 }
 
 impl Drop for Remapped<'_> {
+    /// Gives back the keys that still carry what this send wrote on them. A server that
+    /// does not answer gets nothing zeroed blindly: the journal keeps the keys, and the
+    /// next send gives them back.
     fn drop(&mut self) {
         self.pay();
-        for keycode in &self.spare[..self.used] {
-            let _ = self.conn.change_keyboard_mapping(1, *keycode, 1, &[0]);
+        let rewrites = self.rewrites();
+        if rewrites.is_empty() {
+            return;
         }
-        if let Ok(cookie) = self.conn.get_input_focus() {
-            let _ = cookie.reply();
+        if give_back(self.conn, &rewrites).is_ok()
+            && let Some(journal) = self.journal.as_deref_mut()
+        {
+            journal.clear();
         }
     }
+}
+
+/// Zeroes the keys among `rewrites` that still carry the keysym written on them, and no
+/// other: a key another program wrote on in the meantime is that program's now. Returns
+/// once the server has done it.
+fn give_back(conn: &Conn, rewrites: &[Rewrite]) -> Result<(), Lost> {
+    let setup = conn.setup();
+    let Some((first, count)) = span(rewrites, setup.min_keycode, setup.max_keycode) else {
+        return Ok(());
+    };
+    let mapping = conn.get_keyboard_mapping(first, count)?.reply()?;
+    let keymap = Keymap::new(
+        first,
+        usize::from(mapping.keysyms_per_keycode),
+        mapping.keysyms,
+    );
+    for keycode in ours(&keymap, rewrites) {
+        conn.change_keyboard_mapping(1, keycode, 1, &[0])?;
+    }
+    roundtrip(conn)
+}
+
+/// The display locked for this send, and the keys a send before it left rewritten given
+/// back (`D157`). `None` when there is no lock to ask about, and the send types as it did
+/// before there was one.
+fn hold_display(
+    server: &Server,
+    number: u32,
+    halt: &AtomicBool,
+    expected: usize,
+) -> Result<Option<DisplayLock>, SendError> {
+    let mut lock = match DisplayLock::take(number, halt) {
+        Ok(lock) => lock,
+        Err(NotTaken::Busy) => return Err(SendError::Busy),
+        Err(NotTaken::Halted) => return Err(truncated(0, expected, StopReason::Halted)),
+    };
+    if let Some(lock) = lock.as_mut() {
+        let left = lock.journal();
+        if !left.is_empty() {
+            give_back(&server.conn, &left).map_err(|_| unsupported(Refusal::NoLocalServer))?;
+            lock.clear();
+        }
+    }
+    Ok(lock)
 }
 
 /// The window that is asked whether it has taken the keys, and the atoms of the
@@ -498,6 +584,7 @@ fn assign_all(server: &Server, remapped: &mut Remapped<'_>, keysyms: &[u32]) -> 
         remapped.assign(slot, *keysym)?;
     }
     roundtrip(&server.conn)?;
+    remapped.settled();
     std::thread::sleep(REMAP_SETTLE);
     Ok(())
 }
@@ -645,6 +732,9 @@ pub(crate) fn send_text(
     let address = environment_route().map_err(unsupported)?;
     let server = connect(address).map_err(unsupported)?;
     let lost = |_: Lost| unsupported(Refusal::NoLocalServer);
+    let expected = utf16_units(&characters);
+    // Before the map is read: the keys of another send are not keys of the layout.
+    let mut lock = hold_display(&server, address.number, halt, expected)?;
     let keyboard = read_keyboard(&server.conn).map_err(lost)?;
     let state = wait_for_keys_released(&server, &keyboard)?;
     // What the keys of the layout type depends on the state just read, so the table of
@@ -658,7 +748,6 @@ pub(crate) fn send_text(
         return Err(unsupported(Refusal::NoSpareKeys));
     }
 
-    let expected = utf16_units(&characters);
     // Read after the wait for held keys, which can last two seconds: the window the value
     // was meant for, or nothing is typed (`D148`).
     let Some(front) = focused_toplevel(&server.conn, server.root)
@@ -677,8 +766,9 @@ pub(crate) fn send_text(
     let mut remapped = Remapped {
         conn: &server.conn,
         spare: &spare,
-        used: 0,
+        written: vec![0; spare.len()],
         owed: Duration::ZERO,
+        journal: lock.as_mut(),
     };
     // A value that fits the spare keys is assigned once, here, and the keys are not
     // touched again until the send is over. One that does not fit is rewritten

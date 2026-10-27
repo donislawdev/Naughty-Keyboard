@@ -114,6 +114,7 @@ impl ValueDelivery for DirectInjection {
             Err(nkb_sys::SendError::CannotCarry { character }) => {
                 Err(DeliveryError::CannotCarry { character })
             }
+            Err(nkb_sys::SendError::Busy) => Err(DeliveryError::Busy),
             // `send_text` never reports in chords. If it ever did, the honest
             // translation is "nothing is known to have arrived".
             Err(nkb_sys::SendError::ChordsTruncated { reason, .. }) => {
@@ -348,13 +349,17 @@ impl KeystrokeSender for DirectInjection {
                 which: key.to_owned(),
             }),
             // The clearing keys are not letters and Caps Lock does not change them,
-            // and they are not characters either. `send_chords` never reports these.
-            // If it ever did, nothing is known to have acted.
-            Err(nkb_sys::SendError::CapsLockOn | nkb_sys::SendError::CannotCarry { .. }) => {
-                Err(KeystrokeError::NothingArrived {
-                    reason: StopReason::Dropped,
-                })
-            }
+            // and they are not characters either. They are keys of the layout, which
+            // no send rewrites, so clearing waits for no other send (`D157`).
+            // `send_chords` never reports these. If it ever did, nothing is known to
+            // have acted.
+            Err(
+                nkb_sys::SendError::CapsLockOn
+                | nkb_sys::SendError::CannotCarry { .. }
+                | nkb_sys::SendError::Busy,
+            ) => Err(KeystrokeError::NothingArrived {
+                reason: StopReason::Dropped,
+            }),
             Err(nkb_sys::SendError::ChordsTruncated {
                 chords_sent,
                 chords_expected,

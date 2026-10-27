@@ -68,15 +68,20 @@ band = 0.7
 # 5 since 2026-10-25, the owner's choice: the ceiling came down to 969 and
 # nkb-adapters/src/i18n.rs, which did not grow, joined at 688. 6 since
 # 2026-10-27, the owner's choice: the ceiling came down to 937 and
-# nkb-gui/src/live.rs, which did not grow, joined at 663.
+# nkb-gui/src/live.rs, which did not grow, joined at 663. 5 since 2026-10-27,
+# when what a delivery outcome means went from advance_sequence.rs to
+# advance_sequence/classify.rs.
 [files.rust-product]
 ceiling = 937
-near = 6
+near = 5
 
 # A whole Rust file, its tests included. nkb-gui/src/live.rs, then
-# nkb-adapters/src/i18n.rs at 2101.
+# nkb-adapters/src/i18n.rs at 2101. 2199 since 2026-10-27, when what a delivery
+# outcome means left nkb-app/src/advance_sequence.rs for a module of its own to
+# make room for the sentence of a display another send is typing on, and
+# live.rs is the largest again.
 [files.rust-whole]
-ceiling = 2204
+ceiling = 2199
 # 5 since 2026-10-10, the owner's choice twice that day: the ceiling came down
 # from 2907 to 2481, 2408, 2407 and 2363 as live.rs moved code into modules, the
 # band came down with it, and it reached advance_sequence.rs, settings_file.rs

@@ -201,7 +201,9 @@ pub enum DeliveryError {
     NothingArrived { reason: StopReason },
     /// The route is held by somebody else for longer than the implementation
     /// waits, and nothing went out. Passing - the same request may work in a
-    /// moment. Today only the clipboard route reports it.
+    /// moment. The clipboard route reports it for a clipboard another
+    /// application holds, the direct one on X11 for a display another send of
+    /// this program is typing on (`D157`).
     Busy,
     /// The route refused, and nothing went out. The words are the route's own:
     /// they are the one specific thing a ticket about the tool can quote.
