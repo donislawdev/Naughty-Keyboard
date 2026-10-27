@@ -33,7 +33,19 @@ pub enum SourceError {
     Unreadable,
     /// Read, but not valid UTF-8, which the pack format requires.
     NotUtf8,
+    /// Larger than [`PACK_FILE_LIMIT`], so refused before it was read in full
+    /// (R06). Told apart from `Unreadable` because the repair differs: nothing is
+    /// wrong with the permissions, the file is the problem.
+    TooLarge,
 }
+
+/// The most bytes a pack file may hold, 4 MiB: the owner's choice of 2026-10-27
+/// (R06), about 650 times the largest shipped pack and room for a literal value
+/// of a million four-byte characters. A pack comes from a stranger (untouchable
+/// rule 24), and without a limit a file of gigabytes is read whole into memory
+/// before anything can look at it. The adapter reads at most one byte more than
+/// this, so even a refusal costs no more than the limit.
+pub const PACK_FILE_LIMIT: u64 = 4 * 1024 * 1024;
 
 impl fmt::Display for SourceError {
     /// Deliberately terse and English-only: this is a developer-facing marker,
@@ -44,6 +56,7 @@ impl fmt::Display for SourceError {
             Self::NotFound => "not-found",
             Self::Unreadable => "unreadable",
             Self::NotUtf8 => "not-utf8",
+            Self::TooLarge => "too-large",
         };
         f.write_str(marker)
     }
@@ -1425,6 +1438,7 @@ mod tests {
     fn source_errors_render_as_stable_markers() {
         assert_eq!(SourceError::NotFound.to_string(), "not-found");
         assert_eq!(SourceError::NotUtf8.to_string(), "not-utf8");
+        assert_eq!(SourceError::TooLarge.to_string(), "too-large");
     }
 
     /// A set answering what it was given, and never pressed.

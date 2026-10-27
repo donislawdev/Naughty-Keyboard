@@ -51,7 +51,7 @@ struct Verdict {
 
 fn judge(path: &Path) -> Verdict {
     let (source, id) = DirectoryPackSource::split(path)
-        .unwrap_or_else(|| panic!("{} must name a file", path.display()));
+        .unwrap_or_else(|why| panic!("{} must name a pack file: {why:?}", path.display()));
 
     match lint_pack(&source, &TomlPackFormat, &id) {
         LintOutcome::Judged(report) => Verdict {

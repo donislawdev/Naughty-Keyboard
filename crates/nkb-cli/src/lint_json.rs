@@ -94,7 +94,9 @@ fn file(path: &str, outcome: &LintOutcome) -> Json {
     let (status, accepted, report) = match outcome {
         LintOutcome::Judged(report) => ("judged", Json::Bool(report.accepted()), Some(report)),
         LintOutcome::NotFound => ("not-found", Json::Null, None),
-        LintOutcome::Unreadable => ("unreadable", Json::Null, None),
+        // A file too large to read is reported as unreadable: the `status` values
+        // are a list consumers match on, and the text sentence names the size.
+        LintOutcome::Unreadable | LintOutcome::TooLarge => ("unreadable", Json::Null, None),
     };
 
     Json::Object(vec![

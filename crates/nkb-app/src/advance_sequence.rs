@@ -662,7 +662,7 @@ impl AdvanceSequence {
         let text = match source.read(pack_id) {
             Ok(text) => text,
             Err(SourceError::NotFound) => return Err(ChooseError::NotFound),
-            Err(SourceError::Unreadable | SourceError::NotUtf8) => {
+            Err(SourceError::Unreadable | SourceError::NotUtf8 | SourceError::TooLarge) => {
                 return Err(ChooseError::Unreadable);
             }
         };

@@ -497,10 +497,13 @@ pub enum SkipReason {
     TranslatedPackUnreadable,
     /// It opened and is not UTF-8, so it holds no identifiers to compare against.
     TranslatedPackNotUtf8,
+    /// It is larger than a pack file may be, so it was not read (R06). The repair
+    /// is to that file's size, not to its permissions.
+    TranslatedPackTooLarge,
     /// It is text and is not TOML, so nothing could be read out of it.
     TranslatedPackDidNotParse,
     /// It parses and is itself a translation, so it holds no identifiers of its
-    /// own to be followed. Kept apart from the four above because the repair is
+    /// own to be followed. Kept apart from the five above because the repair is
     /// in **this** file - point `translates` at the pack, not at a translation
     /// of it - while the others are repairs to the neighbour.
     TranslatedPackIsATranslation,
@@ -515,6 +518,7 @@ impl SkipReason {
             Self::TranslatedPackNotFound => "translated-pack-not-found",
             Self::TranslatedPackUnreadable => "translated-pack-unreadable",
             Self::TranslatedPackNotUtf8 => "translated-pack-not-utf8",
+            Self::TranslatedPackTooLarge => "translated-pack-too-large",
             Self::TranslatedPackDidNotParse => "translated-pack-did-not-parse",
             Self::TranslatedPackIsATranslation => "translated-pack-is-a-translation",
         }
@@ -764,6 +768,7 @@ mod tests {
             SkipReason::TranslatedPackNotFound,
             SkipReason::TranslatedPackUnreadable,
             SkipReason::TranslatedPackNotUtf8,
+            SkipReason::TranslatedPackTooLarge,
             SkipReason::TranslatedPackDidNotParse,
             SkipReason::TranslatedPackIsATranslation,
         ] {
@@ -787,6 +792,7 @@ mod tests {
             SkipReason::TranslatedPackNotFound,
             SkipReason::TranslatedPackUnreadable,
             SkipReason::TranslatedPackNotUtf8,
+            SkipReason::TranslatedPackTooLarge,
             SkipReason::TranslatedPackDidNotParse,
             SkipReason::TranslatedPackIsATranslation,
         ];

@@ -16,13 +16,43 @@
 //! `file:line  CODE  sentence` is the shape editors and build logs already know
 //! how to jump to. Getting that right costs nothing and saves a contributor from
 //! searching a file by eye.
+//!
+//! # Somebody else's text is escaped before it is printed
+//!
+//! The file name, the keys and identifiers a problem names, and the parser's own
+//! message all come from a file a stranger wrote (untouchable rule 24). They go
+//! out through `escaped_prose`, the rule the report block uses, so a name holding
+//! `ESC` cannot recolour the terminal and one holding a direction override cannot
+//! reorder the line (R25). The JSON document keeps them as data: the `message`
+//! there is this module's sentence, so it is escaped too.
 
+use nkb_app::PACK_FILE_LIMIT;
 use nkb_core::description::MIN_BREAKS_CODE_POINTS;
 use nkb_core::identity::is_pack_id;
 use nkb_core::lint::{
     LintProblem, LintReport, LintRule, MAX_VALUES_PER_PACK, RULES, RuleCode, RuleCoverage,
     RuleStatus, Severity, SkipReason, SkippedRule,
 };
+use nkb_core::text::escaped_prose;
+
+/// A field a problem names, as it may be printed (R25): absent is empty.
+fn shown(field: Option<&str>) -> String {
+    escaped_prose(field.unwrap_or(""))
+}
+
+/// The subject and the owner of a problem, as they may be printed.
+fn named(problem: &LintProblem) -> (String, String) {
+    (
+        shown(problem.subject.as_deref()),
+        shown(problem.owner.as_deref()),
+    )
+}
+
+/// The most a pack file may hold, as the sentences say it (R06).
+#[must_use]
+pub fn pack_file_limit() -> String {
+    format!("{} MiB", PACK_FILE_LIMIT / (1024 * 1024))
+}
 use nkb_core::schema::kind_of;
 
 /// The format version this build reads, quoted in the message about newer ones.
@@ -31,13 +61,14 @@ const SUPPORTED_FORMAT: &str = "1";
 /// One line per problem, in the shape a build log can be jumped through.
 #[must_use]
 pub fn lines(report: &LintReport, file: &str) -> Vec<String> {
+    let file = escaped_prose(file);
     report
         .problems
         .iter()
         .map(|problem| {
             let place = problem
                 .line
-                .map_or_else(|| file.to_owned(), |line| format!("{file}:{line}"));
+                .map_or_else(|| file.clone(), |line| format!("{file}:{line}"));
             format!("{place}  {}  {}", problem.code.as_str(), sentence(problem))
         })
         .collect()
@@ -102,7 +133,7 @@ pub fn summary(report: &LintReport) -> Vec<String> {
 /// and nothing about what to do next.
 #[must_use]
 pub fn skip_sentence(skipped: &SkippedRule) -> String {
-    let subject = skipped.subject.as_deref().unwrap_or("");
+    let subject = shown(skipped.subject.as_deref());
     match skipped.reason {
         SkipReason::TranslatedPackNotNamed => {
             "`translates` names no pack, so there was nothing to compare against.".to_owned()
@@ -115,6 +146,10 @@ pub fn skip_sentence(skipped: &SkippedRule) -> String {
         ),
         SkipReason::TranslatedPackNotUtf8 => format!(
             "`{subject}.toml` is not UTF-8, so it holds no identifiers to compare against. Fix that file, then run this one again."
+        ),
+        SkipReason::TranslatedPackTooLarge => format!(
+            "`{subject}.toml` is larger than {}, the most a pack file may be, so it was not read. This is about that file, not this one.",
+            pack_file_limit()
         ),
         SkipReason::TranslatedPackDidNotParse => format!(
             "`{subject}.toml` is not valid TOML, so nothing could be read out of it. Lint that file first."
@@ -227,8 +262,8 @@ fn pair_sentence(code: RuleCode, owner: &str, subject: &str) -> String {
 /// The sentence for one problem. Says what happened and what to do next - a
 /// message with only the first half is unfinished.
 pub fn sentence(problem: &LintProblem) -> String {
-    let subject = problem.subject.as_deref().unwrap_or("");
-    let owner = problem.owner.as_deref().unwrap_or("");
+    let (subject, owner) = named(problem);
+    let (subject, owner) = (subject.as_str(), owner.as_str());
 
     match problem.code {
         RuleCode::MissingOrUnsupportedFormat if subject.is_empty() => {
@@ -406,6 +441,23 @@ pub fn sentence(problem: &LintProblem) -> String {
 mod tests {
     use super::*;
     use nkb_core::lint::LintProblem;
+
+    #[test]
+    fn a_hostile_file_name_key_or_identifier_is_printed_escaped() {
+        // R25: what a stranger chose goes out escaped. ESC in the file name would
+        // recolour the terminal, and the override in the key would reorder the line.
+        let mut report = LintReport::default();
+        report.push(
+            LintProblem::new(RuleCode::UnknownKey)
+                .about("risk\u{202E}")
+                .owned_by("bad\u{1B}[2J"),
+        );
+        let printed = lines(&report, "evil\u{1B}[31m.toml").join("\n");
+        assert!(printed.starts_with(r"evil\u001B[31m.toml  "), "{printed}");
+        assert!(printed.contains(r"`bad\u001B[2J`"), "{printed}");
+        assert!(printed.contains(r"`risk\u202E`"), "{printed}");
+        assert!(!printed.contains('\u{1B}') && !printed.contains('\u{202E}'));
+    }
 
     fn one(problem: LintProblem) -> String {
         let mut report = LintReport::default();
@@ -585,6 +637,7 @@ mod tests {
             SkipReason::TranslatedPackNotFound,
             SkipReason::TranslatedPackUnreadable,
             SkipReason::TranslatedPackNotUtf8,
+            SkipReason::TranslatedPackTooLarge,
             SkipReason::TranslatedPackDidNotParse,
             SkipReason::TranslatedPackIsATranslation,
         ];

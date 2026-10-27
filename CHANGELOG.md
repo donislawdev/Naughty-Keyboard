@@ -28,6 +28,17 @@ Changes wait under Unreleased until then.
   key, and the program ends at once. Until now the window went away and the keys went on, for as
   long as the value took, into whatever window had the focus. The one exception is a Wayland
   desktop that is still waiting for the person to allow the keys.
+- `nkb lint` and `nkb fmt` read and write only the file they are given. A name that does not end
+  in `.toml` was read as another file: `nkb fmt notes.txt` formatted and rewrote `notes.toml`
+  beside it. Such a name is now a usage error, exit code 2, on every system, `.TOML` included.
+- A pack file larger than 4 MiB is no longer read into memory whole. `nkb lint`, `nkb fmt` and
+  `nkb packs` say that the file is too large, and the commands that read it end with exit code 5.
+- `nkb lint --json` now ends with exit code 5 for a file it could not read, as the text output
+  always did. It ended with 3, the code for a file that is not there.
+- What `nkb lint` and `nkb fmt` print from a pack file, its name, the keys and identifiers a
+  problem names and the parser's message, now shows control characters and invisible ones as
+  escapes such as `\u202E`. A file name or a key could otherwise change the colours of the
+  terminal or the order of the line it was printed on.
 
 ## [0.3.0] - 2026-10-25
 

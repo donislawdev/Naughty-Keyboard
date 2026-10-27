@@ -141,17 +141,43 @@ pub fn is_format_character(character: char) -> bool {
         || matches!(character, '\u{FFF9}'..='\u{FFFC}')
 }
 
-/// One character in the escaped notation of `pack-format.md` 2 - `\u200B`, or
-/// `\U0001F600` outside the basic plane - whether or not the format's own rule
-/// would escape it.
+/// Somebody else's text, made safe to put on a line of its own: every character
+/// a reader would not see, or a terminal would act on, written in the notation
+/// of `pack-format.md` 2 (`\u200B`, `\U0001F600` outside the basic plane),
+/// and everything else left as it is.
 ///
-/// For a caller with a stricter rule of its own: the report block escapes its
-/// prose more widely than a pack file is escaped (`D68`, `OBS-125`), and it must
-/// still write the one notation a reader knows, not a second one.
+/// For text that came from a stranger and is shown to a person: a pack's prose
+/// in the report block (`D68`), and a file name, a key or a parser message in
+/// what `nkb lint` and `nkb fmt` print (R25). A file name holding `ESC` would
+/// otherwise recolour the terminal, and one holding `U+202E` would reorder the
+/// line that names it.
+///
+/// 🔴 The UNION of the two rules in this crate, minus the ordinary space - and
+/// the union is not decoration. [`needs_escaping`] is the pack format's rule and
+/// [`crate::preview::is_invisible`] the preview's, and the two drifted apart
+/// once: the format's did not know the bidi isolates `U+2066`-`U+2069`, so a
+/// name holding `U+2067` would have reordered a developer's ticket - half of
+/// what "Trojan Source" is made of. `D69` aligned them and a test walks every
+/// code point, but the union stays: it costs nothing, and a ticket or a build
+/// log is where a future drift would do its damage before anyone read the test.
+///
+/// A backslash is left alone, so a Windows path reads as a path. The price is
+/// that a name holding the six characters of an escape and a name holding the
+/// character it stands for look the same. That is the right trade for text shown
+/// to a person and the wrong one for a file, where [`LiteralText::escape`]
+/// doubles the backslash.
 #[must_use]
-pub fn escaped_char(character: char) -> String {
-    let mut out = String::new();
-    write_escape(&mut out, character);
+pub fn escaped_prose(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for character in text.chars() {
+        if character != ' '
+            && (needs_escaping(character, false) || crate::preview::is_invisible(character))
+        {
+            write_escape(&mut out, character);
+        } else {
+            out.push(character);
+        }
+    }
     out
 }
 
@@ -287,6 +313,27 @@ mod tests {
             ("a\u{206A}b", "a\\u206Ab"),
         ] {
             assert_eq!(LiteralText::new(text).escape().as_str(), escaped);
+        }
+    }
+
+    #[test]
+    fn prose_from_a_stranger_shows_what_would_act_on_a_terminal_or_hide() {
+        // R25: a file name or a key in `nkb lint` output. ESC would recolour the
+        // terminal, the override and the isolate would reorder the line, and the
+        // zero width space and the tag character would not be seen at all.
+        for (text, shown) in [
+            ("locale-cz", "locale-cz"),
+            (r"C:\packs\my pack.toml", r"C:\packs\my pack.toml"),
+            (" edge ", " edge "),
+            ("\u{1B}[31mred", r"\u001B[31mred"),
+            ("abc\u{202E}def", r"abc\u202Edef"),
+            ("a\u{2067}b", r"a\u2067b"),
+            ("a\u{200B}b", r"a\u200Bb"),
+            ("a\u{E0041}b", r"a\U000E0041b"),
+            ("line\nbreak\ttab\u{7F}", r"line\u000Abreak\u0009tab\u007F"),
+            ("\u{1F600}", "\u{1F600}"),
+        ] {
+            assert_eq!(escaped_prose(text), shown, "{text:?}");
         }
     }
 }

@@ -30,6 +30,8 @@ pub enum FormatOutcome {
     NotFound,
     /// The file is there and would not open.
     Unreadable,
+    /// The file is larger than [`crate::PACK_FILE_LIMIT`] and was not read (R06).
+    TooLarge,
     /// The file could not be written back.
     Unwritable,
     /// 🔴 Formatting changed what the pack would insert. Nothing was written.
@@ -58,6 +60,7 @@ pub fn format_pack(
         Ok(text) => text,
         Err(SourceError::NotFound) => return FormatOutcome::NotFound,
         Err(SourceError::Unreadable) => return FormatOutcome::Unreadable,
+        Err(SourceError::TooLarge) => return FormatOutcome::TooLarge,
         // Not UTF-8 is a finding about the pack, E005, and the linter is where
         // findings are reported. Here it simply means there is no text to format.
         Err(SourceError::NotUtf8) => return FormatOutcome::DidNotParse,

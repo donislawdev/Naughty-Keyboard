@@ -61,7 +61,7 @@ fn every_pack_this_project_ships_passes_its_own_validator() {
 
     for path in files {
         let (source, id) = DirectoryPackSource::split(&path)
-            .unwrap_or_else(|| panic!("{} must name a file", path.display()));
+            .unwrap_or_else(|why| panic!("{} must name a pack file: {why:?}", path.display()));
 
         let LintOutcome::Judged(report) = lint_pack(&source, &TomlPackFormat, &id) else {
             panic!("{} could not be read", path.display());

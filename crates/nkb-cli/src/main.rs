@@ -20,6 +20,7 @@ mod lint_json;
 mod lint_report;
 mod on_the_way;
 mod output;
+mod pack_file;
 mod refusals;
 mod sent_notes;
 mod target_line;
@@ -28,8 +29,7 @@ use clearing::{not_cleared, say_clearing_before_failure};
 use emit_output::{EmitFormat, Form};
 use exit::ExitCode;
 use nkb_adapters::{
-    BuiltInCatalogue, DirectInjection, DirectoryPackSink, DirectoryPackSource, SystemClock,
-    TomlPackFormat,
+    BuiltInCatalogue, DirectInjection, DirectoryPackSink, SystemClock, TomlPackFormat,
 };
 use nkb_app::{
     Availability, Clearing, ClearingOutcome, Clock, EmitOutcome, FormatOutcome, LintOutcome,
@@ -38,10 +38,10 @@ use nkb_app::{
     send_value, show_pack,
 };
 use output::{out, outln};
+use pack_file::{NamedPack, NotRead, lint_exit, named_pack, say_not_read};
 use refusals::{NEEDS_PERMISSION, say_not_cleared, say_not_delivered, stop_reason};
 use sent_notes::{say_pace, say_text_substitutions};
 use std::io::Write;
-use std::path::Path;
 use target_line::{Countdown, say_where_it_goes, where_it_goes};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -149,9 +149,7 @@ fn lint(args: &[String]) -> ExitCode {
         return ExitCode::Usage;
     };
 
-    let Some((source, id)) = DirectoryPackSource::split(Path::new(path)) else {
-        let mut err = std::io::stderr();
-        let _ = writeln!(err, "nkb lint: '{path}' does not name a file.");
+    let Some(NamedPack { source, id, shown }) = named_pack("lint", path) else {
         return ExitCode::Usage;
     };
 
@@ -162,40 +160,22 @@ fn lint(args: &[String]) -> ExitCode {
             "{}",
             lint_json::document(&[(path.to_owned(), outcome.clone())], VERSION).render()
         );
-        return match &outcome {
-            LintOutcome::Judged(report) if report.accepted() => ExitCode::Ok,
-            LintOutcome::Judged(_) => ExitCode::ValidationFailed,
-            _ => ExitCode::NotFound,
-        };
+        return lint_exit(&outcome);
     }
 
-    match outcome {
+    match &outcome {
         LintOutcome::Judged(report) => {
-            for line in lint_report::lines(&report, path) {
+            for line in lint_report::lines(report, path) {
                 outln!("{line}");
             }
-            for line in lint_report::summary(&report) {
+            for line in lint_report::summary(report) {
                 outln!("{line}");
             }
-            if report.accepted() {
-                ExitCode::Ok
-            } else {
-                ExitCode::ValidationFailed
-            }
+            lint_exit(&outcome)
         }
-        LintOutcome::NotFound => {
-            let mut err = std::io::stderr();
-            let _ = writeln!(err, "nkb lint: no pack file at '{path}'.");
-            ExitCode::NotFound
-        }
-        LintOutcome::Unreadable => {
-            let mut err = std::io::stderr();
-            let _ = writeln!(
-                err,
-                "nkb lint: '{path}' is there and could not be read. Check the file's permissions."
-            );
-            ExitCode::IoFailed
-        }
+        LintOutcome::NotFound => say_not_read("lint", &shown, NotRead::NotFound),
+        LintOutcome::Unreadable => say_not_read("lint", &shown, NotRead::Unreadable),
+        LintOutcome::TooLarge => say_not_read("lint", &shown, NotRead::TooLarge),
     }
 }
 
@@ -236,55 +216,43 @@ fn fmt(args: &[String]) -> ExitCode {
         return ExitCode::Usage;
     };
 
-    let Some((source, id)) = DirectoryPackSource::split(Path::new(path)) else {
-        let mut err = std::io::stderr();
-        let _ = writeln!(err, "nkb fmt: '{path}' does not name a file.");
+    let Some(NamedPack { source, id, shown }) = named_pack("fmt", path) else {
         return ExitCode::Usage;
     };
     let sink = DirectoryPackSink::new(source.folder());
 
     match format_pack(&source, &sink, &TomlPackFormat, &id, dry_run) {
         FormatOutcome::AlreadyCanonical => {
-            outln!("{path} is already in shape. Nothing was written.");
+            outln!("{shown} is already in shape. Nothing was written.");
             ExitCode::Ok
         }
         FormatOutcome::Formatted => {
-            outln!("Wrote {path} in canonical shape.");
+            outln!("Wrote {shown} in canonical shape.");
             ExitCode::Ok
         }
         FormatOutcome::WouldFormat => {
             // A dry run reports on standard output because the report is what it
             // was asked for. It is the product of this run, not a complaint.
-            outln!("{path} is not in shape. Run without --dry-run to rewrite it.");
+            outln!("{shown} is not in shape. Run without --dry-run to rewrite it.");
             ExitCode::Ok
         }
         FormatOutcome::DidNotParse => {
             let mut err = std::io::stderr();
             let _ = writeln!(
                 err,
-                "nkb fmt: '{path}' is not a pack file this tool can read, so there is nothing to put in order."
+                "nkb fmt: '{shown}' is not a pack file this tool can read, so there is nothing to put in order."
             );
-            let _ = writeln!(err, "Run `nkb lint {path}` to see what is wrong with it.");
+            let _ = writeln!(err, "Run `nkb lint {shown}` to see what is wrong with it.");
             ExitCode::ValidationFailed
         }
-        FormatOutcome::NotFound => {
-            let mut err = std::io::stderr();
-            let _ = writeln!(err, "nkb fmt: no pack file at '{path}'.");
-            ExitCode::NotFound
-        }
-        FormatOutcome::Unreadable => {
-            let mut err = std::io::stderr();
-            let _ = writeln!(
-                err,
-                "nkb fmt: '{path}' is there and could not be read. Check the file's permissions."
-            );
-            ExitCode::IoFailed
-        }
+        FormatOutcome::NotFound => say_not_read("fmt", &shown, NotRead::NotFound),
+        FormatOutcome::Unreadable => say_not_read("fmt", &shown, NotRead::Unreadable),
+        FormatOutcome::TooLarge => say_not_read("fmt", &shown, NotRead::TooLarge),
         FormatOutcome::Unwritable => {
             let mut err = std::io::stderr();
             let _ = writeln!(
                 err,
-                "nkb fmt: '{path}' could not be written. Check that you can write to this folder - the file has not been changed."
+                "nkb fmt: '{shown}' could not be written. Check that you can write to this folder - the file has not been changed."
             );
             ExitCode::IoFailed
         }
@@ -294,7 +262,7 @@ fn fmt(args: &[String]) -> ExitCode {
             let mut err = std::io::stderr();
             let _ = writeln!(
                 err,
-                "nkb fmt: formatting '{path}' would change what one of its values inserts, so nothing was written."
+                "nkb fmt: formatting '{shown}' would change what one of its values inserts, so nothing was written."
             );
             let _ = writeln!(
                 err,
@@ -1204,6 +1172,7 @@ fn print_fmt_help() {
 )]
 mod tests {
     use super::*;
+    use nkb_adapters::DirectoryPackSource;
     use nkb_app::{DeliveryError, Following, KeystrokeError, StopReason};
     use nkb_core::preview::{Recipe, ValuePreview};
     use nkb_core::substitutions::Substitutions;
@@ -1837,7 +1806,7 @@ mod tests {
                 if path.extension().is_none_or(|ext| ext != "toml") {
                     continue;
                 }
-                let Some((source, id)) = DirectoryPackSource::split(&path) else {
+                let Ok((source, id)) = DirectoryPackSource::split(&path) else {
                     continue;
                 };
 
