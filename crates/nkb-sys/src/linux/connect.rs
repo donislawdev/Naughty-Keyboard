@@ -4,21 +4,26 @@
 //! TCP included. This program promises to send nothing off the machine, and a
 //! keystroke is data like any other, so the address is read here, by the pure
 //! `parse_display`, and only the socket of this machine is opened.
+//!
+//! Every connection waits for the server for at most `SERVER_WAIT` (`stream`), the
+//! one of the shortcuts' listener excepted, whose work is to wait.
 
 use std::os::unix::net::UnixStream;
 
 use x11rb::connection::Connection;
 use x11rb::reexports::x11rb_protocol::xauth::get_auth;
-use x11rb::rust_connection::{DefaultStream, RustConnection};
+use x11rb::rust_connection::DefaultStream;
 
+use super::stream::{Conn, LocalStream, Wait};
 use crate::linux_rules::{
-    DisplayAddress, Environment, Refusal, route, session_is_wayland, socket_path, window_display,
+    DisplayAddress, Environment, Refusal, SERVER_WAIT, route, session_is_wayland, socket_path,
+    window_display,
 };
 
 /// A connection, the root window of its screen, and the facts about the server
 /// that decide whether it can be typed into.
 pub(crate) struct Server {
-    pub conn: RustConnection,
+    pub conn: Conn,
     pub root: u32,
 }
 
@@ -67,7 +72,17 @@ pub(crate) fn grab_refused_by_wayland() -> bool {
 /// Connects to the local socket of `address`. The server is refused when it is
 /// XWayland (`OBS-203`) or has no `XTEST`, the one way to inject key events.
 pub(crate) fn connect(address: DisplayAddress) -> Result<Server, Refusal> {
-    let server = open(address)?;
+    checked(open(address, Wait::Bounded(SERVER_WAIT))?)
+}
+
+/// Connects as [`connect`] does, for a thread that waits for the server's events for as
+/// long as the program runs: the listener of the shortcuts.
+pub(crate) fn connect_listening(address: DisplayAddress) -> Result<Server, Refusal> {
+    checked(open(address, Wait::Forever)?)
+}
+
+/// `server`, or why it cannot be typed through.
+fn checked(server: Server) -> Result<Server, Refusal> {
     // The server of a Wayland session. The environment need not say so: a shell
     // that was started from an SSH login has no session type, and `DISPLAY=:0`
     // still names XWayland.
@@ -103,7 +118,7 @@ pub(crate) struct Windows {
 pub(crate) fn connect_windows() -> Result<Windows, Refusal> {
     let display = std::env::var("DISPLAY").ok();
     let server = window_display(display.as_deref())
-        .and_then(open)
+        .and_then(|address| open(address, Wait::Bounded(SERVER_WAIT)))
         .map_err(|refusal| {
             if wayland_session() {
                 Refusal::Wayland
@@ -137,18 +152,20 @@ pub(crate) fn on_xwayland() -> bool {
     connect_windows().is_ok_and(|windows| windows.display == Display::XWayland)
 }
 
-/// Opens the local socket of `address` and says nothing of what answers.
-fn open(address: DisplayAddress) -> Result<Server, Refusal> {
+/// Opens the local socket of `address` and says nothing of what answers. A server that
+/// accepts the socket and never sends its setup is waited for as `wait` says.
+fn open(address: DisplayAddress, wait: Wait) -> Result<Server, Refusal> {
     let stream = UnixStream::connect(socket_path(address)).map_err(|_| Refusal::NoLocalServer)?;
     let (stream, (family, peer)) =
         DefaultStream::from_unix_stream(stream).map_err(|_| Refusal::NoLocalServer)?;
+    let stream = LocalStream::new(stream, wait);
     // No authority file, or none that names this display, is a server that lets
     // local clients in: try without, as every X client does.
     let (name, data) = u16::try_from(address.number)
         .ok()
         .and_then(|number| get_auth(family, &peer, number).ok().flatten())
         .unwrap_or_default();
-    let conn = RustConnection::connect_to_stream_with_auth_info(stream, address.screen, name, data)
+    let conn = Conn::connect_to_stream_with_auth_info(stream, address.screen, name, data)
         .map_err(|_| Refusal::NoLocalServer)?;
     let root = conn
         .setup()
@@ -159,8 +176,18 @@ fn open(address: DisplayAddress) -> Result<Server, Refusal> {
     Ok(Server { conn, root })
 }
 
+/// Two connected sockets with no address, made inside this process: the side of the tests of
+/// `stream` that stands in for a server, silent or answering. Made here, where the product
+/// opens its one socket to the X server, so the guard of the network sees it in that file.
+#[cfg(test)]
+pub(super) fn socket_pair() -> std::io::Result<(DefaultStream, UnixStream)> {
+    let (ours, theirs) = UnixStream::pair()?;
+    let (ours, _peer) = DefaultStream::from_unix_stream(ours)?;
+    Ok((ours, theirs))
+}
+
 /// Whether the server has the extension. A server that cannot say has not.
-fn has_extension(conn: &RustConnection, name: &'static str) -> bool {
+fn has_extension(conn: &Conn, name: &'static str) -> bool {
     use x11rb::connection::RequestConnection;
     conn.extension_information(name)
         .is_ok_and(|information| information.is_some())

@@ -46,11 +46,11 @@ use x11rb::protocol::xproto::{
     AtomEnum, ClientMessageEvent, ConnectionExt as _, CreateWindowAux, EventMask, GrabMode,
     Mapping, ModMask, WindowClass,
 };
-use x11rb::rust_connection::RustConnection;
 
 use super::Lost;
-use super::connect::{Server, connect, environment_route};
+use super::connect::{Server, connect_listening, environment_route};
 use super::send::{Keyboard, read_keyboard};
+use super::stream::Conn;
 use crate::hotkey::{Hotkey, HotkeyId, HotkeyRegistration, HotkeyUnavailable};
 use crate::linux_hotkeys::{self as rules, Binding, ModifierBits};
 use crate::linux_rules::Refusal;
@@ -71,7 +71,7 @@ fn unsupported(refusal: Refusal) -> HotkeyUnavailable {
 /// The options of the keyboard layout the server was started with, such as
 /// `grp:alt_shift_toggle`. `None` when it keeps none, which is the case of a server
 /// that was never given a layout by `setxkbmap` or by a session.
-fn layout_options(conn: &RustConnection, root: u32) -> Option<String> {
+fn layout_options(conn: &Conn, root: u32) -> Option<String> {
     let atom = conn
         .intern_atom(true, b"_XKB_RULES_NAMES")
         .ok()?
@@ -106,7 +106,7 @@ struct Prepared {
     stop: u32,
 }
 
-fn prepare(conn: &RustConnection, root: u32) -> Result<Prepared, Lost> {
+fn prepare(conn: &Conn, root: u32) -> Result<Prepared, Lost> {
     let keyboard = read_keyboard(conn)?;
     let window = conn.generate_id()?;
     conn.create_window(
@@ -133,7 +133,7 @@ fn prepare(conn: &RustConnection, root: u32) -> Result<Prepared, Lost> {
 }
 
 /// Gives back what a grab took, in every combination it was taken in.
-fn ungrab(conn: &RustConnection, root: u32, binding: &Binding, variants: &[u16]) {
+fn ungrab(conn: &Conn, root: u32, binding: &Binding, variants: &[u16]) {
     for locks in variants {
         let _ = conn.ungrab_key(
             binding.keycode,
@@ -148,7 +148,7 @@ fn ungrab(conn: &RustConnection, root: u32, binding: &Binding, variants: &[u16])
 /// another client holds any of them, and then none of ours is kept, so half a
 /// shortcut never stays behind.
 fn grab(
-    conn: &RustConnection,
+    conn: &Conn,
     root: u32,
     binding: &Binding,
     variants: &[u16],
@@ -204,7 +204,7 @@ impl Held {
     /// keyboard changed. What did not move is not touched, so a press is never lost
     /// to a change that was not about it. The send of a value changes the map too, on
     /// keys that are no shortcut's, and costs one read of the map here and no grab.
-    fn refresh(&mut self, conn: &RustConnection, root: u32) {
+    fn refresh(&mut self, conn: &Conn, root: u32) {
         let Ok(keyboard) = read_keyboard(conn) else {
             return;
         };
@@ -248,7 +248,7 @@ impl Held {
         let _ = conn.flush();
     }
 
-    fn release(&self, conn: &RustConnection, root: u32) {
+    fn release(&self, conn: &Conn, root: u32) {
         for shortcut in &self.shortcuts {
             if let Some(binding) = &shortcut.binding {
                 ungrab(conn, root, binding, &self.variants);
@@ -259,7 +259,7 @@ impl Held {
 
 /// What shortcuts are taken with: the connection, and the keyboard as it is now.
 struct Taking<'a> {
-    conn: &'a RustConnection,
+    conn: &'a Conn,
     root: u32,
     prepared: &'a Prepared,
     bits: ModifierBits,
@@ -303,7 +303,7 @@ impl Taking<'_> {
 }
 
 fn register_all(
-    conn: &RustConnection,
+    conn: &Conn,
     root: u32,
     hotkeys: &[Hotkey],
     prepared: &Prepared,
@@ -348,13 +348,7 @@ fn register_all(
 }
 
 /// Hears the presses until the stop message, and reports each shortcut by its id.
-fn pump(
-    conn: &RustConnection,
-    root: u32,
-    prepared: &Prepared,
-    mut held: Held,
-    fired: &Sender<HotkeyId>,
-) {
+fn pump(conn: &Conn, root: u32, prepared: &Prepared, mut held: Held, fired: &Sender<HotkeyId>) {
     let mut repeats = rules::Repeats::default();
     while let Ok(event) = conn.wait_for_event() {
         match event {
@@ -393,7 +387,7 @@ fn pump(
 
 /// The thread that holds the shortcuts, and what it takes to ask it to stop.
 struct Running {
-    conn: Arc<RustConnection>,
+    conn: Arc<Conn>,
     window: u32,
     stop: u32,
     handle: JoinHandle<()>,
@@ -434,7 +428,9 @@ impl Drop for Listener {
 
 pub(crate) fn listen(hotkeys: &[Hotkey]) -> Result<Started, HotkeyUnavailable> {
     let address = environment_route().map_err(unsupported)?;
-    let Server { conn, root } = connect(address).map_err(unsupported)?;
+    // The listener waits for the person for as long as the program runs, so its
+    // connection is the one that is never given up (`stream`).
+    let Server { conn, root } = connect_listening(address).map_err(unsupported)?;
     let conn = Arc::new(conn);
     let could_not = |_: Lost| HotkeyUnavailable::CouldNotStart;
     let prepared = prepare(&conn, root).map_err(could_not)?;

@@ -54,6 +54,13 @@ pub(crate) const ANSWER_TARGET: Duration = Duration::from_secs(1);
 /// then (`OBS-206`).
 pub(crate) const PING_WAIT: Duration = Duration::from_secs(5);
 
+/// How long the X server itself is given to answer a question, the setup of a
+/// connection included. The server is not the application: it answers in well under
+/// a millisecond, and only a grab held by another client keeps it longer. One that is
+/// silent this long has stopped, and the send ends instead of waiting for it for ever,
+/// which is what the library would do (`linux/stream.rs`).
+pub(crate) const SERVER_WAIT: Duration = Duration::from_secs(2);
+
 /// The pause after a remap, before the keys that use it. The clients are told of
 /// the new map before they are told of the keys, so this is a hedge for the ones
 /// that read it late, not what the recipe stands on.
@@ -1490,6 +1497,14 @@ mod tests {
         // ping, then the wait for the ping itself (`OBS-202` points 3 and 9).
         let waits = [REMAP_SETTLE, UNPACED_SETTLE, PING_WAIT];
         assert!(waits.windows(2).all(|pair| pair[0] < pair[1]), "{waits:?}");
+        // The server is given less than the application: a stopped server is told
+        // from a stopped application by a question to the server after a ping that
+        // went unanswered, and that question must not outlast the ping.
+        assert!(SERVER_WAIT < PING_WAIT);
+        assert!(
+            SERVER_WAIT >= Duration::from_secs(1),
+            "a grab is not a stopped server"
+        );
         // The tap that makes the server announce its map needs at least the 100 ms
         // that were measured to be enough.
         assert!(WARMUP_SETTLE >= Duration::from_millis(100));
