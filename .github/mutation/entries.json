@@ -12039,6 +12039,15 @@
       "runner": "rust:nkb-cli:bin=nkb"
     },
     {
+      "id": "M1553",
+      "why": "the palette sends the tester to nkb lint with a pack identifier, a usage error since lint reads only the file it is named (OBS-235)",
+      "file": "crates/nkb-adapters/src/i18n.rs",
+      "find": "has {errors} problems. Run nkb lint on its file to see them.\"",
+      "replace": "has {errors} problems. Run: nkb lint {pack}\"",
+      "test": "i18n::tests::no_sentence_hands_nkb_lint_a_pack_identifier",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
       "id": "M1554",
       "why": "a settings save no longer takes its turn, so two palettes saving at once can write over each other (R07)",
       "file": "crates/nkb-adapters/src/settings_file.rs",
