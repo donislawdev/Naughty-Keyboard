@@ -1373,7 +1373,7 @@ mod tests {
                 reason: StopReason::NotTaking,
             },
         );
-        let said = String::from_utf8(said).expect("the command writes text");
+        let said = String::from_utf8(said).unwrap_or_else(|e| panic!("not UTF-8: {e}"));
         assert_eq!(code, ExitCode::InsertFailed);
         assert!(
             said.contains("nkb send: interrupted some-pack/some-value - Some value"),
