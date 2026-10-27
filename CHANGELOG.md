@@ -39,6 +39,18 @@ Changes wait under Unreleased until then.
   problem names and the parser's message, now shows control characters and invisible ones as
   escapes such as `\u202E`. A file name or a key could otherwise change the colours of the
   terminal or the order of the line it was printed on.
+- On Linux and macOS `nkb fmt` no longer rewrites a read-only pack file. It refuses it with exit
+  code 5, as it always did on Windows. A file it does rewrite keeps its permission bits, where
+  until now it came out with the defaults of a new file.
+- `nkb fmt` on a pack file that is a symbolic link now formats the file the link points to and
+  leaves the link in place. Until now it replaced the link with a plain file and left the real one
+  unformatted.
+- `nkb fmt` no longer removes a file named `<pack>.toml.nkb-new` that it finds beside the pack.
+  It writes under a name of its own now, as saving the settings already did.
+- Two palettes that save their settings at the same moment, for example when both are closed, no
+  longer write over each other's change. A save waits up to a second for the other one, using a
+  new empty file `settings.lock` beside the settings file, and then saves anyway. On Linux and
+  macOS a new settings file is now readable by its owner only.
 
 ## [0.3.0] - 2026-10-25
 

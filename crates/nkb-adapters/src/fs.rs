@@ -13,6 +13,8 @@
 
 use nkb_app::{Clock, PACK_FILE_LIMIT, PackSink, PackSource, SinkError, SourceError};
 use nkb_core::calendar::Day;
+
+use crate::atomic_write::{write_atomically, write_target};
 use std::ffi::OsStr;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -178,40 +180,17 @@ impl PackSink for DirectoryPackSink {
     /// leaves a pack that is half a pack and still looks like one, and the file
     /// it destroyed was the contributor's only copy.
     ///
-    /// So the text lands under a neighbouring name and the file gets its real
-    /// name by a rename, which the operating system does in one step. Either the
-    /// old content is there or the new content is. There is no third state.
-    ///
-    /// The temporary file sits in the same folder deliberately. A rename across
-    /// folders is a copy, and a copy is not atomic.
+    /// So the text goes through `atomic_write`, the one writer the settings
+    /// file uses too: either the old content is there or the new content is,
+    /// a read-only file is left alone on every system, the permission bits of
+    /// the old file are kept on Linux and macOS, and a pack file that is a link
+    /// is written through it. Until R05 this had its own copy with one fixed
+    /// temporary name, and a write that found that name taken removed the file
+    /// under it, which belonged to somebody else.
     fn replace(&self, id: &str, text: &str) -> Result<(), SinkError> {
         let path = self.directory.join(format!("{id}.toml"));
-        let temporary = self.directory.join(format!("{id}.toml.nkb-new"));
-
-        // Written with create_new for the same reason `create` uses it: if
-        // something is already sitting under the temporary name, it belongs to
-        // another run and must not be trampled.
-        let outcome = (|| -> std::io::Result<()> {
-            let mut file = std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&temporary)?;
-            std::io::Write::write_all(&mut file, text.as_bytes())?;
-            // Before the rename, not after: a rename that publishes content the
-            // operating system has not committed yet is a rename that publishes
-            // an empty file on the next power cut.
-            file.sync_all()?;
-            drop(file);
-            std::fs::rename(&temporary, &path)
-        })();
-
-        if outcome.is_err() {
-            // Nothing half written is left behind under a name a person might
-            // later mistake for a pack.
-            let _ = std::fs::remove_file(&temporary);
-            return Err(SinkError::Unwritable);
-        }
-        Ok(())
+        let target = write_target(&path).map_err(|_| SinkError::Unwritable)?;
+        write_atomically(&target, text).map_err(|_| SinkError::Unwritable)
     }
 }
 
@@ -373,5 +352,131 @@ mod tests {
         // the reader to fix the wrong thing.
         let source = DirectoryPackSource::new("no-such-directory-here");
         assert_eq!(source.read("absent"), Err(SourceError::NotFound));
+    }
+
+    /// A folder of its own holding `locale-cz.toml` with `old`, removed before
+    /// and after.
+    struct PackFolder(PathBuf);
+
+    impl PackFolder {
+        fn new(name: &str) -> Self {
+            let dir =
+                std::env::temp_dir().join(format!("nkb-replace-{}-{name}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).expect("a temporary directory");
+            std::fs::write(dir.join("locale-cz.toml"), "old").expect("the pack file");
+            Self(dir)
+        }
+        fn pack(&self) -> PathBuf {
+            self.0.join("locale-cz.toml")
+        }
+        fn text(&self) -> String {
+            std::fs::read_to_string(self.pack()).expect("the pack file")
+        }
+    }
+
+    impl Drop for PackFolder {
+        #[allow(
+            clippy::permissions_set_readonly_false,
+            reason = "a scratch file made read-only by a test has to go"
+        )]
+        fn drop(&mut self) {
+            if let Ok(meta) = std::fs::metadata(self.pack()) {
+                let mut permissions = meta.permissions();
+                permissions.set_readonly(false);
+                let _ = std::fs::set_permissions(self.pack(), permissions);
+            }
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn a_replace_leaves_a_file_under_the_old_temporary_name_alone() {
+        // R05: the name the old writer always used. It found the name taken,
+        // failed, and removed the file under it, which was not its own.
+        let folder = PackFolder::new("old-temporary");
+        let foreign = folder.0.join("locale-cz.toml.nkb-new");
+        std::fs::write(&foreign, "not ours").expect("a foreign file");
+
+        assert_eq!(
+            DirectoryPackSink::new(&folder.0).replace("locale-cz", "new"),
+            Ok(())
+        );
+
+        assert_eq!(folder.text(), "new");
+        assert_eq!(
+            std::fs::read_to_string(&foreign).expect("still there"),
+            "not ours"
+        );
+    }
+
+    #[test]
+    fn a_read_only_pack_file_is_not_rewritten_on_any_system() {
+        // On Linux and macOS a rename over a read-only file goes through, so
+        // until R26 `nkb fmt` rewrote it there and refused it only on Windows.
+        let folder = PackFolder::new("read-only");
+        let mut permissions = std::fs::metadata(folder.pack())
+            .expect("the pack file")
+            .permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(folder.pack(), permissions).expect("read-only");
+
+        assert_eq!(
+            DirectoryPackSink::new(&folder.0).replace("locale-cz", "new"),
+            Err(SinkError::Unwritable)
+        );
+        assert_eq!(folder.text(), "old");
+    }
+
+    #[test]
+    fn a_replace_in_a_folder_that_is_not_there_makes_no_folder() {
+        let folder = PackFolder::new("no-folder");
+        let missing = folder.0.join("missing");
+
+        assert_eq!(
+            DirectoryPackSink::new(&missing).replace("locale-cz", "new"),
+            Err(SinkError::Unwritable)
+        );
+        assert!(!missing.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_pack_file_that_is_a_link_is_written_through_it_and_keeps_its_bits() {
+        // The link stays a link and the file it points to gets the new text,
+        // as a formatter writing in place would leave it. Before R26 the link
+        // was replaced by a plain file and the real one was never formatted.
+        use std::os::unix::fs::PermissionsExt;
+        let folder = PackFolder::new("link");
+        let real = folder.0.join("real.toml");
+        std::fs::write(&real, "old").expect("the real file");
+        std::fs::set_permissions(&real, std::fs::Permissions::from_mode(0o640)).expect("bits");
+        std::fs::remove_file(folder.pack()).expect("room for the link");
+        std::os::unix::fs::symlink(&real, folder.pack()).expect("a link");
+
+        assert_eq!(
+            DirectoryPackSink::new(&folder.0).replace("locale-cz", "new"),
+            Ok(())
+        );
+
+        assert!(
+            std::fs::symlink_metadata(folder.pack())
+                .expect("there")
+                .file_type()
+                .is_symlink(),
+            "the link was replaced by a plain file"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&real).expect("the real file"),
+            "new"
+        );
+        assert_eq!(
+            std::fs::metadata(&real)
+                .expect("there")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o640
+        );
     }
 }
