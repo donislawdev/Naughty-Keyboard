@@ -1083,7 +1083,7 @@
       "id": "M126",
       "why": "an edit control counts as unknown - the most common case (an input in a browser) is no longer recognised, though the probe measured it",
       "file": "crates/nkb-sys/src/field.rs",
-      "find": "        control::EDIT => FocusedInput::TextField,",
+      "find": "        control::EDIT => field_unless_read_only(facts.value),",
       "replace": "        control::EDIT => FocusedInput::Unknown,",
       "test": "field::tests::every_measured_focus_is_answered_as_it_was",
       "runner": "rust:nkb-sys:lib"
@@ -12082,6 +12082,33 @@
       "replace": "        let _ = &temporary;",
       "test": "atomic_write::tests::a_failed_write_removes_its_own_temporary_file_and_nothing_else",
       "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1558",
+      "why": "a field that says it is read-only is a field again, so the clearing keys go to a control that takes no typing (R16)",
+      "file": "crates/nkb-sys/src/field.rs",
+      "find": "        Some(true) => FocusedInput::Unknown,",
+      "replace": "        Some(true) => FocusedInput::TextField,",
+      "test": "field::tests::a_text_control_that_says_it_is_read_only_is_not_claimed",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1559",
+      "why": "an Edit is a field whatever its Value pattern says, the rule the measured read-only rows were answered by until R16",
+      "file": "crates/nkb-sys/src/field.rs",
+      "find": "        control::EDIT => field_unless_read_only(facts.value),",
+      "replace": "        control::EDIT => FocusedInput::TextField,",
+      "test": "field::tests::every_measured_focus_is_answered_as_it_was",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1560",
+      "why": "a read-only field on macOS is refused again, unlike Windows and Linux, and a tester cannot send into it to see it stay unchanged",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "            (false, true) => FocusedInput::Unknown,",
+      "replace": "            (false, true) => FocusedInput::NotTextField,",
+      "test": "macos_rules::tests::a_read_only_text_role_is_not_claimed_and_one_without_a_caret_is_not_a_field",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }

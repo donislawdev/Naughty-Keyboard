@@ -81,6 +81,22 @@
 //! sentence it brings names the setting (`D125`). It only narrows `Unknown`: a
 //! `Window` had no other answer.
 //!
+//! # A field that says it is read-only
+//!
+//! The probe of 2026-09-24 read a WinForms box with `ReadOnly` set and a web
+//! input with `readonly` as an `Edit` whose Value pattern is read-only. Such a
+//! field takes the focus and the keys and keeps its text. Until 2026-10-27 its
+//! type alone made it a field, so the clearing recipe went to it as to any
+//! field that takes typing. It is now
+//! [`FocusedInput::Unknown`], as Linux answers an entry without the state
+//! `EDITABLE` and macOS a text field whose value cannot be set (`D153`): the
+//! value is sent, the clearing recipe never. Not
+//! [`FocusedInput::NotTextField`], because sending a value into a read-only
+//! field to see that it stays unchanged is a test of its own, and a refusal
+//! would take that test away. The same holds for a `Group` or a `ComboBox`
+//! with the Text pattern. A missing Value pattern says nothing about writing,
+//! so it changes nothing.
+//!
 //! # Five answers, and the unknown is never folded into another
 //!
 //! [`FocusedInput::NotTextField`] is claimed only for control types that take no
@@ -134,7 +150,7 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FocusedInput {
     /// A control that takes typed text: an edit box, an editable document, a
-    /// `contenteditable` region.
+    /// `contenteditable` region. Never one that says it is read-only.
     TextField,
     /// A terminal: it takes typed text, but what its keys do belongs to the
     /// program running in it, which UI Automation does not show. A value is
@@ -143,8 +159,9 @@ pub enum FocusedInput {
     /// A control that takes no text by definition - a button, a link, a list
     /// item, a page that is not editable. Keys sent there act on the control.
     NotTextField,
-    /// Not recognised, not readable, not answered in time, or not in the window
-    /// in front. The send goes ahead exactly as before.
+    /// Not recognised, not readable, not answered in time, not in the window
+    /// in front, or a field that says it is read-only (`D153`). The send goes
+    /// ahead exactly as before, without the clearing recipe.
     Unknown,
     /// A window that shows the system nothing inside it - Firefox while it
     /// keeps accessibility services out (`OBS-175`, `D125`). Pressed as
@@ -416,7 +433,7 @@ fn classify(facts: &Facts) -> FocusedInput {
         return FocusedInput::ClosedToAccessibility;
     }
     match facts.control_type {
-        control::EDIT => FocusedInput::TextField,
+        control::EDIT => field_unless_read_only(facts.value),
         // A rich edit box is a writable `Document`. A web page that is not
         // editable is a READ-ONLY `Document`, and there a letter can be a
         // command of the application under test. A `Document` with the Text
@@ -432,13 +449,23 @@ fn classify(facts: &Facts) -> FocusedInput {
         },
         // `contenteditable` in Chromium. A group without text is a container
         // of something else, and the module does not know of what.
-        control::GROUP if facts.text => FocusedInput::TextField,
+        control::GROUP if facts.text => field_unless_read_only(facts.value),
         // An editable combo box passes the focus to its edit box, so a focused
         // combo box without text is a closed list - a `select` in a browser.
-        control::COMBO_BOX if facts.text => FocusedInput::TextField,
+        control::COMBO_BOX if facts.text => field_unless_read_only(facts.value),
         control::COMBO_BOX => FocusedInput::NotTextField,
         other if NOT_TEXT.contains(&other) => FocusedInput::NotTextField,
         _ => FocusedInput::Unknown,
+    }
+}
+
+/// A control whose type and patterns take text: a field, unless its Value
+/// pattern says it is read-only (`D153`, module text). A read-only `Document`
+/// is not decided here - that is a page, where a letter can be a command.
+const fn field_unless_read_only(value: Option<bool>) -> FocusedInput {
+    match value {
+        Some(true) => FocusedInput::Unknown,
+        Some(false) | None => FocusedInput::TextField,
     }
 }
 
@@ -766,10 +793,12 @@ mod tests {
                 facts(control::DOCUMENT, RW, true),
                 TextField,
             ),
+            // The two read-only rows were `TextField` until 2026-10-27 (`D153`):
+            // the reading is the same, the answer follows the Value pattern now.
             (
                 "read-only edit box",
                 facts(control::EDIT, RO, true),
-                TextField,
+                Unknown,
             ),
             ("button", facts(control::BUTTON, None, false), NotTextField),
             (
@@ -812,7 +841,7 @@ mod tests {
             (
                 "web read-only input",
                 facts(control::EDIT, RO, true),
-                TextField,
+                Unknown,
             ),
             ("web textarea", facts(control::EDIT, RW, true), TextField),
             (
@@ -1027,6 +1056,37 @@ mod tests {
         assert_eq!(
             classify(&facts(control::DOCUMENT, None, false)),
             FocusedInput::Unknown
+        );
+    }
+
+    #[test]
+    fn a_text_control_that_says_it_is_read_only_is_not_claimed() {
+        // `D153`: the value goes, the clearing recipe never, and never a
+        // refusal. Only a Value pattern that says so counts - one that is
+        // missing says nothing about writing.
+        for control_type in [control::EDIT, control::GROUP, control::COMBO_BOX] {
+            let with = |value| classify(&facts(control_type, value, true));
+            assert_eq!(
+                with(RO),
+                FocusedInput::Unknown,
+                "control type {control_type}"
+            );
+            assert_eq!(
+                with(RW),
+                FocusedInput::TextField,
+                "control type {control_type}"
+            );
+            assert_eq!(
+                with(None),
+                FocusedInput::TextField,
+                "control type {control_type}"
+            );
+        }
+        // A read-only document is a page, where a letter can be a command of
+        // the application under test: that stays a refusal.
+        assert_eq!(
+            classify(&facts(control::DOCUMENT, RO, true)),
+            FocusedInput::NotTextField
         );
     }
 

@@ -320,12 +320,19 @@ pub(crate) fn classify(
         if terminal {
             return FocusedInput::Terminal;
         }
-        // A field that takes text has a value that can be set and a caret. One
-        // that has neither is read-only or disabled: nothing typed there lands.
-        return if settable && has_range {
-            FocusedInput::TextField
-        } else {
-            FocusedInput::NotTextField
+        // A field that takes text has a value that can be set and a caret.
+        return match (settable, has_range) {
+            (true, true) => FocusedInput::TextField,
+            // A caret on a value that cannot be set is a read-only field, as on
+            // Windows and Linux not claimed (`D153`): the value goes, the
+            // clearing recipe never. Sending into a read-only field to see it
+            // stay unchanged is a test of its own. ⚠️ The shape of a read-only
+            // field is read from AppKit's attributes, not measured - Terminal.app
+            // is the one thing measured with it, and it is decided above.
+            (false, true) => FocusedInput::Unknown,
+            // No caret: disabled, or showing text without taking it. Nothing
+            // typed there lands.
+            (_, false) => FocusedInput::NotTextField,
         };
     }
     if NOT_TEXT_ROLES.contains(&role) {
@@ -627,14 +634,23 @@ mod tests {
     }
 
     #[test]
-    fn a_text_role_that_cannot_take_text_is_not_a_field() {
-        // Read-only and disabled fields: a value typed there lands nowhere.
+    fn a_read_only_text_role_is_not_claimed_and_one_without_a_caret_is_not_a_field() {
+        // `D153`: a read-only field is not a refusal. It was `NotTextField`
+        // until 2026-10-27, unlike Windows and Linux.
+        for role in TEXT_ROLES {
+            assert_eq!(
+                classify(role, false, true, false),
+                FocusedInput::Unknown,
+                "{role}"
+            );
+        }
+        // No caret, settable or not: a value typed there lands nowhere.
         assert_eq!(
-            classify("AXTextField", false, true, false),
+            classify("AXTextArea", true, false, false),
             FocusedInput::NotTextField
         );
         assert_eq!(
-            classify("AXTextArea", true, false, false),
+            classify("AXTextField", false, false, false),
             FocusedInput::NotTextField
         );
     }
@@ -651,14 +667,15 @@ mod tests {
     fn terminal_app_reads_as_a_terminal_though_its_value_cannot_be_set() {
         // Measured 2026-10-20: Terminal.app answers `AXTextArea` with a value that
         // cannot be set and a selected range present. Without the program name it
-        // would be a read-only area, which is `NotTextField`.
+        // would be a read-only area, which is `Unknown` (`D153`) - the value
+        // would go, the clearing recipe never.
         assert_eq!(
             classify("AXTextArea", false, true, true),
             FocusedInput::Terminal
         );
         assert_eq!(
             classify("AXTextArea", false, true, false),
-            FocusedInput::NotTextField
+            FocusedInput::Unknown
         );
     }
 
