@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+pub(crate) mod atomic_write;
 pub mod built_in;
 pub mod canonical;
 pub mod catalogue;

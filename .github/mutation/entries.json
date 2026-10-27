@@ -12046,6 +12046,42 @@
       "replace": "has {errors} problems. Run: nkb lint {pack}\"",
       "test": "i18n::tests::no_sentence_hands_nkb_lint_a_pack_identifier",
       "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1554",
+      "why": "a settings save no longer takes its turn, so two palettes saving at once can write over each other (R07)",
+      "file": "crates/nkb-adapters/src/settings_file.rs",
+      "find": "        let _turn = take_turn(path, wait);",
+      "replace": "        let _turn = (path, wait);",
+      "test": "settings_file::tests::a_save_waits_while_another_process_holds_the_turn",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1555",
+      "why": "a save does not wait for a turn held by another process and goes ahead unlocked at once (R07)",
+      "file": "crates/nkb-adapters/src/settings_file.rs",
+      "find": "            Err(TryLockError::WouldBlock) if Instant::now() < deadline => {",
+      "replace": "            Err(TryLockError::WouldBlock) if false => {",
+      "test": "settings_file::tests::a_save_waits_while_another_process_holds_the_turn",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1556",
+      "why": "a temporary name that is taken ends the write instead of being skipped, the pack writer's old failure (R05)",
+      "file": "crates/nkb-adapters/src/atomic_write.rs",
+      "find": "            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}",
+      "replace": "            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => return Err(error),",
+      "test": "atomic_write::tests::a_temporary_name_that_is_taken_is_skipped_and_left_as_it_was",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1557",
+      "why": "a failed write leaves its own temporary file behind under a name a person might open",
+      "file": "crates/nkb-adapters/src/atomic_write.rs",
+      "find": "        let _ = std::fs::remove_file(&temporary);",
+      "replace": "        let _ = &temporary;",
+      "test": "atomic_write::tests::a_failed_write_removes_its_own_temporary_file_and_nothing_else",
+      "runner": "rust:nkb-adapters:lib"
     }
   ]
 }
