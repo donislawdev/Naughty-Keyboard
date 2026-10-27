@@ -43,5 +43,5 @@ pub use settings_file::SettingsFile;
 pub use shortcuts::{
     ChordHeld, GlobalShortcuts, chord_held, default_bindings, layout_character, refresh_layouts,
 };
-pub use startup::report_window_failure;
+pub use startup::{report_window_failure, report_worker_failure};
 pub use toml_pack::TomlPackFormat;

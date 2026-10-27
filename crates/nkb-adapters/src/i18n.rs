@@ -498,6 +498,9 @@ pub fn choose_error(error: &ChooseError, pack: &str) -> String {
 pub enum Startup {
     /// The window could not be created at all.
     WindowFailed,
+    /// The system would not give the palette the thread that holds its
+    /// shortcuts and runs its sequence (R08).
+    WorkerFailed,
 }
 
 /// The pattern for a startup failure. `ux-spec.md` 6, section B.
@@ -514,17 +517,59 @@ fn pattern_startup(failure: Startup) -> &'static str {
         Startup::WindowFailed => {
             "Naughty Keyboard could not open its window: {reason}. If this machine has no graphics acceleration, set SLINT_BACKEND=winit-software and start it again."
         }
+        Startup::WorkerFailed => {
+            "Naughty Keyboard could not start listening for its shortcuts: {reason}. Start it again, and report it with this text if it happens again."
+        }
     }
 }
 
 /// What the tool says when it could not start.
 ///
-/// `reason` is the graphics library's own error text: English, untranslatable,
-/// and in the sentence because without it a tester has nothing to put in a bug
-/// report.
+/// `reason` is the graphics library's or the system's own error text: English,
+/// untranslatable, and in the sentence because without it a tester has nothing
+/// to put in a bug report.
 #[must_use]
 pub fn startup_failure(failure: Startup, reason: &str) -> String {
     fill(pattern_startup(failure), &[("reason", reason)])
+}
+
+/// A fault of the tool itself, said in the palette while it still stands.
+/// `ux-spec.md` 6, section B.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Fault {
+    /// The thread behind the palette stopped on a fault, and the fault came
+    /// with words of its own (R08).
+    WorkerStopped,
+    /// The same, for a fault that came with none.
+    WorkerStoppedWithoutReason,
+}
+
+/// The pattern for a fault of the tool. `ux-spec.md` 6, section B.
+///
+/// The palette stays on the screen after the thread behind it is gone, and
+/// without these words it would look ready while no shortcut does anything.
+fn pattern_fault(fault: Fault) -> &'static str {
+    match fault {
+        Fault::WorkerStopped => {
+            "The palette stopped answering its shortcuts after a fault in the tool: {reason}. Close it, start it again, and report the fault with this text."
+        }
+        Fault::WorkerStoppedWithoutReason => {
+            "The palette stopped answering its shortcuts after a fault in the tool. Close it, start it again, and report the fault."
+        }
+    }
+}
+
+/// What the palette says when the thread behind it stopped on a fault.
+///
+/// `reason` is the fault's own text, English like every internal message
+/// (untouchable rule 6), and in the sentence because it is what a bug report
+/// needs. `None` when the fault carried no text.
+#[must_use]
+pub fn worker_stopped(reason: Option<&str>) -> String {
+    match reason {
+        Some(reason) => fill(pattern_fault(Fault::WorkerStopped), &[("reason", reason)]),
+        None => pattern_fault(Fault::WorkerStoppedWithoutReason).to_owned(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1271,6 +1316,9 @@ mod tests {
         // is about OUR sentence, and a library error text carrying three full
         // stops would fail it for something we did not write.
         out.push(startup_failure(Startup::WindowFailed, "no OpenGL context"));
+        out.push(startup_failure(Startup::WorkerFailed, "out of memory"));
+        out.push(worker_stopped(Some("index out of bounds")));
+        out.push(worker_stopped(None));
         out.extend(
             every_settings_message()
                 .iter()
