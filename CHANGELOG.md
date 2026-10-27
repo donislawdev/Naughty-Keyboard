@@ -64,6 +64,10 @@ Changes wait under Unreleased until then.
   closed. Until now the palette stayed on the screen looking ready while no shortcut did anything,
   and the program ended with 0. A system that refuses to start that part is reported the way a
   window that cannot open is.
+- The trial box of the welcome window no longer slows down as a long value arrives in it. It
+  counted the whole text again after every key, so the work for a value grew with the square of
+  its length. It now adds each key to the counts it already holds, and shows the two ends of a
+  long text without reading the middle.
 
 ## [0.3.0] - 2026-10-25
 

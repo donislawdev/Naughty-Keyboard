@@ -31,8 +31,19 @@
 //! the recipe's `Shift` landed in the box as `U+0010`) - so the box drops it.
 //! None of them is in the shipped catalogue. The arrows are not understood -
 //! nothing the palette sends uses them.
+//!
+//! # Counting as the value arrives (R11)
+//!
+//! The box shows four counts after every key, and a value arrives one key at
+//! a time. Counted from the whole text after each key, a value of n characters
+//! cost n squared over two character reads for each count - over two billion
+//! for 65 535 characters, a frozen window - so the box carries its counts
+//! along instead: a key that adds at the end of the text, which is every key
+//! of a value after the clearing recipe, adds its own counts and reads nothing
+//! else ([`Tally`]). Any other edit counts the whole text again - a key the
+//! tester presses, or a value typed at a caret the tester moved back.
 
-use nkb_core::graphemes::last_cluster_start;
+use nkb_core::graphemes::{Tally, last_cluster_start};
 
 use crate::query::Pressed;
 
@@ -55,6 +66,15 @@ const DELETE: &str = "\u{7f}";
 const HOME: &str = "\u{F729}";
 const END: &str = "\u{F72B}";
 
+/// What the box holds, counted the four ways the palette counts a value.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Counts {
+    pub graphemes: usize,
+    pub code_points: usize,
+    pub bytes: usize,
+    pub utf16_units: usize,
+}
+
 /// The text of the box, a caret in it and, with `Shift`, a selection.
 ///
 /// Positions are byte offsets that always fall on a character boundary.
@@ -64,6 +84,14 @@ pub struct Trial {
     caret: usize,
     /// Where a selection began - `None` when nothing is selected.
     anchor: Option<usize>,
+    /// The clusters of `text`, carried along while it grows at its end.
+    tally: Tally,
+    /// Its code points and UTF-16 units, carried the same way.
+    code_points: usize,
+    utf16_units: usize,
+    /// How many times the whole text was read again to count it.
+    #[cfg(test)]
+    recounts: usize,
 }
 
 impl Trial {
@@ -71,6 +99,17 @@ impl Trial {
     #[must_use]
     pub fn text(&self) -> &str {
         &self.text
+    }
+
+    /// The text counted as the palette counts a value, without reading it.
+    #[must_use]
+    pub fn counts(&self) -> Counts {
+        Counts {
+            graphemes: self.tally.clusters(),
+            code_points: self.code_points,
+            bytes: self.text.len(),
+            utf16_units: self.utf16_units,
+        }
     }
 
     /// The text before the caret - drawn before the caret's mark.
@@ -106,12 +145,36 @@ impl Trial {
                 (trial.caret, end)
             }),
             text if is_value_text(text) => {
-                self.remove_selection();
+                let replaced = self.remove_selection();
+                let at_end = self.caret == self.text.len();
                 self.text.insert_str(self.caret, text);
                 self.caret += text.len();
+                if at_end && !replaced {
+                    self.grow(text);
+                } else {
+                    self.recount();
+                }
                 Pressed::Changed
             }
             _ => Pressed::NotOurs,
+        }
+    }
+
+    /// Carries the counts over `added`, just put at the end of the text.
+    fn grow(&mut self, added: &str) {
+        self.tally.push_str(added);
+        self.code_points += added.chars().count();
+        self.utf16_units += added.encode_utf16().count();
+    }
+
+    /// Counts the whole text again, after an edit anywhere but at its end.
+    fn recount(&mut self) {
+        self.tally = Tally::of(&self.text);
+        self.code_points = self.text.chars().count();
+        self.utf16_units = self.text.encode_utf16().count();
+        #[cfg(test)]
+        {
+            self.recounts += 1;
         }
     }
 
@@ -129,6 +192,7 @@ impl Trial {
     /// Deletes the selection, or - without one - the range `range` names.
     fn delete_or(&mut self, range: impl Fn(&Self) -> (usize, usize)) -> Pressed {
         if self.remove_selection() {
+            self.recount();
             return Pressed::Changed;
         }
         let (start, end) = range(self);
@@ -137,6 +201,7 @@ impl Trial {
         }
         self.text.replace_range(start..end, "");
         self.caret = start;
+        self.recount();
         Pressed::Changed
     }
 
@@ -222,6 +287,71 @@ mod tests {
         typed(&mut trial, " Kowalski");
         assert_eq!(trial.text(), " Kowalski");
         assert_eq!((trial.before(), trial.after()), (" Kowalski", ""));
+    }
+
+    /// The counts of `text`, read from the whole of it.
+    fn counted(text: &str) -> Counts {
+        Counts {
+            graphemes: nkb_core::graphemes::count(text),
+            code_points: text.chars().count(),
+            bytes: text.len(),
+            utf16_units: text.encode_utf16().count(),
+        }
+    }
+
+    #[test]
+    fn a_long_value_typed_at_the_end_is_counted_without_reading_the_text_again() {
+        // R11, a sum rather than a clock: 65 535 keys, the largest value a
+        // UTF-16 length field still holds, and not one recount. Accents, flags
+        // and a joined emoji among them, so the clusters change across keys.
+        let pieces = [
+            "a",
+            "\u{301}",
+            "\u{1F1F5}",
+            "\u{1F1F1}",
+            "\u{1F468}",
+            "\u{200D}",
+            " ",
+        ];
+        let value: String = pieces.iter().cycle().take(65_535).copied().collect();
+        let mut trial = Trial::default();
+        typed(&mut trial, &value);
+        assert_eq!(
+            trial.recounts, 0,
+            "a value at the end must not be read again"
+        );
+        assert_eq!(trial.counts(), counted(&value));
+        // The clearing recipe before the next value: one recount, of the empty
+        // text the Delete leaves.
+        let _ = trial.press(key(HOME));
+        let _ = trial.press(shifted(END));
+        let _ = trial.press(key(DELETE));
+        assert_eq!(trial.recounts, 1);
+        assert_eq!(trial.counts(), Counts::default());
+        typed(&mut trial, "e\u{301}x");
+        assert_eq!((trial.recounts, trial.counts()), (1, counted("e\u{301}x")));
+    }
+
+    #[test]
+    fn an_edit_away_from_the_end_counts_the_whole_text_again() {
+        // A flag split by the caret: the counts after an edit in the middle are
+        // not the old counts plus the new key, and must still be right.
+        let mut trial = Trial::default();
+        typed(&mut trial, "\u{1F1F5}\u{1F1F1}\u{1F1F5}");
+        let _ = trial.press(key(HOME));
+        typed(&mut trial, "\u{1F1F1}");
+        assert_eq!(trial.text(), "\u{1F1F1}\u{1F1F5}\u{1F1F1}\u{1F1F5}");
+        assert_eq!(trial.counts(), counted(trial.text()));
+        assert_eq!(trial.counts().graphemes, 2);
+        assert_eq!(trial.recounts, 1);
+        // Backspace and a selection replaced by a key count again as well.
+        let _ = trial.press(key(END));
+        let _ = trial.press(key(BACKSPACE));
+        assert_eq!(trial.counts(), counted(trial.text()));
+        let _ = trial.press(shifted(HOME));
+        typed(&mut trial, "z");
+        assert_eq!((trial.text(), trial.counts()), ("z", counted("z")));
+        assert_eq!(trial.recounts, 3);
     }
 
     #[test]

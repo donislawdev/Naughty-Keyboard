@@ -155,29 +155,37 @@ pub fn is_invisible(c: char) -> bool {
 /// Builds the preview: markers for the invisible, elision for the long.
 #[must_use]
 pub fn preview(text: &str) -> Preview {
-    let total = text.chars().count();
-    if total <= PREVIEW_LIMIT {
-        return Preview {
-            shown: text.chars().map(substitute).collect(),
-            elided_total: None,
-        };
+    Preview {
+        shown: shown(text),
+        elided_total: text
+            .chars()
+            .nth(PREVIEW_LIMIT)
+            .map(|_| text.chars().count()),
+    }
+}
+
+/// What [`preview`] shows of `text`, without walking the whole of it.
+///
+/// [`preview`] counts every code point to say how many were left out. A box
+/// that redraws a long text after every key needs only what is shown (R11),
+/// and both ends of a text are reached without passing its middle, so this
+/// reads at most [`PREVIEW_LIMIT`] code points and one more.
+#[must_use]
+pub fn shown(text: &str) -> String {
+    if text.chars().nth(PREVIEW_LIMIT).is_none() {
+        return text.chars().map(substitute).collect();
     }
     // Both ends, because the interesting character is as often at the end as at
     // the beginning. The join is left to the caller's sentence rather than baked
     // in here: an ellipsis in the middle would be text, and text belongs in the
     // dictionary (untouchable rule 9).
-    let head: String = text.chars().take(KEPT_PER_END).map(substitute).collect();
-    let tail: String = text
-        .chars()
-        .skip(total - KEPT_PER_END)
+    let mut tail: Vec<char> = text.chars().rev().take(KEPT_PER_END).collect();
+    tail.reverse();
+    text.chars()
+        .take(KEPT_PER_END)
+        .chain(tail)
         .map(substitute)
-        .collect();
-    let mut shown = head;
-    shown.push_str(&tail);
-    Preview {
-        shown,
-        elided_total: Some(total),
-    }
+        .collect()
 }
 
 fn substitute(c: char) -> char {
@@ -445,6 +453,36 @@ mod tests {
             shown.shown
         );
         assert!(shown.shown.starts_with('A'));
+    }
+
+    #[test]
+    fn what_is_shown_is_both_ends_in_order_at_every_length_around_the_limit() {
+        // R11: `shown` reaches the tail from the end. Held to the way the tail
+        // was taken before, by skipping from the start, over texts that read
+        // differently backwards, with multi-byte and invisible characters.
+        let alphabet: Vec<char> = (0..=PREVIEW_LIMIT * 2 + 3)
+            .map(|i| match i % 4 {
+                0 => '\u{200B}',
+                1 => '\u{0105}',
+                2 => char::from(b'a' + u8::try_from(i % 26).unwrap_or(0)),
+                _ => '\u{1F600}',
+            })
+            .collect();
+        for length in 0..alphabet.len() {
+            let text: String = alphabet[..length].iter().collect();
+            let total = text.chars().count();
+            let expected: String = if total <= PREVIEW_LIMIT {
+                text.chars().map(substitute).collect()
+            } else {
+                text.chars()
+                    .take(KEPT_PER_END)
+                    .chain(text.chars().skip(total - KEPT_PER_END))
+                    .map(substitute)
+                    .collect()
+            };
+            assert_eq!(shown(&text), expected, "length {length}");
+            assert_eq!(preview(&text).shown, expected, "length {length}");
+        }
     }
 
     #[test]
