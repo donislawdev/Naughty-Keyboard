@@ -173,6 +173,9 @@ pub enum StopReason {
     /// Nothing that takes typed text had the keyboard focus, so what the send
     /// would have handed over reaches nobody (Wayland, `D159`).
     NoField,
+    /// The keyboard was switched to another layout group while the send was going,
+    /// so a key of the layout would type a character of that one (X11, `D160`).
+    LayoutChanged,
 }
 
 impl core::fmt::Display for StopReason {
@@ -186,6 +189,7 @@ impl core::fmt::Display for StopReason {
             Self::Halted => f.write_str("the send was asked to stop"),
             Self::FieldLeft => f.write_str("the keyboard focus left the field"),
             Self::NoField => f.write_str("no field that takes typed text had the keyboard focus"),
+            Self::LayoutChanged => f.write_str("the keyboard layout changed"),
         }
     }
 }
@@ -1147,6 +1151,7 @@ mod tests {
             StopReason::Halted,
             StopReason::FieldLeft,
             StopReason::NoField,
+            StopReason::LayoutChanged,
         ]
         .iter()
         .map(ToString::to_string)

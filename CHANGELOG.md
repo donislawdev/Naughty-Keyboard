@@ -93,6 +93,14 @@ Changes wait under Unreleased until then.
   for the field to take the focus.
 - On Linux a value with the character U+0000 no longer gets a sentence about the clipboard when it
   is typed. The palette now says that the system cannot type that character.
+- On X11 a modifier key pressed while a value is being typed no longer changes the value. Under
+  Ctrl the rest became shortcuts of the application, under Shift and Caps Lock capitals, and after
+  a layout switch another script, while the send said every key was typed. Now Alt, Caps Lock and a
+  layout switch stop the send and say so. Ctrl and Super hold the next part until they come up, for
+  up to two seconds, and Shift and AltGr do the same for a part typed with keys of the layout.
+- On X11 a modifier left locked, such as Alt locked by sticky keys, no longer swallows a value. A
+  GTK field got nothing of it while `nkb send` said it was sent. Ctrl, Alt or Super latched or
+  locked now refuse the send by name, as a held key does.
 
 ## [0.3.0] - 2026-10-25
 

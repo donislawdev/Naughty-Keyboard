@@ -45,6 +45,7 @@ mod lock;
 pub(crate) mod portal;
 mod send;
 mod stream;
+mod watch;
 pub(crate) mod window;
 
 use core::sync::atomic::AtomicBool;
