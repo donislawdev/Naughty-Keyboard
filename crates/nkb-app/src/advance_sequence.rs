@@ -452,6 +452,9 @@ pub enum Message {
     /// The value holds a character the clipboard does not carry whole, so it
     /// was refused by name rather than pasted cut short. `U+0000` today.
     NotForClipboard { id: String, character: char },
+    /// The value holds a character this system cannot type, so it was refused
+    /// by name rather than typed without it (`OBS-236`). `U+0000` on Linux.
+    CannotType { id: String, character: char },
     /// The recipe describes more text than the format allows. Should not reach
     /// here for a validated pack, and said plainly rather than swallowed.
     ValueTooLarge { id: String },
@@ -1633,11 +1636,22 @@ mod tests {
     }
 
     #[test]
-    fn a_value_the_clipboard_cannot_carry_is_refused_by_name() {
+    fn a_value_a_route_cannot_carry_is_refused_by_name_in_the_words_of_the_route() {
         let mut advance = chosen(Risk::Normal);
-        let kit = Kit::with_by_clipboard(FakeDelivery::failing(DeliveryError::CannotCarry {
-            character: '\0',
-        }));
+        let refusal = || DeliveryError::CannotCarry { character: '\0' };
+        // The keys and the input method of Linux (`OBS-236`): no word of a clipboard.
+        let typing = Kit::with_delivery(FakeDelivery::failing(refusal()));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &typing.ports());
+        assert_eq!(
+            outcome.messages,
+            vec![Message::CannotType {
+                id: "one".to_owned(),
+                character: '\0'
+            }]
+        );
+        assert_eq!(advance.sequence().delivery, Delivery::Direct);
+        assert_eq!(advance.counter(), Some((0, 3)));
+        let kit = Kit::with_by_clipboard(FakeDelivery::failing(refusal()));
         let _ = advance.choose_route(RouteRequest::Clipboard, &kit.ports());
         let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
         assert_eq!(

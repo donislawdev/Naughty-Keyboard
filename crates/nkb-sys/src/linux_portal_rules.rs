@@ -24,6 +24,7 @@
 //! program its identifier is and what is in it.
 
 use core::time::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Instant;
 
@@ -71,6 +72,9 @@ pub(crate) const BIND_WAIT: Duration = Duration::from_secs(300);
 /// and a second is how long `nkb send` already waits before it says it is still typing.
 pub(crate) const CONSENT_NOTICE_AFTER: Duration = Duration::from_secs(1);
 
+/// How often a wait for the person looks at the caller's flag (R03, `D159`).
+pub(crate) const HALT_LOOK: Duration = Duration::from_millis(50);
+
 /// Runs `wait`, which blocks until the person or the portal has answered, on a thread of its
 /// own, and tells `noticed` from THIS thread [`Waiting::ForConsent`] when it has not returned
 /// after `after`. A wait that returns in time says nothing at all. Because the wait is on the
@@ -78,9 +82,17 @@ pub(crate) const CONSENT_NOTICE_AFTER: Duration = Duration::from_secs(1);
 /// it runs where the send runs, between two things the send does. The end of the question is
 /// not told here but by [`Told`], which also knows of a question that was begun before the
 /// wait. `None` when the thread ended without an answer.
+///
+/// When the caller's flag `halt` is set meanwhile (the palette is closing), `withdraw` is
+/// called once, from this thread: it takes the question back from the person and makes the
+/// wait return, and whatever the wait then returns is returned. Without it, the window of the
+/// system would stand for minutes after the palette had gone, and so would the process,
+/// which waits for its worker (`D159`).
 pub(crate) fn wait_telling<T: Send>(
     after: Duration,
     noticed: &mut dyn FnMut(Waiting),
+    halt: &AtomicBool,
+    withdraw: &mut dyn FnMut(),
     wait: impl FnOnce() -> T + Send,
 ) -> Option<T> {
     std::thread::scope(|scope| {
@@ -88,13 +100,23 @@ pub(crate) fn wait_telling<T: Send>(
         scope.spawn(move || {
             let _ = sender.send(wait());
         });
-        match receiver.recv_timeout(after) {
-            Ok(answer) => Some(answer),
-            Err(RecvTimeoutError::Timeout) => {
-                noticed(Waiting::ForConsent);
-                receiver.recv().ok()
+        let began = Instant::now();
+        let mut said = false;
+        let mut withdrawn = false;
+        loop {
+            match receiver.recv_timeout(HALT_LOOK) {
+                Ok(answer) => return Some(answer),
+                Err(RecvTimeoutError::Disconnected) => return None,
+                Err(RecvTimeoutError::Timeout) => {}
             }
-            Err(RecvTimeoutError::Disconnected) => None,
+            if !said && began.elapsed() >= after {
+                said = true;
+                noticed(Waiting::ForConsent);
+            }
+            if !withdrawn && halt.load(Ordering::Relaxed) {
+                withdrawn = true;
+                withdraw();
+            }
         }
     })
 }
@@ -541,12 +563,50 @@ mod tests {
                     began.elapsed(),
                 ));
             },
+            &AtomicBool::new(false),
+            &mut || panic!("nobody asked to stop"),
             move || {
                 std::thread::sleep(wait_for);
                 7_u8
             },
         );
         (answer, told)
+    }
+
+    #[test]
+    fn a_wait_the_caller_stops_takes_the_question_back_once_and_returns_what_the_wait_says() {
+        // The palette closed while the window of the system asked the person: the question is
+        // withdrawn, which makes the wait return, and the window does not outlive the palette.
+        let withdrawn = std::sync::Arc::new(AtomicBool::new(false));
+        let seen = std::sync::Arc::clone(&withdrawn);
+        let mut times = 0;
+        let began = Instant::now();
+        let answer = wait_telling(
+            Duration::from_secs(30),
+            &mut |_| panic!("nothing is said of a question taken back at once"),
+            &AtomicBool::new(true),
+            &mut || {
+                times += 1;
+                withdrawn.store(true, Ordering::SeqCst);
+            },
+            move || {
+                let end = Instant::now() + Duration::from_secs(20);
+                while !seen.load(Ordering::SeqCst) && Instant::now() < end {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                // A wait ends a moment after the question is withdrawn, as the shut connection
+                // makes it, and the flag is looked at more than once meanwhile.
+                std::thread::sleep(HALT_LOOK * 4);
+                3_u8
+            },
+        );
+        assert_eq!(answer, Some(3));
+        assert_eq!(times, 1);
+        assert!(
+            began.elapsed() < Duration::from_secs(5),
+            "{:?}",
+            began.elapsed()
+        );
     }
 
     #[test]

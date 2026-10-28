@@ -34,8 +34,8 @@ Changes wait under Unreleased until then.
   arrives unchanged under it.
 - Closing the palette while a long value is still being typed now stops the value before its next
   key, and the program ends at once. Until now the window went away and the keys went on, for as
-  long as the value took, into whatever window had the focus. The one exception is a Wayland
-  desktop that is still waiting for the person to allow the keys.
+  long as the value took, into whatever window had the focus. On a Wayland desktop that is still
+  asking the person to allow the keys, closing the palette now also closes that window.
 - `nkb lint` and `nkb fmt` read and write only the file they are given. A name that does not end
   in `.toml` was read as another file: `nkb fmt notes.txt` formatted and rewrote `notes.toml`
   beside it. Such a name is now a usage error, exit code 2, on every system, `.TOML` included.
@@ -85,6 +85,14 @@ Changes wait under Unreleased until then.
   how much arrived for certain and that more may still arrive. Escape now stops a send to an
   application that does not answer within a second, where it waited up to five, and closing the
   palette stops it at once.
+- On a Wayland desktop a value is no longer handed to nobody. When the keyboard focus is on the
+  desktop or in a window that takes no typed text, nothing is sent, the counter stays, and the
+  palette and `nkb send` say that no field had the focus. When another application comes to the
+  front while a long value is going in, the value stops before its next piece instead of going on
+  into that application. Escape and closing the palette now also stop a send that is still waiting
+  for the field to take the focus.
+- On Linux a value with the character U+0000 no longer gets a sentence about the clipboard when it
+  is typed. The palette now says that the system cannot type that character.
 
 ## [0.3.0] - 2026-10-25
 

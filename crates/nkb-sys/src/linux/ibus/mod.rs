@@ -24,11 +24,18 @@
 //! desktop without an engine, as it was when the person had none, and a person who had
 //! one switches input source once. Measured exact in GTK4, Slint, Qt and xterm (23 of 23).
 //!
-//! What this route cannot say, and the person is told: whether anything with a field had
-//! the focus. The daemon announces a focused input context also when the focus is on the
-//! desktop, so the text is HANDED OVER to the input method, and what the application did
-//! with it is for the person to look at (`Following::HandedOver`). `Escape`, a held
-//! modifier and Caps Lock do not apply: a commit is not a key.
+//! What this route cannot say, and the person is told: whether the field took what it was
+//! handed. The text is HANDED OVER to the input method, and what the application did with it
+//! is for the person to look at (`Following::HandedOver`). A held modifier and Caps Lock do
+//! not apply: a commit is not a key.
+//!
+//! What it can say, since the engine asks the daemon to name the input context that has the
+//! focus (`D159`), is two things. The focus may be the daemon's own, which it is when the
+//! desktop or a window that takes no typed text has it, and then nothing is sent. And the
+//! field may lose the focus while the value goes in, when another application comes to the
+//! front, and then the send stops before the next piece. A move between two fields of one
+//! window is not heard (`linux_ibus_rules::Trail`). `Escape`, the caller's flag and the field being left
+//! are looked for in every wait of the send, not only between pieces.
 //!
 //! The keys that clear a field are keys, and the same engine stands guard over them
 //! (`keys`, `OBS-229`): they go through the remote-desktop portal, and the engine sees each
@@ -57,7 +64,8 @@ use crate::cadence::{Cadence, PROGRESS_INTERVAL};
 use crate::linux_clearing_rules::{Expected, Judgement, keys_refusal};
 use crate::linux_ibus_rules::{
     COMMIT_GAP, DEADLINE, ESCAPE_LOOK, FOCUS_SETTLE, FOCUS_WAIT, FORGET_LOOK, FORGET_WAIT,
-    SETTLE_AFTER_COMMIT, deadline_for, engine_name, engine_to_restore, is_our_engine, pieces,
+    SETTLE_AFTER_COMMIT, Trail, deadline_for, engine_name, engine_to_restore, is_our_engine,
+    pieces,
 };
 use crate::linux_rules::Refusal;
 use crate::portal::Unavailable;
@@ -140,6 +148,17 @@ fn unsupported_keys(why: Unavailable) -> SendError {
     }
 }
 
+/// Why a send may not begin to type or press keys.
+#[derive(Debug)]
+enum Unready {
+    /// A call to the daemon failed.
+    Failed,
+    /// The daemon told the engine of no focus at all in `FOCUS_WAIT`.
+    Unfocused,
+    /// `Escape`, the caller's flag, or a focus that belongs to nobody.
+    Stopped(StopReason),
+}
+
 /// One send's engine, registered and made the global one, and the way back.
 struct Session {
     opened: Opened,
@@ -152,6 +171,8 @@ struct Session {
     escape: Arc<AtomicBool>,
     /// The key of the recipe the engine waits for, while the keys that clear a field are sent.
     gate: Gate,
+    /// What the daemon said of the focus, and whether the field was left once the send began.
+    trail: Trail,
 }
 
 impl Session {
@@ -187,6 +208,7 @@ impl Session {
             path: None,
             escape,
             gate,
+            trail: Trail::default(),
         })
     }
 
@@ -195,63 +217,94 @@ impl Session {
         expect(&self.gate, expected);
     }
 
+    /// Takes what the engine said: the path it was made at, what the daemon said of the
+    /// focus, and what it found on a key of the recipe, which is returned.
+    fn take(&mut self, event: Event) -> Option<Judgement> {
+        match event {
+            Event::Created(path) => self.path = Some(path),
+            Event::Focus(heard) => self.trail.hear(heard),
+            Event::Key(judged) => return Some(judged),
+        }
+        None
+    }
+
     /// What the engine found on the next key of the recipe, if it said within `wait`. The
     /// answers that came before the key was sent are not this key's, so they are dropped
     /// first by [`Session::forget_echoes`].
-    fn echo(&self, wait: Duration) -> Option<Judgement> {
+    fn echo(&mut self, wait: Duration) -> Option<Judgement> {
         let end = Instant::now() + wait;
         while let Some(left) = end.checked_duration_since(Instant::now()) {
-            match self.events.recv_timeout(left) {
-                Ok(Event::Key(judged)) => return Some(judged),
-                Ok(Event::Created(_) | Event::FocusIn) => {}
-                Err(_) => return None,
+            let event = self.events.recv_timeout(left).ok()?;
+            if let Some(judged) = self.take(event) {
+                return Some(judged);
             }
         }
         None
     }
 
-    /// Drops what the engine said before now.
-    fn forget_echoes(&self) {
-        while self.events.try_recv().is_ok() {}
+    /// Drops what the engine said of keys before now. What it said of the focus is kept.
+    fn forget_echoes(&mut self) {
+        while let Ok(event) = self.events.try_recv() {
+            self.take(event);
+        }
     }
 
-    /// Whether the person pressed `Escape` since the engine was made the global one.
-    fn escape_pressed(&self) -> bool {
-        self.escape.load(Ordering::SeqCst)
+    /// Why the send must stop now, if it must: the caller's flag (R03), `Escape` pressed
+    /// since the engine was made the global one (`D96`), or the field left (`D159`).
+    fn stopped(&mut self, halt: &AtomicBool) -> Option<StopReason> {
+        self.forget_echoes();
+        if halt.load(Ordering::Relaxed) {
+            Some(StopReason::Halted)
+        } else if self.escape.load(Ordering::SeqCst) {
+            Some(StopReason::Escape)
+        } else if self.trail.left() {
+            Some(StopReason::FieldLeft)
+        } else {
+            None
+        }
     }
 
-    /// Waits for `time`, looking for `Escape` every `ESCAPE_LOOK`. `true` if it was pressed.
-    fn pause(&self, time: Duration) -> bool {
+    /// Waits for `time`, looking every `ESCAPE_LOOK` for a reason to stop, which it returns.
+    fn pause(&mut self, time: Duration, halt: &AtomicBool) -> Option<StopReason> {
         let end = Instant::now() + time;
         while let Some(left) = end.checked_duration_since(Instant::now()) {
-            if self.escape_pressed() {
-                return true;
+            if let Some(reason) = self.stopped(halt) {
+                return Some(reason);
             }
             std::thread::sleep(left.min(ESCAPE_LOOK));
         }
-        self.escape_pressed()
+        self.stopped(halt)
     }
 
-    /// Waits until the daemon says an input context has the focus. `Ok(false)` when it
-    /// did not in `FOCUS_WAIT`, which means there is nobody to hand the text to.
-    fn wait_for_focus(&mut self) -> Result<bool, Failed> {
+    /// Waits until the daemon says an input context has the focus, gives the application a
+    /// moment to switch to the engine, and begins following the focus. A focus that belongs
+    /// to nobody is no field to send to (`D159`).
+    fn ready(&mut self, halt: &AtomicBool) -> Result<(), Unready> {
         let deadline = Instant::now() + FOCUS_WAIT;
-        let mut focused = false;
-        while let Some(left) = deadline.checked_duration_since(Instant::now()) {
-            match self.events.recv_timeout(left) {
-                Ok(Event::Created(path)) => self.path = Some(path),
-                Ok(Event::FocusIn) => focused = true,
-                Ok(Event::Key(_)) => {}
-                Err(RecvTimeoutError::Timeout) => break,
-                Err(RecvTimeoutError::Disconnected) => return Err(Failed),
+        loop {
+            let Some(left) = deadline.checked_duration_since(Instant::now()) else {
+                return Err(Unready::Unfocused);
+            };
+            match self.events.recv_timeout(left.min(ESCAPE_LOOK)) {
+                Ok(event) => {
+                    self.take(event);
+                }
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => return Err(Unready::Failed),
+            }
+            if let Some(reason) = self.stopped(halt) {
+                return Err(Unready::Stopped(reason));
             }
             // The engine is made before the daemon tells it anything, so a commit has a
             // path to go from by the time it has a place to go to.
-            if focused && self.path.is_some() {
-                return Ok(true);
+            if self.trail.focused() && self.path.is_some() {
+                break;
             }
         }
-        Ok(false)
+        if let Some(reason) = self.pause(FOCUS_SETTLE, halt) {
+            return Err(Unready::Stopped(reason));
+        }
+        self.trail.begin().map_err(Unready::Stopped)
     }
 
     /// One piece of text, committed from the engine.
@@ -368,26 +421,27 @@ fn hand_over(
     halt: &AtomicBool,
     progress: &mut dyn FnMut(SendProgress),
 ) -> Result<SendOutcome, SendError> {
-    if !session.wait_for_focus().map_err(|_| unsupported())? {
+    session.ready(halt).map_err(|unready| match unready {
+        Unready::Failed => unsupported(),
         // The engine is made and nobody was told they have the focus: nothing was sent.
-        return Err(truncated(0, expected, StopReason::Dropped));
-    }
-    if session.pause(FOCUS_SETTLE) {
-        return Err(truncated(0, expected, StopReason::Escape));
-    }
+        Unready::Unfocused => truncated(0, expected, StopReason::Dropped),
+        Unready::Stopped(reason) => truncated(0, expected, reason),
+    })?;
 
     let mut cadence = Cadence::starting(Instant::now(), PROGRESS_INTERVAL);
     let mut handed = 0usize;
     let mut commits = 0usize;
     for (number, piece) in pieces(text).into_iter().enumerate() {
-        // `Escape` stops a send before the next piece, as on every route: what was handed
-        // over is counted, and nothing more goes (`D96`).
-        if (number > 0 && session.pause(COMMIT_GAP)) || session.escape_pressed() {
-            return Err(truncated(handed, expected, StopReason::Escape));
-        }
-        // And the caller's flag, the same way (R03).
-        if halt.load(Ordering::Relaxed) {
-            return Err(truncated(handed, expected, StopReason::Halted));
+        // `Escape`, the caller's flag and the field being left stop a send before the next
+        // piece, as on every route: what was handed over is counted, and nothing more goes
+        // (`D96`, R03, `D159`).
+        let stop = if number > 0 {
+            session.pause(COMMIT_GAP, halt)
+        } else {
+            session.stopped(halt)
+        };
+        if let Some(reason) = stop {
+            return Err(truncated(handed, expected, reason));
         }
         session
             .commit(piece)

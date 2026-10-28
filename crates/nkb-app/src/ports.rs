@@ -153,6 +153,12 @@ pub enum StopReason {
     /// closing (R03). Nobody is left to read the sentence, and the counter stays
     /// as for `Escape`.
     Halted,
+    /// The field lost the keyboard focus while the value went in, so the rest
+    /// was not sent (Wayland, `D159`).
+    FieldLeft,
+    /// Nothing that takes typed text had the keyboard focus, so nothing was sent
+    /// (Wayland, `D159`).
+    NoField,
 }
 
 impl fmt::Display for StopReason {
@@ -164,6 +170,8 @@ impl fmt::Display for StopReason {
             Self::Escape => f.write_str("escape"),
             Self::KeyPressed { key } => write!(f, "{}-pressed", key.to_ascii_lowercase()),
             Self::Halted => f.write_str("halted"),
+            Self::FieldLeft => f.write_str("field-left"),
+            Self::NoField => f.write_str("no-field"),
         }
     }
 }

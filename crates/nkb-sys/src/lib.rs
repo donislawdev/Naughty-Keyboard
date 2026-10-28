@@ -106,9 +106,9 @@ pub enum Following {
     System,
     /// The text was handed whole to the desktop's input method, which gives it to
     /// whatever has the keyboard focus (Wayland, `D145`). No key was pressed and
-    /// nothing after the hand-over can be followed, not even whether anything
-    /// with a field had the focus, so the caller says "handed", never "in the
-    /// field".
+    /// nothing after the hand-over can be followed: a focus that belongs to nobody
+    /// stops the send before it (`D159`), but whether the field took the text
+    /// cannot be told, so the caller says "handed", never "in the field".
     HandedOver,
 }
 
@@ -166,6 +166,13 @@ pub enum StopReason {
     /// The caller asked the send to stop through the flag it handed over: the
     /// palette is closing (R03). Answered like `Escape`, before the next event.
     Halted,
+    /// The field the send typed into lost the keyboard focus, so the rest could
+    /// have gone to another application (Wayland, `D159`). Said where the route
+    /// can tell the field from the window, which on Wayland it cannot.
+    FieldLeft,
+    /// Nothing that takes typed text had the keyboard focus, so what the send
+    /// would have handed over reaches nobody (Wayland, `D159`).
+    NoField,
 }
 
 impl core::fmt::Display for StopReason {
@@ -177,6 +184,8 @@ impl core::fmt::Display for StopReason {
             Self::Escape => f.write_str("Escape was pressed"),
             Self::KeyPressed { key } => write!(f, "{key} was pressed"),
             Self::Halted => f.write_str("the send was asked to stop"),
+            Self::FieldLeft => f.write_str("the keyboard focus left the field"),
+            Self::NoField => f.write_str("no field that takes typed text had the keyboard focus"),
         }
     }
 }
@@ -1136,6 +1145,8 @@ mod tests {
             StopReason::Escape,
             StopReason::KeyPressed { key: "Alt" },
             StopReason::Halted,
+            StopReason::FieldLeft,
+            StopReason::NoField,
         ]
         .iter()
         .map(ToString::to_string)

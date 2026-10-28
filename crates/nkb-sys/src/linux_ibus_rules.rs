@@ -18,6 +18,7 @@
 
 use core::time::Duration;
 
+use crate::StopReason;
 use crate::linux_rules::KEYSYM_ESCAPE;
 
 /// What every engine this program registers is called before its process number, so the
@@ -77,6 +78,93 @@ pub(crate) const FOCUS_WAIT: Duration = Duration::from_secs(2);
 /// 300 ms is what the prototype sent with (`OBS-219`), and the loop of the route measures
 /// shorter ones (`tools/petla-ofiary-wayland.py`).
 pub(crate) const FOCUS_SETTLE: Duration = Duration::from_millis(300);
+
+/// What the engine of a send heard of the focus (`D159`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Heard {
+    /// An input context took the focus: its path and the name of its client, when the
+    /// daemon says them (`FocusInId`, which IBus 1.5.27 and later call on an engine that
+    /// asks for it), and nothing when it does not.
+    In {
+        context: Option<String>,
+        client: Option<String>,
+    },
+    /// The input context that had the focus lost it.
+    Out,
+}
+
+/// The client name of the daemon's own input context, the one that has the focus when no
+/// application's does (`bus/ibusimpl.c`). A commit to it reaches nobody.
+pub(crate) const NOBODY: &str = "fake";
+
+/// The focus, as one send follows it (`D159`).
+///
+/// Measured on GNOME 50 with IBus 1.5.34 (`tools/sondy/linux/ibus_fokus_sceny.py`): every
+/// field of a native Wayland application is served by ONE input context of the shell
+/// (client `gnome-shell`), and an XIM client such as xterm by one of its own (client `xim`).
+/// Another application coming to the front is heard as the field losing the focus, the
+/// daemon's own context taking it, and the field of the other application taking it. A
+/// move between two fields of one GTK4 window, and to a button of it, is not heard at all,
+/// and committing a value in pieces is heard as nothing in GTK4, Qt, Slint and xterm.
+///
+/// So before the typing begins the trail only remembers the latest focus, and the typing
+/// does not begin when that focus belongs to nobody. Once it has begun, any loss of the
+/// focus is the field being left: the text that would follow could go to another
+/// application, and the send stops before it.
+#[derive(Debug, Default)]
+pub(crate) struct Trail {
+    focused: bool,
+    context: Option<String>,
+    client: Option<String>,
+    typing: bool,
+    left: bool,
+}
+
+impl Trail {
+    pub(crate) fn hear(&mut self, heard: Heard) {
+        match heard {
+            Heard::Out => {
+                self.left |= self.typing;
+                self.focused = false;
+                self.context = None;
+                self.client = None;
+            }
+            Heard::In { context, client } => {
+                // A daemon that moves the focus says it lost it first, so this is a hedge
+                // for one that does not.
+                let elsewhere =
+                    context.is_some() && self.context.is_some() && context != self.context;
+                self.left |= self.typing && elsewhere;
+                self.focused = true;
+                // `FocusIn` without a path comes first, before the daemon knows the engine
+                // asks for paths, and says nothing about whose focus it is.
+                if context.is_some() {
+                    self.context = context;
+                    self.client = client;
+                }
+            }
+        }
+    }
+
+    /// Whether an input context has the focus, of anybody or of nobody.
+    pub(crate) fn focused(&self) -> bool {
+        self.focused
+    }
+
+    /// Begins the typing on the focus of now. A focus of nobody is no field to type into.
+    pub(crate) fn begin(&mut self) -> Result<(), StopReason> {
+        if !self.focused || self.client.as_deref() == Some(NOBODY) {
+            return Err(StopReason::NoField);
+        }
+        self.typing = true;
+        Ok(())
+    }
+
+    /// Whether the field lost the focus since the typing began.
+    pub(crate) fn left(&self) -> bool {
+        self.left
+    }
+}
 
 /// The pause after the last commit, once the daemon has answered a question put after it,
 /// before the engine of the person is put back and the process ends. Both take the
@@ -285,6 +373,104 @@ pub(crate) fn pieces(text: &str) -> Vec<&str> {
 )]
 mod tests {
     use super::*;
+
+    fn into(context: &str, client: &str) -> Heard {
+        Heard::In {
+            context: Some(context.to_owned()),
+            client: Some(client.to_owned()),
+        }
+    }
+
+    const SHELL: &str = "/org/freedesktop/IBus/InputContext_2";
+    const DAEMON: &str = "/org/freedesktop/IBus/InputContext_1";
+
+    #[test]
+    fn a_field_in_front_is_typed_into_and_the_order_the_daemon_speaks_in_does_not_matter() {
+        // As measured: `FocusIn` before the daemon knows the engine asks for paths, then
+        // `FocusInId` for the same context.
+        let mut trail = Trail::default();
+        trail.hear(Heard::In {
+            context: None,
+            client: None,
+        });
+        trail.hear(into(SHELL, "gnome-shell"));
+        assert_eq!(trail.begin(), Ok(()));
+        assert!(!trail.left());
+    }
+
+    #[test]
+    fn a_focus_of_nobody_is_no_field_and_nothing_is_typed() {
+        let mut trail = Trail::default();
+        assert!(!trail.focused());
+        assert_eq!(trail.begin(), Err(StopReason::NoField), "nothing heard");
+        trail.hear(Heard::In {
+            context: None,
+            client: None,
+        });
+        trail.hear(into(DAEMON, NOBODY));
+        assert!(trail.focused(), "the daemon's own context has the focus");
+        assert_eq!(trail.begin(), Err(StopReason::NoField));
+    }
+
+    #[test]
+    fn a_field_that_takes_the_focus_before_the_typing_is_the_one_typed_into() {
+        // As measured when a window came up while the engine was being made: the daemon's
+        // own context first, then the field.
+        let mut trail = Trail::default();
+        trail.hear(into(DAEMON, NOBODY));
+        trail.hear(Heard::Out);
+        trail.hear(into(SHELL, "gnome-shell"));
+        assert_eq!(trail.begin(), Ok(()));
+        assert!(!trail.left());
+    }
+
+    #[test]
+    fn another_application_in_front_while_typing_is_the_field_left_even_when_it_comes_back() {
+        // As measured for Alt+Tab: the field loses the focus, the daemon's context takes it,
+        // the field of the other application takes it, with the same path.
+        let mut trail = Trail::default();
+        trail.hear(into(SHELL, "gnome-shell"));
+        assert_eq!(trail.begin(), Ok(()));
+        trail.hear(Heard::Out);
+        assert!(trail.left());
+        trail.hear(into(DAEMON, NOBODY));
+        trail.hear(Heard::Out);
+        trail.hear(into(SHELL, "gnome-shell"));
+        assert!(
+            trail.left(),
+            "a field that came back may hold text sent elsewhere"
+        );
+    }
+
+    #[test]
+    fn another_context_while_typing_is_the_field_left_even_without_a_loss_said() {
+        let mut trail = Trail::default();
+        trail.hear(into(SHELL, "gnome-shell"));
+        assert_eq!(trail.begin(), Ok(()));
+        trail.hear(Heard::In {
+            context: None,
+            client: None,
+        });
+        assert!(
+            !trail.left(),
+            "a notice without a path names no other field"
+        );
+        trail.hear(into("/org/freedesktop/IBus/InputContext_3", "xim"));
+        assert!(trail.left());
+    }
+
+    #[test]
+    fn a_daemon_that_names_no_context_types_as_before_and_still_hears_the_field_left() {
+        // IBus older than 1.5.27 calls `FocusIn` and `FocusOut` alone.
+        let mut trail = Trail::default();
+        trail.hear(Heard::In {
+            context: None,
+            client: None,
+        });
+        assert_eq!(trail.begin(), Ok(()));
+        trail.hear(Heard::Out);
+        assert!(trail.left());
+    }
 
     fn place() -> Where<'static> {
         Where {

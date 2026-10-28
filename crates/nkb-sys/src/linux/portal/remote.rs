@@ -25,6 +25,7 @@ use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write as _;
 use std::os::unix::fs::OpenOptionsExt as _;
+use std::sync::atomic::AtomicBool;
 
 use zbus::zvariant::{ObjectPath, Value};
 
@@ -50,25 +51,34 @@ impl Keys {
     /// system, the first time, for at most five minutes, and `waiting` hears of it
     /// (`D145` points 76 and 77): first that the desktop is about to be asked, when no
     /// answer of the person's is kept, BEFORE any call is made, then that the question has
-    /// stood for a moment, and at the end, whatever it came to, that it is answered.
-    pub(crate) fn open(waiting: &mut dyn FnMut(Waiting)) -> Result<Self, Unavailable> {
+    /// stood for a moment, and at the end, whatever it came to, that it is answered. The
+    /// caller's flag `halt` withdraws the question and closes the window (`D159`), and the
+    /// opening then fails: the caller, who set the flag, knows why.
+    pub(crate) fn open(
+        waiting: &mut dyn FnMut(Waiting),
+        halt: &AtomicBool,
+    ) -> Result<Self, Unavailable> {
         let remembered = recall();
         let mut told = Told::new(waiting);
         if remembered.is_none() {
             told.say(Waiting::Asking);
         }
-        let opened = Self::open_session(remembered.as_deref(), &mut told);
+        let opened = Self::open_session(remembered.as_deref(), &mut told, halt);
         told.end();
         opened
     }
 
-    fn open_session(remembered: Option<&str>, told: &mut Told<'_>) -> Result<Self, Unavailable> {
+    fn open_session(
+        remembered: Option<&str>,
+        told: &mut Told<'_>,
+        halt: &AtomicBool,
+    ) -> Result<Self, Unavailable> {
         let mut portal = Portal::open()?;
         let session = portal.create_session_on(REMOTE_DESKTOP_INTERFACE)?;
         // From here the session is closed on every way out, an error included.
         let mut keys = Self { portal, session };
         keys.select_devices(remembered)?;
-        keys.start(told)?;
+        keys.start(told, halt)?;
         Ok(keys)
     }
 
@@ -112,12 +122,14 @@ impl Keys {
         }
     }
 
-    fn start(&mut self, told: &mut Told<'_>) -> Result<(), Unavailable> {
+    fn start(&mut self, told: &mut Told<'_>, halt: &AtomicBool) -> Result<(), Unavailable> {
         let session = ObjectPath::try_from(self.session.as_str()).map_err(|_| Unavailable::Odd)?;
-        // The one call that may show the window, so the one the person is told about.
+        // The one call that may show the window, so the one the person is told about, and the
+        // one a palette that closes takes back.
         let (answer, results) = self.portal.request_telling(
             BIND_WAIT,
             &mut |what| told.say(what),
+            halt,
             |connection, handle| {
                 let mut options: HashMap<&str, Value<'_>> = HashMap::new();
                 options.insert("handle_token", Value::from(handle));

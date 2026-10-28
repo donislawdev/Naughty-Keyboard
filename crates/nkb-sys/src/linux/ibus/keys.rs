@@ -13,10 +13,11 @@
 //! state the hand holds, and may take it. So the order of a clearing is:
 //!
 //! 1. the person's agreement to the portal is had (`Keys::open`), the first time with a window
-//!    of the system and after that at once,
+//!    of the system and after that at once. A palette closed meanwhile withdraws the question
+//!    and closes the window (`Request.Close`, `D159`),
 //! 2. the engine is made the global one, and the clearing waits for the daemon to say a field
 //!    has the focus: a field that does not go through the engine cannot be guarded, and no key
-//!    is sent to it,
+//!    is sent to it, nor to a focus that the daemon names its own (`D159`),
 //! 3. for each chord the engine is told which key to wait for, the key is pressed through the
 //!    portal, and the engine says what it found on arrival. A key with a modifier the recipe
 //!    does not have is taken by the engine, so the application never sees it. `Home` is the
@@ -32,13 +33,13 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
-use super::{Session, daemon, put_back, stopped_chords, unsupported_keys};
+use super::{Session, Unready, daemon, put_back, stopped_chords, unsupported_keys};
 use crate::linux::portal::remote::Keys;
 use crate::linux_clearing_rules::{
     CHORD_GAP, ECHO_WAIT, HELD_RETRY, Judgement, KEY_GAP, KEYSYM_SHIFT_L, Next, expected_for,
     keysym_of, next_step,
 };
-use crate::linux_ibus_rules::{DEADLINE, FOCUS_SETTLE, engine_to_restore};
+use crate::linux_ibus_rules::{DEADLINE, engine_to_restore};
 use crate::portal::Unavailable;
 use crate::{Chord, MODIFIER_RELEASE_WAIT, SendError, StopReason, Waiting};
 
@@ -56,8 +57,16 @@ pub(crate) fn press_chords(
     }
     let socket = daemon::locate().map_err(|_| unsupported_keys(Unavailable::NoBus))?;
     // The agreement first: a window of the system that waits for the person must not have
-    // the engine of this program standing in for their keyboard meanwhile.
-    let keys = Keys::open(waiting).map_err(unsupported_keys)?;
+    // the engine of this program standing in for their keyboard meanwhile. A question the
+    // caller's flag withdrew is a clearing stopped before its first key, whatever the
+    // portal said after (R03).
+    let keys = Keys::open(waiting, halt).map_err(|why| {
+        if halt.load(Ordering::Relaxed) {
+            stopped_chords(0, chords.len(), StopReason::Halted)
+        } else {
+            unsupported_keys(why)
+        }
+    })?;
     let mut session =
         Session::begin(&socket, DEADLINE).map_err(|_| unsupported_keys(Unavailable::NoBus))?;
     let result = run(&mut session, &keys, chords, halt);
@@ -77,27 +86,24 @@ fn run(
     halt: &AtomicBool,
 ) -> Result<usize, SendError> {
     let total = chords.len();
-    let focused = session
-        .wait_for_focus()
-        .map_err(|_| unsupported_keys(Unavailable::NoBus))?;
-    if !focused {
+    session.ready(halt).map_err(|unready| match unready {
+        Unready::Failed => unsupported_keys(Unavailable::NoBus),
         // Nobody who is served by the engine has the focus: nothing can be guarded.
-        return Err(stopped_chords(0, total, StopReason::NotTaking));
-    }
-    if session.pause(FOCUS_SETTLE) {
-        return Err(stopped_chords(0, total, StopReason::Escape));
-    }
+        Unready::Unfocused => stopped_chords(0, total, StopReason::NotTaking),
+        Unready::Stopped(reason) => stopped_chords(0, total, reason),
+    })?;
     for (number, chord) in chords.iter().enumerate() {
-        // `Escape` stops the clearing before the next chord, as it stops every send (`D96`).
-        if (number > 0 && session.pause(CHORD_GAP)) || session.escape_pressed() {
-            return Err(stopped_chords(number, total, StopReason::Escape));
+        // `Escape`, the caller's flag and the field being left stop the clearing before the
+        // next chord, as they stop every send (`D96`, R03, `D159`).
+        let stop = if number > 0 {
+            session.pause(CHORD_GAP, halt)
+        } else {
+            session.stopped(halt)
+        };
+        if let Some(reason) = stop {
+            return Err(stopped_chords(number, total, reason));
         }
-        // And the caller's flag, the same way (R03). The window of the portal that asks
-        // the person, before this, does not look at it.
-        if halt.load(Ordering::Relaxed) {
-            return Err(stopped_chords(number, total, StopReason::Halted));
-        }
-        press_guarded(session, keys, chord, number, total)?;
+        press_guarded(session, keys, chord, number, total, halt)?;
     }
     // The last key was handed back to the daemon, which hands it to the application after
     // this: the daemon is asked a question it answers only once it has dealt with it.
@@ -108,11 +114,12 @@ fn run(
 /// One chord, pressed once the engine has found nothing wrong with it. The first chord is
 /// tried again while a modifier the hand holds is waited out.
 fn press_guarded(
-    session: &Session,
+    session: &mut Session,
     keys: &Keys,
     chord: &Chord,
     number: usize,
     total: usize,
+    halt: &AtomicBool,
 ) -> Result<(), SendError> {
     let deadline = Instant::now() + MODIFIER_RELEASE_WAIT;
     loop {
@@ -121,8 +128,8 @@ fn press_guarded(
         match next_step(judged, number == 0, Instant::now() < deadline) {
             Next::Go => return Ok(()),
             Next::Wait => {
-                if session.pause(HELD_RETRY) {
-                    return Err(stopped_chords(0, total, StopReason::Escape));
+                if let Some(reason) = session.pause(HELD_RETRY, halt) {
+                    return Err(stopped_chords(number, total, reason));
                 }
             }
             Next::Refuse(key) => return Err(SendError::ModifierHeld { key }),
@@ -136,7 +143,7 @@ fn press_guarded(
 /// engine said, and whether or not they went: a `Shift` left down changes everything the
 /// person types next.
 fn press_and_listen(
-    session: &Session,
+    session: &mut Session,
     keys: &Keys,
     chord: &Chord,
 ) -> Result<Option<Judgement>, Unavailable> {

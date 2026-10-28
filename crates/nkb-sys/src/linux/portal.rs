@@ -26,6 +26,7 @@ pub(crate) mod entry;
 pub(crate) mod remote;
 
 use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::JoinHandle;
 use std::time::Instant;
@@ -247,22 +248,25 @@ impl Portal {
     /// [`Self::request`] for a call that may show the person a window of the system: when the
     /// answer has not come after [`CONSENT_NOTICE_AFTER`], `noticed` is told so (`D145`
     /// point 76). That the answer came is for the caller to tell (`linux_portal_rules::Told`).
+    /// When the caller's flag `halt` is set meanwhile, the request is closed, which closes the
+    /// window, and the connection is shut, so the wait returns at once with an error (`D159`).
     fn request_telling<F>(
         &mut self,
         wait: core::time::Duration,
         noticed: &mut dyn FnMut(Waiting),
+        halt: &AtomicBool,
         call: F,
     ) -> Result<(Answer, Results), Unavailable>
     where
         F: FnOnce(&Connection, &str) -> zbus::Result<Message>,
     {
-        self.ask(wait, Some(noticed), call)
+        self.ask(wait, Some((noticed, halt)), call)
     }
 
     fn ask<F>(
         &mut self,
         wait: core::time::Duration,
-        noticed: Option<&mut dyn FnMut(Waiting)>,
+        consent: Option<(&mut dyn FnMut(Waiting), &AtomicBool)>,
         call: F,
     ) -> Result<(Answer, Results), Unavailable>
     where
@@ -285,9 +289,24 @@ impl Portal {
         // If the portal never answers, the watch shuts the connection and the wait returns,
         // and the watch is what says the wait ran out rather than the bus going away.
         let watch = self.stream.watch(wait)?;
-        let heard = match noticed {
-            Some(noticed) => {
-                wait_telling(CONSENT_NOTICE_AFTER, noticed, || responses.next()).flatten()
+        let heard = match consent {
+            Some((noticed, halt)) => {
+                // A closed request is answered by no signal, so the wait is ended by the
+                // connection being shut, as the watch would end it.
+                let mut withdraw = || {
+                    let _ = self.connection.call_method(
+                        Some(PORTAL_NAME),
+                        path.as_str(),
+                        Some(REQUEST_INTERFACE),
+                        "Close",
+                        &(),
+                    );
+                    self.stream.shut_down();
+                };
+                wait_telling(CONSENT_NOTICE_AFTER, noticed, halt, &mut withdraw, || {
+                    responses.next()
+                })
+                .flatten()
             }
             None => responses.next(),
         };
