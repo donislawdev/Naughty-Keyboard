@@ -231,6 +231,7 @@ fn stop_reason(reason: StopReason) -> String {
         StopReason::Halted => "the send was asked to stop".to_owned(),
         StopReason::FieldLeft => "the keyboard focus left the field".to_owned(),
         StopReason::NoField => "no field that takes typed text had the keyboard focus".to_owned(),
+        StopReason::LayoutChanged => "the keyboard layout changed".to_owned(),
     }
 }
 
@@ -281,6 +282,7 @@ mod tests {
             StopReason::Halted,
             StopReason::FieldLeft,
             StopReason::NoField,
+            StopReason::LayoutChanged,
         ]
         .map(stop_reason);
         for (i, reason) in reasons.iter().enumerate() {

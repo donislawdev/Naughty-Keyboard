@@ -159,6 +159,9 @@ pub enum StopReason {
     /// Nothing that takes typed text had the keyboard focus, so nothing was sent
     /// (Wayland, `D159`).
     NoField,
+    /// The keyboard was switched to another layout while the value went in, so
+    /// the rest would have been other characters (X11, `D160`).
+    LayoutChanged,
 }
 
 impl fmt::Display for StopReason {
@@ -168,10 +171,14 @@ impl fmt::Display for StopReason {
             Self::FocusMoved => f.write_str("focus-moved"),
             Self::NotTaking => f.write_str("not-taking"),
             Self::Escape => f.write_str("escape"),
-            Self::KeyPressed { key } => write!(f, "{}-pressed", key.to_ascii_lowercase()),
+            // A name of two words (`Caps Lock`, `D160`) keeps the token one word.
+            Self::KeyPressed { key } => {
+                write!(f, "{}-pressed", key.to_ascii_lowercase().replace(' ', "-"))
+            }
             Self::Halted => f.write_str("halted"),
             Self::FieldLeft => f.write_str("field-left"),
             Self::NoField => f.write_str("no-field"),
+            Self::LayoutChanged => f.write_str("layout-changed"),
         }
     }
 }
@@ -1465,6 +1472,28 @@ mod tests {
         assert_eq!(SourceError::NotFound.to_string(), "not-found");
         assert_eq!(SourceError::NotUtf8.to_string(), "not-utf8");
         assert_eq!(SourceError::TooLarge.to_string(), "too-large");
+    }
+
+    /// A stop reason is one word of the marker it stands in, and two reasons never
+    /// read alike - a key named in two words included (`D160`).
+    #[test]
+    fn stop_reasons_render_as_one_marker_word_each() {
+        assert_eq!(
+            StopReason::KeyPressed { key: "Caps Lock" }.to_string(),
+            "caps-lock-pressed"
+        );
+        assert_eq!(
+            StopReason::KeyPressed { key: "Alt" }.to_string(),
+            "alt-pressed"
+        );
+        assert_eq!(StopReason::LayoutChanged.to_string(), "layout-changed");
+        assert!(
+            DeliveryError::NothingArrived {
+                reason: StopReason::LayoutChanged
+            }
+            .to_string()
+            .ends_with("-layout-changed")
+        );
     }
 
     /// A set answering what it was given, and never pressed.

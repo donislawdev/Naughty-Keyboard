@@ -11906,10 +11906,10 @@
     {
       "id": "M1537",
       "why": "the palette's clause leaves {key} standing instead of naming the modifier that stopped the value (D149)",
-      "file": "crates/nkb-adapters/src/i18n.rs",
+      "file": "crates/nkb-adapters/src/i18n/stop.rs",
       "find": "        StopReason::KeyPressed { key } => fill(pattern, &[(\"key\", key)]),",
       "replace": "        StopReason::KeyPressed { .. } => pattern.to_owned(),",
-      "test": "i18n::tests::every_reason_a_send_stopped_reads_as_its_own_clause",
+      "test": "i18n::stop::tests::every_reason_a_send_stopped_reads_as_its_own_clause",
       "runner": "rust:nkb-adapters:lib"
     },
     {
@@ -11978,10 +11978,10 @@
     {
       "id": "M1545",
       "why": "the palette names a halt with the words of Escape, so two reasons read the same (R03)",
-      "file": "crates/nkb-adapters/src/i18n.rs",
+      "file": "crates/nkb-adapters/src/i18n/stop.rs",
       "find": "        StopReason::Halted => \"the palette was closed\",",
       "replace": "        StopReason::Halted => \"Escape was pressed\",",
-      "test": "i18n::tests::every_reason_a_send_stopped_reads_as_its_own_clause",
+      "test": "i18n::stop::tests::every_reason_a_send_stopped_reads_as_its_own_clause",
       "runner": "rust:nkb-adapters:lib"
     },
     {
@@ -12410,10 +12410,10 @@
     {
       "id": "M1594",
       "why": "the palette says another window came to the front when the field lost the focus inside one, and the tester looks for a window",
-      "file": "crates/nkb-adapters/src/i18n.rs",
+      "file": "crates/nkb-adapters/src/i18n/stop.rs",
       "find": "        StopReason::FieldLeft => \"the keyboard focus left the field\",",
       "replace": "        StopReason::FieldLeft => \"another window came to the front\",",
-      "test": "i18n::tests::every_reason_a_send_stopped_reads_as_its_own_clause",
+      "test": "i18n::stop::tests::every_reason_a_send_stopped_reads_as_its_own_clause",
       "runner": "rust:nkb-adapters:lib"
     },
     {
@@ -12433,6 +12433,96 @@
       "replace": "        StopReason::NoField => \"the keyboard focus left the field\".to_owned(),",
       "test": "refusals::tests::every_reason_a_send_stopped_reads_as_its_own_and_names_the_key",
       "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1597",
+      "why": "a held or locked Alt makes the X11 send wait and type on, so its characters become mnemonics (D160)",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        return InTheWay::Stop(StopReason::KeyPressed { key: \"Alt\" });",
+      "replace": "        return InTheWay::WaitFor(\"Alt\");",
+      "test": "linux_rules::tests::a_modifier_before_a_batch_is_waited_for_or_stops_it",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1598",
+      "why": "the X11 send looks at the keys held only, so a locked Alt or Ctrl is not seen and GTK types nothing at sent (OBS-231)",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    let held = down | state;",
+      "replace": "    let held = down;",
+      "test": "linux_rules::tests::a_modifier_before_a_batch_is_waited_for_or_stops_it",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1599",
+      "why": "Caps Lock turned on while the X11 send goes is not seen, and the rest of the value comes out in capitals (D160)",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    if caps_lock_on(state) {",
+      "replace": "    if false && caps_lock_on(state) {",
+      "test": "linux_rules::tests::a_modifier_before_a_batch_is_waited_for_or_stops_it",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1600",
+      "why": "Shift and AltGr stop a batch of spare keys too, which carry their keysym on both levels, so a send waits for nothing (D160)",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    if !layout_keys {",
+      "replace": "    if false && !layout_keys {",
+      "test": "linux_rules::tests::a_modifier_before_a_batch_is_waited_for_or_stops_it",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1601",
+      "why": "a layout group switched while the X11 send goes is not seen, and keys of the layout type another script at sent (D160)",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    if group_bits(state) != group_bits(start) {",
+      "replace": "    if false && group_bits(state) != group_bits(start) {",
+      "test": "linux_rules::tests::a_group_switched_since_the_start_stops_a_batch_of_the_layout_only",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1602",
+      "why": "the group is read from one bit, so a switch to the third group is not seen (D160)",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "    (state >> GROUP_SHIFT) & 0x3",
+      "replace": "    (state >> GROUP_SHIFT) & 0x1",
+      "test": "linux_rules::tests::a_group_switched_since_the_start_stops_a_batch_of_the_layout_only",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1603",
+      "why": "a modifier key held is read into the bit of the next modifier, so Ctrl is taken for Alt (D160)",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        .fold(0, |bits, (index, _)| bits | (1 << index))",
+      "replace": "        .fold(0, |bits, (index, _)| bits | (1 << (index + 1)))",
+      "test": "linux_rules::tests::the_rows_with_a_key_down_are_the_bits_of_a_state",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1604",
+      "why": "a modifier found before the first batch is said as a value cut short after nothing, not refused by name (D160)",
+      "file": "crates/nkb-sys/src/linux_rules.rs",
+      "find": "        StopReason::KeyPressed { key } if first => SendError::ModifierHeld { key },",
+      "replace": "        StopReason::KeyPressed { key } if false => SendError::ModifierHeld { key },",
+      "test": "linux_rules::tests::a_stop_before_the_first_batch_refuses_and_after_it_counts_what_arrived",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1605",
+      "why": "a key named in two words breaks the marker of a stopped value into two words (D160)",
+      "file": "crates/nkb-app/src/ports.rs",
+      "find": "                write!(f, \"{}-pressed\", key.to_ascii_lowercase().replace(' ', \"-\"))",
+      "replace": "                write!(f, \"{}-pressed\", key.to_ascii_lowercase())",
+      "test": "ports::tests::stop_reasons_render_as_one_marker_word_each",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1606",
+      "why": "a send stopped by a layout switch reads like one stopped by the field losing the focus (D160)",
+      "file": "crates/nkb-sys/src/lib.rs",
+      "find": "            Self::LayoutChanged => f.write_str(\"the keyboard layout changed\"),",
+      "replace": "            Self::LayoutChanged => f.write_str(\"the keyboard focus left the field\"),",
+      "test": "tests::every_reason_a_send_stops_has_its_own_words",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }

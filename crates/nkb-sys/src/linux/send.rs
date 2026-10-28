@@ -15,12 +15,18 @@
 //!    letters to capitals under it whatever key typed them (point 8). The state
 //!    then read decides whether the keys of the layout may type the characters
 //!    (`LayoutKeys::typing`), and a send with a character they cannot type is
-//!    refused if the server has no spare key,
+//!    refused if the server has no spare key. A modifier latched or locked that makes a
+//!    key a command (`Ctrl`, `Alt`, `Super`) is then waited for or refused before any key
+//!    is pressed: GTK typed nothing of a value under a locked `Alt` while the send said
+//!    "sent" (`OBS-231`, `D160`),
 //! 4. when a spare key is needed, one tap of an unmapped key makes the server
 //!    announce its map. The first XTest key event of a connection does, and a
 //!    remap made before it is gone (point 1). A value the layout types alone gets
 //!    no tap and no remap,
-//! 5. a batch is: rewrite the spare keys, press and release the keys (Shift held
+//! 5. a batch is: rewrite the spare keys, look at the modifiers the person holds and at
+//!    the layout group (`hands_off`: `Alt` and Caps Lock stop the send, `Ctrl` and `Super`
+//!    are waited for, `Shift`, `AltGr` and a switched group count for a batch with a key of
+//!    the layout, R27), press and release the keys (Shift held
 //!    around those that need it), and ask the window at the keyboard focus to
 //!    answer `_NET_WM_PING`. The answer comes from the application's own loop after
 //!    the key events before it, so it means they were taken (point 3). The spare
@@ -55,20 +61,20 @@ use super::escape::{ReservedEscape, XEscape};
 use super::front::{PingAtoms, focus, focused_toplevel, ping_atoms, ping_target};
 use super::lock::{DisplayLock, NotTaken};
 use super::stream::Conn;
-use crate::cadence::{Cadence, PROGRESS_INTERVAL};
-use crate::linux_clearing_rules::{
-    NoKey, acted_after_silence, keys_for, modifier_stop, state_holds,
+use super::watch::{
+    hands_off, modifier_in_the_way, stop_before_next, wait_for_keys_released, wait_for_modifiers,
 };
+use crate::cadence::{Cadence, PROGRESS_INTERVAL};
+use crate::linux_clearing_rules::{NoKey, acted_after_silence, keys_for, modifier_stop};
 use crate::linux_remap_rules::{Rewrite, ours, span};
 use crate::linux_rules::{
     Batch, FIRST_BATCH_CHARS, KEYSYM_ESCAPE, Keymap, LOOK_EVERY, LayoutKey, LayoutKeys,
     PING_ANSWER_MASK, REMAP_SETTLE, Refusal, UNPACED_SETTLE, WARMUP_SETTLE, batch_of_value,
-    caps_lock_on, give_back_wait, held_modifier, keysym_for, names_an_input_method, next_batch,
-    next_limit, ping_token, slots_for_value, stopped_on_the_wire, unanswered, utf16_units,
+    give_back_wait, keysym_for, names_an_input_method, next_batch, next_limit, ping_token,
+    slots_for_value, stopped_before_batch, stopped_on_the_wire, unanswered, utf16_units,
 };
 use crate::{
-    Chord, Following, MODIFIER_RELEASE_WAIT, SendError, SendOutcome, SendProgress, StopReason,
-    WindowRef, still_in_front,
+    Chord, Following, SendError, SendOutcome, SendProgress, StopReason, WindowRef, still_in_front,
 };
 
 /// Presses the keys that clear a field, each as its own key of the layout, with the server
@@ -204,7 +210,7 @@ fn chords_stopped(chords_sent: usize, chords_expected: usize, reason: StopReason
     }
 }
 
-fn unsupported(refusal: Refusal) -> SendError {
+pub(super) fn unsupported(refusal: Refusal) -> SendError {
     SendError::Unsupported {
         system: refusal.system(),
     }
@@ -508,90 +514,6 @@ pub(super) fn read_keyboard(conn: &Conn) -> Result<Keyboard, Lost> {
     })
 }
 
-/// The modifier that is down right now, if one is.
-fn modifier_down(server: &Server, keyboard: &Keyboard) -> Result<Option<&'static str>, Lost> {
-    let keys = server.conn.query_keymap()?.reply()?.keys;
-    Ok(held_modifier(
-        &keys,
-        &keyboard.modifier_keys,
-        keyboard.keys_per_modifier,
-    ))
-}
-
-/// The modifier that would change what a key of the recipe does, if one is in the way: a
-/// key of it that is down, or one the state of the server says is latched or locked.
-fn modifier_in_the_way(server: &Server, keyboard: &Keyboard) -> Result<Option<&'static str>, Lost> {
-    if let Some(name) = modifier_down(server, keyboard)? {
-        return Ok(Some(name));
-    }
-    let state = server.conn.query_pointer(server.root)?.reply()?.mask;
-    Ok(state_holds(u16::from(state)))
-}
-
-/// Waits for every modifier to come up, for at most `MODIFIER_RELEASE_WAIT`. Caps Lock is
-/// not looked at: the keys of the recipe are not letters, and it does not change them.
-fn wait_for_modifiers(server: &Server, keyboard: &Keyboard) -> Result<(), SendError> {
-    let deadline = Instant::now() + MODIFIER_RELEASE_WAIT;
-    while let Some(key) =
-        modifier_in_the_way(server, keyboard).map_err(|_| unsupported(Refusal::NoLocalServer))?
-    {
-        if Instant::now() >= deadline {
-            return Err(SendError::ModifierHeld { key });
-        }
-        std::thread::sleep(LOOK_EVERY);
-    }
-    Ok(())
-}
-
-/// Waits for every modifier to come up, for at most `MODIFIER_RELEASE_WAIT`, and
-/// then refuses Caps Lock. The modifier is the ordinary case right after a hotkey.
-/// Caps Lock is a state somebody left on, and waiting for it would be waiting for
-/// them. Gives the modifier state the server reports, with the layout group in it.
-fn wait_for_keys_released(server: &Server, keyboard: &Keyboard) -> Result<u16, SendError> {
-    let lost = || unsupported(Refusal::NoLocalServer);
-    let deadline = Instant::now() + MODIFIER_RELEASE_WAIT;
-    while let Some(key) = modifier_down(server, keyboard).map_err(|_| lost())? {
-        if Instant::now() >= deadline {
-            return Err(SendError::ModifierHeld { key });
-        }
-        std::thread::sleep(LOOK_EVERY);
-    }
-    let state = u16::from(
-        server
-            .conn
-            .query_pointer(server.root)
-            .map_err(|_| lost())?
-            .reply()
-            .map_err(|_| lost())?
-            .mask,
-    );
-    if caps_lock_on(state) {
-        return Err(SendError::CapsLockOn);
-    }
-    Ok(state)
-}
-
-/// Why the send must stop before the next batch, if it must: `Escape` first, as on
-/// every system, then the caller's flag (R03), then the window in front.
-fn stop_before_next(
-    server: &Server,
-    front: u32,
-    escape: &mut ReservedEscape,
-    halt: &AtomicBool,
-) -> Option<StopReason> {
-    if escape.pressed() {
-        return Some(StopReason::Escape);
-    }
-    if halt.load(Ordering::Relaxed) {
-        return Some(StopReason::Halted);
-    }
-    match focused_toplevel(&server.conn, server.root) {
-        Ok(Some(window)) if window == front => None,
-        Ok(_) => Some(StopReason::FocusMoved),
-        Err(Lost) => Some(StopReason::Dropped),
-    }
-}
-
 /// The keysyms of `characters`, or the first that has none.
 fn keysyms_of(characters: &[char]) -> Result<Vec<u32>, SendError> {
     characters
@@ -795,6 +717,10 @@ pub(crate) fn send_text(
     // Declared before the keys, so the keys are given back first: the wait for
     // `Escape` to come up must not keep the layout rewritten.
     let mut escape = XEscape::reserve(address, keyboard.keymap.find_keycode(KEYSYM_ESCAPE));
+    // No key goes under a modifier that makes it a command, the tap of the warm-up included:
+    // a lock somebody left on is found here, before anything is pressed (`OBS-231`).
+    hands_off(&server, &keyboard, state, false, front, &mut escape, halt)
+        .map_err(|reason| stopped_before_batch(reason, 0, expected, true))?;
     if needs_spare {
         warm_up(&server, spare[0]).map_err(lost)?;
     }
@@ -844,6 +770,18 @@ pub(crate) fn send_text(
         // of the layout it types whenever it reads them, so with one of those a stop
         // leaves a floor, not a count (R18).
         let layout_keys = layout.types_any(&keysyms[batch.first..batch.end]);
+        // Looked at last, right before the keys: the server stamps each with the state it
+        // meets, so what the person pressed since the last batch is seen here (R27).
+        hands_off(
+            &server,
+            &keyboard,
+            state,
+            layout_keys,
+            front,
+            &mut escape,
+            halt,
+        )
+        .map_err(|reason| stopped_before_batch(reason, arrived, expected, first == 0))?;
         let on_the_wire = move |reason| stopped_on_the_wire(arrived, expected, reason, layout_keys);
         let Ok(used_spare) = type_batch(&server, &spare, &batch, &keysyms, &layout) else {
             return Err(on_the_wire(StopReason::Dropped));

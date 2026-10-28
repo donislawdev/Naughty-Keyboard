@@ -732,23 +732,127 @@ pub(crate) fn held_modifier(
     mapping: &[u8],
     keycodes_per_modifier: usize,
 ) -> Option<&'static str> {
-    if keycodes_per_modifier == 0 {
-        return None;
-    }
-    mapping
-        .chunks(keycodes_per_modifier)
-        .enumerate()
-        .find_map(|(index, row)| {
-            let name = modifier_name(index)?;
-            row.iter()
-                .any(|keycode| *keycode != 0 && key_is_down(keys, *keycode))
-                .then_some(name)
-        })
+    let down = modifiers_down(keys, mapping, keycodes_per_modifier);
+    (0..8)
+        .filter(|index| down & (1 << index) != 0)
+        .find_map(modifier_name)
 }
 
 /// Whether Caps Lock is on, from the modifier state the server reports.
 pub(crate) fn caps_lock_on(state: u16) -> bool {
     state & LOCK_MASK != 0
+}
+
+/// The modifiers of the map whose rows have a key down, as the bits of a state: row
+/// `n` of the server's modifier map is bit `n`. Given the `QueryKeymap` bits and the
+/// map, as [`held_modifier`] is.
+pub(crate) fn modifiers_down(keys: &[u8], mapping: &[u8], keycodes_per_modifier: usize) -> u16 {
+    if keycodes_per_modifier == 0 {
+        return 0;
+    }
+    mapping
+        .chunks(keycodes_per_modifier)
+        .take(8)
+        .enumerate()
+        .filter(|(_, row)| {
+            row.iter()
+                .any(|keycode| *keycode != 0 && key_is_down(keys, *keycode))
+        })
+        .fold(0, |bits, (index, _)| bits | (1 << index))
+}
+
+/// The bits of `Shift`, `Control`, `Mod1` (Alt), `Mod4` (Super) and `Mod5` (`AltGr` on
+/// the layouts that have one) in a state.
+const SHIFT_BIT: u16 = 1 << 0;
+const CONTROL_BIT: u16 = 1 << 2;
+const ALT_BIT: u16 = 1 << 3;
+const SUPER_BIT: u16 = 1 << 6;
+const ALTGR_BIT: u16 = 1 << 7;
+
+/// What the keyboard holds before a batch means for it (R27, `OBS-231`, `D160`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum InTheWay {
+    /// Nothing that would change what the batch types.
+    Nothing,
+    /// A modifier that comes up without harm, so the batch waits for it.
+    WaitFor(&'static str),
+    /// The send stops before the batch.
+    Stop(StopReason),
+}
+
+/// What the modifiers `down` (keys held, [`modifiers_down`]) and `state` (the state the
+/// server reports, latched and locked modifiers and the layout group in it) mean for the
+/// next batch. `start` is the state the keys of the layout were chosen for, and
+/// `layout_keys` says whether the batch holds one of them.
+///
+/// The server stamps a key event with the state it is in when it takes the event, and the
+/// keys of a batch are taken within a millisecond of being sent, so a look right before a
+/// batch sees what its keys will meet. Measured with a physical keyboard on Xorg (`D160`):
+/// a key held, a lock and a group switch reach the keys this program sends, a latch made
+/// on another device does not - and the state does not tell a latch from a lock, so a
+/// latch is answered as a lock is.
+///
+/// - `Alt` stops at once, as on Windows (`D149`): under it a character is a mnemonic, and
+///   GTK typed nothing of a value under a locked `Alt` while the send said "sent".
+/// - Caps Lock stops: the toolkit turns letters into capitals whatever key typed them
+///   (`OBS-202` point 8), and it is a state somebody turned on, not a key that comes up.
+/// - `Ctrl` and `Super` are waited for: under them a key is a command.
+/// - `Shift` and `AltGr` change only the level a key of the layout types, and a spare key
+///   carries its keysym on both levels and in every group (`OBS-202` point 7), so they and
+///   a group switch count only for a batch with a key of the layout.
+pub(crate) fn in_the_way(down: u16, state: u16, start: u16, layout_keys: bool) -> InTheWay {
+    let held = down | state;
+    if held & ALT_BIT != 0 {
+        return InTheWay::Stop(StopReason::KeyPressed { key: "Alt" });
+    }
+    if caps_lock_on(state) {
+        return InTheWay::Stop(StopReason::KeyPressed { key: "Caps Lock" });
+    }
+    if held & CONTROL_BIT != 0 {
+        return InTheWay::WaitFor("Ctrl");
+    }
+    if held & SUPER_BIT != 0 {
+        return InTheWay::WaitFor("Super");
+    }
+    if !layout_keys {
+        return InTheWay::Nothing;
+    }
+    if held & SHIFT_BIT != 0 {
+        return InTheWay::WaitFor("Shift");
+    }
+    if held & ALTGR_BIT != 0 {
+        return InTheWay::WaitFor("AltGr");
+    }
+    if group_bits(state) != group_bits(start) {
+        return InTheWay::Stop(StopReason::LayoutChanged);
+    }
+    InTheWay::Nothing
+}
+
+/// The layout group of a state, whichever of the four it is.
+fn group_bits(state: u16) -> u16 {
+    (state >> GROUP_SHIFT) & 0x3
+}
+
+/// What a stop found before a batch makes of the send. Before the first batch nothing was
+/// typed, so a modifier is refused by name, as one found at the start of any send is: Caps
+/// Lock in its own words, any other as held. After it, the batches answered are what
+/// arrived.
+pub(crate) fn stopped_before_batch(
+    reason: StopReason,
+    arrived: usize,
+    expected: usize,
+    first: bool,
+) -> SendError {
+    match reason {
+        StopReason::KeyPressed { key: "Caps Lock" } if first => SendError::CapsLockOn,
+        StopReason::KeyPressed { key } if first => SendError::ModifierHeld { key },
+        _ => SendError::Truncated {
+            units_sent: arrived,
+            units_expected: expected,
+            reason,
+        },
+    }
 }
 
 /// A token for one `_NET_WM_PING`, different for every ping of one send and made
@@ -1553,6 +1657,154 @@ mod tests {
             held_modifier(&keys, &mapping, 0),
             None,
             "no map, nothing held"
+        );
+    }
+
+    #[test]
+    fn the_rows_with_a_key_down_are_the_bits_of_a_state() {
+        // Shift 50, Lock 66, Control 37, Mod1 64, Mod2 77, Mod4 133, Mod5 92.
+        let mut mapping = [0u8; 16];
+        mapping[..2].copy_from_slice(&[50, 0]);
+        mapping[2..4].copy_from_slice(&[66, 0]);
+        mapping[4..6].copy_from_slice(&[37, 0]);
+        mapping[6..8].copy_from_slice(&[64, 0]);
+        mapping[8..10].copy_from_slice(&[77, 0]);
+        mapping[12..14].copy_from_slice(&[133, 0]);
+        mapping[14..16].copy_from_slice(&[92, 0]);
+        let down = |keycodes: &[u8]| {
+            let mut keys = [0u8; 32];
+            for keycode in keycodes {
+                keys[usize::from(keycode / 8)] |= 1 << (keycode % 8);
+            }
+            modifiers_down(&keys, &mapping, 2)
+        };
+        assert_eq!(down(&[]), 0);
+        assert_eq!(down(&[50]), 0x01);
+        assert_eq!(
+            down(&[37, 64]),
+            0x0C,
+            "Ctrl and Alt, as the shortcut holds them"
+        );
+        assert_eq!(down(&[133]), 0x40);
+        assert_eq!(down(&[92]), 0x80);
+        assert_eq!(down(&[38]), 0, "a key of no modifier");
+        assert_eq!(
+            modifiers_down(&[0xFF; 32], &mapping, 0),
+            0,
+            "no map, nothing down"
+        );
+    }
+
+    /// The person's keys before a batch, as `D160` answers them.
+    #[test]
+    fn a_modifier_before_a_batch_is_waited_for_or_stops_it() {
+        use InTheWay::{Nothing, Stop, WaitFor};
+        let alt = Stop(StopReason::KeyPressed { key: "Alt" });
+        // Nothing held: the batch goes, with or without a key of the layout.
+        assert_eq!(in_the_way(0, 0, 0, true), Nothing);
+        assert_eq!(in_the_way(0, 0, 0, false), Nothing);
+        // Alt stops, held or locked, and before anything it is held with.
+        assert_eq!(in_the_way(0x08, 0, 0, false), alt);
+        assert_eq!(in_the_way(0, 0x08, 0, true), alt, "locked");
+        assert_eq!(
+            in_the_way(0x0C, 0x0C, 0, true),
+            alt,
+            "the shortcut's Ctrl+Alt"
+        );
+        // Caps Lock stops, whatever keys the batch holds.
+        assert_eq!(
+            in_the_way(0, 0x02, 0, false),
+            Stop(StopReason::KeyPressed { key: "Caps Lock" })
+        );
+        // Ctrl and Super are waited for, held or locked, even with spare keys only.
+        assert_eq!(in_the_way(0x04, 0, 0, false), WaitFor("Ctrl"));
+        assert_eq!(in_the_way(0, 0x04, 0, false), WaitFor("Ctrl"));
+        assert_eq!(in_the_way(0x40, 0, 0, false), WaitFor("Super"));
+        assert_eq!(in_the_way(0x44, 0, 0, false), WaitFor("Ctrl"));
+        // Shift and AltGr only for a batch with a key of the layout.
+        assert_eq!(in_the_way(0x01, 0, 0, true), WaitFor("Shift"));
+        assert_eq!(in_the_way(0, 0x01, 0x01, true), WaitFor("Shift"));
+        assert_eq!(in_the_way(0x01, 0x01, 0, false), Nothing);
+        assert_eq!(in_the_way(0x80, 0, 0, true), WaitFor("AltGr"));
+        assert_eq!(
+            in_the_way(0, 0x80, 0x80, false),
+            Nothing,
+            "scene `zatrzask`"
+        );
+        // Num Lock, Mod3 and the buttons are no modifier of a batch.
+        assert_eq!(in_the_way(0x30, 0x0130, 0, true), Nothing);
+    }
+
+    #[test]
+    fn a_group_switched_since_the_start_stops_a_batch_of_the_layout_only() {
+        let first = 0x0000;
+        let second = 0x2000;
+        assert_eq!(
+            in_the_way(0, second, first, true),
+            InTheWay::Stop(StopReason::LayoutChanged)
+        );
+        assert_eq!(
+            in_the_way(0, first, second, true),
+            InTheWay::Stop(StopReason::LayoutChanged),
+            "back to the first is a switch too"
+        );
+        assert_eq!(
+            in_the_way(0, 0x6000, 0x4000, true),
+            InTheWay::Stop(StopReason::LayoutChanged)
+        );
+        assert_eq!(
+            in_the_way(0, 0x4000, first, true),
+            InTheWay::Stop(StopReason::LayoutChanged),
+            "the third group, which the keys of the layout never type in"
+        );
+        assert_eq!(in_the_way(0, second, second, true), InTheWay::Nothing);
+        assert_eq!(
+            in_the_way(0, second, first, false),
+            InTheWay::Nothing,
+            "a spare key types its keysym in every group"
+        );
+        // A modifier is answered before the group: it names the key the person pressed.
+        assert_eq!(
+            in_the_way(0x01, second, first, true),
+            InTheWay::WaitFor("Shift")
+        );
+    }
+
+    #[test]
+    fn a_stop_before_the_first_batch_refuses_and_after_it_counts_what_arrived() {
+        let alt = StopReason::KeyPressed { key: "Alt" };
+        assert_eq!(
+            stopped_before_batch(alt, 0, 255, true),
+            SendError::ModifierHeld { key: "Alt" }
+        );
+        assert_eq!(
+            stopped_before_batch(StopReason::KeyPressed { key: "Caps Lock" }, 0, 255, true),
+            SendError::CapsLockOn
+        );
+        assert_eq!(
+            stopped_before_batch(alt, 64, 255, false),
+            SendError::Truncated {
+                units_sent: 64,
+                units_expected: 255,
+                reason: alt
+            }
+        );
+        assert_eq!(
+            stopped_before_batch(StopReason::Escape, 0, 255, true),
+            SendError::Truncated {
+                units_sent: 0,
+                units_expected: 255,
+                reason: StopReason::Escape
+            },
+            "only a modifier is refused by name"
+        );
+        assert_eq!(
+            stopped_before_batch(StopReason::LayoutChanged, 128, 255, false),
+            SendError::Truncated {
+                units_sent: 128,
+                units_expected: 255,
+                reason: StopReason::LayoutChanged
+            }
         );
     }
 

@@ -67,7 +67,7 @@ use nkb_app::drive_sequence::Ended;
 use nkb_app::keep_settings::{SettingsMessage, ShortcutChange};
 use nkb_app::ports::{
     CatalogueCoverage, CatalogueSource, DesktopRefusal, SaveError, SettingsNote, SettingsUnusable,
-    ShortcutRegistration, ShortcutUnreadable, ShortcutsUnavailable, SourceSkipped, StopReason,
+    ShortcutRegistration, ShortcutUnreadable, ShortcutsUnavailable, SourceSkipped,
 };
 use nkb_core::hotkeys::{
     Bindings, ChordError, ChordProblem, HotkeyAction, HotkeyChord, Refusal, Refused,
@@ -84,6 +84,7 @@ mod causes;
 mod fill;
 mod palette;
 mod registration;
+mod stop;
 mod substitutions;
 mod typing;
 mod windows;
@@ -97,6 +98,7 @@ pub use palette::{
     typing_counter, warnings,
 };
 pub use registration::{ended, entry_news, registration, registrations, shortcuts_unavailable};
+pub use stop::stop_reason;
 pub use substitutions::substitution_names;
 pub use windows::{
     AboutLabel, MatchPlace, PacksLabel, ShortcutsLabel, WelcomeLabel, about_copyright, about_label,
@@ -418,48 +420,6 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
                 ("button", label(PaletteLabel::Copy)),
             ],
         ),
-    }
-}
-
-// ---------------------------------------------------------------------------
-// StopReason - why a send stopped, inside the sentences above
-// ---------------------------------------------------------------------------
-
-/// The pattern for one reason a send stopped. `ux-spec.md` 6, section A, byte
-/// for byte. A clause, not a sentence: it stands after a colon in
-/// `Message::Interrupted`, `Message::InFlight`, `Message::NothingArrived` and
-/// `Message::ClearedThenNothingArrived` (`D95`), the way `{detail}` does in
-/// `Message::ClipboardFailed`.
-fn pattern_stop_reason(reason: StopReason) -> &'static str {
-    match reason {
-        StopReason::Dropped => {
-            "the system did not deliver the keys - another program may be blocking input"
-        }
-        StopReason::FocusMoved => "another window came to the front",
-        StopReason::NotTaking => "the application stopped taking keys",
-        StopReason::Escape => "Escape was pressed",
-        StopReason::KeyPressed { .. } => "{key} was pressed",
-        StopReason::Halted => "the palette was closed",
-        // `D159`. Wayland, where the input method says when the field loses the focus.
-        StopReason::FieldLeft => "the keyboard focus left the field",
-        StopReason::NoField => "no field that takes typed text had the keyboard focus",
-    }
-}
-
-/// Why a send stopped, ready to stand inside a sentence.
-#[must_use]
-pub fn stop_reason(reason: StopReason) -> String {
-    let pattern = pattern_stop_reason(reason);
-    match reason {
-        // The key's name on the system the route runs on (`D149`).
-        StopReason::KeyPressed { key } => fill(pattern, &[("key", key)]),
-        StopReason::Dropped
-        | StopReason::FocusMoved
-        | StopReason::NotTaking
-        | StopReason::Escape
-        | StopReason::Halted
-        | StopReason::FieldLeft
-        | StopReason::NoField => pattern.to_owned(),
     }
 }
 
@@ -1151,7 +1111,7 @@ mod tests {
     use super::windows::{pattern_packs_label, pattern_shortcuts_label};
     use super::*;
     use crate::shortcuts::CONVENTION;
-    use nkb_app::ports::{EntryNews, EntryRefusal};
+    use nkb_app::ports::{EntryNews, EntryRefusal, StopReason};
     use nkb_core::hotkeys::{Convention, HotkeyKey};
     use nkb_core::pack::PairHalf;
     use nkb_core::substitutions::Substitutions;
@@ -1935,29 +1895,10 @@ mod tests {
         }
     }
 
+    /// The clause of a reason stands after the colon of its sentence
+    /// (`stop.rs` holds the clauses).
     #[test]
-    fn every_reason_a_send_stopped_reads_as_its_own_clause() {
-        // `D95`, `D96`: the clause stands between a colon and the full stop its
-        // sentence brings, so it carries no full stop of its own, and two
-        // reasons that read the same would tell the tester nothing.
-        let clauses: Vec<String> = [
-            StopReason::Dropped,
-            StopReason::FocusMoved,
-            StopReason::NotTaking,
-            StopReason::Escape,
-            StopReason::KeyPressed { key: "Alt" },
-            StopReason::Halted,
-            StopReason::FieldLeft,
-            StopReason::NoField,
-        ]
-        .into_iter()
-        .map(stop_reason)
-        .collect();
-        assert_eq!(clauses[4], "Alt was pressed", "the key is named, D149");
-        for (i, clause) in clauses.iter().enumerate() {
-            assert!(!clause.is_empty() && !clause.ends_with('.'), "{clause}");
-            assert!(!clauses[i + 1..].contains(clause), "\"{clause}\" twice");
-        }
+    fn a_reason_a_send_stopped_stands_inside_its_sentence() {
         assert_eq!(
             super::message(
                 &Message::Interrupted {
