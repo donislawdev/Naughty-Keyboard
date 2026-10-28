@@ -212,21 +212,31 @@ fn not_delivered(
         DeliveryError::NoTextField => (Event::InsertionRefused, Message::NoTextField),
         // A route held by somebody else. Nothing went out, so the counter stays.
         DeliveryError::Busy => (Event::InsertionRefused, busy(on_clipboard)),
-        // The two below are reported by the clipboard route alone - the direct
-        // one presses keys and has no clipboard to refuse. A direct route that
-        // began to report them would need sentences of its own. The words here
-        // name the clipboard, because only it gets here. Nothing reached the
-        // clipboard in either, so the counter stays.
+        // Reported by the clipboard route alone - the direct one presses keys
+        // and has no clipboard to refuse. A direct route that began to report it
+        // would need a sentence of its own. Nothing reached the clipboard, so
+        // the counter stays.
         DeliveryError::Refused { detail } => {
             (Event::InsertionRefused, Message::ClipboardFailed { detail })
         }
+        // Both routes refuse a character by name rather than lose it: the
+        // clipboard, and on Linux the keys and the input method (`OBS-236`).
+        // Nothing went out, so the counter stays.
         DeliveryError::CannotCarry { character } => (
             Event::InsertionRefused,
-            Message::NotForClipboard {
-                id: key.value.clone(),
-                character,
-            },
+            cannot_carry(on_clipboard, key, character),
         ),
+    }
+}
+
+/// What a character a route cannot carry tells the tester: that the clipboard
+/// would cut the value short, or that the system cannot type it (`OBS-236`).
+fn cannot_carry(on_clipboard: bool, key: &ValueKey, character: char) -> Message {
+    let id = key.value.clone();
+    if on_clipboard {
+        Message::NotForClipboard { id, character }
+    } else {
+        Message::CannotType { id, character }
     }
 }
 

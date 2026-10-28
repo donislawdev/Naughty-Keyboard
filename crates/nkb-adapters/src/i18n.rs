@@ -233,6 +233,10 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::NotForClipboard { .. } => {
             "Value \"{id}\" contains {character}, where clipboard text would be cut short, so it was not placed on the clipboard. Only direct input can deliver it whole."
         }
+        // `OBS-236`. The keys and the input method of Linux refuse it by name.
+        Message::CannotType { .. } => {
+            "Value \"{id}\" contains {character}, which this system cannot type, so nothing was typed."
+        }
         Message::NoTarget => "The target window is gone. Click into a field and try again.",
         Message::Interrupted { .. } => {
             "Stopped after {sent} of {expected} UTF-16 units: {reason}. The field holds a partial value - clear it before the next test."
@@ -344,12 +348,12 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
             fill(pattern, &[("cause", causes::closed_window())])
         }
         Message::ClipboardFailed { detail } => fill(pattern, &[("detail", detail)]),
-        Message::NotForClipboard { id, character } => fill(
+        Message::NotForClipboard { id, character } | Message::CannotType { id, character } => fill(
             pattern,
             &[
                 ("id", id),
-                // As a code point, never the character itself: the one this
-                // names today is U+0000, and a NUL in the palette's own
+                // As a code point, never the character itself: the one these
+                // name today is U+0000, and a NUL in the palette's own
                 // sentence would cut the sentence short the same way.
                 ("character", &format!("U+{:04X}", u32::from(*character))),
             ],
@@ -436,6 +440,9 @@ fn pattern_stop_reason(reason: StopReason) -> &'static str {
         StopReason::Escape => "Escape was pressed",
         StopReason::KeyPressed { .. } => "{key} was pressed",
         StopReason::Halted => "the palette was closed",
+        // `D159`. Wayland, where the input method says when the field loses the focus.
+        StopReason::FieldLeft => "the keyboard focus left the field",
+        StopReason::NoField => "no field that takes typed text had the keyboard focus",
     }
 }
 
@@ -450,7 +457,9 @@ pub fn stop_reason(reason: StopReason) -> String {
         | StopReason::FocusMoved
         | StopReason::NotTaking
         | StopReason::Escape
-        | StopReason::Halted => pattern.to_owned(),
+        | StopReason::Halted
+        | StopReason::FieldLeft
+        | StopReason::NoField => pattern.to_owned(),
     }
 }
 
@@ -1210,6 +1219,10 @@ mod tests {
                 id: "nul-in-text".to_owned(),
                 character: '\0',
             },
+            Message::CannotType {
+                id: "nul-in-text".to_owned(),
+                character: '\0',
+            },
             Message::NoTarget,
             Message::Interrupted {
                 units_sent: 12480,
@@ -1614,10 +1627,11 @@ mod tests {
             Message::ClearingSkippedNoKeys => 38,
             Message::TypingBusy => 39,
             Message::InFlight { .. } => 40,
+            Message::CannotType { .. } => 41,
         }
     }
 
-    const SLOTS: usize = 41;
+    const SLOTS: usize = 42;
 
     #[test]
     fn every_message_variant_is_listed_here() {
@@ -1880,6 +1894,19 @@ mod tests {
             "Value \"nul-in-text\" contains U+0000, where clipboard text would be cut short, so it was not placed on the clipboard. Only direct input can deliver it whole."
         );
         assert!(!out.contains('\0'));
+        // The keys of Linux refuse the same character, and say nothing of a clipboard.
+        let typed = message(
+            &Message::CannotType {
+                id: "nul-in-text".to_owned(),
+                character: '\0',
+            },
+            "p",
+            &defaults(),
+        );
+        assert_eq!(
+            typed,
+            "Value \"nul-in-text\" contains U+0000, which this system cannot type, so nothing was typed."
+        );
     }
 
     #[test]
@@ -1920,6 +1947,8 @@ mod tests {
             StopReason::Escape,
             StopReason::KeyPressed { key: "Alt" },
             StopReason::Halted,
+            StopReason::FieldLeft,
+            StopReason::NoField,
         ]
         .into_iter()
         .map(stop_reason)

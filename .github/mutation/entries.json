@@ -11538,8 +11538,8 @@
       "id": "M1494",
       "why": "a question that stands is not said to the person",
       "file": "crates/nkb-sys/src/linux_portal_rules.rs",
-      "find": "                noticed(Waiting::ForConsent);\n                receiver.recv().ok()",
-      "replace": "                receiver.recv().ok()",
+      "find": "                said = true;\n                noticed(Waiting::ForConsent);",
+      "replace": "                said = true;",
       "test": "linux_portal_rules::tests::an_answer_that_does_not_come_in_time_is_waited_for_and_noticed_once",
       "runner": "rust:nkb-sys:lib"
     },
@@ -11565,8 +11565,8 @@
       "id": "M1497",
       "why": "an answer that came in time says it ended a wait that never began",
       "file": "crates/nkb-sys/src/linux_portal_rules.rs",
-      "find": "            Ok(answer) => Some(answer),",
-      "replace": "            Ok(answer) => {\n                noticed(Waiting::Answered);\n                Some(answer)\n            }",
+      "find": "                Ok(answer) => return Some(answer),",
+      "replace": "                Ok(answer) => {\n                    noticed(Waiting::Answered);\n                    return Some(answer);\n                }",
       "test": "linux_portal_rules::tests::an_answer_that_comes_in_time_is_returned_and_nothing_is_said",
       "runner": "rust:nkb-sys:lib"
     },
@@ -12334,6 +12334,105 @@
       "replace": "        Arrival::Interrupted { .. }\n    ) {",
       "test": "live::view::tests::a_value_with_keys_still_on_their_way_is_marked_interrupted_as_a_risk",
       "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1586",
+      "why": "a value the keys of Linux cannot carry tells the tester it was not placed on the clipboard, although no clipboard was used",
+      "file": "crates/nkb-app/src/advance_sequence/classify.rs",
+      "find": "    if on_clipboard {\n        Message::NotForClipboard { id, character }",
+      "replace": "    if true {\n        Message::NotForClipboard { id, character }",
+      "test": "advance_sequence::tests::a_value_a_route_cannot_carry_is_refused_by_name_in_the_words_of_the_route",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1587",
+      "why": "the palette tells the tester that the keys of Linux cannot type U+0000 in the words of the clipboard",
+      "file": "crates/nkb-adapters/src/i18n.rs",
+      "find": "contains {character}, which this system cannot type, so nothing was typed.",
+      "replace": "contains {character}, where clipboard text would be cut short, so nothing was typed.",
+      "test": "i18n::tests::the_character_the_clipboard_refuses_is_named_as_a_code_point",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1588",
+      "why": "on Wayland another application that comes to the front while a value goes in gets the rest of it",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "                self.left |= self.typing;",
+      "replace": "                self.left |= false;",
+      "test": "linux_ibus_rules::tests::another_application_in_front_while_typing_is_the_field_left_even_when_it_comes_back",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1589",
+      "why": "on Wayland a value is committed to the input context of nobody and said to be handed over, while it reaches no field",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "        if !self.focused || self.client.as_deref() == Some(NOBODY) {",
+      "replace": "        if !self.focused {",
+      "test": "linux_ibus_rules::tests::a_focus_of_nobody_is_no_field_and_nothing_is_typed",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1590",
+      "why": "a notice of the focus without a path forgets the field typed into, so a move to another input context goes unseen",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "                if context.is_some() {\n                    self.context = context;",
+      "replace": "                if true {\n                    self.context = context;",
+      "test": "linux_ibus_rules::tests::another_context_while_typing_is_the_field_left_even_without_a_loss_said",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1591",
+      "why": "a daemon that names another input context without saying the field lost the focus gets the rest of the value typed there",
+      "file": "crates/nkb-sys/src/linux_ibus_rules.rs",
+      "find": "                self.left |= self.typing && elsewhere;",
+      "replace": "                self.left |= false && elsewhere;",
+      "test": "linux_ibus_rules::tests::another_context_while_typing_is_the_field_left_even_without_a_loss_said",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1592",
+      "why": "closing the palette while the desktop asks the person to allow the keys leaves the window of the system and the process standing for minutes",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "            if !withdrawn && halt.load(Ordering::Relaxed) {",
+      "replace": "            if false && halt.load(Ordering::Relaxed) {",
+      "test": "linux_portal_rules::tests::a_wait_the_caller_stops_takes_the_question_back_once_and_returns_what_the_wait_says",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1593",
+      "why": "a question that was taken back is taken back again every look, and the portal is asked to close a request that is gone",
+      "file": "crates/nkb-sys/src/linux_portal_rules.rs",
+      "find": "                withdrawn = true;\n                withdraw();",
+      "replace": "                withdrawn = false;\n                withdraw();",
+      "test": "linux_portal_rules::tests::a_wait_the_caller_stops_takes_the_question_back_once_and_returns_what_the_wait_says",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1594",
+      "why": "the palette says another window came to the front when the field lost the focus inside one, and the tester looks for a window",
+      "file": "crates/nkb-adapters/src/i18n.rs",
+      "find": "        StopReason::FieldLeft => \"the keyboard focus left the field\",",
+      "replace": "        StopReason::FieldLeft => \"another window came to the front\",",
+      "test": "i18n::tests::every_reason_a_send_stopped_reads_as_its_own_clause",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1595",
+      "why": "a send that stopped because the field lost the focus is told as another window in front",
+      "file": "crates/nkb-adapters/src/keyboard.rs",
+      "find": "        nkb_sys::StopReason::FieldLeft => StopReason::FieldLeft,",
+      "replace": "        nkb_sys::StopReason::FieldLeft => StopReason::FocusMoved,",
+      "test": "keyboard::tests::every_reason_of_the_system_maps_to_its_own_reason",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1596",
+      "why": "nkb send names the field losing the focus and nothing having it in the same words, and a script cannot tell them apart",
+      "file": "crates/nkb-cli/src/refusals.rs",
+      "find": "        StopReason::NoField => \"no field that takes typed text had the keyboard focus\".to_owned(),",
+      "replace": "        StopReason::NoField => \"the keyboard focus left the field\".to_owned(),",
+      "test": "refusals::tests::every_reason_a_send_stopped_reads_as_its_own_and_names_the_key",
+      "runner": "rust:nkb-cli:bin=nkb"
     }
   ]
 }

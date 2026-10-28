@@ -229,6 +229,8 @@ fn stop_reason(reason: StopReason) -> String {
         // `nkb send` hands over a flag nobody sets (`send_value`), so this is never
         // said today. Should a route ever report it, the words are true.
         StopReason::Halted => "the send was asked to stop".to_owned(),
+        StopReason::FieldLeft => "the keyboard focus left the field".to_owned(),
+        StopReason::NoField => "no field that takes typed text had the keyboard focus".to_owned(),
     }
 }
 
@@ -277,6 +279,8 @@ mod tests {
             StopReason::Escape,
             StopReason::KeyPressed { key: "Alt" },
             StopReason::Halted,
+            StopReason::FieldLeft,
+            StopReason::NoField,
         ]
         .map(stop_reason);
         for (i, reason) in reasons.iter().enumerate() {
