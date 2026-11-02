@@ -67,7 +67,7 @@ jobs:
     outputs:
       entries: ${{ steps.plan.outputs.entries }}
       parts: ${{ steps.plan.outputs.parts }}
-      shards: ${{ steps.plan.outputs.shards }}
+      matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       # The whole history, because a pull request is compared with its base and
       # the base has to be here to be compared with. Nothing here pushes, so no
@@ -99,12 +99,15 @@ jobs:
           fi
 
   run:
-    name: part ${{ matrix.shard }}
+    name: part ${{ matrix.shard }} on ${{ matrix.system }}
     needs: plan
     if: ${{ needs.plan.outputs.entries != '0' }}
     # Windows, because every entry was measured there before it moved here, and
     # the crate that calls into the system compiles most of its code only there.
-    runs-on: windows-latest
+    # An entry of code that compiles only on Linux has its test only there, so
+    # the plan gives such entries parts of their own on Linux, after the parts
+    # of Windows, and the script refuses a part on a machine of another system.
+    runs-on: ${{ matrix.machine }}
     # A guess of 60 to 110 minutes a part was written down before the first run,
     # and the first run is the measurement. The ceiling is far above the guess so
     # that a hang ends as a part that did not finish. The step that breaks the
@@ -113,8 +116,8 @@ jobs:
     strategy:
       # A part that fails must not stop the others. Their verdicts are the run.
       fail-fast: false
-      matrix:
-        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+      # Each part with its number, its system and the machine of that system.
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     defaults:
       run:
         shell: bash

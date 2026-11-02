@@ -27,6 +27,12 @@ them take many hours, and they run in CI instead: .github/workflows/mutation.yml
 cuts them into sixteen parts once a week and runs the entries a pull request
 reaches. Here a run needs --only, --base or --shard, and no flag means all.
 
+A part on a machine of another system. An entry runs on Windows unless it names
+another system, and it has to name Linux when it breaks code that compiles only
+there (ONLY_ON), because its test exists nowhere else. The plan gives such
+entries parts of their own, and a part started on the wrong system refuses to
+start, so it is found as a part that did not report and not as NO TEST.
+
 The safeguards, each from a failure seen before it was written
 --------------------------------------------------------------
 - A file is read whole before it is changed, put back in a finally block, and the
@@ -95,6 +101,16 @@ MAX_PARTS = 16
 
 TIMEOUT_MINUTES = 30
 
+# The system an entry runs on, and the machine of the workflow that has it. An
+# entry names its system only where it is not Windows, where every entry was
+# measured before it moved here and where most of the system code compiles.
+SYSTEMS = {"windows": "windows-latest", "linux": "ubuntu-latest"}
+DEFAULT_SYSTEM = "windows"
+# Code that compiles on one system only. Its tests exist there and nowhere else,
+# so an entry that breaks it and runs anywhere else comes out NO TEST, and the
+# check says so before a weekly run does.
+ONLY_ON = (("crates/nkb-sys/src/linux/", "linux"),)
+
 CAUGHT = "caught"
 MISSED = "MISSED"
 WRONG_TEST = "WRONG TEST"
@@ -105,8 +121,9 @@ BASELINE_RED = "BASELINE RED"
 TIMEOUT = "TIMEOUT"
 VERDICTS = (CAUGHT, MISSED, WRONG_TEST, BROKEN, STALE, NO_TEST, BASELINE_RED, TIMEOUT)
 
-ENTRY_KEYS = frozenset({"id", "why", "file", "find", "replace", "append", "test", "runner"})
-CANARY_KEYS = ENTRY_KEYS | {"expect"}
+ENTRY_KEYS = frozenset({"id", "why", "file", "find", "replace", "append", "test", "runner", "system"})
+# A canary runs first in every part, whatever its system, so it names none.
+CANARY_KEYS = (ENTRY_KEYS - {"system"}) | {"expect"}
 REQUIRED_KEYS = ("id", "why", "file", "test", "runner")
 EXPECTABLE = (CAUGHT, MISSED, BROKEN)
 ENTRY_ID = re.compile(r"^M[1-9][0-9]*$")
@@ -223,6 +240,12 @@ def item_problems(item, allowed, pattern):
         problems.append("file is not a relative path with forward slashes")
     if "expect" in item and item["expect"] not in EXPECTABLE:
         problems.append("expect is one of %s" % ", ".join(EXPECTABLE))
+    others = sorted(set(SYSTEMS) - {DEFAULT_SYSTEM})
+    if "system" in item and item["system"] not in others:
+        problems.append("system is one of %s, or left out for %s" % (", ".join(others), DEFAULT_SYSTEM))
+    for prefix, system in ONLY_ON:
+        if path.startswith(prefix) and system_of(item) != system:
+            problems.append("%s compiles only on %s, so the entry says system %s" % (prefix, system, system))
     try:
         parse_runner(item["runner"])
     except ValueError as error:
@@ -423,16 +446,41 @@ def cut(entries, parts):
     return slices
 
 
-def parts_for(entries, whole):
-    """How many parts: sixteen for a run of everything, one for every twenty
+def parts_for(entries, whole, room=MAX_PARTS):
+    """How many parts: all the room for a run of everything, one for every twenty
     entries on a pull request, and never a part left with nothing in it."""
     if not entries:
         return 0
-    wanted = min(MAX_PARTS, len(entries)) if whole else min(
-        MAX_PARTS, math.ceil(len(entries) / ENTRIES_PER_PART))
+    wanted = min(room, len(entries)) if whole else min(
+        room, math.ceil(len(entries) / ENTRIES_PER_PART))
     while wanted > 1 and not all(cut(entries, wanted)):
         wanted -= 1
     return wanted
+
+
+def system_of(entry):
+    return entry.get("system", DEFAULT_SYSTEM)
+
+
+def this_system():
+    """The system of the machine this runs on, in the words of SYSTEMS."""
+    return {"win32": "windows", "linux": "linux", "darwin": "macos"}.get(sys.platform, sys.platform)
+
+
+def layout(entries, whole):
+    """The parts of a run, each the entries of one system with the system: the
+    parts of Windows first, then those of every other system, and never more
+    than sixteen in all. Another system gets one part for every twenty of its
+    entries in a run of everything too. They are few, and a part costs a cold
+    build of the workspace before its first entry."""
+    windows = [e for e in entries if system_of(e) == DEFAULT_SYSTEM]
+    others = []
+    for system in sorted(set(SYSTEMS) - {DEFAULT_SYSTEM}):
+        own = [e for e in entries if system_of(e) == system]
+        room = MAX_PARTS - len(others) - (1 if windows else 0)
+        others.extend((system, part) for part in cut(own, parts_for(own, False, room)))
+    count = parts_for(windows, whole, MAX_PARTS - len(others))
+    return [(DEFAULT_SYSTEM, part) for part in cut(windows, count)] + others
 
 
 def git(root, *arguments):
@@ -971,7 +1019,11 @@ def parse_shard(text):
     return int(match.group(1)), int(match.group(2))
 
 
-def chosen_entries(root, data, only, base, shard):
+def chosen_entries(root, data, only, base, shard, system=None):
+    """The entries a run takes, why, and its part. A part of the plan is refused on
+    a machine of another system, where it could only come out as NO TEST, and a
+    run by --base here leaves out, and counts, the entries of other systems."""
+    system = system or this_system()
     if not (only or base or shard):
         raise Refused(
             "a run needs --only, --base or --shard. Every entry at once is many hours "
@@ -987,9 +1039,17 @@ def chosen_entries(root, data, only, base, shard):
         return [known[x] for x in dict.fromkeys(wanted)], "%d entries named with --only" % len(wanted), (0, 1)
     entries, reason = selection(root, data, base)
     if not shard:
-        return ordered(entries), reason, (0, 1)
+        here = [e for e in entries if system_of(e) == system]
+        if len(here) < len(entries):
+            reason += ", and %d of them run on another system and are left out" % (len(entries) - len(here))
+        return ordered(here), reason, (0, 1)
     part, parts = parse_shard(shard)
-    return cut(entries, parts)[part] if entries else [], reason, (part, parts)
+    planned = layout(entries, base is None)
+    if len(planned) != parts:
+        raise Refused("the plan of these entries has %d parts and --shard says %d" % (len(planned), parts))
+    if planned[part][0] != system:
+        raise Refused("part %d runs on %s and this machine is %s" % (part, planned[part][0], system))
+    return planned[part][1], reason, (part, parts)
 
 
 def run(arguments):
@@ -1034,14 +1094,20 @@ def run_chosen(arguments, data, entries, reason, part, parts):
 def plan(arguments):
     data = read_registry(arguments.root)
     entries, reason = selection(arguments.root, data, arguments.base)
-    parts = parts_for(entries, arguments.base is None)
+    planned = layout(entries, arguments.base is None)
+    parts = len(planned)
+    # The matrix of the parts' job: each part with its system and the machine of it.
+    matrix = {"include": [{"shard": number, "system": system, "machine": SYSTEMS[system]}
+                          for number, (system, _) in enumerate(planned)]}
     lines = ["entries=%d" % len(entries), "parts=%d" % parts,
-             "shards=%s" % json.dumps(list(range(parts)))]
+             "matrix=%s" % json.dumps(matrix, separators=(",", ":"))]
     if arguments.output:
         with open(arguments.output, "a", encoding="utf-8") as handle:
             handle.write("\n".join(lines) + "\n")
     print("\n".join(lines))
-    sentence = ("%s. %d entries in %d parts." % (reason[0].upper() + reason[1:], len(entries), parts)
+    elsewhere = collections.Counter(system for system, _ in planned if system != DEFAULT_SYSTEM)
+    where = "".join(", %d of them on %s" % (count, system) for system, count in sorted(elsewhere.items()))
+    sentence = ("%s. %d entries in %d parts%s." % (reason[0].upper() + reason[1:], len(entries), parts, where)
                 if entries else "No mutation entry is reached by this change, so none runs.")
     print(sentence)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")

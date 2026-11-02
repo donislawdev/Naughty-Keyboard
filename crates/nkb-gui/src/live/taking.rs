@@ -47,7 +47,6 @@ impl Worker<'_> {
     /// [`Worker::resume`], with `lines` said before what it has to say.
     pub(super) fn resume_after(&mut self, mut lines: Vec<String>) -> View {
         let (bindings, refused) = self.in_effect();
-        self.memory.bindings.set(bindings);
         lines.extend(
             refused.iter().filter_map(|message| {
                 i18n::settings_message(message, &self.memory.file, &bindings)

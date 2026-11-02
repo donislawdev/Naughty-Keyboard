@@ -155,6 +155,16 @@ class Shape(unittest.TestCase):
         appends["append"] = "tail"
         self.assertEqual(self.problems([appends]), [])
 
+    def test_an_entry_of_code_that_compiles_only_on_linux_says_linux(self):
+        self.assertEqual(self.problems([entry(system="linux")]), [])
+        self.assertProblem("system is one of linux, or left out for windows", system="windows")
+        self.assertProblem("system is one of linux, or left out for windows", system="macos")
+        self.assertProblem("crates/nkb-sys/src/linux/ compiles only on linux",
+                           file="crates/nkb-sys/src/linux/send.rs")
+        self.assertEqual(self.problems([entry(file="crates/nkb-sys/src/linux/send.rs", system="linux")]), [])
+        found = self.problems(canaries=[entry(identifier="K1", expect="caught", system="linux")])
+        self.assertTrue(any("keys this script does not know: system" in p for p in found), found)
+
     def test_an_id_is_used_once_across_entries_and_canaries(self):
         found = self.problems([entry(), entry()])
         self.assertTrue(any("used 2 times" in p for p in found), found)
@@ -679,6 +689,23 @@ class Cutting(unittest.TestCase):
             parts = mutate.parts_for(entries[:7], whole)
             self.assertTrue(all(mutate.cut(entries[:7], parts)))
 
+    def test_the_entries_of_another_system_get_parts_of_their_own_after_windows(self):
+        windows = self.entries()
+        linux = [entry("M%d" % n, file="crates/nkb-sys/src/linux/a.rs", runner="rust:nkb-sys:lib",
+                       system="linux") for n in range(101, 107)]
+        everything = sorted(e["id"] for e in windows + linux)
+        for whole, of_windows in ((True, 15), (False, 3)):
+            with self.subTest(whole=whole):
+                planned = mutate.layout(windows + linux, whole)
+                self.assertEqual([s for s, _ in planned], ["windows"] * of_windows + ["linux"])
+                self.assertEqual(planned[-1][1], mutate.ordered(linux))
+                self.assertEqual(sorted(e["id"] for _, part in planned for e in part), everything)
+        many = [dict(e, id="M%d" % (200 + n)) for n, e in enumerate(linux * 10)]
+        systems = [s for s, _ in mutate.layout(windows + many, True)]
+        self.assertEqual((len(systems), systems.count("linux")), (16, 3))
+        self.assertEqual(mutate.layout(linux, True), [("linux", mutate.ordered(linux))])
+        self.assertEqual(mutate.layout([], True), [])
+
     def test_a_shard_is_part_slash_parts(self):
         self.assertEqual(mutate.parse_shard("3/16"), (3, 16))
         for wrong in ("16/16", "3", "a/b", "-1/4", "0/0"):
@@ -697,6 +724,21 @@ class Choosing(unittest.TestCase):
             mutate.chosen_entries("unused", data, "M3", None, None)
         with self.assertRaises(mutate.Refused):
             mutate.chosen_entries("unused", data, "M1", None, "0/2")
+
+    def test_a_part_runs_only_on_its_system_and_a_run_here_leaves_the_others_out(self):
+        linux = entry("M2", file="crates/nkb-sys/src/linux/a.rs", system="linux")
+        data = {"entries": [entry("M1"), linux], "canaries": []}
+        chosen, _, part = mutate.chosen_entries("unused", data, None, None, "1/2", system="linux")
+        self.assertEqual(([e["id"] for e in chosen], part), (["M2"], (1, 2)))
+        with self.assertRaisesRegex(mutate.Refused, "part 1 runs on linux and this machine is windows"):
+            mutate.chosen_entries("unused", data, None, None, "1/2", system="windows")
+        with self.assertRaisesRegex(mutate.Refused, "has 2 parts and --shard says 3"):
+            mutate.chosen_entries("unused", data, None, None, "0/3", system="windows")
+        reached = (data["entries"], "2 of 2 entries are reached by the change")
+        with mock.patch.object(mutate, "selection", return_value=reached):
+            chosen, reason, _ = mutate.chosen_entries("unused", data, None, "base", None, system="windows")
+        self.assertEqual([e["id"] for e in chosen], ["M1"])
+        self.assertIn("1 of them run on another system and are left out", reason)
 
 
 # ---- the plan and the report ----------------------------------------------------
@@ -766,7 +808,23 @@ class PlanAndReport(Planted):
         with contextlib.redirect_stdout(io.StringIO()):
             mutate.plan(Namespace(root=self.root, base=None, output=output))
         with open(output, encoding="utf-8") as handle:
-            self.assertEqual(handle.read(), "entries=2\nparts=2\nshards=[0, 1]\n")
+            self.assertEqual(handle.read(), "entries=2\nparts=2\nmatrix=" + json.dumps(
+                {"include": [{"shard": 0, "system": "windows", "machine": "windows-latest"},
+                             {"shard": 1, "system": "windows", "machine": "windows-latest"}]},
+                separators=(",", ":")) + "\n")
+
+    def test_a_part_of_another_system_gets_that_system_s_machine(self):
+        self.write("crates/nkb-sys/src/linux/a.rs", "let z = 1\n")
+        self.registry([entry("M1"), entry("M2", file="crates/nkb-sys/src/linux/a.rs",
+                                          find="z = 1", system="linux")])
+        output = os.path.join(self.root, "output")
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            mutate.plan(Namespace(root=self.root, base=None, output=output))
+        with open(output, encoding="utf-8") as handle:
+            matrix = json.loads(handle.read().split("matrix=", 1)[1])
+        self.assertEqual(matrix["include"][-1], {"shard": 1, "system": "linux", "machine": "ubuntu-latest"})
+        self.assertIn("2 entries in 2 parts, 1 of them on linux.", printed.getvalue())
 
     def test_annotation_text_is_escaped(self):
         self.assertEqual(mutate.escape_property("a,b:c%"), "a%2Cb%3Ac%25")
@@ -815,7 +873,8 @@ class TheWorkflow(unittest.TestCase):
 
     def test_the_plan_decides_the_parts_and_a_pull_request_is_compared_with_its_base(self):
         self.assertEqual(mutate.MAX_PARTS, 16)
-        self.assertIn("shard: ${{ fromJSON(needs.plan.outputs.shards) }}", self.jobs["run"])
+        self.assertIn("matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}", self.jobs["run"])
+        self.assertIn("matrix: ${{ steps.plan.outputs.matrix }}", self.jobs["plan"])
         for job, name in (("plan", "Choose the entries"), ("run", "Break the entries of this part")):
             with self.subTest(job=job):
                 self.assertIn("fetch-depth: 0", self.step(job, "Check out the code"))
@@ -823,9 +882,11 @@ class TheWorkflow(unittest.TestCase):
         self.assertIn('--base "$BASE"', self.step("run", "Break the entries of this part"))
         self.assertIn('--shard "$SHARD/$PARTS"', self.step("run", "Break the entries of this part"))
 
-    def test_the_parts_run_on_windows_without_a_cache_and_never_turn_red_themselves(self):
+    def test_the_parts_run_on_their_system_without_a_cache_and_never_turn_red_themselves(self):
         part = self.jobs["run"]
-        self.assertIn("runs-on: windows-latest", part)
+        self.assertIn("runs-on: ${{ matrix.machine }}", part)
+        self.assertEqual(mutate.SYSTEMS, {"windows": "windows-latest", "linux": "ubuntu-latest"})
+        self.assertEqual(mutate.DEFAULT_SYSTEM, "windows")
         self.assertIn("fail-fast: false", part)
         self.assertIn('cache: "false"', self.step("run", "Set up Rust"))
         self.assertNotIn("CARGO_INCREMENTAL", self.text)

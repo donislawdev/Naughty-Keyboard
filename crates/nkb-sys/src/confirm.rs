@@ -410,6 +410,8 @@ mod tests {
 
     const SHIFT: u16 = 0x10;
     const HOME: u16 = 0x24;
+    /// Looks at the modifiers after which the fake system calls a wait endless.
+    const ENDLESS_LOOKS: usize = 100_000;
 
     /// A fake system: the system's key state, the application's key state, and
     /// switches that make each level fail from a given event on.
@@ -480,6 +482,14 @@ mod tests {
         fn held(&mut self) -> Held {
             let look = self.held_looks;
             self.held_looks += 1;
+            // `pause` sleeps for no one here, so a wait without an end spins on
+            // this look as fast as it can: the test fails instead of hanging the
+            // run (a mutation that broke the bound stopped a CI part after 30
+            // minutes). The longest wait a test means is a thousand looks.
+            assert!(
+                look < ENDLESS_LOOKS,
+                "the modifiers were looked at {look} times, so the wait has no end"
+            );
             match &self.held_while {
                 Some((looks, held)) if looks.contains(&look) => *held,
                 _ => Held::default(),

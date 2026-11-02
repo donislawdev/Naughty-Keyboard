@@ -699,10 +699,13 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
         sending_path.display()
     );
     palette.set_sending_fraction(0.25);
-    palette.set_compact(true);
     // A difference of two renders again, and for a measured reason: the pack
     // band's counter wears the accent too, so "some accent in the compact
     // palette" held with the band hidden - mutation M392 passed against it.
+    // And with no line in the message band, for the rest of the test: a line
+    // keeps the status band up whatever the send does, so with "End of pack"
+    // standing there M392 passed again (2026-10-29).
+    palette.set_messages(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     palette.set_sending(false);
     let accent_compact_idle = offscreen::count_exactly(&render(&window), ACCENT);
     palette.set_sending(true);
