@@ -226,26 +226,51 @@ pub(crate) use mac_platform::{ReservedEscape, SystemEscape};
 /// window 0 times. Not registered, the victim got all 3 (6 events) and the probe
 /// none. It worked the same with the main thread registering and pulling and with
 /// another thread doing both while the main thread slept - in a process with no
-/// `NSApplication`, which is how `nkb send` runs. What the palette does with an
-/// application loop running on the main thread is not measured here.
+/// `NSApplication`, which is how `nkb send` runs.
+///
+/// # One handler for the process
+///
+/// In the palette the press is not pulled by the sending thread: the loop of the
+/// application delivers it, on the main thread, while the send runs on another
+/// (`macos/hotkey.rs` has the measurement). A handler installed for one send and
+/// removed at its end could then be inside its call when it is removed, holding
+/// a flag that is already freed. So, as for the shortcuts, ONE handler is
+/// installed the first time a send reserves the key and stays for the life of
+/// the process. Each reservation registers the key under an id of its own and
+/// puts its flag, shared, in [`RESERVATIONS`]. The handler raises the flag of
+/// the id that fired, under the lock, and a press for a reservation that is gone
+/// finds nothing to raise.
 #[cfg(target_os = "macos")]
 mod mac_platform {
-    use core::sync::atomic::{AtomicBool, Ordering};
+    use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+    use std::sync::{Arc, Mutex, OnceLock};
 
     use super::{ESCAPE_RELEASE_WAIT, EscapeKey, Reserved};
     use crate::macos::ffi::{self, EventHotKeyId, EventTypeSpec, MutRef};
 
     /// `kVK_Escape`.
     const KEY_ESCAPE: u16 = 0x35;
-    /// The signature of our hot key, `nkbe`, and its identifier.
+    /// The signature of our hot key, `nkbe`. The id under it names the
+    /// reservation, so one press raises one flag.
     const SIGNATURE: u32 = u32::from_be_bytes(*b"nkbe");
-    const HOT_KEY_ID: u32 = 1;
 
-    /// `Escape` on the calling thread, with the flag its handler raises.
+    /// The reservations alive in the process: the id each one registered the key
+    /// under, and the flag a press raises.
+    static RESERVATIONS: Mutex<Vec<(u32, Arc<AtomicBool>)>> = Mutex::new(Vec::new());
+
+    /// The id of the next reservation. One a second for a hundred years does not
+    /// wrap, and a reservation is one send.
+    static NEXT_ID: AtomicU32 = AtomicU32::new(1);
+
+    /// The system's answer to installing the one handler, kept so every
+    /// reservation after a failed one says so again.
+    static INSTALLED: OnceLock<i32> = OnceLock::new();
+
+    /// `Escape` on the calling thread, with the flag its press raises.
     pub(crate) struct SystemEscape {
-        fired: Box<AtomicBool>,
+        id: u32,
+        fired: Arc<AtomicBool>,
         hot_key: MutRef,
-        handler: MutRef,
     }
 
     /// `Escape` held by the sending thread for one send (`D96`).
@@ -255,79 +280,104 @@ mod mac_platform {
         pub(crate) fn reserve() -> ReservedEscape {
             Reserved::reserve(
                 Self {
-                    fired: Box::new(AtomicBool::new(false)),
+                    id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+                    fired: Arc::new(AtomicBool::new(false)),
                     hot_key: core::ptr::null_mut(),
-                    handler: core::ptr::null_mut(),
                 },
                 ESCAPE_RELEASE_WAIT,
             )
         }
+
+        fn forget(&self) {
+            // A poisoned lock means another thread panicked holding it. The entry
+            // stays, and its flag is only ever raised, which stops nothing that
+            // is still running.
+            if let Ok(mut reservations) = RESERVATIONS.lock() {
+                reservations.retain(|(id, _)| *id != self.id);
+            }
+        }
     }
 
-    /// Raises the flag the reservation owns. Runs on the thread that pulls the
-    /// event, inside `fired`, or on the thread that runs the application's loop
-    /// when there is one (the palette), so it needs no more than the flag.
+    /// Raises the flag of the reservation that registered the key that fired.
+    /// Runs on the thread that pulls the event, inside `fired`, or on the thread
+    /// that runs the application's loop when there is one (the palette).
     ///
     /// Every hot key press in the process reaches every handler, the palette's
     /// shortcuts included. Taking those for `Escape` would stop a send at the next
     /// shortcut, and answering "handled" would keep that shortcut from the palette,
     /// so a press that is not ours is passed on.
-    extern "C" fn on_hot_key(_next: MutRef, event: MutRef, user: MutRef) -> i32 {
-        let ours = ffi::hot_key_id(event)
-            .is_some_and(|id| id.signature == SIGNATURE && id.id == HOT_KEY_ID);
-        if !ours {
+    extern "C" fn on_hot_key(_next: MutRef, event: MutRef, _user: MutRef) -> i32 {
+        let Some(id) = ffi::hot_key_id(event).filter(|id| id.signature == SIGNATURE) else {
             return ffi::EVENT_NOT_HANDLED;
-        }
-        if let Some(flag) = unsafe { user.cast::<AtomicBool>().as_ref() } {
+        };
+        if let Ok(reservations) = RESERVATIONS.lock()
+            && let Some((_, flag)) = reservations.iter().find(|(known, _)| *known == id.id)
+        {
             flag.store(true, Ordering::SeqCst);
         }
+        // Ours even when its reservation is gone: a late press of a key given
+        // back is nobody else's.
         ffi::NO_ERR
     }
 
-    impl EscapeKey for SystemEscape {
-        fn register(&mut self) -> bool {
+    fn install_handler() -> i32 {
+        *INSTALLED.get_or_init(|| {
             let spec = EventTypeSpec {
                 class: ffi::CLASS_KEYBOARD,
                 kind: ffi::HOT_KEY_PRESSED,
             };
-            let user = core::ptr::from_ref::<AtomicBool>(&self.fired)
-                .cast_mut()
-                .cast();
-            let target = unsafe { ffi::GetApplicationEventTarget() };
-            let installed = unsafe {
-                ffi::InstallEventHandler(target, on_hot_key, 1, &spec, user, &mut self.handler)
-            };
-            if installed != ffi::NO_ERR {
-                self.handler = core::ptr::null_mut();
+            let mut handler: MutRef = core::ptr::null_mut();
+            unsafe {
+                ffi::InstallEventHandler(
+                    ffi::GetApplicationEventTarget(),
+                    on_hot_key,
+                    1,
+                    &spec,
+                    core::ptr::null_mut(),
+                    &mut handler,
+                )
+            }
+        })
+    }
+
+    impl EscapeKey for SystemEscape {
+        fn register(&mut self) -> bool {
+            if install_handler() != ffi::NO_ERR {
                 return false;
+            }
+            // The flag first, so a press the moment the key is registered finds it.
+            match RESERVATIONS.lock() {
+                Ok(mut reservations) => reservations.push((self.id, Arc::clone(&self.fired))),
+                Err(_) => return false,
             }
             let id = EventHotKeyId {
                 signature: SIGNATURE,
-                id: HOT_KEY_ID,
+                id: self.id,
             };
             let registered = unsafe {
-                ffi::RegisterEventHotKey(u32::from(KEY_ESCAPE), 0, id, target, 0, &mut self.hot_key)
+                ffi::RegisterEventHotKey(
+                    u32::from(KEY_ESCAPE),
+                    0,
+                    id,
+                    ffi::GetApplicationEventTarget(),
+                    0,
+                    &mut self.hot_key,
+                )
             };
             if registered != ffi::NO_ERR {
-                // Held by another program: the handler has nothing to hear.
-                unsafe { ffi::RemoveEventHandler(self.handler) };
-                self.handler = core::ptr::null_mut();
+                // Held by another program: there is nothing to hear.
                 self.hot_key = core::ptr::null_mut();
+                self.forget();
                 return false;
             }
             true
         }
         fn unregister(&mut self) {
-            unsafe {
-                if !self.hot_key.is_null() {
-                    ffi::UnregisterEventHotKey(self.hot_key);
-                }
-                if !self.handler.is_null() {
-                    ffi::RemoveEventHandler(self.handler);
-                }
+            if !self.hot_key.is_null() {
+                unsafe { ffi::UnregisterEventHotKey(self.hot_key) };
             }
             self.hot_key = core::ptr::null_mut();
-            self.handler = core::ptr::null_mut();
+            self.forget();
         }
         fn fired(&mut self) -> bool {
             // A hot key press arrives in the queue of the thread that asked, and

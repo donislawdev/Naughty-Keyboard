@@ -38,7 +38,7 @@
 
 use core::time::Duration;
 
-use crate::confirm::Step;
+use crate::confirm::{Hand, Step};
 use crate::field::FocusedInput;
 use crate::{Chord, NavKey};
 
@@ -75,6 +75,31 @@ pub(crate) fn held_modifier(flags: u64) -> Option<&'static str> {
         .iter()
         .find(|(mask, _)| flags & mask != 0)
         .map(|(_, name)| *name)
+}
+
+/// What a modifier held right now means for the next event of a send (R27).
+///
+/// `held` is the system's state, `ours` the modifiers the send's own events hold
+/// down at that moment, which the state cannot tell from the person's. An event
+/// of the send carries its own flags, and that does not protect it: the
+/// application keeps its own account of the modifiers from the events it gets
+/// (`D138` point 9), so a `Command` the person holds turns the next character
+/// into a shortcut all the same. So the send waits for each of them to come up,
+/// as for `Ctrl` and `Win` on Windows (`D149`), and for `Shift` only before a
+/// chord, where it changes the selection.
+pub(crate) const fn hand(held: u64, ours: u64, shift_counts: bool) -> Hand {
+    let person = held & !ours;
+    if person & flag::COMMAND != 0 {
+        Hand::WaitFor("Command")
+    } else if person & flag::CONTROL != 0 {
+        Hand::WaitFor("Control")
+    } else if person & flag::OPTION != 0 {
+        Hand::WaitFor("Option")
+    } else if shift_counts && person & flag::SHIFT != 0 {
+        Hand::WaitFor("Shift")
+    } else {
+        Hand::Free
+    }
 }
 
 /// One event the route posts: a key going down or up, with the modifiers it
@@ -185,8 +210,7 @@ fn key_event(key: u16, down: bool, flags: u64) -> Step<MacEvent> {
         },
         key,
         down,
-        // The event carries its own flags from a private source (`flags`), so a
-        // modifier the person holds is not part of it (`D149`).
+        // The first event of a chord says so in `chord_steps`.
         shift_counts: false,
     }
 }
@@ -215,6 +239,12 @@ pub(crate) fn chord_steps(chord: Chord) -> (Vec<Step<MacEvent>>, usize) {
         flags &= !lead.mask;
         steps.push(key_event(lead.key, false, flags));
     }
+    // A `Shift` the person holds turns the chord's arrow into a selection, so
+    // the chord does not begin under it (`D149`). Once the chord's own `Shift`
+    // is down, the two cannot be told apart.
+    if let Some(first) = steps.first_mut() {
+        first.shift_counts = true;
+    }
     (steps, leads.len())
 }
 
@@ -237,17 +267,94 @@ pub(crate) enum PulseVerdict {
     Unsupported,
 }
 
+/// `kAXErrorNoValue`: the element has no such thing to show - for the pulse,
+/// an application with no window in front, which answered all the same.
+pub(crate) const AX_NO_VALUE: i32 = -25212;
+
 /// What a round trip's result means, given how long it took against the limit
 /// it was allowed. An error that comes after (nearly) the whole limit is the
 /// application not answering, and one that comes at once is an application that
-/// cannot be asked.
+/// cannot be asked - unless the error is the application saying it has no window
+/// in front, which is an answer like any other.
 pub(crate) fn pulse_verdict(error: i32, waited: Duration, limit: Duration) -> PulseVerdict {
-    if error == 0 {
+    if error == 0 || error == AX_NO_VALUE {
         PulseVerdict::Answered
     } else if waited >= limit.mul_f32(0.9) {
         PulseVerdict::Hung
     } else {
         PulseVerdict::Unsupported
+    }
+}
+
+/// How long one question of the pulse waits for its answer before the send
+/// looks at `Escape` and at the palette closing, and asks again (R20).
+///
+/// One question for the whole limit held a send that the person had stopped
+/// for as long as five seconds. A question that runs out is not lost: it waits
+/// in the application's queue behind the keys, and so does the next one, so the
+/// answer still comes once the keys ahead have been taken. A tenth of a second
+/// is what a person notices, and ten times the slowest answer of an application
+/// that is merely behind by a few characters.
+pub(crate) const PULSE_LOOK: Duration = Duration::from_millis(100);
+
+/// What the pulse knows after one more question, `waited` after the first one:
+/// `None` to ask again. A question that ran out is asked again until `limit`
+/// has gone by in all, and only then is the application not answering.
+pub(crate) fn pulse_after(
+    one: PulseVerdict,
+    waited: Duration,
+    limit: Duration,
+) -> Option<PulseVerdict> {
+    match one {
+        PulseVerdict::Hung if waited < limit => None,
+        verdict => Some(verdict),
+    }
+}
+
+/// A target on macOS: the pid of the application in the low half, and in the
+/// high half a token for the window in front of it, zero when that could not be
+/// told (R02). Two windows of one program are two targets.
+pub(crate) const fn target(pid: u32, window: Option<u32>) -> u64 {
+    let window = match window {
+        Some(window) => window as u64,
+        None => 0,
+    };
+    (window << 32) | pid as u64
+}
+
+/// The application of a target.
+pub(crate) const fn pid_of(target: u64) -> u32 {
+    (target & 0xFFFF_FFFF) as u32
+}
+
+/// The window of a target, if it was told.
+pub(crate) const fn window_of(target: u64) -> Option<u32> {
+    match (target >> 32) as u32 {
+        0 => None,
+        window => Some(window),
+    }
+}
+
+/// The token of a window, from the hash of the reference the system hands out
+/// for it: equal references hash equal, so the same window gives the same token.
+/// Nothing is read from the window. Two windows whose hashes fold to the same
+/// token are one target, which is what every window of the program was before.
+pub(crate) const fn window_token(hash: u64) -> u32 {
+    match ((hash >> 32) ^ hash) as u32 {
+        // Zero is "not told".
+        0 => 1,
+        token => token,
+    }
+}
+
+/// Whether the window in front, `now`, is still the one `meant`. Not told when
+/// the send began, only the application is compared. Told then and gone now, it
+/// is not: the next key would go to whatever the application puts in front.
+pub(crate) const fn window_still(meant: Option<u32>, now: Option<u32>) -> bool {
+    match (meant, now) {
+        (None, _) => true,
+        (Some(meant), Some(now)) => meant == now,
+        (Some(_), None) => false,
     }
 }
 
@@ -486,6 +593,76 @@ mod tests {
     }
 
     #[test]
+    fn a_modifier_the_person_holds_holds_the_next_event_back_by_its_own_name() {
+        for (mask, name) in [
+            (flag::COMMAND, "Command"),
+            (flag::CONTROL, "Control"),
+            (flag::OPTION, "Option"),
+        ] {
+            assert_eq!(hand(mask, 0, false), Hand::WaitFor(name));
+            assert_eq!(hand(mask, 0, true), Hand::WaitFor(name));
+        }
+        assert_eq!(hand(0, 0, true), Hand::Free);
+        // Not a key the state shows: caps lock and the bits of an arrow key.
+        assert_eq!(
+            hand(0x0001_0000 | 0x0080_0000 | 0x0020_0000, 0, true),
+            Hand::Free
+        );
+    }
+
+    #[test]
+    fn shift_holds_back_only_the_event_it_would_change() {
+        // A character arrives as itself under it, a chord's arrow selects.
+        assert_eq!(hand(flag::SHIFT, 0, false), Hand::Free);
+        assert_eq!(hand(flag::SHIFT, 0, true), Hand::WaitFor("Shift"));
+        // Another modifier with it is named first, whatever the event.
+        assert_eq!(
+            hand(flag::SHIFT | flag::COMMAND, 0, false),
+            Hand::WaitFor("Command")
+        );
+    }
+
+    #[test]
+    fn the_modifiers_of_the_send_itself_do_not_hold_it_back() {
+        // Inside `Command` + arrow the state shows the send's own `Command`: a
+        // wait for it would wait for the release the next event is.
+        let both = flag::SHIFT | flag::COMMAND;
+        assert_eq!(hand(flag::COMMAND, flag::COMMAND, true), Hand::Free);
+        assert_eq!(hand(both, both, true), Hand::Free);
+        assert_eq!(
+            hand(both | flag::CONTROL, both, false),
+            Hand::WaitFor("Control")
+        );
+        assert_eq!(hand(both, flag::COMMAND, true), Hand::WaitFor("Shift"));
+    }
+
+    #[test]
+    fn only_the_first_event_of_a_chord_waits_for_the_person_s_shift() {
+        for chord in [
+            Chord {
+                key: NavKey::Home,
+                shift: false,
+            },
+            Chord {
+                key: NavKey::End,
+                shift: true,
+            },
+            Chord {
+                key: NavKey::Delete,
+                shift: false,
+            },
+        ] {
+            let (steps, _) = chord_steps(chord);
+            let counts: Vec<bool> = steps.iter().map(|step| step.shift_counts).collect();
+            assert!(counts[0], "{chord:?}");
+            assert!(counts[1..].iter().all(|counts| !counts), "{chord:?}");
+        }
+        for scalar in scalars("aB") {
+            assert!(text_steps(scalar).iter().all(|step| !step.shift_counts));
+        }
+    }
+
+    #[test]
     fn home_is_the_start_of_the_line_with_command_and_nothing_wider() {
         let (steps, leads) = chord_steps(Chord {
             key: NavKey::Home,
@@ -591,10 +768,69 @@ mod tests {
             pulse_verdict(-25204, Duration::from_millis(3), limit),
             PulseVerdict::Unsupported
         );
+        // But no window in front is the application answering: the question is
+        // the window (R02), and the answer came through its queue all the same.
         assert_eq!(
-            pulse_verdict(-25212, Duration::from_millis(1), limit),
-            PulseVerdict::Unsupported
+            pulse_verdict(AX_NO_VALUE, Duration::from_millis(1), limit),
+            PulseVerdict::Answered
         );
+    }
+
+    #[test]
+    fn a_question_that_ran_out_is_asked_again_until_the_whole_limit_went_by() {
+        let limit = Duration::from_secs(5);
+        let ran_out = pulse_verdict(-25204, PULSE_LOOK, PULSE_LOOK);
+        assert_eq!(ran_out, PulseVerdict::Hung);
+        assert_eq!(pulse_after(ran_out, PULSE_LOOK, limit), None);
+        assert_eq!(
+            pulse_after(ran_out, Duration::from_millis(4999), limit),
+            None
+        );
+        assert_eq!(pulse_after(ran_out, limit, limit), Some(PulseVerdict::Hung));
+        // An answer, or a refusal, is what the pulse knows at once.
+        for verdict in [PulseVerdict::Answered, PulseVerdict::Unsupported] {
+            assert_eq!(pulse_after(verdict, PULSE_LOOK, limit), Some(verdict));
+        }
+    }
+
+    #[test]
+    fn a_stop_is_heard_between_two_questions_well_inside_the_limit() {
+        // A person notices a tenth of a second, and the limit is what the system
+        // calls not responding: fifty questions fit in it.
+        assert!(PULSE_LOOK <= Duration::from_millis(100));
+        assert!(PULSE_LOOK >= Duration::from_millis(20));
+        assert!(crate::confirm::TARGET_WAIT >= PULSE_LOOK * 10);
+    }
+
+    #[test]
+    fn a_target_holds_the_application_and_the_window_apart() {
+        let both = target(4242, Some(0xDEAD_BEEF));
+        assert_eq!(pid_of(both), 4242);
+        assert_eq!(window_of(both), Some(0xDEAD_BEEF));
+        // Without its window, a target is the application's handle as
+        // `foreground_window` gives it.
+        assert_eq!(target(4242, None), 4242);
+        assert_eq!(window_of(4242), None);
+        assert_eq!(pid_of(target(u32::MAX, Some(u32::MAX))), u32::MAX);
+    }
+
+    #[test]
+    fn a_window_token_is_never_the_zero_that_means_not_told() {
+        assert_eq!(window_token(0), 1);
+        assert_eq!(window_token(0x0000_0001_0000_0001), 1);
+        assert_eq!(window_token(0x1234), window_token(0x1234));
+        assert_ne!(window_token(0x1234), window_token(0x1235));
+        // Both halves of the hash count.
+        assert_ne!(window_token(0x1_0000_1234), window_token(0x1234));
+    }
+
+    #[test]
+    fn only_a_window_told_and_then_another_or_none_is_another_target() {
+        assert!(window_still(None, None));
+        assert!(window_still(None, Some(7)));
+        assert!(window_still(Some(7), Some(7)));
+        assert!(!window_still(Some(7), Some(8)));
+        assert!(!window_still(Some(7), None));
     }
 
     #[test]

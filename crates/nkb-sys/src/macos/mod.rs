@@ -31,6 +31,6 @@ mod trust;
 pub(crate) mod window;
 
 pub(crate) use ax::focused_input;
-pub(crate) use front::{foreground_window, image_path};
+pub(crate) use front::{foreground_window, image_path, send_target};
 pub(crate) use send::{send_allowed, send_chords, send_text};
 pub(crate) use text_services::text_services;

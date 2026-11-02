@@ -63,7 +63,7 @@ impl ValueDelivery for DirectInjection {
     }
 
     fn target(&self) -> Option<TargetRef> {
-        nkb_sys::foreground_window().map(|window| TargetRef(window.0))
+        nkb_sys::send_target().map(|window| TargetRef(window.0))
     }
 
     fn deliver(
