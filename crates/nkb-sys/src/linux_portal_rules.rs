@@ -676,10 +676,31 @@ mod tests {
 
     #[test]
     fn what_is_said_is_said_on_the_thread_that_asked() {
-        // The callbacks of the ports are not `Sync`: they run where the send runs.
-        let (_, told) = told_by_waiting(Duration::from_millis(10), Duration::from_millis(100));
-        assert!(!told.is_empty());
-        assert!(told.iter().all(|(_, here, _)| *here), "{told:?}");
+        // The callbacks of the ports are not `Sync`: they run where the send runs. The
+        // answer waits for the sentence rather than for a time: an answer after a fixed
+        // 100 ms came first on a loaded macOS runner, before the first look at 50 ms.
+        let here = std::thread::current().id();
+        let said = std::sync::Arc::new(AtomicBool::new(false));
+        let heard = std::sync::Arc::clone(&said);
+        let mut told = Vec::new();
+        let answer = wait_telling(
+            Duration::from_millis(10),
+            &mut |waiting| {
+                told.push((waiting, std::thread::current().id() == here));
+                said.store(true, Ordering::SeqCst);
+            },
+            &AtomicBool::new(false),
+            &mut || panic!("nobody asked to stop"),
+            move || {
+                let end = Instant::now() + Duration::from_secs(20);
+                while !heard.load(Ordering::SeqCst) && Instant::now() < end {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                7_u8
+            },
+        );
+        assert_eq!(answer, Some(7));
+        assert_eq!(told, [(Waiting::ForConsent, true)]);
     }
 
     #[test]
