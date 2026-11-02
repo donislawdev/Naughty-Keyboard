@@ -310,9 +310,18 @@
       "id": "M55",
       "why": "the sentence about a broken promise lands at the END of the message band - a tester reading from the top sees 'end of pack' before learning the palette took the focus",
       "file": "crates/nkb-gui/src/live/view.rs",
+      "find": "    if let Some(line) = standing_line(standing) {\n        messages.insert(0, line);",
+      "replace": "    if let Some(line) = standing_line(standing) {\n        messages.push(line);",
+      "test": "live::tests::a_standing_sentence_leads_every_message_band",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1609",
+      "why": "the sentence that the shortcuts are held back lands under a view's own lines, so a pack chosen during the pause pushes it down the band",
+      "file": "crates/nkb-gui/src/live/view.rs",
       "find": "    if let Some(line) = held_back {\n        messages.insert(0, line);",
       "replace": "    if let Some(line) = held_back {\n        messages.push(line);",
-      "test": "live::tests::a_standing_sentence_leads_every_message_band",
+      "test": "live::view::tests::the_held_back_sentence_leads_the_lines_of_a_view_and_follows_the_standing_one",
       "runner": "rust:nkb-gui:lib"
     },
     {
@@ -1679,15 +1688,6 @@
       "file": "crates/nkb-gui/src/live/taking.rs",
       "find": "        lines.extend(self.take(bindings));\n        let legend = self.naming(bindings);\n        self.view(lines, ValueBand::Keep, Some(legend))",
       "replace": "        lines.extend(self.take(bindings));\n        let _ = self.naming(bindings);\n        self.view(lines, ValueBand::Keep, None)",
-      "test": "live::tests::a_change_while_paused_is_tried_saved_told_and_taken_on_resume",
-      "runner": "rust:nkb-gui:lib"
-    },
-    {
-      "id": "M326",
-      "why": "a resume does not replace the table in memory - sentences name the shortcut from before the change",
-      "file": "crates/nkb-gui/src/live/taking.rs",
-      "find": "        self.memory.bindings.set(bindings);",
-      "replace": "        let _ = bindings;",
       "test": "live::tests::a_change_while_paused_is_tried_saved_told_and_taken_on_resume",
       "runner": "rust:nkb-gui:lib"
     },
@@ -8214,6 +8214,51 @@
       "runner": "pyunit:.github/scripts:test_mutate"
     },
     {
+      "id": "M1610",
+      "why": "an entry of code that compiles only on Linux may leave out its system, and the weekly run finds its test missing",
+      "file": ".github/scripts/mutate.py",
+      "find": "        if path.startswith(prefix) and system_of(item) != system:",
+      "replace": "        if False:",
+      "test": "test_an_entry_of_code_that_compiles_only_on_linux_says_linux",
+      "runner": "pyunit:.github/scripts:test_mutate"
+    },
+    {
+      "id": "M1611",
+      "why": "the entries of Linux go into the parts of Windows, where their tests do not exist",
+      "file": ".github/scripts/mutate.py",
+      "find": "    windows = [e for e in entries if system_of(e) == DEFAULT_SYSTEM]",
+      "replace": "    windows = list(entries)",
+      "test": "test_the_entries_of_another_system_get_parts_of_their_own_after_windows",
+      "runner": "pyunit:.github/scripts:test_mutate"
+    },
+    {
+      "id": "M1612",
+      "why": "a part runs on a machine of another system and comes out NO TEST instead of refusing",
+      "file": ".github/scripts/mutate.py",
+      "find": "    if planned[part][0] != system:",
+      "replace": "    if False:",
+      "test": "test_a_part_runs_only_on_its_system_and_a_run_here_leaves_the_others_out",
+      "runner": "pyunit:.github/scripts:test_mutate"
+    },
+    {
+      "id": "M1613",
+      "why": "every part is given the machine of Windows, so a part of Linux runs there",
+      "file": ".github/scripts/mutate.py",
+      "find": "\"machine\": SYSTEMS[system]}",
+      "replace": "\"machine\": SYSTEMS[DEFAULT_SYSTEM]}",
+      "test": "test_a_part_of_another_system_gets_that_system_s_machine",
+      "runner": "pyunit:.github/scripts:test_mutate"
+    },
+    {
+      "id": "M1614",
+      "why": "a run here takes the entries of another system and judges them NO TEST",
+      "file": ".github/scripts/mutate.py",
+      "find": "        here = [e for e in entries if system_of(e) == system]",
+      "replace": "        here = list(entries)",
+      "test": "test_a_part_runs_only_on_its_system_and_a_run_here_leaves_the_others_out",
+      "runner": "pyunit:.github/scripts:test_mutate"
+    },
+    {
       "id": "M1125",
       "why": "a window opened on request that was minimized on the way out opens again minimized - it takes the keyboard and nothing is on the screen (OBS-183)",
       "file": "crates/nkb-gui/src/on_request.rs",
@@ -11379,7 +11424,8 @@
       "find": "        judged.taken()",
       "replace": "        false",
       "test": "linux::ibus::engine::tests::the_key_waited_for_is_told_to_the_send_and_taken_only_when_a_modifier_is_held",
-      "runner": "rust:nkb-sys:lib"
+      "runner": "rust:nkb-sys:lib",
+      "system": "linux"
     },
     {
       "id": "M1477",
@@ -11388,7 +11434,8 @@
       "find": "        if judged != Judgement::Unrelated && !is_release(state) {",
       "replace": "        if judged != Judgement::Unrelated && is_release(state) {",
       "test": "linux::ibus::engine::tests::the_release_of_a_key_is_judged_as_its_press_but_said_once",
-      "runner": "rust:nkb-sys:lib"
+      "runner": "rust:nkb-sys:lib",
+      "system": "linux"
     },
     {
       "id": "M1478",
@@ -11397,7 +11444,8 @@
       "find": "            return self.recipe_key(keyval, state);",
       "replace": "            return false;",
       "test": "linux::ibus::engine::tests::the_key_waited_for_is_told_to_the_send_and_taken_only_when_a_modifier_is_held",
-      "runner": "rust:nkb-sys:lib"
+      "runner": "rust:nkb-sys:lib",
+      "system": "linux"
     },
     {
       "id": "M1479",
@@ -11406,7 +11454,8 @@
       "find": "        .mode(0o600)",
       "replace": "        .mode(0o644)",
       "test": "linux::portal::remote::tests::the_file_is_the_persons_alone",
-      "runner": "rust:nkb-sys:lib"
+      "runner": "rust:nkb-sys:lib",
+      "system": "linux"
     },
     {
       "id": "M1480",
@@ -11415,7 +11464,8 @@
       "find": "    let outcome = write_whole(&own, token).and_then(|()| fs::rename(&own, path));",
       "replace": "    let outcome = write_whole(&own, token).and_then(|()| Ok(()));",
       "test": "linux::portal::remote::tests::a_token_that_is_kept_is_read_back_and_nothing_else_is_left_in_the_folder",
-      "runner": "rust:nkb-sys:lib"
+      "runner": "rust:nkb-sys:lib",
+      "system": "linux"
     },
     {
       "id": "M1481",
@@ -11424,7 +11474,8 @@
       "find": "    let token = usable_token(token).ok_or(std::io::ErrorKind::InvalidInput)?;",
       "replace": "    let token = token;",
       "test": "linux::portal::remote::tests::what_is_not_a_token_is_not_kept",
-      "runner": "rust:nkb-sys:lib"
+      "runner": "rust:nkb-sys:lib",
+      "system": "linux"
     },
     {
       "id": "M1482",

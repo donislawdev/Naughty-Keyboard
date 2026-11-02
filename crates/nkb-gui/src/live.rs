@@ -1780,7 +1780,7 @@ mod tests {
     }
 
     /// A sequence on a pack that ships, the way the palette opens one.
-    fn on(pack: &str) -> AdvanceSequence {
+    pub(super) fn on(pack: &str) -> AdvanceSequence {
         let mut sequence = AdvanceSequence::new(Box::new(nkb_adapters::SystemClock));
         sequence
             .choose_pack(&BuiltInCatalogue::new(), &TomlPackFormat, pack)

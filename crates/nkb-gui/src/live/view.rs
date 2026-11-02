@@ -969,7 +969,7 @@ fn named() -> Named {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::live::tests::{a_palette, a_sent, an_outcome, quiet, quiet_sent};
+    use crate::live::tests::{a_palette, a_sent, an_outcome, on, quiet, quiet_sent};
     use slint::Model;
 
     /// Keys still on their way are a value cut short too, and a risk: the field
@@ -1283,6 +1283,44 @@ mod tests {
         assert!(
             !palette.get_has_report(),
             "a value on its way showed a block"
+        );
+    }
+
+    /// `D90`: the sentence that says the shortcuts are held back stands first
+    /// among a view's own lines and behind the standing sentence, so a pack
+    /// chosen during the pause says its own lines under it.
+    #[test]
+    fn the_held_back_sentence_leads_the_lines_of_a_view_and_follows_the_standing_one() {
+        let sequence = on("whitespace");
+        let standing = quiet();
+        let view_with = |standing: &Standing| {
+            view_between(
+                &sequence,
+                "whitespace",
+                vec![String::from("own")],
+                ValueBand::Keep,
+                standing,
+                Some(String::from("held back")),
+            )
+            .messages
+        };
+        assert_eq!(
+            view_with(&standing),
+            vec![String::from("held back"), String::from("own")]
+        );
+        assert!(
+            standing
+                .lock()
+                .map(|mut held| *held = Some(String::from("standing")))
+                .is_ok()
+        );
+        assert_eq!(
+            view_with(&standing),
+            vec![
+                String::from("standing"),
+                String::from("held back"),
+                String::from("own")
+            ]
         );
     }
 }
