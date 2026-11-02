@@ -82,9 +82,9 @@ use nkb_core::substitutions::Substitutions;
 
 use crate::load_pack;
 use crate::ports::{
-    Availability, Clipboard, ClipboardError, Clock, DeliveryError, History, KeystrokeError,
-    KeystrokeSender, PackFormat, PackSource, Progress, ReportText, SourceError, StopReason,
-    TargetInspector, TargetRef, ValueDelivery, Waiting,
+    Availability, Clipboard, ClipboardError, Clock, DeliveryError, Following, History,
+    KeystrokeError, KeystrokeSender, PackFormat, PackSource, Progress, ReportText, SourceError,
+    StopReason, TargetInspector, TargetRef, ValueDelivery, Waiting,
 };
 use crate::send_value::{Chosen, Clearing, OnTheWay, SendOutcome, ValueFacts, deliver_value};
 
@@ -187,6 +187,9 @@ struct LastSent {
     /// One-based, like the machine's positions.
     index: usize,
     arrival: Arrival,
+    /// The text services that could have changed it on its way in (`D139`), so
+    /// that the block says what the palette said.
+    may_alter: Substitutions,
     /// Where it was typed, read at the press (`D104`) - `None` when it went to
     /// the clipboard.
     target: Option<Target>,
@@ -303,8 +306,9 @@ pub struct Sent {
     pub offensive: bool,
     /// Whether the field was cleared before the value went in.
     pub cleared: bool,
-    /// How the value reached the field: typed whole, cut short, or put on the
-    /// clipboard for the tester to paste. The SAME answer the report block
+    /// How the value reached the field: typed whole (and how far that could be
+    /// followed), cut short, or put on the clipboard for the tester to paste.
+    /// The SAME answer the report block
     /// gives, from the same function - until `OBS-126` the palette had a flag
     /// for the clipboard and nothing for a fragment, so it showed the value
     /// before beside a sentence about the one cut short.
@@ -859,6 +863,7 @@ impl AdvanceSequence {
             ReportBlock::describe(&loaded.pack, value, last.on, last.arrival)
                 .map(|block| ReportBlock {
                     target: last.target.clone(),
+                    may_alter: last.may_alter,
                     ..block
                 })
                 .map_err(|_| value.id.clone()),
@@ -995,6 +1000,7 @@ impl AdvanceSequence {
             self.last = Some(LastSent {
                 index,
                 arrival,
+                may_alter: may_alter_of(&outcome),
                 target: target.clone(),
                 on: chosen.on,
             });
@@ -1079,7 +1085,14 @@ fn refuse(sequence: &mut Sequence, messages: Vec<Message>) -> Attempt {
 fn arrival_of(outcome: &SendOutcome, on_clipboard: bool) -> Option<Arrival> {
     match outcome {
         SendOutcome::Sent { .. } if on_clipboard => Some(Arrival::OnClipboard),
-        SendOutcome::Sent { .. } => Some(Arrival::Whole),
+        // How far the keys could be followed is part of how the value got in:
+        // the palette warns of the two that stop short of the application, and
+        // the block has to say the same (`D95`, `D145`).
+        SendOutcome::Sent { following, .. } => Some(match following {
+            Following::Application => Arrival::Whole,
+            Following::System => Arrival::TakenBySystem,
+            Following::HandedOver => Arrival::HandedOver,
+        }),
         SendOutcome::Interrupted {
             units_sent,
             units_expected,
@@ -1122,6 +1135,16 @@ fn arrival_of(outcome: &SendOutcome, on_clipboard: bool) -> Option<Arrival> {
             units_expected: *units_expected,
         }),
         _ => None,
+    }
+}
+
+/// The text services that could have changed the value on its way in, for the
+/// block - the set the palette names (`D139`). Only a value that went in whole
+/// has them: the route does not ask for a fragment, whose cut is the worse news.
+fn may_alter_of(outcome: &SendOutcome) -> Substitutions {
+    match outcome {
+        SendOutcome::Sent { may_alter, .. } => *may_alter,
+        _ => Substitutions::NONE,
     }
 }
 
@@ -2707,10 +2730,15 @@ mod tests {
         assert_eq!(outcome.messages, vec![Message::NotPaced]);
         assert!(outcome.sent.is_some());
         assert_eq!(advance.counter(), Some((1, 3)));
+        // The ticket is told the same, rather than "typed whole".
+        assert_eq!(kit.text.blocks.borrow()[0].arrival, Arrival::TakenBySystem);
 
         let mut paced = chosen(Risk::Normal);
-        let quiet = paced.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
+        let ready = Kit::ready();
+        let quiet = paced.on_action(HotkeyAction::NextValue, &ready.ports());
         assert!(quiet.messages.is_empty(), "a paced send says nothing extra");
+        assert_eq!(ready.text.blocks.borrow()[0].arrival, Arrival::Whole);
+        assert!(ready.text.blocks.borrow()[0].may_alter.is_empty());
     }
 
     #[test]
@@ -2724,6 +2752,8 @@ mod tests {
         assert_eq!(outcome.messages, vec![Message::HandedOver]);
         assert!(outcome.sent.is_some());
         assert_eq!(advance.counter(), Some((1, 3)));
+        // Nor does the block say "typed whole" of it.
+        assert_eq!(kit.text.blocks.borrow()[0].arrival, Arrival::HandedOver);
     }
 
     #[test]
@@ -2741,6 +2771,14 @@ mod tests {
         assert_eq!(outcome.messages, vec![Message::MayBeAltered(services)]);
         assert!(outcome.sent.is_some());
         assert_eq!(advance.counter(), Some((1, 3)));
+        // The ticket is told the same, and the shortcut's block later on too.
+        assert_eq!(kit.text.blocks.borrow()[0].may_alter, services);
+        let copied = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
+        assert!(matches!(
+            copied.messages[..],
+            [Message::ReportCopied { .. }]
+        ));
+        assert_eq!(kit.text.blocks.borrow()[1].may_alter, services);
 
         // Nothing on, or nothing that could act: nothing said.
         let mut quiet = chosen(Risk::Normal);

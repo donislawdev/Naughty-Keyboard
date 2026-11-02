@@ -130,7 +130,10 @@ fn describe(outcome: &Outcome) -> String {
         // A value cut short is shown too (`OBS-126`), and must not read as sent.
         let verb = match sent.arrival {
             Arrival::Interrupted { .. } | Arrival::InFlight { .. } => "interrupted",
-            Arrival::Whole | Arrival::OnClipboard => "sent",
+            Arrival::Whole
+            | Arrival::TakenBySystem
+            | Arrival::HandedOver
+            | Arrival::OnClipboard => "sent",
         };
         line.push_str(&format!(
             " {verb} {} ({} code points, cleared: {})",

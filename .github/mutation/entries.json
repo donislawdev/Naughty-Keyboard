@@ -12363,8 +12363,8 @@
       "id": "M1583",
       "why": "the report block gives keys still on their way as an exact count, and the developer finds a longer fragment than the ticket says",
       "file": "crates/nkb-adapters/src/report_text.rs",
-      "find": "            cut_short(ReportPhrase::InFlight, units_sent, units_expected),",
-      "replace": "            cut_short(ReportPhrase::Interrupted, units_sent, units_expected),",
+      "find": "            ReportPhrase::InFlight,\n            units_sent,",
+      "replace": "            ReportPhrase::Interrupted,\n            units_sent,",
       "test": "report_text::tests::keys_still_on_their_way_say_the_count_is_a_floor_in_the_same_place",
       "runner": "rust:nkb-adapters:lib"
     },
@@ -12574,6 +12574,78 @@
       "replace": "            Self::LayoutChanged => f.write_str(\"the keyboard focus left the field\"),",
       "test": "tests::every_reason_a_send_stops_has_its_own_words",
       "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1615",
+      "why": "a value only the system took is called typed whole in the report block, though the palette warned that characters may be missing (D95)",
+      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "find": "            Following::System => Arrival::TakenBySystem,",
+      "replace": "            Following::System => Arrival::Whole,",
+      "test": "advance_sequence::tests::a_value_sent_without_following_the_application_says_characters_may_be_missing",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1616",
+      "why": "a value handed to the input method is called typed whole in the report block, though nothing confirms a field took it (D145)",
+      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "find": "            Following::HandedOver => Arrival::HandedOver,",
+      "replace": "            Following::HandedOver => Arrival::Whole,",
+      "test": "advance_sequence::tests::a_value_handed_to_the_input_method_is_sent_and_never_said_to_be_in_the_field",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1617",
+      "why": "the block of the last value forgets the text substitutions the palette named, at the press and at the shortcut later (D139)",
+      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "find": "                    may_alter: last.may_alter,",
+      "replace": "                    may_alter: Substitutions::NONE,",
+      "test": "advance_sequence::tests::a_value_the_system_may_have_changed_says_which_services_could_have_acted",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1618",
+      "why": "the text substitutions of a value that went in are never kept for its block (D139)",
+      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "find": "        SendOutcome::Sent { may_alter, .. } => *may_alter,",
+      "replace": "        SendOutcome::Sent { .. } => Substitutions::NONE,",
+      "test": "advance_sequence::tests::a_value_the_system_may_have_changed_says_which_services_could_have_acted",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1619",
+      "why": "the report block says nothing of a value only the system took, and reads as typed whole (D95)",
+      "file": "crates/nkb-adapters/src/report_text.rs",
+      "find": "        Arrival::TakenBySystem => Some(said(ReportPhrase::TakenBySystem)),",
+      "replace": "        Arrival::TakenBySystem => None,",
+      "test": "report_text::tests::a_value_the_palette_warned_about_gets_the_same_warning_in_the_same_place",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1620",
+      "why": "the report block says nothing of a value handed to the input method, and reads as typed whole (D145)",
+      "file": "crates/nkb-adapters/src/report_text.rs",
+      "find": "        Arrival::HandedOver => Some(said(ReportPhrase::HandedOver)),",
+      "replace": "        Arrival::HandedOver => None,",
+      "test": "report_text::tests::a_value_the_palette_warned_about_gets_the_same_warning_in_the_same_place",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1621",
+      "why": "the report block never says that text substitutions may have changed the value (D139)",
+      "file": "crates/nkb-adapters/src/report_text.rs",
+      "find": "    let altered = (!block.may_alter.is_empty()).then(|| {",
+      "replace": "    let altered = false.then(|| {",
+      "test": "report_text::tests::a_value_the_palette_warned_about_gets_the_same_warning_in_the_same_place",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1622",
+      "why": "a value with two warnings gets only the first in its block, and the ticket says less than the palette",
+      "file": "crates/nkb-adapters/src/report_text.rs",
+      "find": "    (!parts.is_empty()).then(|| parts.join(\" \u00b7 \"))",
+      "replace": "    (!parts.is_empty()).then(|| parts[0].clone())",
+      "test": "report_text::tests::a_value_the_palette_warned_about_gets_the_same_warning_in_the_same_place",
+      "runner": "rust:nkb-adapters:lib"
     }
   ]
 }

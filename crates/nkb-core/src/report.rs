@@ -36,6 +36,7 @@ use crate::calendar::Day;
 use crate::normalization;
 use crate::pack::{Pack, PackValue};
 use crate::preview::{ShapeFact, shape};
+use crate::substitutions::Substitutions;
 use crate::text::EscapedText;
 use crate::value::{ValueBody, ValueProblem};
 
@@ -63,6 +64,12 @@ pub struct ReportBlock {
     pub breaks: Option<String>,
     pub expected: Option<String>,
     pub arrival: Arrival,
+    /// The text services of the system that were on and could have changed a
+    /// value typed whole on its way into the field (`D139`) - the set the
+    /// palette names in the same press. Empty for a value that did not go in by
+    /// being typed whole, and [`ReportBlock::describe`] leaves it empty, for the
+    /// reason it leaves [`ReportBlock::target`] `None`.
+    pub may_alter: Substitutions,
     /// Where a typed value went, as read at the press (UX8, `D104`). `None`
     /// for a value put on the clipboard - it went wherever the tester pasted
     /// it - and for a block built from the pack alone. [`ReportBlock::describe`]
@@ -132,11 +139,25 @@ pub enum SpelledOut {
     },
 }
 
-/// How the value reached the field, and whether all of it did.
+/// How the value reached the field, whether all of it did, and how far that
+/// could be followed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Arrival {
-    /// Typed into the field whole.
+    /// Typed into the field whole, every key taken by the application that
+    /// held the focus.
     Whole,
+    /// Every key pressed, and only the system is known to have taken them: the
+    /// route could not follow the queue of the application (`D95`, `OBS-158`),
+    /// so characters may be missing if it was busy.
+    ///
+    /// Told apart from [`Arrival::Whole`] because the palette warns of it, and
+    /// a ticket that said less than the palette would describe a value the
+    /// field may not hold.
+    TakenBySystem,
+    /// Handed whole to the desktop's input method (`D145`), which gives it to
+    /// whatever holds the keyboard focus. No key was pressed, and nothing
+    /// confirms that a field took it.
+    HandedOver,
     /// Delivery stopped part-way. The field holds a fragment, and a ticket that
     /// did not say so would describe a value the application never received.
     Interrupted {
@@ -204,6 +225,7 @@ impl ReportBlock {
             breaks: value.breaks.clone(),
             expected: value.expect.clone(),
             arrival,
+            may_alter: Substitutions::NONE,
             target: None,
         })
     }
