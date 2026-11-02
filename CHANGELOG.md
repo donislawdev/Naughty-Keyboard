@@ -101,6 +101,11 @@ Changes wait under Unreleased until then.
 - On X11 a modifier left locked, such as Alt locked by sticky keys, no longer swallows a value. A
   GTK field got nothing of it while `nkb send` said it was sent. Ctrl, Alt or Super latched or
   locked now refuse the send by name, as a held key does.
+- The report block now carries the warnings the palette gives about a value that went in. When
+  only the system confirmed the keys, when the value was handed to the input method of a Wayland
+  desktop, or when the text substitutions of macOS may have changed it, the block has a `Delivery:`
+  line that says so. Before, it described such a value as typed whole, so a ticket said less than
+  the palette did.
 
 ## [0.3.0] - 2026-10-25
 

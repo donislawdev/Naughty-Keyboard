@@ -23,8 +23,11 @@
 //! "not recorded" - so a block from this version and one from the version that
 //! records a target have the same labels in the same order. Two exceptions, each
 //! a warning rather than a field of every value: `Delivery:`, present only when
-//! the value arrived in part, and `Unicode:`, present only when `Typed:` holds a
-//! character a tracker that normalizes text could rewrite (`D70`).
+//! the value did not go in typed whole and followed into the application, or
+//! when the system's text substitutions could have changed it - every warning
+//! the palette gives about a value that went in - and `Unicode:`, present only
+//! when `Typed:` holds a character a tracker that normalizes text could rewrite
+//! (`D70`).
 //!
 //! # Somebody else's prose is escaped before it goes out
 //!
@@ -41,7 +44,7 @@ use nkb_core::preview::ShapeFact;
 use nkb_core::report::{Arrival, ControlKind, ReportBlock, SpelledOut, Target, Typed};
 use nkb_core::text::escaped_prose;
 
-use crate::i18n::{fill, shape_line};
+use crate::i18n::{fill, shape_line, substitution_names};
 
 /// The report block in English, ready to paste.
 #[derive(Debug, Clone, Copy, Default)]
@@ -137,6 +140,16 @@ pub enum ReportPhrase {
     /// keystroke meets a paste as one event, so the reader has to know it was
     /// not typed.
     Clipboard,
+    /// Every key pressed, and only the system confirmed them - the palette's
+    /// `NotPaced` (`D95`, `OBS-158`).
+    TakenBySystem,
+    /// Handed to the desktop's input method - the palette's `HandedOver`
+    /// (`D145`).
+    HandedOver,
+    /// The system's text substitutions that were on could have changed the
+    /// value - the palette's `MayBeAltered` (`D139`). Could, never did: the
+    /// tool does not look into the field.
+    MayBeAltered,
     /// This program and its version.
     Tool,
 }
@@ -167,6 +180,15 @@ fn pattern_report_phrase(phrase: ReportPhrase) -> &'static str {
             "interrupted after at least {sent} of {expected} UTF-16 units - more may have arrived after the stop"
         }
         ReportPhrase::Clipboard => "placed on the clipboard - pasted by the tester, not typed",
+        ReportPhrase::TakenBySystem => {
+            "every key pressed, but only the system confirmed them - characters may be missing if the application was busy"
+        }
+        ReportPhrase::HandedOver => {
+            "handed to the desktop's input method, which gives it to whatever has the keyboard focus - nothing confirms that a field received it"
+        }
+        ReportPhrase::MayBeAltered => {
+            "the system's text substitutions were on and may have changed the value: {what}"
+        }
         ReportPhrase::Tool => "Naughty Keyboard {version}",
     }
 }
@@ -236,29 +258,8 @@ pub fn report_text(block: &ReportBlock) -> String {
             .join(" · "),
         ),
     ]);
-    // The conditional line: only when the value did NOT go into the field by
-    // being typed whole - `D68` keeps it a warning rather than a field of
-    // every value, and `D71` gives it its second reason.
-    match block.arrival {
-        Arrival::Whole => {}
-        Arrival::Interrupted {
-            units_sent,
-            units_expected,
-        } => lines.push((
-            ReportLabel::Delivery,
-            cut_short(ReportPhrase::Interrupted, units_sent, units_expected),
-        )),
-        Arrival::InFlight {
-            units_sent,
-            units_expected,
-        } => lines.push((
-            ReportLabel::Delivery,
-            cut_short(ReportPhrase::InFlight, units_sent, units_expected),
-        )),
-        Arrival::OnClipboard => lines.push((
-            ReportLabel::Delivery,
-            pattern_report_phrase(ReportPhrase::Clipboard).to_owned(),
-        )),
+    if let Some(delivery) = delivery(block) {
+        lines.push((ReportLabel::Delivery, delivery));
     }
     lines.extend([
         (ReportLabel::Breaks, given(block.breaks.as_deref())),
@@ -407,6 +408,47 @@ fn given(text: Option<&str>) -> String {
 }
 
 /// The `Delivery:` line of a value cut short, exact or a floor (`D158`).
+/// The conditional `Delivery:` line: only when the value did NOT go into the
+/// field by being typed whole and followed into the application, untouched by
+/// the system on the way - `D68` keeps it a warning rather than a field of every
+/// value. `D71` gave it the clipboard, `D158` the keys on their way, and the
+/// palette's three warnings of a value that went in give it the rest, so that a
+/// ticket never says less than the palette did. More than one is said in one
+/// line, the way of `Shape:`.
+fn delivery(block: &ReportBlock) -> Option<String> {
+    let said = |phrase| pattern_report_phrase(phrase).to_owned();
+    let arrived = match block.arrival {
+        Arrival::Whole => None,
+        Arrival::TakenBySystem => Some(said(ReportPhrase::TakenBySystem)),
+        Arrival::HandedOver => Some(said(ReportPhrase::HandedOver)),
+        Arrival::OnClipboard => Some(said(ReportPhrase::Clipboard)),
+        Arrival::Interrupted {
+            units_sent,
+            units_expected,
+        } => Some(cut_short(
+            ReportPhrase::Interrupted,
+            units_sent,
+            units_expected,
+        )),
+        Arrival::InFlight {
+            units_sent,
+            units_expected,
+        } => Some(cut_short(
+            ReportPhrase::InFlight,
+            units_sent,
+            units_expected,
+        )),
+    };
+    let altered = (!block.may_alter.is_empty()).then(|| {
+        fill(
+            pattern_report_phrase(ReportPhrase::MayBeAltered),
+            &[("what", &substitution_names(block.may_alter))],
+        )
+    });
+    let parts: Vec<String> = arrived.into_iter().chain(altered).collect();
+    (!parts.is_empty()).then(|| parts.join(" · "))
+}
+
 fn cut_short(phrase: ReportPhrase, units_sent: usize, units_expected: usize) -> String {
     fill(
         pattern_report_phrase(phrase),
@@ -425,6 +467,7 @@ fn cut_short(phrase: ReportPhrase, units_sent: usize, units_expected: usize) -> 
 )]
 mod tests {
     use super::*;
+    use nkb_core::substitutions::Substitutions;
     use nkb_core::text::LiteralText;
 
     fn block() -> ReportBlock {
@@ -441,6 +484,7 @@ mod tests {
             breaks: Some("Counters disagree.".to_owned()),
             expected: None,
             arrival: Arrival::Whole,
+            may_alter: Substitutions::NONE,
             target: Some(Target {
                 program: Some("notepad.exe".to_owned()),
                 field: ControlKind::TextField,
@@ -584,6 +628,45 @@ mod tests {
             lines(&report_text(&block())).len() + 1,
             "exactly one line more than a typed value"
         );
+    }
+
+    #[test]
+    fn a_value_the_palette_warned_about_gets_the_same_warning_in_the_same_place() {
+        // Typed whole, and yet not known to be in the field as typed: the palette
+        // says so, and a ticket that said less would describe a value the field
+        // may not hold. One line, the label and the place of D68.
+        let delivery = |arrival, may_alter| {
+            let text = report_text(&ReportBlock {
+                arrival,
+                may_alter,
+                ..block()
+            });
+            let got: Vec<String> = lines(&text).into_iter().map(str::to_owned).collect();
+            assert!(got[6].starts_with("Breaks:   "), "{text}");
+            got[5].clone()
+        };
+        let capital = Substitutions {
+            capitalization: true,
+            ..Substitutions::NONE
+        };
+        assert_eq!(
+            delivery(Arrival::TakenBySystem, Substitutions::NONE),
+            "Delivery: every key pressed, but only the system confirmed them - characters may be missing if the application was busy"
+        );
+        assert_eq!(
+            delivery(Arrival::HandedOver, Substitutions::NONE),
+            "Delivery: handed to the desktop's input method, which gives it to whatever has the keyboard focus - nothing confirms that a field received it"
+        );
+        assert_eq!(
+            delivery(Arrival::Whole, capital),
+            "Delivery: the system's text substitutions were on and may have changed the value: the first letter of a sentence made a capital"
+        );
+        assert_eq!(
+            delivery(Arrival::TakenBySystem, capital),
+            "Delivery: every key pressed, but only the system confirmed them - characters may be missing if the application was busy · the system's text substitutions were on and may have changed the value: the first letter of a sentence made a capital"
+        );
+        // Followed into the application and untouched on the way: no line at all.
+        assert!(!report_text(&block()).contains("Delivery:"));
     }
 
     #[test]
