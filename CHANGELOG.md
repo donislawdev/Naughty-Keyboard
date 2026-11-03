@@ -12,6 +12,12 @@ Changes wait under Unreleased until then.
 
 ### Changed
 
+- On Windows and macOS a tab in a value is now pressed as the Tab key and a line feed as Enter, as
+  on X11 and as a keyboard types them. A value with a line break typed into a text area of Edge or
+  Chrome lost the break, `Jan` and `Kowalski` arrived as `JanKowalski` while the send said every
+  key was taken, and a tab went into a single-line field as a character. In a single-line field a
+  line feed may now send the form and a tab may move the focus, which the website's honest limits
+  describe.
 - A text field that says it is read-only is no longer treated as a field that takes typing. On
   Windows the clearing keys no longer go to it, and on macOS the value is no longer refused there.
   The value is typed without clearing first, as for any focus that is not confirmed as a field,

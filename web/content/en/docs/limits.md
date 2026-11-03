@@ -19,6 +19,10 @@ No. It was measured on Ubuntu 26.04 only: GNOME 50 on Wayland, and X11 with open
 
 On macOS, yes. The text substitutions of the system can turn a typed value into another one, and the palette and `nkb send` say so when one that is switched on could have acted on that very value.
 
+## What do a tab and a line break in a value do?
+
+What the keys do. On Windows, macOS and X11 a tab is pressed as the Tab key and a line feed as Enter, the way a keyboard types them. In a field of several lines a line feed starts a new line. In a single-line field it may send the form, and a tab may move the focus to the next control, so the rest of the value goes there. A carriage return is typed as a character, which most fields drop, so CR LF ends up as one line break, and as two on macOS. Under Wayland the value is handed to the input method whole, so a tab or a line feed arrives as a character.
+
 ## Can I load my own packs?
 
 You can write them and check them, but not load them yet. `nkb new-pack`, `nkb fmt` and `nkb lint` all work on a file of your own. Reading a folder of your own packs into the palette and the command line is not wired up, and `nkb packs` says so: it reports the folders for your own packs and your team's as not read.

@@ -8937,8 +8937,8 @@
       "id": "M1200",
       "why": "U+0000 is carried - it is no keysym, and a send would press a key that types nothing and report it as sent",
       "file": "crates/nkb-sys/src/linux_rules.rs",
-      "find": "        '\\0' => Err(CannotCarry(character)),",
-      "replace": "        '\\0' => Ok(UNICODE_KEYSYM_BASE),",
+      "find": "    if character == '\\0' {\n        return Err(CannotCarry(character));",
+      "replace": "    if character == '\\0' {\n        return Ok(UNICODE_KEYSYM_BASE);",
       "test": "linux_rules::tests::nul_cannot_be_carried_and_is_refused_by_name",
       "runner": "rust:nkb-sys:lib"
     },
@@ -8946,8 +8946,8 @@
       "id": "M1201",
       "why": "a line feed is typed as its Unicode keysym - toolkits drop a control character, so the line break never arrives",
       "file": "crates/nkb-sys/src/linux_rules.rs",
-      "find": "        '\\n' => Ok(KEYSYM_RETURN),",
-      "replace": "        '\\n' => Ok(UNICODE_KEYSYM_BASE + 10),",
+      "find": "Some(TextKey::Return) => KEYSYM_RETURN,",
+      "replace": "Some(TextKey::Return) => UNICODE_KEYSYM_BASE + 10,",
       "test": "linux_rules::tests::every_character_is_its_unicode_keysym_and_two_are_keys",
       "runner": "rust:nkb-sys:lib"
     },
@@ -8955,8 +8955,8 @@
       "id": "M1202",
       "why": "a character is typed as its legacy keysym - a letter alone on a key is changed to lower case by the server (OBS-202 point 7)",
       "file": "crates/nkb-sys/src/linux_rules.rs",
-      "find": "        other => Ok(UNICODE_KEYSYM_BASE + u32::from(other)),",
-      "replace": "        other => Ok(u32::from(other)),",
+      "find": "None => UNICODE_KEYSYM_BASE + u32::from(character),",
+      "replace": "None => u32::from(character),",
       "test": "linux_rules::tests::every_character_is_its_unicode_keysym_and_two_are_keys",
       "runner": "rust:nkb-sys:lib"
     },
@@ -12807,6 +12807,60 @@
       "find": "read(answer).map_or(Reply::Refused, Reply::Said)",
       "replace": "read(answer).map_or(Reply::Silent, Reply::Said)",
       "test": "linux_atspi_rules::tests::an_answer_that_does_not_read_is_a_refusal_and_silence_stays_silence",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1641",
+      "why": "a tab goes as a character again, so in a page field of Edge or Chrome it is typed into the field where a keyboard moves the focus (D164)",
+      "file": "crates/nkb-sys/src/text_keys.rs",
+      "find": "0x09 => Some(TextKey::Tab),",
+      "replace": "0x0B => Some(TextKey::Tab),",
+      "test": "text_keys::tests::a_tab_and_a_line_feed_are_the_keys_of_their_names",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1642",
+      "why": "a carriage return is pressed as Return in place of the line feed, so a line break of a value is lost in a text area and CR LF makes a second one",
+      "file": "crates/nkb-sys/src/text_keys.rs",
+      "find": "0x0A => Some(TextKey::Return),",
+      "replace": "0x0D => Some(TextKey::Return),",
+      "test": "text_keys::tests::every_other_character_goes_as_text_a_carriage_return_included",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1643",
+      "why": "the person's Shift is not waited for before a tab on Windows, so Shift held during a send turns it into Shift+Tab and the focus goes backwards",
+      "file": "crates/nkb-sys/src/windows_keys.rs",
+      "find": "Some(TextKey::Tab) => (VK_TAB, key_events(VK_TAB), true),",
+      "replace": "Some(TextKey::Tab) => (VK_TAB, key_events(VK_TAB), false),",
+      "test": "windows_keys::tests::a_tab_and_a_line_feed_are_their_keys_and_wait_for_the_person_s_shift",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1644",
+      "why": "a line feed goes as VK_PACKET again on Windows, and a text area of Edge or Chrome loses every line break of a value (D164)",
+      "file": "crates/nkb-sys/src/windows_keys.rs",
+      "find": "Some(TextKey::Return) => (VK_RETURN, key_events(VK_RETURN), true),",
+      "replace": "Some(TextKey::Return) => (VK_PACKET, events_for(unit), false),",
+      "test": "windows_keys::tests::a_tab_and_a_line_feed_are_their_keys_and_wait_for_the_person_s_shift",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1645",
+      "why": "a tab goes on the text key again on macOS, so Chrome types it into a single-line field where a keyboard moves the focus (D164)",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "(1, Some(TextKey::Tab)) => (KEY_TAB, true),",
+      "replace": "(1, Some(TextKey::Tab)) => (TEXT_KEY, false),",
+      "test": "macos_rules::tests::a_tab_and_a_line_feed_are_their_keys_and_wait_for_the_person_s_shift",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1646",
+      "why": "the person's Shift is not waited for before a line feed on macOS, so Shift held during a send makes it Shift+Return",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "(1, Some(TextKey::Return)) => (KEY_RETURN, true),",
+      "replace": "(1, Some(TextKey::Return)) => (KEY_RETURN, false),",
+      "test": "macos_rules::tests::a_tab_and_a_line_feed_are_their_keys_and_wait_for_the_person_s_shift",
       "runner": "rust:nkb-sys:lib"
     }
   ]

@@ -15,7 +15,7 @@ Podaj paczkę i, z `--index`, którą wartość. Polecenie domyślnie czeka trzy
 $ nkb send magic-values --index 2 --delay 3
 ```
 
-Wartość trafia do okna z fokusem, a nie na standardowe wyjście, a wszystko, co mówi polecenie, idzie na standardowe wyjście błędów. Dodaj `--clear`, żeby najpierw wyczyścić bieżący wiersz pola klawiszami Home, Shift+End i Delete, tak jak paleta robi domyślnie. Bez tej opcji jedyne wysyłane klawisze to znaki samej wartości.
+Wartość trafia do okna z fokusem, a nie na standardowe wyjście, a wszystko, co mówi polecenie, idzie na standardowe wyjście błędów. Dodaj `--clear`, żeby najpierw wyczyścić bieżący wiersz pola klawiszami Home, Shift+End i Delete, tak jak paleta robi domyślnie. Bez tej opcji jedyne wysyłane klawisze to znaki samej wartości. Tabulator w wartości jest naciskany jako klawisz Tab, a znak nowej linii jako Enter, więc w polu jednowierszowym mogą przenieść fokus albo wysłać formularz, o czym mówią [Uczciwe ograniczenia](/docs/limits/).
 
 ## Kiedy odmawia?
 

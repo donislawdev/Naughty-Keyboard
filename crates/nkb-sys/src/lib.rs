@@ -71,8 +71,12 @@ pub mod program;
 pub mod screens;
 pub mod spaces;
 pub mod startup;
+#[cfg(any(windows, target_os = "macos", target_os = "linux", test))]
+mod text_keys;
 pub mod text_services;
 pub mod window;
+#[cfg(windows)]
+mod windows_keys;
 
 use core::sync::atomic::AtomicBool;
 
@@ -386,14 +390,14 @@ mod windows_impl {
         chords_acted, hand, press_confirmed, units_arrived,
     };
     use super::escape::{ReservedEscape, SystemEscape};
+    use super::windows_keys::{chord_event, steps_for};
     use super::{Chord, MODIFIER_RELEASE_WAIT, NavKey};
     use core::sync::atomic::{AtomicBool, Ordering};
     use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-        GetAsyncKeyState, GetFocus, GetKeyState, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
-        KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, SendInput, VIRTUAL_KEY,
-        VK_CONTROL, VK_DELETE, VK_END, VK_HOME, VK_LWIN, VK_MENU, VK_PACKET, VK_RWIN, VK_SHIFT,
+        GetAsyncKeyState, GetFocus, GetKeyState, INPUT, SendInput, VIRTUAL_KEY, VK_CONTROL,
+        VK_DELETE, VK_END, VK_HOME, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         GUITHREADINFO, GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId,
@@ -454,35 +458,6 @@ mod windows_impl {
             NavKey::End => VK_END,
             NavKey::Delete => VK_DELETE,
         }
-    }
-
-    /// One virtual-key event. `KEYEVENTF_EXTENDEDKEY` marks the navigation
-    /// cluster, so an application that tells `Home` from the numeric keypad's
-    /// `7` sees the former.
-    fn key_event(key: VIRTUAL_KEY, flags: u32) -> INPUT {
-        INPUT {
-            r#type: INPUT_KEYBOARD,
-            Anonymous: INPUT_0 {
-                ki: KEYBDINPUT {
-                    wVk: key,
-                    wScan: 0,
-                    dwFlags: flags,
-                    time: 0,
-                    dwExtraInfo: 0,
-                },
-            },
-        }
-    }
-
-    /// The event for `key`, down or up. Navigation keys carry
-    /// `KEYEVENTF_EXTENDEDKEY`, `Shift` does not.
-    fn chord_event(key: VIRTUAL_KEY, release: bool) -> INPUT {
-        let extended = if key == VK_SHIFT {
-            0
-        } else {
-            KEYEVENTF_EXTENDEDKEY
-        };
-        key_event(key, extended | if release { KEYEVENTF_KEYUP } else { 0 })
     }
 
     /// One event to the system. True when it accepted it - which is not yet
@@ -694,29 +669,6 @@ mod windows_impl {
         Ok(chords.len())
     }
 
-    /// One UTF-16 unit as the pair of events the system expects.
-    fn events_for(unit: u16) -> [INPUT; 2] {
-        let event = |flags: u32| INPUT {
-            r#type: INPUT_KEYBOARD,
-            Anonymous: INPUT_0 {
-                ki: KEYBDINPUT {
-                    // Zero: the unit below is a character, not a key. That is
-                    // what KEYEVENTF_UNICODE means, and it is why layout does
-                    // not matter - the probe sent CJK on a Polish keyboard.
-                    wVk: 0,
-                    wScan: unit,
-                    dwFlags: flags,
-                    time: 0,
-                    dwExtraInfo: 0,
-                },
-            },
-        };
-        [
-            event(KEYEVENTF_UNICODE),
-            event(KEYEVENTF_UNICODE | KEYEVENTF_KEYUP),
-        ]
-    }
-
     /// Windows needs no permission to type: a window with higher privileges is
     /// refused per window (`privilege.rs`), not for the program as a whole.
     pub fn send_allowed() -> bool {
@@ -776,23 +728,8 @@ mod windows_impl {
         // window in front is looked at (`W2`).
         let mut cadence = Cadence::starting(std::time::Instant::now(), PROGRESS_INTERVAL);
         for (index, unit) in units.iter().enumerate() {
-            let [down, up] = events_for(*unit);
-            // A character arrives as itself under `Shift` (`OBS-233`), so the
-            // person's `Shift` holds no unit back.
-            let steps = [
-                Step {
-                    event: down,
-                    key: VK_PACKET,
-                    down: true,
-                    shift_counts: false,
-                },
-                Step {
-                    event: up,
-                    key: VK_PACKET,
-                    down: false,
-                    shift_counts: false,
-                },
-            ];
+            let steps = steps_for(*unit);
+            let up = steps[1].event;
             let pressed = session.press(&steps);
             if let Some(reason) = pressed.stop {
                 // Always, unconfirmed: a down that was not taken makes the
