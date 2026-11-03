@@ -21,7 +21,7 @@ numbers-extreme           12 values  Extreme numbers
 dates-impossible          12 values  Impossible dates
 export-breakers           12 values  Export breakers
 locale-pl                  6 values  Polish locale
-filenames-paths           12 values  File names and paths
+filenames-paths           28 values  File names and paths
 look-alike-pairs          12 values  Look-alike pairs
 emoji-complex             12 values  Complex emoji
 encoding-mojibake         11 values  Encoding and mojibake
@@ -31,8 +31,9 @@ names-identity            12 values  Names and identity
 time-zones                12 values  Time and time zones
 currency-separators       12 values  Money and separators
 pseudolocalization        10 values  Pseudolocalisation
+json-payloads             12 values  JSON request bodies
 
-18 of 18 packs loaded, 207 values.
+19 of 19 packs loaded, 235 values.
 Read these pack sources: built-in.
 Not read: team - the settings file has no key for this folder yet, so it cannot be named.
 Not read: own - the settings file has no key for this folder yet, so it cannot be named.

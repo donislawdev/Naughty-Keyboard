@@ -10,8 +10,25 @@ Changes wait under Unreleased until then.
 
 ## [Unreleased]
 
+### Added
+
+- A `json-payloads` pack of twelve request bodies that JSON parsers and databases read differently,
+  among them a duplicate key, an integer above 2^53, 1001 nested arrays, an escaped NUL and a byte
+  order mark. Each is one line, so `nkb emit json-payloads --format lines`
+  gives one body per line for a script. Typed into a text area or into the Monaco code editor in Edge,
+  all twelve arrive whole, although the editor closes brackets and quotes as they are typed. The field
+  names are examples to rename to those of your API.
+- Sixteen more names in `filenames-paths`, now version 1.1: a name that starts with a dash or with two
+  dots, a percent sign with a plus and a hash, only an extension, several dots, no extension, an
+  extension in capitals, an Office lock file name, `.htaccess`, `web.config`, `.env` and `desktop.ini`,
+  an accent written as a character of its own, an extension in full-width letters, a percent-encoded
+  NUL and line break, and a name of 101 bytes, one past the name field of a tar archive.
+
 ### Changed
 
+- `nkb lint` warns about a long written-out value (W026) only when the value is one piece repeated,
+  which `type = "repeat"` can write instead. A long value with no such piece, such as 1001 opening
+  brackets followed by 1001 closing ones, no longer gets advice nobody can follow.
 - The palette uses less memory. The About and Shortcuts windows are now made the first time they
   are opened, not when the palette starts, because each window holds a graphics context of its own
   whether it is open or not. On a Windows machine with an AMD graphics card the palette took about

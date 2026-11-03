@@ -341,13 +341,16 @@ fn every_character_the_table_promises_leaves_ink() {
 /// what it draws. This asks about what the catalogue carries, so a new script in
 /// the middle of a long value still has to be acknowledged here.
 ///
-/// ⚠️ Twenty-nine, which is also the number `D52` gives for the whole
-/// catalogue of `catalog-v0.1.md` - a coincidence, not the same set. Eighteen
-/// of its twenty packs are shipped today. The nine added on 2026-10-14 brought
+/// ⚠️ Thirty. Until 2026-11-03 it was twenty-nine, which is also the
+/// number `D52` gives for the whole catalogue of `catalog-v0.1.md` - a
+/// coincidence, not the same set. Eighteen of its twenty packs are shipped
+/// today, with one pack from outside it. The nine added on 2026-10-14 brought
 /// eleven: the keycap mark, two ideographs, one ideograph beyond the basic
 /// plane and seven emoji. Their Arabic, Greek and Cyrillic letters, the
 /// replacement character and the heart are all drawn by the typeface.
-const SHIPPED_OUTSIDE: [(char, &str); 29] = [
+/// `json-payloads` and `filenames-paths` 1.1 brought one: the full width x of
+/// a file extension, whose t was already here.
+const SHIPPED_OUTSIDE: [(char, &str); 30] = [
     ('\u{20E3}', "emoji-complex/emoji-keycap"),
     ('\u{30B9}', "unicode-text/cjk-mixed"),
     ('\u{30C6}', "unicode-text/cjk-mixed"),
@@ -366,6 +369,7 @@ const SHIPPED_OUTSIDE: [(char, &str); 29] = [
     ('\u{FF54}', "unicode-text/fullwidth-latin"),
     ('\u{FF55}', "unicode-text/fullwidth-latin"),
     ('\u{FF57}', "unicode-text/fullwidth-latin"),
+    ('\u{FF58}', "filenames-paths/fullwidth-extension"),
     ('\u{1D407}', "unicode-text/math-bold"),
     ('\u{1D41E}', "unicode-text/math-bold"),
     ('\u{1D425}', "unicode-text/math-bold"),

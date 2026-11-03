@@ -1,0 +1,110 @@
+format = 1
+
+[pack]
+id          = "json-payloads"
+name        = "JSON request bodies"
+description = "JSON request bodies that parsers and databases read differently. Rename the example fields to those of your API."
+version     = "1.0"
+updated     = 2026-11-03
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["api", "json", "request-body", "parser"]
+fields      = ["multiline", "text"]
+risk        = "normal"
+
+[[values]]
+id     = "empty-body"
+name   = "Empty request body"
+value  = ""
+breaks = "An empty body is not JSON; most parsers raise an error and some return no value at all, so a handler written for one of the two answers 500 instead of 400."
+expect = "400 with a message that says the body is empty."
+since  = "1.0"
+
+[[values]]
+id     = "duplicate-key"
+name   = "Duplicate key"
+value  = "{\"quantity\":1,\"quantity\":100}"
+breaks = "RFC 8259 leaves duplicate names undefined: most parsers keep the last value and a few refuse the body, so two layers with different parsers can each see a different quantity."
+expect = "Rejected with 400, or the same value used by every layer that reads the body."
+since  = "1.0"
+
+[[values]]
+id     = "big-int-id"
+name   = "Integer above 2^53"
+value  = "{\"id\":9007199254740993}"
+breaks = "Above 2^53 a double cannot hold every integer: JavaScript and a Go map read 9007199254740993 as 9007199254740992, while a typed int64 keeps it, so an id changes between two services."
+expect = "Ids above 2^53 - 1 sent as strings, or rejected with a message."
+since  = "1.0"
+
+[[values]]
+id     = "explicit-null"
+name   = "Explicit null"
+value  = "{\"name\":null}"
+breaks = "A typed model reads null and a missing field as the same empty value, so a partial update cannot tell a request to clear the name from one that leaves it alone."
+expect = "Null and an absent field handled as two different requests, the way the API documents them."
+since  = "1.0"
+
+[[values]]
+id     = "number-as-string"
+name   = "Number sent as a string"
+value  = "{\"quantity\":\"5\"}"
+breaks = "Some binders read the string 5 as the number 5 and others refuse it, so the same body passes one service and is rejected by the next one in the chain."
+expect = "Rejected with 400 naming the field and its type, or converted the same way in every layer."
+since  = "1.0"
+
+[[values]]
+id     = "nesting-1001"
+name   = "1001 nested arrays"
+value  = "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"
+breaks = "Each parser stops at its own depth, from 64 levels to 1000 or none at all, so a body that one layer parses another rejects with a depth error rather than a syntax error."
+expect = "Rejected with 400 at a documented depth, before any handler sees it."
+since  = "1.0"
+
+[[values]]
+id     = "lone-surrogate"
+name   = "Escaped lone surrogate"
+value  = "{\"name\":\"\\ud800\"}"
+breaks = "An escaped lone surrogate is valid JSON syntax but not valid text: some parsers refuse it, Go encoding/json replaces it with U+FFFD, and others keep it until writing it as UTF-8 fails or changes it."
+expect = "Rejected with 400, or replaced visibly before the value is stored."
+since  = "1.0"
+
+[[values]]
+id     = "escaped-nul"
+name   = "Escaped NUL in a string"
+value  = "{\"name\":\"a\\u0000b\"}"
+breaks = "JSON parsers keep the NUL inside the string, so it reaches storage: PostgreSQL jsonb refuses it, and code that uses C strings cuts the name after the a."
+expect = "Rejected with 400 at the API, or the NUL removed before the value is stored."
+since  = "1.0"
+
+[[values]]
+id     = "huge-exponent"
+name   = "Number beyond a double"
+value  = "{\"price\":1e400}"
+breaks = "1e400 is valid JSON and beyond a double: Go and serde refuse it, Python, .NET and Jackson read infinity, JavaScript writes it back as null, and PostgreSQL jsonb keeps all 401 digits."
+expect = "Rejected with 400 as out of range for the field."
+since  = "1.0"
+
+[[values]]
+id     = "case-variant-keys"
+name   = "Keys differing only in case"
+value  = "{\"quantity\":1,\"Quantity\":100}"
+breaks = "Case-insensitive binding, the default in ASP.NET Core and in Go encoding/json, takes the second key, while case-sensitive binders take the first or refuse the unknown one, so layers disagree about the quantity."
+expect = "Rejected with 400, or one documented key used by every layer."
+since  = "1.0"
+
+[[values]]
+id     = "trailing-comma"
+name   = "Trailing comma"
+value  = "{\"quantity\":1,}"
+breaks = "JavaScript object literals and JSON5 allow a trailing comma and JSON does not, so a body written by hand or by a lenient client fails on a strict server, with 400 or with 500."
+expect = "400 with a message that points at the comma."
+since  = "1.0"
+
+[[values]]
+id     = "bom-before-body"
+name   = "Byte order mark before the body"
+value  = "\uFEFF{\"quantity\":1}"
+breaks = "RFC 8259 forbids a byte order mark before JSON and lets parsers ignore one: Jackson and decoders that strip it accept the body, while Go, serde and PostgreSQL refuse it, so one request passes one service and fails another."
+expect = "Accepted with the mark ignored, or rejected with 400 that names it; never 500."
+since  = "1.0"

@@ -83,8 +83,8 @@ fn every_shipped_value_goes_through_clipboard_mode_whole() {
     }
     // Anti-vacuity: a catalogue that listed nothing would pass the loop above.
     assert_eq!(
-        values, 207,
-        "the shipped catalogue holds 207 values (CLAUDE.md, `shipped_packs.rs`) - a \
+        values, 235,
+        "the shipped catalogue holds 235 values (CLAUDE.md, `shipped_packs.rs`) - a \
          different count means this walked something else"
     );
 }

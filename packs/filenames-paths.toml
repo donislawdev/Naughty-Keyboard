@@ -3,13 +3,13 @@ format = 1
 [pack]
 id          = "filenames-paths"
 name        = "File names and paths"
-description = "Names a file system rejects, alters, or reads differently than the user meant."
-version     = "1.0"
-updated     = 2026-09-24
+description = "Names that a file system, an archive or a server rejects, alters, or reads differently than the user meant."
+version     = "1.1"
+updated     = 2026-11-03
 license     = "CC-BY-4.0"
 authors     = ["Naughty Keyboard"]
 language    = "en"
-tags        = ["filesystem", "reserved", "portability"]
+tags        = ["filesystem", "reserved", "portability", "upload"]
 fields      = ["filename", "path", "text"]
 risk        = "normal"
 
@@ -110,3 +110,131 @@ value  = "my report.txt"
 breaks = "Names with spaces break command construction and links that are not quoted or encoded."
 expect = "Handled everywhere the file name is used, including download links."
 since  = "1.0"
+
+[[values]]
+id     = "leading-dash"
+name   = "Name starting with a dash"
+value  = "-rf"
+breaks = "A name that starts with a dash is read as an option when a script passes it to a command without -- in front of it."
+expect = "Stored as a name, and every command that receives it gets -- before it."
+since  = "1.1"
+
+[[values]]
+id     = "url-specials"
+name   = "Percent, plus and hash"
+value  = "100% a+b #1.txt"
+breaks = "A percent sign, a plus and a hash each mean something else in a URL, so a download link built without encoding points at another file or stops at the hash."
+expect = "Download links encode the name, and the file downloads under the name it was given."
+since  = "1.1"
+
+[[values]]
+id     = "leading-double-dot"
+name   = "Name starting with two dots"
+value  = "..report.txt"
+breaks = "A traversal filter that looks for two dots refuses a name that climbs nowhere, and a filter that strips dots stores another name."
+expect = "Accepted unchanged, or rejected with a message; never stored under a different name."
+since  = "1.1"
+
+[[values]]
+id     = "extension-only"
+name   = "Only an extension"
+value  = ".txt"
+breaks = "With nothing before the dot, code that splits off the extension is left with an empty name, and Linux and macOS hide the file."
+expect = "Rejected with a message, or accepted and listed with its full name."
+since  = "1.1"
+
+[[values]]
+id     = "many-dots"
+name   = "Several dots"
+value  = "v1.2.3.final.pdf"
+breaks = "Only the part after the last dot is the extension; code that splits at the first dot reads the type as 2.3.final.pdf."
+expect = "Accepted, with the type taken from the last extension."
+since  = "1.1"
+
+[[values]]
+id     = "no-extension"
+name   = "No extension"
+value  = "README"
+breaks = "A system that requires an extension, or guesses the type from it, has nothing to go on and may refuse a common file."
+expect = "Accepted, or rejected with a message that names the missing extension."
+since  = "1.1"
+
+[[values]]
+id     = "upper-extension"
+name   = "Extension in capitals"
+value  = "REPORT.PDF"
+breaks = "An extension check that compares with case refuses a file it accepts as report.pdf."
+expect = "Accepted, like the same name in lower case."
+since  = "1.1"
+
+[[values]]
+id     = "office-lock-name"
+name   = "Office lock file name"
+value  = "~$report.docx"
+breaks = "Microsoft Office names its lock files this way, so sync tools, backups and upload filters may skip the file without saying so."
+expect = "Stored and listed like any other name, or rejected with a message."
+since  = "1.1"
+
+[[values]]
+id     = "htaccess"
+name   = "Apache configuration file name"
+value  = ".htaccess"
+breaks = "On an Apache server that serves the upload folder, a file with this name changes how the server behaves, whatever it holds."
+expect = "Rejected or renamed before it is stored in a folder the server serves."
+since  = "1.1"
+
+[[values]]
+id     = "web-config"
+name   = "IIS configuration file name"
+value  = "web.config"
+breaks = "On an IIS server that serves the upload folder, a file with this name changes how the server behaves, whatever it holds."
+expect = "Rejected or renamed before it is stored in a folder the server serves."
+since  = "1.1"
+
+[[values]]
+id     = "dotenv"
+name   = "Environment file name"
+value  = ".env"
+breaks = "Applications read their settings and secrets from a file with this name, so an upload that lands in the wrong folder becomes configuration."
+expect = "Rejected or renamed, and never stored where an application reads its settings."
+since  = "1.1"
+
+[[values]]
+id     = "desktop-ini"
+name   = "Windows folder settings file name"
+value  = "desktop.ini"
+breaks = "Windows Explorer reads a file with this name to decide how a folder looks, so an upload to a shared folder changes it for everyone."
+expect = "Rejected or renamed in folders that people open in Explorer."
+since  = "1.1"
+
+[[values]]
+id     = "nfd-name"
+name   = "Accent as a separate character"
+value  = "cafe\u0301.txt"
+breaks = "The accent follows the e as its own character, as macOS hands names over; a system that compares bytes sees a different file from the usual spelling."
+expect = "Found, matched and listed as the same name as its composed spelling."
+since  = "1.1"
+
+[[values]]
+id     = "fullwidth-extension"
+name   = "Extension in full-width letters"
+value  = "report.\uFF54\uFF58\uFF54"
+breaks = "The extension looks like txt and is not; a type check before normalisation sees one extension and storage after it another."
+expect = "Rejected, or the name normalised before the type is checked."
+since  = "1.1"
+
+[[values]]
+id     = "encoded-control-name"
+name   = "Percent-encoded NUL and line break"
+value  = "report%00%0D%0A.txt"
+breaks = "Decoded once too often, %00 cuts the name short and %0D%0A starts a header or a log line that nobody wrote."
+expect = "Stored as typed, and decoded at most once on the way in."
+since  = "1.1"
+
+[[values]]
+id     = "tar-name-101"
+name   = "101 bytes, one past the tar name field"
+value  = "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu.txt"
+breaks = "The name field of a ustar tar archive holds 100 bytes, so packing the file into tar cuts the name or moves it to an extra header."
+expect = "Archived and restored with the whole name."
+since  = "1.1"

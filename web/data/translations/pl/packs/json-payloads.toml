@@ -1,0 +1,158 @@
+# Polish translations of the pack json-payloads, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "0c8cfaa3aec8"
+text = "Ciała żądań JSON"
+
+[pack.description]
+source = "77535122ba3a"
+text = "Ciała żądań JSON, które parsery i bazy czytają różnie. Nazwy pól to przykład, podmień je na pola swojego API."
+
+[empty-body.name]
+source = "02aea648ebfb"
+text = "Puste ciało żądania"
+
+[empty-body.breaks]
+source = "01935c8dcdce"
+text = "Puste ciało nie jest JSON-em. Większość parserów zgłasza błąd, a niektóre nie zwracają żadnej wartości, więc obsługa napisana pod jeden z tych przypadków odpowiada 500 zamiast 400."
+
+[empty-body.expect]
+source = "fdaee1ddb0e6"
+text = "400 z komunikatem, że ciało jest puste."
+
+[duplicate-key.name]
+source = "d849552825a8"
+text = "Powtórzony klucz"
+
+[duplicate-key.breaks]
+source = "85b9bbdf15cf"
+text = "RFC 8259 nie określa, co znaczą powtórzone nazwy: większość parserów bierze ostatnią wartość, a kilka odrzuca ciało, więc dwie warstwy z różnymi parserami mogą widzieć różną ilość."
+
+[duplicate-key.expect]
+source = "1c85055aa7d3"
+text = "Odrzucone z 400 albo ta sama wartość w każdej warstwie, która czyta ciało."
+
+[big-int-id.name]
+source = "90e1d6c53d9e"
+text = "Liczba całkowita powyżej 2^53"
+
+[big-int-id.breaks]
+source = "5cc1d3b382e8"
+text = "Powyżej 2^53 liczba typu double nie mieści każdej liczby całkowitej: JavaScript i mapa w Go czytają 9007199254740993 jako 9007199254740992, a typ int64 ją zachowuje, więc identyfikator zmienia się między dwiema usługami."
+
+[big-int-id.expect]
+source = "8e9bb1514156"
+text = "Identyfikatory powyżej 2^53 - 1 wysyłane jako napisy albo odrzucane z komunikatem."
+
+[explicit-null.name]
+source = "3616741fa14f"
+text = "Jawny null"
+
+[explicit-null.breaks]
+source = "61158b456305"
+text = "Model z typami czyta null i brak pola jako tę samą pustą wartość, więc częściowa aktualizacja nie odróżni prośby o wyczyszczenie nazwy od prośby, która jej nie rusza."
+
+[explicit-null.expect]
+source = "c4f90c0a2a54"
+text = "Null i brak pola obsłużone jako dwa różne żądania, tak jak opisuje je API."
+
+[number-as-string.name]
+source = "5a08931ad076"
+text = "Liczba wysłana jako napis"
+
+[number-as-string.breaks]
+source = "d946b736f4fd"
+text = "Jedne mechanizmy wiązania czytają napis 5 jako liczbę 5, a inne go odrzucają, więc to samo ciało przechodzi przez jedną usługę i zostaje odrzucone przez następną w łańcuchu."
+
+[number-as-string.expect]
+source = "4f11f4b8da27"
+text = "Odrzucone z 400, które nazywa pole i jego typ, albo zamienione tak samo w każdej warstwie."
+
+[nesting-1001.name]
+source = "34cc4953cc3c"
+text = "1001 zagnieżdżonych tablic"
+
+[nesting-1001.breaks]
+source = "c8222ffbd65e"
+text = "Każdy parser zatrzymuje się na własnej głębokości, od 64 poziomów do 1000 albo bez limitu, więc ciało, które jedna warstwa czyta, druga odrzuca błędem głębokości zamiast błędu składni."
+
+[nesting-1001.expect]
+source = "ea30aa1c4468"
+text = "Odrzucone z 400 na udokumentowanej głębokości, zanim zobaczy je jakakolwiek obsługa."
+
+[lone-surrogate.name]
+source = "3d06a9faf45e"
+text = "Escapowany samotny surogat"
+
+[lone-surrogate.breaks]
+source = "5484b604ae45"
+text = "Escapowany samotny surogat jest poprawną składnią JSON, ale nie poprawnym tekstem: część parserów go odrzuca, encoding/json w Go zamienia go na U+FFFD, a inne trzymają go do chwili, w której zapis w UTF-8 pada albo go zmienia."
+
+[lone-surrogate.expect]
+source = "2377f1b131dd"
+text = "Odrzucone z 400 albo widocznie zastąpione, zanim wartość zostanie zapisana."
+
+[escaped-nul.name]
+source = "3d0dcc9f7ca4"
+text = "Escapowany NUL w napisie"
+
+[escaped-nul.breaks]
+source = "257c0bad078d"
+text = "Parsery JSON zostawiają NUL w napisie, więc dociera on do bazy: jsonb w PostgreSQL go odrzuca, a kod oparty na napisach z C ucina nazwę po a."
+
+[escaped-nul.expect]
+source = "41ce319c68f6"
+text = "Odrzucone z 400 na wejściu API albo NUL usunięty, zanim wartość zostanie zapisana."
+
+[huge-exponent.name]
+source = "ee1443ff36ba"
+text = "Liczba poza zakresem double"
+
+[huge-exponent.breaks]
+source = "37ab00820b11"
+text = "1e400 to poprawny JSON i więcej, niż mieści double: Go i serde go odrzucają, Python, .NET i Jackson czytają nieskończoność, JavaScript zapisuje z powrotem null, a jsonb w PostgreSQL trzyma wszystkie 401 cyfr."
+
+[huge-exponent.expect]
+source = "cda5ab6cbb9c"
+text = "Odrzucone z 400 jako wartość spoza zakresu pola."
+
+[case-variant-keys.name]
+source = "92c406d115cc"
+text = "Klucze różniące się wielkością liter"
+
+[case-variant-keys.breaks]
+source = "b5ed45ae2e4d"
+text = "Wiązanie bez rozróżniania wielkości liter, domyślne w ASP.NET Core i w encoding/json w Go, bierze drugi klucz, a wiązanie, które je rozróżnia, bierze pierwszy albo odrzuca nieznany, więc warstwy nie zgadzają się co do ilości."
+
+[case-variant-keys.expect]
+source = "96e13716e34a"
+text = "Odrzucone z 400 albo jeden udokumentowany klucz w każdej warstwie."
+
+[trailing-comma.name]
+source = "65fbb3cf1598"
+text = "Przecinek na końcu"
+
+[trailing-comma.breaks]
+source = "4b5df27e8e3c"
+text = "Literały obiektów w JavaScripcie i JSON5 dopuszczają przecinek na końcu, a JSON nie, więc ciało pisane ręcznie albo przez pobłażliwego klienta pada na ścisłym serwerze, z 400 albo z 500."
+
+[trailing-comma.expect]
+source = "e5c4370c8c50"
+text = "400 z komunikatem, który wskazuje przecinek."
+
+[bom-before-body.name]
+source = "808860a9fd6b"
+text = "Znacznik kolejności bajtów przed ciałem"
+
+[bom-before-body.breaks]
+source = "c038320a6e3a"
+text = "RFC 8259 zabrania znacznika kolejności bajtów przed JSON-em i pozwala parserom go pominąć: Jackson i dekodery, które go zdejmują, przyjmują ciało, a Go, serde i PostgreSQL je odrzucają, więc to samo żądanie przechodzi przez jedną usługę i pada w drugiej."
+
+[bom-before-body.expect]
+source = "5d8e0f0b960c"
+text = "Przyjęte z pominiętym znacznikiem albo odrzucone z 400, które go nazywa, nigdy 500."

@@ -350,7 +350,7 @@ pub fn sentence(problem: &LintProblem) -> String {
             "value `{owner}` uses the escape `{subject}`, which is valid in TOML 1.1.0 and an error in 1.0.0. Write the character itself, so the pack parses for everyone who receives it."
         ),
         RuleCode::LiteralValueVeryLong => format!(
-            "value `{owner}` writes out {subject} characters. Consider `type = \"repeat\"` - a recipe stays reviewable where a wall of text does not."
+            "value `{owner}` writes out {subject} characters that are one piece repeated. Write it as `type = \"repeat\"` - a recipe stays reviewable where a wall of text does not."
         ),
         // E010 carries one code for two faults, and they send the reader to do
         // different things. Which one it is comes from the same function that

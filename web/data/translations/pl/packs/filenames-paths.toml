@@ -10,8 +10,8 @@ source = "6fe651ebea31"
 text = "Nazwy plików i ścieżki"
 
 [pack.description]
-source = "a414b53dab99"
-text = "Nazwy, które system plików odrzuca, zmienia albo czyta inaczej, niż chciał użytkownik."
+source = "3574981010e7"
+text = "Nazwy, które system plików, archiwum albo serwer odrzuca, zmienia albo czyta inaczej, niż chciał użytkownik."
 
 [reserved-con.name]
 source = "78e2d67c7ec3"
@@ -156,3 +156,195 @@ text = "Nazwy ze spacjami psują budowanie poleceń i odnośniki, które nie są
 [space-in-name.expect]
 source = "25075f4e76bd"
 text = "Obsłużona wszędzie, gdzie używana jest nazwa pliku, także w odnośnikach do pobrania."
+
+[leading-dash.name]
+source = "f78555153bb4"
+text = "Nazwa zaczynająca się od myślnika"
+
+[leading-dash.breaks]
+source = "a2bf9fe34f8f"
+text = "Nazwa zaczynająca się od myślnika jest czytana jako opcja, gdy skrypt przekazuje ją poleceniu bez -- przed nią."
+
+[leading-dash.expect]
+source = "904c27f929e0"
+text = "Zapisana jako nazwa, a każde polecenie, które ją dostaje, ma przed nią --."
+
+[url-specials.name]
+source = "33e833d16a2f"
+text = "Procent, plus i krzyżyk"
+
+[url-specials.breaks]
+source = "2b46834fc0f6"
+text = "Procent, plus i krzyżyk znaczą w adresie URL coś innego, więc odsyłacz do pobrania zbudowany bez kodowania wskazuje inny plik albo urywa się na krzyżyku."
+
+[url-specials.expect]
+source = "ad643e3de21f"
+text = "Odsyłacze do pobrania kodują nazwę, a plik pobiera się pod nazwą, którą dostał."
+
+[leading-double-dot.name]
+source = "fe32b2d2b71d"
+text = "Nazwa zaczynająca się od dwóch kropek"
+
+[leading-double-dot.breaks]
+source = "cfb1a98d8831"
+text = "Filtr trawersalu, który szuka dwóch kropek, odrzuca nazwę, która nigdzie nie wychodzi, a filtr, który usuwa kropki, zapisuje inną nazwę."
+
+[leading-double-dot.expect]
+source = "3ac86f135586"
+text = "Przyjęta bez zmian albo odrzucona z komunikatem, nigdy zapisana pod inną nazwą."
+
+[extension-only.name]
+source = "fe9ab8346266"
+text = "Samo rozszerzenie"
+
+[extension-only.breaks]
+source = "a8b712520a4e"
+text = "Gdy przed kropką nic nie ma, kod, który odcina rozszerzenie, zostaje z pustą nazwą, a Linux i macOS ukrywają plik."
+
+[extension-only.expect]
+source = "8418e414f4a3"
+text = "Odrzucona z komunikatem albo przyjęta i pokazana z pełną nazwą."
+
+[many-dots.name]
+source = "ddc095c2e286"
+text = "Kilka kropek"
+
+[many-dots.breaks]
+source = "cbdd653dc0e1"
+text = "Rozszerzeniem jest tylko część po ostatniej kropce, a kod, który dzieli nazwę na pierwszej, czyta typ jako 2.3.final.pdf."
+
+[many-dots.expect]
+source = "ce09e0161251"
+text = "Przyjęta, z typem wziętym z ostatniego rozszerzenia."
+
+[no-extension.name]
+source = "3e6dce2575cd"
+text = "Bez rozszerzenia"
+
+[no-extension.breaks]
+source = "cd0f05404695"
+text = "System, który wymaga rozszerzenia albo zgaduje z niego typ, nie ma się na czym oprzeć i może odrzucić zwykły plik."
+
+[no-extension.expect]
+source = "2469cae21dda"
+text = "Przyjęta albo odrzucona z komunikatem, który mówi, że brakuje rozszerzenia."
+
+[upper-extension.name]
+source = "e725f5a69844"
+text = "Rozszerzenie wielkimi literami"
+
+[upper-extension.breaks]
+source = "8c35cf0cf772"
+text = "Sprawdzenie rozszerzenia, które porównuje wielkość liter, odrzuca plik przyjmowany jako report.pdf."
+
+[upper-extension.expect]
+source = "c53d21396df7"
+text = "Przyjęta, tak samo jak ta sama nazwa małymi literami."
+
+[office-lock-name.name]
+source = "e67135deb1dc"
+text = "Nazwa pliku blokady Office"
+
+[office-lock-name.breaks]
+source = "e4baa42150b9"
+text = "Microsoft Office tak nazywa swoje pliki blokady, więc narzędzia synchronizacji, kopie zapasowe i filtry przesyłania mogą pominąć plik bez słowa."
+
+[office-lock-name.expect]
+source = "ec0bcf8e8b04"
+text = "Zapisana i pokazana jak każda inna nazwa albo odrzucona z komunikatem."
+
+[htaccess.name]
+source = "03790d72691c"
+text = "Nazwa pliku konfiguracji Apache"
+
+[htaccess.breaks]
+source = "18f69f5604b9"
+text = "Na serwerze Apache, który serwuje folder przesłanych plików, plik o tej nazwie zmienia działanie serwera, cokolwiek zawiera."
+
+[htaccess.expect]
+source = "8c4497d4786c"
+text = "Odrzucona albo zmieniona, zanim plik trafi do folderu, który serwer serwuje."
+
+[web-config.name]
+source = "b6423eaa9e0d"
+text = "Nazwa pliku konfiguracji IIS"
+
+[web-config.breaks]
+source = "e3c25a91e4a0"
+text = "Na serwerze IIS, który serwuje folder przesłanych plików, plik o tej nazwie zmienia działanie serwera, cokolwiek zawiera."
+
+[web-config.expect]
+source = "8c4497d4786c"
+text = "Odrzucona albo zmieniona, zanim plik trafi do folderu, który serwer serwuje."
+
+[dotenv.name]
+source = "944f3dda6f97"
+text = "Nazwa pliku środowiska"
+
+[dotenv.breaks]
+source = "948b58bf7866"
+text = "Aplikacje czytają ustawienia i sekrety z pliku o tej nazwie, więc przesłany plik, który trafi do złego folderu, staje się konfiguracją."
+
+[dotenv.expect]
+source = "653afe8fb9d9"
+text = "Odrzucona albo zmieniona i nigdy niezapisana tam, skąd aplikacja czyta ustawienia."
+
+[desktop-ini.name]
+source = "03bb2faedeff"
+text = "Nazwa pliku ustawień folderu Windows"
+
+[desktop-ini.breaks]
+source = "be6ca640aa97"
+text = "Eksplorator Windows czyta plik o tej nazwie, żeby zdecydować, jak wygląda folder, więc plik przesłany do wspólnego folderu zmienia go dla wszystkich."
+
+[desktop-ini.expect]
+source = "8cf5c0e6feac"
+text = "Odrzucona albo zmieniona w folderach, które ludzie otwierają w Eksploratorze."
+
+[nfd-name.name]
+source = "79caf696349f"
+text = "Akcent jako osobny znak"
+
+[nfd-name.breaks]
+source = "ddf2eddf670e"
+text = "Akcent idzie po e jako osobny znak, tak jak macOS przekazuje nazwy, a system, który porównuje bajty, widzi inny plik niż w zwykłej pisowni."
+
+[nfd-name.expect]
+source = "3a37c492e990"
+text = "Znaleziona, dopasowana i pokazana jako ta sama nazwa co jej postać złożona."
+
+[fullwidth-extension.name]
+source = "8460fe9adfee"
+text = "Rozszerzenie literami pełnej szerokości"
+
+[fullwidth-extension.breaks]
+source = "7e95315be5e5"
+text = "Rozszerzenie wygląda jak txt, a nim nie jest: sprawdzenie typu przed normalizacją widzi jedno rozszerzenie, a zapis po niej inne."
+
+[fullwidth-extension.expect]
+source = "53eca86020a2"
+text = "Odrzucona albo nazwa znormalizowana, zanim typ zostanie sprawdzony."
+
+[encoded-control-name.name]
+source = "3d1c09b37eeb"
+text = "Zakodowany procentowo NUL i koniec wiersza"
+
+[encoded-control-name.breaks]
+source = "ee3093e6424b"
+text = "Zdekodowane o jeden raz za dużo, %00 ucina nazwę, a %0D%0A zaczyna nagłówek albo wiersz dziennika, którego nikt nie napisał."
+
+[encoded-control-name.expect]
+source = "df4663a78da3"
+text = "Zapisana tak, jak ją wpisano, i dekodowana na wejściu najwyżej raz."
+
+[tar-name-101.name]
+source = "284ae7a606ed"
+text = "101 bajtów, o jeden więcej niż pole nazwy w tar"
+
+[tar-name-101.breaks]
+source = "b70fb15fb96e"
+text = "Pole nazwy w archiwum tar w formacie ustar mieści 100 bajtów, więc spakowanie pliku do tar ucina nazwę albo przenosi ją do dodatkowego nagłówka."
+
+[tar-name-101.expect]
+source = "6daed80d8538"
+text = "Spakowana i rozpakowana z całą nazwą."
