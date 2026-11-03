@@ -12,6 +12,11 @@ Changes wait under Unreleased until then.
 
 ### Changed
 
+- The palette uses less memory. The About and Shortcuts windows are now made the first time they
+  are opened, not when the palette starts, because each window holds a graphics context of its own
+  whether it is open or not. On a Windows machine with an AMD graphics card the palette took about
+  116 MB in Task Manager and now takes about 76 MB until those windows are opened. Their first
+  opening takes about a tenth of a second longer.
 - On Windows and macOS a tab in a value is now pressed as the Tab key and a line feed as Enter, as
   on X11 and as a keyboard types them. A value with a line break typed into a text area of Edge or
   Chrome lost the break, `Jan` and `Kowalski` arrived as `JanKowalski` while the send said every
