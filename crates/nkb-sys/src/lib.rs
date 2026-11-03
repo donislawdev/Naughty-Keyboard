@@ -71,6 +71,8 @@ pub mod program;
 pub mod screens;
 pub mod spaces;
 pub mod startup;
+#[cfg(any(windows, target_os = "macos", target_os = "linux", test))]
+mod text_keys;
 pub mod text_services;
 pub mod window;
 
@@ -386,6 +388,7 @@ mod windows_impl {
         chords_acted, hand, press_confirmed, units_arrived,
     };
     use super::escape::{ReservedEscape, SystemEscape};
+    use super::text_keys::{TextKey, text_key};
     use super::{Chord, MODIFIER_RELEASE_WAIT, NavKey};
     use core::sync::atomic::{AtomicBool, Ordering};
     use windows_sys::Win32::Foundation::HWND;
@@ -393,7 +396,8 @@ mod windows_impl {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
         GetAsyncKeyState, GetFocus, GetKeyState, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
         KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, SendInput, VIRTUAL_KEY,
-        VK_CONTROL, VK_DELETE, VK_END, VK_HOME, VK_LWIN, VK_MENU, VK_PACKET, VK_RWIN, VK_SHIFT,
+        VK_CONTROL, VK_DELETE, VK_END, VK_HOME, VK_LWIN, VK_MENU, VK_PACKET, VK_RETURN, VK_RWIN,
+        VK_SHIFT, VK_TAB,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         GUITHREADINFO, GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId,
@@ -694,6 +698,38 @@ mod windows_impl {
         Ok(chords.len())
     }
 
+    /// One UTF-16 unit as the steps that press it. A tab and a line feed are the
+    /// Tab and Return keys (`text_keys.rs`), which the person's `Shift` changes, so
+    /// it holds them back. Every other unit is a character, which arrives as itself
+    /// under `Shift` (`OBS-233`).
+    fn steps_for(unit: u16) -> [Step<INPUT>; 2] {
+        let (key, [down, up], shift_counts) = match text_key(u32::from(unit)) {
+            Some(TextKey::Tab) => (VK_TAB, key_events(VK_TAB), true),
+            Some(TextKey::Return) => (VK_RETURN, key_events(VK_RETURN), true),
+            None => (VK_PACKET, events_for(unit), false),
+        };
+        [
+            Step {
+                event: down,
+                key,
+                down: true,
+                shift_counts,
+            },
+            Step {
+                event: up,
+                key,
+                down: false,
+                shift_counts,
+            },
+        ]
+    }
+
+    /// The main Tab or Return key, down and up. Neither is of the navigation
+    /// cluster, so neither is extended (the Return of the numeric keypad is).
+    fn key_events(key: VIRTUAL_KEY) -> [INPUT; 2] {
+        [key_event(key, 0), key_event(key, KEYEVENTF_KEYUP)]
+    }
+
     /// One UTF-16 unit as the pair of events the system expects.
     fn events_for(unit: u16) -> [INPUT; 2] {
         let event = |flags: u32| INPUT {
@@ -776,23 +812,8 @@ mod windows_impl {
         // window in front is looked at (`W2`).
         let mut cadence = Cadence::starting(std::time::Instant::now(), PROGRESS_INTERVAL);
         for (index, unit) in units.iter().enumerate() {
-            let [down, up] = events_for(*unit);
-            // A character arrives as itself under `Shift` (`OBS-233`), so the
-            // person's `Shift` holds no unit back.
-            let steps = [
-                Step {
-                    event: down,
-                    key: VK_PACKET,
-                    down: true,
-                    shift_counts: false,
-                },
-                Step {
-                    event: up,
-                    key: VK_PACKET,
-                    down: false,
-                    shift_counts: false,
-                },
-            ];
+            let steps = steps_for(*unit);
+            let up = steps[1].event;
             let pressed = session.press(&steps);
             if let Some(reason) = pressed.stop {
                 // Always, unconfirmed: a down that was not taken makes the
@@ -828,6 +849,30 @@ mod windows_impl {
                 Following::System
             },
         })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn a_tab_and_a_line_feed_are_their_keys_and_wait_for_the_person_s_shift() {
+            for (unit, key) in [(0x09, VK_TAB), (0x0A, VK_RETURN)] {
+                let [down, up] = steps_for(unit);
+                assert_eq!((down.key, up.key), (key, key), "{unit:#x}");
+                assert!(down.down && !up.down);
+                assert!(down.shift_counts && up.shift_counts, "{unit:#x}");
+            }
+        }
+
+        #[test]
+        fn every_other_unit_is_a_character_the_person_s_shift_does_not_change() {
+            for unit in [0x0D, 0x20, 0x41, 0x0105, 0x2028, 0xD83D] {
+                let [down, up] = steps_for(unit);
+                assert_eq!((down.key, up.key), (VK_PACKET, VK_PACKET), "{unit:#x}");
+                assert!(!down.shift_counts && !up.shift_counts, "{unit:#x}");
+            }
+        }
     }
 }
 

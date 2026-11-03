@@ -25,6 +25,7 @@
 use core::time::Duration;
 use std::collections::HashMap;
 
+use crate::text_keys::{TextKey, text_key};
 use crate::{SendError, StopReason};
 
 /// Where the X server of this machine keeps its sockets for local clients.
@@ -244,16 +245,19 @@ pub(crate) struct CannotCarry(pub char);
 
 /// The keysym that types `character`.
 ///
-/// Line feed and tab are the keys of those names. Every other character is its
-/// Unicode keysym, ASCII included (`OBS-202` point 6). `U+0000` is no keysym at
-/// all, and refusing it by name is the alternative to sending nothing for it.
+/// Line feed and tab are the keys of those names, as on every route that presses
+/// keys (`text_keys.rs`). Every other character is its Unicode keysym, ASCII
+/// included (`OBS-202` point 6). `U+0000` is no keysym at all, and refusing it by
+/// name is the alternative to sending nothing for it.
 pub(crate) fn keysym_for(character: char) -> Result<u32, CannotCarry> {
-    match character {
-        '\0' => Err(CannotCarry(character)),
-        '\n' => Ok(KEYSYM_RETURN),
-        '\t' => Ok(KEYSYM_TAB),
-        other => Ok(UNICODE_KEYSYM_BASE + u32::from(other)),
+    if character == '\0' {
+        return Err(CannotCarry(character));
     }
+    Ok(match text_key(u32::from(character)) {
+        Some(TextKey::Return) => KEYSYM_RETURN,
+        Some(TextKey::Tab) => KEYSYM_TAB,
+        None => UNICODE_KEYSYM_BASE + u32::from(character),
+    })
 }
 
 /// UTF-16 units in `characters`, the unit every route reports in.

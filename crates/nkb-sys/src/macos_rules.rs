@@ -40,6 +40,7 @@ use core::time::Duration;
 
 use crate::confirm::{Hand, Step};
 use crate::field::FocusedInput;
+use crate::text_keys::{TextKey, text_key};
 use crate::{Chord, NavKey};
 
 /// The key code of every character event: the letter `A`. Any ordinary
@@ -51,6 +52,8 @@ const KEY_SHIFT: u16 = 0x38;
 const KEY_BACKSPACE: u16 = 0x33;
 const KEY_LEFT: u16 = 0x7B;
 const KEY_RIGHT: u16 = 0x7C;
+const KEY_RETURN: u16 = 0x24;
+const KEY_TAB: u16 = 0x30;
 
 /// Modifier bits of an event, as `CGEventFlags` defines them.
 pub(crate) mod flag {
@@ -136,9 +139,20 @@ pub(crate) fn scalars(text: &str) -> Vec<Scalar> {
 
 /// The two steps of one character: the key down and up, each with the state the
 /// system shows once it has taken it.
+///
+/// A tab and a line feed are the Tab and Return keys, carrying the same character
+/// (`text_keys.rs`): Return with a line feed reached Safari and Chrome, where the
+/// line feed on `TEXT_KEY` was lost in Chrome (`OBS-194`). The person's `Shift`
+/// changes what those keys do, so it holds them back. Every other character is
+/// `TEXT_KEY`, which arrives as itself under `Shift`.
 pub(crate) fn text_steps(scalar: Scalar) -> [Step<MacEvent>; 2] {
+    let (key, shift_counts) = match (scalar.count, text_key(u32::from(scalar.units[0]))) {
+        (1, Some(TextKey::Tab)) => (KEY_TAB, true),
+        (1, Some(TextKey::Return)) => (KEY_RETURN, true),
+        _ => (TEXT_KEY, false),
+    };
     let event = |down| MacEvent {
-        key: TEXT_KEY,
+        key,
         down,
         flags: 0,
         units: scalar.units,
@@ -147,15 +161,15 @@ pub(crate) fn text_steps(scalar: Scalar) -> [Step<MacEvent>; 2] {
     [
         Step {
             event: event(true),
-            key: TEXT_KEY,
+            key,
             down: true,
-            shift_counts: false,
+            shift_counts,
         },
         Step {
             event: event(false),
-            key: TEXT_KEY,
+            key,
             down: false,
-            shift_counts: false,
+            shift_counts,
         },
     ]
 }
@@ -576,6 +590,29 @@ mod tests {
                 assert_eq!(step.event.key, TEXT_KEY);
                 assert_eq!(step.key, TEXT_KEY);
                 assert_eq!(step.event.flags, 0);
+            }
+        }
+    }
+
+    #[test]
+    fn a_tab_and_a_line_feed_are_their_keys_and_wait_for_the_person_s_shift() {
+        for (text, key) in [("\t", KEY_TAB), ("\n", KEY_RETURN)] {
+            for (index, step) in text_steps(scalars(text)[0]).into_iter().enumerate() {
+                assert_eq!((step.key, step.event.key), (key, key), "{text:?}");
+                assert_eq!(step.event.units[0], u16::from(text.as_bytes()[0]));
+                assert_eq!(step.event.flags, 0);
+                assert!(step.shift_counts, "{text:?}");
+                assert_eq!(step.down, index == 0);
+            }
+        }
+    }
+
+    #[test]
+    fn a_carriage_return_and_the_rest_stay_on_the_text_key() {
+        for scalar in scalars("\r a\u{2028}\u{1F600}") {
+            for step in text_steps(scalar) {
+                assert_eq!(step.key, TEXT_KEY);
+                assert!(!step.shift_counts);
             }
         }
     }

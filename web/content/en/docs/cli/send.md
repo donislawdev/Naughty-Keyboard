@@ -15,7 +15,7 @@ Name the pack and, with `--index`, which value. The command waits three seconds 
 $ nkb send magic-values --index 2 --delay 3
 ```
 
-The value goes to the focused window, not to standard output, and everything the command says is on standard error. Add `--clear` to clear the current line of the field first with Home, Shift+End and Delete, the way the palette does by default. Without it, the only keys sent are the value's own characters.
+The value goes to the focused window, not to standard output, and everything the command says is on standard error. Add `--clear` to clear the current line of the field first with Home, Shift+End and Delete, the way the palette does by default. Without it, the only keys sent are the value's own characters. A tab in the value is pressed as the Tab key and a line feed as Enter, so in a single-line field they may move the focus or send the form, as [Honest limits](/docs/limits/) explains.
 
 ## When does it refuse?
 
