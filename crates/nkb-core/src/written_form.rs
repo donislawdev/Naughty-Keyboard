@@ -143,11 +143,45 @@ pub fn check(raw: &str, expanded: &str) -> Vec<LintProblem> {
 ///
 /// A warning and never an error. The value is correct - the file is merely
 /// harder to review than it needs to be.
+///
+/// It speaks only when its advice can be followed: when the value is one
+/// shorter piece written over and over, which `type = "repeat"` writes as that
+/// piece and a count. A long value with no such piece - a thousand opening
+/// brackets followed by a thousand closing ones - has no recipe, and a warning
+/// nobody can act on teaches the reader to skip the rule.
 #[must_use]
 pub fn check_length(expanded: &str) -> Option<LintProblem> {
-    (expanded.chars().count() > LITERAL_LENGTH_HINT).then(|| {
-        LintProblem::new(RuleCode::LiteralValueVeryLong).about(expanded.chars().count().to_string())
+    let characters: Vec<char> = expanded.chars().collect();
+    (characters.len() > LITERAL_LENGTH_HINT && repeats_a_piece(&characters)).then(|| {
+        LintProblem::new(RuleCode::LiteralValueVeryLong).about(characters.len().to_string())
     })
+}
+
+/// Whether the text is one shorter piece written two or more times.
+///
+/// The prefix function of Knuth, Morris and Pratt gives the longest proper
+/// prefix that is also a suffix, and the text minus that border is its shortest
+/// period. The text is a repetition exactly when that period is shorter than
+/// the text and divides its length. One pass, so a value of a million
+/// characters costs a million steps and not a million squared.
+fn repeats_a_piece(characters: &[char]) -> bool {
+    let length = characters.len();
+    if length < 2 {
+        return false;
+    }
+    let mut border = vec![0_usize; length];
+    for at in 1..length {
+        let mut matched = border[at - 1];
+        while matched > 0 && characters[at] != characters[matched] {
+            matched = border[matched - 1];
+        }
+        if characters[at] == characters[matched] {
+            matched += 1;
+        }
+        border[at] = matched;
+    }
+    let period = length - border[length - 1];
+    period < length && length.is_multiple_of(period)
 }
 
 /// Names a character by its code point, so a report can say which one it means
@@ -321,5 +355,75 @@ mod tests {
         let warning = check_length(&"a".repeat(LITERAL_LENGTH_HINT + 1)).expect("warns");
         assert_eq!(warning.code.as_str(), "W026");
         assert_eq!(warning.subject.as_deref(), Some("2001"));
+    }
+
+    #[test]
+    fn a_long_value_made_of_a_longer_piece_is_a_warning_counted_in_characters() {
+        // 667 copies of a three character piece, one of them outside the basic
+        // plane: the count is in characters, the unit `repeat` counts in.
+        let warning = check_length(&"a\u{1F600}b".repeat(667)).expect("warns");
+        assert_eq!(warning.subject.as_deref(), Some("2001"));
+    }
+
+    #[test]
+    fn a_long_value_no_recipe_can_write_raises_nothing() {
+        // `[` a thousand and one times, then `]` as often: there is no piece to
+        // repeat, so "consider type = repeat" would be advice nobody can follow.
+        let nested = format!("{}{}", "[".repeat(1001), "]".repeat(1001));
+        assert!(check_length(&nested).is_none());
+        // One character off a repetition is not a repetition either, at the
+        // start, in the middle and at the end.
+        let mut almost = "ab".repeat(1001);
+        assert!(check_length(&almost).is_some(), "the control must warn");
+        almost.push('a');
+        assert!(
+            check_length(&almost).is_none(),
+            "ab repeated and one a more"
+        );
+        let middle = format!("{}x{}", "a".repeat(1001), "a".repeat(1001));
+        assert!(check_length(&middle).is_none(), "one x in the middle");
+        let start = format!("x{}", "a".repeat(2001));
+        assert!(check_length(&start).is_none(), "one x at the start");
+    }
+
+    #[test]
+    fn the_period_is_found_whatever_the_length_of_the_piece() {
+        assert!(!repeats_a_piece(&[]));
+        assert!(!repeats_a_piece(&['a']));
+        assert!(repeats_a_piece(&['a', 'a']));
+        assert!(!repeats_a_piece(&['a', 'b']));
+        for piece in ["ab", "abc", "aab", "abab", "a\u{0}b"] {
+            let whole: Vec<char> = piece.repeat(5).chars().collect();
+            assert!(repeats_a_piece(&whole), "{piece:?} five times");
+            let mut cut = whole.clone();
+            cut.pop();
+            assert!(!repeats_a_piece(&cut), "{piece:?} five times less one");
+        }
+        // A border that is not a period: "abaab" ends with "ab", which it also
+        // starts with, and is still no repetition.
+        assert!(!repeats_a_piece(&"abaab".chars().collect::<Vec<_>>()));
+    }
+
+    #[test]
+    fn the_period_agrees_with_trying_every_piece_on_every_short_text() {
+        // The slow answer, written from the definition and nothing else: some
+        // shorter piece that divides the length and builds the whole text.
+        fn by_trying(text: &[char]) -> bool {
+            (1..text.len()).any(|piece| {
+                text.len().is_multiple_of(piece)
+                    && text.chunks(piece).all(|chunk| chunk == &text[..piece])
+            })
+        }
+        let mut repetitions = 0;
+        for length in 0..=12 {
+            for bits in 0_u32..(1 << length) {
+                let text: Vec<char> = (0..length)
+                    .map(|at| if bits >> at & 1 == 1 { 'b' } else { 'a' })
+                    .collect();
+                assert_eq!(repeats_a_piece(&text), by_trying(&text), "{text:?}");
+                repetitions += usize::from(by_trying(&text));
+            }
+        }
+        assert!(repetitions > 100, "the texts must include repetitions");
     }
 }

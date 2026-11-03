@@ -13051,6 +13051,24 @@
       "replace": "            line += count_newlines(&s[i..close]);\n            out.skipped.push((i, end));\n            i = end;\n        } else if c == '\\'' || c == '\"' {\n            let first_line = line;",
       "test": "control_the_package_sources_are_read",
       "runner": "rust:nkb-core:prose_punctuation"
+    },
+    {
+      "id": "M1668",
+      "why": "W026 warns about every long written-out value again, including one no recipe can write (D170)",
+      "file": "crates/nkb-core/src/written_form.rs",
+      "find": "    (characters.len() > LITERAL_LENGTH_HINT && repeats_a_piece(&characters)).then(|| {",
+      "replace": "    (characters.len() > LITERAL_LENGTH_HINT).then(|| {",
+      "test": "written_form::tests::a_long_value_no_recipe_can_write_raises_nothing",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1669",
+      "why": "a text whose shortest period does not divide its length counts as a repetition (D170)",
+      "file": "crates/nkb-core/src/written_form.rs",
+      "find": "    period < length && length.is_multiple_of(period)",
+      "replace": "    period < length",
+      "test": "written_form::tests::the_period_is_found_whatever_the_length_of_the_piece",
+      "runner": "rust:nkb-core:lib"
     }
   ]
 }
