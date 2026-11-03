@@ -53,8 +53,8 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::focus::{HANDLE_WAIT, POLL, window_handle};
 use crate::live::{Command, ShortcutsNow, Tell, Told};
-use crate::on_request;
-use crate::packs::{Keyboard, forget_held_modifiers};
+use crate::on_request::{self, Later, Ready, Requested};
+use crate::packs::{Keyboard, SystemKeyboard, forget_held_modifiers};
 use crate::shortcut_list::{Act, ShortcutList, ShortcutRow, key_of};
 use crate::window_keys::KeyTracker;
 use crate::{HintRow, PickRow, ShortcutsWindow};
@@ -218,6 +218,24 @@ impl Shortcuts {
             slint::CloseRequestResponse::KeepWindowShown
         });
         shortcuts
+    }
+
+    /// The window as the palette has it: made at its first opening, with the
+    /// system's keyboard and keys, and kept from then on ([`Later`] says why).
+    /// Not made yet, it is not the one [`tell`] delivers to, and hears the
+    /// worker's answers the way a closed window does: none comes unasked but
+    /// the desktop's news, and a closed window drops that.
+    #[must_use]
+    pub fn later(commands: Sender<Command>, say: Box<dyn Fn(String)>) -> Rc<Later<Self>> {
+        Later::new(say, move |say| {
+            Ok(Self::new(
+                ShortcutsWindow::new()?,
+                Box::new(SystemKeyboard::default()),
+                Box::new(System::default()),
+                commands.clone(),
+                say,
+            ))
+        })
     }
 
     /// Whether the window is open.
@@ -492,6 +510,18 @@ impl Shortcuts {
     #[must_use]
     pub fn window(&self) -> &ShortcutsWindow {
         &self.window
+    }
+}
+
+impl Requested for Shortcuts {
+    fn open(self: &Rc<Self>) {
+        Self::open(self);
+    }
+    fn close(&self) {
+        Self::close(self);
+    }
+    fn when_ready(self: &Rc<Self>, then: Ready) {
+        on_request::when_backed(self, |shortcuts| shortcuts.window.window(), then);
     }
 }
 

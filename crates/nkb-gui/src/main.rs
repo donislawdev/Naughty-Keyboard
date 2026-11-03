@@ -65,11 +65,11 @@ use nkb_app::{KeptSettings, RouteRequest};
 use nkb_core::hotkeys::{Bindings, HotkeyAction};
 use nkb_gui::about::About;
 use nkb_gui::packs::{Packs, SystemKeyboard};
-use nkb_gui::shortcuts::{Shortcuts, System};
+use nkb_gui::shortcuts::Shortcuts;
 use nkb_gui::welcome::Welcome;
 use nkb_gui::{
-    AboutWindow, Gallery, HeaderLinkKind, PacksWindow, Palette, ShortcutsWindow, WelcomeWindow,
-    focus, header_links, live, own_frame, place,
+    Gallery, HeaderLinkKind, PacksWindow, Palette, WelcomeWindow, focus, header_links, live,
+    own_frame, place,
 };
 use slint::ComponentHandle;
 
@@ -301,15 +301,11 @@ fn run_palette(
         say_in(&palette),
     );
     wire_clicks(&palette, &choose);
-    // The same way: created once, shown on request - and the one window the
-    // worker's answers about shortcuts are delivered to (`shortcuts::tell`).
-    let shortcuts = Shortcuts::new(
-        ShortcutsWindow::new()?,
-        Box::new(SystemKeyboard::default()),
-        Box::new(System::default()),
-        choose.clone(),
-        say_in(&palette),
-    );
+    // Shown on request too, but made at its first opening and kept from then
+    // on: a window holds a graphics context from the moment it is made (R23,
+    // `D167`). The one window the worker's answers about shortcuts are
+    // delivered to (`shortcuts::tell`), from the moment it is made.
+    let shortcuts = Shortcuts::later(choose.clone(), say_in(&palette));
     live::wire_shortcut_links(
         &palette,
         {
@@ -318,12 +314,9 @@ fn run_palette(
         },
         &choose,
     );
-    // The About window (the owner's point 4): created once, shown on request.
-    let about = About::new(
-        AboutWindow::new()?,
-        Box::new(SystemKeyboard::default()),
-        say_in(&palette),
-    );
+    // The About window (the owner's point 4): made at its first opening, the
+    // shortcuts window's way.
+    let about = About::later(say_in(&palette));
     // The links in the header (the owner's points of 2026-10-14): two pages in
     // the browser, and the About window.
     palette.on_open_link({

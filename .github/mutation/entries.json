@@ -12862,6 +12862,42 @@
       "replace": "(1, Some(TextKey::Return)) => (KEY_RETURN, false),",
       "test": "macos_rules::tests::a_tab_and_a_line_feed_are_their_keys_and_wait_for_the_person_s_shift",
       "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1647",
+      "why": "a second click while the first opening of About or the shortcuts window waits opens it before its native window exists, with buttons the title bar must not have",
+      "file": "crates/nkb-gui/src/on_request.rs",
+      "find": "        if self.waiting.get() {\n            return;\n        }\n        if let Some(window) = self.made.get() {",
+      "replace": "        if let Some(window) = self.made.get() {",
+      "test": "on_request::tests::the_first_opening_waits_for_the_window_and_the_window_is_made_once",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1648",
+      "why": "the first opening of a window made on request does not wait for it to be ready, and About comes up with minimize and maximize beside Close",
+      "file": "crates/nkb-gui/src/on_request.rs",
+      "find": "        self.waiting.set(true);\n        let later = Rc::downgrade(self);",
+      "replace": "        window.open();\n        self.waiting.set(true);\n        let later = Rc::downgrade(self);",
+      "test": "on_request::tests::the_first_opening_waits_for_the_window_and_the_window_is_made_once",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1649",
+      "why": "closing the palette while a window made on request waits to open no longer takes the opening back, so the window opens after the palette is gone",
+      "file": "crates/nkb-gui/src/on_request.rs",
+      "find": "        self.waiting.set(false);\n        if let Some(window) = self.made.get() {\n            window.close();",
+      "replace": "        if let Some(window) = self.made.get() {\n            window.close();",
+      "test": "on_request::tests::a_close_while_the_first_opening_waits_keeps_the_window_shut",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1650",
+      "why": "a window made on request that never becomes ready says nothing, and the tester's click goes unanswered",
+      "file": "crates/nkb-gui/src/on_request.rs",
+      "find": "                (Err(error), _) => later.cannot(&error),",
+      "replace": "                (Err(_), _) => {}",
+      "test": "on_request::tests::a_window_that_cannot_be_made_or_readied_says_so",
+      "runner": "rust:nkb-gui:lib"
     }
   ]
 }

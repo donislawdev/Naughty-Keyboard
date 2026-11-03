@@ -28,8 +28,8 @@ use nkb_adapters::i18n::{self, AboutLabel, Environment, Startup};
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::focus::{HANDLE_WAIT, POLL, window_handle};
-use crate::on_request;
-use crate::packs::{Keyboard, build_before_the_loop, forget_held_modifiers};
+use crate::on_request::{self, Later, Ready, Requested};
+use crate::packs::{Keyboard, SystemKeyboard, build_before_the_loop, forget_held_modifiers};
 use crate::shortcut_list::{Key, key_of};
 use crate::{AboutWindow, Fact};
 
@@ -140,6 +140,19 @@ impl About {
             slint::CloseRequestResponse::KeepWindowShown
         });
         about
+    }
+
+    /// The window as the palette has it: made at its first opening, with the
+    /// system's keyboard, and kept from then on ([`Later`] says why).
+    #[must_use]
+    pub fn later(say: Box<dyn Fn(String)>) -> Rc<Later<Self>> {
+        Later::new(say, |say| {
+            Ok(Self::new(
+                AboutWindow::new()?,
+                Box::new(SystemKeyboard::default()),
+                say,
+            ))
+        })
     }
 
     /// Whether the window is open.
@@ -254,6 +267,18 @@ fn label(window: &AboutWindow) {
     window.set_licence_text(i18n::about_label(AboutLabel::LicenceText).into());
     window.set_close_label(i18n::about_label(AboutLabel::Close).into());
     window.set_close_action(i18n::about_label(AboutLabel::CloseAction).into());
+}
+
+impl Requested for About {
+    fn open(self: &Rc<Self>) {
+        Self::open(self);
+    }
+    fn close(&self) {
+        Self::close(self);
+    }
+    fn when_ready(self: &Rc<Self>, then: Ready) {
+        on_request::when_backed(self, |about| about.window.window(), then);
+    }
 }
 
 #[cfg(test)]

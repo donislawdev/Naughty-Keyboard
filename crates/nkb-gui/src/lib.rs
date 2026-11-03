@@ -90,8 +90,9 @@ pub mod welcome;
 pub mod about;
 // How the three windows above that open on request stand on the screen and
 // go away - never minimized, Close as the only button (`OBS-183`, `D137`).
-// One place, because the three got it wrong the same way.
-mod on_request;
+// One place, because the three got it wrong the same way. And how two of them
+// are made at their first opening rather than at start (R23, `D167`).
+pub mod on_request;
 
 // The links in the palette's header, and the two pages - the project on
 // GitHub and the support page - that two of them open in the browser (the
