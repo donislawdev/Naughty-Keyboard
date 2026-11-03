@@ -224,7 +224,7 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
     // One counter per kind of file, in the order `Syntax` declares them. Nine
     // stood here while `Syntax` had ten, so the first shell script would have
     // stopped this test with an index out of bounds instead of a finding.
-    let mut seen = [0usize; 13];
+    let mut seen = [0usize; 14];
     let mut comment_lines = 0;
     let mut literals = 0;
     for (path, syntax) in &tree.files {
@@ -259,10 +259,15 @@ fn product_prose_uses_no_semicolon_and_only_the_flat_hyphen() {
         python,
         // No shell script is tracked today, and one would be read like the rest.
         _shell,
+        powershell,
         html,
         css,
         json,
     ] = seen;
+    assert!(
+        powershell >= 3,
+        "read {powershell} PowerShell scripts, expected the three of the Chocolatey packages in packaging/"
+    );
     assert!(
         html >= 2,
         "read {html} website templates, expected at least the base and the home page in web/layouts"
@@ -674,6 +679,50 @@ fn control_the_shell_scripts_are_read() {
         found(
             Syntax::Shell,
             "# it's here\necho 'a # bSEMI c'\necho \\\"x\n# xSEMI y\n"
+        ),
+        [(2, LiteralSemicolon), (4, Semicolon)]
+    );
+}
+
+#[test]
+fn control_the_package_sources_are_read() {
+    use Breach::{LiteralSemicolon, Semicolon};
+    // A template is read the way the file it renders to is.
+    for (name, syntax) in [
+        ("installer.window.yaml.in", Syntax::Yaml),
+        ("package.nuspec.in", Syntax::Xml),
+        ("chocolateyinstall.window.ps1.in", Syntax::PowerShell),
+    ] {
+        assert_eq!(
+            repo_text::syntax_of(std::path::Path::new(name)),
+            Some(syntax),
+            "{name}"
+        );
+    }
+    // A PowerShell comment is prose, on a line and in a block, and a semicolon
+    // between two statements is code.
+    assert_eq!(
+        found(
+            Syntax::PowerShell,
+            "# aSEMI b\n$a = 1SEMI $b = 2\n<#\n  cSEMI d\n#>\n"
+        ),
+        [(1, Semicolon), (4, Semicolon)]
+    );
+    // A quote doubled or escaped with a backtick ends no string, a hash inside a
+    // string or a word opens no comment, and a backtick at the end of a line
+    // carries the command on.
+    assert_eq!(
+        found(
+            Syntax::PowerShell,
+            "Write-Host 'it''s # oneSEMI two'\n$x = \"a `\" bSEMI c\" `\n    -Flag a#bSEMI c\n# eSEMI f\n"
+        ),
+        [(1, LiteralSemicolon), (2, LiteralSemicolon), (4, Semicolon)]
+    );
+    // A here-string is one literal, its quotes included.
+    assert_eq!(
+        found(
+            Syntax::PowerShell,
+            "$t = @'\nit's # oneSEMI two\n'@\n# gSEMI h\n"
         ),
         [(2, LiteralSemicolon), (4, Semicolon)]
     );

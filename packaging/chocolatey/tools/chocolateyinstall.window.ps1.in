@@ -1,0 +1,36 @@
+# Rendered by .github/scripts/build_packages.py - do not edit the generated copy.
+#
+# The package runs the Windows installer of the release - the same signed file,
+# checksum and all, that the release page publishes and that WinGet installs
+# first. Everything this package puts on the machine comes from that installer:
+# the Start menu entry for every account, its folder on the machine PATH with
+# both programs in it, and the entry in Installed apps. So the two feeds install
+# one thing in one shape, the one try_installer.py installs on a clean machine,
+# rather than one a script of ours makes and has to take away again. The
+# package carries no binaries, so it owes the moderators no VERIFICATION.txt,
+# and it makes no shims.
+#
+# Windows PowerShell 5.1 is what Chocolatey runs package scripts with, so this
+# file is ASCII and uses no PowerShell 7 syntax.
+$ErrorActionPreference = 'Stop'
+
+$packageArgs = @{
+    packageName    = $env:ChocolateyPackageName
+    fileType       = 'msi'
+    url64bit       = '{{MSI_URL}}'
+    checksum64     = '{{MSI_SHA256}}'
+    checksumType64 = 'sha256'
+    softwareName   = '{{TITLE}}'
+    silentArgs     = "/qn /norestart /l*v `"$env:TEMP\$env:ChocolateyPackageName.$env:ChocolateyPackageVersion.install.log`""
+    # The installer closes nothing that is running - its Restart Manager is off
+    # on purpose, because it closed an open palette in the middle of an update.
+    # An upgrade with nkb or the palette running answers 0 and the running copy
+    # goes on (try_installer.py, which every installer is tried with). 3010 and
+    # 1641 are the successes that ask for a restart or start one, for a machine
+    # where Windows still needs one.
+    validExitCodes = @(0, 3010, 1641)
+}
+Install-ChocolateyPackage @packageArgs
+
+Write-Host ''
+Write-Host 'Start the palette from the Start menu. In a new terminal, {{WINDOW_PROGRAM}} starts it and {{CLI_PROGRAM}} --help lists the commands.'
