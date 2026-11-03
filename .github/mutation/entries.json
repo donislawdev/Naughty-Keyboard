@@ -12830,19 +12830,19 @@
     {
       "id": "M1643",
       "why": "the person's Shift is not waited for before a tab on Windows, so Shift held during a send turns it into Shift+Tab and the focus goes backwards",
-      "file": "crates/nkb-sys/src/lib.rs",
+      "file": "crates/nkb-sys/src/windows_keys.rs",
       "find": "Some(TextKey::Tab) => (VK_TAB, key_events(VK_TAB), true),",
       "replace": "Some(TextKey::Tab) => (VK_TAB, key_events(VK_TAB), false),",
-      "test": "windows_impl::tests::a_tab_and_a_line_feed_are_their_keys_and_wait_for_the_person_s_shift",
+      "test": "windows_keys::tests::a_tab_and_a_line_feed_are_their_keys_and_wait_for_the_person_s_shift",
       "runner": "rust:nkb-sys:lib"
     },
     {
       "id": "M1644",
       "why": "a line feed goes as VK_PACKET again on Windows, and a text area of Edge or Chrome loses every line break of a value (D164)",
-      "file": "crates/nkb-sys/src/lib.rs",
+      "file": "crates/nkb-sys/src/windows_keys.rs",
       "find": "Some(TextKey::Return) => (VK_RETURN, key_events(VK_RETURN), true),",
       "replace": "Some(TextKey::Return) => (VK_PACKET, events_for(unit), false),",
-      "test": "windows_impl::tests::a_tab_and_a_line_feed_are_their_keys_and_wait_for_the_person_s_shift",
+      "test": "windows_keys::tests::a_tab_and_a_line_feed_are_their_keys_and_wait_for_the_person_s_shift",
       "runner": "rust:nkb-sys:lib"
     },
     {
