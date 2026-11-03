@@ -14,12 +14,12 @@
 //!    and the window stayed in the taskbar while its owner took it for closed.
 //!    Restored from there it answered no key, and neither Esc nor its close
 //!    button closed it. So a window that was left hides once that event is
-//!    over: [`hide_once_left`].
+//!    over: `hide_once_left`.
 //! 2. Opened again, it came up minimized, in each of the three ways tried -
 //!    `show()` shows a window in the state it was hidden in - and it took the
 //!    keyboard there. The tester saw nothing, and the letters of the search
 //!    went into a window nobody could see. So every opening brings it back:
-//!    [`bring_up`].
+//!    `bring_up`.
 //! 3. A button that closes the window under another name is one too many (the
 //!    owner's choice, `D137`): its title bar keeps Close alone.
 //!
@@ -109,10 +109,11 @@ fn keep_only_close(window: &slint::Window) {
 /// about to type, and until it has the keyboard the letters reach the field
 /// under test (`OBS-148`).
 ///
-/// 🔴 The first opening waits until the window is ready ([`when_backed`]).
+/// 🔴 The first opening waits until the window is ready (`when_backed`).
 /// Opened at once, the window made while the loop runs has no native window
-/// yet, so [`bring_up`] had nothing to take the buttons off, and About came up
-/// with minimize and maximize beside Close - measured, `tools/sondy/okno-about.ps1`.
+/// yet, so `bring_up` had nothing to take the buttons off, and About came up
+/// with minimize and maximize beside Close - measured,
+/// `tools/sondy/okna-na-zadanie.ps1`.
 pub struct Later<T> {
     made: OnceCell<Rc<T>>,
     /// A first opening that waits for the window to be ready. A close in that
@@ -138,7 +139,7 @@ pub trait Requested {
     /// Closes the window.
     fn close(&self);
     /// Runs `then` once the window can open as one made at start does - for a
-    /// window on the winit backend, [`when_backed`].
+    /// window on the winit backend, `when_backed`.
     fn when_ready(self: &Rc<Self>, then: Ready);
 }
 
@@ -215,7 +216,7 @@ impl<T: Requested + 'static> Later<T> {
 /// window - at once when it has.
 ///
 /// Read in i-slint-backend-winit 1.18.1 (`set_visibility`, `ensure_window`)
-/// and measured with `tools/sondy/okno-about.ps1`: a window made while the
+/// and measured with `tools/sondy/okna-na-zadanie.ps1`: a window made while the
 /// loop runs has no native window until the backend's next turn, and showing
 /// it only asks for one. So it is shown and hidden in one turn, which leaves
 /// nothing on the screen and has the backend make its native window hidden,
