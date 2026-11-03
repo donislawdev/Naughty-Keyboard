@@ -93,13 +93,15 @@ pub enum Syntax {
     Toml,
     Git,
     Markdown,
-    /// A drawing, and the source of the Windows installer: XML, whose
-    /// comments are prose and whose markup is not.
+    /// A drawing, the source of the Windows installer and the description of a
+    /// Chocolatey package: XML, whose comments are prose and whose markup is not.
     Xml,
     Resource,
     Yaml,
     Python,
     Shell,
+    /// The scripts a Chocolatey package runs.
+    PowerShell,
     /// A template of the website: HTML with Hugo's template actions.
     Html,
     Css,
@@ -520,6 +522,103 @@ fn lex_shell(source: &str) -> Lexed {
     out
 }
 
+/// A PowerShell script: `#` comments and `<# #>` blocks, strings in single
+/// quotes where `''` is a quote, strings in double quotes where `""` is a quote
+/// and a backtick escapes the next character, and here-strings, which run from
+/// `@'` or `@"` at the end of a line to the same quote and `@` at the start of
+/// one. Outside a string a backtick escapes too - the line break of a command
+/// continued on the next line among them - and a `#` inside a word opens nothing.
+fn lex_powershell(source: &str) -> Lexed {
+    let s: Vec<char> = source.chars().collect();
+    let mut out = Lexed::default();
+    let mut line = 1;
+    let mut i = 0;
+    while i < s.len() {
+        let c = s[i];
+        let starts_word =
+            i == 0 || s[i - 1].is_whitespace() || matches!(s[i - 1], ';' | '(' | '{' | '|' | '&');
+        if c == '\n' {
+            line += 1;
+            i += 1;
+        } else if c == '`' {
+            if s.get(i + 1) == Some(&'\n') {
+                line += 1;
+            }
+            i += 2;
+        } else if at(&s, i, "<#") {
+            let close = (i + 2..s.len())
+                .find(|&j| at(&s, j, "#>"))
+                .unwrap_or(s.len());
+            let body: String = s[i + 2..close].iter().collect();
+            out.comments.push(Comment {
+                first_line: line,
+                kind: CommentKind::Block,
+                lines: body.split('\n').map(str::to_owned).collect(),
+            });
+            line += count_newlines(&s[i..close]);
+            let end = (close + 2).min(s.len());
+            out.skipped.push((i, end));
+            i = end;
+        } else if c == '#' && starts_word {
+            let end = line_end(&s, i);
+            let body: String = s[i + 1..end].iter().collect();
+            out.comments.push(Comment {
+                first_line: line,
+                kind: CommentKind::Plain,
+                lines: vec![body],
+            });
+            out.skipped.push((i, end));
+            i = end;
+        } else if c == '@'
+            && matches!(s.get(i + 1), Some('\'' | '"'))
+            && matches!(s.get(i + 2), Some('\n' | '\r'))
+        {
+            let fence: String = ['\n', s[i + 1], '@'].iter().collect();
+            let open = i + 2;
+            let close = (open..s.len())
+                .find(|&j| at(&s, j, &fence))
+                .unwrap_or(s.len());
+            out.literals
+                .push(toml_literal(&s[open..close], line, false));
+            // The fence begins with the line break before the closing quote, so
+            // the lines are counted up to its end, not to where it starts.
+            let end = (close + 3).min(s.len());
+            line += count_newlines(&s[i..end]);
+            out.skipped.push((i, end));
+            i = end;
+        } else if c == '\'' || c == '"' {
+            let first_line = line;
+            let mut chars = Vec::new();
+            let mut j = i + 1;
+            while j < s.len() {
+                if s[j] == c && s.get(j + 1) == Some(&c) {
+                    chars.push((c, line));
+                    j += 2;
+                    continue;
+                }
+                if s[j] == c {
+                    break;
+                }
+                if c == '"' && s[j] == '`' && j + 1 < s.len() {
+                    j += 1;
+                }
+                chars.push((s[j], line));
+                if s[j] == '\n' {
+                    line += 1;
+                }
+                j += 1;
+            }
+            out.literals.push(Literal { first_line, chars });
+            let end = (j + 1).min(s.len());
+            out.skipped.push((i, end));
+            i = end;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
 /// `.gitignore` and `.gitattributes`: a comment is a line that starts with `#`,
 /// and nothing else in them is prose.
 fn lex_git(source: &str) -> Lexed {
@@ -732,6 +831,7 @@ pub fn lex(syntax: Syntax, source: &str) -> Lexed {
         // the CI scripts use no other form that would read differently.
         Syntax::Toml | Syntax::Python => lex_toml(source),
         Syntax::Shell => lex_shell(source),
+        Syntax::PowerShell => lex_powershell(source),
         Syntax::Git => lex_git(source),
         Syntax::Markdown => lex_markdown(source),
         Syntax::Xml => lex_xml(source),
@@ -784,10 +884,14 @@ pub fn syntax_of(path: &Path) -> Option<Syntax> {
         "slint" => Some(Syntax::Slint),
         "toml" => Some(Syntax::Toml),
         "md" => Some(Syntax::Markdown),
-        "svg" | "wxs" => Some(Syntax::Xml),
+        "svg" | "wxs" | "nuspec" => Some(Syntax::Xml),
         "yml" | "yaml" => Some(Syntax::Yaml),
         "py" => Some(Syntax::Python),
         "sh" => Some(Syntax::Shell),
+        "ps1" => Some(Syntax::PowerShell),
+        // A template is read the way the file it renders to is: the package
+        // sources in packaging/ are `name.yaml.in`, `name.ps1.in` and so on.
+        "in" => syntax_of(Path::new(path.file_stem()?)),
         "rc" => Some(Syntax::Resource),
         // A content adapter of the website is a template with no markup around it.
         "html" | "gotmpl" => Some(Syntax::Html),
@@ -815,7 +919,9 @@ pub fn product_tree(root: &Path) -> Tree {
         let name = entry.file_name().to_string_lossy().into_owned();
         if path.is_dir() {
             match name.as_str() {
-                "crates" | "tests" | ".github" | ".cargo" | "web" => walk(root, &path, &mut tree),
+                "crates" | "tests" | ".github" | ".cargo" | "web" | "packaging" => {
+                    walk(root, &path, &mut tree)
+                }
                 "packs" | "target" => {}
                 n if MEMORY.contains(&n) || n.starts_with('.') => {}
                 _ => tree.unreadable.push(format!(

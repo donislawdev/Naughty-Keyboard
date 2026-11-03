@@ -7767,8 +7767,8 @@
       "id": "M1071",
       "why": "the installer source is not read by the punctuation guard",
       "file": "crates/nkb-core/tests/repo_text/mod.rs",
-      "find": "        \"svg\" | \"wxs\" => Some(Syntax::Xml),",
-      "replace": "        \"svg\" => Some(Syntax::Xml),",
+      "find": "        \"svg\" | \"wxs\" | \"nuspec\" => Some(Syntax::Xml),",
+      "replace": "        \"svg\" | \"nuspec\" => Some(Syntax::Xml),",
       "test": "control_the_icon_files_are_read",
       "runner": "rust:nkb-core:prose_punctuation"
     },
@@ -12898,6 +12898,159 @@
       "replace": "                (Err(_), _) => {}",
       "test": "on_request::tests::a_window_that_cannot_be_made_or_readied_says_so",
       "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1651",
+      "why": "a downloaded file that is not the release's installer gives the manifest a ProductCode of another build",
+      "file": ".github/scripts/build_packages.py",
+      "find": "    if digest != sha256:",
+      "replace": "    if False:",
+      "test": "test_an_installer_that_is_not_the_releases_is_refused",
+      "runner": "pyunit:.github/scripts:test_build_packages"
+    },
+    {
+      "id": "M1652",
+      "why": "an installer of another product or version is taken as the release's, and WinGet would look for it",
+      "file": ".github/scripts/build_packages.py",
+      "find": "        if properties.get(name) != wanted:",
+      "replace": "        if False:",
+      "test": "test_an_installer_of_another_product_or_version_is_refused",
+      "runner": "pyunit:.github/scripts:test_build_packages"
+    },
+    {
+      "id": "M1653",
+      "why": "a ProductCode without braces reaches the manifest, which WinGet compares as written",
+      "file": ".github/scripts/build_packages.py",
+      "find": "    if not PRODUCT_CODE.fullmatch(code):",
+      "replace": "    if not code:",
+      "test": "test_a_product_code_that_is_not_a_code_is_refused",
+      "runner": "pyunit:.github/scripts:test_build_packages"
+    },
+    {
+      "id": "M1654",
+      "why": "a release candidate is refused as no tag at all, and the sentence names the wrong reason",
+      "file": ".github/scripts/build_packages.py",
+      "find": "    if re.fullmatch(r\"v\\d+\\.\\d+\\.\\d+-.+\", tag or \"\"):",
+      "replace": "    if False:",
+      "test": "test_a_candidate_and_a_name_that_is_no_tag_are_refused",
+      "runner": "pyunit:.github/scripts:test_build_packages"
+    },
+    {
+      "id": "M1655",
+      "why": "rendered packages may land inside the repository, where the next commit would take them",
+      "file": ".github/scripts/build_packages.py",
+      "find": "    if os.path.normcase(out) == root or os.path.normcase(out).startswith(root + os.sep):",
+      "replace": "    if False:",
+      "test": "test_a_destination_inside_the_repository_or_holding_something_is_refused",
+      "runner": "pyunit:.github/scripts:test_build_packages"
+    },
+    {
+      "id": "M1656",
+      "why": "a value that changes what its file means is written as it is, a quote ending a PowerShell string",
+      "file": ".github/scripts/build_packages.py",
+      "find": "            why = breaking(name, table[key], \"'{{%s}}'\" % key in line)",
+      "replace": "            why = \"\"",
+      "test": "test_a_value_that_breaks_its_file_is_refused",
+      "runner": "pyunit:.github/scripts:test_build_packages"
+    },
+    {
+      "id": "M1657",
+      "why": "a value no template uses any more stays in the renderer unnoticed",
+      "file": ".github/scripts/build_packages.py",
+      "find": "        if known - used:",
+      "replace": "        if False:",
+      "test": "test_a_value_no_template_uses_is_refused",
+      "runner": "pyunit:.github/scripts:test_build_packages"
+    },
+    {
+      "id": "M1658",
+      "why": "a run that fails while writing leaves the folders it made behind",
+      "file": ".github/scripts/build_packages.py",
+      "find": "        if not finished:\n            remove_empty(made)",
+      "replace": "        if False:\n            remove_empty(made)",
+      "test": "test_a_run_that_fails_while_writing_leaves_nothing_behind",
+      "runner": "pyunit:.github/scripts:test_build_packages"
+    },
+    {
+      "id": "M1659",
+      "why": "the description of a Chocolatey package is not read by the punctuation guard",
+      "file": "crates/nkb-core/tests/repo_text/mod.rs",
+      "find": "        \"svg\" | \"wxs\" | \"nuspec\" => Some(Syntax::Xml),",
+      "replace": "        \"svg\" | \"wxs\" => Some(Syntax::Xml),",
+      "test": "control_the_package_sources_are_read",
+      "runner": "rust:nkb-core:prose_punctuation"
+    },
+    {
+      "id": "M1660",
+      "why": "a template in packaging/ is not read as the file it renders to",
+      "file": "crates/nkb-core/tests/repo_text/mod.rs",
+      "find": "        \"in\" => syntax_of(Path::new(path.file_stem()?)),",
+      "replace": "        \"in\" => None,",
+      "test": "control_the_package_sources_are_read",
+      "runner": "rust:nkb-core:prose_punctuation"
+    },
+    {
+      "id": "M1661",
+      "why": "a package script is read as a shell script, whose quotes and escapes are not PowerShell's",
+      "file": "crates/nkb-core/tests/repo_text/mod.rs",
+      "find": "        \"ps1\" => Some(Syntax::PowerShell),",
+      "replace": "        \"ps1\" => Some(Syntax::Shell),",
+      "test": "control_the_package_sources_are_read",
+      "runner": "rust:nkb-core:prose_punctuation"
+    },
+    {
+      "id": "M1662",
+      "why": "packaging/ is not walked, and the guard stops at a directory it does not know",
+      "file": "crates/nkb-core/tests/repo_text/mod.rs",
+      "find": "                \"crates\" | \"tests\" | \".github\" | \".cargo\" | \"web\" | \"packaging\" => {",
+      "replace": "                \"crates\" | \"tests\" | \".github\" | \".cargo\" | \"web\" => {",
+      "test": "product_prose_uses_no_semicolon_and_only_the_flat_hyphen",
+      "runner": "rust:nkb-core:prose_punctuation"
+    },
+    {
+      "id": "M1663",
+      "why": "a quote escaped with a backtick ends a PowerShell string, and the rest of the file is read wrong",
+      "file": "crates/nkb-core/tests/repo_text/mod.rs",
+      "find": "                if c == '\"' && s[j] == '`' && j + 1 < s.len() {",
+      "replace": "                if false {",
+      "test": "control_the_package_sources_are_read",
+      "runner": "rust:nkb-core:prose_punctuation"
+    },
+    {
+      "id": "M1664",
+      "why": "a here-string is read as quotes and code, and the hash inside it opens a comment",
+      "file": "crates/nkb-core/tests/repo_text/mod.rs",
+      "find": "        } else if c == '@'\n            && matches!(s.get(i + 1), Some('\\'' | '\"'))",
+      "replace": "        } else if false\n            && matches!(s.get(i + 1), Some('\\'' | '\"'))",
+      "test": "control_the_package_sources_are_read",
+      "runner": "rust:nkb-core:prose_punctuation"
+    },
+    {
+      "id": "M1665",
+      "why": "a PowerShell block comment is not read as prose",
+      "file": "crates/nkb-core/tests/repo_text/mod.rs",
+      "find": "        } else if at(&s, i, \"<#\") {",
+      "replace": "        } else if false {",
+      "test": "control_the_package_sources_are_read",
+      "runner": "rust:nkb-core:prose_punctuation"
+    },
+    {
+      "id": "M1666",
+      "why": "a hash inside a PowerShell word opens a comment, and code is read as prose",
+      "file": "crates/nkb-core/tests/repo_text/mod.rs",
+      "find": "        } else if c == '#' && starts_word {\n            let end = line_end(&s, i);\n            let body: String = s[i + 1..end].iter().collect();\n            out.comments.push(Comment {\n                first_line: line,\n                kind: CommentKind::Plain,\n                lines: vec![body],\n            });\n            out.skipped.push((i, end));\n            i = end;\n        } else if c == '@'",
+      "replace": "        } else if c == '#' {\n            let end = line_end(&s, i);\n            let body: String = s[i + 1..end].iter().collect();\n            out.comments.push(Comment {\n                first_line: line,\n                kind: CommentKind::Plain,\n                lines: vec![body],\n            });\n            out.skipped.push((i, end));\n            i = end;\n        } else if c == '@'",
+      "test": "control_the_package_sources_are_read",
+      "runner": "rust:nkb-core:prose_punctuation"
+    },
+    {
+      "id": "M1667",
+      "why": "the line after a here-string is counted one too early, and a finding names the wrong line",
+      "file": "crates/nkb-core/tests/repo_text/mod.rs",
+      "find": "            line += count_newlines(&s[i..end]);\n            out.skipped.push((i, end));\n            i = end;\n        } else if c == '\\'' || c == '\"' {\n            let first_line = line;",
+      "replace": "            line += count_newlines(&s[i..close]);\n            out.skipped.push((i, end));\n            i = end;\n        } else if c == '\\'' || c == '\"' {\n            let first_line = line;",
+      "test": "control_the_package_sources_are_read",
+      "runner": "rust:nkb-core:prose_punctuation"
     }
   ]
 }
