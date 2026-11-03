@@ -23,6 +23,13 @@
 //!   show their trees, and Slint, Qt, Firefox and Chromium do not show a window at all.
 //!   Chromium, switch on, showed a window with no children in the run made.
 //!
+//! 2026-11-03, the same machine, `tools/sondy/linux/atspi_zatrzymana.py` (`OBS-238`): an
+//! application stopped with `SIGSTOP` stays on the bus and answers nothing, and the look
+//! went on to the others. A GTK window with the focus on a button, in front on a second X
+//! server on the same bus, made `nkb send` refuse the stopped field as "not a text field",
+//! and the same window with the focus in an entry made it press the clearing keys into the
+//! stopped application, confirmed as a field by another program.
+//!
 //! # What is decided here
 //!
 //! The kind of control is claimed only from the role AND the states of the one element that
@@ -31,6 +38,12 @@
 //! definition needs a role from the other closed list. Everything else, a table cell
 //! included (the cell of a spreadsheet takes the clearing keys to the row, `D76`), is
 //! `Unknown`, and `Unknown` presses as it did before this existed.
+//!
+//! The answer is about the window in front only while every application answered. One that
+//! said nothing in time may be the one in front ([`Reply::Silent`]), and then whatever the
+//! others show is not about its window, so the look is `Unknown`. One that answered with an
+//! error has gone or does not know the question, holds no window in front, and is passed
+//! over.
 //!
 //! Nothing here reads a name, a description or text of any element: the questions are the
 //! children, the states and the role of an element, and `tests/atspi_reads_only_kinds.rs`
@@ -78,6 +91,11 @@ pub(crate) const MAX_ELEMENTS: usize = 1500;
 /// walks a browser is not made three times. The answer of the last look is the one of this
 /// press only while it is this fresh, and a press a second later looks again.
 pub(crate) const REUSE: Duration = Duration::from_millis(300);
+
+/// The names of the two errors the bus sends back in place of a reply that never came. Read
+/// off an answer, never said.
+const NO_REPLY: &str = "org.freedesktop.DBus.Error.NoReply";
+const TIMED_OUT: &str = "org.freedesktop.DBus.Error.TimedOut";
 
 /// The states of an element the code asks about. `GetState` answers two words of 32 bits,
 /// and a state is the bit of that number.
@@ -200,17 +218,63 @@ pub(crate) fn kind_of(code: u32, states: &[u32]) -> FocusedInput {
     }
 }
 
-/// The tree of the bus, as far as the look asks it. Every question may get no answer: an
-/// application that hangs or has gone is not a reason to stop looking at the others.
+/// The answer to one question of an element.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Reply<T> {
+    /// What the element said.
+    Said(T),
+    /// An error came back: the application has gone, or does not know the question, and
+    /// holds no window in front.
+    Refused,
+    /// Nothing came back in time. The application may be stopped or busy, and it may be the
+    /// one in front.
+    Silent,
+}
+
+impl<T> Reply<T> {
+    /// The answer, when one came.
+    pub(crate) fn said(self) -> Option<T> {
+        match self {
+            Self::Said(answer) => Some(answer),
+            Self::Refused | Self::Silent => None,
+        }
+    }
+
+    /// The answer read by `read`. An answer that does not read is `Refused`: something came
+    /// back.
+    pub(crate) fn then<U>(self, read: impl FnOnce(T) -> Option<U>) -> Reply<U> {
+        match self {
+            Self::Said(answer) => read(answer).map_or(Reply::Refused, Reply::Said),
+            Self::Refused => Reply::Refused,
+            Self::Silent => Reply::Silent,
+        }
+    }
+}
+
+/// What a question that failed means, from the name of the error that came back, if one
+/// did. An error is an answer, except the two the bus sends for a reply that never came.
+/// No error at all is a question that ran out of time or a connection that was shut, and
+/// that is silence.
+pub(crate) fn failed<T>(error: Option<&str>) -> Reply<T> {
+    match error {
+        Some(NO_REPLY | TIMED_OUT) | None => Reply::Silent,
+        Some(_) => Reply::Refused,
+    }
+}
+
+/// The tree of the bus, as far as the look asks it. Every question may get no answer.
+/// Inside the windows in front a part that does not answer is passed over, and so is an
+/// application that answered with an error. An application that did not answer at all
+/// makes the look [`Found::Silent`].
 pub(crate) trait Tree {
     type Node;
 
     /// The applications that show a tree.
     fn applications(&mut self) -> Option<Vec<Self::Node>>;
     /// The children of an element.
-    fn children(&mut self, node: &Self::Node) -> Option<Vec<Self::Node>>;
+    fn children(&mut self, node: &Self::Node) -> Reply<Vec<Self::Node>>;
     /// The states of an element, as `GetState` words them.
-    fn states(&mut self, node: &Self::Node) -> Option<Vec<u32>>;
+    fn states(&mut self, node: &Self::Node) -> Reply<Vec<u32>>;
     /// The role of an element.
     fn role(&mut self, node: &Self::Node) -> Option<u32>;
     /// Whether there is time for another question.
@@ -231,6 +295,9 @@ pub(crate) enum Found {
     Several,
     /// The time or the number of elements ran out before the answer.
     Spent,
+    /// An application did not answer, so the window in front may be one of its windows and
+    /// what the others show is not about it (`OBS-238`).
+    Silent,
 }
 
 /// What a walk down one window found.
@@ -246,21 +313,29 @@ pub(crate) fn find<T: Tree>(tree: &mut T) -> Found {
         return Found::NoWindow;
     };
     let mut windows = Vec::new();
+    let mut silent = false;
     for application in applications {
         if !tree.time_left() {
             return Found::Spent;
         }
-        let Some(tops) = tree.children(&application) else {
-            continue;
+        let tops = match tree.children(&application) {
+            Reply::Said(tops) => tops,
+            Reply::Refused => continue,
+            Reply::Silent => {
+                silent = true;
+                continue;
+            }
         };
         for top in tops {
-            if tree
-                .states(&top)
-                .is_some_and(|states| has(&states, state::ACTIVE))
-            {
-                windows.push(top);
+            match tree.states(&top) {
+                Reply::Said(states) if has(&states, state::ACTIVE) => windows.push(top),
+                Reply::Silent => silent = true,
+                Reply::Said(_) | Reply::Refused => {}
             }
         }
+    }
+    if silent {
+        return Found::Silent;
     }
     if windows.is_empty() {
         return Found::NoWindow;
@@ -292,7 +367,7 @@ fn walk<T: Tree>(tree: &mut T, window: T::Node, left: &mut usize) -> Walk<T::Nod
             return Walk::Spent;
         }
         *left -= 1;
-        let Some(states) = tree.states(&node) else {
+        let Some(states) = tree.states(&node).said() else {
             continue;
         };
         if has(&states, state::DEFUNCT) {
@@ -301,7 +376,7 @@ fn walk<T: Tree>(tree: &mut T, window: T::Node, left: &mut usize) -> Walk<T::Nod
         if has(&states, state::FOCUSED) {
             return Walk::Holder(node, states);
         }
-        if let Some(children) = tree.children(&node) {
+        if let Some(children) = tree.children(&node).said() {
             stack.extend(children.into_iter().rev());
         }
     }
@@ -313,12 +388,15 @@ fn walk<T: Tree>(tree: &mut T, window: T::Node, left: &mut usize) -> Walk<T::Nod
 /// A look that found no window in front or nothing with the focus, with the switch of the
 /// bus off, is an application that shows nothing because it was not asked to: that is
 /// `ClosedToAccessibility`, and the person is told so. With the switch on the same
-/// finding is just not recognised. A look that ran out, or found two, says nothing.
+/// finding is just not recognised. A look that ran out, found two, or met an application
+/// that did not answer, says nothing.
 pub(crate) fn settle(found: Found, switched_on: bool) -> FocusedInput {
     match found {
         Found::Kind(kind) => kind,
         Found::NoWindow | Found::NoFocus if !switched_on => FocusedInput::ClosedToAccessibility,
-        Found::NoWindow | Found::NoFocus | Found::Several | Found::Spent => FocusedInput::Unknown,
+        Found::NoWindow | Found::NoFocus | Found::Several | Found::Spent | Found::Silent => {
+            FocusedInput::Unknown
+        }
     }
 }
 
@@ -368,13 +446,30 @@ mod tests {
         words
     }
 
+    /// How an element of a made-up tree answers.
+    #[derive(Clone, Copy)]
+    enum Answers {
+        Yes,
+        WithAnError,
+        Not,
+    }
+
     /// An element of a made-up tree: its role, its states and its children by position.
     struct Element {
         role: u32,
         states: Vec<u32>,
         children: Vec<usize>,
-        /// Whether it answers at all.
-        answers: bool,
+        answers: Answers,
+    }
+
+    impl Element {
+        fn reply<T>(&self, answer: T) -> Reply<T> {
+            match self.answers {
+                Answers::Yes => Reply::Said(answer),
+                Answers::WithAnError => Reply::Refused,
+                Answers::Not => Reply::Silent,
+            }
+        }
     }
 
     /// A tree in a vector, with the root's children being the applications, and a count of
@@ -401,13 +496,17 @@ mod tests {
                 role,
                 states: states_of(names),
                 children: children.to_vec(),
-                answers: true,
+                answers: Answers::Yes,
             });
             self.elements.len() - 1
         }
 
         fn mute(&mut self, node: usize) {
-            self.elements[node].answers = false;
+            self.elements[node].answers = Answers::Not;
+        }
+
+        fn refuse(&mut self, node: usize) {
+            self.elements[node].answers = Answers::WithAnError;
         }
     }
 
@@ -418,16 +517,16 @@ mod tests {
             Some(self.applications.clone())
         }
 
-        fn children(&mut self, node: &usize) -> Option<Vec<usize>> {
+        fn children(&mut self, node: &usize) -> Reply<Vec<usize>> {
             self.asked += 1;
             let element = &self.elements[*node];
-            element.answers.then(|| element.children.clone())
+            element.reply(element.children.clone())
         }
 
-        fn states(&mut self, node: &usize) -> Option<Vec<u32>> {
+        fn states(&mut self, node: &usize) -> Reply<Vec<u32>> {
             self.asked += 1;
             let element = &self.elements[*node];
-            element.answers.then(|| element.states.clone())
+            element.reply(element.states.clone())
         }
 
         fn role(&mut self, node: &usize) -> Option<u32> {
@@ -593,13 +692,84 @@ mod tests {
     }
 
     #[test]
-    fn an_application_that_does_not_answer_is_passed_over() {
+    fn an_application_that_has_gone_is_passed_over() {
         let mut tree = Fake::new();
-        let hung = tree.add(75, &[], &[]);
-        tree.mute(hung);
-        tree.applications.push(hung);
+        let gone = tree.add(75, &[], &[]);
+        tree.refuse(gone);
+        tree.applications.push(gone);
         window_with(&mut tree, role::ENTRY, &[state::FOCUSED, state::EDITABLE]);
         assert_eq!(find(&mut tree), Found::Kind(FocusedInput::TextField));
+    }
+
+    #[test]
+    fn an_application_that_does_not_answer_leaves_the_focus_unknown_whatever_the_others_show() {
+        // `OBS-238`: the stopped application in front says nothing, and a window of another
+        // program on the same bus shows the focus on a button or in an entry.
+        for (role, names) in [
+            (role::PUSH_BUTTON, &[state::FOCUSED][..]),
+            (role::ENTRY, &[state::FOCUSED, state::EDITABLE][..]),
+        ] {
+            for hung_first in [true, false] {
+                let mut tree = Fake::new();
+                let hung = tree.add(75, &[], &[]);
+                tree.mute(hung);
+                if hung_first {
+                    tree.applications.push(hung);
+                }
+                window_with(&mut tree, role, names);
+                if !hung_first {
+                    tree.applications.push(hung);
+                }
+                assert_eq!(find(&mut tree), Found::Silent, "{role}, first {hung_first}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_window_whose_states_do_not_come_leaves_the_focus_unknown_too() {
+        let mut tree = Fake::new();
+        let window = tree.add(23, &[state::ACTIVE], &[]);
+        tree.mute(window);
+        let application = tree.add(75, &[], &[window]);
+        tree.applications.push(application);
+        window_with(&mut tree, role::PUSH_BUTTON, &[state::FOCUSED]);
+        assert_eq!(find(&mut tree), Found::Silent);
+    }
+
+    #[test]
+    fn a_window_whose_states_come_back_as_an_error_is_passed_over() {
+        let mut tree = Fake::new();
+        let window = tree.add(23, &[state::ACTIVE], &[]);
+        tree.refuse(window);
+        let application = tree.add(75, &[], &[window]);
+        tree.applications.push(application);
+        window_with(&mut tree, role::PUSH_BUTTON, &[state::FOCUSED]);
+        assert_eq!(find(&mut tree), Found::Kind(FocusedInput::NotTextField));
+    }
+
+    #[test]
+    fn only_the_errors_for_a_reply_that_never_came_are_silence() {
+        assert_eq!(failed::<()>(None), Reply::Silent);
+        assert_eq!(failed::<()>(Some(NO_REPLY)), Reply::Silent);
+        assert_eq!(failed::<()>(Some(TIMED_OUT)), Reply::Silent);
+        for refusal in [
+            "org.freedesktop.DBus.Error.ServiceUnknown",
+            "org.freedesktop.DBus.Error.NameHasNoOwner",
+            "org.freedesktop.DBus.Error.UnknownMethod",
+            "org.freedesktop.DBus.Error.UnknownObject",
+        ] {
+            assert_eq!(failed::<()>(Some(refusal)), Reply::Refused, "{refusal}");
+        }
+    }
+
+    #[test]
+    fn an_answer_that_does_not_read_is_a_refusal_and_silence_stays_silence() {
+        assert_eq!(Reply::Said(4).then(|n| Some(n + 1)), Reply::Said(5));
+        assert_eq!(Reply::Said(4).then(|_| None::<u32>), Reply::Refused);
+        assert_eq!(Reply::<u32>::Refused.then(Some), Reply::Refused);
+        assert_eq!(Reply::<u32>::Silent.then(Some), Reply::Silent);
+        assert_eq!(Reply::Said(4).said(), Some(4));
+        assert_eq!(Reply::<u32>::Silent.said(), None);
     }
 
     #[test]
@@ -674,10 +844,11 @@ mod tests {
     }
 
     #[test]
-    fn a_look_that_ran_out_or_found_two_says_nothing_whatever_the_switch() {
+    fn a_look_that_ran_out_found_two_or_met_silence_says_nothing_whatever_the_switch() {
         for on in [true, false] {
             assert_eq!(settle(Found::Spent, on), FocusedInput::Unknown);
             assert_eq!(settle(Found::Several, on), FocusedInput::Unknown);
+            assert_eq!(settle(Found::Silent, on), FocusedInput::Unknown);
         }
     }
 

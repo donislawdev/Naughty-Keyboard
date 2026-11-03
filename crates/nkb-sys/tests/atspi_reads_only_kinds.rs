@@ -48,6 +48,10 @@ const WORDS: &[&str] = &[
     "GetChildren",
     "GetState",
     "GetRole",
+    // The names of the two errors the bus sends back for a reply that never came, read off
+    // an answer to tell an application that is silent from one that has gone (`OBS-238`).
+    "org.freedesktop.DBus.Error.NoReply",
+    "org.freedesktop.DBus.Error.TimedOut",
     // Where the session bus is.
     "DBUS_SESSION_BUS_ADDRESS",
     "XDG_RUNTIME_DIR",
