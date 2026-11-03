@@ -100,6 +100,11 @@ Changes wait under Unreleased until then.
 - On X11 a modifier left locked, such as Alt locked by sticky keys, no longer swallows a value. A
   GTK field got nothing of it while `nkb send` said it was sent. Ctrl, Alt or Super latched or
   locked now refuse the send by name, as a held key does.
+- On Linux an application in front that has stopped answering is no longer judged by the window of
+  another program. While it said nothing, any other window that showed a focus decided for it: a
+  field was refused as if it were a button, or the clearing keys were pressed into it as if it were
+  confirmed as a field. Now its focus counts as not confirmed, the value goes in without clearing,
+  and the send says that the application stopped taking keys.
 - The report block now carries the warnings the palette gives about a value that went in. When
   only the system confirmed the keys, when the value was handed to the input method of a Wayland
   desktop, or when the text substitutions of macOS may have changed it, the block has a `Delivery:`

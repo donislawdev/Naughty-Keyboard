@@ -27,7 +27,8 @@
 //!
 //! Every question has its own limit, the whole look has another (`LOOK_WAIT`), and a watch
 //! over both sockets shuts them when twice that has passed, so nothing in a look can hold a
-//! press for good. An answer that did not come is `Unknown`.
+//! press for good. An answer that did not come is `Unknown`, and so is the whole look when
+//! an application did not answer, because the window in front may be its own (`OBS-238`).
 
 use std::sync::Mutex;
 use std::time::Instant;
@@ -41,7 +42,7 @@ use super::bus::{self, Handle};
 use crate::field::FocusedInput;
 use crate::linux_atspi_rules::{
     ACCESSIBLE_INTERFACE, CALL_WAIT, LAUNCHER_NAME, LAUNCHER_PATH, LOOK_WAIT, REGISTRY_NAME,
-    REGISTRY_ROOT, Recent, STATUS_INTERFACE, Tree, find, settle,
+    REGISTRY_ROOT, Recent, Reply, STATUS_INTERFACE, Tree, failed, find, settle,
 };
 use crate::linux_ibus_rules::socket_in_address;
 use crate::linux_portal_rules::session_bus_socket;
@@ -165,18 +166,21 @@ struct Bus<'c> {
 }
 
 impl Bus<'_> {
-    /// Calls `member` of the accessible interface on `element`. `None` when the
-    /// application does not answer, which includes one that has gone.
-    fn ask(&self, element: &Element, member: &str) -> Option<Message> {
-        self.connection
-            .call_method(
-                Some(element.0.as_str()),
-                element.1.as_str(),
-                Some(ACCESSIBLE_INTERFACE),
-                member,
-                &(),
-            )
-            .ok()
+    /// Calls `member` of the accessible interface on `element`. An error that came back is
+    /// `Refused` (which includes an application that has gone), and a question that ran out
+    /// of time is `Silent`.
+    fn ask(&self, element: &Element, member: &str) -> Reply<Message> {
+        match self.connection.call_method(
+            Some(element.0.as_str()),
+            element.1.as_str(),
+            Some(ACCESSIBLE_INTERFACE),
+            member,
+            &(),
+        ) {
+            Ok(message) => Reply::Said(message),
+            Err(Error::MethodError(name, _, _)) => failed(Some(name.as_str())),
+            Err(_) => failed(None),
+        }
     }
 }
 
@@ -186,18 +190,23 @@ impl Tree for Bus<'_> {
     fn applications(&mut self) -> Option<Vec<Element>> {
         let root = ObjectPath::try_from(REGISTRY_ROOT).ok()?;
         self.children(&(REGISTRY_NAME.to_owned(), OwnedObjectPath::from(root)))
+            .said()
     }
 
-    fn children(&mut self, node: &Element) -> Option<Vec<Element>> {
-        self.ask(node, "GetChildren")?.body().deserialize().ok()
+    fn children(&mut self, node: &Element) -> Reply<Vec<Element>> {
+        self.ask(node, "GetChildren")
+            .then(|message| message.body().deserialize().ok())
     }
 
-    fn states(&mut self, node: &Element) -> Option<Vec<u32>> {
-        self.ask(node, "GetState")?.body().deserialize().ok()
+    fn states(&mut self, node: &Element) -> Reply<Vec<u32>> {
+        self.ask(node, "GetState")
+            .then(|message| message.body().deserialize().ok())
     }
 
     fn role(&mut self, node: &Element) -> Option<u32> {
-        self.ask(node, "GetRole")?.body().deserialize().ok()
+        self.ask(node, "GetRole")
+            .then(|message| message.body().deserialize().ok())
+            .said()
     }
 
     fn time_left(&self) -> bool {

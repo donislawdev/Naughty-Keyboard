@@ -11142,8 +11142,8 @@
       "id": "M1445",
       "why": "a window that is not in front is looked into, so a stale focus in it is taken for the focus",
       "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
-      "find": ".is_some_and(|states| has(&states, state::ACTIVE))",
-      "replace": ".is_some_and(|states| !has(&states, state::ACTIVE))",
+      "find": "Reply::Said(states) if has(&states, state::ACTIVE) => windows.push(top),",
+      "replace": "Reply::Said(states) if !has(&states, state::ACTIVE) => windows.push(top),",
       "test": "linux_atspi_rules::tests::a_window_not_in_front_is_not_looked_into",
       "runner": "rust:nkb-sys:lib"
     },
@@ -12744,6 +12744,69 @@
       "find": "        (Some(meant), Some(now)) => meant == now,",
       "replace": "        (Some(_), Some(_)) => true,",
       "test": "macos_rules::tests::only_a_window_told_and_then_another_or_none_is_another_target",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1634",
+      "why": "an application that did not answer is passed over again, so a window of another program on the same bus decides the focus of the stopped one in front and a field is refused or cleared on its word (OBS-238)",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "    if silent {",
+      "replace": "    if false && silent {",
+      "test": "linux_atspi_rules::tests::an_application_that_does_not_answer_leaves_the_focus_unknown_whatever_the_others_show",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1635",
+      "why": "a window whose states do not come is passed over, so the focus of another program decides for an application that stopped while asked",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "Reply::Silent => silent = true,",
+      "replace": "Reply::Silent => {}",
+      "test": "linux_atspi_rules::tests::a_window_whose_states_do_not_come_leaves_the_focus_unknown_too",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1636",
+      "why": "an application that has gone counts as silent, so one that just closed makes every look unknown and a field is never cleared",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "Reply::Refused => continue,",
+      "replace": "Reply::Refused => { silent = true; continue }",
+      "test": "linux_atspi_rules::tests::an_application_that_has_gone_is_passed_over",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1637",
+      "why": "a window that answered its states with an error counts as silent, and the look gives up on the window in front of another program",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "Reply::Said(_) | Reply::Refused => {}",
+      "replace": "Reply::Said(_) => {} Reply::Refused => silent = true,",
+      "test": "linux_atspi_rules::tests::a_window_whose_states_come_back_as_an_error_is_passed_over",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1638",
+      "why": "every error that comes back counts as silence, so an application that has gone leaves every look unknown",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "Some(_) => Reply::Refused,",
+      "replace": "Some(_) => Reply::Silent,",
+      "test": "linux_atspi_rules::tests::only_the_errors_for_a_reply_that_never_came_are_silence",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1639",
+      "why": "the error the bus sends for a reply that never came reads as a refusal, so an application that hangs past the bus's own limit is passed over again",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "Some(NO_REPLY | TIMED_OUT) | None => Reply::Silent,",
+      "replace": "None => Reply::Silent,",
+      "test": "linux_atspi_rules::tests::only_the_errors_for_a_reply_that_never_came_are_silence",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1640",
+      "why": "an answer that does not read counts as silence, so one application with a strange answer leaves every look unknown",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "read(answer).map_or(Reply::Refused, Reply::Said)",
+      "replace": "read(answer).map_or(Reply::Silent, Reply::Said)",
+      "test": "linux_atspi_rules::tests::an_answer_that_does_not_read_is_a_refusal_and_silence_stays_silence",
       "runner": "rust:nkb-sys:lib"
     }
   ]
