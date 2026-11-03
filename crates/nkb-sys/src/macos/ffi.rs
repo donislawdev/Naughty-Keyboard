@@ -91,6 +91,7 @@ pub(crate) struct CgRect {
 #[link(name = "CoreFoundation", kind = "framework")]
 unsafe extern "C" {
     pub(crate) fn CFRelease(object: CfRef);
+    pub(crate) fn CFHash(object: CfRef) -> u64;
     pub(crate) fn CFArrayGetCount(array: CfRef) -> isize;
     pub(crate) fn CFArrayGetValueAtIndex(array: CfRef, index: isize) -> CfRef;
     pub(crate) fn CFGetTypeID(object: CfRef) -> usize;
@@ -166,7 +167,6 @@ unsafe extern "C" {
         user_data: MutRef,
         out: *mut MutRef,
     ) -> i32;
-    pub(crate) fn RemoveEventHandler(handler: MutRef) -> i32;
     pub(crate) fn RegisterEventHotKey(
         key: u32,
         modifiers: u32,

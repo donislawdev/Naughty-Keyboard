@@ -17,8 +17,16 @@
 //! is merely slow: a stopped process answers it with an error after exactly the
 //! limit and keeps what was sent to it.
 //!
-//! What it asks is the ROLE of the focused element, a type name, and the answer
-//! is released at once without being read. Never its title, its value or its text.
+//! What it asks is the window in front of the application, a reference that is
+//! released at once, kept only as its token: the same round trip that paces the
+//! send says whether the window the send was meant for is still the one in
+//! front (R02). Never its title, its value or its text. An application with no
+//! window in front answers that, which paces the send just as well.
+//!
+//! Each question waits [`PULSE_LOOK`] at most and is asked again until
+//! [`TARGET_WAIT`] has gone by in all, so a person who presses `Escape`, or a
+//! palette that closes, is heard between two of them (R20). One question for the
+//! whole limit held such a send for as long as five seconds.
 //!
 //! An application that cannot be asked - it answers an error at once - is not
 //! paced, and the send says so rather than going on as if it were
@@ -26,47 +34,56 @@
 //! page that types lives in another, so for one the pace is the browser's and not
 //! the page's: not measured, and named here so nobody counts on it.
 
-use core::time::Duration;
-
-use super::ffi::{self, CfRef, Owned};
-use crate::confirm::TARGET_WAIT;
-use crate::macos_rules::{PULSE_EVERY, PulseVerdict, pulse_verdict};
+use super::ax;
+use super::ffi::{self, Owned};
+use crate::confirm::{TARGET_WAIT, Watch};
+use crate::macos_rules::{
+    PULSE_EVERY, PULSE_LOOK, PulseVerdict, pulse_after, pulse_verdict, window_still,
+};
 
 /// The round trips of one send, to the application that was in front when it
 /// began.
 pub(crate) struct Pulse {
     app: Option<Owned>,
-    role: Option<Owned>,
+    /// The window the send is meant for, or `None` when it was never told, and
+    /// then only the application is compared.
+    window: Option<u32>,
     /// Events seen since the last question. Two per character.
     since: usize,
     /// Whether the application answers at all.
     active: bool,
-    /// The application did not answer the first question: it was hung before the
-    /// send began, and the send stops at its first look.
-    hung_at_start: bool,
+    /// What the first question found, said at the first look: the application
+    /// was hung, or another of its windows was in front, before the send began.
+    at_start: Watch,
 }
 
 impl Pulse {
-    /// Asks the application once, and keeps asking only if it answered.
-    pub(crate) fn start(pid: i32) -> Self {
+    /// Asks the application once, and keeps asking only if it answered. The
+    /// window is `meant` if the send's target told it, the one in front now if
+    /// not. `stop` says whether the send is being stopped meanwhile.
+    pub(crate) fn start(pid: i32, meant: Option<u32>, stop: &mut dyn FnMut() -> bool) -> Self {
         let app = Owned::new(unsafe { ffi::AXUIElementCreateApplication(pid) }.cast_const());
-        let role = ffi::cf_string(c"AXRole");
         if let Some(app) = &app {
-            // The same bound the application is given to take a key on Windows:
-            // what the system itself calls not responding.
-            unsafe { ffi::AXUIElementSetMessagingTimeout(app.0, TARGET_WAIT.as_secs_f32()) };
+            unsafe { ffi::AXUIElementSetMessagingTimeout(app.0, PULSE_LOOK.as_secs_f32()) };
         }
         let mut pulse = Self {
             app,
-            role,
+            window: meant,
             since: 0,
             active: false,
-            hung_at_start: false,
+            at_start: Watch::Steady,
         };
-        match pulse.ask() {
-            PulseVerdict::Answered => pulse.active = true,
-            PulseVerdict::Hung => pulse.hung_at_start = true,
-            PulseVerdict::Unsupported => {}
+        match pulse.ask(stop) {
+            Some((PulseVerdict::Answered, now)) => {
+                pulse.active = true;
+                if !window_still(meant, now) {
+                    pulse.at_start = Watch::Moved;
+                }
+                pulse.window = meant.or(now);
+            }
+            Some((PulseVerdict::Hung, _)) => pulse.at_start = Watch::Hung,
+            // Stopped while asking: the first look says why, before this does.
+            Some((PulseVerdict::Unsupported, _)) | None => {}
         }
         pulse
     }
@@ -77,40 +94,54 @@ impl Pulse {
     }
 
     /// Counts one event, and asks the application when enough have gone by.
-    /// `Hung` is the only answer that stops the send.
-    pub(crate) fn tick(&mut self) -> PulseVerdict {
-        if self.hung_at_start {
-            return PulseVerdict::Hung;
+    /// `Steady` goes on, and so does a question cut short by `stop`: the caller
+    /// looks at what stopped it.
+    pub(crate) fn tick(&mut self, stop: &mut dyn FnMut() -> bool) -> Watch {
+        if self.at_start != Watch::Steady {
+            return self.at_start;
         }
         if !self.active {
-            return PulseVerdict::Answered;
+            return Watch::Steady;
         }
         self.since += 1;
         if self.since < PULSE_EVERY * 2 {
-            return PulseVerdict::Answered;
+            return Watch::Steady;
         }
         self.since = 0;
-        match self.ask() {
-            PulseVerdict::Unsupported => {
+        match self.ask(stop) {
+            Some((PulseVerdict::Answered, now)) if !window_still(self.window, now) => Watch::Moved,
+            Some((PulseVerdict::Hung, _)) => Watch::Hung,
+            Some((PulseVerdict::Unsupported, _)) => {
                 // It answered before and refuses now: stop asking, keep going.
                 self.active = false;
-                PulseVerdict::Answered
+                Watch::Steady
             }
-            verdict => verdict,
+            Some((PulseVerdict::Answered, _)) | None => Watch::Steady,
         }
     }
 
-    /// One round trip, timed against the limit.
-    fn ask(&self) -> PulseVerdict {
-        let (Some(app), Some(role)) = (&self.app, &self.role) else {
-            return PulseVerdict::Unsupported;
+    /// Round trips until one says something: the answer and the token of the
+    /// window in front, or `None` when `stop` asked the send to stop between two.
+    fn ask(&self, stop: &mut dyn FnMut() -> bool) -> Option<(PulseVerdict, Option<u32>)> {
+        let Some(app) = &self.app else {
+            return Some((PulseVerdict::Unsupported, None));
         };
-        let start = std::time::Instant::now();
-        let mut value: CfRef = core::ptr::null();
-        let error = unsafe { ffi::AXUIElementCopyAttributeValue(app.0, role.0, &mut value) };
-        // The answer is a role name and is not looked at: only that it came.
-        drop(Owned::new(value));
-        let waited: Duration = start.elapsed();
-        pulse_verdict(error, waited, TARGET_WAIT)
+        let first = std::time::Instant::now();
+        loop {
+            let asked = std::time::Instant::now();
+            let answer = ax::focused_window(app.0);
+            let one = pulse_verdict(
+                answer.as_ref().err().copied().unwrap_or(0),
+                asked.elapsed(),
+                PULSE_LOOK,
+            );
+            if let Some(verdict) = pulse_after(one, first.elapsed(), TARGET_WAIT) {
+                // The reference is released here: only its token is kept.
+                return Some((verdict, answer.ok().map(|window| ax::token(&window))));
+            }
+            if stop() {
+                return None;
+            }
+        }
     }
 }

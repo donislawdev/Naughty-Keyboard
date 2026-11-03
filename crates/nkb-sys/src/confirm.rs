@@ -71,8 +71,10 @@ pub(crate) struct Step<E> {
 }
 
 /// The modifiers down right now, by the person or any other program: the
-/// system does not say whose (`D149`).
+/// system does not say whose (`D149`). The keys of Windows: macOS has its own
+/// (`macos_rules::hand`).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) struct Held {
     pub ctrl: bool,
     pub alt: bool,
@@ -93,11 +95,13 @@ pub(crate) enum Hand {
     /// Pressed, so the send stops: under `Alt` a character is a menu mnemonic,
     /// and `Alt` let go with nothing between opens the menu bar, so a send that
     /// waited for it and went on would type into the menu.
+    #[cfg_attr(not(windows), allow(dead_code))]
     StopAt(&'static str),
 }
 
 /// What `held` means for an event whose `shift_counts` is given, as in [`Step`].
 /// `Alt` first: another key held with it never turns the stop into a wait.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub(crate) const fn hand(held: Held, shift_counts: bool) -> Hand {
     if held.alt {
         Hand::StopAt("Alt")
@@ -142,9 +146,11 @@ pub(crate) trait Wire<E> {
     fn target_down(&mut self, key: u16) -> bool;
     /// What the window in front looks like, and whether `Escape` was pressed.
     fn watch(&mut self) -> Watch;
-    /// Which modifiers are down right now, in the state the next event would
-    /// meet (`D149`).
-    fn held(&mut self) -> Held;
+    /// What the modifiers down right now mean for the next event, in the state
+    /// that event would meet (`D149`): [`hand`] of the keys the system shows on
+    /// Windows, a rule of its own on macOS, where the names and the meanings of
+    /// the modifiers are other ones (`macos_rules::hand`).
+    fn hand(&mut self, shift_counts: bool) -> Hand;
     /// Lets time pass between two looks. A test does nothing here.
     fn pause(&mut self, how_long: Duration);
 }
@@ -267,7 +273,7 @@ fn hands_off<E>(
 ) -> Result<(), StopReason> {
     let start = std::time::Instant::now();
     loop {
-        match hand(wire.held(), shift_counts) {
+        match wire.hand(shift_counts) {
             Hand::Free => return Ok(()),
             Hand::StopAt(key) => return Err(StopReason::KeyPressed { key }),
             Hand::WaitFor(key) => {
@@ -479,7 +485,7 @@ mod tests {
                 _ => Watch::Steady,
             }
         }
-        fn held(&mut self) -> Held {
+        fn hand(&mut self, shift_counts: bool) -> Hand {
             let look = self.held_looks;
             self.held_looks += 1;
             // `pause` sleeps for no one here, so a wait without an end spins on
@@ -490,10 +496,11 @@ mod tests {
                 look < ENDLESS_LOOKS,
                 "the modifiers were looked at {look} times, so the wait has no end"
             );
-            match &self.held_while {
+            let held = match &self.held_while {
                 Some((looks, held)) if looks.contains(&look) => *held,
                 _ => Held::default(),
-            }
+            };
+            hand(held, shift_counts)
         }
         fn pause(&mut self, _how_long: Duration) {}
     }
@@ -901,8 +908,8 @@ mod tests {
                     Watch::Steady
                 }
             }
-            fn held(&mut self) -> Held {
-                Held::default()
+            fn hand(&mut self, _shift_counts: bool) -> Hand {
+                Hand::Free
             }
             fn pause(&mut self, _how_long: Duration) {
                 self.pauses += 1;
@@ -986,8 +993,8 @@ mod tests {
             fn watch(&mut self) -> Watch {
                 Watch::Steady
             }
-            fn held(&mut self) -> Held {
-                Held::default()
+            fn hand(&mut self, _shift_counts: bool) -> Hand {
+                Hand::Free
             }
             fn pause(&mut self, how_long: Duration) {
                 std::thread::sleep(how_long);
@@ -1068,8 +1075,8 @@ mod tests {
             fn watch(&mut self) -> Watch {
                 Watch::Steady
             }
-            fn held(&mut self) -> Held {
-                Held::default()
+            fn hand(&mut self, _shift_counts: bool) -> Hand {
+                Hand::Free
             }
             fn pause(&mut self, _how_long: Duration) {}
         }

@@ -12646,6 +12646,105 @@
       "replace": "    (!parts.is_empty()).then(|| parts[0].clone())",
       "test": "report_text::tests::a_value_the_palette_warned_about_gets_the_same_warning_in_the_same_place",
       "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1623",
+      "why": "the send's own Command, inside a chord, holds the chord back until the wait runs out, and the clearing keys never finish on macOS",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "    let person = held & !ours;",
+      "replace": "    let person = held;",
+      "test": "macos_rules::tests::the_modifiers_of_the_send_itself_do_not_hold_it_back",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1624",
+      "why": "the person's Shift holds back every character on macOS as well, although only a chord's arrow is changed by it",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "    } else if shift_counts && person & flag::SHIFT != 0 {",
+      "replace": "    } else if person & flag::SHIFT != 0 {",
+      "test": "macos_rules::tests::shift_holds_back_only_the_event_it_would_change",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1625",
+      "why": "a person's Shift is never waited for before a chord on macOS, and Command and an arrow select instead of moving the caret",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "        first.shift_counts = true;",
+      "replace": "        first.shift_counts = false;",
+      "test": "macos_rules::tests::only_the_first_event_of_a_chord_waits_for_the_person_s_shift",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1626",
+      "why": "an application with no window in front is taken for one that cannot be asked, and its send goes unpaced",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "    if error == 0 || error == AX_NO_VALUE {",
+      "replace": "    if error == 0 {",
+      "test": "macos_rules::tests::an_answer_is_answered_a_silence_is_hung_and_a_refusal_is_unsupported",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1627",
+      "why": "a pulse that ran out asks once more after the whole limit went by, and a stopped application holds the send longer than the system's own word for not responding",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "        PulseVerdict::Hung if waited < limit => None,",
+      "replace": "        PulseVerdict::Hung if waited <= limit => None,",
+      "test": "macos_rules::tests::a_question_that_ran_out_is_asked_again_until_the_whole_limit_went_by",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1628",
+      "why": "each question of the pulse waits five seconds again, and Escape is not heard while an application is behind",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "pub(crate) const PULSE_LOOK: Duration = Duration::from_millis(100);",
+      "replace": "pub(crate) const PULSE_LOOK: Duration = Duration::from_millis(5000);",
+      "test": "macos_rules::tests::a_stop_is_heard_between_two_questions_well_inside_the_limit",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1629",
+      "why": "a target that did not tell its window reads as window zero, and a send whose window was never known is stopped as moved",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "        0 => None,\n        window => Some(window),",
+      "replace": "        0 => Some(0),\n        window => Some(window),",
+      "test": "macos_rules::tests::a_target_holds_the_application_and_the_window_apart",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1630",
+      "why": "a window whose hash folds to zero reads as not told, and a switch away from it goes unseen",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "        // Zero is \"not told\".\n        0 => 1,",
+      "replace": "        // Zero is \"not told\".\n        0 => 0,",
+      "test": "macos_rules::tests::a_window_token_is_never_the_zero_that_means_not_told",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1631",
+      "why": "only the low half of the hash tells two windows apart, and windows that differ in the high half are one target",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "    match ((hash >> 32) ^ hash) as u32 {",
+      "replace": "    match hash as u32 {",
+      "test": "macos_rules::tests::a_window_token_is_never_the_zero_that_means_not_told",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1632",
+      "why": "the window the send was meant for closes or leaves the front and the rest of the value goes to whatever the application puts there",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "        (Some(_), None) => false,",
+      "replace": "        (Some(_), None) => true,",
+      "test": "macos_rules::tests::only_a_window_told_and_then_another_or_none_is_another_target",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1633",
+      "why": "another window of the same program in front stops nothing, the macOS target is the program again",
+      "file": "crates/nkb-sys/src/macos_rules.rs",
+      "find": "        (Some(meant), Some(now)) => meant == now,",
+      "replace": "        (Some(_), Some(_)) => true,",
+      "test": "macos_rules::tests::only_a_window_told_and_then_another_or_none_is_another_target",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }

@@ -368,7 +368,10 @@ pub const UNNAMED_WINDOW: WindowRef = WindowRef(u64::MAX);
 /// and the clearing keys keep "never beyond the field" only in the field that was
 /// confirmed (untouchable rule 17). Nothing in front is not `target` either. Two
 /// unnamed windows are equal (a Wayland session, where the route types into
-/// whatever has the focus and has no other answer to give).
+/// whatever has the focus and has no other answer to give). macOS compares the
+/// application here and its window with the round trip that paces the send
+/// (`macos/send.rs`, R02).
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub(crate) fn still_in_front(target: WindowRef, front: Option<WindowRef>) -> bool {
     front == Some(target)
 }
@@ -379,8 +382,8 @@ mod windows_impl {
 
     use super::cadence::{Cadence, PROGRESS_INTERVAL};
     use super::confirm::{
-        Held, Pressed, Step, TAKEN_WAIT, TARGET_WAIT, Waits, Watch, chord_steps, chords_acted,
-        press_confirmed, units_arrived,
+        Hand, Held, Pressed, Step, TAKEN_WAIT, TARGET_WAIT, Waits, Watch, chord_steps,
+        chords_acted, hand, press_confirmed, units_arrived,
     };
     use super::escape::{ReservedEscape, SystemEscape};
     use super::{Chord, MODIFIER_RELEASE_WAIT, NavKey};
@@ -570,15 +573,16 @@ mod windows_impl {
             let state = unsafe { GetKeyState(i32::from(key)) };
             (state as u16) & 0x8000 != 0
         }
-        fn held(&mut self) -> Held {
+        fn hand(&mut self, shift_counts: bool) -> Hand {
             // The system's state, the one the next event meets: a key down when
             // `SendInput` takes our event is down for that event (`OBS-233`).
-            Held {
+            let held = Held {
                 ctrl: is_down(VK_CONTROL),
                 alt: is_down(VK_MENU),
                 shift: is_down(VK_SHIFT),
                 win: is_down(VK_LWIN) || is_down(VK_RWIN),
-            }
+            };
+            hand(held, shift_counts)
         }
         fn watch(&mut self) -> Watch {
             // First: a person who pressed Escape asked for exactly this stop,
@@ -878,6 +882,21 @@ use other_impl as platform;
 /// The window in front right now, if there is one.
 pub fn foreground_window() -> Option<WindowRef> {
     platform::foreground_window()
+}
+
+/// The window a send would go to right now, as [`send_text`] and
+/// [`send_chords`] compare it with the one in front once they begin (`D148`).
+/// The window in front everywhere but on macOS, where [`foreground_window`] is
+/// the application and this adds its window in front (R02).
+pub fn send_target() -> Option<WindowRef> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::send_target()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        foreground_window()
+    }
 }
 
 /// Send `text` to the field that holds the keyboard focus in `target`.

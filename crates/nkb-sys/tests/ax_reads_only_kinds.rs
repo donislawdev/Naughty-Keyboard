@@ -36,8 +36,10 @@ const ATTRIBUTES: &[&str] = &[
     // The element that holds the keyboard focus: a reference, never read further
     // than the three facts below.
     "AXFocusedUIElement",
-    // Whether the application has a window in front at all: a reference whose
-    // only use is that it exists (the application shows its focus to nobody).
+    // The window in front of the application: a reference whose only uses are
+    // that it exists (the application shows its focus to nobody) and the hash of
+    // the reference, made in this process, which tells it from another window of
+    // the application (R02). It is also the question that paces a send.
     "AXFocusedWindow",
     // The type name of the focused element (`AXTextField`), compared with a closed
     // list in `macos_rules.rs` and dropped.
@@ -49,8 +51,9 @@ const ATTRIBUTES: &[&str] = &[
 ];
 
 /// The calls that copy something out of an element, and how many times each may
-/// appear in the code of `macos/`: the focus, its role, and the window.
-const COPY_CALLS: &[(&str, usize)] = &[("ffi::AXUIElementCopyAttributeValue(", 4)];
+/// appear in the code of `macos/`: the focus, its role, and the window - which
+/// the pulse asks for through the same function (`ax::focused_window`).
+const COPY_CALLS: &[(&str, usize)] = &[("ffi::AXUIElementCopyAttributeValue(", 3)];
 
 /// The code of one file with test modules and `//` comments taken out.
 fn code_of(source: &str) -> String {
@@ -139,8 +142,7 @@ fn the_scanner_sees_what_it_is_meant_to_forbid() {
                  let r = ffi::cf_string(c\"AXSelectedTextRange\");\n\
                  unsafe { ffi::AXUIElementCopyAttributeValue(app, a.0, &mut f) };\n\
                  unsafe { ffi::AXUIElementCopyAttributeValue(app, b.0, &mut f) };\n\
-                 unsafe { ffi::AXUIElementCopyAttributeValue(focus.0, role_name.0, &mut r) };\n\
-                 unsafe { ffi::AXUIElementCopyAttributeValue(app, role.0, &mut value) };\n";
+                 unsafe { ffi::AXUIElementCopyAttributeValue(focus.0, role_name.0, &mut r) };\n";
     assert!(findings(clean).is_empty(), "{:?}", findings(clean));
 
     let names_it = |code: &str, culprit: &str| {
@@ -162,7 +164,7 @@ fn the_scanner_sees_what_it_is_meant_to_forbid() {
         ),
         "outside the settable question",
     );
-    // A fifth copy out of an element.
+    // A fourth copy out of an element.
     names_it(
         &format!("{clean}unsafe {{ ffi::AXUIElementCopyAttributeValue(focus.0, x.0, &mut v) }};\n"),
         "ffi::AXUIElementCopyAttributeValue(",

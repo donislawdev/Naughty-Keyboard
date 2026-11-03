@@ -17,8 +17,11 @@
 //!
 //! And one more fact, asked only when the application shows no focused element
 //! at all: whether it has a window in front ([`has_window`]). The window is a
-//! reference whose only use is that it exists. `tests/ax_reads_only_kinds.rs`
-//! holds the list of attribute names, and goes red when one is added.
+//! reference whose only uses are that it exists and its hash, which tells it from
+//! another window of the application ([`window_token`], R02) - the hash of the
+//! reference, made on this side, with nothing of the window read.
+//! `tests/ax_reads_only_kinds.rs` holds the list of attribute names, and goes red
+//! when one is added.
 //!
 //! # Measured 2026-10-19 (macOS 27.0, a Slint window, `plain` field)
 //!
@@ -58,10 +61,9 @@ use std::time::Instant;
 use super::ffi::{self, CfRef, Owned};
 use crate::WindowRef;
 use crate::field::{FocusedInput, LOOK_STEP_MS, SECOND_LOOK_MS, TIMEOUT_MS};
-use crate::macos_rules::{TERMINAL_PROGRAMS, classify, silent_answer};
-
-/// `kAXErrorNoValue`: the element has no focused child yet.
-const NO_VALUE: i32 = -25212;
+use crate::macos_rules::{
+    AX_NO_VALUE as NO_VALUE, PULSE_LOOK, TERMINAL_PROGRAMS, classify, pid_of, silent_answer,
+};
 
 /// What the system said about the focused element, once: the properties and
 /// nothing they point at.
@@ -119,15 +121,38 @@ fn read(app: CfRef, pid: i32) -> Result<Reading, i32> {
     })
 }
 
+/// The window in front of `app`: a reference, nothing read from it - or the
+/// error code that says why not.
+pub(super) fn focused_window(app: CfRef) -> Result<Owned, i32> {
+    let name = ffi::cf_string(c"AXFocusedWindow").ok_or(-1)?;
+    let mut window: CfRef = core::ptr::null();
+    let error = unsafe { ffi::AXUIElementCopyAttributeValue(app, name.0, &mut window) };
+    Owned::new(window).ok_or(if error == 0 { -1 } else { error })
+}
+
 /// Whether `app` has a window in front - a reference that exists, nothing read
 /// from it. The question behind [`FocusedInput::ClosedToAccessibility`].
 fn has_window(app: CfRef) -> bool {
-    let Some(name) = ffi::cf_string(c"AXFocusedWindow") else {
-        return false;
-    };
-    let mut window: CfRef = core::ptr::null();
-    let error = unsafe { ffi::AXUIElementCopyAttributeValue(app, name.0, &mut window) };
-    error == 0 && Owned::new(window).is_some()
+    focused_window(app).is_ok()
+}
+
+/// The token of `window`, which tells it from another window of the same
+/// application (R02): the hash of the reference, made in this process.
+pub(super) fn token(window: &Owned) -> u32 {
+    crate::macos_rules::window_token(unsafe { ffi::CFHash(window.0) })
+}
+
+/// The token of the window in front of the application `pid`, asked once, with
+/// at most [`PULSE_LOOK`] for the answer: when the send's target is taken, the
+/// application is not yet behind on anything of ours. `None` when it does not
+/// say, which leaves the application alone to compare.
+pub(crate) fn window_token(pid: i32) -> Option<u32> {
+    if pid <= 0 {
+        return None;
+    }
+    let app = Owned::new(unsafe { ffi::AXUIElementCreateApplication(pid) }.cast_const())?;
+    unsafe { ffi::AXUIElementSetMessagingTimeout(app.0, PULSE_LOOK.as_secs_f32()) };
+    focused_window(app.0).ok().map(|window| token(&window))
 }
 
 /// What holds the keyboard focus in the application behind `window`, asked fresh.
@@ -135,7 +160,7 @@ pub(crate) fn focused_input(window: WindowRef) -> FocusedInput {
     // A pid of zero or below is no process, and the accessibility call does not
     // answer it with an error: it kills the program with a trap (found by the
     // test that asks about a window that does not exist, 2026-10-19).
-    let Some(pid) = i32::try_from(window.0).ok().filter(|pid| *pid > 0) else {
+    let Some(pid) = i32::try_from(pid_of(window.0)).ok().filter(|pid| *pid > 0) else {
         return FocusedInput::Unknown;
     };
     let Some(app) = Owned::new(unsafe { ffi::AXUIElementCreateApplication(pid) }.cast_const())

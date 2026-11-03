@@ -23,15 +23,15 @@ use super::pulse::Pulse;
 use super::trust;
 use crate::cadence::{Cadence, PROGRESS_INTERVAL};
 use crate::confirm::press_confirmed;
-use crate::confirm::{Held, Step, TAKEN_WAIT, Waits, Watch, Wire};
+use crate::confirm::{Hand, Step, TAKEN_WAIT, Waits, Watch, Wire};
 use crate::escape::{ReservedEscape, SystemEscape};
 use crate::macos_rules::{
-    MacEvent, PulseVerdict, TEXT_KEY, chord_acted, chord_steps, held_modifier, scalars, text_steps,
-    units_after,
+    MacEvent, TEXT_KEY, chord_acted, chord_steps, hand, held_modifier, pid_of, scalars, text_steps,
+    units_after, window_of,
 };
 use crate::{
     Chord, Following, MODIFIER_RELEASE_WAIT, SendError, SendOutcome, SendProgress, StopReason,
-    WindowRef, still_in_front,
+    WindowRef,
 };
 
 /// Whether this program is allowed to send keystrokes right now. Asked on every
@@ -83,9 +83,23 @@ struct SystemWire<'a> {
     pulse: Pulse,
     /// The caller's flag to stop the send (R03).
     halt: &'a AtomicBool,
+    /// The modifiers the events of this send hold down: the flags of the last
+    /// one posted. The system's state shows them as it shows the person's.
+    ours: u64,
 }
 
 impl SystemWire<'_> {
+    /// `Escape` pressed or the caller's stop, if the send is being stopped.
+    fn stopping(&mut self) -> Option<Watch> {
+        if self.escape.pressed() {
+            Some(Watch::Escape)
+        } else if self.halt.load(Ordering::Relaxed) {
+            Some(Watch::Halted)
+        } else {
+            None
+        }
+    }
+
     /// One event to the system, which does not say whether it took it.
     fn post(&self, event: MacEvent) -> bool {
         let made = unsafe {
@@ -109,7 +123,11 @@ impl SystemWire<'_> {
 
 impl Wire<MacEvent> for SystemWire<'_> {
     fn send(&mut self, event: MacEvent) -> bool {
-        self.post(event)
+        let posted = self.post(event);
+        if posted {
+            self.ours = event.flags;
+        }
+        posted
     }
     fn system_down(&mut self, key: u16) -> bool {
         unsafe { ffi::CGEventSourceKeyState(ffi::STATE_HID, key) }
@@ -121,25 +139,23 @@ impl Wire<MacEvent> for SystemWire<'_> {
     }
     fn watch(&mut self) -> Watch {
         // First: a person who pressed Escape asked for exactly this stop.
-        if self.escape.pressed() {
-            Watch::Escape
-        } else if self.halt.load(Ordering::Relaxed) {
-            Watch::Halted
-        } else if front_pid() != Some(self.front) {
-            Watch::Moved
-        } else if self.pulse.tick() == PulseVerdict::Hung {
-            Watch::Hung
-        } else {
-            Watch::Steady
+        if let Some(stop) = self.stopping() {
+            return stop;
         }
+        if front_pid() != Some(self.front) {
+            return Watch::Moved;
+        }
+        let (escape, halt) = (&mut self.escape, self.halt);
+        let pulse = self
+            .pulse
+            .tick(&mut || escape.pressed() || halt.load(Ordering::Relaxed));
+        // Asked again: the question can wait for seconds, and the stop asked
+        // for meanwhile comes before what the application said.
+        self.stopping().unwrap_or(pulse)
     }
-    fn held(&mut self) -> Held {
-        // Nothing the person holds is part of an event of this send: each comes
-        // from a private source with its flags set in full (`post`). Whether a
-        // held modifier still changes what an application does with such an
-        // event is measured on Windows only (`OBS-233`), so nothing is waited for
-        // here (`D149`).
-        Held::default()
+    fn hand(&mut self, shift_counts: bool) -> Hand {
+        let held = unsafe { ffi::CGEventSourceFlagsState(ffi::STATE_HID) };
+        hand(held, self.ours, shift_counts)
     }
     fn pause(&mut self, how_long: Duration) {
         std::thread::sleep(how_long);
@@ -154,26 +170,31 @@ struct Session<'a> {
 
 impl<'a> Session<'a> {
     /// The session around the application `target` names, or nothing when
-    /// another application - or none - is in front by now (`D148`). The
-    /// application, not the window: two windows of one program are one target
-    /// here.
+    /// another application - or none - is in front by now (`D148`). Its window,
+    /// when the target told it, is the pulse's to compare, with the same round
+    /// trip that paces the send (R02): another window of the program in front by
+    /// now stops the send at its first look, before any key.
     fn begin(target: WindowRef, halt: &'a AtomicBool) -> Option<Self> {
         let front = front_pid()?;
-        let named = u64::try_from(front).ok().map(WindowRef);
-        if !still_in_front(target, named) {
+        if front.unsigned_abs() != pid_of(target.0) {
             return None;
         }
         let source =
             Owned::new(unsafe { ffi::CGEventSourceCreate(ffi::STATE_PRIVATE) }.cast_const())?;
+        // Reserved on THIS thread, which is the one that asks it between events
+        // (`D96`), and before the first question, which it may cut short.
+        let mut escape = SystemEscape::reserve();
+        let pulse = Pulse::start(front, window_of(target.0), &mut || {
+            escape.pressed() || halt.load(Ordering::Relaxed)
+        });
         Some(Self {
             wire: SystemWire {
                 source,
                 front,
-                // Reserved on THIS thread, which is the one that asks it between
-                // events (`D96`).
-                escape: SystemEscape::reserve(),
-                pulse: Pulse::start(front),
+                escape,
+                pulse,
                 halt,
+                ours: 0,
             },
         })
     }

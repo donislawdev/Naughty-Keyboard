@@ -24,8 +24,7 @@ Changes wait under Unreleased until then.
   countdown of `nkb send`. The window is read once, when the send begins, and the clearing keys and
   the value go to it or nowhere. Before, a send waiting for a held modifier key took whatever window
   was in front once the key came up. Now it stops before its first key and says that another window
-  came to the front. Windows and X11 compare the window, macOS the program, and Wayland, which does
-  not name the window, is unchanged.
+  came to the front. On Wayland, which does not name the window, nothing changes.
 - On Windows a modifier key pressed while a value is being typed no longer changes what the value
   does. Under Alt the characters became menu commands of the application under test, under Ctrl a
   browser dropped them while the send said they were typed, and Ctrl during the clearing keys
@@ -106,6 +105,17 @@ Changes wait under Unreleased until then.
   desktop, or when the text substitutions of macOS may have changed it, the block has a `Delivery:`
   line that says so. Before, it described such a value as typed whole, so a ticket said less than
   the palette did.
+- On macOS a value no longer goes on into another window of the same program. A click on a second
+  TextEdit document in the middle of a long value, or between clearing the field and typing, now
+  stops the send and says that another window came to the front. Up to 64 characters can still
+  reach the new window before the send notices.
+- On macOS a modifier key pressed while a value is being typed no longer changes what the value
+  does. Under Command a character became a shortcut of the application under test. The send now
+  waits for Command, Control or Option to come up, for up to two seconds, and for Shift before a
+  clearing key.
+- On macOS Escape and closing the palette stop a send within a tenth of a second also while the
+  application under test is behind. Before, they waited up to five seconds for it to answer. The
+  palette also no longer risks crashing when Escape is pressed just as a value finishes.
 
 ## [0.3.0] - 2026-10-25
 

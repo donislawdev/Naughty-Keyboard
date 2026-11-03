@@ -16,12 +16,13 @@
 //! deprecated. If it ever stops answering, `None` says so and the send stops
 //! rather than carrying on blind - the same as a window that cannot be read.
 //!
-//! The pid is the whole of what is known about the target here: a name for the
-//! window and the program it belongs to are asked for separately, and the
-//! program's name is cut down to its file (`program.rs`).
+//! The pid is what is known about the application in front. A send's target
+//! adds a token for its window in front ([`send_target`], R02), and the program's
+//! name is asked for separately and cut down to its file (`program.rs`).
 
-use super::ffi;
+use super::{ax, ffi};
 use crate::WindowRef;
+use crate::macos_rules::{pid_of, target};
 
 /// The pid of the process in front, if the system says.
 pub(crate) fn front_pid() -> Option<i32> {
@@ -43,12 +44,24 @@ pub(crate) fn foreground_window() -> Option<WindowRef> {
         .map(WindowRef)
 }
 
+/// The application in front and its window in front, as a send compares them:
+/// two windows of one program are two targets (R02). The window is told by a
+/// token of the reference the system hands out for it (`ax::window_token`), and
+/// not told when the application does not answer at once.
+pub(crate) fn send_target() -> Option<WindowRef> {
+    let pid = front_pid()?;
+    let window = ax::window_token(pid);
+    Some(WindowRef(target(pid.unsigned_abs(), window)))
+}
+
 /// The path of the executable behind the application in front, as UTF-16 units
 /// for `program.rs`, which cuts it down to a file name and drops the rest.
 pub(crate) fn image_path(window: WindowRef) -> Option<Vec<u16>> {
     const MAX: usize = 4096;
     // Process zero is the kernel, which has a path of its own and no window.
-    let pid = i32::try_from(window.0).ok().filter(|pid| *pid > 0)?;
+    let pid = i32::try_from(pid_of(window.0))
+        .ok()
+        .filter(|pid| *pid > 0)?;
     let mut buffer = vec![0u8; MAX];
     let length = unsafe { ffi::proc_pidpath(pid, buffer.as_mut_ptr().cast(), MAX as u32) };
     let length = usize::try_from(length).ok().filter(|length| *length > 0)?;
