@@ -102,6 +102,10 @@ pub const BUILT_IN_PACKS: &[(&str, &str)] = &[
         "pseudolocalization",
         include_str!("../../../packs/pseudolocalization.toml"),
     ),
+    (
+        "json-payloads",
+        include_str!("../../../packs/json-payloads.toml"),
+    ),
 ];
 
 #[cfg(test)]

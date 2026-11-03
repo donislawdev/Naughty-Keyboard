@@ -1,6 +1,6 @@
 {
-  "pack_count": 18,
-  "value_count": 207,
+  "pack_count": 19,
+  "value_count": 235,
   "packs": [
     {
       "id": "whitespace",
@@ -3133,9 +3133,9 @@
     {
       "id": "filenames-paths",
       "name": "File names and paths",
-      "description": "Names a file system rejects, alters, or reads differently than the user meant.",
-      "version": "1.0",
-      "updated": "2026-09-24",
+      "description": "Names that a file system, an archive or a server rejects, alters, or reads differently than the user meant.",
+      "version": "1.1",
+      "updated": "2026-11-03",
       "license": "CC-BY-4.0",
       "language": "en",
       "fields": [
@@ -3146,9 +3146,10 @@
       "tags": [
         "filesystem",
         "reserved",
-        "portability"
+        "portability",
+        "upload"
       ],
-      "value_count": 12,
+      "value_count": 28,
       "values": [
         {
           "id": "reserved-con",
@@ -3542,6 +3543,518 @@
             "code_points": 13,
             "bytes": 13,
             "utf16_units": 13
+          }
+        },
+        {
+          "id": "leading-dash",
+          "ref": "filenames-paths/leading-dash",
+          "name": "Name starting with a dash",
+          "escaped": "-rf",
+          "breaks": "A name that starts with a dash is read as an option when a script passes it to a command without -- in front of it.",
+          "expect": "Stored as a name, and every command that receives it gets -- before it.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "-rf",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 3,
+            "code_points": 3,
+            "bytes": 3,
+            "utf16_units": 3
+          }
+        },
+        {
+          "id": "url-specials",
+          "ref": "filenames-paths/url-specials",
+          "name": "Percent, plus and hash",
+          "escaped": "100% a+b #1.txt",
+          "breaks": "A percent sign, a plus and a hash each mean something else in a URL, so a download link built without encoding points at another file or stops at the hash.",
+          "expect": "Download links encode the name, and the file downloads under the name it was given.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "100%\u2423a+b\u2423#1.txt",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 15,
+            "code_points": 15,
+            "bytes": 15,
+            "utf16_units": 15
+          }
+        },
+        {
+          "id": "leading-double-dot",
+          "ref": "filenames-paths/leading-double-dot",
+          "name": "Name starting with two dots",
+          "escaped": "..report.txt",
+          "breaks": "A traversal filter that looks for two dots refuses a name that climbs nowhere, and a filter that strips dots stores another name.",
+          "expect": "Accepted unchanged, or rejected with a message; never stored under a different name.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "..report.txt",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 12,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "extension-only",
+          "ref": "filenames-paths/extension-only",
+          "name": "Only an extension",
+          "escaped": ".txt",
+          "breaks": "With nothing before the dot, code that splits off the extension is left with an empty name, and Linux and macOS hide the file.",
+          "expect": "Rejected with a message, or accepted and listed with its full name.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": ".txt",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "many-dots",
+          "ref": "filenames-paths/many-dots",
+          "name": "Several dots",
+          "escaped": "v1.2.3.final.pdf",
+          "breaks": "Only the part after the last dot is the extension; code that splits at the first dot reads the type as 2.3.final.pdf.",
+          "expect": "Accepted, with the type taken from the last extension.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "v1.2.3.final.pdf",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 16,
+            "code_points": 16,
+            "bytes": 16,
+            "utf16_units": 16
+          }
+        },
+        {
+          "id": "no-extension",
+          "ref": "filenames-paths/no-extension",
+          "name": "No extension",
+          "escaped": "README",
+          "breaks": "A system that requires an extension, or guesses the type from it, has nothing to go on and may refuse a common file.",
+          "expect": "Accepted, or rejected with a message that names the missing extension.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "README",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 6,
+            "code_points": 6,
+            "bytes": 6,
+            "utf16_units": 6
+          }
+        },
+        {
+          "id": "upper-extension",
+          "ref": "filenames-paths/upper-extension",
+          "name": "Extension in capitals",
+          "escaped": "REPORT.PDF",
+          "breaks": "An extension check that compares with case refuses a file it accepts as report.pdf.",
+          "expect": "Accepted, like the same name in lower case.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "REPORT.PDF",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "office-lock-name",
+          "ref": "filenames-paths/office-lock-name",
+          "name": "Office lock file name",
+          "escaped": "~$report.docx",
+          "breaks": "Microsoft Office names its lock files this way, so sync tools, backups and upload filters may skip the file without saying so.",
+          "expect": "Stored and listed like any other name, or rejected with a message.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "~$report.docx",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 13,
+            "code_points": 13,
+            "bytes": 13,
+            "utf16_units": 13
+          }
+        },
+        {
+          "id": "htaccess",
+          "ref": "filenames-paths/htaccess",
+          "name": "Apache configuration file name",
+          "escaped": ".htaccess",
+          "breaks": "On an Apache server that serves the upload folder, a file with this name changes how the server behaves, whatever it holds.",
+          "expect": "Rejected or renamed before it is stored in a folder the server serves.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": ".htaccess",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 9,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "web-config",
+          "ref": "filenames-paths/web-config",
+          "name": "IIS configuration file name",
+          "escaped": "web.config",
+          "breaks": "On an IIS server that serves the upload folder, a file with this name changes how the server behaves, whatever it holds.",
+          "expect": "Rejected or renamed before it is stored in a folder the server serves.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "web.config",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "dotenv",
+          "ref": "filenames-paths/dotenv",
+          "name": "Environment file name",
+          "escaped": ".env",
+          "breaks": "Applications read their settings and secrets from a file with this name, so an upload that lands in the wrong folder becomes configuration.",
+          "expect": "Rejected or renamed, and never stored where an application reads its settings.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": ".env",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "desktop-ini",
+          "ref": "filenames-paths/desktop-ini",
+          "name": "Windows folder settings file name",
+          "escaped": "desktop.ini",
+          "breaks": "Windows Explorer reads a file with this name to decide how a folder looks, so an upload to a shared folder changes it for everyone.",
+          "expect": "Rejected or renamed in folders that people open in Explorer.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "desktop.ini",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 11,
+            "code_points": 11,
+            "bytes": 11,
+            "utf16_units": 11
+          }
+        },
+        {
+          "id": "nfd-name",
+          "ref": "filenames-paths/nfd-name",
+          "name": "Accent as a separate character",
+          "escaped": "cafe\u0301.txt",
+          "breaks": "The accent follows the e as its own character, as macOS hands names over; a system that compares bytes sees a different file from the usual spelling.",
+          "expect": "Found, matched and listed as the same name as its composed spelling.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "cafe\u0301.txt",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 8,
+            "code_points": 9,
+            "bytes": 10,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "fullwidth-extension",
+          "ref": "filenames-paths/fullwidth-extension",
+          "name": "Extension in full-width letters",
+          "escaped": "report.\uff54\uff58\uff54",
+          "breaks": "The extension looks like txt and is not; a type check before normalisation sees one extension and storage after it another.",
+          "expect": "Rejected, or the name normalised before the type is checked.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "report.\uff54\uff58\uff54",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 16,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "encoded-control-name",
+          "ref": "filenames-paths/encoded-control-name",
+          "name": "Percent-encoded NUL and line break",
+          "escaped": "report%00%0D%0A.txt",
+          "breaks": "Decoded once too often, %00 cuts the name short and %0D%0A starts a header or a log line that nobody wrote.",
+          "expect": "Stored as typed, and decoded at most once on the way in.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "report%00%0D%0A.txt",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 19,
+            "code_points": 19,
+            "bytes": 19,
+            "utf16_units": 19
+          }
+        },
+        {
+          "id": "tar-name-101",
+          "ref": "filenames-paths/tar-name-101",
+          "name": "101 bytes, one past the tar name field",
+          "escaped": "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu.txt",
+          "breaks": "The name field of a ustar tar archive holds 100 bytes, so packing the file into tar cuts the name or moves it to an extra header.",
+          "expect": "Archived and restored with the whole name.",
+          "fields": [
+            "filename",
+            "path",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.1",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "uuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuuu.txt",
+            "elided_total": 101
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 101,
+            "code_points": 101,
+            "bytes": 101,
+            "utf16_units": 101
           }
         }
       ],
@@ -7271,6 +7784,407 @@
             "code_points": 30,
             "bytes": 50,
             "utf16_units": 30
+          }
+        }
+      ],
+      "pair_count": 0,
+      "pairs": []
+    },
+    {
+      "id": "json-payloads",
+      "name": "JSON request bodies",
+      "description": "JSON request bodies that parsers and databases read differently. Rename the example fields to those of your API.",
+      "version": "1.0",
+      "updated": "2026-11-03",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "multiline",
+        "text"
+      ],
+      "tags": [
+        "api",
+        "json",
+        "request-body",
+        "parser"
+      ],
+      "value_count": 12,
+      "values": [
+        {
+          "id": "empty-body",
+          "ref": "json-payloads/empty-body",
+          "name": "Empty request body",
+          "escaped": "",
+          "breaks": "An empty body is not JSON; most parsers raise an error and some return no value at all, so a handler written for one of the two answers 500 instead of 400.",
+          "expect": "400 with a message that says the body is empty.",
+          "fields": [
+            "multiline",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 0,
+            "code_points": 0,
+            "bytes": 0,
+            "utf16_units": 0
+          }
+        },
+        {
+          "id": "duplicate-key",
+          "ref": "json-payloads/duplicate-key",
+          "name": "Duplicate key",
+          "escaped": "{\"quantity\":1,\"quantity\":100}",
+          "breaks": "RFC 8259 leaves duplicate names undefined: most parsers keep the last value and a few refuse the body, so two layers with different parsers can each see a different quantity.",
+          "expect": "Rejected with 400, or the same value used by every layer that reads the body.",
+          "fields": [
+            "multiline",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "{\"quantity\":1,\"quantity\":100}",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 29,
+            "code_points": 29,
+            "bytes": 29,
+            "utf16_units": 29
+          }
+        },
+        {
+          "id": "big-int-id",
+          "ref": "json-payloads/big-int-id",
+          "name": "Integer above 2^53",
+          "escaped": "{\"id\":9007199254740993}",
+          "breaks": "Above 2^53 a double cannot hold every integer: JavaScript and a Go map read 9007199254740993 as 9007199254740992, while a typed int64 keeps it, so an id changes between two services.",
+          "expect": "Ids above 2^53 - 1 sent as strings, or rejected with a message.",
+          "fields": [
+            "multiline",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "{\"id\":9007199254740993}",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 23,
+            "code_points": 23,
+            "bytes": 23,
+            "utf16_units": 23
+          }
+        },
+        {
+          "id": "explicit-null",
+          "ref": "json-payloads/explicit-null",
+          "name": "Explicit null",
+          "escaped": "{\"name\":null}",
+          "breaks": "A typed model reads null and a missing field as the same empty value, so a partial update cannot tell a request to clear the name from one that leaves it alone.",
+          "expect": "Null and an absent field handled as two different requests, the way the API documents them.",
+          "fields": [
+            "multiline",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "{\"name\":null}",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 13,
+            "code_points": 13,
+            "bytes": 13,
+            "utf16_units": 13
+          }
+        },
+        {
+          "id": "number-as-string",
+          "ref": "json-payloads/number-as-string",
+          "name": "Number sent as a string",
+          "escaped": "{\"quantity\":\"5\"}",
+          "breaks": "Some binders read the string 5 as the number 5 and others refuse it, so the same body passes one service and is rejected by the next one in the chain.",
+          "expect": "Rejected with 400 naming the field and its type, or converted the same way in every layer.",
+          "fields": [
+            "multiline",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "{\"quantity\":\"5\"}",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 16,
+            "code_points": 16,
+            "bytes": 16,
+            "utf16_units": 16
+          }
+        },
+        {
+          "id": "nesting-1001",
+          "ref": "json-payloads/nesting-1001",
+          "name": "1001 nested arrays",
+          "escaped": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+          "breaks": "Each parser stops at its own depth, from 64 levels to 1000 or none at all, so a body that one layer parses another rejects with a depth error rather than a syntax error.",
+          "expect": "Rejected with 400 at a documented depth, before any handler sees it.",
+          "fields": [
+            "multiline",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]",
+            "elided_total": 2002
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 2002,
+            "code_points": 2002,
+            "bytes": 2002,
+            "utf16_units": 2002
+          }
+        },
+        {
+          "id": "lone-surrogate",
+          "ref": "json-payloads/lone-surrogate",
+          "name": "Escaped lone surrogate",
+          "escaped": "{\"name\":\"\\\\ud800\"}",
+          "breaks": "An escaped lone surrogate is valid JSON syntax but not valid text: some parsers refuse it, Go encoding/json replaces it with U+FFFD, and others keep it until writing it as UTF-8 fails or changes it.",
+          "expect": "Rejected with 400, or replaced visibly before the value is stored.",
+          "fields": [
+            "multiline",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "{\"name\":\"\\ud800\"}",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 17,
+            "code_points": 17,
+            "bytes": 17,
+            "utf16_units": 17
+          }
+        },
+        {
+          "id": "escaped-nul",
+          "ref": "json-payloads/escaped-nul",
+          "name": "Escaped NUL in a string",
+          "escaped": "{\"name\":\"a\\\\u0000b\"}",
+          "breaks": "JSON parsers keep the NUL inside the string, so it reaches storage: PostgreSQL jsonb refuses it, and code that uses C strings cuts the name after the a.",
+          "expect": "Rejected with 400 at the API, or the NUL removed before the value is stored.",
+          "fields": [
+            "multiline",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "{\"name\":\"a\\u0000b\"}",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 19,
+            "code_points": 19,
+            "bytes": 19,
+            "utf16_units": 19
+          }
+        },
+        {
+          "id": "huge-exponent",
+          "ref": "json-payloads/huge-exponent",
+          "name": "Number beyond a double",
+          "escaped": "{\"price\":1e400}",
+          "breaks": "1e400 is valid JSON and beyond a double: Go and serde refuse it, Python, .NET and Jackson read infinity, JavaScript writes it back as null, and PostgreSQL jsonb keeps all 401 digits.",
+          "expect": "Rejected with 400 as out of range for the field.",
+          "fields": [
+            "multiline",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "{\"price\":1e400}",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 15,
+            "code_points": 15,
+            "bytes": 15,
+            "utf16_units": 15
+          }
+        },
+        {
+          "id": "case-variant-keys",
+          "ref": "json-payloads/case-variant-keys",
+          "name": "Keys differing only in case",
+          "escaped": "{\"quantity\":1,\"Quantity\":100}",
+          "breaks": "Case-insensitive binding, the default in ASP.NET Core and in Go encoding/json, takes the second key, while case-sensitive binders take the first or refuse the unknown one, so layers disagree about the quantity.",
+          "expect": "Rejected with 400, or one documented key used by every layer.",
+          "fields": [
+            "multiline",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "{\"quantity\":1,\"Quantity\":100}",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 29,
+            "code_points": 29,
+            "bytes": 29,
+            "utf16_units": 29
+          }
+        },
+        {
+          "id": "trailing-comma",
+          "ref": "json-payloads/trailing-comma",
+          "name": "Trailing comma",
+          "escaped": "{\"quantity\":1,}",
+          "breaks": "JavaScript object literals and JSON5 allow a trailing comma and JSON does not, so a body written by hand or by a lenient client fails on a strict server, with 400 or with 500.",
+          "expect": "400 with a message that points at the comma.",
+          "fields": [
+            "multiline",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "{\"quantity\":1,}",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 15,
+            "code_points": 15,
+            "bytes": 15,
+            "utf16_units": 15
+          }
+        },
+        {
+          "id": "bom-before-body",
+          "ref": "json-payloads/bom-before-body",
+          "name": "Byte order mark before the body",
+          "escaped": "\\uFEFF{\"quantity\":1}",
+          "breaks": "RFC 8259 forbids a byte order mark before JSON and lets parsers ignore one: Jackson and decoders that strip it accept the body, while Go, serde and PostgreSQL refuse it, so one request passes one service and fails another.",
+          "expect": "Accepted with the mark ignored, or rejected with 400 that names it; never 500.",
+          "fields": [
+            "multiline",
+            "text"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u2423{\"quantity\":1}",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [
+            {
+              "fact": "zero-width",
+              "count": 1
+            }
+          ],
+          "counts": {
+            "graphemes": 15,
+            "code_points": 15,
+            "bytes": 17,
+            "utf16_units": 15
           }
         }
       ],

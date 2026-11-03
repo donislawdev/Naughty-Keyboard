@@ -222,7 +222,7 @@ unicode-text              12 values  Unicode and text
 length-bombs              12 values  Length bombs
 ...
 
-18 of 18 packs loaded, 207 values.
+19 of 19 packs loaded, 235 values.
 ```
 
 Read one in full. Values are printed escaped, because a value made of characters nobody can see has
@@ -326,7 +326,7 @@ a project.
 
 ## What is in the packs
 
-Eighteen packs, 207 values, all built in. Every value says what it breaks and what a correct application
+Nineteen packs, 235 values, all built in. Every value says what it breaks and what a correct application
 does.
 
 | Pack | Values | What it holds |
@@ -339,7 +339,7 @@ does.
 | `dates-impossible` | 12 | Dates that do not exist, that are ambiguous, or that are written differently than the field assumes |
 | `export-breakers` | 12 | Values that pass validation and break only in the exported file |
 | `locale-pl` | 6 | Polish identifiers, formats and characters that global commercial products do not handle |
-| `filenames-paths` | 12 | Names a file system rejects, alters, or reads differently than the user meant |
+| `filenames-paths` | 28 | Names that a file system, an archive or a server rejects, alters, or reads differently than the user meant |
 | `look-alike-pairs` | 12 | Pairs of values that are identical on screen and different in storage, five pairs among them |
 | `emoji-complex` | 12 | Characters beyond the basic plane and composed sequences that break counting and truncation |
 | `encoding-mojibake` | 11 | Text that went through the wrong encoding and never came back |
@@ -349,6 +349,7 @@ does.
 | `time-zones` | 12 | Hours that do not exist, happen twice, or are written without a zone |
 | `currency-separators` | 12 | Amounts written the way people and spreadsheets write them, and where precision ends |
 | `pseudolocalization` | 10 | The standard internationalisation-testing technique, reduced to values you can paste into a field |
+| `json-payloads` | 12 | JSON request bodies that parsers and databases read differently. Rename the example fields to those of your API |
 
 A value too long to store is kept as a recipe and written out when it is sent, so `length-bombs` can
 hold 100 000 characters in a few lines. A date that has to stay ahead is kept as a rule the same way,
@@ -390,7 +391,7 @@ says so.
 - **It will not type into everything.** `nkb send` refuses a window running with higher privileges than
   itself, because Windows would drop the keystrokes without a word, and a control where keys would act on
   the control and not on text. Where it cannot tell which kind of control has the focus, it sends.
-- **A small catalogue.** 207 values in eighteen packs is a start. It is chosen to be the values that cost the
+- **A small catalogue.** 235 values in nineteen packs is a start. It is chosen to be the values that cost the
   most to miss, and it is not a complete list of anything.
 
 ---

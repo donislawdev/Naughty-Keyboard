@@ -1123,7 +1123,7 @@ mod tests {
             "no value is spread out on opening"
         );
         let packs = of_kind(&picker, RowKind::Pack);
-        assert_eq!(packs.len(), 18);
+        assert_eq!(packs.len(), 19);
         assert!(
             packs
                 .iter()
@@ -1136,7 +1136,7 @@ mod tests {
         assert_eq!(picker.chosen(), Chosen::InUse);
         assert_eq!(
             picker.summary(),
-            "values: 207, packs: 18",
+            "values: 235, packs: 19",
             "the catalogue's numbers, not the rows' - the values are folded"
         );
         assert_eq!(picker.empty_text(), "");
@@ -1256,7 +1256,7 @@ mod tests {
             .flatten()
             .map(|value| preview_line(&preview_of(&value.definition.on(TODAY))).0)
             .collect();
-        assert_eq!(shown.len(), 207);
+        assert_eq!(shown.len(), 235);
         assert_eq!(shown, expected);
     }
 
@@ -1453,7 +1453,7 @@ mod tests {
         let narrowed = picker.rows().len();
         type_in(&mut picker, " zzz");
         assert!(picker.rows().is_empty(), "every word must match");
-        assert_eq!(picker.summary(), "values: 0 of 207, packs: 0 of 18");
+        assert_eq!(picker.summary(), "values: 0 of 235, packs: 0 of 19");
         assert_eq!(
             picker.empty_text(),
             "Nothing matches \"UNICODE zzz\". Press Backspace to widen the search."
