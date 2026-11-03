@@ -120,10 +120,12 @@ Changes wait under Unreleased until then.
   TextEdit document in the middle of a long value, or between clearing the field and typing, now
   stops the send and says that another window came to the front. Up to 64 characters can still
   reach the new window before the send notices.
-- On macOS a modifier key pressed while a value is being typed no longer changes what the value
-  does. Under Command a character became a shortcut of the application under test. The send now
-  waits for Command, Control or Option to come up, for up to two seconds, and for Shift before a
-  clearing key.
+- On macOS a send now waits while Command, Control or Option is held in the middle of it, for up to
+  two seconds, and for Shift before a clearing key, and stops if the key stays down longer. The
+  system shows such a key to the tool only some time after it is pressed, so characters typed
+  meanwhile still go in under it. Safari, Chrome, Firefox and TextEdit type them as they are. An
+  application that keeps its own account of the modifier keys, such as one built on winit, can take
+  them as its shortcuts.
 - On macOS Escape and closing the palette stop a send within a tenth of a second also while the
   application under test is behind. Before, they waited up to five seconds for it to answer. The
   palette also no longer risks crashing when Escape is pressed just as a value finishes.
