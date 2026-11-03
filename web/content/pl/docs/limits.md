@@ -24,6 +24,10 @@ Na macOS tak. Podstawienia tekstu w systemie mogą zamienić wpisaną wartość 
 
 To, co klawisze. Na Windows, macOS i X11 tabulator jest naciskany jako klawisz Tab, a znak nowej linii jako Enter, tak jak pisze je klawiatura. W polu wielowierszowym znak nowej linii zaczyna nowy wiersz. W polu jednowierszowym może wysłać formularz, a tabulator może przenieść fokus do następnej kontrolki, więc reszta wartości trafia tam. Powrót karetki jest wpisywany jako znak, który większość pól pomija, więc CR LF daje jedno złamanie linii, a na macOS dwa. Pod Waylandem wartość trafia do metody wprowadzania w całości, więc tabulator i znak nowej linii przychodzą jako znaki.
 
+## Czy trzymany klawisz może zmienić wartość?
+
+Na macOS nadal może, w jednym rodzaju aplikacji. Command, Control albo Option trzymany w trakcie wpisywania wstrzymuje wysyłkę, ale klawisz wciśnięty w środku wysyłki system pokazuje programowi dopiero po chwili, a znaki wpisane w tym czasie wchodzą pod nim. Safari, Chrome, Firefox i TextEdit czytają modyfikatory każdego klawisza i wpisują te znaki takimi, jakie są. Aplikacja, która sama śledzi klawisze modyfikatorów, na przykład zbudowana na winit, bierze je za swoje skróty: pod Commandem `a` zaznacza wszystko, a reszta wartości to zastępuje.
+
 ## Czy mogę wczytać własne paczki?
 
 Możesz je napisać i sprawdzić, ale jeszcze nie wczytać. `nkb new-pack`, `nkb fmt` i `nkb lint` działają na Twoim własnym pliku. Wczytywanie folderu własnych paczek do palety i do wiersza poleceń nie jest podłączone, a `nkb packs` to mówi: zgłasza foldery na paczki własne i zespołu jako nieprzeczytane.
