@@ -52,8 +52,8 @@
 //!   offsets, with no prose in it. The drawings it is made from are read.
 //! - The `.png` of the social preview: a picture, with no prose in it. The
 //!   drawing it is rendered from is read, and so is the README beside it.
-//! - The `.webp` animation the README plays: a recording, with no prose in it.
-//!   The page that describes it, beside it, is read.
+//! - The `.webp` and `.gif` animations the README plays: recordings, with no
+//!   prose in them. The page that describes them, beside them, is read.
 //! - The project memory that the root `.gitignore` keeps out of this repository.
 //!   Its names are listed here AND checked against that file, so the list cannot
 //!   hide a file this repository does carry.

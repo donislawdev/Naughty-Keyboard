@@ -31,10 +31,6 @@ Every value comes with what it usually breaks and what a correct application doe
 them breaks something, one more shortcut copies a report block you can paste straight into a ticket.
 A window and a command line, over one engine.
 
-<p align="center">
-  <img src=".github/media/naughty.webp" width="860" alt="The palette beside Notepad, typing values of two packs into the document, then collapsed, and the value window opened to find another value.">
-</p>
-
 ⭐ **If it found the bug your users would have found, leave a star.** That is how the next tester who
 needs it finds out it exists.
 
@@ -60,6 +56,14 @@ needs it finds out it exists.
 - **Made for scripts too** - `nkb emit` prints a pack as JSON, CSV or one value per line, escaped or
   raw, optionally as base64. Every command has exit codes you can branch on.
 - **Offline, free, no telemetry** - GPL-3.0, no account, and it opens no network connection.
+
+<p align="center">
+  <img src=".github/media/naughty.webp" width="860" alt="The palette beside Notepad, typing values of two packs into the document, then collapsed, and the value window opened to find another value.">
+</p>
+
+<p align="center">
+  <img src=".github/media/naughty-star.gif" width="860" alt="The Star button on the page of this repository, clicked, turning into Starred.">
+</p>
 
 ---
 
