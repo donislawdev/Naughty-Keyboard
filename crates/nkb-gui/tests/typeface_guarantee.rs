@@ -341,7 +341,7 @@ fn every_character_the_table_promises_leaves_ink() {
 /// what it draws. This asks about what the catalogue carries, so a new script in
 /// the middle of a long value still has to be acknowledged here.
 ///
-/// ⚠️ Thirty. Until 2026-11-03 it was twenty-nine, which is also the
+/// ⚠️ Thirty-one. Until 2026-11-03 it was twenty-nine, which is also the
 /// number `D52` gives for the whole catalogue of `catalog-v0.1.md` - a
 /// coincidence, not the same set. Eighteen of its twenty packs are shipped
 /// today, with one pack from outside it. The nine added on 2026-10-14 brought
@@ -349,8 +349,10 @@ fn every_character_the_table_promises_leaves_ink() {
 /// plane and seven emoji. Their Arabic, Greek and Cyrillic letters, the
 /// replacement character and the heart are all drawn by the typeface.
 /// `json-payloads` and `filenames-paths` 1.1 brought one: the full width x of
-/// a file extension, whose t was already here.
-const SHIPPED_OUTSIDE: [(char, &str); 30] = [
+/// a file extension, whose t was already here. `passwords` and `search-queries`
+/// brought one: the key emoji of a password counted twice. Their Polish and
+/// Cyrillic letters and combining accents are drawn by the typeface.
+const SHIPPED_OUTSIDE: [(char, &str); 31] = [
     ('\u{20E3}', "emoji-complex/emoji-keycap"),
     ('\u{30B9}', "unicode-text/cjk-mixed"),
     ('\u{30C6}', "unicode-text/cjk-mixed"),
@@ -381,6 +383,7 @@ const SHIPPED_OUTSIDE: [(char, &str); 30] = [
     ('\u{1F467}', "emoji-complex/emoji-family-zwj"),
     ('\u{1F468}', "emoji-complex/emoji-family-zwj"),
     ('\u{1F469}', "emoji-complex/emoji-family-zwj"),
+    ('\u{1F511}', "passwords/emoji-four"),
     // Also in `length-bombs/emoji-truncation` and in seven of the values added
     // on 2026-10-14. Named by the value the catalogue lists first.
     ('\u{1F600}', "unicode-text/emoji-in-name"),

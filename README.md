@@ -223,7 +223,7 @@ unicode-text              12 values  Unicode and text
 length-bombs              12 values  Length bombs
 ...
 
-20 of 20 packs loaded, 246 values.
+22 of 22 packs loaded, 280 values.
 ```
 
 Read one in full. Values are printed escaped, because a value made of characters nobody can see has
@@ -327,7 +327,7 @@ a project.
 
 ## What is in the packs
 
-Twenty packs, 246 values, all built in. Every value says what it breaks and what a correct application
+Twenty-two packs, 280 values, all built in. Every value says what it breaks and what a correct application
 does.
 
 | Pack | Values | What it holds |
@@ -352,6 +352,8 @@ does.
 | `pseudolocalization` | 10 | The standard internationalisation-testing technique, reduced to values you can paste into a field |
 | `json-payloads` | 12 | JSON request bodies that parsers and databases read differently. Rename the example fields to those of your API |
 | `injections` | 11 | Classic checks for escaping: a quote, a tag, a template expression and a path. The palette marks it `offensive` |
+| `passwords` | 17 | Passwords that registration and login read differently: cut after 72 bytes, trimmed, unnormalised or miscounted, four pairs among them |
+| `search-queries` | 17 | Queries that a search box reads as wildcards, query syntax or a broken address instead of the text the user typed, one pair among them |
 
 A value too long to store is kept as a recipe and written out when it is sent, so `length-bombs` can
 hold 100 000 characters in a few lines. A date that has to stay ahead is kept as a rule the same way,
@@ -393,8 +395,8 @@ says so.
 - **It will not type into everything.** `nkb send` refuses a window running with higher privileges than
   itself, because Windows would drop the keystrokes without a word, and a control where keys would act on
   the control and not on text. Where it cannot tell which kind of control has the focus, it sends.
-- **A small catalogue.** 246 values in twenty packs is a start. It is chosen to be the values that cost the
-  most to miss, and it is not a complete list of anything.
+- **A small catalogue.** 280 values in twenty-two packs is a start. It is chosen to be the values that
+  cost the most to miss, and it is not a complete list of anything.
 
 ---
 

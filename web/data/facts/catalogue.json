@@ -1,6 +1,6 @@
 {
-  "pack_count": 20,
-  "value_count": 246,
+  "pack_count": 22,
+  "value_count": 280,
   "packs": [
     {
       "id": "whitespace",
@@ -8581,6 +8581,1204 @@
       ],
       "pair_count": 0,
       "pairs": []
+    },
+    {
+      "id": "passwords",
+      "name": "Passwords",
+      "description": "Passwords that registration and login read differently: cut after 72 bytes, trimmed, unnormalised or miscounted.",
+      "version": "1.0",
+      "updated": "2026-11-04",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "password"
+      ],
+      "tags": [
+        "password",
+        "login",
+        "authentication",
+        "bcrypt",
+        "unicode"
+      ],
+      "value_count": 17,
+      "values": [
+        {
+          "id": "bcrypt-cut-register",
+          "ref": "passwords/bcrypt-cut-register",
+          "name": "Step 1: register with 72 letters a and a 1",
+          "escaped": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
+          "breaks": "Step 1 of the 72-byte test: register a new account with this password of 73 bytes. Newer libraries such as Go x/crypto, Spring Security and bcrypt 5 for Python refuse it, and an application that does not catch that shows an error page already here.",
+          "expect": "Registered, or refused with a message that names the length limit.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [
+            {
+              "pair": "bcrypt-cut",
+              "half": 1
+            }
+          ],
+          "shape": [],
+          "counts": {
+            "graphemes": 73,
+            "code_points": 73,
+            "bytes": 73,
+            "utf16_units": 73
+          }
+        },
+        {
+          "id": "bcrypt-cut-login",
+          "ref": "passwords/bcrypt-cut-login",
+          "name": "Step 2: log in with 72 letters a and a 2",
+          "escaped": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2",
+          "breaks": "Step 2: log in to the account from step 1 with this password, which differs only in its 73rd byte. A bcrypt hash that reads only the first 72 bytes, as in PHP, BCrypt.Net, jBCrypt, bcryptjs and pgcrypto, cannot tell the two apart.",
+          "expect": "Login refused, because this is not the password the account was registered with.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [
+            {
+              "pair": "bcrypt-cut",
+              "half": 2
+            }
+          ],
+          "shape": [],
+          "counts": {
+            "graphemes": 73,
+            "code_points": 73,
+            "bytes": 73,
+            "utf16_units": 73
+          }
+        },
+        {
+          "id": "bytes-not-chars-register",
+          "ref": "passwords/bytes-not-chars-register",
+          "name": "Step 1: register with 36 Polish letters and a 1",
+          "escaped": "\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u01421",
+          "breaks": "Step 1 of the same test in Polish: 37 characters, under any limit counted in characters, and 73 bytes in UTF-8, because each l with stroke takes two bytes.",
+          "expect": "Registered.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u01421",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [
+            {
+              "pair": "bytes-not-chars",
+              "half": 1
+            }
+          ],
+          "shape": [],
+          "counts": {
+            "graphemes": 37,
+            "code_points": 37,
+            "bytes": 73,
+            "utf16_units": 37
+          }
+        },
+        {
+          "id": "bytes-not-chars-login",
+          "ref": "passwords/bytes-not-chars-login",
+          "name": "Step 2: log in with 36 Polish letters and a 2",
+          "escaped": "\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u01422",
+          "breaks": "Step 2: log in with this password, which differs only in its last character. A limit of 64 or 72 characters does not stop a hash that reads 72 bytes from cutting it.",
+          "expect": "Login refused.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u0142\u01422",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [
+            {
+              "pair": "bytes-not-chars",
+              "half": 2
+            }
+          ],
+          "shape": [],
+          "counts": {
+            "graphemes": 37,
+            "code_points": 37,
+            "bytes": 73,
+            "utf16_units": 37
+          }
+        },
+        {
+          "id": "trailing-space-register",
+          "ref": "passwords/trailing-space-register",
+          "name": "Step 1: register with a password that ends with a space",
+          "escaped": "Secret-pass-42\\u0020",
+          "breaks": "Step 1 of the trimming test: register with a password that ends with a space. A layer that trims input stores the password without it.",
+          "expect": "Registered, with the space kept as part of the password.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Secret-pass-42\u2423",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [
+            {
+              "pair": "trailing-space",
+              "half": 1
+            }
+          ],
+          "shape": [
+            {
+              "fact": "trailing-space",
+              "count": null
+            }
+          ],
+          "counts": {
+            "graphemes": 15,
+            "code_points": 15,
+            "bytes": 15,
+            "utf16_units": 15
+          }
+        },
+        {
+          "id": "trailing-space-login",
+          "ref": "passwords/trailing-space-login",
+          "name": "Step 2: log in with the same password without the space",
+          "escaped": "Secret-pass-42",
+          "breaks": "Step 2: log in with the password from step 1 without its last space, then once more with the space. Registration and login that trim differently let only one of the two in.",
+          "expect": "Only the password with the space opens the account, or both do because both sides trim.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Secret-pass-42",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [
+            {
+              "pair": "trailing-space",
+              "half": 2
+            }
+          ],
+          "shape": [],
+          "counts": {
+            "graphemes": 14,
+            "code_points": 14,
+            "bytes": 14,
+            "utf16_units": 14
+          }
+        },
+        {
+          "id": "nfc-nfd-register",
+          "ref": "passwords/nfc-nfd-register",
+          "name": "Step 1: register with composed Polish letters",
+          "escaped": "Za\u017c\u00f3\u0142\u0107-42",
+          "breaks": "Step 1 of the normalisation test: register with Polish letters written as single characters, the form a keyboard types.",
+          "expect": "Registered.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Za\u017c\u00f3\u0142\u0107-42",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [
+            {
+              "pair": "nfc-nfd",
+              "half": 1
+            }
+          ],
+          "shape": [],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 13,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "nfc-nfd-login",
+          "ref": "passwords/nfc-nfd-login",
+          "name": "Step 2: log in with the same letters decomposed",
+          "escaped": "Zaz\u0307o\u0301\u0142c\u0301-42",
+          "breaks": "Step 2: log in with the same word written as base letters followed by combining accents. It looks identical, and hashing libraries take the bytes as given, so only an application that normalises the password lets it in.",
+          "expect": "Login succeeds, because the password is normalised to NFC before it is hashed.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Zaz\u0307o\u0301\u0142c\u0301-42",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [
+            {
+              "pair": "nfc-nfd",
+              "half": 2
+            }
+          ],
+          "shape": [],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 12,
+            "bytes": 16,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "spaces-only",
+          "ref": "passwords/spaces-only",
+          "name": "Sixteen spaces",
+          "escaped": null,
+          "breaks": "Passes a minimum length of 8, 12 or 15 characters and holds nothing a user could remember. A layer that trims input turns it into an empty password.",
+          "expect": "Refused with the reason stated, or accepted and kept exactly, never trimmed to an empty password.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "\u2423",
+            "count": 16
+          },
+          "next_date": null,
+          "halves": [],
+          "shape": [
+            {
+              "fact": "leading-space",
+              "count": null
+            },
+            {
+              "fact": "trailing-space",
+              "count": null
+            }
+          ],
+          "counts": {
+            "graphemes": 16,
+            "code_points": 16,
+            "bytes": 16,
+            "utf16_units": 16
+          }
+        },
+        {
+          "id": "emoji-four",
+          "ref": "passwords/emoji-four",
+          "name": "Four key emoji",
+          "escaped": "\ud83d\udd11\ud83d\udd11\ud83d\udd11\ud83d\udd11",
+          "breaks": "Four characters that String.length in JavaScript, .NET and Java counts as eight, because each takes two UTF-16 units, while Python, PostgreSQL and NIST SP 800-63B count four. A page and a server written in different languages disagree about the minimum length.",
+          "expect": "Counted as four characters on the page and on the server, and accepted or refused the same way by both.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\ud83d\udd11\ud83d\udd11\ud83d\udd11\ud83d\udd11",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 16,
+            "utf16_units": 8
+          }
+        },
+        {
+          "id": "passphrase-64",
+          "ref": "passwords/passphrase-64",
+          "name": "Passphrase of 64 characters with spaces",
+          "escaped": "four quiet rivers carry seven paper boats past the old mill gate",
+          "breaks": "NIST SP 800-63B asks verifiers to accept at least 64 characters and the space, and a form with a maxlength of 20 or 32, or a rule against spaces, refuses the passphrase users are told to choose.",
+          "expect": "Accepted in full, and the same passphrase opens the account afterwards.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "four\u2423quiet\u2423rivers\u2423carry\u2423seven\u2423paper\u2423boats\u2423past\u2423the\u2423old\u2423mill\u2423gate",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 64,
+            "code_points": 64,
+            "bytes": 64,
+            "utf16_units": 64
+          }
+        },
+        {
+          "id": "composition-ok",
+          "ref": "passwords/composition-ok",
+          "name": "Common password that meets the usual rules",
+          "escaped": "Password1!",
+          "breaks": "Has an upper-case letter, a digit and a symbol, so it passes the usual composition rules, and appears more than 500,000 times in the Pwned Passwords list of breached passwords.",
+          "expect": "Refused as a common or breached password, with the reason stated.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Password1!",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "breached-but-valid",
+          "ref": "passwords/breached-but-valid",
+          "name": "Keyboard walk that meets the usual rules",
+          "escaped": "Qwerty123!",
+          "breaks": "A keyboard pattern with a capital letter, digits and a symbol: it passes composition rules and appears more than 150,000 times in the Pwned Passwords list.",
+          "expect": "Refused as a common or breached password, with the reason stated.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Qwerty123!",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 10,
+            "code_points": 10,
+            "bytes": 10,
+            "utf16_units": 10
+          }
+        },
+        {
+          "id": "login-maxlength",
+          "ref": "passwords/login-maxlength",
+          "name": "Password of 100 characters",
+          "escaped": null,
+          "breaks": "Registration accepts 100 characters while the login field has a lower maxlength, often 64, so the browser silently drops the rest and the user can never log in.",
+          "expect": "The same password works on the registration, login and password change forms, or all three refuse it with the same limit stated.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "Long-pass-",
+            "count": 10
+          },
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 100,
+            "code_points": 100,
+            "bytes": 100,
+            "utf16_units": 100
+          }
+        },
+        {
+          "id": "cyrillic",
+          "ref": "passwords/cyrillic",
+          "name": "Password in Cyrillic",
+          "escaped": "\u043f\u0430\u0440\u043e\u043b\u044c-42",
+          "breaks": "NIST SP 800-63B asks verifiers to accept Unicode. A rule that allows only ASCII refuses it, or registration accepts it and an older layer in a single-byte encoding stores something else.",
+          "expect": "Accepted, and the same password opens the account afterwards.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u043f\u0430\u0440\u043e\u043b\u044c-42",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 9,
+            "code_points": 9,
+            "bytes": 15,
+            "utf16_units": 9
+          }
+        },
+        {
+          "id": "angle-bracket",
+          "ref": "passwords/angle-bracket",
+          "name": "Password with angle brackets",
+          "escaped": "pass<word>42",
+          "breaks": "Request validation in ASP.NET on .NET Framework refuses a form value with a less-than sign followed by a letter, so a valid password ends at an error page.",
+          "expect": "Accepted like any other printing ASCII character.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "pass<word>42",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 12,
+            "code_points": 12,
+            "bytes": 12,
+            "utf16_units": 12
+          }
+        },
+        {
+          "id": "plus-and-percent",
+          "ref": "passwords/plus-and-percent",
+          "name": "Password with a plus and a percent sign",
+          "escaped": "Pa+ss%41-42",
+          "breaks": "In a form-encoded body a plus means a space and %41 means A. A client that builds the body by hand without encoding sends Pa ssA-42, so the page and that client store different passwords.",
+          "expect": "Stored and checked exactly as typed, through every client.",
+          "fields": [
+            "password"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "Pa+ss%41-42",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 11,
+            "code_points": 11,
+            "bytes": 11,
+            "utf16_units": 11
+          }
+        }
+      ],
+      "pair_count": 4,
+      "pairs": [
+        {
+          "id": "bcrypt-cut",
+          "ref": "passwords/bcrypt-cut",
+          "name": "Two passwords that differ after byte 72",
+          "relation": "identity",
+          "a": "bcrypt-cut-register",
+          "b": "bcrypt-cut-login",
+          "breaks": "Step 3 of the 72-byte test: if the second password opened the account, the system hashes only the first 72 bytes and two different passwords open it. An error page at step 1 means the library refuses long passwords and the application does not handle it.",
+          "expect": "Login with the second password refused, and registration with the first accepted or refused with the limit stated.",
+          "since": "1.0"
+        },
+        {
+          "id": "bytes-not-chars",
+          "ref": "passwords/bytes-not-chars",
+          "name": "Two Polish passwords that differ after byte 72",
+          "relation": "identity",
+          "a": "bytes-not-chars-register",
+          "b": "bytes-not-chars-login",
+          "breaks": "Step 3: if the second password opened the account, the length check counts characters while the hash counts bytes, so a password in Polish, Cyrillic or Chinese is cut far earlier than its length suggests.",
+          "expect": "Login with the second password refused.",
+          "since": "1.0"
+        },
+        {
+          "id": "trailing-space",
+          "ref": "passwords/trailing-space",
+          "name": "Password with and without a trailing space",
+          "relation": "identity",
+          "a": "trailing-space-register",
+          "b": "trailing-space-login",
+          "breaks": "Step 3: if only one of the two logins works and it is not the one with the space, registration and login trim differently, and a user who set the space is locked out.",
+          "expect": "Only the password with the space opens the account, or both do because both sides trim.",
+          "since": "1.0"
+        },
+        {
+          "id": "nfc-nfd",
+          "ref": "passwords/nfc-nfd",
+          "name": "Composed and decomposed forms of one password",
+          "relation": "identity",
+          "a": "nfc-nfd-register",
+          "b": "nfc-nfd-login",
+          "breaks": "Step 3: NIST SP 800-63B asks verifiers to normalise passwords to NFC. Without it, the same password typed on one system and pasted from another does not match.",
+          "expect": "Both forms open the account.",
+          "since": "1.0"
+        }
+      ]
+    },
+    {
+      "id": "search-queries",
+      "name": "Search queries",
+      "description": "Queries that a search box reads as wildcards, query syntax or a broken address instead of the text the user typed.",
+      "version": "1.0",
+      "updated": "2026-11-04",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "search"
+      ],
+      "tags": [
+        "search",
+        "full-text",
+        "like",
+        "query-syntax",
+        "url-encoding"
+      ],
+      "value_count": 17,
+      "values": [
+        {
+          "id": "percent",
+          "ref": "search-queries/percent",
+          "name": "Search for 100%",
+          "escaped": "100%",
+          "breaks": "In SQL LIKE a percent sign matches anything, and a parameterised query does not escape it, so PostgreSQL, MySQL and SQLite return every row that merely contains 100, such as 1000 items.",
+          "expect": "Only results that contain the text 100%.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "100%",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "underscore",
+          "ref": "search-queries/underscore",
+          "name": "Search with an underscore",
+          "escaped": "a_b",
+          "breaks": "In LIKE an underscore matches any single character, so a_b also finds a-b, axb and the a?b of a pasted link, and code that escapes the percent sign often forgets this one.",
+          "expect": "Only results that contain a_b.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "a_b",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 3,
+            "code_points": 3,
+            "bytes": 3,
+            "utf16_units": 3
+          }
+        },
+        {
+          "id": "asterisk",
+          "ref": "search-queries/asterisk",
+          "name": "A single asterisk",
+          "escaped": "*",
+          "breaks": "A wildcard on its own: Elasticsearch query_string returns the whole index, MySQL full-text search and SQLite FTS5 refuse it with a syntax error, and a regular expression built from the query fails with nothing to repeat.",
+          "expect": "Results that contain an asterisk, an empty result, or a message, never everything and never an error page.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "*",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 1,
+            "bytes": 1,
+            "utf16_units": 1
+          }
+        },
+        {
+          "id": "unbalanced-quote",
+          "ref": "search-queries/unbalanced-quote",
+          "name": "Quote that is never closed",
+          "escaped": "\"annual report",
+          "breaks": "Elasticsearch query_string, SQLite FTS5 and to_tsquery in PostgreSQL read the quote as the start of a phrase that never ends and stop with a parse error, which an application that passes it on shows as an error page.",
+          "expect": "Results for the two words, with the quote ignored or searched as text.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\"annual\u2423report",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 14,
+            "code_points": 14,
+            "bytes": 14,
+            "utf16_units": 14
+          }
+        },
+        {
+          "id": "unbalanced-paren",
+          "ref": "search-queries/unbalanced-paren",
+          "name": "Bracket that is never closed",
+          "escaped": "(draft",
+          "breaks": "A bracket opens a group that never closes: Elasticsearch query_string, SQLite FTS5, to_tsquery in PostgreSQL, MySQL boolean full-text search and a regular expression built from the query in Python or JavaScript all stop with a syntax error.",
+          "expect": "Results for draft, with the bracket ignored or searched as text.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "(draft",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 6,
+            "code_points": 6,
+            "bytes": 6,
+            "utf16_units": 6
+          }
+        },
+        {
+          "id": "backslash-end",
+          "ref": "search-queries/backslash-end",
+          "name": "Word followed by a backslash",
+          "escaped": "draft\\\\",
+          "breaks": "A backslash at the end escapes nothing, so Elasticsearch query_string, SQLite FTS5, to_tsquery in PostgreSQL and a regular expression built from the query in Python or JavaScript stop with a syntax error.",
+          "expect": "Results for draft followed by a backslash, an empty result or a message, never an error page.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "draft\\",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 6,
+            "code_points": 6,
+            "bytes": 6,
+            "utf16_units": 6
+          }
+        },
+        {
+          "id": "c-plus-plus",
+          "ref": "search-queries/c-plus-plus",
+          "name": "Search for C++",
+          "escaped": "C++",
+          "breaks": "Tokenisers drop the plus signs, so Elasticsearch and PostgreSQL full-text search return every result with the letter C, SQLite FTS5 and MySQL boolean mode stop with a syntax error, and in a URL built by hand each plus arrives as a space.",
+          "expect": "Results about C++ first, not every result with the letter C.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "C++",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 3,
+            "code_points": 3,
+            "bytes": 3,
+            "utf16_units": 3
+          }
+        },
+        {
+          "id": "c-sharp",
+          "ref": "search-queries/c-sharp",
+          "name": "Search for C#",
+          "escaped": "C#",
+          "breaks": "Added to a URL by hand without encoding, the hash sign starts the fragment and the server searches for C. Elasticsearch and PostgreSQL full-text search drop the hash sign too, and MySQL full-text search ignores a word that short.",
+          "expect": "Results about C#, with the hash sign reaching the server encoded as %23.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "C#",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 2,
+            "code_points": 2,
+            "bytes": 2,
+            "utf16_units": 2
+          }
+        },
+        {
+          "id": "stop-words",
+          "ref": "search-queries/stop-words",
+          "name": "Phrase made only of stop words",
+          "escaped": "to be or not to be",
+          "breaks": "Every word is on the English stop list of PostgreSQL full-text search, so the query becomes empty and the user finds nothing for a famous phrase.",
+          "expect": "Results that contain the phrase, or a message that the query was too common.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "to\u2423be\u2423or\u2423not\u2423to\u2423be",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 18,
+            "code_points": 18,
+            "bytes": 18,
+            "utf16_units": 18
+          }
+        },
+        {
+          "id": "boolean-words",
+          "ref": "search-queries/boolean-words",
+          "name": "Words joined by AND",
+          "escaped": "salt AND pepper",
+          "breaks": "SQLite FTS5 and Lucene query syntax read upper-case AND as an operator, and full-text search matches the words anywhere, so a record called pepper with sea salt comes up for the phrase the user typed.",
+          "expect": "The same results as for salt and pepper, or the phrase searched as typed.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "salt\u2423AND\u2423pepper",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 15,
+            "code_points": 15,
+            "bytes": 15,
+            "utf16_units": 15
+          }
+        },
+        {
+          "id": "diacritics-stored",
+          "ref": "search-queries/diacritics-stored",
+          "name": "Step 1: save a record named Lodz with Polish letters",
+          "escaped": "\u0141\u00f3d\u017a",
+          "breaks": "Step 1 of the accent test: save a record with this name, the Polish spelling of the city, before searching for it without accents.",
+          "expect": "Saved as typed.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "\u0141\u00f3d\u017a",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [
+            {
+              "pair": "diacritics",
+              "half": 1
+            }
+          ],
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 7,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "diacritics-searched",
+          "ref": "search-queries/diacritics-searched",
+          "name": "Step 2: search for lodz without accents",
+          "escaped": "lodz",
+          "breaks": "Step 2: search for the record from step 1 typed without Polish letters, as most users type on a keyboard without them.",
+          "expect": "The record from step 1 is found.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "lodz",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [
+            {
+              "pair": "diacritics",
+              "half": 2
+            }
+          ],
+          "shape": [],
+          "counts": {
+            "graphemes": 4,
+            "code_points": 4,
+            "bytes": 4,
+            "utf16_units": 4
+          }
+        },
+        {
+          "id": "spaces-only",
+          "ref": "search-queries/spaces-only",
+          "name": "Three spaces",
+          "escaped": null,
+          "breaks": "Trimmed to an empty query, which some searches answer with every row and others with an error: SQLite FTS5 refuses it, and a URL built by hand loses trailing spaces, so the server receives an empty query.",
+          "expect": "An empty result or a message, the same as for an empty search box.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "\u2423",
+            "count": 3
+          },
+          "next_date": null,
+          "halves": [],
+          "shape": [
+            {
+              "fact": "leading-space",
+              "count": null
+            },
+            {
+              "fact": "trailing-space",
+              "count": null
+            }
+          ],
+          "counts": {
+            "graphemes": 3,
+            "code_points": 3,
+            "bytes": 3,
+            "utf16_units": 3
+          }
+        },
+        {
+          "id": "url-query",
+          "ref": "search-queries/url-query",
+          "name": "Pasted link",
+          "escaped": "https://example.com/a?b=1",
+          "breaks": "Elasticsearch query_string reads the colon as a field name and the slash as the start of a regular expression and refuses the link, SQLite FTS5 answers no such column, and match queries return every record with example or com.",
+          "expect": "Records that contain the link.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "https://example.com/a?b=1",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 25,
+            "code_points": 25,
+            "bytes": 25,
+            "utf16_units": 25
+          }
+        },
+        {
+          "id": "email-query",
+          "ref": "search-queries/email-query",
+          "name": "E-mail address",
+          "escaped": "first.last@example.com",
+          "breaks": "Elasticsearch and MySQL full-text search split the address at the at sign and the dots and return every record with example or com, MySQL boolean mode refuses the at sign, and SQLite FTS5 refuses the dot.",
+          "expect": "The record with this address first.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "first.last@example.com",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 22,
+            "code_points": 22,
+            "bytes": 22,
+            "utf16_units": 22
+          }
+        },
+        {
+          "id": "invoice-number",
+          "ref": "search-queries/invoice-number",
+          "name": "Invoice number with slashes",
+          "escaped": "FV/2027/11/001",
+          "breaks": "Elasticsearch query_string reads a slash as the start of a regular expression and refuses the number, and full-text search in Elasticsearch and MySQL splits it at the slashes and returns every invoice and every other record from 2027.",
+          "expect": "The invoice with this number first.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "FV/2027/11/001",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 14,
+            "code_points": 14,
+            "bytes": 14,
+            "utf16_units": 14
+          }
+        },
+        {
+          "id": "long-query",
+          "ref": "search-queries/long-query",
+          "name": "16500 characters",
+          "escaped": null,
+          "breaks": "Sent as a GET parameter, the query is longer than web servers accept by default: IIS answers 404 above 2048 bytes, nginx, Apache and Kestrel 414 above about 8 KB, and Node 431 above 16 KB, an error page instead of results or a message.",
+          "expect": "Results, or a message that the query is too long.",
+          "fields": [
+            "search"
+          ],
+          "tags": [],
+          "risk": "normal",
+          "since": "1.0",
+          "source": null,
+          "generated": true,
+          "preview": null,
+          "recipe": {
+            "unit": "a",
+            "count": 16500
+          },
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 16500,
+            "code_points": 16500,
+            "bytes": 16500,
+            "utf16_units": 16500
+          }
+        }
+      ],
+      "pair_count": 1,
+      "pairs": [
+        {
+          "id": "diacritics",
+          "ref": "search-queries/diacritics",
+          "name": "Polish spelling against the same word without accents",
+          "relation": "identity",
+          "a": "diacritics-stored",
+          "b": "diacritics-searched",
+          "breaks": "Step 3: a search that strips accents after NFD decomposition still misses the record, because the Polish l with stroke has no decomposition. The unaccent extension of PostgreSQL and the accent-insensitive default collation of MySQL find it, while plain LIKE, SQLite, Elasticsearch with its default analyser and JavaScript do not.",
+          "expect": "The search for lodz finds the record saved with Polish letters.",
+          "since": "1.0"
+        }
+      ]
     }
   ]
 }

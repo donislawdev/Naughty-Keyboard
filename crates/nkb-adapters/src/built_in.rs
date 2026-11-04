@@ -107,6 +107,11 @@ pub const BUILT_IN_PACKS: &[(&str, &str)] = &[
         include_str!("../../../packs/json-payloads.toml"),
     ),
     ("injections", include_str!("../../../packs/injections.toml")),
+    ("passwords", include_str!("../../../packs/passwords.toml")),
+    (
+        "search-queries",
+        include_str!("../../../packs/search-queries.toml"),
+    ),
 ];
 
 #[cfg(test)]

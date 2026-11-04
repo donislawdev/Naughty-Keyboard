@@ -1,0 +1,164 @@
+format = 1
+
+[pack]
+id          = "search-queries"
+name        = "Search queries"
+description = "Queries that a search box reads as wildcards, query syntax or a broken address instead of the text the user typed."
+version     = "1.0"
+updated     = 2026-11-04
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["search", "full-text", "like", "query-syntax", "url-encoding"]
+fields      = ["search"]
+risk        = "normal"
+
+[[values]]
+id     = "percent"
+name   = "Search for 100%"
+value  = "100%"
+breaks = "In SQL LIKE a percent sign matches anything, and a parameterised query does not escape it, so PostgreSQL, MySQL and SQLite return every row that merely contains 100, such as 1000 items."
+expect = "Only results that contain the text 100%."
+since  = "1.0"
+
+[[values]]
+id     = "underscore"
+name   = "Search with an underscore"
+value  = "a_b"
+breaks = "In LIKE an underscore matches any single character, so a_b also finds a-b, axb and the a?b of a pasted link, and code that escapes the percent sign often forgets this one."
+expect = "Only results that contain a_b."
+since  = "1.0"
+
+[[values]]
+id     = "asterisk"
+name   = "A single asterisk"
+value  = "*"
+breaks = "A wildcard on its own: Elasticsearch query_string returns the whole index, MySQL full-text search and SQLite FTS5 refuse it with a syntax error, and a regular expression built from the query fails with nothing to repeat."
+expect = "Results that contain an asterisk, an empty result, or a message, never everything and never an error page."
+since  = "1.0"
+
+[[values]]
+id     = "unbalanced-quote"
+name   = "Quote that is never closed"
+value  = "\"annual report"
+breaks = "Elasticsearch query_string, SQLite FTS5 and to_tsquery in PostgreSQL read the quote as the start of a phrase that never ends and stop with a parse error, which an application that passes it on shows as an error page."
+expect = "Results for the two words, with the quote ignored or searched as text."
+since  = "1.0"
+
+[[values]]
+id     = "unbalanced-paren"
+name   = "Bracket that is never closed"
+value  = "(draft"
+breaks = "A bracket opens a group that never closes: Elasticsearch query_string, SQLite FTS5, to_tsquery in PostgreSQL, MySQL boolean full-text search and a regular expression built from the query in Python or JavaScript all stop with a syntax error."
+expect = "Results for draft, with the bracket ignored or searched as text."
+since  = "1.0"
+
+[[values]]
+id     = "backslash-end"
+name   = "Word followed by a backslash"
+value  = "draft\\"
+breaks = "A backslash at the end escapes nothing, so Elasticsearch query_string, SQLite FTS5, to_tsquery in PostgreSQL and a regular expression built from the query in Python or JavaScript stop with a syntax error."
+expect = "Results for draft followed by a backslash, an empty result or a message, never an error page."
+since  = "1.0"
+
+[[values]]
+id     = "c-plus-plus"
+name   = "Search for C++"
+value  = "C++"
+breaks = "Tokenisers drop the plus signs, so Elasticsearch and PostgreSQL full-text search return every result with the letter C, SQLite FTS5 and MySQL boolean mode stop with a syntax error, and in a URL built by hand each plus arrives as a space."
+expect = "Results about C++ first, not every result with the letter C."
+since  = "1.0"
+
+[[values]]
+id     = "c-sharp"
+name   = "Search for C#"
+value  = "C#"
+breaks = "Added to a URL by hand without encoding, the hash sign starts the fragment and the server searches for C. Elasticsearch and PostgreSQL full-text search drop the hash sign too, and MySQL full-text search ignores a word that short."
+expect = "Results about C#, with the hash sign reaching the server encoded as %23."
+since  = "1.0"
+
+[[values]]
+id     = "stop-words"
+name   = "Phrase made only of stop words"
+value  = "to be or not to be"
+breaks = "Every word is on the English stop list of PostgreSQL full-text search, so the query becomes empty and the user finds nothing for a famous phrase."
+expect = "Results that contain the phrase, or a message that the query was too common."
+since  = "1.0"
+
+[[values]]
+id     = "boolean-words"
+name   = "Words joined by AND"
+value  = "salt AND pepper"
+breaks = "SQLite FTS5 and Lucene query syntax read upper-case AND as an operator, and full-text search matches the words anywhere, so a record called pepper with sea salt comes up for the phrase the user typed."
+expect = "The same results as for salt and pepper, or the phrase searched as typed."
+since  = "1.0"
+
+[[values]]
+id     = "diacritics-stored"
+name   = "Step 1: save a record named Lodz with Polish letters"
+value  = "\u0141\u00F3d\u017A"
+breaks = "Step 1 of the accent test: save a record with this name, the Polish spelling of the city, before searching for it without accents."
+expect = "Saved as typed."
+since  = "1.0"
+
+[[values]]
+id     = "diacritics-searched"
+name   = "Step 2: search for lodz without accents"
+value  = "lodz"
+breaks = "Step 2: search for the record from step 1 typed without Polish letters, as most users type on a keyboard without them."
+expect = "The record from step 1 is found."
+since  = "1.0"
+
+[[values]]
+id     = "spaces-only"
+name   = "Three spaces"
+type   = "repeat"
+unit   = "\u0020"
+count  = 3
+breaks = "Trimmed to an empty query, which some searches answer with every row and others with an error: SQLite FTS5 refuses it, and a URL built by hand loses trailing spaces, so the server receives an empty query."
+expect = "An empty result or a message, the same as for an empty search box."
+since  = "1.0"
+
+[[values]]
+id     = "url-query"
+name   = "Pasted link"
+value  = "https://example.com/a?b=1"
+breaks = "Elasticsearch query_string reads the colon as a field name and the slash as the start of a regular expression and refuses the link, SQLite FTS5 answers no such column, and match queries return every record with example or com."
+expect = "Records that contain the link."
+since  = "1.0"
+
+[[values]]
+id     = "email-query"
+name   = "E-mail address"
+value  = "first.last@example.com"
+breaks = "Elasticsearch and MySQL full-text search split the address at the at sign and the dots and return every record with example or com, MySQL boolean mode refuses the at sign, and SQLite FTS5 refuses the dot."
+expect = "The record with this address first."
+since  = "1.0"
+
+[[values]]
+id     = "invoice-number"
+name   = "Invoice number with slashes"
+value  = "FV/2027/11/001"
+breaks = "Elasticsearch query_string reads a slash as the start of a regular expression and refuses the number, and full-text search in Elasticsearch and MySQL splits it at the slashes and returns every invoice and every other record from 2027."
+expect = "The invoice with this number first."
+since  = "1.0"
+
+[[values]]
+id     = "long-query"
+name   = "16500 characters"
+type   = "repeat"
+unit   = "a"
+count  = 16500
+breaks = "Sent as a GET parameter, the query is longer than web servers accept by default: IIS answers 404 above 2048 bytes, nginx, Apache and Kestrel 414 above about 8 KB, and Node 431 above 16 KB, an error page instead of results or a message."
+expect = "Results, or a message that the query is too long."
+since  = "1.0"
+
+[[pairs]]
+id       = "diacritics"
+name     = "Polish spelling against the same word without accents"
+relation = "identity"
+a        = "diacritics-stored"
+b        = "diacritics-searched"
+breaks   = "Step 3: a search that strips accents after NFD decomposition still misses the record, because the Polish l with stroke has no decomposition. The unaccent extension of PostgreSQL and the accent-insensitive default collation of MySQL find it, while plain LIKE, SQLite, Elasticsearch with its default analyser and JavaScript do not."
+expect   = "The search for lodz finds the record saved with Polish letters."
+since    = "1.0"
