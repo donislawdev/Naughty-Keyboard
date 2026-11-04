@@ -1,0 +1,230 @@
+# Polish translations of the pack search-queries, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "ce4982451b9a"
+text = "Zapytania wyszukiwania"
+
+[pack.description]
+source = "7e689c2ce2bc"
+text = "Zapytania, które wyszukiwarka czyta jak symbole wieloznaczne, składnię albo zepsuty adres, a nie tekst."
+
+[percent.name]
+source = "5830283ce27b"
+text = "Szukanie 100%"
+
+[percent.breaks]
+source = "6551450f1543"
+text = "W SQL LIKE znak procentu pasuje do czegokolwiek, a zapytanie z parametrem go nie escapuje, więc PostgreSQL, MySQL i SQLite zwracają każdy wiersz, który zawiera samo 100, na przykład 1000 items."
+
+[percent.expect]
+source = "e8615eee7b6d"
+text = "Tylko wyniki, które zawierają tekst 100%."
+
+[underscore.name]
+source = "b59265e32c82"
+text = "Szukanie z podkreśleniem"
+
+[underscore.breaks]
+source = "9f5832e14ea8"
+text = "W LIKE podkreślenie pasuje do dowolnego jednego znaku, więc a_b znajduje też a-b, axb i a?b z wklejonego linku, a kod, który escapuje znak procentu, często o nim zapomina."
+
+[underscore.expect]
+source = "0f66f9f6825d"
+text = "Tylko wyniki, które zawierają a_b."
+
+[asterisk.name]
+source = "ac8da7c5a02f"
+text = "Sama gwiazdka"
+
+[asterisk.breaks]
+source = "ba4f7ef4f911"
+text = "Sam symbol wieloznaczny: query_string w Elasticsearch zwraca cały indeks, wyszukiwanie pełnotekstowe MySQL i SQLite FTS5 odrzucają go błędem składni, a wyrażenie regularne zbudowane z zapytania pada z komunikatem, że nie ma czego powtarzać."
+
+[asterisk.expect]
+source = "003d97ce1ac2"
+text = "Wyniki, które zawierają gwiazdkę, pusty wynik albo komunikat, nigdy wszystko i nigdy strona błędu."
+
+[unbalanced-quote.name]
+source = "b0010bf3bafe"
+text = "Cudzysłów, który się nie zamyka"
+
+[unbalanced-quote.breaks]
+source = "c3497298160e"
+text = "query_string w Elasticsearch, SQLite FTS5 i to_tsquery w PostgreSQL czytają cudzysłów jako początek frazy, która się nie kończy, i stają z błędem parsera, który aplikacja przekazująca go dalej pokazuje jako stronę błędu."
+
+[unbalanced-quote.expect]
+source = "f6046d040ea4"
+text = "Wyniki dla obu słów, z cudzysłowem pominiętym albo szukanym jako tekst."
+
+[unbalanced-paren.name]
+source = "48b11eb1e48e"
+text = "Nawias, który się nie zamyka"
+
+[unbalanced-paren.breaks]
+source = "edce5db68d41"
+text = "Nawias otwiera grupę, która się nie zamyka: query_string w Elasticsearch, SQLite FTS5, to_tsquery w PostgreSQL, logiczne wyszukiwanie pełnotekstowe MySQL i wyrażenie regularne zbudowane z zapytania w Pythonie albo JavaScripcie stają z błędem składni."
+
+[unbalanced-paren.expect]
+source = "8b1d382f4fb7"
+text = "Wyniki dla draft, z nawiasem pominiętym albo szukanym jako tekst."
+
+[backslash-end.name]
+source = "f461eb358f06"
+text = "Słowo z ukośnikiem wstecznym na końcu"
+
+[backslash-end.breaks]
+source = "c169eb00474b"
+text = "Ukośnik wsteczny na końcu niczego nie escapuje, więc query_string w Elasticsearch, SQLite FTS5, to_tsquery w PostgreSQL i wyrażenie regularne zbudowane z zapytania w Pythonie albo JavaScripcie stają z błędem składni."
+
+[backslash-end.expect]
+source = "e86187747e62"
+text = "Wyniki dla draft z ukośnikiem wstecznym, pusty wynik albo komunikat, nigdy strona błędu."
+
+[c-plus-plus.name]
+source = "bcb023eaa737"
+text = "Szukanie C++"
+
+[c-plus-plus.breaks]
+source = "10138801cebd"
+text = "Tokenizatory gubią plusy, więc wyszukiwanie pełnotekstowe Elasticsearch i PostgreSQL zwraca każdy wynik z literą C, SQLite FTS5 i logiczny tryb MySQL stają z błędem składni, a w adresie składanym ręcznie każdy plus dociera jako spacja."
+
+[c-plus-plus.expect]
+source = "f2ddcb18fb12"
+text = "Najpierw wyniki o C++, nie każdy wynik z literą C."
+
+[c-sharp.name]
+source = "cb5dd410d17e"
+text = "Szukanie C#"
+
+[c-sharp.breaks]
+source = "c9cee564a7de"
+text = "Doklejony do adresu ręcznie bez kodowania krzyżyk zaczyna fragment adresu, a serwer szuka C. Wyszukiwanie pełnotekstowe Elasticsearch i PostgreSQL też gubi krzyżyk, a wyszukiwanie pełnotekstowe MySQL pomija tak krótkie słowo."
+
+[c-sharp.expect]
+source = "9b13f1b58510"
+text = "Wyniki o C#, a krzyżyk dociera do serwera zakodowany jako %23."
+
+[stop-words.name]
+source = "ab43de4d79d9"
+text = "Fraza z samych słów pomijanych"
+
+[stop-words.breaks]
+source = "fa266a042598"
+text = "Każde słowo jest na angielskiej liście słów pomijanych wyszukiwania pełnotekstowego PostgreSQL, więc zapytanie robi się puste, a użytkownik nie znajduje niczego dla słynnej frazy."
+
+[stop-words.expect]
+source = "c8fcee93760f"
+text = "Wyniki, które zawierają frazę, albo komunikat, że zapytanie jest zbyt pospolite."
+
+[boolean-words.name]
+source = "01ff59e04ea7"
+text = "Słowa połączone przez AND"
+
+[boolean-words.breaks]
+source = "9a50092ea950"
+text = "SQLite FTS5 i składnia zapytań Lucene czytają wielkie AND jako operator, a wyszukiwanie pełnotekstowe dopasowuje słowa w dowolnym miejscu, więc rekord pepper with sea salt pojawia się dla frazy, którą wpisał użytkownik."
+
+[boolean-words.expect]
+source = "937cd11f5dff"
+text = "Te same wyniki co dla salt and pepper albo fraza szukana tak, jak wpisana."
+
+[diacritics-stored.name]
+source = "4e507ee08479"
+text = "Krok 1: zapisz rekord Łódź z polskimi literami"
+
+[diacritics-stored.breaks]
+source = "b8434f566fb5"
+text = "Krok 1 testu akcentów: zapisz rekord o tej nazwie, polskiej pisowni miasta, zanim zaczniesz go szukać bez polskich liter."
+
+[diacritics-stored.expect]
+source = "1008973a4def"
+text = "Zapisany tak, jak wpisany."
+
+[diacritics-searched.name]
+source = "e55282bffd7e"
+text = "Krok 2: szukaj lodz bez polskich liter"
+
+[diacritics-searched.breaks]
+source = "a1df3ca378a5"
+text = "Krok 2: szukaj rekordu z kroku 1 wpisanego bez polskich liter, tak jak pisze większość użytkowników na klawiaturze bez nich."
+
+[diacritics-searched.expect]
+source = "8dd67f3a6008"
+text = "Rekord z kroku 1 znaleziony."
+
+[spaces-only.name]
+source = "59c9243c58b7"
+text = "Trzy spacje"
+
+[spaces-only.breaks]
+source = "2ee58010b873"
+text = "Po przycięciu zostaje puste zapytanie, na które jedne wyszukiwarki odpowiadają wszystkimi wierszami, a inne błędem: SQLite FTS5 je odrzuca, a adres składany ręcznie gubi spacje z końca, więc serwer dostaje puste zapytanie."
+
+[spaces-only.expect]
+source = "5348358c9ecd"
+text = "Pusty wynik albo komunikat, tak samo jak dla pustego pola wyszukiwania."
+
+[url-query.name]
+source = "08a1a9b50d52"
+text = "Wklejony link"
+
+[url-query.breaks]
+source = "d63417470f22"
+text = "query_string w Elasticsearch czyta dwukropek jako nazwę pola, a ukośnik jako początek wyrażenia regularnego, i odrzuca link, SQLite FTS5 odpowiada, że nie ma takiej kolumny, a zapytania match zwracają każdy rekord z example albo com."
+
+[url-query.expect]
+source = "13045d7fece4"
+text = "Rekordy, które zawierają ten link."
+
+[email-query.name]
+source = "70772a3487ed"
+text = "Adres e-mail"
+
+[email-query.breaks]
+source = "b7a5d9bc16d3"
+text = "Wyszukiwanie pełnotekstowe Elasticsearch i MySQL dzieli adres przy małpie i kropkach i zwraca każdy rekord z example albo com, logiczny tryb MySQL odrzuca małpę, a SQLite FTS5 odrzuca kropkę."
+
+[email-query.expect]
+source = "c36f552240a6"
+text = "Najpierw rekord z tym adresem."
+
+[invoice-number.name]
+source = "980d78ac9b4d"
+text = "Numer faktury z ukośnikami"
+
+[invoice-number.breaks]
+source = "86ca0511b7b6"
+text = "query_string w Elasticsearch czyta ukośnik jako początek wyrażenia regularnego i odrzuca numer, a wyszukiwanie pełnotekstowe Elasticsearch i MySQL dzieli go przy ukośnikach i zwraca każdą fakturę i każdy inny rekord z 2027 roku."
+
+[invoice-number.expect]
+source = "1a664460c3a8"
+text = "Najpierw faktura z tym numerem."
+
+[long-query.name]
+source = "12b5a33d2f6b"
+text = "2100 znaków"
+
+[long-query.breaks]
+source = "098c04851aed"
+text = "Wysłane jako parametr GET zapytanie jest dłuższe niż 2048 bajtów, które IIS domyślnie przyjmuje w ciągu zapytania, więc IIS odpowiada stroną błędu 404 zamiast wyników. Serwery takie jak nginx, Apache, Node i Kestrel je przyjmują."
+
+[long-query.expect]
+source = "d835af55e301"
+text = "Wyniki albo komunikat, że zapytanie jest za długie."
+
+[diacritics.name]
+source = "20ce4aa7f34d"
+text = "Polska pisownia i to samo słowo bez polskich liter"
+
+[diacritics.breaks]
+source = "6713d142f1f5"
+text = "Krok 3: wyszukiwanie, które zdejmuje akcenty po rozkładzie NFD, i tak nie znajduje rekordu, bo polskie ł nie ma rozkładu. Rozszerzenie unaccent w PostgreSQL i domyślne porównanie MySQL bez akcentów go znajdują, a zwykłe LIKE, SQLite, Elasticsearch z domyślnym analizatorem i JavaScript nie."
+
+[diacritics.expect]
+source = "2fc8046467b8"
+text = "Szukanie lodz znajduje rekord zapisany z polskimi literami."

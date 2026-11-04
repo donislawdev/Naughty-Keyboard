@@ -12,6 +12,18 @@ Changes wait under Unreleased until then.
 
 ### Added
 
+- A `passwords` pack of seventeen passwords that registration and login read differently. Four pairs
+  are tests in three steps: register with the first half, log in with the second, read the result.
+  They catch a hash that reads only 72 bytes, also behind a 37-character Polish password, a trailing
+  space trimmed on one side only, and composed against decomposed accents. The rest are sixteen
+  spaces, emoji that String.length counts twice, a 64-character passphrase, two breached passwords
+  that meet the usual rules, a login field shorter than registration, Cyrillic, angle brackets and a
+  plus sign in a form body.
+- A `search-queries` pack of seventeen queries that a search box reads as something other than the
+  text typed: a percent sign and an underscore in LIKE, a lone asterisk, a quote and a bracket never
+  closed, a trailing backslash, C++ and C#, a phrase made only of stop words, AND as an operator,
+  three spaces, a pasted link, an e-mail address, an invoice number with slashes and a query longer
+  than IIS accepts in a URL. One pair saves a record named `Łódź` and searches for `lodz`.
 - An `injections` pack of eleven classic checks for escaping: a single quote, bold tags, a script
   tag, an image with an error handler, template expressions in double braces and with a dollar sign,
   a path that climbs out of its folder with slashes and with backslashes, a quote with an SQL
