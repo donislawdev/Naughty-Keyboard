@@ -25,6 +25,8 @@ It refuses rather than guesses. It types nothing while Ctrl, Alt, Shift or Win i
 
 A window running with higher privileges than the palette, such as a program started as administrator, would drop the keystrokes without a word. For such a window the palette puts the value on the clipboard instead, says why, and leaves pasting to you. [Clipboard mode](/docs/clipboard-mode/) says more.
 
+A code editor can surprise you. Monaco, the editor inside VS Code and many web pages, wraps a selection in the bracket or quote you type instead of replacing it, so a value that starts with one comes out around the old text. The palette never reads the field, so it cannot see a selection. Do not type a value over a selection in a code editor: put the caret in a one-line body and let the palette clear the line, or delete the old text first.
+
 ## How do I find a value?
 
 Press {{< kbd "Alt+Shift+Space" >}}. The window that opens shows every pack as a list you can open, and searches the values of all of them at once as you type. Choosing a value makes its pack the one in use and that value the next one, so the next press types it. The values you chose there most recently, from any pack, are at the top. A value that is one half of a pair says which beside its name, and typing the name of a pair finds both of its values.

@@ -348,6 +348,12 @@ other = "wersja {{ .version }}, aktualizacja {{ .updated }}"
 [pack_how]
 other = "Wpisuj je po jednej skrótem {{ .chord }} w palecie albo weź wszystkie do skryptu poleceniem <code>{{ .command }}</code>."
 
+[pack_offensive]
+other = "offensive"
+
+[pack_offensive_note]
+other = "Paleta oznacza te wartości jako offensive. To klasyczne sprawdziany escapowania, żadna z nich nie jest exploitem znanej podatności, a nic nie jest wpisywane, dopóki nie naciśniesz skrótu. Używaj ich tylko na systemach, które wolno Ci testować."
+
 [pairs_heading]
 other = "Pary"
 

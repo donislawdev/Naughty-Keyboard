@@ -32,8 +32,9 @@ time-zones                12 values  Time and time zones
 currency-separators       12 values  Money and separators
 pseudolocalization        10 values  Pseudolocalisation
 json-payloads             12 values  JSON request bodies
+injections                11 values  Injections  (offensive)
 
-19 of 19 packs loaded, 235 values.
+20 of 20 packs loaded, 246 values.
 Read these pack sources: built-in.
 Not read: team - the settings file has no key for this folder yet, so it cannot be named.
 Not read: own - the settings file has no key for this folder yet, so it cannot be named.

@@ -94,7 +94,7 @@ body:
     attributes:
       label: Before you send it
       options:
-        - label: This is a value that real users or real data produce, not an exploit payload. The catalogue holds the first kind.
+        - label: This is a value that real users or real data produce, or a classic check for escaping, not an exploit for a known vulnerability. The catalogue holds those two kinds.
           required: true
         - label: I looked in the packs, with `nkb show`, and this value or a close one is not there yet.
           required: true

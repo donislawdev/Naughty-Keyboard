@@ -26,6 +26,8 @@ Odmawia, zamiast zgadywać. Nie wpisuje niczego, gdy wciśnięty jest Ctrl, Alt,
 
 Okno działające z wyższymi uprawnieniami niż paleta, na przykład program uruchomiony jako administrator, odrzuciłoby naciśnięcia bez słowa. Dla takiego okna paleta kładzie wartość w schowku, mówi dlaczego i zostawia wklejenie Tobie. Więcej mówi [Tryb schowka](/docs/clipboard-mode/).
 
+Edytor kodu potrafi zaskoczyć. Monaco, edytor w VS Code i na wielu stronach, otacza zaznaczenie nawiasem albo cudzysłowem, który wpisujesz, zamiast je zastąpić, więc wartość zaczynająca się od takiego znaku ląduje wokół starego tekstu. Paleta nigdy nie czyta pola, więc zaznaczenia nie widzi. Nie wpisuj wartości w zaznaczenie w edytorze kodu: ustaw karetkę w jednowierszowym ciele i pozwól palecie wyczyścić wiersz albo najpierw skasuj stary tekst.
+
 ## Jak znaleźć wartość?
 
 Naciśnij {{< kbd "Alt+Shift+Space" >}}. Okno, które się otworzy, pokazuje każdą paczkę jako listę do rozwinięcia i w trakcie pisania przeszukuje naraz wartości wszystkich paczek. Wybranie wartości ustawia jej paczkę jako używaną, a tę wartość jako następną, więc następne naciśnięcie ją wpisze. Na górze stoją wartości ostatnio wybrane w tym oknie, z każdej paczki. Wartość, która jest połową pary, mówi obok swojej nazwy, którą połową jest, a nazwa pary znajduje obie jej wartości.

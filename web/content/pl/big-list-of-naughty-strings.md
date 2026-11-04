@@ -27,7 +27,7 @@ Robi resztę pracy wokół takiej listy:
 
 ## Kiedy Big List wystarcza?
 
-Gdy napisy trafiają do testu automatycznego i nikt nie wpisuje ich ręcznie. Ma dużo więcej napisów, sekcje, których Naughty Keyboard nie ma, na przykład wstrzykiwanie skryptów, SQL i poleceń, oraz gotowe pakiety dla kilku języków programowania. Naughty Keyboard nie ma dziś paczki z takimi napisami: jego wartości to to, co produkują prawdziwi użytkownicy i prawdziwe dane.
+Gdy napisy trafiają do testu automatycznego i nikt nie wpisuje ich ręcznie. Ma dużo więcej napisów, sekcje, których Naughty Keyboard nie ma, na przykład wstrzykiwanie poleceń i znacznie więcej napisów ze skryptami i SQL, oraz gotowe pakiety dla kilku języków programowania. Naughty Keyboard ma jedną małą paczkę klasycznych sprawdzianów escapowania, oznaczoną w palecie jako offensive, i żadnych napisów ze znanych podatności. Większość jego wartości to to, co produkują prawdziwi użytkownicy i prawdziwe dane.
 
 ## Jak wypadają obok siebie?
 
@@ -37,7 +37,7 @@ Gdy napisy trafiają do testu automatycznego i nikt nie wpisuje ich ręcznie. Ma
 | Rozmiar | ponad 500 napisów w 31 sekcjach | paczki: {{< count "pack" >}}, wartości: {{< count "value" >}} |
 | Co mówi o wartości | jeden wiersz na sekcję | co psuje i co robi poprawna aplikacja, przy każdej wartości |
 | Wartości od 255 znaków | celowo pominięte | zapisane jako przepisy |
-| Wstrzykiwanie skryptów, SQL i poleceń | tak, ze znanymi CVE | dziś nie |
+| Wstrzykiwanie skryptów, SQL i poleceń | tak, ze znanymi CVE | kilka klasycznych sprawdzianów escapowania, bez wstrzykiwania poleceń i bez CVE |
 | Wartość w polu | kopiuj i wklej | jeden skrót na Windows, macOS i Linuksie |
 | W teście automatycznym | `blns.json` i pakiety dla kilku języków | `nkb emit`, jako JSON, CSV albo jedna wartość na wiersz |
 | Licencja | MIT | GPL-3.0 dla programów, CC BY 4.0 dla paczek |

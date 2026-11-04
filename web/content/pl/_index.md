@@ -24,7 +24,7 @@ rows = [
 [catalogue]
 eyebrow = "Katalog"
 title = "Wartości, których Twój formularz jeszcze nie widział"
-text = "Nie są sprytne ani tajne. Produkują je prawdziwi użytkownicy i prawdziwe dane, a nikt nie wpisuje ich ręcznie, bo to żmudne."
+text = "Nie są sprytne ani tajne. Większość produkują prawdziwi użytkownicy i prawdziwe dane, kilka to klasyczne sprawdziany escapowania, a nikt nie wpisuje ich ręcznie, bo to żmudne."
 examples = [
   "whitespace/trailing-space",
   "export-breakers/formula-equals",

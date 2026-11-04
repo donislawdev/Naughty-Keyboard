@@ -1,0 +1,146 @@
+# Polish translations of the pack injections, made from the program's English.
+#
+# source is the first twelve characters of the SHA-256 of the English each
+# text was made from. When the program says something else, the site build
+# stops and names the new digest, to be written here once the text below has
+# been checked against the new English.
+
+[pack.name]
+source = "5fed173ae6ea"
+text = "Wstrzyknięcia"
+
+[pack.description]
+source = "e7d7d728d5d8"
+text = "Napisy pokazujące, czy pole traktuje wejście jak dane, a nie kod: cudzysłowy, znaczniki, szablony, ścieżki."
+
+[single-quote.name]
+source = "f9f00df089a7"
+text = "Pojedynczy cudzysłów"
+
+[single-quote.breaks]
+source = "bd6125611a1e"
+text = "Najskuteczniejszy test z jednego znaku: pole, które bez ucieczki wstawia go do zapytania SQL, kończy napis za wcześnie, a strona pokazuje błąd bazy danych."
+
+[single-quote.expect]
+source = "ed92921f4827"
+text = "Zapisany i zwrócony jako jeden znak oraz pokazany jako jeden znak."
+
+[angle-brackets.name]
+source = "c9bb2f4e82aa"
+text = "Znaczniki pogrubienia"
+
+[angle-brackets.breaks]
+source = "7bf8b957fec9"
+text = "Znaczniki w polu tekstowym są przy wyświetlaniu albo escapowane, albo renderowane, a pogrubiony tekst na stronie znaczy, że pole nie escapuje niczego."
+
+[angle-brackets.expect]
+source = "b2d341cf2a18"
+text = "Pokazane jako zwykły tekst, z widocznymi znacznikami."
+
+[script-tag.name]
+source = "673137d3a1a9"
+text = "Znacznik skryptu"
+
+[script-tag.breaks]
+source = "671dbf797e20"
+text = "Klasyczny test escapowania wyjścia: okno z napisem 1 albo tekst, który znika, znaczy, że wartość trafiła na stronę jako kod w miejscu, gdzie jest pokazywana."
+
+[script-tag.expect]
+source = "d9a419b2d949"
+text = "Pokazany jako zwykły tekst wszędzie tam, gdzie wartość się pojawia, także na listach i w eksportach."
+
+[img-onerror.name]
+source = "ac19b6fdde4c"
+text = "Obraz z obsługą błędu"
+
+[img-onerror.breaks]
+source = "ddcf822a4017"
+text = "Łapie filtr, który usuwa znaczniki skryptu po nazwie, a przepuszcza atrybut uruchamiający kod, więc wartość działa, gdy tylko zepsuty obraz się wczyta."
+
+[img-onerror.expect]
+source = "9be885cf4d50"
+text = "Pokazany jako zwykły tekst."
+
+[template-braces.name]
+source = "07a78ee37e99"
+text = "Wyrażenie szablonu w podwójnych nawiasach klamrowych"
+
+[template-braces.breaks]
+source = "42b51673ec48"
+text = "Silniki szablonów, takie jak Jinja, Twig i Angular, wyliczają podwójne nawiasy klamrowe, więc 49 na stronie znaczy, że dane od użytkownika trafiły do szablonu jako kod."
+
+[template-braces.expect]
+source = "a357b3a904e5"
+text = "Pokazane dokładnie tak, jak wpisane, z widocznymi nawiasami."
+
+[template-dollar.name]
+source = "f4bd19f95ccf"
+text = "Wyrażenie szablonu ze znakiem dolara"
+
+[template-dollar.breaks]
+source = "ddd4b6aa418a"
+text = "Literały szablonowe JavaScriptu, języki wyrażeń Javy i Freemarker wyliczają znak dolara z nawiasami klamrowymi, więc 49 znaczy, że wartość trafiła do jednego z nich jako kod."
+
+[template-dollar.expect]
+source = "bcecb7077fc2"
+text = "Pokazane dokładnie tak, jak wpisane."
+
+[path-traversal.name]
+source = "db13be489fa2"
+text = "Ścieżka wychodząca poza swój folder"
+
+[path-traversal.breaks]
+source = "f939fc66c71b"
+text = "Nazwa pliku doklejona do folderu bez normalizacji ścieżki wychodzi z niego, więc aplikacja czyta albo zapisuje plik, do którego nigdy nie miała sięgać."
+
+[path-traversal.expect]
+source = "ec1cfe011575"
+text = "Odrzucona albo znormalizowana tak, żeby wynik został w zamierzonym folderze."
+
+[path-traversal-win.name]
+source = "30e44ad2d11a"
+text = "Ścieżka wychodząca z odwróconymi ukośnikami"
+
+[path-traversal-win.breaks]
+source = "f32f55c6e510"
+text = "Windows czyta odwrócony ukośnik jak separator, a walidator, który szuka tylko ../, przepuszcza to samo wyjście z folderu."
+
+[path-traversal-win.expect]
+source = "664735e89bda"
+text = "Odrzucona albo znormalizowana dokładnie tak jak postać ze zwykłymi ukośnikami."
+
+[sql-comment.name]
+source = "3c53844d4ed5"
+text = "Cudzysłów i komentarz SQL"
+
+[sql-comment.breaks]
+source = "aab218eb0c43"
+text = "Cudzysłów kończący napis i komentarz ucinający resztę zapytania: klasyczny kształt zapytania logowania zepsutego przez niescapowane wejście."
+
+[sql-comment.expect]
+source = "39b3f4491a8e"
+text = "Zapisany i pokazany jako napis o ośmiu znakach."
+
+[format-string.name]
+source = "624b39fb735b"
+text = "Specyfikatory formatu"
+
+[format-string.breaks]
+source = "c04266cc3ded"
+text = "Użyty jako format printf w C, %x czyta stos, %n zapisuje w pamięci, a wywołanie formatowania w języku zarządzanym, które znajduje specyfikatory bez argumentów, zgłasza błąd."
+
+[format-string.expect]
+source = "74247457fb3d"
+text = "Traktowany jako zwykły tekst, nigdy nie przekazany jako napis formatu."
+
+[xml-entity.name]
+source = "b0dfb84a53ac"
+text = "Zewnętrzna encja XML"
+
+[xml-entity.breaks]
+source = "7d9684437347"
+text = "Parser XML, który rozwiązuje encje zewnętrzne, zastępuje odwołanie do encji plikiem wskazanym w deklaracji, więc zaimportowana treść każe serwerowi czytać jego własne pliki."
+
+[xml-entity.expect]
+source = "6c7bf5041da2"
+text = "Encje zewnętrzne nierozwiązywane, a wartość potraktowana jako tekst albo odrzucona."

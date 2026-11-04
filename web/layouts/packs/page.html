@@ -22,8 +22,14 @@
       <span class="chip">{{ $pack.id }}</span>
       <span class="chip">{{ T "pack_version" (dict "version" $pack.version "updated" $pack.updated) }}</span>
       <span class="chip">{{ $pack.license }}</span>
+      {{- if where $pack.values "risk" "offensive" }}
+      <span class="chip">{{ T "pack_offensive" }}</span>
+      {{- end }}
     </div>
     <p>{{ T "pack_how" (dict "chord" (partial "chord.html" "Alt+Shift+N") "command" (printf "nkb emit %s" $pack.id)) | safeHTML }}</p>
+    {{- if where $pack.values "risk" "offensive" }}
+    <p>{{ T "pack_offensive_note" }}</p>
+    {{- end }}
     <div>
       {{- range $pack.values }}
       {{- $name := partial "value-text.html" (dict "value" . "field" "name") }}
