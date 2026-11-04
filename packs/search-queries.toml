@@ -145,11 +145,11 @@ since  = "1.0"
 
 [[values]]
 id     = "long-query"
-name   = "2100 characters"
+name   = "16500 characters"
 type   = "repeat"
 unit   = "a"
-count  = 2100
-breaks = "Sent as a GET parameter, the query is longer than the 2048 bytes IIS allows in a query string by default, so IIS answers with a 404 error page instead of results. Servers such as nginx, Apache, Node and Kestrel accept it."
+count  = 16500
+breaks = "Sent as a GET parameter, the query is longer than web servers accept by default: IIS answers 404 above 2048 bytes, nginx, Apache and Kestrel 414 above about 8 KB, and Node 431 above 16 KB, an error page instead of results or a message."
 expect = "Results, or a message that the query is too long."
 since  = "1.0"
 

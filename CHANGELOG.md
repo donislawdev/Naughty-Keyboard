@@ -23,7 +23,7 @@ Changes wait under Unreleased until then.
   text typed: a percent sign and an underscore in LIKE, a lone asterisk, a quote and a bracket never
   closed, a trailing backslash, C++ and C#, a phrase made only of stop words, AND as an operator,
   three spaces, a pasted link, an e-mail address, an invoice number with slashes and a query longer
-  than IIS accepts in a URL. One pair saves a record named `Łódź` and searches for `lodz`.
+  than web servers accept in a URL. One pair saves a record named `Łódź` and searches for `lodz`.
 - An `injections` pack of eleven classic checks for escaping: a single quote, bold tags, a script
   tag, an image with an error handler, template expressions in double braces and with a dollar sign,
   a path that climbs out of its folder with slashes and with backslashes, a quote with an SQL

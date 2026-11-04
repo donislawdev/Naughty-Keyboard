@@ -206,12 +206,12 @@ source = "1a664460c3a8"
 text = "Najpierw faktura z tym numerem."
 
 [long-query.name]
-source = "12b5a33d2f6b"
-text = "2100 znaków"
+source = "36e0520fc542"
+text = "16500 znaków"
 
 [long-query.breaks]
-source = "098c04851aed"
-text = "Wysłane jako parametr GET zapytanie jest dłuższe niż 2048 bajtów, które IIS domyślnie przyjmuje w ciągu zapytania, więc IIS odpowiada stroną błędu 404 zamiast wyników. Serwery takie jak nginx, Apache, Node i Kestrel je przyjmują."
+source = "b96f9f1408a7"
+text = "Wysłane jako parametr GET zapytanie jest dłuższe, niż serwery WWW domyślnie przyjmują: IIS odpowiada 404 powyżej 2048 bajtów, nginx, Apache i Kestrel 414 powyżej ok. 8 KB, a Node 431 powyżej 16 KB, czyli stroną błędu zamiast wyników albo komunikatu."
 
 [long-query.expect]
 source = "d835af55e301"
