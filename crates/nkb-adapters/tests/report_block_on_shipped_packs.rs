@@ -88,8 +88,10 @@ impl KeystrokeSender for NoKeys {
 /// implementation, so a mistake in `nkb_core::normalization` cannot stand on
 /// both sides of the comparison (`D70`). On 2026-11-03, with `json-payloads`
 /// and `filenames-paths` 1.1, Python 3.15 asked the `Typed:` lines this test
-/// writes and added the two file names below and no other.
-const REWRITTEN_BY_NORMALIZATION: [&str; 12] = [
+/// writes and added the two file names below and no other. On 2026-11-04,
+/// with `passwords` and `search-queries`, Python 3.15.2 (`unicodedata` 17.0.0)
+/// added the decomposed password and no other.
+const REWRITTEN_BY_NORMALIZATION: [&str; 13] = [
     "unicode-text/combining-acute",
     "unicode-text/zalgo",
     "unicode-text/fullwidth-latin",
@@ -102,6 +104,7 @@ const REWRITTEN_BY_NORMALIZATION: [&str; 12] = [
     "pasted-from-word/multiple-typographic",
     "filenames-paths/nfd-name",
     "filenames-paths/fullwidth-extension",
+    "passwords/nfc-nfd-login",
 ];
 
 fn shipped_packs() -> Vec<Pack> {
