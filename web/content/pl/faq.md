@@ -26,7 +26,7 @@ faq:
   - question: Czy mogę dodać własne wartości?
     answer: "Własną paczkę możesz już dziś napisać i sprawdzić poleceniami `nkb new-pack`, `nkb lint` i `nkb fmt`. Wczytywanie własnych paczek do palety nie jest jeszcze podłączone. Wartość, która kiedyś kosztowała Cię popołudnie, należy do katalogu, a formularz [Suggest a value](https://github.com/donislawdev/Naughty-Keyboard/issues/new?template=suggest_value.yml) pyta po angielsku o wartość, o to, co psuje, i o to, gdzie ją widziano."
   - question: Czy to narzędzie do ataków?
-    answer: "Nie. Jest zbudowane do testowania oprogramowania, za które odpowiadasz, i mówi to okno powitalne: używaj go tylko na systemach, które wolno Ci testować. Wbudowane paczki zawierają wartości, które produkują prawdziwi użytkownicy i prawdziwe dane, a nie gotowe exploity."
+    answer: "Nie. Jest zbudowane do testowania oprogramowania, za które odpowiadasz, i mówi to okno powitalne: używaj go tylko na systemach, które wolno Ci testować. Większość wbudowanych paczek zawiera wartości, które produkują prawdziwi użytkownicy i prawdziwe dane. Jedna paczka zawiera klasyczne sprawdziany escapowania, paleta oznacza ją jako offensive, a żadna jej wartość nie jest exploitem znanej podatności."
   - question: Dlaczego wpisuje, a nie wkleja?
     answer: "Bo pole spotyka większość wartości z klawiatury, a niektóre aplikacje traktują wpisywanie i wklejanie inaczej, co warto przetestować osobno. Gdy chcesz drugiej drogi, [tryb schowka](/docs/clipboard-mode/) kładzie każdą wartość w schowku."
   - question: Dlaczego w Firefoksie wiersz nie jest czyszczony?

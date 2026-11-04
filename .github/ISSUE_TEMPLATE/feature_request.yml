@@ -36,7 +36,7 @@ body:
       options:
         - label: This does not need the tool to read what a window shows. It reads the kind of control that has the focus and the name of the program, never a title, a text or a value, and tests hold it to that. Reading more would change what the tool is.
           required: true
-        - label: This is not about attacking anything. Naughty Keyboard is for testing software you are responsible for, and the packs hold values that real users and real data produce, with no exploit payloads in them.
+        - label: This is not about attacking anything. Naughty Keyboard is for testing software you are responsible for, and the packs hold values that real users and real data produce plus a few classic checks for escaping, with no exploits for known vulnerabilities in them.
           required: true
   - type: checkboxes
     id: surfaces

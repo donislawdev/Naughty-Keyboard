@@ -12,6 +12,12 @@ Changes wait under Unreleased until then.
 
 ### Added
 
+- An `injections` pack of eleven classic checks for escaping: a single quote, bold tags, a script
+  tag, an image with an error handler, template expressions in double braces and with a dollar sign,
+  a path that climbs out of its folder with slashes and with backslashes, a quote with an SQL
+  comment, format specifiers and an XML external entity. The palette and `nkb packs` mark the pack
+  `offensive`. None of the values is an exploit for a known vulnerability, and nothing is typed until
+  you press a shortcut.
 - A `json-payloads` pack of twelve request bodies that JSON parsers and databases read differently,
   among them a duplicate key, an integer above 2^53, 1001 nested arrays, an escaped NUL and a byte
   order mark. Each is one line, so `nkb emit json-payloads --format lines`

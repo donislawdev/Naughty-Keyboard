@@ -149,7 +149,8 @@ program only after you click the button for it. The other button takes it away.
 
 - **Typing into the window in front.** That is the product.
 - **Values that break your application.** Finding that is the point. The values in the packs are
-  awkward on purpose, and they are values real users and real data produce, not exploit payloads. A
+  awkward on purpose. Most are values real users and real data produce, and a few are classic checks
+  for escaping that the palette marks `offensive`. None is an exploit for a known vulnerability. A
   bug they uncover belongs in your application's tracker.
 - **Other programs reading the clipboard.** In clipboard mode a value sits on the clipboard until
   something replaces it, and any program running as you can read it. That is how the clipboard

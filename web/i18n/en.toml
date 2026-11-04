@@ -319,6 +319,12 @@ other = "version {{ .version }}, updated {{ .updated }}"
 [pack_how]
 other = "Type them one at a time with {{ .chord }} in the palette, or take them all into a script with <code>{{ .command }}</code>."
 
+[pack_offensive]
+other = "offensive"
+
+[pack_offensive_note]
+other = "The palette marks these values offensive. They are classic checks for escaping, none of them is an exploit for a known vulnerability, and nothing is typed until you press a shortcut. Use them only on systems you are allowed to test."
+
 [pairs_heading]
 other = "Pairs"
 

@@ -23,8 +23,9 @@
 
 **Naughty Keyboard** is a tool for testers and developers. One shortcut types the next awkward value
 into the field in front of you: `null`, a trailing space, a zero-width space, `30.02.2026`, `=1+1`,
-a name of 65 535 characters. They are the values real users and real data produce, and a form you
-only ever tried with "John Smith" has never met them.
+a name of 65 535 characters. Most of them are values real users and real data produce, and a few are
+the classic checks for escaping, marked `offensive` in the palette. A form you only ever tried with
+"John Smith" has never met them.
 
 Every value comes with what it usually breaks and what a correct application does instead. When one of
 them breaks something, one more shortcut copies a report block you can paste straight into a ticket.
@@ -222,7 +223,7 @@ unicode-text              12 values  Unicode and text
 length-bombs              12 values  Length bombs
 ...
 
-19 of 19 packs loaded, 235 values.
+20 of 20 packs loaded, 246 values.
 ```
 
 Read one in full. Values are printed escaped, because a value made of characters nobody can see has
@@ -326,7 +327,7 @@ a project.
 
 ## What is in the packs
 
-Nineteen packs, 235 values, all built in. Every value says what it breaks and what a correct application
+Twenty packs, 246 values, all built in. Every value says what it breaks and what a correct application
 does.
 
 | Pack | Values | What it holds |
@@ -350,6 +351,7 @@ does.
 | `currency-separators` | 12 | Amounts written the way people and spreadsheets write them, and where precision ends |
 | `pseudolocalization` | 10 | The standard internationalisation-testing technique, reduced to values you can paste into a field |
 | `json-payloads` | 12 | JSON request bodies that parsers and databases read differently. Rename the example fields to those of your API |
+| `injections` | 11 | Classic checks for escaping: a quote, a tag, a template expression and a path. The palette marks it `offensive` |
 
 A value too long to store is kept as a recipe and written out when it is sent, so `length-bombs` can
 hold 100 000 characters in a few lines. A date that has to stay ahead is kept as a rule the same way,
@@ -391,7 +393,7 @@ says so.
 - **It will not type into everything.** `nkb send` refuses a window running with higher privileges than
   itself, because Windows would drop the keystrokes without a word, and a control where keys would act on
   the control and not on text. Where it cannot tell which kind of control has the focus, it sends.
-- **A small catalogue.** 235 values in nineteen packs is a start. It is chosen to be the values that cost the
+- **A small catalogue.** 246 values in twenty packs is a start. It is chosen to be the values that cost the
   most to miss, and it is not a complete list of anything.
 
 ---
@@ -399,9 +401,11 @@ says so.
 ## This is not an attack tool
 
 Naughty Keyboard is built for testing software you are responsible for, and the welcome window says
-so: use it only on systems you are allowed to test. The built-in packs hold values that real users and
-real data produce, with no exploit payloads in them. It is a way to find out how your own forms behave,
-not a way to attack someone else's.
+so: use it only on systems you are allowed to test. Most built-in packs hold values that real users and
+real data produce. One pack, Injections, holds the classic checks for escaping: a quote, a tag, a
+template expression and a path. The palette marks that pack and each of its values `offensive`, none
+of them is an exploit for a known vulnerability, and nothing is typed until you press a shortcut. It
+is a way to find out how your own forms behave, not a way to attack someone else's.
 
 ---
 

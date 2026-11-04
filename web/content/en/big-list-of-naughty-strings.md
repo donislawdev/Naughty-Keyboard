@@ -27,7 +27,7 @@ It does the rest of the job around a list like that:
 
 ## When is the Big List enough?
 
-When the strings go into an automated test and nobody types them by hand. It has many more strings, sections Naughty Keyboard does not have, such as script, SQL and command injection, and ready packages for several programming languages. Naughty Keyboard has no pack of injection strings today: its values are what real users and real data produce.
+When the strings go into an automated test and nobody types them by hand. It has many more strings, sections Naughty Keyboard does not have, such as command injection and many more script and SQL strings, and ready packages for several programming languages. Naughty Keyboard has one small pack of classic escaping checks, marked offensive in the palette, and no strings taken from known vulnerabilities. Most of its values are what real users and real data produce.
 
 ## How do they compare?
 
@@ -37,7 +37,7 @@ When the strings go into an automated test and nobody types them by hand. It has
 | Size | more than 500 strings in 31 sections | {{< count "value" >}} values in {{< count "pack" >}} packs |
 | What it says about a value | one line for each section | what it breaks and what a correct application does, for each value |
 | Values of 255 characters or more | left out on purpose | kept as recipes |
-| Script, SQL and command injection | yes, with known CVEs | none today |
+| Script, SQL and command injection | yes, with known CVEs | a few classic escaping checks, no command injection and no CVEs |
 | Getting a value into a field | copy and paste | one shortcut on Windows, macOS and Linux |
 | In an automated test | `blns.json`, and packages for several languages | `nkb emit`, as JSON, CSV or one value per line |
 | Licence | MIT | GPL-3.0 for the programs, CC BY 4.0 for the packs |

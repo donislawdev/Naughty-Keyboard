@@ -24,7 +24,7 @@ faq:
   - question: Can I add my own values?
     answer: "You can write a pack of your own and check it with `nkb new-pack`, `nkb lint` and `nkb fmt` today. Loading your own packs into the palette is not wired up yet. A value that cost you an afternoon once belongs in the catalogue, and the [Suggest a value](https://github.com/donislawdev/Naughty-Keyboard/issues/new?template=suggest_value.yml) form asks for the value, what it breaks and where you saw it."
   - question: Is this an attack tool?
-    answer: "No. It is built for testing software you are responsible for, and the welcome window says so: use it only on systems you are allowed to test. The built-in packs hold values that real users and real data produce, and no exploit payloads."
+    answer: "No. It is built for testing software you are responsible for, and the welcome window says so: use it only on systems you are allowed to test. Most built-in packs hold values that real users and real data produce. One pack holds classic checks for escaping, the palette marks it offensive, and none of its values is an exploit for a known vulnerability."
   - question: Why does it type rather than paste?
     answer: "Because a field meets most values from a keyboard, and some applications treat typing and pasting differently, which is worth testing on its own. When you want the other way, [clipboard mode](/docs/clipboard-mode/) puts each value on the clipboard instead."
   - question: Why is the line not cleared in Firefox?

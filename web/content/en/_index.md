@@ -24,7 +24,7 @@ rows = [
 [catalogue]
 eyebrow = "The catalogue"
 title = "Values your form has never met"
-text = "They are not clever and not secret. They are what real users and real data produce, and nobody types them by hand because typing them is tedious."
+text = "They are not clever and not secret. Most are what real users and real data produce, a few are classic checks for escaping, and nobody types them by hand because typing them is tedious."
 examples = [
   "whitespace/trailing-space",
   "export-breakers/formula-equals",
