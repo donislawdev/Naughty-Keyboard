@@ -1,0 +1,102 @@
+format = 1
+
+[pack]
+id          = "injections"
+name        = "Injections"
+description = "Strings that show whether a field treats input as data or as code: quotes, markup, templates and paths."
+version     = "1.0"
+updated     = 2026-11-04
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["injection", "escaping", "xss", "sql", "template", "path-traversal"]
+fields      = ["text", "search", "name", "url"]
+risk        = "offensive"
+
+[[values]]
+id     = "single-quote"
+name   = "Single quote"
+value  = "'"
+breaks = "The most effective one-character test: a field that passes it unescaped into an SQL query ends the string early, and the page shows a database error."
+expect = "Stored and returned as one character, and shown as one character."
+since  = "1.0"
+
+[[values]]
+id     = "angle-brackets"
+name   = "Bold tags"
+value  = "<b>test</b>"
+breaks = "Markup in a text field is either escaped on display or rendered, and bold text on the page means the field escapes nothing."
+expect = "Displayed as literal text, with the tags visible to the user."
+since  = "1.0"
+
+[[values]]
+id     = "script-tag"
+name   = "Script tag"
+value  = "<script>alert(1)</script>"
+breaks = "The canonical check for output escaping: a dialog that says 1, or text that vanishes, means the value reached the page as code somewhere it is shown."
+expect = "Displayed as literal text everywhere the value is shown, including lists and exports."
+since  = "1.0"
+
+[[values]]
+id     = "img-onerror"
+name   = "Image with an error handler"
+value  = "<img src=x onerror=alert(1)>"
+breaks = "Catches a filter that removes script tags by name and lets an attribute that runs code through, so the value runs as soon as the broken image loads."
+expect = "Displayed as literal text."
+since  = "1.0"
+
+[[values]]
+id     = "template-braces"
+name   = "Template expression in double braces"
+value  = "{{7*7}}"
+breaks = "Template engines such as Jinja, Twig and Angular evaluate double braces, so 49 on the page means user input reached a template as code."
+expect = "Displayed exactly as typed, with the braces visible."
+since  = "1.0"
+
+[[values]]
+id     = "template-dollar"
+name   = "Template expression with a dollar sign"
+value  = "${7*7}"
+breaks = "JavaScript template literals, Java expression languages and Freemarker evaluate a dollar sign and braces, so 49 means the value reached one of them as code."
+expect = "Displayed exactly as typed."
+since  = "1.0"
+
+[[values]]
+id     = "path-traversal"
+name   = "Path that climbs out of its folder"
+value  = "../../etc/passwd"
+breaks = "A file name joined to a folder without normalising the path climbs out of it, so the application reads or writes a file it was never meant to reach."
+expect = "Rejected, or normalised so the result stays inside the intended folder."
+since  = "1.0"
+
+[[values]]
+id     = "path-traversal-win"
+name   = "Path that climbs out with backslashes"
+value  = "..\\..\\windows\\win.ini"
+breaks = "Windows reads a backslash as a separator, and a validator that looks only for ../ lets the same climb through."
+expect = "Rejected or normalised, exactly like the form with forward slashes."
+since  = "1.0"
+
+[[values]]
+id     = "sql-comment"
+name   = "Quote and SQL comment"
+value  = "admin'--"
+breaks = "A quote that ends the string and a comment that cuts off the rest of the query: the classic shape of a login query broken by unescaped input."
+expect = "Stored and displayed as an eight-character string."
+since  = "1.0"
+
+[[values]]
+id     = "format-string"
+name   = "Format specifiers"
+value  = "%s%n%x"
+breaks = "Used as the format of printf in C, %x reads the stack and %n writes to memory, and a format call in a managed language that finds specifiers without arguments raises an error."
+expect = "Treated as literal text, never passed as a format string."
+since  = "1.0"
+
+[[values]]
+id     = "xml-entity"
+name   = "XML external entity"
+value  = "<!DOCTYPE t [<!ENTITY e SYSTEM \"file:///etc/passwd\">]><t>&e;</t>"
+breaks = "An XML parser that resolves external entities replaces &e; with the file the declaration names, so imported content makes the server read its own files."
+expect = "External entities not resolved, and the value treated as text or rejected."
+since  = "1.0"

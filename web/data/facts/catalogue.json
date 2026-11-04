@@ -1,6 +1,6 @@
 {
-  "pack_count": 19,
-  "value_count": 235,
+  "pack_count": 20,
+  "value_count": 246,
   "packs": [
     {
       "id": "whitespace",
@@ -8185,6 +8185,397 @@
             "code_points": 15,
             "bytes": 17,
             "utf16_units": 15
+          }
+        }
+      ],
+      "pair_count": 0,
+      "pairs": []
+    },
+    {
+      "id": "injections",
+      "name": "Injections",
+      "description": "Strings that show whether a field treats input as data or as code: quotes, markup, templates and paths.",
+      "version": "1.0",
+      "updated": "2026-11-04",
+      "license": "CC-BY-4.0",
+      "language": "en",
+      "fields": [
+        "text",
+        "search",
+        "name",
+        "url"
+      ],
+      "tags": [
+        "injection",
+        "escaping",
+        "xss",
+        "sql",
+        "template",
+        "path-traversal"
+      ],
+      "value_count": 11,
+      "values": [
+        {
+          "id": "single-quote",
+          "ref": "injections/single-quote",
+          "name": "Single quote",
+          "escaped": "'",
+          "breaks": "The most effective one-character test: a field that passes it unescaped into an SQL query ends the string early, and the page shows a database error.",
+          "expect": "Stored and returned as one character, and shown as one character.",
+          "fields": [
+            "text",
+            "search",
+            "name",
+            "url"
+          ],
+          "tags": [],
+          "risk": "offensive",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "'",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 1,
+            "code_points": 1,
+            "bytes": 1,
+            "utf16_units": 1
+          }
+        },
+        {
+          "id": "angle-brackets",
+          "ref": "injections/angle-brackets",
+          "name": "Bold tags",
+          "escaped": "<b>test</b>",
+          "breaks": "Markup in a text field is either escaped on display or rendered, and bold text on the page means the field escapes nothing.",
+          "expect": "Displayed as literal text, with the tags visible to the user.",
+          "fields": [
+            "text",
+            "search",
+            "name",
+            "url"
+          ],
+          "tags": [],
+          "risk": "offensive",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "<b>test</b>",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 11,
+            "code_points": 11,
+            "bytes": 11,
+            "utf16_units": 11
+          }
+        },
+        {
+          "id": "script-tag",
+          "ref": "injections/script-tag",
+          "name": "Script tag",
+          "escaped": "<script>alert(1)</script>",
+          "breaks": "The canonical check for output escaping: a dialog that says 1, or text that vanishes, means the value reached the page as code somewhere it is shown.",
+          "expect": "Displayed as literal text everywhere the value is shown, including lists and exports.",
+          "fields": [
+            "text",
+            "search",
+            "name",
+            "url"
+          ],
+          "tags": [],
+          "risk": "offensive",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "<script>alert(1)</script>",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 25,
+            "code_points": 25,
+            "bytes": 25,
+            "utf16_units": 25
+          }
+        },
+        {
+          "id": "img-onerror",
+          "ref": "injections/img-onerror",
+          "name": "Image with an error handler",
+          "escaped": "<img src=x onerror=alert(1)>",
+          "breaks": "Catches a filter that removes script tags by name and lets an attribute that runs code through, so the value runs as soon as the broken image loads.",
+          "expect": "Displayed as literal text.",
+          "fields": [
+            "text",
+            "search",
+            "name",
+            "url"
+          ],
+          "tags": [],
+          "risk": "offensive",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "<img\u2423src=x\u2423onerror=alert(1)>",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 28,
+            "code_points": 28,
+            "bytes": 28,
+            "utf16_units": 28
+          }
+        },
+        {
+          "id": "template-braces",
+          "ref": "injections/template-braces",
+          "name": "Template expression in double braces",
+          "escaped": "{{7*7}}",
+          "breaks": "Template engines such as Jinja, Twig and Angular evaluate double braces, so 49 on the page means user input reached a template as code.",
+          "expect": "Displayed exactly as typed, with the braces visible.",
+          "fields": [
+            "text",
+            "search",
+            "name",
+            "url"
+          ],
+          "tags": [],
+          "risk": "offensive",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "{{7*7}}",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 7,
+            "code_points": 7,
+            "bytes": 7,
+            "utf16_units": 7
+          }
+        },
+        {
+          "id": "template-dollar",
+          "ref": "injections/template-dollar",
+          "name": "Template expression with a dollar sign",
+          "escaped": "${7*7}",
+          "breaks": "JavaScript template literals, Java expression languages and Freemarker evaluate a dollar sign and braces, so 49 means the value reached one of them as code.",
+          "expect": "Displayed exactly as typed.",
+          "fields": [
+            "text",
+            "search",
+            "name",
+            "url"
+          ],
+          "tags": [],
+          "risk": "offensive",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "${7*7}",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 6,
+            "code_points": 6,
+            "bytes": 6,
+            "utf16_units": 6
+          }
+        },
+        {
+          "id": "path-traversal",
+          "ref": "injections/path-traversal",
+          "name": "Path that climbs out of its folder",
+          "escaped": "../../etc/passwd",
+          "breaks": "A file name joined to a folder without normalising the path climbs out of it, so the application reads or writes a file it was never meant to reach.",
+          "expect": "Rejected, or normalised so the result stays inside the intended folder.",
+          "fields": [
+            "text",
+            "search",
+            "name",
+            "url"
+          ],
+          "tags": [],
+          "risk": "offensive",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "../../etc/passwd",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 16,
+            "code_points": 16,
+            "bytes": 16,
+            "utf16_units": 16
+          }
+        },
+        {
+          "id": "path-traversal-win",
+          "ref": "injections/path-traversal-win",
+          "name": "Path that climbs out with backslashes",
+          "escaped": "..\\\\..\\\\windows\\\\win.ini",
+          "breaks": "Windows reads a backslash as a separator, and a validator that looks only for ../ lets the same climb through.",
+          "expect": "Rejected or normalised, exactly like the form with forward slashes.",
+          "fields": [
+            "text",
+            "search",
+            "name",
+            "url"
+          ],
+          "tags": [],
+          "risk": "offensive",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "..\\..\\windows\\win.ini",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 21,
+            "code_points": 21,
+            "bytes": 21,
+            "utf16_units": 21
+          }
+        },
+        {
+          "id": "sql-comment",
+          "ref": "injections/sql-comment",
+          "name": "Quote and SQL comment",
+          "escaped": "admin'--",
+          "breaks": "A quote that ends the string and a comment that cuts off the rest of the query: the classic shape of a login query broken by unescaped input.",
+          "expect": "Stored and displayed as an eight-character string.",
+          "fields": [
+            "text",
+            "search",
+            "name",
+            "url"
+          ],
+          "tags": [],
+          "risk": "offensive",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "admin'--",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 8,
+            "code_points": 8,
+            "bytes": 8,
+            "utf16_units": 8
+          }
+        },
+        {
+          "id": "format-string",
+          "ref": "injections/format-string",
+          "name": "Format specifiers",
+          "escaped": "%s%n%x",
+          "breaks": "Used as the format of printf in C, %x reads the stack and %n writes to memory, and a format call in a managed language that finds specifiers without arguments raises an error.",
+          "expect": "Treated as literal text, never passed as a format string.",
+          "fields": [
+            "text",
+            "search",
+            "name",
+            "url"
+          ],
+          "tags": [],
+          "risk": "offensive",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "%s%n%x",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 6,
+            "code_points": 6,
+            "bytes": 6,
+            "utf16_units": 6
+          }
+        },
+        {
+          "id": "xml-entity",
+          "ref": "injections/xml-entity",
+          "name": "XML external entity",
+          "escaped": "<!DOCTYPE t [<!ENTITY e SYSTEM \"file:///etc/passwd\">]><t>&e;</t>",
+          "breaks": "An XML parser that resolves external entities replaces &e; with the file the declaration names, so imported content makes the server read its own files.",
+          "expect": "External entities not resolved, and the value treated as text or rejected.",
+          "fields": [
+            "text",
+            "search",
+            "name",
+            "url"
+          ],
+          "tags": [],
+          "risk": "offensive",
+          "since": "1.0",
+          "source": null,
+          "generated": false,
+          "preview": {
+            "shown": "<!DOCTYPE\u2423t\u2423[<!ENTITY\u2423e\u2423SYSTEM\u2423\"file:///etc/passwd\">]><t>&e;</t>",
+            "elided_total": null
+          },
+          "recipe": null,
+          "next_date": null,
+          "halves": [],
+          "shape": [],
+          "counts": {
+            "graphemes": 64,
+            "code_points": 64,
+            "bytes": 64,
+            "utf16_units": 64
           }
         }
       ],
