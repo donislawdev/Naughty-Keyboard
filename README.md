@@ -51,8 +51,10 @@ needs it finds out it exists.
 - **Never takes the keyboard** - the palette is a display driven by shortcuts and does not take focus,
   so the cursor never leaves the field you are testing.
 - **Clipboard mode** - put values on the clipboard to paste yourself, for one window or for all of them.
-- **Packs you can check** - a pack is a plain TOML file, `nkb lint` checks it against the format rules,
-  `nkb fmt` puts it in canonical shape, and `nkb new-pack` writes the skeleton.
+- **Packs of your own and of your team** - a pack file in your own folder, or in a folder your team keeps
+  in its repository, is offered beside the built-in packs, in the palette and on the command line. A pack
+  of the same name as a built-in one is used instead of it, and both say so. `nkb lint` checks a pack
+  against the format rules, `nkb fmt` puts it in canonical shape and `nkb new-pack` writes the skeleton.
 - **Made for scripts too** - `nkb emit` prints a pack as JSON, CSV or one value per line, escaped or
   raw, optionally as base64. Every command has exit codes you can branch on.
 - **Offline, free, no telemetry** - GPL-3.0, no account, and it opens no network connection.
@@ -363,6 +365,41 @@ A value too long to store is kept as a recipe and written out when it is sent, s
 hold 100 000 characters in a few lines. A date that has to stay ahead is kept as a rule the same way,
 so `time-zones` always types the next change of the clocks rather than one that has passed.
 
+### Packs of your own and of your team
+
+Packs come from three places, read in this order:
+
+1. The ones built in.
+2. A team folder - a folder of pack files your team keeps, for example in the repository of the
+   application you test.
+3. Your own folder, `packs` beside the settings file:
+   - Windows: `%APPDATA%\Naughty Keyboard\packs`
+   - macOS: `~/Library/Application Support/Naughty Keyboard/packs`
+   - Linux: `~/.config/naughty-keyboard/packs` (or under `$XDG_CONFIG_HOME`)
+
+A pack is a file named after its identifier, such as `checkout-fields.toml`, straight in the folder.
+A pack in a later place is used instead of one of the same name in an earlier place, and the value
+window, `nkb packs`, `nkb show` and the report block all say where a pack came from. A pack that has
+errors is not loaded, and the built-in pack it would replace is not loaded in its place either - you
+learn that your pack is broken rather than quietly get another one.
+
+The team folder is a line in `settings.toml`, a full path:
+
+```toml
+[packs]
+team-folder = 'C:\work\shop\qa-packs'
+```
+
+On the command line, and in a pipeline that has no settings file, `--team-folder` names it for one run:
+
+```
+nkb emit checkout-fields --team-folder qa-packs --format json > fields.json
+```
+
+A folder is read again each time the value window opens and each time a pack is chosen, so a fixed pack
+file shows without a restart. A team folder on a share that stops answering is skipped after two seconds
+and said, and the built-in and own packs keep working.
+
 ---
 
 ## Honest limits
@@ -388,9 +425,8 @@ says so.
 - **The system may change what is typed.** On macOS the text substitutions of the system can turn a
   typed value into another one, and the palette and `nkb send` say so when one that is switched on could
   have acted on that very value.
-- **You can write your own packs, but not load them yet.** `nkb new-pack`, `nkb fmt` and `nkb lint` all
-  work on a file of your own. Reading a folder of your own packs into the palette and the command line
-  is not wired up: `nkb packs` reports the folders for your own and your team's packs as not read.
+- **The team folder is a line in the settings file.** The palette offers the packs from it but has no
+  button to choose the folder yet, so it is written by hand, as above. Your own folder needs no setting.
 - **The pack format is not frozen.** A later release may still change it, and its notes will say how.
   `nkb lint` checks 41 of its 47 rules today, and `nkb lint --explain` lists every one and why a few wait.
 - **It does not look at the result.** It types the value and does not read what the window shows, only
@@ -476,7 +512,8 @@ nkb lint my-pack.toml
 nkb fmt my-pack.toml
 ```
 
-The format is still moving and your own packs cannot be loaded yet, so for now **open an issue** with
+A pack of your own works at once from your own folder. To share a value with everyone, and while the
+format is still moving, **open an issue** with
 the [Suggest a value](https://github.com/donislawdev/Naughty-Keyboard/issues/new?template=suggest_value.yml)
 form, which asks for the value, what it breaks and where you saw it, rather than a pull request. Bug
 reports are welcome the same way. The example files in `tests/packs/` show what a pack may and may not

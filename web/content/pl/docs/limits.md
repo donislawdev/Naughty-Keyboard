@@ -2,7 +2,7 @@
 title: Uczciwe ograniczenia
 slug: ograniczenia
 seoTitle: Uczciwe ograniczenia - czego program jeszcze nie robi
-description: "Gdzie Naughty Keyboard się kończy: wpisywanie ma warunki w każdym systemie, Linux zmierzono na jednym, własnych paczek nie wczytasz, format nie jest zamrożony."
+description: "Gdzie Naughty Keyboard się kończy: wpisywanie ma warunki w każdym systemie, Linux zmierzono na jednym, folder zespołu wpisujesz ręcznie, format nie jest stały."
 lead: "Narzędzie, które po cichu robi mniej, niż się wydaje, jest gorsze od takiego, które to mówi. Oto, czego jeszcze nie robi."
 ---
 
@@ -30,7 +30,7 @@ Na macOS nadal może, w jednym rodzaju aplikacji. Command, Control albo Option t
 
 ## Czy mogę wczytać własne paczki?
 
-Możesz je napisać i sprawdzić, ale jeszcze nie wczytać. `nkb new-pack`, `nkb fmt` i `nkb lint` działają na Twoim własnym pliku. Wczytywanie folderu własnych paczek do palety i do wiersza poleceń nie jest podłączone, a `nkb packs` to mówi: zgłasza foldery na paczki własne i zespołu jako nieprzeczytane.
+Tak, z własnego folderu i z folderu zespołu, w palecie i w wierszu poleceń - jak, mówi [strona o palecie](/docs/palette/). Brakuje przycisku: folder zespołu to wiersz w `settings.toml` albo `--team-folder` w wierszu poleceń, a paleta nie umie go jeszcze wybrać.
 
 ## Czy format paczki jest stabilny?
 
