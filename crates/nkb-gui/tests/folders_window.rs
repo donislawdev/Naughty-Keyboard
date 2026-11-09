@@ -288,6 +288,29 @@ fn the_first_thing_of_a_drop_is_taken_and_the_rest_are_named_once() {
         ["More than one thing was dropped. Only the first is used."]
     );
     assert!(!window.get_team().targeted);
+
+    // The worker answers for the first thing after the rest was named: both
+    // stay, the answer first - the answer must not hide the rest of the drop.
+    run.folders.heard(TeamFolderNews {
+        team: None,
+        said: String::from("This is not a folder, so it cannot be the team folder: first"),
+    });
+    assert_eq!(
+        notes(window),
+        [
+            "This is not a folder, so it cannot be the team folder: first",
+            "More than one thing was dropped. Only the first is used."
+        ]
+    );
+    // A new drop starts afresh.
+    std::thread::sleep(std::time::Duration::from_millis(600));
+    run.folders.dropped(scratch.0.join("third"));
+    assert!(notes(window).is_empty(), "{:?}", notes(window));
+    run.folders.heard(TeamFolderNews {
+        team: None,
+        said: String::from("refused"),
+    });
+    assert_eq!(notes(window), ["refused"]);
 }
 
 #[test]

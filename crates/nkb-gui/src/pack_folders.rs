@@ -405,7 +405,16 @@ impl Folders {
     pub fn heard(&self, news: TeamFolderNews) {
         let now = self.wiring.folders.borrow().with_team(news.team);
         *self.wiring.folders.borrow_mut() = now;
-        self.tell(news.said);
+        // The rest of a drop was named before the worker answered for its first
+        // thing: both stay, the answer first.
+        let rest = i18n::folders_label(FoldersLabel::OnlyFirstDropped);
+        let named = self.notes.borrow().iter().any(|note| note == rest);
+        let mut lines = vec![news.said];
+        if named {
+            lines.push(rest.to_owned());
+        }
+        *self.notes.borrow_mut() = lines;
+        self.show();
     }
 
     fn open_in_file_manager(&self, folder: &Path) {
@@ -443,10 +452,16 @@ impl Folders {
             .get()
             .is_some_and(|first| now.duration_since(first) < ONE_DROP);
         if same_drop {
-            self.tell(i18n::folders_label(FoldersLabel::OnlyFirstDropped).to_owned());
+            let rest = i18n::folders_label(FoldersLabel::OnlyFirstDropped).to_owned();
+            if !self.notes.borrow().contains(&rest) {
+                self.notes.borrow_mut().push(rest);
+            }
+            self.show();
             return;
         }
         self.last_drop.set(Some(now));
+        self.notes.borrow_mut().clear();
+        self.show();
         self.send(Some(path));
     }
 

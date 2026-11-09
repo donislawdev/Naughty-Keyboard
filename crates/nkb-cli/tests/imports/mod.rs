@@ -215,7 +215,8 @@ const WINDOWS_BOTH: &[Entry] = &[
     ),
     (
         "ole32.dll",
-        "COM, through which UI Automation tells which kind of control has the focus (D73)",
+        "COM, through which UI Automation tells which kind of control has the focus (D73), and \
+         the palette shows the system's folder window (IFileOpenDialog, D175)",
     ),
     (
         "oleaut32.dll",
@@ -274,7 +275,9 @@ const WINDOWS_WINDOW: &[Entry] = &[
     ),
     (
         "shell32.dll",
-        "DragQueryFileW and DragFinish, a file dropped on a window. ShellExecute is refused above",
+        "DragQueryFileW and DragFinish, a folder dropped on the pack folders window, and \
+         SHCreateItemFromParsingName, the folder the system's folder window opens in (D175). \
+         ShellExecute is refused above",
     ),
     (
         "shlwapi.dll",
@@ -287,8 +290,10 @@ const WINDOWS_WINDOW_GRANTED: &[Entry] = &[(
     "the webbrowser crate starts the default browser, and since 2026-10-14 one click makes it: \
      GitHub or Donate in the palette's header opens the repository or the support page \
      (crates/nkb-gui/src/header_links.rs, the one file nothing_reaches_the_network.rs grants, \
-     for those two addresses). Slint also keeps it \
-     linked for `open-url`, which that guard refuses in every view",
+     for those two addresses). Since 2026-11-09 one other click does: Open in the pack \
+     folders window starts Explorer from the Windows directory on a pack folder \
+     (crates/nkb-sys/src/folders/win32.rs, register 5 of that guard, D175). Slint also keeps \
+     it linked for `open-url`, which that guard refuses in every view",
 )];
 
 const LINUX_BOTH: &[Entry] = &[
@@ -418,7 +423,7 @@ const MACOS_BOTH: &[Entry] = &[
     // of an application in full screen through it (`OBS-193`).
     (
         "/usr/lib/libobjc.A.dylib",
-        "the Objective-C runtime: three functions that find the windows of the palette's own process and set how they stand in the spaces. Nothing in it opens a connection",
+        "the Objective-C runtime: the functions that find the windows of the palette's own process and set how they stand in the spaces, and that show the system's folder panel and open a pack folder in Finder (D175). Nothing in it opens a connection",
     ),
     // `UCKeyTranslate`, which says what a keyboard layout types with Option, is
     // defined here and in no framework above (measured: a program that calls only
