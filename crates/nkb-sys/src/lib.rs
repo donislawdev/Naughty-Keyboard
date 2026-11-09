@@ -38,6 +38,7 @@ mod confirm;
 #[cfg(any(windows, target_os = "macos", target_os = "linux", test))]
 mod escape;
 pub mod field;
+pub mod folders;
 pub mod held;
 pub mod hotkey;
 pub mod layout;
@@ -47,6 +48,8 @@ mod linux;
 mod linux_atspi_rules;
 #[cfg(any(target_os = "linux", test))]
 mod linux_clearing_rules;
+#[cfg(any(target_os = "linux", test))]
+mod linux_folder_rules;
 #[cfg(any(target_os = "linux", test))]
 mod linux_hotkeys;
 #[cfg(any(target_os = "linux", test))]
