@@ -61,6 +61,17 @@ pub enum SettingsMessage {
     PositionOffScreen { at: Point },
 }
 
+/// What came of giving the run a team folder, or none (`D175`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TeamFolderSaved {
+    /// Written to the settings file, or already so there.
+    Saved,
+    /// In effect for this run and not written: `None` when nothing is saved in
+    /// this run at all - no place for settings, or a file that cannot be used,
+    /// which was said at start - and the store's own error otherwise.
+    NotSaved(Option<SaveError>),
+}
+
 /// What opening a pack had to say, in the order it happened.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Opening {
@@ -444,6 +455,33 @@ impl KeptSettings {
         )
     }
 
+    /// Gives the run the team folder `folder`, or none, and saves it - the pack
+    /// folders window (`D175`). In effect for this run whether or not it reached
+    /// the disk, as every change is.
+    ///
+    /// Unlike [`Self::keep`] it answers every time: the tester has just chosen,
+    /// in the window they are looking at, and a failure said once before must
+    /// not read as a save the second time.
+    pub fn change_team_folder(
+        &mut self,
+        store: &dyn SettingsStore,
+        folder: Option<String>,
+    ) -> TeamFolderSaved {
+        let change = SettingChange::TeamFolder(folder);
+        let saved = match self.keeping {
+            Keeping::NotSaving => Err(None),
+            Keeping::Saving => store.save(&change).map_err(Some),
+        };
+        self.apply(change);
+        match saved {
+            Ok(()) => {
+                self.said.clear();
+                TeamFolderSaved::Saved
+            }
+            Err(why) => TeamFolderSaved::NotSaved(why),
+        }
+    }
+
     /// Whether this change is already in effect, so saving it changes nothing.
     ///
     /// Compared with what is IN EFFECT, not with a default: a setting the file
@@ -469,6 +507,11 @@ impl KeptSettings {
             }
             SettingChange::WelcomeDone => self.settings.welcome_done == Some(true),
             SettingChange::Recent(recent) => self.settings.recent == *recent,
+            // Never "already in effect", for the shortcut's reason: a value the
+            // file holds and that could not be read is not in the settings, and
+            // stopping the team folder is meant to clear it. The store writes
+            // nothing when the key is already so.
+            SettingChange::TeamFolder(_) => false,
         }
     }
 
@@ -490,6 +533,7 @@ impl KeptSettings {
             }
             SettingChange::WelcomeDone => self.settings.welcome_done = Some(true),
             SettingChange::Recent(recent) => self.settings.recent = recent,
+            SettingChange::TeamFolder(folder) => self.settings.team_folder = folder,
         }
     }
 
@@ -730,6 +774,67 @@ mod tests {
                 Err(ChooseError::NotFound)
             }
         }
+    }
+
+    /// `D175`: the team folder chosen in the window is in effect at once and
+    /// saved, and stopping it is saved too - even when the settings hold none,
+    /// because the file may hold one nobody could read.
+    #[test]
+    fn the_team_folder_is_saved_and_stopping_it_always_reaches_the_store() {
+        let store = FakeStore::loading(SettingsLoad::Absent);
+        let (mut kept, _) = KeptSettings::open(&store);
+        assert_eq!(
+            kept.change_team_folder(&store, Some(String::from("/srv/packs"))),
+            TeamFolderSaved::Saved
+        );
+        assert_eq!(kept.settings().team_folder.as_deref(), Some("/srv/packs"));
+        assert_eq!(
+            kept.change_team_folder(&store, None),
+            TeamFolderSaved::Saved
+        );
+        assert_eq!(kept.settings().team_folder, None);
+        assert_eq!(
+            kept.change_team_folder(&store, None),
+            TeamFolderSaved::Saved
+        );
+        assert_eq!(
+            store.saves(),
+            vec![
+                SettingChange::TeamFolder(Some(String::from("/srv/packs"))),
+                SettingChange::TeamFolder(None),
+                SettingChange::TeamFolder(None),
+            ],
+            "a stop the settings already show is still asked of the store"
+        );
+    }
+
+    /// The window is told every failure, where the palette is told each kind
+    /// once: the tester has just chosen, and silence would read as saved.
+    #[test]
+    fn a_team_folder_that_cannot_be_saved_says_so_every_time_and_is_used_all_the_same() {
+        let store = FakeStore::loading(SettingsLoad::Absent).failing_with(SaveError::Unwritable);
+        let (mut kept, _) = KeptSettings::open(&store);
+        for _ in 0..2 {
+            assert_eq!(
+                kept.change_team_folder(&store, Some(String::from("/srv/packs"))),
+                TeamFolderSaved::NotSaved(Some(SaveError::Unwritable))
+            );
+        }
+        assert_eq!(kept.settings().team_folder.as_deref(), Some("/srv/packs"));
+    }
+
+    /// A file that cannot be used is never written over (`D84`): the folder is
+    /// used for this run, nothing is asked of the store, and the answer says it.
+    #[test]
+    fn a_settings_file_that_cannot_be_used_keeps_the_team_folder_for_this_run_only() {
+        let store = FakeStore::loading(SettingsLoad::Unusable(SettingsUnusable::NotUtf8));
+        let (mut kept, _) = KeptSettings::open(&store);
+        assert_eq!(
+            kept.change_team_folder(&store, Some(String::from("/srv/packs"))),
+            TeamFolderSaved::NotSaved(None)
+        );
+        assert_eq!(kept.settings().team_folder.as_deref(), Some("/srv/packs"));
+        assert!(store.saves().is_empty(), "the file was written over");
     }
 
     #[test]

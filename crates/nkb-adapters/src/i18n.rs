@@ -83,6 +83,7 @@ use crate::settings_file::SCHEMA;
 mod catalogue;
 mod causes;
 mod fill;
+mod folders;
 mod palette;
 mod registration;
 mod stop;
@@ -95,6 +96,10 @@ pub use catalogue::{
 };
 pub use causes::closed_window as closed_window_cause;
 pub(crate) use fill::fill;
+pub use folders::{
+    FoldersLabel, file_manager_failed, folder_state, folder_window_failed, folders_label,
+    own_folder_not_made, shown_folder, team_folder_kept, team_folder_refused,
+};
 use palette::pattern_palette_label;
 pub use palette::{
     PaletteLabel, back_to, browser_did_not_open, counter, counts, label, next_end_of_pack,

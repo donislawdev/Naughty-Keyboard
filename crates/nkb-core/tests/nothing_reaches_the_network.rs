@@ -736,7 +736,11 @@ fn the_file_manager_is_the_one_program_the_product_starts_from_one_file_per_syst
         } else {
             format!("let c = class(c\"{spelling}\");\n")
         };
-        assert_eq!(findings(Syntax::Rust, &use_of_it, file), Vec::new(), "{file}");
+        assert_eq!(
+            findings(Syntax::Rust, &use_of_it, file),
+            Vec::new(),
+            "{file}"
+        );
         assert!(
             !findings(Syntax::Rust, &use_of_it, "crates/nkb-sys/src/linux/send.rs").is_empty(),
             "the grant is for {file} alone, and the same spelling anywhere else is refused"

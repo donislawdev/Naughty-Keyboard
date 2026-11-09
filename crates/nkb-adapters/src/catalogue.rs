@@ -196,6 +196,32 @@ impl PackFolders {
         }
     }
 
+    /// Makes the own folder when it is not there yet - the pack folders window's
+    /// "Create and open" (`D175`). Reading never makes it (`D173`), the tester's
+    /// click does, and a folder that is there already is left as it is.
+    ///
+    /// # Errors
+    ///
+    /// The system's, when the folder cannot be made - and `NotFound` when this
+    /// machine gives the settings no place, so there is no own folder at all.
+    pub fn make_own(&self) -> std::io::Result<()> {
+        let own = self
+            .own()
+            .map_err(|_| std::io::Error::from(std::io::ErrorKind::NotFound))?;
+        std::fs::create_dir_all(own)
+    }
+
+    /// These folders with another team folder, or none - what the pack folders
+    /// window offers before it is saved (`D175`). The own folder is the same
+    /// one, with what it remembers about questions still hanging on it.
+    #[must_use]
+    pub fn with_team(&self, team: Option<PathBuf>) -> Self {
+        Self {
+            team: team.map(PackFolder::new).ok_or(SourceSkipped::NotSet),
+            own: self.own.clone(),
+        }
+    }
+
     /// A snapshot of the three sources as they are now.
     #[must_use]
     pub fn catalogue(&self) -> FolderCatalogue {
@@ -248,6 +274,21 @@ fn layer(folder: &Result<PackFolder, SourceSkipped>) -> Result<Layer, SourceSkip
     })
 }
 
+/// What one folder held in a snapshot, as the pack folders window says it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FolderHolds {
+    /// Read: `count` packs, of which `instead` are used in place of a pack of
+    /// the same name from a source read earlier, and `misnamed` `.toml` files
+    /// whose name is not a pack identifier.
+    Packs {
+        count: usize,
+        instead: usize,
+        misnamed: usize,
+    },
+    /// Not read, and why.
+    Skipped(SourceSkipped),
+}
+
 /// The three sources as one snapshot found them - what the palette, the value
 /// window and `nkb` read packs from.
 #[derive(Debug, Clone)]
@@ -257,6 +298,34 @@ pub struct FolderCatalogue {
 }
 
 impl FolderCatalogue {
+    /// What the folder of `source` held in this snapshot, for the pack folders
+    /// window (`D175`) - `None` for the built-in packs, which have no folder.
+    #[must_use]
+    pub fn holds_of(&self, source: CatalogueSource) -> Option<FolderHolds> {
+        let layer = match source {
+            CatalogueSource::BuiltIn => return None,
+            CatalogueSource::Team => &self.team,
+            CatalogueSource::Own => &self.own,
+        };
+        Some(match layer {
+            Ok(layer) => FolderHolds::Packs {
+                count: layer.listing.packs.len(),
+                instead: layer
+                    .listing
+                    .packs
+                    .iter()
+                    .filter(|id| {
+                        self.origin_of(id).is_some_and(|origin| {
+                            origin.source == source && !origin.overrides.is_empty()
+                        })
+                    })
+                    .count(),
+                misnamed: layer.listing.misnamed.len(),
+            },
+            Err(why) => FolderHolds::Skipped(*why),
+        })
+    }
+
     /// The sources holding `id`, the one in use first.
     fn holders(&self, id: &str) -> Vec<CatalogueSource> {
         let mut holders = Vec::new();
@@ -405,6 +474,64 @@ mod tests {
             Ok(PackFolder::with_wait(team, Duration::from_secs(5))),
             Ok(PackFolder::with_wait(own, Duration::from_secs(5))),
         )
+    }
+
+    /// `D175`: what the pack folders window says of each folder - how many packs,
+    /// how many are used in place of another, how many files are not packs - and
+    /// why a folder was not read. A team pack the own folder overrides is in the
+    /// team folder's count and not among the ones it puts in place of another.
+    #[test]
+    fn each_folder_says_how_many_packs_it_holds_and_how_many_win() {
+        let scratch = Scratch::new("holds");
+        let team = scratch.sub("team");
+        let own = scratch.sub("own");
+        write(&team, "whitespace.toml", "x");
+        write(&team, "alpha.toml", "x");
+        write(&team, "Not A Pack.toml", "x");
+        write(&own, "alpha.toml", "x");
+        let catalogue = folders(&team, &own).catalogue();
+        assert_eq!(
+            catalogue.holds_of(CatalogueSource::Team),
+            Some(FolderHolds::Packs {
+                count: 2,
+                instead: 1,
+                misnamed: 1
+            })
+        );
+        assert_eq!(
+            catalogue.holds_of(CatalogueSource::Own),
+            Some(FolderHolds::Packs {
+                count: 1,
+                instead: 1,
+                misnamed: 0
+            })
+        );
+        assert_eq!(catalogue.holds_of(CatalogueSource::BuiltIn), None);
+        let gone = folders(&scratch.0.join("gone"), &own).catalogue();
+        assert_eq!(
+            gone.holds_of(CatalogueSource::Team),
+            Some(FolderHolds::Skipped(SourceSkipped::Missing))
+        );
+        let later = scratch.0.join("later");
+        let unmade = PackFolders::new(Err(SourceSkipped::NotSet), Ok(later.clone()));
+        assert!(!later.exists(), "reading made the own folder");
+        unmade
+            .make_own()
+            .expect("the own folder is made on request");
+        assert!(later.is_dir());
+        unmade
+            .make_own()
+            .expect("a folder that is there is left as it is");
+        let nowhere = PackFolders::new(Err(SourceSkipped::NotSet), Err(SourceSkipped::NoPlace));
+        assert_eq!(
+            nowhere.make_own().map_err(|error| error.kind()),
+            Err(std::io::ErrorKind::NotFound)
+        );
+        let without = folders(&team, &own).with_team(None).catalogue();
+        assert_eq!(
+            without.holds_of(CatalogueSource::Team),
+            Some(FolderHolds::Skipped(SourceSkipped::NotSet))
+        );
     }
 
     #[test]

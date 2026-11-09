@@ -602,6 +602,14 @@ fn set_key(document: &mut DocumentMut, change: &SettingChange) -> bool {
             current.and_then(recent_of).as_ref() == Some(recent),
             Some(recent_array(recent)),
         ),
+        // Compared as written: a path is the tester's text, and two spellings
+        // of one folder are two values of the key. Stopping removes the key - a
+        // value that did not read as a path with it (`D175`).
+        SettingChange::TeamFolder(Some(folder)) => (
+            current.and_then(Item::as_str) == Some(folder.as_str()),
+            Some(Value::from(folder.as_str())),
+        ),
+        SettingChange::TeamFolder(None) => (current.is_none(), None),
         // Not one key - `set` hands it to `set_position`, and `place_of` has
         // already answered `None` for it.
         SettingChange::Position { .. } => return false,
@@ -655,6 +663,7 @@ fn place_of(change: &SettingChange) -> Option<(&'static str, &'static str)> {
         SettingChange::Shortcut { action, .. } => Some(("shortcuts", action.id())),
         SettingChange::WelcomeDone => Some(("welcome", "done")),
         SettingChange::Recent(_) => Some(("find", "recent")),
+        SettingChange::TeamFolder(_) => Some(("packs", "team-folder")),
         SettingChange::Position { .. } => None,
     }
 }
@@ -1350,6 +1359,61 @@ mod tests {
             );
             assert_eq!(scratch.text(), written, "reading changed the file");
         }
+    }
+
+    /// `D175`: the window writes the key into `[packs]`, made when missing, and
+    /// reads it back as the same folder; a second save of the same folder writes
+    /// nothing, and stopping removes the key and keeps what stands around it.
+    #[test]
+    fn the_team_folder_is_written_read_back_and_removed() {
+        let scratch = Scratch::new("team-folder-write");
+        scratch.write("schema = 1\n# the team's packs\n[palette]\ncompact = true\n");
+        let store = scratch.store();
+        let folder = SettingChange::TeamFolder(Some(full_path()));
+        assert_eq!(store.save(&folder), Ok(()));
+        let (settings, notes) = read(&store);
+        assert_eq!(settings.team_folder, Some(full_path()));
+        assert!(notes.is_empty(), "{notes:?}");
+        assert_eq!(settings.compact, Some(true), "the other keys stayed");
+
+        let written = scratch.bytes();
+        assert_eq!(store.save(&folder), Ok(()));
+        assert_eq!(
+            scratch.bytes(),
+            written,
+            "the same folder was written again"
+        );
+
+        assert_eq!(store.save(&SettingChange::TeamFolder(None)), Ok(()));
+        let (settings, _) = read(&store);
+        assert_eq!(settings.team_folder, None);
+        assert!(
+            scratch.text().contains("# the team's packs"),
+            "{}",
+            scratch.text()
+        );
+        assert!(
+            !scratch.text().contains("team-folder"),
+            "{}",
+            scratch.text()
+        );
+    }
+
+    /// Stopping the team folder clears a value nobody could read - the case the
+    /// settings cannot see, which is why the window asks the store every time.
+    #[test]
+    fn stopping_the_team_folder_removes_a_value_that_did_not_read() {
+        let scratch = Scratch::new("team-folder-unread");
+        scratch.write("schema = 1\n[packs]\nteam-folder = \"qa-packs\"\n");
+        let store = scratch.store();
+        assert_eq!(read(&store).0.team_folder, None);
+        assert_eq!(store.save(&SettingChange::TeamFolder(None)), Ok(()));
+        let (settings, notes) = read(&store);
+        assert_eq!(settings.team_folder, None);
+        assert!(
+            notes.is_empty(),
+            "the value that did not read is still there: {notes:?}"
+        );
     }
 
     #[test]
