@@ -1,0 +1,103 @@
+// One of the places packs are read from, in the pack folders window (`D175`):
+// what it is, where it is, what was found there, and what can be done with it.
+//
+// # Why a component
+//
+// The window shows two such places, the team folder and the tester's own, and
+// they differ only in their words and their buttons - one shape given twice
+// (GUI rules 2 and 8). So the place is a struct and the buttons are a list
+// drawn in a loop. A click says WHICH button, never what it does: that is
+// Rust's (GUI rule 11), and the list changes with what the place holds - a
+// folder not made yet offers to make it, a team folder not set has nothing to
+// stop using.
+//
+// # The path breaks anywhere
+//
+// A folder's path has no spaces to wrap at, and a text that cannot wrap may not
+// be narrower than itself, so it would widen the window past its size
+// (`slint.md` 2.29). The path breaks between characters, in the monospaced role
+// a reference is written in.
+//
+// # A fault is said in the risk colour
+//
+// A folder that could not be read is the one thing in the section the tester
+// has to act on, and it is said in the colour the product says risk in - over
+// the ground of a window, a pair `tools/kontrast.py` holds to 4.5:1.
+//
+// # Dropped on
+//
+// While a folder is dragged over the window, the place that will take it says
+// so in the accent, in its state line - where the tester is looking, and in a
+// line that is there already, so nothing moves.
+
+import { Tokens } from "../tokens.slint";
+import { TextBody, TextSmallMuted, TextMono } from "typography.slint";
+import { SmallButton } from "button.slint";
+
+// One button of a place.
+export struct FolderAction {
+    // The word on the button.
+    text: string,
+    // What a click does, as UI Automation reads it.
+    action: string,
+    enabled: bool,
+    // The window's main action, in the accent - one in the window.
+    primary: bool,
+}
+
+// One place packs are read from, as the window shows it.
+export struct FolderPlace {
+    // What the place is: "Team folder", "Your own folder".
+    heading: string,
+    // Where it is - escaped by Rust - or a sentence saying there is no folder.
+    path: string,
+    // What was found there, finished words.
+    state: string,
+    // The state is a fault the tester has to act on.
+    fault: bool,
+    // A folder is dragged over the window, and this place takes it: the state
+    // line says so in the accent.
+    targeted: bool,
+    actions: [FolderAction],
+}
+
+export component FolderSection inherits Rectangle {
+    in property <FolderPlace> place;
+    // Which button was clicked, by its place in `place.actions`.
+    callback act(int);
+
+    height: column.preferred-height;
+
+    column := VerticalLayout {
+        spacing: Tokens.space-1;
+
+        TextSmallMuted {
+            text: root.place.heading;
+        }
+        TextMono {
+            text: root.place.path;
+            wrap: char-wrap;
+        }
+        TextBody {
+            text: root.place.state;
+            wrap: word-wrap;
+            color: root.place.targeted ? Tokens.accent
+                : root.place.fault ? Tokens.risk
+                : Tokens.text-secondary;
+        }
+        if root.place.actions.length > 0: HorizontalLayout {
+            padding-top: Tokens.space-1;
+            spacing: Tokens.space-2;
+            alignment: start;
+            for action[index] in root.place.actions: SmallButton {
+                text: action.text;
+                action: action.action;
+                enabled: action.enabled;
+                primary: action.primary;
+                clicked => {
+                    root.act(index);
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,147 @@
+// The pack folders window (`D173` point 5, `D175`): where the team's packs and
+// the tester's own come from, and the way to set the first and open both.
+//
+// # Chrome, content, chrome (PORADNIK-GUI 4)
+//
+//     header    the window's heading
+//     content   where packs come from and which wins, in one sentence
+//               the team folder: where, what is there, choose / open / stop
+//               using - and that a folder can be dropped on the window
+//               the tester's own folder: where, what is there, open (made on
+//               that click when it is not there yet)
+//     footer    Close
+//     status    what the last click came to, while there is something to say
+//
+// The frame every window stands in (`components/frame.slint`, `D110`). The
+// window's main action is choosing the team folder, so that button wears the
+// accent, in its section, and Close in the footer is an ordinary button.
+//
+// # Built-in packs have no section
+//
+// They come with the program, have no folder to open and nothing to set, so
+// they are named in the opening sentence and nowhere else - a section with no
+// action would be a third block to read for nothing (the owner's word on the
+// palette, "too much to read", `D107`).
+//
+// # Nothing is decided here
+//
+// Every word is a property filled from `nkb-adapters::i18n` (untouchable
+// rule 9), what each button does is Rust's (the sections say only which one was
+// clicked), what a key does is Rust's, and the callbacks are aliases or hand on
+// one argument (GUI rule 11).
+
+import {
+    Tokens,
+    TextBody,
+    TextSmallMuted,
+    Spacer,
+    Zone,
+    WindowFrame,
+    WindowHeader,
+    WindowFooter,
+    WindowStatus,
+    KeyScope,
+    SmallButton,
+    FolderPlace,
+    FolderSection,
+} from "../components.slint";
+
+export component FoldersWindow inherits Window {
+    in property <string> window-title;
+    in property <string> heading;
+    // Where packs come from, and which wins.
+    in property <string> summary;
+    in property <FolderPlace> team;
+    // That a folder dropped on the window becomes the team folder.
+    in property <string> drop-hint;
+    in property <FolderPlace> own;
+    in property <string> close-label;
+    in property <string> close-action;
+    // What the last click came to.
+    in property <[string]> notes;
+
+    // Esc closes, and Rust says so - see `folders.rs`.
+    callback pressed <=> keys.pressed;
+    callback deactivated <=> keys.window-left;
+    callback activated <=> keys.window-entered;
+    callback team-act(int);
+    callback own-act(int);
+    callback close-clicked();
+
+    // The keyboard goes to the window as it opens, so Esc closes it.
+    public function focus-keys() {
+        keys.focus();
+    }
+
+    title: root.window-title;
+    icon: Tokens.app-icon;
+    background: Tokens.surface;
+    // BOUND, for the shortcuts window's reason (`slint.md` 2.38): the backend
+    // creates every window when the event loop starts and keeps that size.
+    width: Tokens.folders-width;
+    height: body.preferred-height;
+    always-on-top: true;
+
+    keys := KeyScope {
+        body := WindowFrame {
+            packed: true;
+
+            WindowHeader {
+                title: root.heading;
+            }
+
+            Zone {
+                divided: false;
+                TextBody {
+                    text: root.summary;
+                    wrap: word-wrap;
+                }
+            }
+
+            Zone {
+                FolderSection {
+                    place: root.team;
+                    act(index) => {
+                        root.team-act(index);
+                    }
+                }
+                TextSmallMuted {
+                    text: root.drop-hint;
+                    wrap: word-wrap;
+                }
+            }
+
+            Zone {
+                FolderSection {
+                    place: root.own;
+                    act(index) => {
+                        root.own-act(index);
+                    }
+                }
+            }
+
+            WindowFooter {
+                HorizontalLayout {
+                    Spacer { }
+                    SmallButton {
+                        text: root.close-label;
+                        action: root.close-action;
+                        clicked => {
+                            root.close-clicked();
+                        }
+                    }
+                }
+            }
+
+            // In the status line, last in the window, where every window says
+            // what the tool has to say: a sentence that comes moves only the
+            // bottom edge, never a button the tester is about to click.
+            if root.notes.length > 0: WindowStatus {
+                for note in root.notes: TextBody {
+                    text: note;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+}

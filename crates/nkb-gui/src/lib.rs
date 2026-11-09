@@ -88,6 +88,11 @@ pub mod welcome;
 // whose, under which licence - opened by the palette's link (the owner's
 // point 4 of 2026-10-10).
 pub mod about;
+// The pack folders window, on the main thread: where the team's packs and the
+// tester's own come from, the team folder chosen or dropped, both opened in the
+// file manager (`D175`). It stays open when the tester goes elsewhere, so a
+// folder can be dropped on it - the module says why.
+pub mod pack_folders;
 // How the three windows above that open on request stand on the screen and
 // go away - never minimized, Close as the only button (`OBS-183`, `D137`).
 // One place, because the three got it wrong the same way. And how two of them

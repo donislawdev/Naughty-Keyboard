@@ -1362,7 +1362,7 @@ mod tests {
     }
 
     /// `D175`: the window writes the key into `[packs]`, made when missing, and
-    /// reads it back as the same folder; a second save of the same folder writes
+    /// reads it back as the same folder. A second save of the same folder writes
     /// nothing, and stopping removes the key and keeps what stands around it.
     #[test]
     fn the_team_folder_is_written_read_back_and_removed() {

@@ -26,6 +26,7 @@ pub(crate) mod shortcut_claim;
 pub mod shortcuts;
 pub mod skeleton;
 pub mod startup;
+pub mod system_folders;
 pub mod team_folder;
 pub mod toml_pack;
 

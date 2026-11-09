@@ -71,8 +71,8 @@ use std::rc::Rc;
 use std::sync::mpsc::Sender;
 use std::time::Instant;
 
-use nkb_adapters::i18n::{self, Environment, PacksLabel, Startup};
-use nkb_adapters::{LentFocus, PackFolders, SystemClock, TomlPackFormat};
+use nkb_adapters::i18n::{self, Environment, FoldersLabel, PacksLabel, Startup};
+use nkb_adapters::{LentFocus, SystemClock, TomlPackFormat};
 use nkb_app::Clock;
 use nkb_app::{Ended, list_packs};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
@@ -80,6 +80,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use crate::focus::{HANDLE_WAIT, POLL, window_handle};
 use crate::live::{Command, InUse, in_use_now};
 use crate::on_request;
+use crate::pack_folders::{FolderLink, HandedOver, SharedFolders};
 use crate::picker::{Chosen, Folding, PackPicker, Row, RowKind};
 use crate::query::{KeyPress, Pressed};
 use crate::{HintRow, PacksWindow, PickRow};
@@ -105,6 +106,18 @@ pub trait Keyboard {
     ///
     /// Why it could not be given back.
     fn give_back(&self, window: Option<u64>) -> Result<(), String>;
+    /// Hands over who was remembered, to another window that takes the keyboard
+    /// from this one - the pack folders window, opened by this window's link
+    /// (`D175`). Nothing is remembered here afterwards.
+    fn pass_on(&self) -> Option<LentFocus> {
+        None
+    }
+    /// Remembers who another window remembered, instead of who holds the
+    /// keyboard now - which is that other window.
+    fn take_over(&self, lent: LentFocus) {
+        let _ = lent;
+        self.remember();
+    }
 }
 
 /// The system's keyboard, through [`LentFocus`].
@@ -132,6 +145,14 @@ impl Keyboard for SystemKeyboard {
             lent.give_back(window).map_err(|error| error.to_string())
         })
     }
+
+    fn pass_on(&self) -> Option<LentFocus> {
+        self.lent.take()
+    }
+
+    fn take_over(&self, lent: LentFocus) {
+        self.lent.set(Some(lent));
+    }
 }
 
 /// The pack window and what it shows while it is open.
@@ -147,8 +168,13 @@ pub struct Packs {
     /// about the tool goes, and where the tester looks after the window closes.
     say: Box<dyn Fn(String)>,
     /// Where the team's and the tester's own packs are (`D173`): read again on
-    /// every opening, so a pack file fixed on disk shows at the next one.
-    folders: PackFolders,
+    /// every opening, so a pack file fixed on disk shows at the next one. Shared
+    /// with the pack folders window, which changes the team folder (`D175`).
+    folders: SharedFolders,
+    /// Opens the pack folders window - set once it exists - and the cell this
+    /// window hands the keyboard it lent over in.
+    open_folders: RefCell<Option<Box<dyn Fn()>>>,
+    handed_over: HandedOver,
 }
 
 impl Packs {
@@ -163,7 +189,7 @@ impl Packs {
         commands: Sender<Command>,
         in_use: InUse,
         say: Box<dyn Fn(String)>,
-        folders: PackFolders,
+        link: FolderLink,
     ) -> Rc<Self> {
         label(&window);
         // After the words, which are part of what the layout measures.
@@ -175,7 +201,15 @@ impl Packs {
             commands,
             in_use,
             say,
-            folders,
+            folders: link.folders,
+            open_folders: RefCell::new(None),
+            handed_over: link.handed_over,
+        });
+        let weak = Rc::downgrade(&packs);
+        packs.window.on_open_folders(move || {
+            if let Some(packs) = weak.upgrade() {
+                packs.to_folders();
+            }
         });
         let weak = Rc::downgrade(&packs);
         packs
@@ -280,10 +314,11 @@ impl Packs {
         if !self.is_open() {
             self.keyboard.remember();
             let now = in_use_now(&self.in_use);
-            let listing = list_packs(&self.folders.catalogue(), &TomlPackFormat);
+            let folders = self.folders.borrow().clone();
+            let listing = list_packs(&folders.catalogue(), &TomlPackFormat);
             let notes = listing.as_ref().map_or_else(
                 |_| Vec::new(),
-                |listing| i18n::catalogue_notes(&listing.coverage, &self.folders),
+                |listing| i18n::catalogue_notes(&listing.coverage, &folders),
             );
             let picker = PackPicker::new(
                 listing,
@@ -329,6 +364,25 @@ impl Packs {
         }
         let _ = self.window.hide();
         *self.picker.borrow_mut() = None;
+    }
+
+    /// What opens the pack folders window from this one's link.
+    pub fn set_open_folders(&self, open: Box<dyn Fn()>) {
+        *self.open_folders.borrow_mut() = Some(open);
+    }
+
+    /// The link to the pack folders window: the keyboard this window lent goes
+    /// over to that one, so closing it gives the keyboard back to the field
+    /// under test, and this window closes without handing anything back.
+    fn to_folders(&self) {
+        let Some(open) = self.open_folders.borrow_mut().take() else {
+            return;
+        };
+        self.handed_over.set(self.keyboard.pass_on());
+        *self.picker.borrow_mut() = None;
+        let _ = self.window.hide();
+        open();
+        *self.open_folders.borrow_mut() = Some(open);
     }
 
     /// The window stopped being the active one: the tester is elsewhere.
@@ -548,6 +602,8 @@ fn label(window: &PacksWindow) {
     window.set_heading(i18n::packs_label(PacksLabel::Heading).into());
     window.set_search_label(i18n::packs_label(PacksLabel::Search).into());
     window.set_current_label(i18n::packs_label(PacksLabel::InUse).into());
+    window.set_folders_link(i18n::folders_label(FoldersLabel::Link).into());
+    window.set_folders_link_action(i18n::folders_label(FoldersLabel::LinkAction).into());
     let hints: Vec<HintRow> = [
         (PacksLabel::KeyEnter, PacksLabel::UseSelected),
         (PacksLabel::KeyEscape, PacksLabel::Close),

@@ -64,6 +64,8 @@ use nkb_app::ports::Settings;
 use nkb_app::{KeptSettings, RouteRequest};
 use nkb_core::hotkeys::{Bindings, HotkeyAction};
 use nkb_gui::about::About;
+use nkb_gui::on_request::Later;
+use nkb_gui::pack_folders::{FolderLink, Folders, Wiring};
 use nkb_gui::packs::{Packs, SystemKeyboard};
 use nkb_gui::shortcuts::Shortcuts;
 use nkb_gui::welcome::Welcome;
@@ -188,6 +190,32 @@ fn start(request: Request) -> Result<ExitCode, Failure> {
 
 /// The clicks of the palette that only ask the worker for something.
 ///
+/// The pack folders window (`D175`): made at its first opening, the About
+/// window's way, and opened by the value window's link, which hands it the
+/// keyboard it lent. Its choices go to the worker, which keeps the settings.
+fn wire_folders(
+    palette: &Palette,
+    packs: &Rc<Packs>,
+    choose: &std::sync::mpsc::Sender<live::Command>,
+    link: FolderLink,
+    store: &SettingsFile,
+) -> Rc<Later<Folders>> {
+    let folders = Folders::later(
+        Wiring {
+            commands: choose.clone(),
+            folders: link.folders,
+            handed_over: link.handed_over,
+            settings_file: store.path().map(std::path::Path::to_path_buf),
+        },
+        say_in(palette),
+    );
+    packs.set_open_folders(Box::new({
+        let folders = Rc::clone(&folders);
+        move || folders.open()
+    }));
+    folders
+}
+
 /// The worker holds the sequence and the settings, so each click sends a command,
 /// as the shortcut of the same action does.
 fn wire_clicks(palette: &Palette, choose: &std::sync::mpsc::Sender<live::Command>) {
@@ -301,14 +329,16 @@ fn run_palette(
 
     // Created once and shown on request. Unlike the palette it has no flag to
     // lose when hidden, so hiding it between openings costs nothing.
+    let link = FolderLink::new(folders.clone());
     let packs = Packs::new(
         PacksWindow::new()?,
         Box::new(SystemKeyboard::default()),
         choose.clone(),
         Arc::clone(&in_use),
         say_in(&palette),
-        folders.clone(),
+        link.clone(),
     );
+    let pack_folders = wire_folders(&palette, &packs, &choose, link, &store);
     wire_clicks(&palette, &choose);
     // Shown on request too, but made at its first opening and kept from then
     // on: a window holds a graphics context from the moment it is made (R23,
@@ -388,6 +418,7 @@ fn run_palette(
         let packs = std::rc::Rc::clone(&packs);
         let shortcuts = std::rc::Rc::clone(&shortcuts);
         let about = Rc::clone(&about);
+        let pack_folders = Rc::clone(&pack_folders);
         let closed_at = std::rc::Rc::clone(&closed_at);
         let palette = palette.as_weak();
         let welcome = welcome.clone();
@@ -398,6 +429,7 @@ fn run_palette(
             packs.close();
             shortcuts.close();
             about.close();
+            pack_folders.close();
             if let Some(welcome) = &welcome {
                 welcome.dismiss();
             }

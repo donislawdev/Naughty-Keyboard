@@ -656,6 +656,9 @@ pub enum Environment {
     /// The About window opened, and the system kept the keyboard somewhere
     /// else - Esc would go to the application under test, not close it.
     AboutFocusNotTaken,
+    /// The pack folders window opened, and the system kept the keyboard
+    /// somewhere else - Esc would go to the application under test (`D175`).
+    FoldersFocusNotTaken,
     /// The palette could not be let into the space of an application in full
     /// screen (macOS), so the shortcuts work and the palette is out of sight
     /// there (`OBS-193`).
@@ -696,6 +699,9 @@ fn pattern_environment(limit: Environment) -> &'static str {
         }
         Environment::AboutFocusNotTaken => {
             "The About window could not take the keyboard focus: {reason}. Close it with its Close button."
+        }
+        Environment::FoldersFocusNotTaken => {
+            "The pack folders window could not take the keyboard focus: {reason}. Close it with its Close button."
         }
         Environment::NotOverFullScreen => {
             "The palette may stay out of sight while an application is in full screen: {reason}. The shortcuts still work. Leave full screen to see it."

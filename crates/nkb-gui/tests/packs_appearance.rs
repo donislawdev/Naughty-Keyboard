@@ -52,6 +52,9 @@ fn fill(window: &PacksWindow, rows: Vec<PickRow>) {
     window.set_window_title("Naughty Keyboard - find a value".into());
     window.set_heading("Find a value".into());
     window.set_summary("values: 102, packs: 9".into());
+    // The link to the pack folders window, as the product words it (`D175`):
+    // beside the count, which must keep its place.
+    window.set_folders_link("Pack folders".into());
     window.set_search_label("Search values and packs by name, tag or id".into());
     window.set_query("unicode".into());
     window.set_current_label("in use".into());

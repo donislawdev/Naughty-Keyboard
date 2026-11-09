@@ -1,4 +1,4 @@
-//! The words of the pack folders window (`ux-spec.md` 6 M, `D175`): what the
+//! The words of the pack folders window (`ux-spec.md` 6 P, `D175`): what the
 //! window is, what each folder holds, and what came of each thing the tester
 //! did there.
 //!
