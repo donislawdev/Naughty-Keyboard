@@ -35,12 +35,13 @@ yanked = "deny"
 # They sit inside Slint's own tree, so the one who can drop them is Slint, and
 # the next Slint release is the moment to look again. The three zbus crates
 # went into zbus 6 itself, so they go when Slint and the crates under it move
-# to zbus 6.
+# to zbus 6. `pin-utils` goes when Slint stops building with `spin_on`.
 ignore = [
     { id = "RUSTSEC-2026-0192", reason = "`ttf-parser` is reached only through the window decorations that Slint's winit backend draws itself under Wayland on Linux (sctk-adwaita, then ab_glyph). It reads a font the toolkit ships and never a file the tester supplies. No vulnerability is reported against it." },
     { id = "RUSTSEC-2026-0370", reason = "`zvariant` is unmaintained. It is reached only on Linux, through zbus 5, which Slint and crates under it (accessibility, the tray icon) use to talk over the session bus. It moved into zbus 6, released on 2026-10-16, and nothing in Slint's tree uses zbus 6 yet. No vulnerability is reported against it." },
     { id = "RUSTSEC-2026-0371", reason = "`zbus_names` is unmaintained. It is reached only on Linux, through zbus 5, which Slint and crates under it (accessibility, the tray icon) use to talk over the session bus. It moved into zbus 6, released on 2026-10-16, and nothing in Slint's tree uses zbus 6 yet. No vulnerability is reported against it." },
     { id = "RUSTSEC-2026-0372", reason = "`zvariant_derive` is unmaintained. It is the derive macro of `zvariant`, runs only while a Linux build compiles and is not part of the program. It moved into zbus 6 with `zvariant`. No vulnerability is reported against it." },
+    { id = "RUSTSEC-2026-0441", reason = "`pin-utils` is unmaintained. It is reached only through `spin_on`, which Slint's macro crate and `slint-build` use while a build compiles the windows, so it runs on the build machine and is not part of the program. No vulnerability is reported against it." },
 ]
 
 [licenses]
