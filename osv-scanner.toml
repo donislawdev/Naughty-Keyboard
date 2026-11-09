@@ -37,3 +37,7 @@ reason = "zbus_names is unmaintained, and no vulnerability is reported against i
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0372"
 reason = "zvariant_derive is unmaintained, and no vulnerability is reported against it. It is the derive macro of zvariant, runs only while a Linux build compiles and is not part of the program. It moved into zbus 6 with zvariant, released on 2026-10-16, and nothing in Slint's tree uses zbus 6 yet. The twin entry in deny.toml says the same."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0441"
+reason = "pin-utils is unmaintained, and no vulnerability is reported against it. It is reached only through spin_on, which Slint's macro crate and slint-build use while a build compiles the windows, so it runs on the build machine and is not part of the program: cargo tree --invert spin_on --edges normal names only slint-macros, a proc-macro, on Windows, macOS and Linux. The twin entry in deny.toml says the same."
