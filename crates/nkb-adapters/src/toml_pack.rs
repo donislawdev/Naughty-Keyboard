@@ -24,8 +24,10 @@ use crate::canonical;
 
 mod body;
 mod next_date;
+mod prose;
 use body::{BodyKey, body_key, check_body};
 pub(crate) use next_date::rule_of;
+use prose::check_prose;
 
 use nkb_app::{Date, PackFormat, TranslationCheck, TranslationTarget};
 use nkb_core::description::{self, BreaksFault};
@@ -279,6 +281,13 @@ pub fn check(file: &str, expected_id: &str) -> Vec<LintProblem> {
     ));
     problems.extend(check_pack_table(text, root));
     problems.extend(check_pack_kinds(text, root));
+    if let Some(pack) = root.get("pack").and_then(Item::as_table_like) {
+        problems.extend(
+            check_prose(text, pack)
+                .into_iter()
+                .map(|problem| problem.owned_by("pack")),
+        );
+    }
     problems.extend(check_pack_id(text, root, expected_id));
     problems.extend(check_style(text, root));
     let context = pack_context(root);
@@ -744,6 +753,7 @@ fn check_values<'a>(
             .chain(check_keys(text, table, &VALUE_KEYS, ""))
             .chain(check_risk(text, table))
             .chain(check_description(table, pack, attributed_one_by_one))
+            .chain(check_prose(text, table))
         {
             problem.line = problem.line.or(Some(line));
             problem.owner = Some(identity.clone());
@@ -842,6 +852,7 @@ fn check_pairs<'a>(
         // sentence rule reaches it for the same reason. W033 does not: crediting
         // a source belongs to the values a pair joins, not to the joining.
         found.extend(check_description(table, pack, false));
+        found.extend(check_prose(text, table));
 
         for mut problem in found {
             problem.line = problem.line.or(Some(line));
@@ -878,6 +889,9 @@ fn check_translation_file(text: &SourceText<'_>, root: &Table) -> Vec<LintProble
     );
 
     problems.extend(check_translates_names_a_pack(text, root));
+    // A translation is prose and nothing else, so E035 and E036 reach all of
+    // it: the language it names at the root, and every table below (`D174`).
+    problems.extend(check_prose(text, root));
 
     if let Some(pack) = root.get("pack").and_then(Item::as_table_like) {
         problems.extend(
@@ -885,6 +899,7 @@ fn check_translation_file(text: &SourceText<'_>, root: &Table) -> Vec<LintProble
                 .into_iter()
                 .chain(check_insertion_fields(text, pack.iter()))
                 .chain(check_translation_keys(text, pack, &TRANSLATION_PACK_KEYS))
+                .chain(check_prose(text, pack))
                 .map(|problem| problem.owned_by("pack")),
         );
     }
@@ -894,6 +909,7 @@ fn check_translation_file(text: &SourceText<'_>, root: &Table) -> Vec<LintProble
             .into_iter()
             .chain(check_insertion_fields(text, table.iter()))
             .chain(check_translation_keys(text, table, &TRANSLATION_ENTRY_KEYS))
+            .chain(check_prose(text, table))
         {
             problem.owner = Some(owner.clone());
             problems.push(problem);

@@ -112,6 +112,39 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
+    fn every_text_field_is_either_prose_or_judged_by_a_rule_of_its_own() {
+        // A field added to the format later has to be placed on one side of
+        // this line on purpose (`D174`). Left off both, its text would pass
+        // with no rule looking at what a reader is shown.
+        let judged_elsewhere = [
+            "value",
+            "unit",
+            "id",
+            "a",
+            "b",
+            "replaced_by",
+            "translates",
+            "fields",
+            "risk",
+            "type",
+            "relation",
+            "week",
+            "weekday",
+            "time",
+        ];
+        for (field, kind) in FIELDS {
+            if !matches!(kind, Text | List) {
+                continue;
+            }
+            let prose = crate::prose::limit_of(field).is_some();
+            assert!(
+                prose != judged_elsewhere.contains(&field),
+                "{field} must be prose or judged elsewhere, and not both"
+            );
+        }
+    }
+
+    #[test]
     fn the_fields_the_format_documents_are_all_here() {
         // Taken from the two data model tables of the specification. A field
         // missing from this list is a field E009 cannot judge, silently.

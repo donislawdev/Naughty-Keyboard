@@ -52,6 +52,12 @@ Changes wait under Unreleased until then.
 
 ### Changed
 
+- `nkb lint` refuses a pack whose prose a reader cannot see or cannot get through. A name, a
+  description or any other text around the values may not hold a control character, a direction
+  mark, an invisible character or a space other than the ordinary one, written out or as an escape
+  (E035). A name may run to 120 characters, a description to 300, what a value breaks and what should
+  happen to 1000 each, and any other text to 300 (E036). The palette refuses such a pack from a
+  folder like any broken pack.
 - `nkb lint` warns about a long written-out value (W026) only when the value is one piece repeated,
   which `type = "repeat"` can write instead. A long value with no such piece, such as 1001 opening
   brackets followed by 1001 closing ones, no longer gets advice nobody can follow.

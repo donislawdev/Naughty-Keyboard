@@ -13,10 +13,11 @@ band = 0.7
 # The code the two programs are made of: libraries and binaries, without tests
 # and examples. Measured 2026-10-08 on Windows with clippy 0.1.99. Complexity
 # 23 since 2026-10-11, when the reading of the remembered places left the
-# settings file's settings_of, its holder. Length 158 since 2026-10-15, when the
-# sentences about pairs left the lint report's sentence.
+# settings file's settings_of, its holder. Length 155 since 2026-11-09, when the
+# sentences about the description of a value left the lint report's sentence,
+# and the palette worker's drive became the longest.
 [clippy.product]
-too-many-lines-threshold = 158
+too-many-lines-threshold = 155
 cognitive-complexity-threshold = 23
 excessive-nesting-threshold = 6
 too-many-arguments-threshold = 7
@@ -29,9 +30,11 @@ too-many-arguments-threshold = 7
 # from 108 lines to 111, the edge of the band. The count is the owner's to
 # accept, as it was for toml_pack.rs. Eight since 2026-10-27, when the
 # sentences of a value that did not go into the field left classify for a
-# function of their own.
+# function of their own. Nine since 2026-11-09: the ceiling came down to 155
+# and the band with it, onto the emit command of nkb, which did not grow - the
+# owner's choice.
 [clippy.near.product]
-too-many-lines-threshold = 8
+too-many-lines-threshold = 9
 cognitive-complexity-threshold = 1
 excessive-nesting-threshold = 1
 too-many-arguments-threshold = 2

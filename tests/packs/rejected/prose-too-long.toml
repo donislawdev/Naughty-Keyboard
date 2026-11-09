@@ -1,0 +1,28 @@
+# expect: E036
+#
+# A description the format will not take: longer than 300 characters, the most
+# the value window shows. The limits are 120 for a name, 300 for a description,
+# 1000 for what a value breaks and what should happen, and 300 for any other
+# prose, counted in code points. The longest prose in the catalogue the tool
+# carries stays far below every one of them.
+
+format = 1
+
+[pack]
+id          = "prose-too-long"
+name        = "Prose too long"
+description = "A pack whose description goes on far longer than any window shows and any reader follows, repeating what its name already says in other words, then listing every field it was ever meant for, then the history of how it came to be written, then a promise to be shorter next time, which it never keeps, and only then, at the very end, the one sentence that mattered."
+version     = "1.0"
+updated     = 2026-11-09
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["format-suite"]
+
+[[values]]
+id     = "anything"
+name   = "Anything"
+value  = "anything"
+breaks = "Nothing on its own - this value exists so that the pack around it is otherwise complete."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"

@@ -280,7 +280,7 @@ $ nkb new-pack my-pack
 Wrote my-pack.toml.
 $ nkb lint my-pack.toml
 0 errors, 0 warnings.
-Checked 41 of 47 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.
+Checked 43 of 49 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.
 ```
 
 <!--
@@ -428,7 +428,7 @@ says so.
 - **The team folder is a line in the settings file.** The palette offers the packs from it but has no
   button to choose the folder yet, so it is written by hand, as above. Your own folder needs no setting.
 - **The pack format is not frozen.** A later release may still change it, and its notes will say how.
-  `nkb lint` checks 41 of its 47 rules today, and `nkb lint --explain` lists every one and why a few wait.
+  `nkb lint` checks 43 of its 49 rules today, and `nkb lint --explain` lists every one and why a few wait.
 - **It does not look at the result.** It types the value and does not read what the window shows, only
   the name of its program and the kind of control that has the keyboard. Whether the application coped is
   for you to judge. Marking a result on its own chord is not there yet, so the report block is the record.
