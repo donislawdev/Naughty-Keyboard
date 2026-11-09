@@ -47,7 +47,10 @@ fn main() {
     let catalogue = BuiltInCatalogue::new();
     let mut sequence = AdvanceSequence::new(Box::new(nkb_adapters::SystemClock));
     if let Err(error) = sequence.choose_pack(&catalogue, &format, PACK) {
-        eprintln!("{}", i18n::choose_error(&error, PACK));
+        eprintln!(
+            "{}",
+            i18n::choose_error(&error, PACK, &nkb_adapters::PackFolders::none())
+        );
         std::process::exit(1);
     }
     let Some((_, total)) = sequence.counter() else {

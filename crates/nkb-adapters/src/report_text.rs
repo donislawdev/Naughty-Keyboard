@@ -41,7 +41,7 @@
 
 use nkb_app::ports::ReportText;
 use nkb_core::preview::ShapeFact;
-use nkb_core::report::{Arrival, ControlKind, ReportBlock, SpelledOut, Target, Typed};
+use nkb_core::report::{Arrival, ControlKind, PackFolder, ReportBlock, SpelledOut, Target, Typed};
 use nkb_core::text::escaped_prose;
 
 use crate::i18n::{fill, shape_line, substitution_names};
@@ -97,6 +97,12 @@ fn pattern_report_label(label: ReportLabel) -> &'static str {
 pub enum ReportPhrase {
     /// The value and the pack version it came from - `pack-format.md` 7.
     Reference,
+    /// The same, for a pack from a team's folder (`D173`): a developer looking
+    /// the reference up in the published catalogue would find another pack,
+    /// or none. The folder by kind, never by path - a path names the tester.
+    ReferenceTeam,
+    /// The same, for a pack from the tester's own folder.
+    ReferenceOwn,
     /// A generated value, exact at every length.
     Recipe,
     /// A generated value as code points: the unit's, and how many in a row.
@@ -157,6 +163,10 @@ pub enum ReportPhrase {
 fn pattern_report_phrase(phrase: ReportPhrase) -> &'static str {
     match phrase {
         ReportPhrase::Reference => "{reference} @ pack {version}",
+        ReportPhrase::ReferenceTeam => "{reference} @ pack {version}, from a team pack folder",
+        ReportPhrase::ReferenceOwn => {
+            "{reference} @ pack {version}, from the tester's own pack folder"
+        }
         ReportPhrase::Recipe => "{count} × \"{unit}\"",
         ReportPhrase::RecipeCodePoints => "{count} × {list}",
         ReportPhrase::CodePointsMore => "{list} and {rest} more",
@@ -233,7 +243,11 @@ pub fn report_text(block: &ReportBlock) -> String {
         (
             ReportLabel::Value,
             fill(
-                pattern_report_phrase(ReportPhrase::Reference),
+                pattern_report_phrase(match block.folder {
+                    None => ReportPhrase::Reference,
+                    Some(PackFolder::Team) => ReportPhrase::ReferenceTeam,
+                    Some(PackFolder::Own) => ReportPhrase::ReferenceOwn,
+                }),
                 &[
                     ("reference", &escaped_prose(&block.reference)),
                     ("version", &escaped_prose(&block.pack_version)),
@@ -474,6 +488,7 @@ mod tests {
         ReportBlock {
             reference: "whitespace/zero-width-space-x3".to_owned(),
             pack_version: "1.0".to_owned(),
+            folder: None,
             name: "Three zero-width spaces".to_owned(),
             typed: Typed::Written(LiteralText::new("ab\u{200B}\u{200B}\u{200B}cd").escape()),
             spelled_out: None,
@@ -494,6 +509,30 @@ mod tests {
 
     fn lines(text: &str) -> Vec<&str> {
         text.split(LINE_END).collect()
+    }
+
+    #[test]
+    fn a_pack_from_a_folder_is_named_by_kind_on_the_value_line_and_nothing_else_moves() {
+        // `D173`: the folder by kind, never by path - and the block keeps its
+        // shape, so only the first line differs.
+        let built_in = report_text(&block());
+        for (folder, said) in [
+            (
+                PackFolder::Team,
+                "Value:    whitespace/zero-width-space-x3 @ pack 1.0, from a team pack folder",
+            ),
+            (
+                PackFolder::Own,
+                "Value:    whitespace/zero-width-space-x3 @ pack 1.0, from the tester's own pack folder",
+            ),
+        ] {
+            let text = report_text(&ReportBlock {
+                folder: Some(folder),
+                ..block()
+            });
+            assert_eq!(lines(&text)[0], said);
+            assert_eq!(lines(&text)[1..], lines(&built_in)[1..]);
+        }
     }
 
     #[test]

@@ -393,9 +393,12 @@ const SHIPPED_OUTSIDE: [(char, &str); 31] = [
 #[test]
 fn the_shipped_packs_reach_outside_the_guarantee_exactly_here() {
     let catalogue = BuiltInCatalogue::new();
-    let ids = catalogue
+    let ids: Vec<String> = catalogue
         .list()
-        .expect("the built-in catalogue lists its packs");
+        .expect("the built-in catalogue lists its packs")
+        .into_iter()
+        .map(|listed| listed.id)
+        .collect();
     assert!(
         !ids.is_empty(),
         "the catalogue is empty, so nothing below means anything"

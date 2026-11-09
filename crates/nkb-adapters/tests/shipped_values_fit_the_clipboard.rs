@@ -41,7 +41,12 @@ impl Clipboard for Recording {
 #[test]
 fn every_shipped_value_goes_through_clipboard_mode_whole() {
     let catalogue = BuiltInCatalogue::new();
-    let ids = catalogue.list().expect("the built-in catalogue lists");
+    let ids: Vec<String> = catalogue
+        .list()
+        .expect("the built-in catalogue lists")
+        .into_iter()
+        .map(|listed| listed.id)
+        .collect();
     let mut values = 0usize;
     for id in &ids {
         let text = catalogue.read(id).expect("a shipped pack reads");

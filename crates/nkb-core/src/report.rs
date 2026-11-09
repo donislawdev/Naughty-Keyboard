@@ -48,6 +48,13 @@ pub struct ReportBlock {
     /// The pack's own version. Two years on, this is what lets a ticket be
     /// reproduced against the value it was about - `pack-format.md` 7.
     pub pack_version: String,
+    /// The folder the pack came from, when it did not come with the tool
+    /// (`D173`). A team's pack of the same name as a built-in one holds other
+    /// values, and a developer looking the reference up in the published
+    /// catalogue would find the wrong one. `None` for a built-in pack and for a
+    /// block built from the pack alone - [`ReportBlock::describe`] leaves it
+    /// `None`, for the reason it leaves [`ReportBlock::target`] `None`.
+    pub folder: Option<PackFolder>,
     pub name: String,
     pub typed: Typed,
     /// The value as code points - present only when [`Typed`] holds a
@@ -75,6 +82,19 @@ pub struct ReportBlock {
     /// it - and for a block built from the pack alone. [`ReportBlock::describe`]
     /// leaves it `None`: the pack knows nothing about the press.
     pub target: Option<Target>,
+}
+
+/// A folder of packs other than the ones the tool carries (`pack-format.md`
+/// 12, `D173`).
+///
+/// Named by kind and never by path: a path carries the tester's account name,
+/// and the block is pasted where other people read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PackFolder {
+    /// The folder a team shares, named in the settings.
+    Team,
+    /// The tester's own folder, beside the settings file.
+    Own,
 }
 
 /// Where a typed value went, read at the press (UX8, `D104`): the program
@@ -215,6 +235,7 @@ impl ReportBlock {
         Ok(Self {
             reference: format!("{}/{}", pack.id, value.id),
             pack_version: pack.version.clone(),
+            folder: None,
             name: value.name.clone(),
             spelled_out: spelled_out(&body, &typed),
             typed,

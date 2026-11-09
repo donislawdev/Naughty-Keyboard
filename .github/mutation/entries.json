@@ -630,18 +630,9 @@
       "runner": "rust:nkb-gui:lib"
     },
     {
-      "id": "M237",
-      "why": "the pack window does not say which sources it did not read - a list from one source of three looks complete (rule 1)",
-      "file": "crates/nkb-gui/src/picker.rs",
-      "find": "                (packs, empty, i18n::not_read(&listing.coverage))",
-      "replace": "                (packs, empty, Vec::new())",
-      "test": "picker::tests::the_shipped_catalogue_says_which_sources_it_did_not_read",
-      "runner": "rust:nkb-gui:lib"
-    },
-    {
       "id": "M238",
       "why": "choosing the pack in use opens it anew - the pack window works on a snapshot, and the count 7 / 34 goes back to zero though nothing changed",
-      "file": "crates/nkb-gui/src/live.rs",
+      "file": "crates/nkb-gui/src/live/folders.rs",
       "find": "    if sequence.pack_id() == Some(asked) {",
       "replace": "    if false {",
       "test": "live::tests::choosing_the_pack_in_use_changes_nothing_and_draws_nothing",
@@ -677,16 +668,16 @@
     {
       "id": "M242",
       "why": "a pack chosen in the window does not reach the settings - the next start opens the old one, though D84 says the pack opened on request is remembered",
-      "file": "crates/nkb-gui/src/live.rs",
-      "find": "            PackOpening::New(\n                memory\n                    .keep(SettingChange::Pack(asked.to_owned()))\n                    .into_iter()\n                    .collect(),\n            )",
-      "replace": "            PackOpening::New(Vec::new())",
+      "file": "crates/nkb-gui/src/live/folders.rs",
+      "find": "            said.extend(memory.keep(SettingChange::Pack(asked.to_owned())));\n",
+      "replace": "            let _ = SettingChange::Pack(asked.to_owned());\n",
       "test": "live::tests::choosing_another_pack_opens_it_remembers_it_and_clears_the_value",
       "runner": "rust:nkb-gui:lib"
     },
     {
       "id": "M243",
       "why": "after a change of pack the messages still speak of the old one - sentences with a pack id name a pack no longer in the palette",
-      "file": "crates/nkb-gui/src/live.rs",
+      "file": "crates/nkb-gui/src/live/folders.rs",
       "find": "            asked.clone_into(pack);",
       "replace": "            let _ = &pack;",
       "test": "live::tests::choosing_another_pack_opens_it_remembers_it_and_clears_the_value",
@@ -2889,33 +2880,6 @@
       "runner": "rust:nkb-adapters:lib"
     },
     {
-      "id": "M497",
-      "why": "the note about folders sounds like a failure again - 'Not read' at every opening (UX-GUI-009, D102)",
-      "file": "crates/nkb-adapters/src/i18n/windows.rs",
-      "find": "            if reason == PacksLabel::ReasonCannotBeSet && names.len() == 2 && built_in_read {",
-      "replace": "            if false {",
-      "test": "i18n::tests::unread_sources_are_one_line_per_reason_and_nothing_when_all_were_read",
-      "runner": "rust:nkb-adapters:lib"
-    },
-    {
-      "id": "M498",
-      "why": "'only the built-in packs' with one folder missing, though the other is read (D102)",
-      "file": "crates/nkb-adapters/src/i18n/windows.rs",
-      "find": "            if reason == PacksLabel::ReasonCannotBeSet && names.len() == 2 && built_in_read {",
-      "replace": "            if reason == PacksLabel::ReasonCannotBeSet && !names.is_empty() && built_in_read {",
-      "test": "i18n::tests::unread_sources_are_one_line_per_reason_and_nothing_when_all_were_read",
-      "runner": "rust:nkb-adapters:lib"
-    },
-    {
-      "id": "M499",
-      "why": "'only the built-in packs' when the built-in packs were not read (D102)",
-      "file": "crates/nkb-adapters/src/i18n/windows.rs",
-      "find": "            if reason == PacksLabel::ReasonCannotBeSet && names.len() == 2 && built_in_read {",
-      "replace": "            if reason == PacksLabel::ReasonCannotBeSet && names.len() == 2 {",
-      "test": "i18n::tests::unread_sources_are_one_line_per_reason_and_nothing_when_all_were_read",
-      "runner": "rust:nkb-adapters:lib"
-    },
-    {
       "id": "M500",
       "why": "the Shortcuts window without the 'not available yet' pill - actions not wired look like working ones (UX-GUI-006)",
       "file": "crates/nkb-gui/src/shortcut_list.rs",
@@ -3054,8 +3018,8 @@
       "id": "M527",
       "why": "the [welcome] table is named as unknown (D103)",
       "file": "crates/nkb-adapters/src/settings_file.rs",
-      "find": "        if ![\"schema\", \"palette\", \"shortcuts\", \"welcome\", \"find\"].contains(&key) {",
-      "replace": "        if ![\"schema\", \"palette\", \"shortcuts\", \"find\"].contains(&key) {",
+      "find": "        if ![\"schema\", \"palette\", \"shortcuts\", \"welcome\", \"find\", \"packs\"].contains(&key) {",
+      "replace": "        if ![\"schema\", \"palette\", \"shortcuts\", \"find\", \"packs\"].contains(&key) {",
       "test": "settings_file::tests::the_welcome_closed_is_remembered_in_a_table_of_its_own",
       "runner": "rust:nkb-adapters:lib"
     },
@@ -3468,8 +3432,8 @@
       "id": "M575",
       "why": "the [find] table counts as unknown - every file with a recent list gets a sentence about an unknown key (D106)",
       "file": "crates/nkb-adapters/src/settings_file.rs",
-      "find": "        if ![\"schema\", \"palette\", \"shortcuts\", \"welcome\", \"find\"].contains(&key) {",
-      "replace": "        if ![\"schema\", \"palette\", \"shortcuts\", \"welcome\"].contains(&key) {",
+      "find": "        if ![\"schema\", \"palette\", \"shortcuts\", \"welcome\", \"find\", \"packs\"].contains(&key) {",
+      "replace": "        if ![\"schema\", \"palette\", \"shortcuts\", \"welcome\", \"packs\"].contains(&key) {",
       "test": "settings_file::tests::a_recent_list_with_one_entry_that_does_not_read_is_not_used_at_all",
       "runner": "rust:nkb-adapters:lib"
     },
@@ -3620,7 +3584,7 @@
     {
       "id": "M593",
       "why": "a value row shows the name instead of the preview - nothing shows what it types",
-      "file": "crates/nkb-gui/src/picker.rs",
+      "file": "crates/nkb-gui/src/picker/rows.rs",
       "find": "                    preview: preview_line(&preview_of(&value.definition.on(today))).0,",
       "replace": "                    preview: value.name.clone(),",
       "test": "picker::tests::every_value_previews_as_the_palette_previews_it",
@@ -3629,9 +3593,9 @@
     {
       "id": "M594",
       "why": "a pack row starts with the id again - the description is pushed out of view",
-      "file": "crates/nkb-gui/src/picker.rs",
-      "find": "            detail: pack.description.clone(),",
-      "replace": "            detail: format!(\"{}, {}\", pack.id, pack.description),",
+      "file": "crates/nkb-gui/src/picker/rows.rs",
+      "find": "            detail: with_source(shown_prose(&pack.description, SHOWN_DESCRIPTION)),",
+      "replace": "            detail: with_source(format!(\"{}, {}\", pack.id, shown_prose(&pack.description, SHOWN_DESCRIPTION))),",
       "test": "picker::tests::a_pack_row_says_what_the_pack_is_for_and_nothing_before_it",
       "runner": "rust:nkb-gui:lib"
     },
@@ -4347,8 +4311,8 @@
       "id": "M675",
       "why": "nkb really starts a process - CreateProcessW has to stand in the import table of the built program",
       "file": "crates/nkb-cli/src/main.rs",
-      "find": "    let args: Vec<String> = std::env::args().skip(1).collect();\n",
-      "replace": "    let args: Vec<String> = std::env::args().skip(1).collect();\n    if std::env::var_os(\"NKB_MUTATION_NEVER_SET\").is_some() {\n        let _ = std::process::Command::new(\"x\").status();\n    }\n",
+      "find": "    // What the command found, unless its answer could not be written (`output`).\n",
+      "replace": "    if std::env::var_os(\"NKB_MUTATION_NEVER_SET\").is_some() {\n        let _ = std::process::Command::new(\"x\").status();\n    }\n    // What the command found, unless its answer could not be written (`output`).\n",
       "test": "nkb_links_nothing_that_reaches_off_the_machine",
       "runner": "rust:nkb-cli:links_nothing_off_the_machine"
     },
@@ -4356,8 +4320,8 @@
       "id": "M676",
       "why": "nkb really opens a socket - ws2_32.dll has to stand in the import table of the built program",
       "file": "crates/nkb-cli/src/main.rs",
-      "find": "    let args: Vec<String> = std::env::args().skip(1).collect();\n",
-      "replace": "    let args: Vec<String> = std::env::args().skip(1).collect();\n    if std::env::var_os(\"NKB_MUTATION_NEVER_SET\").is_some() {\n        let _ = std::net::TcpStream::connect(\"127.0.0.1:9\");\n    }\n",
+      "find": "    // What the command found, unless its answer could not be written (`output`).\n",
+      "replace": "    if std::env::var_os(\"NKB_MUTATION_NEVER_SET\").is_some() {\n        let _ = std::net::TcpStream::connect(\"127.0.0.1:9\");\n    }\n    // What the command found, unless its answer could not be written (`output`).\n",
       "test": "nkb_links_nothing_that_reaches_off_the_machine",
       "runner": "rust:nkb-cli:links_nothing_off_the_machine"
     },
@@ -8027,7 +7991,7 @@
     {
       "id": "M1101",
       "why": "the name of a pair is not searched - 'against' does not find the halves, though the pair's name is the test they make together (D134)",
-      "file": "crates/nkb-gui/src/picker.rs",
+      "file": "crates/nkb-gui/src/picker/rows.rs",
       "find": "                    (MatchPlace::Pair, pair.name.as_str()),",
       "replace": "                    (MatchPlace::Pair, pair.id.as_str()),",
       "test": "picker::tests::a_value_is_found_by_its_pair_and_says_so",
@@ -12092,7 +12056,7 @@
     {
       "id": "M1553",
       "why": "the palette sends the tester to nkb lint with a pack identifier, a usage error since lint reads only the file it is named (OBS-235)",
-      "file": "crates/nkb-adapters/src/i18n.rs",
+      "file": "crates/nkb-adapters/src/i18n/catalogue.rs",
       "find": "has {errors} problems. Run nkb lint on its file to see them.\"",
       "replace": "has {errors} problems. Run: nkb lint {pack}\"",
       "test": "i18n::tests::no_sentence_hands_nkb_lint_a_pack_identifier",
@@ -13069,6 +13033,114 @@
       "replace": "    period < length",
       "test": "written_form::tests::the_period_is_found_whatever_the_length_of_the_piece",
       "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1670",
+      "why": "the value window says nothing under its list - not where own packs go, not which folder was not read (D173)",
+      "file": "crates/nkb-gui/src/packs.rs",
+      "find": "            .with_notes(notes)\n",
+      "replace": "",
+      "test": "the_pack_window_chooses_closes_and_always_hands_the_keyboard_back",
+      "runner": "rust:nkb-gui:packs_window"
+    },
+    {
+      "id": "M1671",
+      "why": "a folder that hangs is asked again and again - every question waits its full two seconds on a dead share (D173)",
+      "file": "crates/nkb-adapters/src/pack_folder.rs",
+      "find": "        if self.hanging.load(Ordering::SeqCst) > 0 {",
+      "replace": "        if false {",
+      "test": "pack_folder::tests::a_folder_that_does_not_answer_in_time_is_unreachable_and_asked_no_more_until_it_does",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1672",
+      "why": "a pack name becomes a path unchecked - ../ reads a file outside the pack folder (D173)",
+      "file": "crates/nkb-adapters/src/pack_folder.rs",
+      "find": "        if !is_pack_id(id) {",
+      "replace": "        if false {",
+      "test": "pack_folder::tests::a_pack_is_read_by_identifier_and_never_by_a_path",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1673",
+      "why": "a team pack that cannot be read uncovers the built-in one - the tester types other values than chosen (D173)",
+      "file": "crates/nkb-adapters/src/catalogue.rs",
+      "find": "            CatalogueSource::Team => read_from(&self.team, id),",
+      "replace": "            CatalogueSource::Team => BuiltInCatalogue.read(id),",
+      "test": "catalogue::tests::an_overriding_pack_that_cannot_be_read_does_not_uncover_the_one_behind_it",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1674",
+      "why": "a team folder that is the own folder is read twice - every pack in it overrides itself (D173)",
+      "file": "crates/nkb-adapters/src/catalogue.rs",
+      "find": "            team = Err(SourceSkipped::SameAsOwn);\n",
+      "replace": "",
+      "test": "catalogue::tests::a_team_folder_that_is_the_own_folder_is_read_once_as_the_own_one",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1675",
+      "why": "a relative team-folder is taken - a different folder for every place the palette starts from (D173)",
+      "file": "crates/nkb-adapters/src/settings_file.rs",
+      "find": "                        Some(path) if Path::new(path).is_absolute() => {",
+      "replace": "                        Some(path) => {",
+      "test": "settings_file::tests::the_team_folder_is_read_only_as_a_full_path",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1676",
+      "why": "a hostile file name goes into the note unescaped - a direction override reorders the window's line (D173)",
+      "file": "crates/nkb-adapters/src/i18n/catalogue.rs",
+      "find": "        .map(|name| format!(\"\\\"{}\\\"\", escaped_prose(name)))",
+      "replace": "        .map(|name| format!(\"\\\"{name}\\\"\"))",
+      "test": "i18n::catalogue::tests::a_hostile_file_name_cannot_forge_or_reorder_the_note",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1677",
+      "why": "the report block of a team pack reads as the built-in one - a developer looks up the wrong values (D173)",
+      "file": "crates/nkb-adapters/src/report_text.rs",
+      "find": "                    Some(PackFolder::Team) => ReportPhrase::ReferenceTeam,",
+      "replace": "                    Some(PackFolder::Team) => ReportPhrase::Reference,",
+      "test": "report_text::tests::a_pack_from_a_folder_is_named_by_kind_on_the_value_line_and_nothing_else_moves",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1678",
+      "why": "a pack's prose is shown whole whatever its length - megabytes of description freeze the window (D173)",
+      "file": "crates/nkb-core/src/text.rs",
+      "find": "    match text.char_indices().nth(max) {",
+      "replace": "    match text.char_indices().nth(usize::MAX) {",
+      "test": "text::tests::shown_prose_escapes_and_cuts_only_what_is_longer_than_the_limit",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1679",
+      "why": "--team-folder given twice takes the second without a word - a pipeline reads another folder than it names (D173)",
+      "file": "crates/nkb-cli/src/folders.rs",
+      "find": "            Some(folder) if !folder.is_empty() && team.is_none() => {",
+      "replace": "            Some(folder) if !folder.is_empty() => {",
+      "test": "folders::tests::the_option_needs_one_folder_and_takes_only_one",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1680",
+      "why": "a folder that does not answer is said at every change of pack - a sentence said every time teaches the tester to skip it (D173)",
+      "file": "crates/nkb-gui/src/live/folders.rs",
+      "find": "        if *said == faults {",
+      "replace": "        if false {",
+      "test": "live::folders::tests::a_folder_fault_is_said_once_and_not_at_every_pack",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1681",
+      "why": "a pack used instead of the built-in one says nothing in the palette - a silent override (pack-format.md 12, D173)",
+      "file": "crates/nkb-adapters/src/i18n/catalogue.rs",
+      "find": "    let note = match origin.overrides.first()? {",
+      "replace": "    let note = match None::<&CatalogueSource>? {",
+      "test": "i18n::catalogue::tests::a_pack_used_instead_of_another_says_so_and_a_plain_one_says_nothing",
+      "runner": "rust:nkb-adapters:lib"
     }
   ]
 }

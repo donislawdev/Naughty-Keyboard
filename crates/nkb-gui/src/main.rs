@@ -57,8 +57,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use nkb_adapters::i18n::PaletteLabel;
 use nkb_adapters::{
-    KeptFocus, SettingsFile, default_bindings, i18n, layout_character, report_window_failure,
-    report_worker_failure, screens,
+    KeptFocus, PackFolders, SettingsFile, default_bindings, i18n, layout_character,
+    report_window_failure, report_worker_failure, screens,
 };
 use nkb_app::ports::Settings;
 use nkb_app::{KeptSettings, RouteRequest};
@@ -148,7 +148,12 @@ enum Request {
 }
 
 fn request() -> Request {
-    let mut arguments = std::env::args().skip(1);
+    // Not `std::env::args`, which ends the process with a panic on a word that
+    // is not Unicode. Such a word cannot name a pack, and read lossily it says
+    // "not found" like any other name that does not.
+    let mut arguments = std::env::args_os()
+        .skip(1)
+        .map(|word| word.to_string_lossy().into_owned());
     let first = arguments.next();
     let (route, pack) = match first.as_deref() {
         Some("--gallery") => return Request::Gallery,
@@ -248,6 +253,9 @@ fn run_palette(
     // on the worker.
     let store = SettingsFile::for_this_user();
     let (settings, mut said) = KeptSettings::open(&store);
+    // The team's and the tester's own pack folders (`D173`), from what the
+    // settings said - the value window and the worker read the same ones.
+    let folders = PackFolders::for_run(&store, settings.settings(), &said, None);
     // The shortcuts of this run, once, here: the hint bar on this thread and
     // the registration on the worker must show and take the same ones. What
     // the tester wrote and could not be used is said with the other settings -
@@ -299,6 +307,7 @@ fn run_palette(
         choose.clone(),
         Arc::clone(&in_use),
         say_in(&palette),
+        folders.clone(),
     );
     wire_clicks(&palette, &choose);
     // Shown on request too, but made at its first opening and kept from then
@@ -411,6 +420,7 @@ fn run_palette(
             store,
             kept: settings,
             said,
+            folders,
             bindings,
             // To the shortcuts window, through the main thread's event loop.
             tell: nkb_gui::shortcuts::tell(),

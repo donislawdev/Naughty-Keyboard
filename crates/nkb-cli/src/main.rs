@@ -15,6 +15,8 @@ mod clearing;
 mod emit_output;
 mod english;
 mod exit;
+mod folders;
+mod help;
 mod json;
 mod lint_json;
 mod lint_report;
@@ -28,9 +30,11 @@ mod target_line;
 use clearing::{not_cleared, say_clearing_before_failure};
 use emit_output::{EmitFormat, Form};
 use exit::ExitCode;
-use nkb_adapters::{
-    BuiltInCatalogue, DirectInjection, DirectoryPackSink, SystemClock, TomlPackFormat,
+use help::{
+    print_emit_help, print_fmt_help, print_help, print_lint_help, print_new_pack_help,
+    print_packs_help, print_send_help, print_show_help,
 };
+use nkb_adapters::{DirectInjection, DirectoryPackSink, PackFolders, SystemClock, TomlPackFormat};
 use nkb_app::{
     Availability, Clearing, ClearingOutcome, Clock, EmitOutcome, FormatOutcome, LintOutcome,
     NewPackOutcome, OnTheWay, SendOutcome, SendRequest, ShowOutcome, TargetInspector, TargetRef,
@@ -44,10 +48,22 @@ use sent_notes::{say_pace, say_text_substitutions};
 use std::io::Write;
 use target_line::{Countdown, say_where_it_goes, where_it_goes};
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() -> std::process::ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    // Not `std::env::args`, which ends the process with a panic on a word that
+    // is not Unicode - a file name on Linux may be one. Refused by name.
+    let Ok(args) = std::env::args_os()
+        .skip(1)
+        .map(std::ffi::OsString::into_string)
+        .collect::<Result<Vec<String>, _>>()
+    else {
+        let _ = writeln!(
+            std::io::stderr(),
+            "nkb: an argument is not valid Unicode text, and nkb reads only text."
+        );
+        return std::process::ExitCode::from(2);
+    };
     // What the command found, unless its answer could not be written (`output`).
     let code = output::settle(run(&args));
     std::process::ExitCode::from(u8::try_from(code.as_i32()).unwrap_or(2))
@@ -72,10 +88,10 @@ fn run(args: &[String]) -> ExitCode {
             outln!("nkb {VERSION}");
             ExitCode::Ok
         }
-        "packs" => packs(&args[1..]),
-        "show" => show(&args[1..]),
-        "emit" => emit(&args[1..]),
-        "send" => send(&args[1..]),
+        "packs" => folders::then(&args[1..], "packs", packs),
+        "show" => folders::then(&args[1..], "show", show),
+        "emit" => folders::then(&args[1..], "emit", emit),
+        "send" => folders::then(&args[1..], "send", send),
         "lint" => lint(&args[1..]),
         "fmt" => fmt(&args[1..]),
         "new-pack" => new_pack_command(&args[1..]),
@@ -357,7 +373,7 @@ fn new_pack_command(args: &[String]) -> ExitCode {
 /// that is deliberate: it is part of the answer, not a diagnostic about it. A
 /// list of one source out of three read without that line is a false statement,
 /// and standard error is exactly where a pipeline drops things.
-fn packs(args: &[String]) -> ExitCode {
+fn packs(args: &[String], folders: &PackFolders) -> ExitCode {
     // `first` rather than a loop: every branch below returns, so a loop would be
     // one that never loops, and the compiler is right to say so.
     match args.first().map(String::as_str) {
@@ -374,12 +390,12 @@ fn packs(args: &[String]) -> ExitCode {
         }
     }
 
-    let catalogue = BuiltInCatalogue::new();
+    let catalogue = folders.catalogue();
     let format = TomlPackFormat;
 
     match list_packs(&catalogue, &format) {
         Ok(found) => {
-            for line in browse_report::listing(&found) {
+            for line in browse_report::listing(&found, folders) {
                 outln!("{line}");
             }
             // A catalogue holding a pack nobody can load is not a failed run:
@@ -399,7 +415,7 @@ fn packs(args: &[String]) -> ExitCode {
 }
 
 /// `nkb show <pack>` - one pack in full.
-fn show(args: &[String]) -> ExitCode {
+fn show(args: &[String], folders: &PackFolders) -> ExitCode {
     let mut wanted: Option<&str> = None;
 
     for arg in args {
@@ -425,25 +441,33 @@ fn show(args: &[String]) -> ExitCode {
         return ExitCode::Usage;
     };
 
-    let catalogue = BuiltInCatalogue::new();
+    let catalogue = folders.catalogue();
     let format = TomlPackFormat;
 
     match show_pack(&catalogue, &format, wanted) {
-        ShowOutcome::Shown { pack, warnings } => {
+        ShowOutcome::Shown {
+            pack,
+            warnings,
+            origin,
+        } => {
+            for line in browse_report::origin_line(&origin, folders) {
+                outln!("{line}");
+            }
             for line in browse_report::pack(&pack, warnings) {
                 outln!("{line}");
             }
             ExitCode::Ok
         }
-        ShowOutcome::Refused { errors } => {
+        ShowOutcome::Refused { errors, origin } => {
             let mut err = std::io::stderr();
             let _ = writeln!(
                 err,
                 "nkb show: '{wanted}' has {errors} errors and is not loaded at all."
             );
+            let lint = browse_report::lint_hint(wanted, &origin, folders);
             let _ = writeln!(
                 err,
-                "A pack is whole or absent - run `nkb lint` on it to see what is wrong."
+                "A pack is whole or absent - {lint} to see what is wrong."
             );
             ExitCode::ValidationFailed
         }
@@ -451,27 +475,15 @@ fn show(args: &[String]) -> ExitCode {
             let mut err = std::io::stderr();
             let _ = writeln!(err, "nkb show: no pack called '{wanted}'.");
             let _ = writeln!(err, "Run 'nkb packs' to see what there is.");
+            folders::say_not_read(&mut err, "show", &catalogue, folders);
             ExitCode::NotFound
         }
-        ShowOutcome::Unreadable => {
+        ShowOutcome::Unreadable { .. } => {
             let mut err = std::io::stderr();
             let _ = writeln!(err, "nkb show: '{wanted}' could not be read.");
             ExitCode::IoFailed
         }
     }
-}
-
-fn print_packs_help() {
-    outln!("nkb packs - list the packs this build can offer");
-    outln!();
-    outln!("Usage:");
-    outln!("  nkb packs");
-    outln!();
-    outln!("Every run also states which pack sources were read and which were not,");
-    outln!("because a list drawn from one source looks exactly like a complete one.");
-    outln!();
-    outln!("Options:");
-    outln!("  -h, --help     Show this help and exit with 0");
 }
 
 /// Which switch is still waiting for its number.
@@ -526,7 +538,7 @@ struct SendArgs<'a> {
 /// Standard output stays EMPTY here, deliberately. `09-CLI-I-CI.md` gives stdout
 /// to data, and this command's data does not come back to the caller - it goes
 /// into somebody else's window. Everything a person reads is on standard error.
-fn send(args: &[String]) -> ExitCode {
+fn send(args: &[String], folders: &PackFolders) -> ExitCode {
     let asked = match send_args(args) {
         Ok(asked) => asked,
         Err(code) => return code,
@@ -561,15 +573,20 @@ fn send(args: &[String]) -> ExitCode {
             let _ = writeln!(std::io::stderr(), "{line}");
         }
     };
+    let catalogue = folders.catalogue();
     let outcome = send_value(
-        &BuiltInCatalogue::new(),
+        &catalogue,
         &TomlPackFormat,
         &delivery,
         &delivery,
         &request,
         &mut on_the_way,
     );
-    report_send(&mut std::io::stderr(), asked.wanted, outcome)
+    let code = report_send(&mut std::io::stderr(), asked.wanted, outcome);
+    if code == ExitCode::NotFound {
+        folders::say_not_read(&mut std::io::stderr(), "send", &catalogue, folders);
+    }
+    code
 }
 
 /// The arguments of `nkb send`, or the exit code to stop with.
@@ -874,46 +891,12 @@ fn count_down(seconds: u64) {
     let _ = writeln!(err);
 }
 
-fn print_send_help() {
-    outln!("nkb send - type one value into the focused field");
-    outln!();
-    outln!("Usage:");
-    outln!("  nkb send <pack> [--index N] [--delay S] [--clear]");
-    outln!();
-    outln!("Put one value of a pack into whatever field has the keyboard focus.");
-    outln!();
-    outln!("Options:");
-    outln!("  --index N      which value, counting from 1 in the pack's own order");
-    outln!("                 (default: 1). The order of values is the order of testing.");
-    outln!("  --delay S      seconds to wait first, so you can focus the target");
-    outln!("                 (default: 3). Use 0 when something else focuses it.");
-    outln!("  --clear        press Home, Shift+End, Delete first, clearing the current");
-    outln!("                 line of the field. Never selects beyond the line, so a");
-    outln!("                 multi-line field keeps its other lines. Without this switch");
-    outln!("                 the only keys sent are the value's own characters.");
-    outln!("  -h, --help     Show this help and exit with 0");
-    outln!();
-    outln!("The value goes to the focused window, not to standard output.");
-    outln!("Everything you read here is on standard error.");
-    outln!("Nothing is sent while Ctrl, Alt, Shift or Win is held on the keyboard:");
-    outln!("the command waits up to two seconds for them to come up, then refuses.");
-    outln!("Nothing is sent to a window running with higher privileges than nkb,");
-    outln!("such as an application started as administrator: the system would drop");
-    outln!("the keystrokes without a word, so the command refuses and exits with 4.");
-    outln!("Nothing is sent when the keyboard focus is on a button, a link, a list item");
-    outln!("or a page that is not editable: keys there act on that control, so the");
-    outln!("command refuses and exits with 4. Where it cannot tell, it sends.");
-    outln!("Press Escape to stop a send in progress: nothing more is typed, the command");
-    outln!("says how much arrived and exits with 4. Escape belongs to the command only");
-    outln!("while it types - before and after, the key is the application's.");
-}
-
 /// `nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]`
 ///
 /// The command that takes the catalogue out of the tool. Everything it prints on
 /// standard output is values. The account of what came out, and every note about
 /// what a format could not carry, goes to the error stream - `ux-spec.md` 10.
-fn emit(args: &[String]) -> ExitCode {
+fn emit(args: &[String], folders: &PackFolders) -> ExitCode {
     let mut wanted: Option<&str> = None;
     let mut format = EmitFormat::Json;
     let mut form: Option<Form> = None;
@@ -983,7 +966,7 @@ fn emit(args: &[String]) -> ExitCode {
         return ExitCode::Usage;
     };
 
-    let catalogue = BuiltInCatalogue::new();
+    let catalogue = folders.catalogue();
 
     match emit_values(&catalogue, &TomlPackFormat, &SystemClock, wanted) {
         EmitOutcome::Emitted(emission) => {
@@ -1013,6 +996,7 @@ fn emit(args: &[String]) -> ExitCode {
             let mut err = std::io::stderr();
             let _ = writeln!(err, "nkb emit: no pack called '{wanted}'.");
             let _ = writeln!(err, "Run 'nkb packs' to see what there is.");
+            folders::say_not_read(&mut err, "emit", &catalogue, folders);
             ExitCode::NotFound
         }
         EmitOutcome::Unreadable => {
@@ -1033,126 +1017,6 @@ fn emit(args: &[String]) -> ExitCode {
             ExitCode::ValidationFailed
         }
     }
-}
-
-fn print_emit_help() {
-    outln!("nkb emit - print a pack's values for a script or a file");
-    outln!();
-    outln!("Usage:");
-    outln!("  nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]");
-    outln!();
-    outln!("Values go to standard output. The account of what came out, and any");
-    outln!("note about what a format could not carry, go to standard error - so a");
-    outln!("redirected file holds values and nothing else.");
-    outln!();
-    outln!("Formats:");
-    outln!("  json     Both forms of every value, and every field. The default,");
-    outln!("           because it is the only one that carries the whole catalogue");
-    outln!("  csv      One row per value. Escaped by default, because this");
-    outln!("           catalogue contains values that destroy CSV files");
-    outln!("  lines    One value per line. Refuses a value containing a line");
-    outln!("           break by name, rather than splitting it silently");
-    outln!();
-    outln!("Options:");
-    outln!("      --escaped  Print values as a pack file stores them");
-    outln!("      --raw      Print values literally");
-    outln!("      --base64   Encode values, for channels that damage text");
-    outln!("  -h, --help     Show this help and exit with 0");
-}
-
-fn print_show_help() {
-    outln!("nkb show - print one pack in full");
-    outln!();
-    outln!("Usage:");
-    outln!("  nkb show <pack>");
-    outln!();
-    outln!("Values are printed ESCAPED, which is the only readable form for a value");
-    outln!("made of characters nobody can see. A generated value is printed as its");
-    outln!("recipe and is never expanded here.");
-    outln!();
-    outln!("Options:");
-    outln!("  -h, --help     Show this help and exit with 0");
-}
-
-fn print_help() {
-    outln!("nkb {VERSION} - malicious test data, one shortcut away");
-    outln!();
-    outln!("Usage:");
-    outln!("  nkb <command> [options]");
-    outln!();
-    outln!("Commands:");
-    outln!("  packs             List the packs this build can offer");
-    outln!("  show <pack>       Print one pack in full");
-    outln!("  emit <pack>       Print a pack's values for a script or a file");
-    outln!("  send <pack>       Type one value into the focused field");
-    outln!("  lint <file>       Check a pack file against the format rules");
-    outln!("  fmt <file>        Rewrite a pack file in canonical shape");
-    outln!("  new-pack <name>   Write the skeleton for a new pack");
-    outln!();
-    outln!("Options:");
-    outln!("  -h, --help        Show this help and exit with 0");
-    outln!("      --version     Print the version and exit with 0");
-    outln!();
-    outln!("The graphical interface is a separate executable: nkb-gui");
-}
-
-fn print_new_pack_help() {
-    outln!("nkb new-pack - write the skeleton for a new pack");
-    outln!();
-    outln!("Usage:");
-    outln!("  nkb new-pack <name>");
-    outln!();
-    outln!("The name becomes both the file name and the pack identifier, so it has");
-    outln!("to be lower case letters, digits and hyphens, starting with a letter.");
-    outln!("The file is written in the current folder and never over an existing one.");
-    outln!();
-    outln!("Options:");
-    outln!("  -h, --help     Show this help and exit with 0");
-}
-
-fn print_lint_help() {
-    outln!("nkb lint - check a pack file against the format rules");
-    outln!();
-    outln!("Usage:");
-    outln!("  nkb lint <file.toml> [--json] [--explain]");
-    outln!();
-    outln!("Options:");
-    outln!("      --json     Write the verdict as JSON, and nothing else");
-    outln!("      --explain  List every rule and whether this build checks it");
-    outln!("  -h, --help     Show this help and exit with 0");
-    outln!();
-    outln!("Exit codes:");
-    outln!("  0  the pack passed every rule this build checks");
-    outln!("  1  the pack broke at least one blocking rule");
-    outln!("  2  the command was called wrongly");
-    outln!("  3  there is no pack file to read at that path");
-    outln!("  5  the file is there and could not be read, or the verdict");
-    outln!("     could not be written to standard output");
-}
-
-fn print_fmt_help() {
-    outln!("nkb fmt - rewrite a pack file in canonical shape");
-    outln!();
-    outln!("Usage:");
-    outln!("  nkb fmt <file.toml> [--dry-run]");
-    outln!();
-    outln!("Puts the fields of each table in the order the format defines and lines");
-    outln!("up the equals signs. Comments, blank lines and the order of the values");
-    outln!("themselves are left exactly as they are - the order of the values is the");
-    outln!("order a tester meets them.");
-    outln!();
-    outln!("Options:");
-    outln!("      --dry-run  Say what would change and write nothing");
-    outln!("  -h, --help     Show this help and exit with 0");
-    outln!();
-    outln!("Exit codes:");
-    outln!("  0  the file is in shape, or was put in shape");
-    outln!("  1  the file is not TOML, so there was nothing to put in order");
-    outln!("  2  the command was called wrongly");
-    outln!("  3  there is no pack file to read at that path");
-    outln!("  4  formatting would have changed a value, so nothing was written");
-    outln!("  5  the file could not be read or written, or standard output");
-    outln!("     could not be written");
 }
 
 #[cfg(test)]

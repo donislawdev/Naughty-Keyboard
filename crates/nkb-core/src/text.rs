@@ -181,6 +181,34 @@ pub fn escaped_prose(text: &str) -> String {
     out
 }
 
+/// The most characters of a pack's name a window shows (`D173`): about five
+/// times the longest name in the catalogue the tool carries.
+pub const SHOWN_NAME: usize = 120;
+
+/// The most characters of a pack's description the value window shows: about
+/// two and a half times the longest in the catalogue (114). Measured on a live
+/// window on 2026-11-09: at 1000 a row of a hostile pack filled the whole list.
+pub const SHOWN_DESCRIPTION: usize = 300;
+
+/// A pack's prose as a window shows it: escaped as [`escaped_prose`], and cut
+/// after `max` characters with an ellipsis.
+///
+/// Since packs come from folders (`D173`), the prose may come from a stranger,
+/// and `nkb lint` accepts a description of three megabytes: laid out in a
+/// window, such a text would freeze it. The cut is on characters before the
+/// escape, so a name made of controls still ends after `max` of them.
+#[must_use]
+pub fn shown_prose(text: &str, max: usize) -> String {
+    match text.char_indices().nth(max) {
+        None => escaped_prose(text),
+        Some((cut, _)) => {
+            let mut shown = escaped_prose(&text[..cut]);
+            shown.push('\u{2026}');
+            shown
+        }
+    }
+}
+
 fn write_escape(out: &mut String, character: char) {
     let code = character as u32;
     if code <= 0xFFFF {
@@ -195,6 +223,18 @@ fn write_escape(out: &mut String, character: char) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shown_prose_escapes_and_cuts_only_what_is_longer_than_the_limit() {
+        assert_eq!(shown_prose("Whitespace", 10), "Whitespace");
+        assert_eq!(shown_prose("Whitespaces", 10), "Whitespace\u{2026}");
+        assert_eq!(shown_prose("a\u{202E}b", 10), "a\\u202Eb");
+        assert_eq!(shown_prose("\n\n\n", 2), "\\u000A\\u000A\u{2026}");
+        assert_eq!(
+            shown_prose("\u{142}\u{f3}d\u{17a}", 4),
+            "\u{142}\u{f3}d\u{17a}"
+        );
+    }
 
     #[test]
     fn plain_text_is_left_alone() {

@@ -76,21 +76,22 @@ use nkb_core::calendar::Day;
 use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::pack::{Pack, PackValue, PairHalf, Risk};
 use nkb_core::preview::{ValuePreview, preview_of};
-use nkb_core::report::{Arrival, ReportBlock, Target};
+use nkb_core::report::{Arrival, PackFolder, ReportBlock, Target};
 use nkb_core::sequence::{Delivery, Effect, Event, Sequence, Upcoming};
 use nkb_core::substitutions::Substitutions;
 
-use crate::load_pack;
 use crate::ports::{
-    Availability, Clipboard, ClipboardError, Clock, DeliveryError, Following, History,
-    KeystrokeError, KeystrokeSender, PackFormat, PackSource, Progress, ReportText, SourceError,
-    StopReason, TargetInspector, TargetRef, ValueDelivery, Waiting,
+    Availability, CatalogueSource, Clipboard, ClipboardError, Clock, DeliveryError, Following,
+    History, KeystrokeError, KeystrokeSender, PackOrigin, Progress, ReportText, StopReason,
+    TargetInspector, TargetRef, ValueDelivery, Waiting,
 };
 use crate::send_value::{Chosen, Clearing, OnTheWay, SendOutcome, ValueFacts, deliver_value};
 
+mod choose;
 mod classify;
 mod copy;
 
+pub use choose::ChooseError;
 pub use copy::CopyFrom;
 
 /// Everything an action may reach outside the sequence, one port each.
@@ -205,17 +206,9 @@ struct Loaded {
     /// Warnings the pack carried. It loaded anyway - warnings never block - but
     /// a send should not hide them, so they travel out with each `Sent`.
     warnings: usize,
-}
-
-/// Why a pack could not be chosen.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ChooseError {
-    /// No pack of that name.
-    NotFound,
-    /// Present but unreadable, or not valid UTF-8.
-    Unreadable,
-    /// The pack has errors, so it loads not at all - `pack-format.md` 11.
-    Refused { errors: usize },
+    /// Where the pack came from and what it overrides (`D173`): the report
+    /// block names a folder, and the palette says what a pack overrides.
+    origin: PackOrigin,
 }
 
 /// What the palette shows after one action. Holds no toolkit and no sentence -
@@ -654,52 +647,6 @@ impl AdvanceSequence {
         Some(self.settled(None, Vec::new(), false))
     }
 
-    /// Reads, validates and chooses a pack, moving the sequence to `ready`.
-    ///
-    /// Called at startup and again whenever the tester picks another pack.
-    /// `check` runs first and the pack is refused on any error -
-    /// `pack-format.md` 11 loads all of a pack or none of it - which is what
-    /// `load_pack::load` does. A refused pack leaves everything as it was: the
-    /// pack in use, its place in it and the last value all stay.
-    ///
-    /// ⚠️ Called only between actions, never while a value is going in. The
-    /// machine would refuse `PackChosen` in `inserting`, but the loaded pack is
-    /// swapped before the machine is asked. Unreachable today, because a send
-    /// is one blocking call inside [`Self::on_action`] and the sequence is never
-    /// left `inserting` between calls. Delivery one character at a time (`W2`)
-    /// has to ask the machine first.
-    ///
-    /// # Errors
-    ///
-    /// [`ChooseError`] when the pack is missing, unreadable, or has errors.
-    pub fn choose_pack(
-        &mut self,
-        source: &dyn PackSource,
-        format: &dyn PackFormat,
-        pack_id: &str,
-    ) -> Result<(), ChooseError> {
-        let text = match source.read(pack_id) {
-            Ok(text) => text,
-            Err(SourceError::NotFound) => return Err(ChooseError::NotFound),
-            Err(SourceError::Unreadable | SourceError::NotUtf8 | SourceError::TooLarge) => {
-                return Err(ChooseError::Unreadable);
-            }
-        };
-        let loaded =
-            load_pack::load(format, pack_id, &text).map_err(|refused| ChooseError::Refused {
-                errors: refused.errors,
-            })?;
-        let total = loaded.pack.values.len();
-        // A new pack makes the old index point at somebody else's value.
-        self.last = None;
-        self.loaded = Some(Loaded {
-            pack: loaded.pack,
-            warnings: loaded.warnings,
-        });
-        self.sequence = self.sequence.apply(Event::PackChosen { total }).sequence;
-        Ok(())
-    }
-
     /// Settles how values will travel, before the first press, and says what
     /// the tester has to know about it.
     ///
@@ -864,6 +811,11 @@ impl AdvanceSequence {
                 .map(|block| ReportBlock {
                     target: last.target.clone(),
                     may_alter: last.may_alter,
+                    folder: match loaded.origin.source {
+                        CatalogueSource::BuiltIn => None,
+                        CatalogueSource::Team => Some(PackFolder::Team),
+                        CatalogueSource::Own => Some(PackFolder::Own),
+                    },
                     ..block
                 })
                 .map_err(|_| value.id.clone()),
@@ -1232,7 +1184,13 @@ mod tests {
         let _ = advance.on_action(HotkeyAction::NextValue, &ports);
 
         let refused = advance.choose_pack(&FakeSource, &FakeFormat::with_errors(2), "broken");
-        assert_eq!(refused, Err(ChooseError::Refused { errors: 2 }));
+        assert_eq!(
+            refused,
+            Err(ChooseError::Refused {
+                errors: 2,
+                origin: PackOrigin::built_in()
+            })
+        );
         let missing = advance.choose_pack(&MissingSource, &FakeFormat::with_errors(0), "absent");
         assert_eq!(missing, Err(ChooseError::NotFound));
 
@@ -2066,7 +2024,13 @@ mod tests {
     fn a_pack_with_errors_is_refused_and_says_how_many() {
         let mut advance = AdvanceSequence::new(Box::new(StoppedClock::default()));
         let result = advance.choose_pack(&FakeSource, &FakeFormat::with_errors(3), "sample");
-        assert_eq!(result, Err(ChooseError::Refused { errors: 3 }));
+        assert_eq!(
+            result,
+            Err(ChooseError::Refused {
+                errors: 3,
+                origin: PackOrigin::built_in()
+            })
+        );
     }
 
     #[test]

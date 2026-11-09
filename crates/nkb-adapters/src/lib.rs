@@ -15,6 +15,7 @@ pub mod focus;
 pub mod fs;
 pub mod i18n;
 pub mod keyboard;
+pub mod pack_folder;
 pub mod portal_entry;
 pub mod portal_shortcuts;
 pub(crate) mod read_pack;
@@ -28,7 +29,7 @@ pub mod startup;
 pub mod toml_pack;
 
 pub use built_in::BUILT_IN_PACKS;
-pub use catalogue::BuiltInCatalogue;
+pub use catalogue::{BuiltInCatalogue, FolderCatalogue, PackFolders};
 pub use clipboard_delivery::ClipboardDelivery;
 pub use focus::{
     Aside, KeptFocus, LentFocus, StackingError, no_keyboard_menu, stand_over_full_screen,
@@ -36,6 +37,7 @@ pub use focus::{
 };
 pub use fs::{DirectoryPackSink, DirectoryPackSource, NotAPackFile, SystemClock};
 pub use keyboard::DirectInjection;
+pub use pack_folder::{FOLDER_WAIT, PackFolder};
 pub use portal_entry::PortalEntry;
 pub use portal_shortcuts::PortalShortcuts;
 pub use report_text::EnglishReport;

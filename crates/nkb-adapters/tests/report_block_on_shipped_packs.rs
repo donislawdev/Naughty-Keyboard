@@ -109,7 +109,12 @@ const REWRITTEN_BY_NORMALIZATION: [&str; 13] = [
 
 fn shipped_packs() -> Vec<Pack> {
     let catalogue = BuiltInCatalogue::new();
-    let ids = catalogue.list().expect("the built-in catalogue lists");
+    let ids: Vec<String> = catalogue
+        .list()
+        .expect("the built-in catalogue lists")
+        .into_iter()
+        .map(|listed| listed.id)
+        .collect();
     assert!(!ids.is_empty(), "the product ships packs");
     ids.iter()
         .map(|id| {
