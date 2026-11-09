@@ -29,6 +29,7 @@ pub mod next_date;
 pub mod normalization;
 pub mod pack;
 pub mod preview;
+pub mod prose;
 pub mod report;
 pub mod schema;
 pub mod screens;

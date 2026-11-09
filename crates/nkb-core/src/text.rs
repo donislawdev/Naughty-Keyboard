@@ -170,9 +170,7 @@ pub fn is_format_character(character: char) -> bool {
 pub fn escaped_prose(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for character in text.chars() {
-        if character != ' '
-            && (needs_escaping(character, false) || crate::preview::is_invisible(character))
-        {
+        if is_unseen(character) {
             write_escape(&mut out, character);
         } else {
             out.push(character);
@@ -181,14 +179,27 @@ pub fn escaped_prose(text: &str) -> String {
     out
 }
 
-/// The most characters of a pack's name a window shows (`D173`): about five
-/// times the longest name in the catalogue the tool carries.
-pub const SHOWN_NAME: usize = 120;
+/// Whether a character in prose is one a reader would not see or a terminal
+/// would act on: what [`escaped_prose`] escapes, and what E035 refuses in the
+/// prose of a pack (`D174`).
+///
+/// One predicate for both on purpose. The rule and the display drifting apart
+/// would let a pack pass that the display then has to rescue, or refuse one the
+/// display shows plainly.
+#[must_use]
+pub fn is_unseen(character: char) -> bool {
+    character != ' '
+        && (needs_escaping(character, false) || crate::preview::is_invisible(character))
+}
 
-/// The most characters of a pack's description the value window shows: about
-/// two and a half times the longest in the catalogue (114). Measured on a live
-/// window on 2026-11-09: at 1000 a row of a hostile pack filled the whole list.
-pub const SHOWN_DESCRIPTION: usize = 300;
+/// The most characters of a name a window shows (`D173`). The same number as
+/// the most a name may hold (`D174`), so the name of a pack that passes
+/// `nkb lint` is always shown whole, and the cut is left for packs that do not.
+pub const SHOWN_NAME: usize = crate::prose::NAME_LIMIT;
+
+/// The most characters of a pack's description the value window shows, tied to
+/// the format's limit for the same reason as [`SHOWN_NAME`].
+pub const SHOWN_DESCRIPTION: usize = crate::prose::DESCRIPTION_LIMIT;
 
 /// A pack's prose as a window shows it: escaped as [`escaped_prose`], and cut
 /// after `max` characters with an ellipsis.

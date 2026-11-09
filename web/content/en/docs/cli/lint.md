@@ -9,7 +9,7 @@ lead: "Check a pack file against the rules of the pack format, and report every 
 
 ## What does it check?
 
-Everything the pack format asks of a file, from its encoding to the sentence that says what each value breaks. A value without that sentence is an error, because it is the reason a catalogue is worth more than a list. Every run says how many of the format's rules this build checks, and `--explain` lists every rule and why the few it does not check wait.
+Everything the pack format asks of a file, from its encoding to the sentence that says what each value breaks. A value without that sentence is an error, because it is the reason a catalogue is worth more than a list. The text around the values is read by people too, so it may hold only characters you can see, with no line breaks, direction marks or terminal escape sequences, and it has a length limit: 120 characters for a name, 300 for a description and 1000 for what a value breaks or what should happen. Every run says how many of the format's rules this build checks, and `--explain` lists every rule and why the few it does not check wait.
 
 ## Examples
 
@@ -18,7 +18,7 @@ A file that passes:
 ```console
 $ nkb lint my-pack.toml
 0 errors, 0 warnings.
-Checked 41 of 47 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.
+Checked 43 of 49 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.
 The pack format is not frozen yet: a later release may still change it.
 ```
 

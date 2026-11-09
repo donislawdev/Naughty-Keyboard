@@ -903,8 +903,8 @@
       "id": "M80",
       "why": "the prose of a pack is no longer escaped in the block - a name with a newline forges a Target: line, and U+202E reverses the reading order (rule 24)",
       "file": "crates/nkb-core/src/text.rs",
-      "find": "        if character != ' '\n            && (needs_escaping(character, false) || crate::preview::is_invisible(character))",
-      "replace": "        if false\n            && (needs_escaping(character, false) || crate::preview::is_invisible(character))",
+      "find": "        if is_unseen(character) {",
+      "replace": "        if false {",
       "test": "report_text::tests::a_hostile_pack_cannot_forge_a_line_or_reorder_the_ticket",
       "runner": "rust:nkb-adapters:lib"
     },
@@ -13141,6 +13141,96 @@
       "replace": "    let note = match None::<&CatalogueSource>? {",
       "test": "i18n::catalogue::tests::a_pack_used_instead_of_another_says_so_and_a_plain_one_says_nothing",
       "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1682",
+      "why": "a field built to attack names every unseen character it holds - the finding floods the terminal it warns about (D174)",
+      "file": "crates/nkb-core/src/prose.rs",
+      "find": "        if named.len() == MOST_NAMED {",
+      "replace": "        if named.len() == usize::MAX {",
+      "test": "prose::tests::a_character_is_named_once_and_at_most_four_are_named",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1683",
+      "why": "a no-break space pasted many times is named many times - the one repair hides among repeats (D174)",
+      "file": "crates/nkb-core/src/prose.rs",
+      "find": "        if named.contains(&character) {",
+      "replace": "        if false {",
+      "test": "prose::tests::a_character_is_named_once_and_at_most_four_are_named",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1684",
+      "why": "a name of exactly 120 characters is refused - the length a window shows whole is itself forbidden (D174)",
+      "file": "crates/nkb-core/src/prose.rs",
+      "find": "    if code_points > limit {",
+      "replace": "    if code_points >= limit {",
+      "test": "prose::tests::the_limit_is_counted_in_code_points_and_is_itself_allowed",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1685",
+      "why": "prose may hold a direction override or a no-break space - only control characters are refused (D174)",
+      "file": "crates/nkb-core/src/prose.rs",
+      "find": "    for character in text.chars().filter(|c| is_unseen(*c)) {",
+      "replace": "    for character in text.chars().filter(|c| c.is_control()) {",
+      "test": "prose::tests::every_kind_of_unseen_character_is_named",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1686",
+      "why": "the ordinary space counts as unseen - every name of two words is refused (D174)",
+      "file": "crates/nkb-core/src/text.rs",
+      "find": "    character != ' '",
+      "replace": "    true",
+      "test": "prose::tests::prose_of_visible_characters_within_its_limit_passes",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1687",
+      "why": "a tag or an author is never judged - a list carries a terminal escape past the rule (D174)",
+      "file": "crates/nkb-adapters/src/toml_pack/prose.rs",
+      "find": "            Some(list) => list.iter().filter_map(|element| element.as_str()).collect(),",
+      "replace": "            Some(_) => Vec::new(),",
+      "test": "toml_pack::prose::tests::a_list_is_judged_item_by_item",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1688",
+      "why": "the prose of a pair is never judged - its name may reorder the line that shows it (D174)",
+      "file": "crates/nkb-adapters/src/toml_pack.rs",
+      "find": "        found.extend(check_prose(text, table));",
+      "replace": "        let _ = check_prose(text, table);",
+      "test": "toml_pack::prose::tests::a_pair_is_judged_like_a_value",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1689",
+      "why": "the root of a translation is never judged - its language may hold any text at any length (D174)",
+      "file": "crates/nkb-adapters/src/toml_pack.rs",
+      "find": "    problems.extend(check_prose(text, root));",
+      "replace": "    let _ = check_prose(text, root);",
+      "test": "toml_pack::prose::tests::a_translation_is_judged_at_its_root_its_pack_and_every_entry",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1690",
+      "why": "a finding about the pack reads as one about a value named pack - the author looks for a value that is not there (D174)",
+      "file": "crates/nkb-cli/src/lint_report.rs",
+      "find": "        \"pack\" => format!(\"the pack's `{field}`\"),",
+      "replace": "        \"pack\" => format!(\"`{field}` of `pack`\"),",
+      "test": "lint_report::tests::prose_findings_name_the_field_its_owner_and_what_was_found",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1691",
+      "why": "a breaks over its limit is told the limit of a tag - the author shortens to 300 what may hold 1000 (D174)",
+      "file": "crates/nkb-cli/src/lint_report.rs",
+      "find": "    let limit = prose::limit_of(field).unwrap_or(prose::OTHER_TEXT_LIMIT);",
+      "replace": "    let limit = prose::OTHER_TEXT_LIMIT;",
+      "test": "lint_report::tests::prose_findings_name_the_field_its_owner_and_what_was_found",
+      "runner": "rust:nkb-cli:bin=nkb"
     }
   ]
 }

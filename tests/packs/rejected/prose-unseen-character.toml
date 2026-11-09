@@ -1,0 +1,32 @@
+# expect: E035
+#
+# The prose of a pack is read by people: a tester in a window, a developer in a
+# terminal, a reviewer in a pull request. The description below holds a
+# terminal escape sequence and the description of the value a direction
+# override, both written as escapes. The file is plain ASCII, and that does not
+# help - TOML reads an escape back as the character it names, so the rule is
+# asked about the text after reading, not about the bytes of the file.
+#
+# Only a value may hold such characters, written escaped. Prose holds visible
+# characters only.
+
+format = 1
+
+[pack]
+id          = "prose-unseen-character"
+name        = "Prose with unseen characters"
+description = "Turns a terminal red: \u001B[31m and everything after it."
+version     = "1.0"
+updated     = 2026-11-09
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["format-suite"]
+
+[[values]]
+id     = "reversed-explanation"
+name   = "Reversed explanation"
+value  = "anything"
+breaks = "A reviewer reads this sentence with its end \u202Eturned around, and approves a description that says something else."
+expect = "Nothing - this file exists to be judged by the validator, not to be inserted anywhere."
+since  = "1.0"

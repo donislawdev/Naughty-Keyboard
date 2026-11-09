@@ -9,7 +9,7 @@ lead: "Sprawdza plik paczki według reguł formatu paczki i zgłasza każdy prob
 
 ## Co sprawdza?
 
-Wszystko, czego format paczki wymaga od pliku, od kodowania po zdanie, które mówi, co psuje każda wartość. Wartość bez tego zdania jest błędem, bo to ono sprawia, że katalog jest wart więcej niż lista. Każde uruchomienie mówi, ile reguł formatu sprawdza ta wersja programu, a `--explain` wypisuje każdą regułę i to, dlaczego te nieliczne, których nie sprawdza, czekają.
+Wszystko, czego format paczki wymaga od pliku, od kodowania po zdanie, które mówi, co psuje każda wartość. Wartość bez tego zdania jest błędem, bo to ono sprawia, że katalog jest wart więcej niż lista. Tekst wokół wartości też czytają ludzie, więc może zawierać tylko znaki, które widać, bez łamania wiersza, znaków kierunku i sekwencji sterujących terminala, i ma limit długości: 120 znaków na nazwę, 300 na opis i 1000 na to, co wartość psuje albo co powinno się stać. Każde uruchomienie mówi, ile reguł formatu sprawdza ta wersja programu, a `--explain` wypisuje każdą regułę i to, dlaczego te nieliczne, których nie sprawdza, czekają.
 
 ## Przykłady
 
@@ -18,7 +18,7 @@ Plik, który przechodzi:
 ```console
 $ nkb lint my-pack.toml
 0 errors, 0 warnings.
-Checked 41 of 47 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.
+Checked 43 of 49 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.
 The pack format is not frozen yet: a later release may still change it.
 ```
 

@@ -33,6 +33,7 @@ use nkb_core::lint::{
     LintProblem, LintReport, LintRule, MAX_VALUES_PER_PACK, RULES, RuleCode, RuleCoverage,
     RuleStatus, Severity, SkipReason, SkippedRule,
 };
+use nkb_core::prose;
 use nkb_core::text::escaped_prose;
 
 /// A field a problem names, as it may be printed (R25): absent is empty.
@@ -259,6 +260,55 @@ fn pair_sentence(code: RuleCode, owner: &str, subject: &str) -> String {
     }
 }
 
+/// The sentences about the half of a value that explains it (E030, E031, W032,
+/// W033 and W034). The owner is the value, and the subject of E031 is the length
+/// of `breaks` in code points, or `name` when it only says the name again.
+fn description_sentence(code: RuleCode, owner: &str, subject: &str) -> String {
+    match code {
+        RuleCode::MissingBreaks => format!(
+            "value `{owner}` declares no `breaks`. It is the field this catalogue exists for: say what this value usually breaks and why, or the value is a curiosity rather than a test case."
+        ),
+        RuleCode::BreaksTooShortOrEchoesName if subject == "name" => format!(
+            "value `{owner}` has a `breaks` that only says its name again. The name is already on the screen beside it, so this value arrives with no explanation at all."
+        ),
+        RuleCode::BreaksTooShortOrEchoesName => format!(
+            "value `{owner}` has a `breaks` of {subject} characters, where the format asks for {MIN_BREAKS_CODE_POINTS}. Say what this value usually breaks and why - the sentence is the work this catalogue is made of."
+        ),
+        RuleCode::MissingExpect => format!(
+            "value `{owner}` declares no `expect`. Without it a tester sees what happened and has nothing to compare it against, so a bug and correct behaviour look the same."
+        ),
+        RuleCode::ValueWithoutSourceInSourcedPack => format!(
+            "value `{owner}` names no `source`, in a pack whose other values name theirs. It inherits the pack's, which credits somebody with work that may not be theirs."
+        ),
+        _ => format!(
+            "value `{owner}` has a `breaks` carrying no English word. A source pack is written in English and translated in a file of its own - if this one is English after all, this line is the whole cost."
+        ),
+    }
+}
+
+/// The sentences about the prose of a pack (E035 and E036). The subject is the
+/// field, a colon and what was found in it (`toml_pack/prose.rs`): the
+/// characters in escaped notation, or the length in code points. The owner is
+/// `pack`, a value or pair, an entry of a translation, or nothing for the root
+/// of a translation.
+fn prose_sentence(code: RuleCode, owner: &str, subject: &str) -> String {
+    let (field, found) = subject.split_once(": ").unwrap_or((subject, ""));
+    let whose = match owner {
+        "" => format!("this file's `{field}`"),
+        "pack" => format!("the pack's `{field}`"),
+        _ => format!("`{field}` of `{owner}`"),
+    };
+    if code == RuleCode::UnseenCharacterInProse {
+        return format!(
+            "{whose} holds {found}, which a reader cannot see or a terminal acts on. Prose is shown to people, so write it with visible characters only - an escape in the file reads back as the same character."
+        );
+    }
+    let limit = prose::limit_of(field).unwrap_or(prose::OTHER_TEXT_LIMIT);
+    format!(
+        "{whose} has {found} characters, where the format allows {limit}. Prose this long goes unread - say it in fewer words."
+    )
+}
+
 /// The sentence for one problem. Says what happened and what to do next - a
 /// message with only the first half is unfinished.
 pub fn sentence(problem: &LintProblem) -> String {
@@ -370,24 +420,11 @@ pub fn sentence(problem: &LintProblem) -> String {
         RuleCode::ReplacedByUnknownId => format!(
             "value `{owner}` names `{subject}` as its successor and no value in this pack has that id. A retired value is still cited by reports written years ago, so its successor has to resolve."
         ),
-        RuleCode::MissingBreaks => format!(
-            "value `{owner}` declares no `breaks`. It is the field this catalogue exists for: say what this value usually breaks and why, or the value is a curiosity rather than a test case."
-        ),
-        RuleCode::BreaksTooShortOrEchoesName if subject == "name" => format!(
-            "value `{owner}` has a `breaks` that only says its name again. The name is already on the screen beside it, so this value arrives with no explanation at all."
-        ),
-        RuleCode::BreaksTooShortOrEchoesName => format!(
-            "value `{owner}` has a `breaks` of {subject} characters, where the format asks for {MIN_BREAKS_CODE_POINTS}. Say what this value usually breaks and why - the sentence is the work this catalogue is made of."
-        ),
-        RuleCode::MissingExpect => format!(
-            "value `{owner}` declares no `expect`. Without it a tester sees what happened and has nothing to compare it against, so a bug and correct behaviour look the same."
-        ),
-        RuleCode::ValueWithoutSourceInSourcedPack => format!(
-            "value `{owner}` names no `source`, in a pack whose other values name theirs. It inherits the pack's, which credits somebody with work that may not be theirs."
-        ),
-        RuleCode::BreaksProbablyNotEnglish => format!(
-            "value `{owner}` has a `breaks` carrying no English word. A source pack is written in English and translated in a file of its own - if this one is English after all, this line is the whole cost."
-        ),
+        RuleCode::MissingBreaks
+        | RuleCode::BreaksTooShortOrEchoesName
+        | RuleCode::MissingExpect
+        | RuleCode::ValueWithoutSourceInSourcedPack
+        | RuleCode::BreaksProbablyNotEnglish => description_sentence(problem.code, owner, subject),
         RuleCode::PairEndpointUnknown
         | RuleCode::UnknownRelation
         | RuleCode::PairEndpointsIdentical
@@ -426,6 +463,9 @@ pub fn sentence(problem: &LintProblem) -> String {
         RuleCode::TranslationRefersToMissingId => format!(
             "this translation describes `{subject}`, which the pack it translates does not have. Translations carry no version of their own, so an entry outlives whatever it described - delete it, or point it at the identifier that replaced it."
         ),
+        RuleCode::UnseenCharacterInProse | RuleCode::ProseTooLong => {
+            prose_sentence(problem.code, owner, subject)
+        }
         // Every other rule is registered and not yet run, so no problem carrying
         // its code can reach this point. Answering with the code rather than with
         // a crash keeps a validator from taking somebody's build down with it.
@@ -674,7 +714,7 @@ mod tests {
             .about("unicode-text"),
         );
         let text = summary(&report).join("\n");
-        assert!(text.contains("Checked 41 of 47 rules"), "{text}");
+        assert!(text.contains("Checked 43 of 49 rules"), "{text}");
         assert!(
             text.contains("1 more rule could not be checked for this file"),
             "{text}"
@@ -715,6 +755,42 @@ mod tests {
                 .owned_by("spring"),
         );
         assert!(kind.contains("declares type `date-offset`"), "{kind}");
+    }
+
+    #[test]
+    fn prose_findings_name_the_field_its_owner_and_what_was_found() {
+        let unseen = one(LintProblem::new(RuleCode::UnseenCharacterInProse)
+            .at(9)
+            .about(r"breaks: \u202E \u000A")
+            .owned_by("rli-in-file-name"));
+        assert!(
+            unseen.contains(r"`breaks` of `rli-in-file-name` holds \u202E \u000A, which"),
+            "{unseen}"
+        );
+
+        let pack = sentence(
+            &LintProblem::new(RuleCode::ProseTooLong)
+                .about("description: 3200000")
+                .owned_by("pack"),
+        );
+        assert!(
+            pack.contains(
+                "the pack's `description` has 3200000 characters, where the format allows 300."
+            ),
+            "{pack}"
+        );
+
+        // The root of a translation names its language and has no owner.
+        let root = sentence(&LintProblem::new(RuleCode::ProseTooLong).about("language: 301"));
+        assert!(root.starts_with("this file's `language` has 301"), "{root}");
+
+        // Each field is told its own limit.
+        let breaks = sentence(
+            &LintProblem::new(RuleCode::ProseTooLong)
+                .about("breaks: 1001")
+                .owned_by("a-value"),
+        );
+        assert!(breaks.contains("where the format allows 1000."), "{breaks}");
     }
 
     #[test]
