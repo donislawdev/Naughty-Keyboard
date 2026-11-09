@@ -81,16 +81,18 @@
 use std::collections::BTreeSet;
 
 use nkb_adapters::i18n::{self, MatchPlace, PacksLabel};
-use nkb_app::browse_packs::{Listing, PackEntry};
+use nkb_app::browse_packs::Listing;
 use nkb_app::ports::SourceError;
 use nkb_core::calendar::Day;
 use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::identity::ValueKey;
-use nkb_core::pack::{Pack, PackValue, PairHalf, Risk};
-use nkb_core::preview::preview_of;
+use nkb_core::pack::PairHalf;
 
-use crate::live::preview_line;
 use crate::query::{KeyPress, Pressed, Query};
+
+mod rows;
+
+use rows::choice_of;
 
 /// One pack as the window offers it.
 #[derive(Debug, Clone)]
@@ -355,7 +357,9 @@ impl PackPicker {
                     .map(|entry| choice_of(entry, today))
                     .collect();
                 let empty = packs.is_empty().then_some(Empty::NoPacks);
-                (packs, empty, i18n::not_read(&listing.coverage))
+                // The notes need the folders, which only the window knows
+                // (`with_notes`, `D173`).
+                (packs, empty, Vec::new())
             }
             Err(_) => (Vec::new(), Some(Empty::Unavailable), Vec::new()),
         };
@@ -395,6 +399,14 @@ impl PackPicker {
     /// move the tester's place.
     fn select_on_opening(&mut self) {
         self.selected = self.position_of_in_use().or_else(|| self.first_enabled());
+    }
+
+    /// The same picker, with the notes under its list - made by the window,
+    /// which knows the folders the catalogue was read from (`D173`).
+    #[must_use]
+    pub fn with_notes(mut self, notes: Vec<String>) -> Self {
+        self.notes = notes;
+        self
     }
 
     /// The same picker, its restart row ending in `key` - the restart
@@ -614,7 +626,8 @@ impl PackPicker {
         }
     }
 
-    /// Which catalogue sources the list did not read, one line per reason.
+    /// What the window says under the list about the catalogue: a folder not
+    /// read and why, files not named as packs, where own packs go.
     #[must_use]
     pub fn notes(&self) -> &[String] {
         &self.notes
@@ -909,107 +922,6 @@ fn value_badge(choice: &ValueChoice, is_next: bool) -> Option<Badge> {
     }
 }
 
-/// A row of the list. `today` is the day a `next-date` value names in its
-/// preview - the date the window shows is the date a press would type.
-fn choice_of(entry: &PackEntry, today: Day) -> PackChoice {
-    match entry {
-        PackEntry::Loaded { pack, .. } => PackChoice {
-            id: pack.id.clone(),
-            title: pack.name.clone(),
-            detail: pack.description.clone(),
-            badge: is_offensive(pack).then(|| Badge {
-                text: i18n::packs_label(PacksLabel::Offensive).to_owned(),
-                risky: true,
-                current: false,
-            }),
-            enabled: true,
-            haystack: haystack_of(pack),
-            values: pack
-                .values
-                .iter()
-                .map(|value| ValueChoice {
-                    id: value.id.clone(),
-                    name: value.name.clone(),
-                    preview: preview_line(&preview_of(&value.definition.on(today))).0,
-                    offensive: pack.risk_of(value) == Risk::Offensive,
-                    halves: pack.halves_of(&value.id).map(|(_, half)| half).collect(),
-                    haystack: value_haystack_of(pack, value),
-                })
-                .collect(),
-        },
-        PackEntry::Refused { id, errors } => PackChoice {
-            id: id.clone(),
-            title: id.clone(),
-            detail: i18n::pack_refused(id),
-            badge: Some(Badge {
-                text: i18n::pack_problems(*errors),
-                risky: true,
-                current: false,
-            }),
-            enabled: false,
-            // The id is all the window knows of it, and the row shows it.
-            haystack: Haystack::new(&[id], []),
-            values: Vec::new(),
-        },
-        PackEntry::Unreadable { id, .. } => PackChoice {
-            id: id.clone(),
-            title: id.clone(),
-            detail: i18n::pack_unreadable(id),
-            badge: None,
-            enabled: false,
-            haystack: Haystack::new(&[id], []),
-            values: Vec::new(),
-        },
-    }
-}
-
-/// A pack is offensive when it says so, or when any one of its values does.
-fn is_offensive(pack: &Pack) -> bool {
-    pack.risk == Risk::Offensive
-        || pack
-            .values
-            .iter()
-            .any(|value| pack.risk_of(value) == Risk::Offensive)
-}
-
-/// Name and description, which the pack's row shows, and its id and tags,
-/// which it does not.
-fn haystack_of(pack: &Pack) -> Haystack {
-    Haystack::new(
-        &[pack.name.as_str(), pack.description.as_str()],
-        std::iter::once((MatchPlace::Id, pack.id.as_str()))
-            .chain(pack.tags.iter().map(|tag| (MatchPlace::Tags, tag.as_str()))),
-    )
-}
-
-/// The value's own name, which its row shows, and its id, tags and fields and
-/// the name and id of each pair it is a half of, which it does not - a pair's
-/// name is the test the two values make together (`D134`).
-fn value_haystack_of(pack: &Pack, value: &PackValue) -> Haystack {
-    Haystack::new(
-        &[value.name.as_str()],
-        std::iter::once((MatchPlace::Id, value.id.as_str()))
-            .chain(
-                value
-                    .tags
-                    .iter()
-                    .map(|tag| (MatchPlace::Tags, tag.as_str())),
-            )
-            .chain(
-                value
-                    .fields
-                    .iter()
-                    .map(|field| (MatchPlace::Fields, field.as_str())),
-            )
-            .chain(pack.halves_of(&value.id).flat_map(|(pair, _)| {
-                [
-                    (MatchPlace::Pair, pair.name.as_str()),
-                    (MatchPlace::Pair, pair.id.as_str()),
-                ]
-            })),
-    )
-}
-
 #[cfg(test)]
 #[allow(
     clippy::expect_used,
@@ -1022,8 +934,12 @@ mod tests {
 
     /// 2026-10-15, so that a `next-date` value previews the same in every run.
     const TODAY: Day = Day::from_days_since_1970(20_741);
-    use nkb_app::browse_packs::list_packs;
+    use nkb_app::browse_packs::{PackEntry, list_packs};
     use nkb_app::ports::{CatalogueCoverage, CatalogueSource};
+    use nkb_core::pack::Risk;
+    use nkb_core::preview::preview_of;
+
+    use crate::live::preview_line;
 
     fn key(text: &str) -> KeyPress<'_> {
         KeyPress {
@@ -1077,11 +993,13 @@ mod tests {
             PackEntry::Refused {
                 id: String::from("broken"),
                 errors: 3,
+                origin: nkb_app::PackOrigin::built_in(),
             },
         );
         entries.push(PackEntry::Unreadable {
             id: String::from("gone"),
             reason: SourceError::Unreadable,
+            origin: nkb_app::PackOrigin::built_in(),
         });
         PackPicker::new(
             Ok(Listing {
@@ -1089,6 +1007,7 @@ mod tests {
                 coverage: CatalogueCoverage {
                     consulted: vec![CatalogueSource::BuiltIn],
                     skipped: Vec::new(),
+                    misnamed: Vec::new(),
                 },
             }),
             TODAY,
@@ -1472,10 +1391,18 @@ mod tests {
             .entries
             .into_iter()
             .filter_map(|entry| match entry {
-                PackEntry::Loaded { mut pack, warnings } if pack.id == "whitespace" => {
+                PackEntry::Loaded {
+                    mut pack,
+                    warnings,
+                    origin,
+                } if pack.id == "whitespace" => {
                     pack.values[0].tags = vec![String::from("needle-tag")];
                     pack.values[0].fields = vec![String::from("needle-field")];
-                    Some(PackEntry::Loaded { pack, warnings })
+                    Some(PackEntry::Loaded {
+                        pack,
+                        warnings,
+                        origin,
+                    })
                 }
                 _ => None,
             })
@@ -1486,6 +1413,7 @@ mod tests {
                 coverage: CatalogueCoverage {
                     consulted: vec![CatalogueSource::BuiltIn],
                     skipped: Vec::new(),
+                    misnamed: Vec::new(),
                 },
             }),
             TODAY,
@@ -1915,13 +1843,11 @@ mod tests {
     }
 
     #[test]
-    fn the_shipped_catalogue_says_which_sources_it_did_not_read() {
-        let picker = shipped(None);
-        assert_eq!(
-            picker.notes(),
-            [
-                "This version lists the built-in packs only - team and own pack folders are not in it yet."
-            ]
-        );
+    fn the_notes_are_the_ones_the_window_gives_and_none_of_its_own() {
+        // The notes need the folders, which only the window knows (`D173`):
+        // the picker shows what it is given and makes up nothing.
+        assert!(shipped(None).notes().is_empty());
+        let given = vec![String::from("Put your own pack files in here.")];
+        assert_eq!(shipped(None).with_notes(given.clone()).notes(), given);
     }
 }

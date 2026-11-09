@@ -20,4 +20,4 @@ Edit it, then run `nkb lint my-pack.toml` - it reports everything in one pass.
 The pack format is not frozen yet: a later release may still change it.
 ```
 
-Własne paczki można dziś napisać i sprawdzić, ale jeszcze nie wczytać do palety. Więcej mówią [Uczciwe ograniczenia](/docs/limits/).
+Połóż plik we własnym folderze, `packs` obok pliku ustawień, a paleta i `nkb` pokażą go obok paczek wbudowanych. Więcej mówi [strona o palecie](/docs/palette/).

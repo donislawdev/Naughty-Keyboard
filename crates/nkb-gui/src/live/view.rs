@@ -9,6 +9,7 @@ use std::cell::Cell;
 use nkb_core::hotkeys::HotkeyChord;
 use nkb_core::pack::PairHalf;
 use nkb_core::sequence::Sequence;
+use nkb_core::text::{SHOWN_NAME, shown_prose};
 use slint::ComponentHandle;
 
 use super::*;
@@ -234,9 +235,10 @@ pub(super) struct ValueView {
 }
 
 /// The name the palette shows for the pack: its own name when it opened, the
-/// identifier that was tried when nothing did.
+/// identifier that was tried when nothing did. Through `shown_prose`, as every
+/// word of a pack: a pack from a folder may come from a stranger (`D173`).
 pub(super) fn shown(sequence: &AdvanceSequence, pack: &str) -> String {
-    sequence.pack_name().unwrap_or(pack).to_owned()
+    shown_prose(sequence.pack_name().unwrap_or(pack), SHOWN_NAME)
 }
 
 pub(super) fn counter_of(sequence: &AdvanceSequence) -> String {
@@ -444,7 +446,7 @@ pub(super) fn facts_view(
         i18n::not_guaranteed(&outside_guarantee(&preview, &SHIPPED)).unwrap_or_default();
     ValueView {
         key: None,
-        name: facts.name.clone(),
+        name: shown_prose(&facts.name, SHOWN_NAME),
         sent_to: String::new(),
         reference: facts.reference.clone(),
         counts: i18n::counts(facts.graphemes, facts.code_points, facts.bytes, utf16_units),

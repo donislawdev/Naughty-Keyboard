@@ -72,7 +72,7 @@ use std::sync::mpsc::Sender;
 use std::time::Instant;
 
 use nkb_adapters::i18n::{self, Environment, PacksLabel, Startup};
-use nkb_adapters::{BuiltInCatalogue, LentFocus, SystemClock, TomlPackFormat};
+use nkb_adapters::{LentFocus, PackFolders, SystemClock, TomlPackFormat};
 use nkb_app::Clock;
 use nkb_app::{Ended, list_packs};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
@@ -146,6 +146,9 @@ pub struct Packs {
     /// Puts a line in the palette's message band - where every other sentence
     /// about the tool goes, and where the tester looks after the window closes.
     say: Box<dyn Fn(String)>,
+    /// Where the team's and the tester's own packs are (`D173`): read again on
+    /// every opening, so a pack file fixed on disk shows at the next one.
+    folders: PackFolders,
 }
 
 impl Packs {
@@ -160,6 +163,7 @@ impl Packs {
         commands: Sender<Command>,
         in_use: InUse,
         say: Box<dyn Fn(String)>,
+        folders: PackFolders,
     ) -> Rc<Self> {
         label(&window);
         // After the words, which are part of what the layout measures.
@@ -171,6 +175,7 @@ impl Packs {
             commands,
             in_use,
             say,
+            folders,
         });
         let weak = Rc::downgrade(&packs);
         packs
@@ -275,12 +280,18 @@ impl Packs {
         if !self.is_open() {
             self.keyboard.remember();
             let now = in_use_now(&self.in_use);
+            let listing = list_packs(&self.folders.catalogue(), &TomlPackFormat);
+            let notes = listing.as_ref().map_or_else(
+                |_| Vec::new(),
+                |listing| i18n::catalogue_notes(&listing.coverage, &self.folders),
+            );
             let picker = PackPicker::new(
-                list_packs(&BuiltInCatalogue::new(), &TomlPackFormat),
+                listing,
                 SystemClock.today(),
                 now.pack.as_deref(),
                 now.next.as_deref(),
             )
+            .with_notes(notes)
             .with_restart_key(now.restart.map(i18n::chord))
             .with_recent(&now.recent);
             self.window.set_notes(strings(picker.notes()));

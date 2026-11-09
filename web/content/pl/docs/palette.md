@@ -32,6 +32,17 @@ Edytor kodu potrafi zaskoczyć. Monaco, edytor w VS Code i na wielu stronach, ot
 
 Naciśnij {{< kbd "Alt+Shift+Space" >}}. Okno, które się otworzy, pokazuje każdą paczkę jako listę do rozwinięcia i w trakcie pisania przeszukuje naraz wartości wszystkich paczek. Wybranie wartości ustawia jej paczkę jako używaną, a tę wartość jako następną, więc następne naciśnięcie ją wpisze. Na górze stoją wartości ostatnio wybrane w tym oknie, z każdej paczki. Wartość, która jest połową pary, mówi obok swojej nazwy, którą połową jest, a nazwa pary znajduje obie jej wartości.
 
+## Czy może pokazać moje paczki albo paczki zespołu?
+
+Tak. Plik paczki w Twoim własnym folderze, `packs` obok pliku ustawień, jest pokazywany obok paczek wbudowanych, tak samo jak paczka w folderze zespołu, czyli folderze, który zespół trzyma na przykład w repozytorium testowanej aplikacji. Folder zespołu to jeden wiersz w `settings.toml`:
+
+```toml
+[packs]
+team-folder = 'C:\work\shop\qa-packs'
+```
+
+Paczka z folderu własnego zastępuje paczkę zespołu o tej samej nazwie, a paczka zespołu paczkę wbudowaną. Okno mówi, skąd jest każda paczka i co zastępuje, a paleta mówi to samo, gdy taką paczkę otwiera. Paczka z błędami nie jest wczytywana, a paczka, którą miałaby zastąpić, też nie wchodzi na jej miejsce. Foldery są czytane od nowa przy każdym otwarciu okna, więc poprawiony plik paczki widać bez restartu.
+
 ## Czy mogę ją zmniejszyć?
 
 {{< kbd "Alt+Shift+H" >}} zwija paletę do samego nagłówka i rozwija ją z powrotem. Gdy znasz już skróty, kliknij **Shortcuts** na dole, a ich lista zwinie się pod nagłówkiem. Kolejne kliknięcie ją rozwija. Skróty działają także przy zwiniętej liście. Paleta nigdy się nie chowa i nigdy sama się nie przesuwa. Jest dokładnie tak wysoka, jak to, co pokazuje.

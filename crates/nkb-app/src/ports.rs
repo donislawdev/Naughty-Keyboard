@@ -672,19 +672,34 @@ pub trait PackSource {
 /// The supertrait says the part that is genuinely true - anything able to list
 /// packs can also read one - without forcing the reverse.
 pub trait PackCatalogue: PackSource {
-    /// Every pack identifier this catalogue holds, in a stable order.
+    /// Every pack this catalogue holds, each once, with where it comes from,
+    /// in a stable order.
     ///
     /// Stable rather than sorted-here, so that a source with a meaningful order
     /// of its own may keep it. What must not happen is the order changing
     /// between two runs over unchanged data: `nkb packs` output goes into other
     /// people's scripts, and a listing that shuffles turns a diff into noise.
     ///
+    /// A pack that overrides another of the same identifier is listed once,
+    /// as the one in use, and its [`PackOrigin`] names what it overrides
+    /// (`pack-format.md` 12): a silent override would have the tester type
+    /// other values than the ones they think they chose.
+    ///
     /// # Errors
     ///
     /// Returns [`SourceError`] when the catalogue itself cannot be examined.
     /// A catalogue that is present and holds nothing returns an empty list,
     /// which is a different answer and is never folded into the error.
-    fn list(&self) -> Result<Vec<String>, SourceError>;
+    fn list(&self) -> Result<Vec<Listed>, SourceError>;
+
+    /// The pack of this identifier that is in use, with where it comes from,
+    /// or `None` when no source holds one.
+    ///
+    /// The origin comes back even when the text does not, because the person
+    /// told "could not be read" needs to know WHICH file: a pack in a folder
+    /// that overrides a built-in one and cannot be read is not replaced by the
+    /// built-in one behind it (`D173`).
+    fn find(&self, id: &str) -> Option<Found>;
 
     /// Which of the sources described by `pack-format.md` 12 this stands for,
     /// and which ones were not consulted at all.
@@ -692,10 +707,47 @@ pub trait PackCatalogue: PackSource {
     /// 🔴 Here because untouchable rule 1 forbids the silence, not because a
     /// caller asked. The format defines THREE sources - built in, team, and the
     /// user's own - loaded in that order, with a later one overriding an earlier
-    /// one by `pack.id`. A build that consults one of the three and prints a
+    /// one by `pack.id`. A run that consults one of the three and prints a
     /// list looking exactly like a complete one is a run that did less than it
     /// appeared to, which is the one thing a run may never do.
     fn coverage(&self) -> CatalogueCoverage;
+}
+
+/// One pack a catalogue holds, by identifier, with where it comes from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Listed {
+    pub id: String,
+    pub origin: PackOrigin,
+}
+
+/// A pack's text as the source in use gave it, with that source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Found {
+    pub origin: PackOrigin,
+    pub text: Result<String, SourceError>,
+}
+
+/// Where a pack in use comes from, and which sources below it hold a pack of
+/// the same identifier that it is used instead of.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackOrigin {
+    pub source: CatalogueSource,
+    /// The sources overridden, nearest first: an own pack over a team pack
+    /// over a built-in one names the team folder, then the built-in packs.
+    /// Empty when nothing is overridden.
+    pub overrides: Vec<CatalogueSource>,
+}
+
+impl PackOrigin {
+    /// A pack carried by the tool, overriding nothing - the only origin a
+    /// built-in pack can have, since the built-in source is the first one.
+    #[must_use]
+    pub fn built_in() -> Self {
+        Self {
+            source: CatalogueSource::BuiltIn,
+            overrides: Vec::new(),
+        }
+    }
 }
 
 /// The three places packs come from, and whether this run looked at them.
@@ -708,6 +760,11 @@ pub struct CatalogueCoverage {
     pub consulted: Vec<CatalogueSource>,
     /// Sources that were not, each with the reason - which is never "no reason".
     pub skipped: Vec<(CatalogueSource, SourceSkipped)>,
+    /// Files in a folder that end in `.toml` and were passed over because
+    /// their name is not a pack identifier (`pack-format.md` 7), as the folder
+    /// gave the name. A pack file a person named `My Pack.toml` would otherwise
+    /// vanish from every list with no word about why.
+    pub misnamed: Vec<(CatalogueSource, String)>,
 }
 
 /// One of the three sources `pack-format.md` 12 defines.
@@ -736,12 +793,30 @@ impl CatalogueSource {
 /// Why a source was not read. Never a bare "no".
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceSkipped {
-    /// The settings file has no key for this folder yet, so it cannot be named.
-    NotImplementedYet,
-    /// Configured, but nothing is at that location.
-    NotConfigured,
-    /// Configured and present, and the read failed.
+    /// No folder is named for it: no `team-folder` in the settings file and no
+    /// `--team-folder` on the command line.
+    NotSet,
+    /// The folder's setting is there and could not be used: the settings file
+    /// is not one this version can read, or the key is not a full path to a
+    /// folder. What exactly is said where the settings file is read.
+    SettingUnusable,
+    /// The tool has nowhere to look: the own folder lives beside the settings
+    /// file, and the variable that places it is not set.
+    NoPlace,
+    /// Named, and nothing is there.
+    Missing,
+    /// Named, and it is a file rather than a folder.
+    NotAFolder,
+    /// There, and listing it failed - permissions, a device error.
     Unreadable,
+    /// There, and it did not answer in time - a network share that stopped
+    /// responding. Built-in and own packs are offered all the same.
+    Unreachable,
+    /// More pack files than a pack folder is allowed to hold, which says the
+    /// folder is likely the wrong one - a repository's root, a drive.
+    TooManyFiles,
+    /// The team folder is the own folder, so it was read once, as the own one.
+    SameAsOwn,
 }
 
 impl SourceSkipped {
@@ -749,9 +824,15 @@ impl SourceSkipped {
     #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::NotImplementedYet => "not-implemented-yet",
-            Self::NotConfigured => "not-configured",
+            Self::NotSet => "not-set",
+            Self::SettingUnusable => "setting-unusable",
+            Self::NoPlace => "no-place",
+            Self::Missing => "missing",
+            Self::NotAFolder => "not-a-folder",
             Self::Unreadable => "unreadable",
+            Self::Unreachable => "unreachable",
+            Self::TooManyFiles => "too-many-files",
+            Self::SameAsOwn => "same-as-own",
         }
     }
 }
@@ -994,6 +1075,10 @@ pub struct Settings {
     /// Only a list whose every entry reads as a value (`ValueKey::parse`)
     /// arrives here - by identifiers, never the value itself.
     pub recent: Vec<ValueKey>,
+    /// The folder of packs a team shares (`[packs] team-folder`, `D173`), as
+    /// written. Only a full path arrives here: a relative one would mean a
+    /// different folder for every place the palette is started from.
+    pub team_folder: Option<String>,
 }
 
 /// One setting the tester changed. A save carries exactly one, so a save can
@@ -1095,6 +1180,10 @@ pub enum SettingsNote {
     /// The list of recent values is not a list of texts that each read as
     /// `pack/value`. None of it is used, and the next save writes it anew.
     NotARecentList { key: String },
+    /// A key that must name a folder by its full path holds something else -
+    /// not text, empty, or a path relative to wherever the program started.
+    /// No team folder is read (`D173`).
+    NotAFolderPath { key: String },
 }
 
 /// Why a shortcut in the settings file did not read.

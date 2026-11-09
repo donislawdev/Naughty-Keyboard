@@ -21,20 +21,32 @@
 
 use nkb_core::pack::Pack;
 
-use crate::ports::{CatalogueCoverage, PackCatalogue, PackFormat, PackSource, SourceError};
+use crate::ports::{CatalogueCoverage, Found, PackCatalogue, PackFormat, PackOrigin, SourceError};
 
 /// One pack, as far as this run could get with it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackEntry {
     /// Loaded. `warnings` is a count rather than a list, because a listing is
     /// not the place to read them and `nkb lint` is.
-    Loaded { pack: Box<Pack>, warnings: usize },
+    Loaded {
+        pack: Box<Pack>,
+        warnings: usize,
+        origin: PackOrigin,
+    },
     /// Present, readable, and refused: `errors` problems block it. The pack is
     /// absent from the tool and present in the listing, which is the only
     /// combination that does not mislead.
-    Refused { id: String, errors: usize },
+    Refused {
+        id: String,
+        errors: usize,
+        origin: PackOrigin,
+    },
     /// The file itself would not give up its text.
-    Unreadable { id: String, reason: SourceError },
+    Unreadable {
+        id: String,
+        reason: SourceError,
+        origin: PackOrigin,
+    },
 }
 
 impl PackEntry {
@@ -44,6 +56,18 @@ impl PackEntry {
         match self {
             Self::Loaded { pack, .. } => &pack.id,
             Self::Refused { id, .. } | Self::Unreadable { id, .. } => id,
+        }
+    }
+
+    /// Where this entry's pack comes from and what it overrides - loaded or
+    /// not, because a refused pack in a folder hides the built-in one all the
+    /// same (`D173`).
+    #[must_use]
+    pub fn origin(&self) -> &PackOrigin {
+        match self {
+            Self::Loaded { origin, .. }
+            | Self::Refused { origin, .. }
+            | Self::Unreadable { origin, .. } => origin,
         }
     }
 }
@@ -126,11 +150,23 @@ pub enum Direction {
 /// The order is the rule from `pack-format.md` 11 in code. Parsing first and
 /// checking afterwards would work exactly as well until the day a file parsed
 /// into something plausible and wrong.
-fn load(format: &dyn PackFormat, id: &str, text: &str) -> PackEntry {
-    match crate::load_pack::load(format, id, text) {
+fn load(format: &dyn PackFormat, id: &str, found: Found) -> PackEntry {
+    let Found { origin, text } = found;
+    let text = match text {
+        Ok(text) => text,
+        Err(reason) => {
+            return PackEntry::Unreadable {
+                id: id.to_owned(),
+                reason,
+                origin,
+            };
+        }
+    };
+    match crate::load_pack::load(format, id, &text) {
         Ok(loaded) => PackEntry::Loaded {
             pack: Box::new(loaded.pack),
             warnings: loaded.warnings,
+            origin,
         },
         // A refused pack still appears in the listing, named. The reasons it
         // can be refused - errors in the file, or the two halves of the format
@@ -139,6 +175,7 @@ fn load(format: &dyn PackFormat, id: &str, text: &str) -> PackEntry {
         Err(refused) => PackEntry::Refused {
             id: id.to_owned(),
             errors: refused.errors,
+            origin,
         },
     }
 }
@@ -154,12 +191,18 @@ pub fn list_packs(
     catalogue: &dyn PackCatalogue,
     format: &dyn PackFormat,
 ) -> Result<Listing, SourceError> {
-    let ids = catalogue.list()?;
-    let entries = ids
+    let listed = catalogue.list()?;
+    let entries = listed
         .into_iter()
-        .map(|id| match catalogue.read(&id) {
-            Ok(text) => load(format, &id, &text),
-            Err(reason) => PackEntry::Unreadable { id, reason },
+        .map(|listed| {
+            // A pack listed a moment ago and gone now - a file deleted between
+            // the two looks - is a pack that could not be read, under the
+            // origin the listing gave it, not a hole in the list.
+            let found = catalogue.find(&listed.id).unwrap_or(Found {
+                origin: listed.origin,
+                text: Err(SourceError::NotFound),
+            });
+            load(format, &listed.id, found)
         })
         .collect();
 
@@ -173,38 +216,49 @@ pub fn list_packs(
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ShowOutcome {
     /// Here it is.
-    Shown { pack: Box<Pack>, warnings: usize },
+    Shown {
+        pack: Box<Pack>,
+        warnings: usize,
+        origin: PackOrigin,
+    },
     /// It is there and it does not load. The count, not the problems: reading
     /// those is `nkb lint`, and two commands reporting the same list in two
     /// shapes is two things to keep in step.
-    Refused { errors: usize },
+    Refused { errors: usize, origin: PackOrigin },
     /// No pack under that name.
     NotFound,
-    /// The file is there and would not open.
-    Unreadable,
+    /// The file is there and would not give up its text. Not UTF-8 is E005
+    /// and a finding about the pack, which `nkb lint` reports - here it means
+    /// what the others mean: no text to show.
+    Unreadable {
+        reason: SourceError,
+        origin: PackOrigin,
+    },
 }
 
-/// One pack, in full.
+/// One pack, in full, from the source that is in use for its identifier.
 ///
-/// Takes a [`PackSource`] rather than a [`PackCatalogue`]: this reads one pack
-/// by name and never asks what else exists, so requiring the ability to
-/// enumerate would be asking for something it does not use.
+/// Takes a [`PackCatalogue`] rather than a bare [`crate::PackSource`] since
+/// packs come from folders as well (`D173`): the answer has to say WHERE the
+/// pack it shows comes from and what it overrides, or `nkb show whitespace`
+/// would print a team's pack under the built-in pack's name.
 #[must_use]
-pub fn show_pack(source: &dyn PackSource, format: &dyn PackFormat, id: &str) -> ShowOutcome {
-    let text = match source.read(id) {
-        Ok(text) => text,
-        Err(SourceError::NotFound) => return ShowOutcome::NotFound,
-        // Not UTF-8 is E005 and a finding about the pack, which `nkb lint`
-        // reports. Here both mean the same thing: no text to show.
-        Err(SourceError::Unreadable | SourceError::NotUtf8 | SourceError::TooLarge) => {
-            return ShowOutcome::Unreadable;
-        }
+pub fn show_pack(catalogue: &dyn PackCatalogue, format: &dyn PackFormat, id: &str) -> ShowOutcome {
+    let Some(found) = catalogue.find(id) else {
+        return ShowOutcome::NotFound;
     };
-
-    match load(format, id, &text) {
-        PackEntry::Loaded { pack, warnings } => ShowOutcome::Shown { pack, warnings },
-        PackEntry::Refused { errors, .. } => ShowOutcome::Refused { errors },
-        PackEntry::Unreadable { .. } => ShowOutcome::Unreadable,
+    match load(format, id, found) {
+        PackEntry::Loaded {
+            pack,
+            warnings,
+            origin,
+        } => ShowOutcome::Shown {
+            pack,
+            warnings,
+            origin,
+        },
+        PackEntry::Refused { errors, origin, .. } => ShowOutcome::Refused { errors, origin },
+        PackEntry::Unreadable { reason, origin, .. } => ShowOutcome::Unreadable { reason, origin },
     }
 }
 
@@ -216,7 +270,10 @@ pub fn show_pack(source: &dyn PackSource, format: &dyn PackFormat, id: &str) -> 
 )]
 mod tests {
     use super::*;
-    use crate::ports::{CatalogueSource, Date, SourceSkipped, TranslationCheck, TranslationTarget};
+    use crate::ports::{
+        CatalogueSource, Date, Listed, PackSource, SourceSkipped, TranslationCheck,
+        TranslationTarget,
+    };
     use nkb_core::lint::{LintProblem, RuleCode};
     use nkb_core::pack::Risk;
     use nkb_core::text::LiteralText;
@@ -224,8 +281,12 @@ mod tests {
     use std::collections::BTreeMap;
 
     /// A catalogue with no disk behind it. The reason ports exist.
+    ///
+    /// Every pack is built in unless `origins` says otherwise, which is how a
+    /// pack from a folder - one that overrides another or not - is told.
     struct Shelf {
         packs: BTreeMap<String, Result<String, SourceError>>,
+        origins: BTreeMap<String, PackOrigin>,
     }
 
     impl Shelf {
@@ -235,7 +296,15 @@ mod tests {
                     .iter()
                     .map(|(id, text)| ((*id).to_owned(), Ok((*text).to_owned())))
                     .collect(),
+                origins: BTreeMap::new(),
             }
+        }
+
+        fn origin_of(&self, id: &str) -> PackOrigin {
+            self.origins
+                .get(id)
+                .cloned()
+                .unwrap_or_else(PackOrigin::built_in)
         }
     }
 
@@ -249,13 +318,27 @@ mod tests {
     }
 
     impl PackCatalogue for Shelf {
-        fn list(&self) -> Result<Vec<String>, SourceError> {
-            Ok(self.packs.keys().cloned().collect())
+        fn list(&self) -> Result<Vec<Listed>, SourceError> {
+            Ok(self
+                .packs
+                .keys()
+                .map(|id| Listed {
+                    id: id.clone(),
+                    origin: self.origin_of(id),
+                })
+                .collect())
+        }
+        fn find(&self, id: &str) -> Option<Found> {
+            self.packs.get(id).map(|text| Found {
+                origin: self.origin_of(id),
+                text: text.clone(),
+            })
         }
         fn coverage(&self) -> CatalogueCoverage {
             CatalogueCoverage {
                 consulted: vec![CatalogueSource::BuiltIn],
-                skipped: vec![(CatalogueSource::Team, SourceSkipped::NotImplementedYet)],
+                skipped: vec![(CatalogueSource::Team, SourceSkipped::NotSet)],
+                misnamed: Vec::new(),
             }
         }
     }
@@ -384,7 +467,7 @@ mod tests {
         assert_eq!(listing.loaded(), 0);
         assert_eq!(listing.unusable(), 1);
         match listing.entries.first().expect("one entry") {
-            PackEntry::Refused { id, errors } => {
+            PackEntry::Refused { id, errors, .. } => {
                 assert_eq!(id, "alpha");
                 assert_eq!(*errors, 1);
             }
@@ -421,13 +504,14 @@ mod tests {
                 ("beta".to_owned(), Err(SourceError::Unreadable)),
                 ("gamma".to_owned(), Ok("gamma".to_owned())),
             ]),
+            origins: BTreeMap::new(),
         };
         let listing = list_packs(&shelf, &Scripted::clean()).expect("the shelf can be listed");
 
         assert_eq!(listing.entries.len(), 3);
         assert_eq!(listing.loaded(), 2);
         match listing.entries.get(1).expect("three entries") {
-            PackEntry::Unreadable { id, reason } => {
+            PackEntry::Unreadable { id, reason, .. } => {
                 assert_eq!(id, "beta");
                 assert_eq!(*reason, SourceError::Unreadable);
             }
@@ -444,6 +528,85 @@ mod tests {
             "a listing with no account of the sources it skipped is the silence \
              untouchable rule 1 forbids"
         );
+    }
+
+    #[test]
+    fn a_pack_from_a_folder_keeps_its_origin_loaded_or_refused() {
+        // `D173`: a pack in the team folder that overrides a built-in one and
+        // does not load is refused UNDER ITS ORIGIN - the listing must not
+        // present it as the built-in pack, nor hand the built-in one over.
+        let team_over_built_in = PackOrigin {
+            source: CatalogueSource::Team,
+            overrides: vec![CatalogueSource::BuiltIn],
+        };
+        let mut shelf = Shelf::of(&[("alpha", "alpha")]);
+        shelf
+            .origins
+            .insert("alpha".to_owned(), team_over_built_in.clone());
+
+        let loads = list_packs(&shelf, &Scripted::clean()).expect("the shelf can be listed");
+        let entry = loads.entries.first().expect("one entry");
+        assert!(matches!(entry, PackEntry::Loaded { .. }));
+        assert_eq!(entry.origin(), &team_over_built_in);
+
+        let format = Scripted {
+            errors: 1,
+            warnings: 0,
+            parses: true,
+        };
+        let refused = list_packs(&shelf, &format).expect("the shelf can be listed");
+        let entry = refused.entries.first().expect("one entry");
+        assert!(matches!(entry, PackEntry::Refused { .. }));
+        assert_eq!(entry.origin(), &team_over_built_in);
+        assert_eq!(
+            show_pack(&shelf, &format, "alpha"),
+            ShowOutcome::Refused {
+                errors: 1,
+                origin: team_over_built_in
+            }
+        );
+    }
+
+    #[test]
+    fn a_pack_gone_between_the_listing_and_the_reading_is_an_unreadable_entry() {
+        // A catalogue that lists what it then cannot find: the entry stays,
+        // under the origin the listing gave it.
+        struct Vanishing;
+        impl PackSource for Vanishing {
+            fn read(&self, _id: &str) -> Result<String, SourceError> {
+                Err(SourceError::NotFound)
+            }
+        }
+        impl PackCatalogue for Vanishing {
+            fn list(&self) -> Result<Vec<Listed>, SourceError> {
+                Ok(vec![Listed {
+                    id: "alpha".to_owned(),
+                    origin: PackOrigin {
+                        source: CatalogueSource::Own,
+                        overrides: Vec::new(),
+                    },
+                }])
+            }
+            fn find(&self, _id: &str) -> Option<Found> {
+                None
+            }
+            fn coverage(&self) -> CatalogueCoverage {
+                CatalogueCoverage {
+                    consulted: vec![CatalogueSource::Own],
+                    skipped: Vec::new(),
+                    misnamed: Vec::new(),
+                }
+            }
+        }
+        let listing = list_packs(&Vanishing, &Scripted::clean()).expect("listed");
+        match listing.entries.first().expect("one entry") {
+            PackEntry::Unreadable { id, reason, origin } => {
+                assert_eq!(id, "alpha");
+                assert_eq!(*reason, SourceError::NotFound);
+                assert_eq!(origin.source, CatalogueSource::Own);
+            }
+            other => panic!("expected an unreadable entry, got {other:?}"),
+        }
     }
 
     #[test]
@@ -465,7 +628,10 @@ mod tests {
         };
         assert_eq!(
             show_pack(&shelf, &format, "alpha"),
-            ShowOutcome::Refused { errors: 2 }
+            ShowOutcome::Refused {
+                errors: 2,
+                origin: PackOrigin::built_in()
+            }
         );
     }
 
@@ -473,7 +639,7 @@ mod tests {
     fn showing_a_good_pack_hands_over_the_pack_itself() {
         let shelf = Shelf::of(&[("alpha", "alpha")]);
         match show_pack(&shelf, &Scripted::clean(), "alpha") {
-            ShowOutcome::Shown { pack, warnings } => {
+            ShowOutcome::Shown { pack, warnings, .. } => {
                 assert_eq!(pack.id, "alpha");
                 assert_eq!(warnings, 0);
                 assert_eq!(pack.values.len(), 1);
@@ -491,11 +657,13 @@ mod tests {
                         PackEntry::Loaded {
                             pack: Box::new(a_pack(id)),
                             warnings: 0,
+                            origin: PackOrigin::built_in(),
                         }
                     } else {
                         PackEntry::Refused {
                             id: (*id).to_owned(),
                             errors: 1,
+                            origin: PackOrigin::built_in(),
                         }
                     }
                 })
@@ -503,6 +671,7 @@ mod tests {
             coverage: CatalogueCoverage {
                 consulted: vec![CatalogueSource::BuiltIn],
                 skipped: Vec::new(),
+                misnamed: Vec::new(),
             },
         }
     }

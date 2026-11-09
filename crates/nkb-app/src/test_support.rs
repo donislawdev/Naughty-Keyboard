@@ -18,8 +18,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::advance_sequence::{AdvanceSequence, InFlight, Ports};
 use crate::ports::{
-    Availability, Clipboard, ClipboardError, Date, Delivered, DeliveryError, Following, History,
-    KeystrokeError, KeystrokeSender, PackFormat, PackSource, Progress, ReportText, SourceError,
+    Availability, CatalogueCoverage, CatalogueSource, Clipboard, ClipboardError, Date, Delivered,
+    DeliveryError, Following, Found, History, KeystrokeError, KeystrokeSender, Listed,
+    PackCatalogue, PackFormat, PackOrigin, PackSource, Progress, ReportText, SourceError,
     TargetInspector, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery, Waiting,
 };
 use nkb_core::calendar::Day;
@@ -417,11 +418,76 @@ impl PackSource for FakeSource {
     }
 }
 
+/// Holds every pack it is asked for, built in - the format is scripted, so
+/// the text is never read.
+impl PackCatalogue for FakeSource {
+    fn list(&self) -> Result<Vec<Listed>, SourceError> {
+        Ok(Vec::new())
+    }
+    fn find(&self, id: &str) -> Option<Found> {
+        Some(Found {
+            origin: PackOrigin::built_in(),
+            text: self.read(id),
+        })
+    }
+    fn coverage(&self) -> CatalogueCoverage {
+        built_in_only()
+    }
+}
+
 pub(crate) struct MissingSource;
 
 impl PackSource for MissingSource {
     fn read(&self, _id: &str) -> Result<String, SourceError> {
         Err(SourceError::NotFound)
+    }
+}
+
+impl PackCatalogue for MissingSource {
+    fn list(&self) -> Result<Vec<Listed>, SourceError> {
+        Ok(Vec::new())
+    }
+    fn find(&self, _id: &str) -> Option<Found> {
+        None
+    }
+    fn coverage(&self) -> CatalogueCoverage {
+        built_in_only()
+    }
+}
+
+/// One pack of any name, from `origin`, whose file gives `text` - for the
+/// sentences and the block that say where a pack came from (`D173`).
+pub(crate) struct FolderSource {
+    pub origin: PackOrigin,
+    pub text: Result<String, SourceError>,
+}
+
+impl PackSource for FolderSource {
+    fn read(&self, _id: &str) -> Result<String, SourceError> {
+        self.text.clone()
+    }
+}
+
+impl PackCatalogue for FolderSource {
+    fn list(&self) -> Result<Vec<Listed>, SourceError> {
+        Ok(Vec::new())
+    }
+    fn find(&self, _id: &str) -> Option<Found> {
+        Some(Found {
+            origin: self.origin.clone(),
+            text: self.text.clone(),
+        })
+    }
+    fn coverage(&self) -> CatalogueCoverage {
+        built_in_only()
+    }
+}
+
+fn built_in_only() -> CatalogueCoverage {
+    CatalogueCoverage {
+        consulted: vec![CatalogueSource::BuiltIn],
+        skipped: Vec::new(),
+        misnamed: Vec::new(),
     }
 }
 

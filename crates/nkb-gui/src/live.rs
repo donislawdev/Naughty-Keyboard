@@ -94,8 +94,8 @@ use std::time::{Duration, Instant};
 
 use nkb_adapters::i18n::PaletteLabel;
 use nkb_adapters::{
-    BuiltInCatalogue, ClipboardDelivery, DirectInjection, EnglishReport, GlobalShortcuts,
-    SettingsFile, SystemClock, TomlPackFormat, default_bindings, i18n, layout_character,
+    ClipboardDelivery, DirectInjection, EnglishReport, GlobalShortcuts, PackFolders, SettingsFile,
+    SystemClock, TomlPackFormat, default_bindings, i18n, layout_character,
 };
 use nkb_app::advance_sequence::{InFlight, Ports, RouteRequest, Sent};
 use nkb_app::browse_packs::{Direction, list_packs};
@@ -124,6 +124,7 @@ mod aside;
 mod copy;
 mod entry;
 mod fault;
+mod folders;
 mod folds;
 mod hold;
 mod links;
@@ -136,6 +137,7 @@ use aside::Question;
 use copy::show_copied;
 pub use copy::{CopyButton, copy_command, label_copies};
 pub use fault::{WorkerEnd, guarded};
+use folders::{Folders, PackOpening, open_pack};
 use folds::{Collapse, draw_toggle};
 pub use folds::{label_shortcut_list, starts_with_shortcut_list, wire_shortcut_list};
 use hold::Hold;
@@ -176,6 +178,8 @@ pub struct Start {
     pub kept: KeptSettings,
     /// What reading the settings had to say.
     pub said: Vec<SettingsMessage>,
+    /// The team's and the tester's own pack folders (`D173`).
+    pub folders: PackFolders,
     /// The shortcuts of this run: the defaults with the tester's own on top
     /// (`KeptSettings::bindings`). Read once, on the main thread, because the
     /// hint bar there shows the same ones the worker registers.
@@ -438,6 +442,7 @@ pub fn drive(
         store,
         kept,
         said,
+        folders,
         bindings,
         tell,
     } = start;
@@ -485,14 +490,15 @@ pub fn drive(
     };
 
     let mut kept = kept;
+    let folders = Folders::new(folders);
     let opened = kept.open_pack(&store, asked.as_deref(), default_pack, &mut |pack| {
-        sequence.choose_pack(&BuiltInCatalogue::new(), &TomlPackFormat, pack)
+        let (chosen, said) = folders.choose(&mut sequence, pack);
+        opening.extend(said);
+        chosen
     });
     for note in &opened.notes {
         match note {
-            Opening::CouldNotChoose { pack, error } => {
-                opening.push(i18n::choose_error(error, pack));
-            }
+            Opening::CouldNotChoose { pack, error } => opening.push(folders.why_not(error, pack)),
             Opening::Settings(message) => {
                 opening.extend(i18n::settings_message(message, &file, &bindings));
             }
@@ -510,6 +516,7 @@ pub fn drive(
         store: &store,
         file,
         bindings: Cell::new(bindings),
+        folders,
     };
     let mut worker = Worker {
         sequence,
@@ -720,7 +727,7 @@ impl Worker<'_> {
     /// there opens it - from its first value, and remembered (`D120`). With no
     /// other pack that opens, the palette says so rather than doing nothing.
     fn step_pack(&mut self, direction: Direction) -> Carried {
-        let listing = list_packs(&BuiltInCatalogue::new(), &TomlPackFormat).ok();
+        let listing = list_packs(&self.memory.folders.catalogue(), &TomlPackFormat).ok();
         let other = listing
             .as_ref()
             .and_then(|listing| listing.neighbour(&self.pack, direction))
@@ -985,7 +992,7 @@ fn choose(
     let (said, value) = match open_pack(sequence, memory, pack, asked) {
         PackOpening::Same => return None,
         PackOpening::New(said) => (said, ValueBand::Clear),
-        PackOpening::Failed(line) => (vec![line], ValueBand::Keep),
+        PackOpening::Failed(said) => (said, ValueBand::Keep),
     };
     Some(view_between(
         sequence, pack, said, value, standing, held_back,
@@ -1011,59 +1018,14 @@ fn choose_value(
     let (mut said, band) = match open_pack(sequence, memory, pack, asked) {
         PackOpening::Same => (Vec::new(), ValueBand::Keep),
         PackOpening::New(said) => (said, ValueBand::Clear),
-        PackOpening::Failed(line) => {
-            return view_between(
-                sequence,
-                pack,
-                vec![line],
-                ValueBand::Keep,
-                standing,
-                held_back,
-            );
+        PackOpening::Failed(said) => {
+            return view_between(sequence, pack, said, ValueBand::Keep, standing, held_back);
         }
     };
     if !sequence.choose_next(value) {
         said.push(i18n::value_gone(value, &shown(sequence, pack)));
     }
     view_between(sequence, pack, said, band, standing, held_back)
-}
-
-/// What opening a pack came to.
-enum PackOpening {
-    /// It is the pack in use - the window works from a snapshot, and choosing
-    /// it again must not send `7 / 34` back to the start.
-    Same,
-    /// Opened, with what saving it as the remembered pack had to say.
-    New(Vec<String>),
-    /// It could not be opened, and nothing changed - `choose_pack` leaves the
-    /// pack in use, its place and the last value as they were. The line says
-    /// why, naming the pack that was asked for.
-    Failed(String),
-}
-
-/// Opens `asked` in place of the pack in use. One path for a pack row and a
-/// value row of the window. `pack` follows the pack that opened.
-fn open_pack(
-    sequence: &mut AdvanceSequence,
-    memory: &Memory,
-    pack: &mut String,
-    asked: &str,
-) -> PackOpening {
-    if sequence.pack_id() == Some(asked) {
-        return PackOpening::Same;
-    }
-    match sequence.choose_pack(&BuiltInCatalogue::new(), &TomlPackFormat, asked) {
-        Ok(()) => {
-            asked.clone_into(pack);
-            PackOpening::New(
-                memory
-                    .keep(SettingChange::Pack(asked.to_owned()))
-                    .into_iter()
-                    .collect(),
-            )
-        }
-        Err(error) => PackOpening::Failed(i18n::choose_error(&error, asked)),
-    }
 }
 
 /// The settings of this run and where they are saved, shared by everything the
@@ -1081,6 +1043,8 @@ struct Memory<'a> {
     /// cell, because the shortcuts window changes them while the palette runs
     /// (K5.3).
     bindings: Cell<Bindings>,
+    /// The pack folders, read again at every choice of a pack (`D173`).
+    folders: Folders,
 }
 
 impl Memory<'_> {
@@ -1796,6 +1760,7 @@ mod tests {
             store,
             file: String::from("f"),
             bindings: Cell::new(nkb_adapters::default_bindings()),
+            folders: crate::live::Folders::new(nkb_adapters::PackFolders::none()),
         }
     }
 
@@ -1867,7 +1832,11 @@ mod tests {
         );
         assert_eq!(
             view.messages,
-            vec![i18n::choose_error(&ChooseError::NotFound, "no-such-pack")]
+            vec![i18n::choose_error(
+                &ChooseError::NotFound,
+                "no-such-pack",
+                &nkb_adapters::PackFolders::none()
+            )]
         );
         assert!(
             store.saved.borrow().is_empty(),

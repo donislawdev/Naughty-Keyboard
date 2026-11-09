@@ -580,7 +580,7 @@ fn catalogue_facts() -> Json {
     let mut packs = Vec::new();
     let mut total = 0;
     for entry in listing.entries {
-        let PackEntry::Loaded { pack, warnings } = entry else {
+        let PackEntry::Loaded { pack, warnings, .. } = entry else {
             panic!("a built-in pack did not load, and shipped_packs.rs says why");
         };
         let day = OnTheDayTheTypeWasWritten;

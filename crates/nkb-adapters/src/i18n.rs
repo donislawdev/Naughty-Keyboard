@@ -62,12 +62,12 @@
 //! exactly one value per key - and that move is a piece of work of its own, not
 //! part of the palette. `OBS-14` carries it.
 
-use nkb_app::advance_sequence::{ChooseError, Message};
+use nkb_app::advance_sequence::Message;
 use nkb_app::drive_sequence::Ended;
 use nkb_app::keep_settings::{SettingsMessage, ShortcutChange};
 use nkb_app::ports::{
-    CatalogueCoverage, CatalogueSource, DesktopRefusal, SaveError, SettingsNote, SettingsUnusable,
-    ShortcutRegistration, ShortcutUnreadable, ShortcutsUnavailable, SourceSkipped,
+    DesktopRefusal, SaveError, SettingsNote, SettingsUnusable, ShortcutRegistration,
+    ShortcutUnreadable, ShortcutsUnavailable,
 };
 use nkb_core::hotkeys::{
     Bindings, ChordError, ChordProblem, HotkeyAction, HotkeyChord, Refusal, Refused,
@@ -80,6 +80,7 @@ use crate::settings_file::SCHEMA;
 // Split by the window a word stands in, so that each window's words are found
 // in one file - and no file grows past the ceiling of `D113`. The paths stay
 // what they were: every name below is still `nkb_adapters::i18n::<name>`.
+mod catalogue;
 mod causes;
 mod fill;
 mod palette;
@@ -89,6 +90,9 @@ mod substitutions;
 mod typing;
 mod windows;
 
+pub use catalogue::{
+    catalogue_notes, choose_error, folder_not_read, pack_overrides, pack_source, source_badge,
+};
 pub use causes::closed_window as closed_window_cause;
 pub(crate) use fill::fill;
 use palette::pattern_palette_label;
@@ -102,10 +106,10 @@ pub use stop::stop_reason;
 pub use substitutions::substitution_names;
 pub use windows::{
     AboutLabel, MatchPlace, PacksLabel, ShortcutsLabel, WelcomeLabel, about_copyright, about_label,
-    found_in, no_match, not_read, pack_problems, pack_refused, pack_unreadable, packs_label,
-    packs_summary, packs_summary_filtered, pair_halves, recent_heading, shortcut_answer,
-    shortcut_invite, shortcuts_label, shortcuts_summary, value_aside, value_gone, welcome_label,
-    welcome_ready, welcome_try_it,
+    found_in, no_match, pack_problems, pack_refused, pack_unreadable, packs_label, packs_summary,
+    packs_summary_filtered, pair_halves, recent_heading, shortcut_answer, shortcut_invite,
+    shortcuts_label, shortcuts_summary, value_aside, value_gone, welcome_label, welcome_ready,
+    welcome_try_it,
 };
 
 // ---------------------------------------------------------------------------
@@ -420,47 +424,6 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
                 ("button", label(PaletteLabel::Copy)),
             ],
         ),
-    }
-}
-
-// ---------------------------------------------------------------------------
-// ChooseError - why a pack could not be chosen
-// ---------------------------------------------------------------------------
-
-/// The pattern for one pack-choosing failure. `ux-spec.md` 6, section D.
-///
-/// ⚠️ `Refused` has TWO patterns, because English inflects the noun: one problem,
-/// three problems. It is the only sentence in today's set that needs it, and it
-/// is handled head-on rather than with a parenthesised "(s)", which reads as an
-/// apology for not having handled it. Languages with more than two plural forms
-/// - Polish among them - need rules, and those arrive with the second language.
-fn pattern_choose_error(error: &ChooseError) -> &'static str {
-    match error {
-        ChooseError::NotFound => "Pack \"{pack}\" was not found. Run: nkb packs",
-        ChooseError::Unreadable => {
-            "Pack \"{pack}\" could not be read. Check that the file is there and is valid UTF-8."
-        }
-        // `nkb lint` reads exactly the file it is named (R04), and the palette
-        // knows a pack by its identifier, not by its file. So the sentence
-        // names the command and not an argument it cannot give (`OBS-235`).
-        ChooseError::Refused { errors } if *errors == 1 => {
-            "Pack \"{pack}\" has 1 problem. Run nkb lint on its file to see it."
-        }
-        ChooseError::Refused { .. } => {
-            "Pack \"{pack}\" has {errors} problems. Run nkb lint on its file to see them."
-        }
-    }
-}
-
-/// What the palette says when a pack could not be chosen.
-#[must_use]
-pub fn choose_error(error: &ChooseError, pack: &str) -> String {
-    let pattern = pattern_choose_error(error);
-    match error {
-        ChooseError::NotFound | ChooseError::Unreadable => fill(pattern, &[("pack", pack)]),
-        ChooseError::Refused { errors } => {
-            fill(pattern, &[("pack", pack), ("errors", &errors.to_string())])
-        }
     }
 }
 
@@ -824,6 +787,9 @@ fn pattern_settings_note(note: &SettingsNote) -> &'static str {
         SettingsNote::NotARecentList { .. } => {
             "In the settings file {file}, {key} should be a list of values written as pack/value, such as \"whitespace/trailing-space\", so the value window starts with no recent values. The list is written anew when the palette closes."
         }
+        SettingsNote::NotAFolderPath { .. } => {
+            "In the settings file {file}, {key} should be the full path of a folder, so no team folder is read. Fix the value, or remove the line."
+        }
     }
 }
 
@@ -1006,7 +972,8 @@ pub fn settings_message(
                 | SettingsNote::NotATable { key }
                 | SettingsNote::NotAShortcut { key, .. }
                 | SettingsNote::NotAPosition { key }
-                | SettingsNote::NotARecentList { key } => {
+                | SettingsNote::NotARecentList { key }
+                | SettingsNote::NotAFolderPath { key } => {
                     (key.as_str(), String::new(), String::new())
                 }
             };
@@ -1035,7 +1002,8 @@ pub fn settings_message(
                 | SettingsNote::NotAClearing { .. }
                 | SettingsNote::NotATable { .. }
                 | SettingsNote::NotAPosition { .. }
-                | SettingsNote::NotARecentList { .. } => String::new(),
+                | SettingsNote::NotARecentList { .. }
+                | SettingsNote::NotAFolderPath { .. } => String::new(),
             };
             Some(fill(
                 pattern_settings_note(note),
@@ -1111,7 +1079,11 @@ mod tests {
     use super::windows::{pattern_packs_label, pattern_shortcuts_label};
     use super::*;
     use crate::shortcuts::CONVENTION;
-    use nkb_app::ports::{EntryNews, EntryRefusal, StopReason};
+    use nkb_app::advance_sequence::ChooseError;
+    use nkb_app::ports::{
+        CatalogueCoverage, CatalogueSource, EntryNews, EntryRefusal, PackOrigin, SourceSkipped,
+        StopReason,
+    };
     use nkb_core::hotkeys::{Convention, HotkeyKey};
     use nkb_core::pack::PairHalf;
     use nkb_core::substitutions::Substitutions;
@@ -1256,13 +1228,76 @@ mod tests {
                 .map(|key| message(key, "unicode-text", &defaults().unnamed(&HotkeyAction::ALL))),
         );
 
-        for error in [
-            ChooseError::NotFound,
-            ChooseError::Unreadable,
-            ChooseError::Refused { errors: 1 },
-            ChooseError::Refused { errors: 3 },
-        ] {
-            out.push(choose_error(&error, "locale-cz"));
+        // Every sentence about a pack that could not be chosen, from the tool
+        // and from each folder, overriding a pack or not (`D173`).
+        let folders = crate::catalogue::PackFolders::new(
+            Ok(std::path::PathBuf::from("/work/qa-packs")),
+            Ok(std::path::PathBuf::from("/home/tester/packs")),
+        );
+        let origins = [
+            PackOrigin::built_in(),
+            PackOrigin {
+                source: CatalogueSource::Team,
+                overrides: vec![CatalogueSource::BuiltIn],
+            },
+            PackOrigin {
+                source: CatalogueSource::Own,
+                overrides: Vec::new(),
+            },
+        ];
+        out.push(choose_error(&ChooseError::NotFound, "locale-cz", &folders));
+        for origin in &origins {
+            for error in [
+                ChooseError::Unreadable {
+                    origin: origin.clone(),
+                },
+                ChooseError::TooLarge {
+                    origin: origin.clone(),
+                },
+                ChooseError::Refused {
+                    errors: 1,
+                    origin: origin.clone(),
+                },
+                ChooseError::Refused {
+                    errors: 3,
+                    origin: origin.clone(),
+                },
+            ] {
+                out.push(choose_error(&error, "locale-cz", &folders));
+            }
+            out.extend(pack_overrides("locale-cz", origin));
+            out.extend(pack_source(origin));
+        }
+        out.extend(pack_overrides(
+            "locale-cz",
+            &PackOrigin {
+                source: CatalogueSource::Own,
+                overrides: vec![CatalogueSource::Team],
+            },
+        ));
+        for source in [CatalogueSource::Team, CatalogueSource::Own] {
+            for why in [
+                SourceSkipped::Missing,
+                SourceSkipped::NotAFolder,
+                SourceSkipped::Unreadable,
+                SourceSkipped::Unreachable,
+                SourceSkipped::TooManyFiles,
+            ] {
+                out.extend(folder_not_read(source, why, &folders));
+            }
+        }
+        let misnamed = |count: usize| CatalogueCoverage {
+            consulted: vec![CatalogueSource::BuiltIn],
+            skipped: vec![
+                (CatalogueSource::Team, SourceSkipped::SettingUnusable),
+                (CatalogueSource::Own, SourceSkipped::NoPlace),
+            ],
+            misnamed: (0..count)
+                .map(|n| (CatalogueSource::Team, format!("Pack {n}.toml")))
+                .collect(),
+        };
+        for count in [1, 3, 9] {
+            out.extend(catalogue_notes(&misnamed(count), &folders));
         }
         for outcome in [
             ShortcutRegistration::Taken,
@@ -1320,22 +1355,7 @@ mod tests {
         out.push(no_match("zzz"));
         out.push(packs_label(PacksLabel::NoPacks).to_owned());
         out.push(packs_label(PacksLabel::ListUnavailable).to_owned());
-        out.extend(not_read(&every_skip()));
         out
-    }
-
-    /// A coverage that skips every source for every reason it can be skipped
-    /// for, so each reason word is exercised at least once.
-    fn every_skip() -> CatalogueCoverage {
-        CatalogueCoverage {
-            consulted: Vec::new(),
-            skipped: vec![
-                (CatalogueSource::BuiltIn, SourceSkipped::NotImplementedYet),
-                (CatalogueSource::Team, SourceSkipped::NotImplementedYet),
-                (CatalogueSource::Own, SourceSkipped::NotConfigured),
-                (CatalogueSource::Team, SourceSkipped::Unreadable),
-            ],
-        }
     }
 
     /// One of every settings message that has a sentence.
@@ -1962,15 +1982,6 @@ mod tests {
             PacksLabel::NoMatch,
             PacksLabel::NoPacks,
             PacksLabel::ListUnavailable,
-            PacksLabel::NotRead,
-            PacksLabel::BuiltInOnly,
-            PacksLabel::SourceBuiltIn,
-            PacksLabel::SourceTeam,
-            PacksLabel::SourceOwn,
-            PacksLabel::ReasonNotCarried,
-            PacksLabel::ReasonCannotBeSet,
-            PacksLabel::ReasonNotSet,
-            PacksLabel::ReasonUnreadable,
             PacksLabel::KeyEnter,
             PacksLabel::UseSelected,
             PacksLabel::KeyEscape,
@@ -1994,8 +2005,7 @@ mod tests {
                 | PacksLabel::Refused
                 | PacksLabel::Problems
                 | PacksLabel::Unreadable
-                | PacksLabel::NoMatch
-                | PacksLabel::NotRead => true,
+                | PacksLabel::NoMatch => true,
                 PacksLabel::Title
                 | PacksLabel::Heading
                 | PacksLabel::Search
@@ -2010,14 +2020,6 @@ mod tests {
                 | PacksLabel::Offensive
                 | PacksLabel::NoPacks
                 | PacksLabel::ListUnavailable
-                | PacksLabel::BuiltInOnly
-                | PacksLabel::SourceBuiltIn
-                | PacksLabel::SourceTeam
-                | PacksLabel::SourceOwn
-                | PacksLabel::ReasonNotCarried
-                | PacksLabel::ReasonCannotBeSet
-                | PacksLabel::ReasonNotSet
-                | PacksLabel::ReasonUnreadable
                 | PacksLabel::KeyEnter
                 | PacksLabel::UseSelected
                 | PacksLabel::KeyEscape
@@ -2138,54 +2140,6 @@ mod tests {
             pair_halves(&[PairHalf::First, PairHalf::First, PairHalf::Second]).as_deref(),
             Some("pair 1 of 2, pair 1 of 2, pair 2 of 2")
         );
-    }
-
-    #[test]
-    fn unread_sources_are_one_line_per_reason_and_nothing_when_all_were_read() {
-        // Today's build: the built-in catalogue's own coverage.
-        let today = CatalogueCoverage {
-            consulted: vec![CatalogueSource::BuiltIn],
-            skipped: vec![
-                (CatalogueSource::Team, SourceSkipped::NotImplementedYet),
-                (CatalogueSource::Own, SourceSkipped::NotImplementedYet),
-            ],
-        };
-        // `UX-GUI-009`: the folders this version does not have, in the
-        // tester's words - not as a failure to read.
-        assert_eq!(
-            not_read(&today),
-            vec![
-                "This version lists the built-in packs only - team and own pack folders are not in it yet."
-            ]
-        );
-        // One folder missing while the other is read is not "built-in only",
-        // and neither is a version whose built-in packs went unread.
-        let team_only = CatalogueCoverage {
-            consulted: vec![CatalogueSource::BuiltIn, CatalogueSource::Own],
-            skipped: vec![(CatalogueSource::Team, SourceSkipped::NotImplementedYet)],
-        };
-        assert_eq!(
-            not_read(&team_only),
-            vec!["Not read: team folder - cannot be set in this version."]
-        );
-        let nothing_built_in = CatalogueCoverage {
-            consulted: Vec::new(),
-            ..today.clone()
-        };
-        assert_eq!(
-            not_read(&nothing_built_in),
-            vec!["Not read: team folder, own folder - cannot be set in this version."]
-        );
-        let complete = CatalogueCoverage {
-            consulted: vec![
-                CatalogueSource::BuiltIn,
-                CatalogueSource::Team,
-                CatalogueSource::Own,
-            ],
-            skipped: Vec::new(),
-        };
-        assert!(not_read(&complete).is_empty());
-        assert_eq!(not_read(&every_skip()).len(), 4);
     }
 
     #[test]

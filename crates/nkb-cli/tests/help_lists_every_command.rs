@@ -59,8 +59,10 @@ fn commands_in_the_dispatcher() -> Vec<String> {
 }
 
 /// The help body, as `print_help` writes it.
+/// The general help, which lives in `help.rs` since the helps left `main.rs`
+/// for the ceiling of `D113` (`D173`).
 fn general_help() -> String {
-    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/main.rs");
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/help.rs");
     let body = std::fs::read_to_string(&source)
         .unwrap_or_else(|e| panic!("{} must be readable: {e}", source.display()));
     let start = body.find("fn print_help()").expect("print_help must exist");

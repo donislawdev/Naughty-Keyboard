@@ -1,7 +1,7 @@
 ---
 title: Honest limits
 seoTitle: Honest limits - what Naughty Keyboard does not do yet
-description: "Where Naughty Keyboard stops today: typing has conditions on each system, Linux was measured on one, own packs cannot be loaded, the format is not frozen."
+description: "Where Naughty Keyboard stops today: typing has conditions on each system, Linux was measured on one, the team folder is set by hand, the format is not frozen."
 lead: "A tool that quietly does less than it seems to is worse than one that says so. This is what it does not do yet."
 ---
 
@@ -29,7 +29,7 @@ On macOS it still can, in one kind of application. A Command, Control or Option 
 
 ## Can I load my own packs?
 
-You can write them and check them, but not load them yet. `nkb new-pack`, `nkb fmt` and `nkb lint` all work on a file of your own. Reading a folder of your own packs into the palette and the command line is not wired up, and `nkb packs` says so: it reports the folders for your own packs and your team's as not read.
+Yes, from your own folder and from a team folder, in the palette and on the command line - [the palette page](/docs/palette/) says how. What is missing is a button: the team folder is a line in `settings.toml`, or `--team-folder` on the command line, and the palette cannot choose it yet.
 
 ## Is the pack format stable?
 

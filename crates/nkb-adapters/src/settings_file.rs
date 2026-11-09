@@ -140,7 +140,24 @@ impl SettingsFile {
             Place::Nowhere { .. } => None,
         }
     }
+
+    /// The tester's own folder of packs (`pack-format.md` 12, `D173`): `packs`
+    /// beside this file. Named here, where the file is placed, so the two can
+    /// never be looked for in two different ways - and so the instruments that
+    /// give the palette its own `APPDATA` give it its own empty pack folder
+    /// with it. `None` when there is no place for the file.
+    ///
+    /// Reading never creates it, as reading never creates the settings file.
+    #[must_use]
+    pub fn own_packs_folder(&self) -> Option<PathBuf> {
+        self.path()
+            .and_then(Path::parent)
+            .map(|folder| folder.join(OWN_PACKS))
+    }
 }
+
+/// The name of the own pack folder beside the settings file.
+const OWN_PACKS: &str = "packs";
 
 /// Where the settings live on `system`, read from the environment by `var`.
 ///
@@ -236,10 +253,11 @@ fn settings_of(document: &DocumentMut) -> (Settings, Vec<SettingsNote>) {
     let mut unknown = Vec::new();
 
     for (key, _) in document.iter() {
-        if !["schema", "palette", "shortcuts", "welcome", "find"].contains(&key) {
+        if !["schema", "palette", "shortcuts", "welcome", "find", "packs"].contains(&key) {
             unknown.push(key.to_owned());
         }
     }
+    packs_of(document, &mut settings, &mut notes, &mut unknown);
     match document.get("find").map(Item::as_table_like) {
         None => {}
         Some(None) => notes.push(SettingsNote::NotATable {
@@ -345,6 +363,41 @@ fn settings_of(document: &DocumentMut) -> (Settings, Vec<SettingsNote>) {
         notes.push(SettingsNote::UnknownKeys { keys: unknown });
     }
     (settings, notes)
+}
+
+/// The table `[packs]` (`D173`): the folder a team shares. Out of
+/// [`settings_of`] for the length that function already has.
+///
+/// 🔴 Only a full path is taken. A relative one would name a different folder
+/// for every place the palette or `nkb` is started from - the rule
+/// [`locate`] applies to the variables that place this file.
+fn packs_of(
+    document: &DocumentMut,
+    settings: &mut Settings,
+    notes: &mut Vec<SettingsNote>,
+    unknown: &mut Vec<String>,
+) {
+    match document.get("packs").map(Item::as_table_like) {
+        None => {}
+        Some(None) => notes.push(SettingsNote::NotATable {
+            key: String::from("packs"),
+        }),
+        Some(Some(packs)) => {
+            for (key, item) in packs.iter() {
+                match key {
+                    "team-folder" => match item.as_str() {
+                        Some(path) if Path::new(path).is_absolute() => {
+                            settings.team_folder = Some(path.to_owned());
+                        }
+                        _ => notes.push(SettingsNote::NotAFolderPath {
+                            key: String::from("packs.team-folder"),
+                        }),
+                    },
+                    other => unknown.push(format!("packs.{other}")),
+                }
+            }
+        }
+    }
 }
 
 /// The places in `[palette.position]` (`D103`): each one that reads is kept,
@@ -1252,6 +1305,86 @@ mod tests {
             ]
         );
         assert_eq!(scratch.text(), written, "reading changed the file");
+    }
+
+    /// A full path on the system the test runs on, written as a TOML literal
+    /// string so a Windows backslash needs no escape.
+    fn full_path() -> String {
+        if cfg!(windows) {
+            String::from("C:\\work\\qa packs")
+        } else {
+            String::from("/work/qa packs")
+        }
+    }
+
+    #[test]
+    fn the_team_folder_is_read_only_as_a_full_path() {
+        // `D173`. The value is somebody's text: only a full path is taken, and
+        // every other shape is named back and left in the file.
+        let scratch = Scratch::new("team-folder");
+        let written = format!("schema = 1\n[packs]\nteam-folder = '{}'\n", full_path());
+        scratch.write(&written);
+        let (settings, notes) = read(&scratch.store());
+        assert_eq!(settings.team_folder, Some(full_path()));
+        assert!(notes.is_empty(), "{notes:?}");
+
+        for value in [
+            "\"qa-packs\"",
+            "\"./qa-packs\"",
+            "\"\"",
+            "5",
+            "true",
+            "[\"/a\", \"/b\"]",
+            "{ path = \"/a\" }",
+        ] {
+            let written = format!("schema = 1\n[packs]\nteam-folder = {value}\n");
+            scratch.write(&written);
+            let (settings, notes) = read(&scratch.store());
+            assert_eq!(settings.team_folder, None, "{value}");
+            assert_eq!(
+                notes,
+                vec![SettingsNote::NotAFolderPath {
+                    key: String::from("packs.team-folder")
+                }],
+                "{value}"
+            );
+            assert_eq!(scratch.text(), written, "reading changed the file");
+        }
+    }
+
+    #[test]
+    fn the_packs_table_names_what_it_does_not_know_and_a_value_where_a_table_goes() {
+        let scratch = Scratch::new("packs-table");
+        scratch.write("schema = 1\n[packs]\nteam-foldr = '/x'\n");
+        let (settings, notes) = read(&scratch.store());
+        assert_eq!(settings.team_folder, None);
+        assert_eq!(
+            notes,
+            vec![SettingsNote::UnknownKeys {
+                keys: vec![String::from("packs.team-foldr")]
+            }]
+        );
+        scratch.write("schema = 1\npacks = '/x'\n");
+        let (_, notes) = read(&scratch.store());
+        assert_eq!(
+            notes,
+            vec![SettingsNote::NotATable {
+                key: String::from("packs")
+            }]
+        );
+    }
+
+    #[test]
+    fn the_own_pack_folder_is_beside_the_settings_file_and_absent_with_it() {
+        let file = SettingsFile::at(PathBuf::from("base").join(FILE_NAME));
+        assert_eq!(
+            file.own_packs_folder(),
+            Some(PathBuf::from("base").join("packs"))
+        );
+        let nowhere = SettingsFile {
+            place: Place::Nowhere { missing: "HOME" },
+        };
+        assert_eq!(nowhere.own_packs_folder(), None);
     }
 
     #[test]

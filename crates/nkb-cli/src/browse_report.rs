@@ -21,10 +21,12 @@
 //! behaviour the condition applies to.
 
 use crate::english::plural;
-use nkb_app::{CatalogueSource, Listing, PackEntry, SourceError, SourceSkipped};
+use nkb_adapters::{FOLDER_WAIT, PackFolders};
+use nkb_app::{CatalogueSource, Listing, PackEntry, PackOrigin, SourceError, SourceSkipped};
 use nkb_core::metrics::TextMetrics;
 use nkb_core::next_date::NextDate;
 use nkb_core::pack::{Pack, PackValue};
+use nkb_core::text::escaped_prose;
 use nkb_core::value::{Definition, ValueBody};
 
 /// How a value would be written in a pack file: the recipe, or the escaped text.
@@ -95,15 +97,27 @@ fn metrics_of(definition: &Definition) -> Option<TextMetrics> {
 /// A listing assembled from one source of three is indistinguishable from a
 /// complete one, and the person reading it is about to draw a false conclusion
 /// about their own installation. Untouchable rule 1.
+///
+/// A folder is named with its path - this is the tester's own terminal - and
+/// the path is shown escaped, as a file name in a team folder is: both come
+/// from somebody else (`D173`).
 #[must_use]
-pub fn coverage_lines(listing: &Listing) -> Vec<String> {
+pub fn coverage_lines(listing: &Listing, folders: &PackFolders) -> Vec<String> {
     let mut lines = Vec::new();
+    let named = |source: CatalogueSource| match folders.path_of(source) {
+        Some(path) => format!(
+            "{} ({})",
+            source.as_str(),
+            escaped_prose(&path.to_string_lossy())
+        ),
+        None => source.as_str().to_owned(),
+    };
 
-    let consulted: Vec<&str> = listing
+    let consulted: Vec<String> = listing
         .coverage
         .consulted
         .iter()
-        .map(|source| source.as_str())
+        .map(|source| named(*source))
         .collect();
     lines.push(if consulted.is_empty() {
         "Read no pack source at all.".to_owned()
@@ -114,28 +128,100 @@ pub fn coverage_lines(listing: &Listing) -> Vec<String> {
     for (source, reason) in &listing.coverage.skipped {
         lines.push(format!(
             "Not read: {} - {}.",
-            source.as_str(),
+            named(*source),
             explain_skip(*source, *reason)
+        ));
+    }
+    for (source, name) in &listing.coverage.misnamed {
+        lines.push(format!(
+            "Not a pack file, so not read: \"{}\" in the {} folder - a pack file is named after its pack, such as whitespace.toml.",
+            escaped_prose(name),
+            source.as_str()
         ));
     }
     lines
 }
 
 /// Why a source went unread, in words rather than in a marker.
-fn explain_skip(source: CatalogueSource, reason: SourceSkipped) -> &'static str {
-    match reason {
-        // Named for what it is. "Not configured" would be a lie here: there is
-        // nowhere to configure it yet, and somebody would go looking for the
-        // setting.
-        SourceSkipped::NotImplementedYet => match source {
-            CatalogueSource::BuiltIn => "this build carries none",
-            CatalogueSource::Team | CatalogueSource::Own => {
-                "the settings file has no key for this folder yet, so it cannot be named"
-            }
-        },
-        SourceSkipped::NotConfigured => "no folder is configured for it",
-        SourceSkipped::Unreadable => "the folder is configured and could not be read",
+fn explain_skip(source: CatalogueSource, reason: SourceSkipped) -> String {
+    let words = match (reason, source) {
+        (SourceSkipped::NotSet, _) => {
+            "no folder is named - give --team-folder, or set team-folder under [packs] in the settings file"
+        }
+        (SourceSkipped::SettingUnusable, _) => {
+            "the settings file names one that could not be used - the palette says why when it starts"
+        }
+        (SourceSkipped::NoPlace, _) => {
+            "this system gives the settings file no place, so there is none for this folder either"
+        }
+        (SourceSkipped::Missing, CatalogueSource::Own) => {
+            "it does not exist yet - make it and put pack files in it to use them"
+        }
+        (SourceSkipped::Missing, _) => "it does not exist",
+        (SourceSkipped::NotAFolder, _) => "it is a file, not a folder",
+        (SourceSkipped::Unreadable, _) => "it could not be read",
+        (SourceSkipped::Unreachable, _) => {
+            return format!("it did not answer within {} seconds", FOLDER_WAIT.as_secs());
+        }
+        (SourceSkipped::TooManyFiles, _) => {
+            return format!(
+                "it holds more than {} pack files, so it is likely not a pack folder",
+                nkb_adapters::pack_folder::FOLDER_FILES_LIMIT
+            );
+        }
+        (SourceSkipped::SameAsOwn, _) => "it is the own folder, read once as that",
+    };
+    words.to_owned()
+}
+
+/// Where a pack comes from, after its line in the listing - nothing for a
+/// built-in pack that overrides nothing, which is every pack until a folder
+/// holds one.
+fn origin_note(origin: &PackOrigin) -> String {
+    let from = match origin.source {
+        CatalogueSource::BuiltIn => return String::new(),
+        CatalogueSource::Team => "team folder",
+        CatalogueSource::Own => "own folder",
+    };
+    match origin.overrides.first() {
+        None => format!("  ({from})"),
+        Some(CatalogueSource::Team) => format!("  ({from}, used instead of the team pack)"),
+        Some(_) => format!("  ({from}, used instead of the built-in pack)"),
     }
+}
+
+/// How to see what is wrong with a refused pack: `nkb lint` on its file, named
+/// for a pack from a folder - `nkb lint` reads a path, not a name (R04).
+#[must_use]
+pub fn lint_hint(id: &str, origin: &PackOrigin, folders: &PackFolders) -> String {
+    match folders.path_of(origin.source) {
+        Some(folder) => format!(
+            "run nkb lint \"{}\"",
+            escaped_prose(&folder.join(format!("{id}.toml")).to_string_lossy())
+        ),
+        None => "run `nkb lint` on it".to_owned(),
+    }
+}
+
+/// The first line of `nkb show` for a pack that does not come with the tool:
+/// where it is, and what it is used instead of. Nothing for a built-in pack.
+#[must_use]
+pub fn origin_line(origin: &PackOrigin, folders: &PackFolders) -> Vec<String> {
+    let from = match origin.source {
+        CatalogueSource::BuiltIn => return Vec::new(),
+        CatalogueSource::Team => "the team folder",
+        CatalogueSource::Own => "your own folder",
+    };
+    let path = folders
+        .path_of(origin.source)
+        .map(|path| format!(" ({})", escaped_prose(&path.to_string_lossy())))
+        .unwrap_or_default();
+    let instead = match origin.overrides.first() {
+        None => "",
+        Some(CatalogueSource::Team) => ", used instead of the team pack of the same name",
+        Some(_) => ", used instead of the built-in pack of the same name",
+    };
+    vec![format!("From {from}{path}{instead}.")]
 }
 
 fn source_error(reason: SourceError) -> String {
@@ -151,14 +237,20 @@ fn source_error(reason: SourceError) -> String {
 }
 
 /// The whole of `nkb packs`.
+///
+/// A pack from a folder says so after its line, and what it is used instead
+/// of: a silent override would have a tester type other values than the ones
+/// they think they chose (`pack-format.md` 12). Its name is shown escaped -
+/// it comes from whoever wrote the file.
 #[must_use]
-pub fn listing(listing: &Listing) -> Vec<String> {
+pub fn listing(listing: &Listing, folders: &PackFolders) -> Vec<String> {
     let mut lines = Vec::new();
     let mut values = 0;
 
     for entry in &listing.entries {
+        let from = origin_note(entry.origin());
         match entry {
-            PackEntry::Loaded { pack, warnings } => {
+            PackEntry::Loaded { pack, warnings, .. } => {
                 values += pack.values.len();
                 let mut note = String::new();
                 if *warnings > 0 {
@@ -168,19 +260,23 @@ pub fn listing(listing: &Listing) -> Vec<String> {
                     note.push_str("  (offensive)");
                 }
                 lines.push(format!(
-                    "{:<24}{:>4} values  {}{note}",
+                    "{:<24}{:>4} values  {}{note}{from}",
                     pack.id,
                     pack.values.len(),
-                    pack.name
+                    escaped_prose(&pack.name)
                 ));
             }
             // A refused pack keeps its line. Dropping it would render "present
-            // and broken" as "absent", and those need different repairs.
-            PackEntry::Refused { id, errors } => lines.push(format!(
-                "{id:<24}   -- not loaded: {errors} errors - run `nkb lint` on it"
-            )),
-            PackEntry::Unreadable { id, reason } => lines.push(format!(
-                "{id:<24}   -- not loaded: {}",
+            // and broken" as "absent", and those need different repairs. One
+            // from a folder names its file, which `nkb lint` reads.
+            PackEntry::Refused { id, errors, origin } => {
+                let lint = lint_hint(id, origin, folders);
+                lines.push(format!(
+                    "{id:<24}   -- not loaded: {errors} errors - {lint}{from}"
+                ));
+            }
+            PackEntry::Unreadable { id, reason, .. } => lines.push(format!(
+                "{id:<24}   -- not loaded: {}{from}",
                 source_error(*reason)
             )),
         }
@@ -196,7 +292,7 @@ pub fn listing(listing: &Listing) -> Vec<String> {
         listing.loaded(),
         listing.entries.len()
     ));
-    lines.extend(coverage_lines(listing));
+    lines.extend(coverage_lines(listing, folders));
     lines
 }
 
@@ -214,7 +310,7 @@ fn value_lines(pack: &Pack, value: &PackValue) -> Vec<String> {
         }
     }
     lines.push(format!("  {}{marks}", value.id));
-    lines.push(format!("    {}", value.name));
+    lines.push(format!("    {}", escaped_prose(&value.name)));
     lines.push(format!("    value    {}", written_form(&value.definition)));
 
     if let Some(metrics) = metrics_of(&value.definition) {
@@ -225,26 +321,31 @@ fn value_lines(pack: &Pack, value: &PackValue) -> Vec<String> {
         ));
     }
     if let Some(breaks) = &value.breaks {
-        lines.push(format!("    breaks   {breaks}"));
+        lines.push(format!("    breaks   {}", escaped_prose(breaks)));
     }
     if let Some(expect) = &value.expect {
-        lines.push(format!("    expect   {expect}"));
+        lines.push(format!("    expect   {}", escaped_prose(expect)));
     }
     lines.push(String::new());
     lines
 }
 
 /// The whole of `nkb show <pack>`.
+///
+/// Every sentence of the pack is shown escaped (`escaped_prose`): since packs
+/// come from folders (`D173`), a name may come from a stranger, and `nkb lint`
+/// lets a line break or a terminal's escape sequence through in prose - written
+/// out to a terminal, they would forge lines or recolour it.
 #[must_use]
 pub fn pack(pack: &Pack, warnings: usize) -> Vec<String> {
     let mut lines = vec![
-        format!("{} - {}", pack.id, pack.name),
-        pack.description.clone(),
+        format!("{} - {}", pack.id, escaped_prose(&pack.name)),
+        escaped_prose(&pack.description),
         format!(
             "version {}, updated {}, {}, fields: {}",
-            pack.version,
+            escaped_prose(&pack.version),
             pack.updated,
-            pack.license,
+            escaped_prose(&pack.license),
             if pack.fields.is_empty() {
                 "-".to_owned()
             } else {
@@ -268,17 +369,17 @@ pub fn pack(pack: &Pack, warnings: usize) -> Vec<String> {
 
     for pair in &pack.pairs {
         lines.push(format!("  {} [pair: {}]", pair.id, pair.relation));
-        lines.push(format!("    {}", pair.name));
+        lines.push(format!("    {}", escaped_prose(&pair.name)));
         lines.push(format!("    a        {}", pair.a));
         lines.push(format!("    b        {}", pair.b));
         if let Some(breaks) = &pair.breaks {
-            lines.push(format!("    breaks   {breaks}"));
+            lines.push(format!("    breaks   {}", escaped_prose(breaks)));
         }
         // The same two sentences a value is shown with: a pair exists for the
         // sentence one value alone cannot carry (`D33`), and what a correct
         // application does is half of it.
         if let Some(expect) = &pair.expect {
-            lines.push(format!("    expect   {expect}"));
+            lines.push(format!("    expect   {}", escaped_prose(expect)));
         }
         lines.push(String::new());
     }

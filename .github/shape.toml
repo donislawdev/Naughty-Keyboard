@@ -65,7 +65,8 @@ band = 0.7
 # nkb lint and nkb fmt say about the file they were named went to pack_file.rs
 # with the refusal of a name that does not end in .toml. 932 since the same
 # day, when what nkb send says of a value cut short went to refusals.rs with
-# the sentence for keys still on their way.
+# the sentence for keys still on their way. 802 since 2026-11-09, when the help
+# of nkb and its commands went to help.rs to make room for --team-folder.
 # near = 4 since 2026-10-19: the ceiling came down by 104, and the band with it,
 # so three files that did not grow joined it (advance_sequence.rs, toml_pack.rs
 # and picker.rs). The count is the owner's to accept, as it was for toml_pack.rs.
@@ -74,18 +75,22 @@ band = 0.7
 # 2026-10-27, the owner's choice: the ceiling came down to 937 and
 # nkb-gui/src/live.rs, which did not grow, joined at 663. 5 since 2026-10-27,
 # when what a delivery outcome means went from advance_sequence.rs to
-# advance_sequence/classify.rs.
+# advance_sequence/classify.rs. 10 since 2026-11-09, the owner's choice: the
+# ceiling came down by 130 to 802 and the band with it, so five files that did
+# not grow joined it (settings_file.rs, live/view.rs, linux/send.rs,
+# nkb-sys/src/lib.rs and advance_sequence.rs).
 [files.rust-product]
-ceiling = 932
-near = 5
+ceiling = 802
+near = 10
 
 # A whole Rust file, its tests included. nkb-gui/src/live.rs, then
 # nkb-adapters/src/i18n.rs at 2101. 2199 since 2026-10-27, when what a delivery
 # outcome means left nkb-app/src/advance_sequence.rs for a module of its own to
 # make room for the sentence of a display another send is typing on, and
-# live.rs is the largest again.
+# live.rs is the largest again. 2177 since 2026-11-09, when opening a pack went
+# from live.rs to live/folders.rs with the pack folders.
 [files.rust-whole]
-ceiling = 2199
+ceiling = 2177
 # 5 since 2026-10-10, the owner's choice twice that day: the ceiling came down
 # from 2907 to 2481, 2408, 2407 and 2363 as live.rs moved code into modules, the
 # band came down with it, and it reached advance_sequence.rs, settings_file.rs

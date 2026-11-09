@@ -17,6 +17,10 @@ text = "Wypisuje wersję i kończy kodem 0"
 source = "163c5e31f303"
 text = "wypisuje paczki, które ta wersja programu może zaoferować"
 
+[packs.options.--team-folder]
+source = "77b00c5885d7"
+text = "Czyta paczki zespołu z tego folderu zamiast z folderu wskazanego w pliku ustawień. Ścieżka względna jest liczona od bieżącego folderu"
+
 [packs.options.--help]
 source = "9014c4c690f2"
 text = "Pokazuje tę pomoc i kończy kodem 0"
@@ -24,6 +28,10 @@ text = "Pokazuje tę pomoc i kończy kodem 0"
 [show.summary]
 source = "8fa998df61fc"
 text = "wypisuje jedną paczkę w całości"
+
+[show.options.--team-folder]
+source = "77b00c5885d7"
+text = "Czyta paczki zespołu z tego folderu zamiast z folderu wskazanego w pliku ustawień. Ścieżka względna jest liczona od bieżącego folderu"
 
 [show.options.--help]
 source = "9014c4c690f2"
@@ -44,6 +52,10 @@ text = "Wypisuje wartości dosłownie"
 [emit.options.--base64]
 source = "ca742413c92f"
 text = "Koduje wartości dla kanałów, które psują tekst"
+
+[emit.options.--team-folder]
+source = "77b00c5885d7"
+text = "Czyta paczki zespołu z tego folderu zamiast z folderu wskazanego w pliku ustawień. Ścieżka względna jest liczona od bieżącego folderu"
 
 [emit.options.--help]
 source = "9014c4c690f2"
@@ -76,6 +88,10 @@ text = "ile sekund najpierw czekać, żeby zdążyć kliknąć w cel (domyślnie
 [send.options.--clear]
 source = "cdf4aa7e6729"
 text = "najpierw naciska Home, Shift+End, Delete i czyści bieżący wiersz pola. Nigdy nie zaznacza poza wierszem, więc pole wielowierszowe zachowuje pozostałe wiersze. Bez tego przełącznika jedyne wysyłane klawisze to znaki samej wartości."
+
+[send.options.--team-folder]
+source = "77b00c5885d7"
+text = "Czyta paczki zespołu z tego folderu zamiast z folderu wskazanego w pliku ustawień. Ścieżka względna jest liczona od bieżącego folderu"
 
 [send.options.--help]
 source = "9014c4c690f2"

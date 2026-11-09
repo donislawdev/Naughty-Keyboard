@@ -31,6 +31,17 @@ A code editor can surprise you. Monaco, the editor inside VS Code and many web p
 
 Press {{< kbd "Alt+Shift+Space" >}}. The window that opens shows every pack as a list you can open, and searches the values of all of them at once as you type. Choosing a value makes its pack the one in use and that value the next one, so the next press types it. The values you chose there most recently, from any pack, are at the top. A value that is one half of a pair says which beside its name, and typing the name of a pair finds both of its values.
 
+## Can it offer packs of my own or of my team?
+
+Yes. A pack file in your own folder, `packs` beside the settings file, is offered beside the built-in packs, and so is a pack in a team folder, a folder your team keeps, for example in the repository of the application you test. The team folder is a line in `settings.toml`:
+
+```toml
+[packs]
+team-folder = 'C:\work\shop\qa-packs'
+```
+
+A pack in your own folder is used instead of a team pack of the same name, and a team pack instead of a built-in one. The window says where each pack comes from and what it is used instead of, and so does the palette when it opens such a pack. A pack that has errors is not loaded, and the pack it would replace is not loaded in its place either. The folders are read again each time the window opens, so a pack file you fixed shows without a restart.
+
 ## Can I make it smaller?
 
 {{< kbd "Alt+Shift+H" >}} collapses the palette to its header and expands it again. Once you know the shortcuts, click **Shortcuts** at the bottom to fold their list under its heading, and click it again to open it. The shortcuts keep working while their list is folded. The palette never hides and never moves on its own. It is exactly as tall as what it shows.

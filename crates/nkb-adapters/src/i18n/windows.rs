@@ -82,22 +82,6 @@ pub enum PacksLabel {
     NoPacks,
     /// The catalogue itself could not be read.
     ListUnavailable,
-    /// Which sources the list did not read, and why. 🔴 Said on every opening
-    /// while a source is unread: a list from one source of three looks exactly
-    /// like a complete one (untouchable rule 1, the same rule `nkb packs` keeps).
-    NotRead,
-    /// Said instead of `NotRead` when the version simply has no team and own
-    /// folders and the built-in packs were read (`UX-GUI-009`).
-    BuiltInOnly,
-    /// The words for the sources, inside `NotRead`.
-    SourceBuiltIn,
-    SourceTeam,
-    SourceOwn,
-    /// The reasons, inside `NotRead`.
-    ReasonNotCarried,
-    ReasonCannotBeSet,
-    ReasonNotSet,
-    ReasonUnreadable,
     /// The footer: each key, and what it does here.
     KeyEnter,
     UseSelected,
@@ -148,17 +132,6 @@ pub(super) fn pattern_packs_label(label: PacksLabel) -> &'static str {
         PacksLabel::ListUnavailable => {
             "The pack list could not be read, so there is nothing to choose from. Close this window and start the palette with a pack name."
         }
-        PacksLabel::NotRead => "Not read: {sources} - {reason}.",
-        PacksLabel::BuiltInOnly => {
-            "This version lists the built-in packs only - team and own pack folders are not in it yet."
-        }
-        PacksLabel::SourceBuiltIn => "built-in packs",
-        PacksLabel::SourceTeam => "team folder",
-        PacksLabel::SourceOwn => "own folder",
-        PacksLabel::ReasonNotCarried => "not carried by this build",
-        PacksLabel::ReasonCannotBeSet => "cannot be set in this version",
-        PacksLabel::ReasonNotSet => "no folder is set",
-        PacksLabel::ReasonUnreadable => "the folder could not be read",
         PacksLabel::KeyEnter => "Enter",
         PacksLabel::UseSelected => "Use the selected value or pack",
         PacksLabel::KeyEscape => "Esc",
@@ -361,63 +334,6 @@ pub fn no_match(query: &str) -> String {
         pattern_packs_label(PacksLabel::NoMatch),
         &[("query", query)],
     )
-}
-
-/// One line per reason a source went unread, naming the sources it covers.
-///
-/// Empty when every source was read. Grouped by reason, so the build today says
-/// one line for the team and own folders rather than two lines that differ in
-/// one word.
-///
-/// `UX-GUI-009`: when the only thing missing is that this version HAS no team
-/// and own folders, while the built-in packs were read, the line says so in
-/// the tester's words (`PacksLabel::BuiltInOnly`). "Not read: team folder, own
-/// folder" stood under the list on every opening and read like a failure - and
-/// a note that cries wolf teaches the tester to skip the one that will one day
-/// name a folder that really could not be read. Every other case keeps "Not
-/// read" (untouchable rule 1 asks for the truth, not for alarm).
-#[must_use]
-pub fn not_read(coverage: &CatalogueCoverage) -> Vec<String> {
-    let mut groups: Vec<(PacksLabel, Vec<&'static str>)> = Vec::new();
-    for (source, skipped) in &coverage.skipped {
-        let reason = match (skipped, source) {
-            (SourceSkipped::NotImplementedYet, CatalogueSource::BuiltIn) => {
-                PacksLabel::ReasonNotCarried
-            }
-            (SourceSkipped::NotImplementedYet, CatalogueSource::Team | CatalogueSource::Own) => {
-                PacksLabel::ReasonCannotBeSet
-            }
-            (SourceSkipped::NotConfigured, _) => PacksLabel::ReasonNotSet,
-            (SourceSkipped::Unreadable, _) => PacksLabel::ReasonUnreadable,
-        };
-        let name = pattern_packs_label(match source {
-            CatalogueSource::BuiltIn => PacksLabel::SourceBuiltIn,
-            CatalogueSource::Team => PacksLabel::SourceTeam,
-            CatalogueSource::Own => PacksLabel::SourceOwn,
-        });
-        match groups.iter_mut().find(|(known, _)| *known == reason) {
-            Some((_, names)) => names.push(name),
-            None => groups.push((reason, vec![name])),
-        }
-    }
-    // Both folders, and only for the reason that they do not exist yet - the
-    // group holds nothing else - with the built-in packs read.
-    let built_in_read = coverage.consulted.contains(&CatalogueSource::BuiltIn);
-    groups
-        .into_iter()
-        .map(|(reason, names)| {
-            if reason == PacksLabel::ReasonCannotBeSet && names.len() == 2 && built_in_read {
-                return pattern_packs_label(PacksLabel::BuiltInOnly).to_owned();
-            }
-            fill(
-                pattern_packs_label(PacksLabel::NotRead),
-                &[
-                    ("sources", &names.join(", ")),
-                    ("reason", pattern_packs_label(reason)),
-                ],
-            )
-        })
-        .collect()
 }
 
 // ---------------------------------------------------------------------------

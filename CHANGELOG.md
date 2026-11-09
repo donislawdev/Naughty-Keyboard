@@ -12,6 +12,14 @@ Changes wait under Unreleased until then.
 
 ### Added
 
+- Packs of your own and of your team. A pack file in your own folder, `packs` beside the settings
+  file, or in a team folder named by `team-folder` under `[packs]` in the settings file, is offered
+  beside the built-in packs: in the palette, the value window and `nkb packs`, `show`, `emit` and
+  `send`. A pack of the same name is used instead of the built-in one, and the palette, the value
+  window, `nkb packs`, `nkb show` and the report block say where it came from. A broken pack in a
+  folder is refused, never swapped for the built-in one.
+- `--team-folder <folder>` on `nkb packs`, `show`, `emit` and `send` names the team folder for one
+  run, so a pipeline with no settings file can use a team's packs.
 - A `passwords` pack of seventeen passwords that registration and login read differently. Four pairs
   are tests in three steps: register with the first half, log in with the second, read the result.
   They catch a hash that reads only 72 bytes, also behind a 37-character Polish password, a trailing
@@ -66,6 +74,12 @@ Changes wait under Unreleased until then.
 
 ### Fixed
 
+- `nkb` and `nkb-gui` no longer stop with a crash when an argument is not valid text, such as a file
+  name on Linux that is not UTF-8. `nkb` says so and exits with 2.
+- `nkb packs` and `nkb show` print the name, the description and the sentences of a pack escaped, and
+  the windows show them escaped and cut to a readable length. A line break, a terminal escape
+  sequence or a direction mark in a pack can no longer forge a line, recolour the terminal or reorder
+  a row, which matters now that packs come from folders.
 - A value no longer goes to a window that comes to the front after the shortcut or after the
   countdown of `nkb send`. The window is read once, when the send begins, and the clearing keys and
   the value go to it or nowhere. Before, a send waiting for a held modifier key took whatever window
