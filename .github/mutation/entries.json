@@ -13532,9 +13532,9 @@
     {
       "id": "M1725",
       "why": "the padding stands behind the heavy characters - a field cutting at the limit cuts a letter a and never a character in half",
-      "file": "crates/nkb-core/src/boundary.rs",
-      "find": "                text.push_str(&LETTER.repeat(padding as usize));\n                text.push_str(&character.repeat(count as usize));",
-      "replace": "                text.push_str(&character.repeat(count as usize));\n                text.push_str(&LETTER.repeat(padding as usize));",
+      "file": "crates/nkb-core/src/value.rs",
+      "find": "                push(padding, *padding_count);\n                push(unit, *count);",
+      "replace": "                push(unit, *count);\n                push(padding, *padding_count);",
       "test": "boundary::tests::a_byte_limit_falls_inside_the_last_character_of_the_value_over_it",
       "runner": "rust:nkb-core:lib"
     },
@@ -13586,10 +13586,10 @@
     {
       "id": "M1731",
       "why": "the numbers of a counterstring are one off - a field that cut it shows the wrong place",
-      "file": "crates/nkb-core/src/boundary.rs",
+      "file": "crates/nkb-core/src/counterstring.rs",
       "find": "        let mut number = left;",
       "replace": "        let mut number = left - 1;",
-      "test": "boundary::tests::a_counterstring_reads_as_the_known_examples",
+      "test": "counterstring::tests::a_counterstring_reads_as_the_known_examples",
       "runner": "rust:nkb-core:lib"
     },
     {

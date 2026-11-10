@@ -87,6 +87,10 @@ pub enum PaletteLabel {
     /// the preview - exact at every length, where a hundred characters of `a`
     /// would say nothing about whether there were 254 or 256 of them.
     Recipe,
+    /// A generated value of two parts, each written as a recipe is: the
+    /// padding in front, and what follows it. The values made for a limit
+    /// counted in bytes or UTF-16 units are padded (`D178`).
+    PaddedRecipe,
     /// What the value band says before anything has gone out. The band is there
     /// from the start and never disappears (`D83`), so its empty state is a
     /// sentence that tells the tester the one thing to do next.
@@ -300,6 +304,7 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
             "not guaranteed by the bundled font: {list} and {rest} more"
         }
         PaletteLabel::Recipe => "{count} × \"{unit}\"",
+        PaletteLabel::PaddedRecipe => "{padding} + {rest}",
         PaletteLabel::NoValueYet => {
             "Nothing sent yet. Put the cursor in any field and press {shortcut}."
         }
@@ -833,6 +838,7 @@ mod tests {
             PaletteLabel::NotGuaranteed,
             PaletteLabel::NotGuaranteedMore,
             PaletteLabel::Recipe,
+            PaletteLabel::PaddedRecipe,
             PaletteLabel::NoValueYet,
             PaletteLabel::NoValueYetUnnamed,
             PaletteLabel::CounterKeptUnnamed,
@@ -903,6 +909,7 @@ mod tests {
                 | PaletteLabel::NotGuaranteed
                 | PaletteLabel::NotGuaranteedMore
                 | PaletteLabel::Recipe
+                | PaletteLabel::PaddedRecipe
                 | PaletteLabel::NoValueYet
                 | PaletteLabel::NoValueYetUnnamed
                 | PaletteLabel::CounterKeptUnnamed

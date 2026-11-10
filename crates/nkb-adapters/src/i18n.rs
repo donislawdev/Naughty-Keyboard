@@ -621,6 +621,16 @@ pub fn recipe(count: u32, unit: &str) -> String {
     )
 }
 
+/// A generated value of two parts as the preview shows it:
+/// `1 × "a" + 25 × "ł"`. Each part is a [`recipe`], already written.
+#[must_use]
+pub fn padded_recipe(padding: &str, rest: &str) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::PaddedRecipe),
+        &[("padding", padding), ("rest", rest)],
+    )
+}
+
 // ---------------------------------------------------------------------------
 // What the environment would not let the tool do
 // ---------------------------------------------------------------------------

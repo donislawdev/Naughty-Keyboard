@@ -143,6 +143,18 @@ pub enum Typed {
     Written(EscapedText),
     /// A generated value: `unit` repeated `count` times, the unit escaped.
     Recipe { unit: EscapedText, count: u32 },
+    /// A generated value of two parts: `padding` repeated `padding_count`
+    /// times and then `unit` repeated `count` times, both escaped.
+    Padded {
+        padding: EscapedText,
+        padding_count: u32,
+        unit: EscapedText,
+        count: u32,
+    },
+    /// The counterstring of this many characters - a recipe a reader can make
+    /// again, where the text itself could be a hundred thousand characters of
+    /// a ticket.
+    Counterstring { length: u32 },
 }
 
 /// A value written as code points, in the same two shapes as [`Typed`].
@@ -154,6 +166,13 @@ pub enum SpelledOut {
     Written(Vec<char>),
     /// The unit's code points. The value is `count` of them in a row.
     Recipe {
+        unit: Vec<char>,
+        count: u32,
+    },
+    /// The code points of both parts of a padded value, in their order.
+    Padded {
+        padding: Vec<char>,
+        padding_count: u32,
         unit: Vec<char>,
         count: u32,
     },
@@ -261,6 +280,18 @@ pub fn typed_of(body: &ValueBody) -> Typed {
             unit: unit.escape(),
             count: *count,
         },
+        ValueBody::Padded {
+            padding,
+            padding_count,
+            unit,
+            count,
+        } => Typed::Padded {
+            padding: padding.escape(),
+            padding_count: *padding_count,
+            unit: unit.escape(),
+            count: *count,
+        },
+        ValueBody::Counterstring { length } => Typed::Counterstring { length: *length },
     }
 }
 
@@ -276,17 +307,34 @@ fn spelled_out(body: &ValueBody, typed: &Typed) -> Option<SpelledOut> {
     let at_risk = match typed {
         Typed::Written(escaped) => normalization::may_change(escaped.as_str()),
         Typed::Recipe { unit, .. } => normalization::may_change(unit.as_str()),
+        Typed::Padded { padding, unit, .. } => {
+            normalization::may_change(padding.as_str()) || normalization::may_change(unit.as_str())
+        }
+        // Digits and stars, which no normalization touches.
+        Typed::Counterstring { .. } => false,
     };
     if !at_risk {
         return None;
     }
-    Some(match body {
-        ValueBody::Literal(text) => SpelledOut::Written(text.as_str().chars().collect()),
-        ValueBody::Repeat { unit, count } => SpelledOut::Recipe {
+    match body {
+        ValueBody::Literal(text) => Some(SpelledOut::Written(text.as_str().chars().collect())),
+        ValueBody::Repeat { unit, count } => Some(SpelledOut::Recipe {
             unit: unit.as_str().chars().collect(),
             count: *count,
-        },
-    })
+        }),
+        ValueBody::Padded {
+            padding,
+            padding_count,
+            unit,
+            count,
+        } => Some(SpelledOut::Padded {
+            padding: padding.as_str().chars().collect(),
+            padding_count: *padding_count,
+            unit: unit.as_str().chars().collect(),
+            count: *count,
+        }),
+        ValueBody::Counterstring { .. } => None,
+    }
 }
 
 #[cfg(test)]
@@ -343,6 +391,72 @@ mod tests {
 
     fn literal(text: &str) -> ValueBody {
         ValueBody::Literal(LiteralText::new(text))
+    }
+
+    #[test]
+    fn the_two_recipes_the_tool_makes_are_typed_as_recipes_and_counted_from_the_text() {
+        // `D178`: a padded value and a counterstring, as the palette holds the
+        // values made for a limit.
+        let padded = ValueBody::Padded {
+            padding: LiteralText::new("a"),
+            padding_count: 1,
+            unit: LiteralText::new("\u{0142}"),
+            count: 25,
+        };
+        let block =
+            ReportBlock::describe(&pack(), &value("two-byte-51", padded), SENT, Arrival::Whole)
+                .expect("under the ceiling");
+        assert_eq!(
+            block.typed,
+            Typed::Padded {
+                padding: LiteralText::new("a").escape(),
+                padding_count: 1,
+                unit: LiteralText::new("\u{0142}").escape(),
+                count: 25,
+            }
+        );
+        assert_eq!(
+            (block.graphemes, block.code_points, block.bytes),
+            (26, 26, 51)
+        );
+        // A letter no normal form changes earns no line of code points.
+        assert_eq!(block.spelled_out, None);
+
+        let counted = ValueBody::Counterstring { length: 50 };
+        let block = ReportBlock::describe(
+            &pack(),
+            &value("counterstring-50", counted),
+            SENT,
+            Arrival::Whole,
+        )
+        .expect("under the ceiling");
+        assert_eq!(block.typed, Typed::Counterstring { length: 50 });
+        assert_eq!(
+            (block.graphemes, block.code_points, block.bytes),
+            (50, 50, 50)
+        );
+        assert_eq!(block.spelled_out, None);
+    }
+
+    #[test]
+    fn a_padded_value_whose_unit_a_tracker_could_rewrite_is_spelled_out_in_both_parts() {
+        let padded = ValueBody::Padded {
+            padding: LiteralText::new("a"),
+            padding_count: 2,
+            unit: LiteralText::new("e\u{0301}"),
+            count: 3,
+        };
+        let block = ReportBlock::describe(&pack(), &value("padded", padded), SENT, Arrival::Whole)
+            .expect("under the ceiling");
+        assert_eq!(
+            block.spelled_out,
+            Some(SpelledOut::Padded {
+                padding: vec!['a'],
+                padding_count: 2,
+                unit: vec!['e', '\u{0301}'],
+                count: 3,
+            })
+        );
     }
 
     #[test]

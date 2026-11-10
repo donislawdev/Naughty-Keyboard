@@ -26,11 +26,15 @@
 //!
 //! # A value is a recipe here as well
 //!
-//! Like [`crate::value::ValueBody`], nothing in this module builds text to
-//! measure it. [`BoundaryValue::sizes`] answers from the recipe, and
-//! [`BoundaryValue::materialise`] is the separate, explicit step.
+//! Nothing in this module builds text to measure it. [`BoundaryValue::sizes`]
+//! answers from the recipe, and [`BoundaryValue::materialise`] is the separate,
+//! explicit step. The text itself is built by [`crate::value::ValueBody`], the
+//! body every other value of the tool has ([`BoundaryValue::body`]): what the
+//! command prints and what the palette types come from one builder.
 
 use crate::graphemes;
+use crate::text::LiteralText;
+use crate::value::ValueBody;
 
 /// The largest limit this module answers.
 ///
@@ -366,24 +370,41 @@ impl BoundaryValue {
         }
     }
 
-    /// Builds the text. The one step here that costs as much as the value is
-    /// long, and never a way to measure it.
+    /// The value as the body every other value of the tool has: what the
+    /// palette holds, previews, types and reports.
+    ///
+    /// No padding is a plain repeat, because a body says each text one way.
     #[must_use]
-    pub fn materialise(&self) -> String {
+    pub fn body(&self) -> ValueBody {
         match self.recipe {
-            Recipe::Empty => String::new(),
+            Recipe::Empty => ValueBody::Literal(LiteralText::new("")),
+            Recipe::Repeated {
+                padding: 0,
+                character,
+                count,
+            } => ValueBody::Repeat {
+                unit: LiteralText::new(character),
+                count,
+            },
             Recipe::Repeated {
                 padding,
                 character,
                 count,
-            } => {
-                let mut text = String::with_capacity(self.sizes().bytes);
-                text.push_str(&LETTER.repeat(padding as usize));
-                text.push_str(&character.repeat(count as usize));
-                text
-            }
-            Recipe::Counterstring { length } => counterstring(length as usize),
+            } => ValueBody::Padded {
+                padding: LiteralText::new(LETTER),
+                padding_count: padding,
+                unit: LiteralText::new(character),
+                count,
+            },
+            Recipe::Counterstring { length } => ValueBody::Counterstring { length },
         }
+    }
+
+    /// Builds the text. The one step here that costs as much as the value is
+    /// long, and never a way to measure it.
+    #[must_use]
+    pub fn materialise(&self) -> String {
+        self.body().build()
     }
 }
 
@@ -411,32 +432,6 @@ pub fn values(limit: Limit) -> Vec<BoundaryValue> {
         }
     }
     values
-}
-
-/// The counterstring of `length` characters: every star is preceded by the
-/// number of its own position, counted from one.
-///
-/// Twelve characters read `*3*5*7*9*12*`. A field that kept only part of it
-/// ends in a number and perhaps a few characters more, and that is where it
-/// cut. Built from the end, because the last star is the one whose place is
-/// known. Only the very first position can be too narrow for a number, and it
-/// takes a bare star.
-#[must_use]
-pub fn counterstring(length: usize) -> String {
-    const DIGITS: &[u8; 10] = b"0123456789";
-    let mut backwards = Vec::with_capacity(length);
-    let mut left = length;
-    while left > 0 {
-        backwards.push(b'*');
-        let mut number = left;
-        left -= 1;
-        while number > 0 && left > 0 {
-            backwards.push(DIGITS[number % 10]);
-            number /= 10;
-            left -= 1;
-        }
-    }
-    backwards.into_iter().rev().map(char::from).collect()
 }
 
 #[cfg(test)]
@@ -742,6 +737,18 @@ mod tests {
                         value.id(),
                         unit.id()
                     );
+                    // The body the palette holds says the same text and the
+                    // same size, and passes the rules every value passes.
+                    let body = value.body();
+                    assert_eq!(body.materialise().as_deref(), Ok(text.as_str()));
+                    let promised = body.metrics().expect("a measurable recipe");
+                    assert_eq!(
+                        (promised.code_points, promised.bytes),
+                        (read.code_points, read.bytes),
+                        "{} in {}",
+                        value.id(),
+                        unit.id()
+                    );
                     assert!(seen.insert(text), "{} repeats a text", value.id());
                 }
             }
@@ -759,47 +766,10 @@ mod tests {
                     value.id(),
                     unit.id()
                 );
+                // What lets `materialise` build without asking: the rules of
+                // a value hold for every body this module makes.
+                assert_eq!(value.body().check_size(), Ok(()), "{}", value.id());
             }
         }
-    }
-
-    #[test]
-    fn a_counterstring_reads_as_the_known_examples() {
-        assert_eq!(counterstring(0), "");
-        assert_eq!(counterstring(1), "*");
-        assert_eq!(counterstring(2), "2*");
-        assert_eq!(counterstring(3), "*3*");
-        assert_eq!(counterstring(11), "2*4*6*8*11*");
-        assert_eq!(counterstring(12), "*3*5*7*9*12*");
-    }
-
-    #[test]
-    fn every_star_of_a_counterstring_stands_where_the_number_before_it_says() {
-        for length in (1..=1200).chain([9_999, 10_000, 100_001]) {
-            let text = counterstring(length);
-            assert_eq!(text.len(), length, "ASCII, so bytes are characters");
-            assert!(text.ends_with('*'));
-            let mut number = String::new();
-            for (index, character) in text.chars().enumerate() {
-                if character.is_ascii_digit() {
-                    number.push(character);
-                    continue;
-                }
-                assert_eq!(character, '*');
-                if !number.is_empty() {
-                    assert_eq!(number, (index + 1).to_string(), "in {length}");
-                    number.clear();
-                } else {
-                    assert_eq!(index, 0, "only the first star may stand bare");
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn a_cut_counterstring_says_where_it_was_cut() {
-        // 51 characters cut to 50: the last whole star says 48, two more follow.
-        let kept = &counterstring(51)[..50];
-        assert!(kept.ends_with("*48*51"), "{kept}");
     }
 }

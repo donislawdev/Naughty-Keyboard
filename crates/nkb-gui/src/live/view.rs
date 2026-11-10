@@ -418,6 +418,13 @@ pub(crate) fn preview_line(preview: &ValuePreview) -> (String, String) {
         // A recipe is the whole value, exactly, so nothing is elided and there
         // is nothing to confess.
         ValuePreview::Recipe(recipe) => (i18n::recipe(recipe.count, &recipe.unit), String::new()),
+        ValuePreview::Padded { padding, rest } => (
+            i18n::padded_recipe(
+                &i18n::recipe(padding.count, &padding.unit),
+                &i18n::recipe(rest.count, &rest.unit),
+            ),
+            String::new(),
+        ),
     }
 }
 

@@ -41,6 +41,24 @@ pub enum ValueBody {
     Literal(LiteralText),
     /// A unit repeated `count` times. Never stored expanded.
     Repeat { unit: LiteralText, count: u32 },
+    /// A padding repeated `padding_count` times and then a unit repeated
+    /// `count` times: one plain letter in front of twenty-five two-byte ones.
+    /// Never stored expanded.
+    ///
+    /// No pack file says this today. The tool makes it when a length has to be
+    /// met exactly in a unit the heavy character does not divide
+    /// ([`crate::boundary`]). Both counts are at least one: with no padding the
+    /// value is a [`ValueBody::Repeat`], and there is one way to say each text.
+    Padded {
+        padding: LiteralText,
+        padding_count: u32,
+        unit: LiteralText,
+        count: u32,
+    },
+    /// The counterstring of `length` characters
+    /// ([`crate::counterstring::counterstring`]). Never stored expanded, and
+    /// made by the tool like [`ValueBody::Padded`].
+    Counterstring { length: u32 },
 }
 
 /// What a pack file says a value inserts.
@@ -148,6 +166,24 @@ impl ValueBody {
         match self {
             Self::Literal(text) => Some(TextMetrics::of(text.as_str())),
             Self::Repeat { unit, count } => TextMetrics::of_repeated(unit.as_str(), *count),
+            Self::Padded {
+                padding,
+                padding_count,
+                unit,
+                count,
+            } => {
+                let front = TextMetrics::of_repeated(padding.as_str(), *padding_count)?;
+                let rest = TextMetrics::of_repeated(unit.as_str(), *count)?;
+                Some(TextMetrics {
+                    code_points: front.code_points.checked_add(rest.code_points)?,
+                    bytes: front.bytes.checked_add(rest.bytes)?,
+                })
+            }
+            // Digits and stars: a code point and a byte each.
+            Self::Counterstring { length } => Some(TextMetrics {
+                code_points: *length as usize,
+                bytes: *length as usize,
+            }),
         }
     }
 
@@ -179,21 +215,56 @@ impl ValueBody {
     /// never has to guess a rule code back from a message.
     pub fn materialise(&self) -> Result<String, ValueProblem> {
         self.check_size()?;
+        Ok(self.build())
+    }
 
-        match self {
-            Self::Literal(text) => Ok(text.as_str().to_owned()),
-            Self::Repeat { unit, count } => {
-                // The size is already known and already bounded, so the buffer
-                // is asked for once at the right size instead of growing.
-                let metrics = self
-                    .metrics()
-                    .ok_or(ValueProblem::RepeatProductUnmeasurable)?;
-                let mut out = String::with_capacity(metrics.bytes);
-                for _ in 0..*count {
-                    out.push_str(unit.as_str());
-                }
-                Ok(out)
+    /// Builds the text with no question about its size.
+    ///
+    /// Inside the crate only, for [`Self::materialise`] after its check and for
+    /// [`crate::boundary`], whose recipes are under the ceiling by the way they
+    /// are made. Everything else asks [`Self::materialise`].
+    pub(crate) fn build(&self) -> String {
+        // The size is known from the recipe, so the buffer is asked for once at
+        // the right size instead of growing.
+        let mut out = String::with_capacity(self.metrics().map_or(0, |metrics| metrics.bytes));
+        let mut push = |unit: &LiteralText, count: u32| {
+            for _ in 0..count {
+                out.push_str(unit.as_str());
             }
+        };
+        match self {
+            Self::Literal(text) => push(text, 1),
+            Self::Repeat { unit, count } => push(unit, *count),
+            Self::Padded {
+                padding,
+                padding_count,
+                unit,
+                count,
+            } => {
+                push(padding, *padding_count);
+                push(unit, *count);
+            }
+            Self::Counterstring { length } => {
+                return crate::counterstring::counterstring(*length as usize);
+            }
+        }
+        out
+    }
+
+    /// The counts of a recipe, each of which the format bounds. A written
+    /// value has none. The length of a counterstring is one of them: it is how
+    /// many characters the recipe makes, as the count of a one-character unit
+    /// is.
+    fn counts(&self) -> [Option<u32>; 2] {
+        match self {
+            Self::Literal(_) => [None, None],
+            Self::Repeat { count, .. } => [Some(*count), None],
+            Self::Padded {
+                padding_count,
+                count,
+                ..
+            } => [Some(*padding_count), Some(*count)],
+            Self::Counterstring { length } => [Some(*length), None],
         }
     }
 
@@ -204,13 +275,13 @@ impl ValueBody {
     /// characters repeated a million times passed validation and described two
     /// billion characters from a file of a few kilobytes.
     pub fn check_size(&self) -> Result<(), ValueProblem> {
-        let Self::Repeat { count, .. } = self else {
+        if matches!(self, Self::Literal(_)) {
             return Ok(());
-        };
-        let count = *count;
-
-        if count == 0 || count > MAX_REPEAT_COUNT {
-            return Err(ValueProblem::RepeatCountOutOfRange { count });
+        }
+        for count in self.counts().into_iter().flatten() {
+            if count == 0 || count > MAX_REPEAT_COUNT {
+                return Err(ValueProblem::RepeatCountOutOfRange { count });
+            }
         }
 
         let Some(metrics) = self.metrics() else {
@@ -356,6 +427,69 @@ mod tests {
         assert_eq!(problem.code(), "E024");
     }
 
+    fn padded(padding_count: u32, unit: &str, count: u32) -> ValueBody {
+        ValueBody::Padded {
+            padding: LiteralText::new("a"),
+            padding_count,
+            unit: LiteralText::new(unit),
+            count,
+        }
+    }
+
+    #[test]
+    fn a_padded_value_is_the_padding_and_then_the_unit_and_as_long_as_it_says() {
+        // 51 bytes of a two-byte letter: one plain letter in front, so a cut at
+        // 50 bytes goes through the last letter.
+        let body = padded(1, "\u{0142}", 25);
+        let promised = body.metrics().expect("measurable");
+        assert_eq!((promised.code_points, promised.bytes), (26, 51));
+        let built = body.materialise().expect("fits");
+        assert_eq!(built, format!("a{}", "\u{0142}".repeat(25)));
+        assert_eq!(built.len(), promised.bytes);
+        assert_eq!(built.chars().count(), promised.code_points);
+    }
+
+    #[test]
+    fn a_padded_value_with_no_padding_or_no_unit_is_refused() {
+        // One way to say each text: no padding is a repeat, and the validator's
+        // rule about a count holds for both counts.
+        for body in [padded(0, "b", 3), padded(2, "b", 0)] {
+            let problem = body.check_size().expect_err("must reject");
+            assert_eq!(problem.code(), "E024");
+            assert_eq!(body.materialise().map_err(ValueProblem::code), Err("E024"));
+        }
+    }
+
+    #[test]
+    fn a_padded_value_is_bounded_by_what_both_parts_make_together() {
+        assert_eq!(padded(1, "ab", 499_999).check_size(), Ok(()));
+        let problem = padded(1, "ab", 500_000)
+            .check_size()
+            .expect_err("one code point over the ceiling");
+        assert_eq!(problem.code(), "E026");
+    }
+
+    #[test]
+    fn a_counterstring_is_as_long_as_it_says_and_is_the_text_of_its_module() {
+        let body = ValueBody::Counterstring { length: 12 };
+        let promised = body.metrics().expect("measurable");
+        assert_eq!((promised.code_points, promised.bytes), (12, 12));
+        assert_eq!(body.materialise().as_deref(), Ok("*3*5*7*9*12*"));
+    }
+
+    #[test]
+    fn a_counterstring_of_nothing_or_past_the_ceiling_is_refused_unbuilt() {
+        // The ceiling of a value, in code points, is the ceiling of a count.
+        for length in [0, MAX_REPEAT_COUNT + 1, u32::MAX] {
+            let body = ValueBody::Counterstring { length };
+            assert_eq!(body.materialise().map_err(ValueProblem::code), Err("E024"));
+        }
+        let largest = ValueBody::Counterstring {
+            length: MAX_REPEAT_COUNT,
+        };
+        assert_eq!(largest.check_size(), Ok(()));
+    }
+
     #[test]
     fn the_largest_value_in_the_shipped_catalogue_really_can_be_built() {
         // The positive control for the test above: a ceiling that refused
@@ -401,6 +535,8 @@ mod tests {
     fn only_a_written_value_is_not_generated() {
         assert!(!Definition::from(ValueBody::Literal(LiteralText::new("x"))).is_generated());
         assert!(Definition::from(repeat("a", 5)).is_generated());
+        assert!(Definition::from(padded(1, "b", 5)).is_generated());
+        assert!(Definition::from(ValueBody::Counterstring { length: 5 }).is_generated());
         assert!(spring_change().is_generated());
     }
 
