@@ -460,10 +460,7 @@ fn show(args: &[String], folders: &PackFolders) -> ExitCode {
         }
         ShowOutcome::Refused { errors, origin } => {
             let mut err = std::io::stderr();
-            let _ = writeln!(
-                err,
-                "nkb show: '{wanted}' has {errors} errors and is not loaded at all."
-            );
+            let _ = writeln!(err, "{}", browse_report::not_loaded("show", wanted, errors));
             let lint = browse_report::lint_hint(wanted, &origin, folders);
             let _ = writeln!(
                 err,
@@ -794,10 +791,7 @@ fn report_send(err: &mut impl Write, wanted: &str, outcome: SendOutcome) -> Exit
             ExitCode::IoFailed
         }
         SendOutcome::Refused { errors } => {
-            let _ = writeln!(
-                err,
-                "nkb send: '{wanted}' has {errors} errors and is not loaded at all."
-            );
+            let _ = writeln!(err, "{}", browse_report::not_loaded("send", wanted, errors));
             let _ = writeln!(err, "Nothing was sent. Run `nkb lint` on it.");
             ExitCode::ValidationFailed
         }
@@ -982,10 +976,7 @@ fn emit(args: &[String], folders: &PackFolders) -> ExitCode {
         }
         EmitOutcome::Refused { errors } => {
             let mut err = std::io::stderr();
-            let _ = writeln!(
-                err,
-                "nkb emit: '{wanted}' has {errors} errors and is not loaded at all."
-            );
+            let _ = writeln!(err, "{}", browse_report::not_loaded("emit", wanted, errors));
             let _ = writeln!(
                 err,
                 "Nothing was printed - a pack is whole or absent. Run `nkb lint` on it."

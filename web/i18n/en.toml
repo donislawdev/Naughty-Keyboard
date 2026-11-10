@@ -82,6 +82,9 @@ other = "Start"
 [side_palette]
 other = "The palette"
 
+[side_own]
+other = "Your own packs"
+
 [side_cli]
 other = "Command line"
 
@@ -436,3 +439,13 @@ other = "macOS {{ .minimum }} or newer, Apple silicon"
 
 [system_linux]
 other = "Linux x64 with glibc 2.35 or newer"
+
+# A pack template and a mistake in a pack, on the pages that teach the format.
+[template_download]
+other = "Download {{ .file }}"
+
+[mistake_in_file]
+other = "In {{ .file }}:"
+
+[mistake_lint_says]
+other = "What nkb lint says:"

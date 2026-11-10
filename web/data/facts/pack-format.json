@@ -1,0 +1,67 @@
+{
+  "min_breaks": 40,
+  "name_limit": 120,
+  "description_limit": 300,
+  "explanation_limit": 1000,
+  "field_kinds": [
+    "any",
+    "text",
+    "multiline",
+    "name",
+    "username",
+    "password",
+    "email",
+    "url",
+    "search",
+    "number",
+    "integer",
+    "money",
+    "date",
+    "time",
+    "datetime",
+    "phone",
+    "postal-code",
+    "country-code",
+    "address",
+    "filename",
+    "path",
+    "id-number"
+  ],
+  "risk_levels": [
+    "normal",
+    "offensive"
+  ],
+  "relations": [
+    "look-alike",
+    "range",
+    "identity"
+  ],
+  "value_types": [
+    "literal",
+    "repeat",
+    "next-date"
+  ],
+  "weeks": [
+    "first",
+    "second",
+    "third",
+    "fourth",
+    "last"
+  ],
+  "weekdays": [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday"
+  ],
+  "max_repeat_count": 1000000,
+  "max_code_points": 1000000,
+  "literal_length_hint": 2000,
+  "max_values": 60,
+  "pack_file_mib": 4,
+  "folder_files": 256,
+  "folder_wait_seconds": 2
+}

@@ -22,7 +22,7 @@ faq:
   - question: Which version do I have?
     answer: "The About link in the palette says, with the author and the licence. `nkb --version` prints it, and on Windows both programs carry it in their file details, under Properties and Details."
   - question: Can I add my own values?
-    answer: "Yes. Write a pack with `nkb new-pack`, check it with `nkb lint` and `nkb fmt`, and put it in your own folder, `packs` beside the settings file: the palette and `nkb` offer it beside the built-in packs. A value that cost you an afternoon once belongs in the catalogue, and the [Suggest a value](https://github.com/donislawdev/Naughty-Keyboard/issues/new?template=suggest_value.yml) form asks for the value, what it breaks and where you saw it."
+    answer: "Yes. A pack is one text file in your own folder, `packs` beside the settings file, and the palette and `nkb` offer it beside the built-in packs. [Write your own pack](/docs/write-a-pack/) goes through it step by step, and [the pack templates](/docs/pack-templates/) are ready to download and change. A value that cost you an afternoon once belongs in the catalogue, and the [Suggest a value](https://github.com/donislawdev/Naughty-Keyboard/issues/new?template=suggest_value.yml) form asks for the value, what it breaks and where you saw it."
   - question: Is this an attack tool?
     answer: "No. It is built for testing software you are responsible for, and the welcome window says so: use it only on systems you are allowed to test. Most built-in packs hold values that real users and real data produce. One pack holds classic checks for escaping, the palette marks it offensive, and none of its values is an exploit for a known vulnerability."
   - question: Why does it type rather than paste?

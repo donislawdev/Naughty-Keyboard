@@ -82,6 +82,9 @@ other = "Start"
 [side_palette]
 other = "Paleta"
 
+[side_own]
+other = "Własne paczki"
+
 [side_cli]
 other = "Wiersz poleceń"
 
@@ -465,3 +468,13 @@ other = "macOS {{ .minimum }} lub nowszy, Apple silicon"
 
 [system_linux]
 other = "Linux x64 z glibc 2.35 lub nowszą"
+
+# A pack template and a mistake in a pack, on the pages that teach the format.
+[template_download]
+other = "Pobierz {{ .file }}"
+
+[mistake_in_file]
+other = "W pliku {{ .file }}:"
+
+[mistake_lint_says]
+other = "Co mówi nkb lint:"

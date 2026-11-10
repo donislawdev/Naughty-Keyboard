@@ -1,0 +1,84 @@
+# Booking dates: a check-in at an hour the clocks skip or repeat, a stay that
+# ends the next morning, and a date far ahead. The two clock-change dates are
+# written as a rule, type = "next-date", and worked out on the day they are
+# typed, so they never fall into the past.
+#
+# A template from https://naughtykeyboard.donislawdev.com/docs/pack-templates/
+# Change anything in it. When you change `id`, rename the file to match,
+# booking-dates.toml now, because a pack is found by its file name.
+
+format = 1
+
+[pack]
+id          = "booking-dates"
+name        = "Booking dates"
+description = "Dates and times for a booking form: hours the clocks skip or repeat, a stay past midnight and a date far ahead."
+version     = "1.0"
+updated     = 2026-11-10
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["dates", "time", "booking"]
+fields      = ["datetime", "date", "time"]
+risk        = "normal"
+
+[[values]]
+id      = "spring-forward"
+name    = "Check-in at an hour the clocks skip"
+type    = "next-date"
+month   = 3
+week    = "last"
+weekday = "sunday"
+time    = "02:30"
+breaks  = "On the night clocks go forward in the European Union this hour does not exist, so a form moves it to 03:30 without saying so, or fails with a raw error."
+expect  = "Refused with an explanation, or moved with the new time shown."
+since   = "1.0"
+
+[[values]]
+id      = "fall-back"
+name    = "Check-in at an hour the clocks repeat"
+type    = "next-date"
+month   = 10
+week    = "last"
+weekday = "sunday"
+time    = "02:30"
+breaks  = "On the night clocks go back in the European Union this hour happens twice, so a booking stored without a zone cannot say which of the two it means, and a stay of one hour can last two."
+expect  = "The time stored with its zone or offset, or the form asks which of the two hours is meant."
+since   = "1.0"
+
+[[values]]
+id     = "start-evening"
+name   = "Start at six in the evening"
+value  = "18:00"
+breaks = "The first half of a pair, and on its own an ordinary start time. Type it into the start field, then the next value into the end field."
+expect = "Accepted."
+fields = ["time"]
+since  = "1.0"
+
+[[values]]
+id     = "end-next-morning"
+name   = "End at nine the next morning"
+value  = "09:00"
+breaks = "The second half: an end earlier than the start. A form that compares the two times alone refuses an overnight stay, or saves one that ends before it begins."
+expect = "Read as the next morning and shown that way, or refused with a message that asks for the date."
+fields = ["time"]
+since  = "1.0"
+
+[[values]]
+id     = "far-future"
+name   = "The last day of the year 9999"
+value  = "9999-12-31"
+breaks = "A date picker, a database column or a library with a narrower range refuses it with a raw error, cuts the year, or saves it and then sorts it before today."
+expect = "Refused with a message that names the latest date allowed, or saved and shown as written."
+fields = ["date"]
+since  = "1.0"
+
+[[pairs]]
+id       = "overnight"
+name     = "A stay that ends the next morning"
+relation = "range"
+a        = "start-evening"
+b        = "end-next-morning"
+breaks   = "A range check that compares times without dates reads the end as earlier than the start, so an overnight booking is refused or saved the wrong way round."
+expect   = "Accepted as a stay into the next morning, with both dates shown."
+since    = "1.0"

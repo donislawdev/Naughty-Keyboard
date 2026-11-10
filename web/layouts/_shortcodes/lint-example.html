@@ -1,0 +1,51 @@
+{{- /*
+  One mistake in a pack and what nkb lint says about it: lint-example
+  "space-written-out". The file is web/assets/pack-mistakes/<name>.toml, and
+  what nkb lint says about it is in data/facts/pack-mistakes.json, written by
+  running the program on that file (crates/nkb-cli/tests/site_facts.rs). The
+  page shows the table the first problem points at, with every line a problem
+  names marked, and then everything the program prints, unchanged.
+*/ -}}
+{{- $file := printf "%s.toml" (.Get 0) }}
+{{- $mistake := index (where (index hugo.Data.facts "pack-mistakes").mistakes "file" $file) 0 }}
+{{- if not $mistake }}
+  {{- errorf "%s: data/facts/pack-mistakes.json has nothing about %s - write the facts again" .Position $file }}
+{{- end }}
+{{- $source := resources.Get (printf "pack-mistakes/%s" $file) }}
+{{- if not $source }}
+  {{- errorf "%s: there is no %s in assets/pack-mistakes" .Position $file }}
+{{- end }}
+{{- $lines := split $source.Content "\n" }}
+{{- $hits := slice }}
+{{- range $mistake.problems }}
+  {{- with .line }}{{ $hits = $hits | append (int .) }}{{ end }}
+{{- end }}
+<div class="mistake">
+{{- with $hits }}
+  {{- $first := sub (index . 0) 1 }}
+  {{- /* The table the line stands in: back to its header, on to the blank line. */ -}}
+  {{- $start := 0 }}
+  {{- range $i := seq 0 $first }}
+    {{- if hasPrefix (index $lines $i) "[" }}{{ $start = $i }}{{ end }}
+  {{- end }}
+  {{- $end := sub (len $lines) 1 }}
+  {{- range $i := seq $first (sub (len $lines) 1) }}
+    {{- if eq (index $lines $i) "" }}{{ $end = sub $i 1 }}{{ break }}{{ end }}
+  {{- end }}
+  {{- range . }}
+    {{- if or (lt (sub . 1) $start) (gt (sub . 1) $end) }}
+      {{- errorf "%s: %s names line %d, outside the table of its first problem" $.Position $file . }}
+    {{- end }}
+  {{- end }}
+  <p class="mistake-label">{{ T "mistake_in_file" (dict "file" $file) }}</p>
+  <pre class="pack-lines">
+  {{- range $i := seq $start $end -}}
+    <span class="line-number">{{ add $i 1 }}</span>
+    {{- if in $hits (add $i 1) }}<mark>{{ index $lines $i }}</mark>{{ else }}{{ index $lines $i }}{{ end }}
+{{ end -}}
+  </pre>
+{{- end }}
+  <p class="mistake-label">{{ T "mistake_lint_says" }}</p>
+  <pre class="lint-output"><span class="prompt">$ </span>nkb lint {{ $file }}
+{{ delimit $mistake.output "\n" }}</pre>
+</div>

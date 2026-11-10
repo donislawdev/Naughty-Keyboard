@@ -12,7 +12,7 @@ use nkb_core::value::ValueBody;
 use nkb_core::written_form;
 use toml_edit::{Item, Table};
 
-use super::raw_slice;
+use super::{raw_slice, span_line};
 
 /// The kinds of value this build understands.
 ///
@@ -105,9 +105,15 @@ fn check_literal(text: &SourceText<'_>, table: &Table) -> Vec<LintProblem> {
         return Vec::new();
     };
 
+    // On the line of `value`, so an editor jumps to the character rather than
+    // to the top of the value.
+    let line = span_line(text, item);
     let mut problems = written_form::check(raw_slice(text, item), expanded);
     problems.extend(written_form::check_length(expanded));
     problems
+        .into_iter()
+        .map(|problem| problem.at(line))
+        .collect()
 }
 
 /// A value described by a recipe: the recipe's parts, its size, and the spelling
@@ -156,7 +162,12 @@ fn check_repeat(text: &SourceText<'_>, table: &Table) -> Vec<LintProblem> {
     }
 
     if let Some(item) = table.get("unit") {
-        problems.extend(written_form::check(raw_slice(text, item), unit));
+        let line = span_line(text, item);
+        problems.extend(
+            written_form::check(raw_slice(text, item), unit)
+                .into_iter()
+                .map(|problem| problem.at(line)),
+        );
     }
     problems
 }

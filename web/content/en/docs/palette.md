@@ -40,7 +40,7 @@ Yes. A pack file in your own folder, `packs` beside the settings file, is offere
 team-folder = 'C:\work\shop\qa-packs'
 ```
 
-A pack in your own folder is used instead of a team pack of the same name, and a team pack instead of a built-in one. The window says where each pack comes from and what it is used instead of, and so does the palette when it opens such a pack. A pack that has errors is not loaded, and the pack it would replace is not loaded in its place either. The folders are read again each time the window opens, so a pack file you fixed shows without a restart.
+A pack in your own folder is used instead of a team pack of the same name, and a team pack instead of a built-in one. The window says where each pack comes from and what it is used instead of, and so does the palette when it opens such a pack. A pack that has errors is not loaded, and the pack it would replace is not loaded in its place either. The folders are read again each time the window opens, so a pack file you fixed shows without a restart. [Write your own pack](/docs/write-a-pack/) shows how to write one.
 
 ## Can I make it smaller?
 

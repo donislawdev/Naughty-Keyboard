@@ -20,4 +20,4 @@ Edit it, then run `nkb lint my-pack.toml` - it reports everything in one pass.
 The pack format is not frozen yet: a later release may still change it.
 ```
 
-Połóż plik we własnym folderze, `packs` obok pliku ustawień, a paleta i `nkb` pokażą go obok paczek wbudowanych. Więcej mówi [strona o palecie](/docs/palette/).
+Połóż plik we własnym folderze, `packs` obok pliku ustawień, a paleta i `nkb` pokażą go obok paczek wbudowanych. [Własna paczka](/docs/write-a-pack/) objaśnia każde pole pliku, a [szablony paczek](/docs/pack-templates/) to pełniejsze przykłady na start.

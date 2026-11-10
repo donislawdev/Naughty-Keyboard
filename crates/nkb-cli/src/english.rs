@@ -26,9 +26,35 @@ pub fn plural(count: usize, noun: &str) -> String {
     }
 }
 
+/// Words joined the way a sentence lists them: `a`, `a and b`, `a, b and c`.
+///
+/// For a closed list the format keeps in code, so a sentence that names the
+/// allowed words names the ones the check uses, and the two cannot drift.
+pub fn listed<S: AsRef<str>>(words: &[S]) -> String {
+    match words {
+        [] => String::new(),
+        [one] => one.as_ref().to_owned(),
+        [rest @ .., last] => {
+            let head: Vec<&str> = rest.iter().map(AsRef::as_ref).collect();
+            format!("{} and {}", head.join(", "), last.as_ref())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_list_is_joined_with_commas_and_a_last_and() {
+        assert_eq!(listed::<&str>(&[]), "");
+        assert_eq!(listed(&["normal"]), "normal");
+        assert_eq!(listed(&["normal", "offensive"]), "normal and offensive");
+        assert_eq!(
+            listed(&["look-alike", "range", "identity"]),
+            "look-alike, range and identity"
+        );
+    }
 
     #[test]
     fn a_count_of_one_is_written_in_the_singular() {

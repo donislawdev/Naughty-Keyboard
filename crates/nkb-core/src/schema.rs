@@ -106,6 +106,63 @@ pub fn kind_of(field: &str) -> Option<FieldKind> {
         .map(|(_, kind)| *kind)
 }
 
+// ---- the closed vocabularies -------------------------------------------------
+//
+// The words a field may hold where the format allows only a few. The validator
+// checks a file against them, `nkb lint` names them when a word is wrong, and
+// the website lists them for somebody writing a first pack - three readers of
+// one list, which is why it is here and not beside any one of them.
+
+/// The kinds of field a value may name in `fields`, from `pack-format.md` 5.
+///
+/// Closed on purpose. Left open, fifty contributions would bring `email`,
+/// `e-mail`, `mail` and `email-address` for one thing, matching packs to a field
+/// would stop working, and the repair would mean editing every pack at once.
+pub const FIELD_KINDS: [&str; 22] = [
+    "any",
+    "text",
+    "multiline",
+    "name",
+    "username",
+    "password",
+    "email",
+    "url",
+    "search",
+    "number",
+    "integer",
+    "money",
+    "date",
+    "time",
+    "datetime",
+    "phone",
+    "postal-code",
+    "country-code",
+    "address",
+    "filename",
+    "path",
+    "id-number",
+];
+
+/// The two values `risk` may hold, from `pack-format.md` 4 and 5.
+///
+/// Closed like the field kinds, and until 2026-09-07 the only closed set in
+/// the format with no rule behind it. It decides whether a value is marked as
+/// offensive before a tester sends it, so a misspelling here does not degrade to
+/// a smaller feature - it degrades to no warning at all.
+pub const RISK_LEVELS: [&str; 2] = ["normal", "offensive"];
+
+/// The three relations a pair may declare.
+///
+/// Closed for the same reason the field kinds are closed: left open, the
+/// palette cannot tell a contributor what a pair will do, and neither can the
+/// contributor.
+pub const RELATIONS: [&str; 3] = ["look-alike", "range", "identity"];
+
+/// The kinds of value this build produces, the default first: a value written
+/// out, a value repeated from a short piece, and a date worked out on the day it
+/// is typed. Every other name is reserved (`pack-format.md` 6).
+pub const VALUE_TYPES: [&str; 3] = ["literal", "repeat", "next-date"];
+
 #[cfg(test)]
 mod tests {
     use super::*;

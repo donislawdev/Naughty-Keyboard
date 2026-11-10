@@ -1,0 +1,49 @@
+{{- /*
+  Part of a pack template, for a page that explains the format by example:
+  template-part "text-field-limit" "len-51", or several parts at once,
+  template-part "sign-up-form" "email" "email-trailing-space" "repeat-email".
+  A part is a [[values]] or [[pairs]] table named by its id, or "pack" for the
+  first line and the [pack] table. Comments above a table are left out.
+
+  Every example on such a page is cut from a template, and every template
+  passes nkb lint (crates/nkb-cli/tests/pack_templates.rs), so no example on
+  the page can teach a pack the program would refuse. A part the template does
+  not have stops the build.
+*/ -}}
+{{- $name := .Get 0 }}
+{{- $file := partial "template-file.html" (dict "name" $name "position" .Position) }}
+{{- /* nkb fmt keeps one blank line between tables, so a table is a block. */ -}}
+{{- $tables := slice }}
+{{- range split $file.Content "\n\n" }}
+  {{- $lines := slice }}
+  {{- range split (strings.TrimRight "\n" .) "\n" }}
+    {{- if or (gt (len $lines) 0) (not (hasPrefix . "#")) }}
+      {{- $lines = $lines | append . }}
+    {{- end }}
+  {{- end }}
+  {{- with $lines }}
+    {{- $tables = $tables | append (delimit . "\n") }}
+  {{- end }}
+{{- end }}
+{{- $found := slice }}
+{{- range after 1 .Params }}
+  {{- $part := . }}
+  {{- $table := "" }}
+  {{- range $tables }}
+    {{- if eq $part "pack" }}
+      {{- if hasPrefix . "[pack]" }}
+        {{- $table = printf "format = 1\n\n%s" . }}
+      {{- end }}
+    {{- else if and (or (hasPrefix . "[[values]]") (hasPrefix . "[[pairs]]")) (findRE (printf `(?m)^id *= "%s"$` $part) . 1) }}
+      {{- $table = . }}
+    {{- end }}
+  {{- end }}
+  {{- if not $table }}
+    {{- errorf "%s: the pack template %q has no part %q" $.Position $name $part }}
+  {{- end }}
+  {{- $found = $found | append $table }}
+{{- end }}
+{{- if not $found }}
+  {{- errorf "%s: template-part names no part of %q" .Position $name }}
+{{- end }}
+{{ transform.Highlight (delimit $found "\n\n") "toml" "" }}

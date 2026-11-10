@@ -32,9 +32,11 @@ too-many-arguments-threshold = 7
 # sentences of a value that did not go into the field left classify for a
 # function of their own. Nine since 2026-11-09: the ceiling came down to 155
 # and the band with it, onto the emit command of nkb, which did not grow - the
-# owner's choice.
+# owner's choice. Eight since 2026-11-10, when the sentence nkb emit, show and
+# send say about a pack with errors became one function in browse_report.rs and
+# emit left the band.
 [clippy.near.product]
-too-many-lines-threshold = 9
+too-many-lines-threshold = 8
 cognitive-complexity-threshold = 1
 excessive-nesting-threshold = 1
 too-many-arguments-threshold = 2
@@ -69,7 +71,9 @@ band = 0.7
 # with the refusal of a name that does not end in .toml. 932 since the same
 # day, when what nkb send says of a value cut short went to refusals.rs with
 # the sentence for keys still on their way. 802 since 2026-11-09, when the help
-# of nkb and its commands went to help.rs to make room for --team-folder.
+# of nkb and its commands went to help.rs to make room for --team-folder. 793
+# since 2026-11-10, when the sentence nkb show, send and emit say about a pack
+# with errors went to browse_report.rs, one sentence for the three of them.
 # near = 4 since 2026-10-19: the ceiling came down by 104, and the band with it,
 # so three files that did not grow joined it (advance_sequence.rs, toml_pack.rs
 # and picker.rs). The count is the owner's to accept, as it was for toml_pack.rs.
@@ -81,10 +85,12 @@ band = 0.7
 # advance_sequence/classify.rs. 10 since 2026-11-09, the owner's choice: the
 # ceiling came down by 130 to 802 and the band with it, so five files that did
 # not grow joined it (settings_file.rs, live/view.rs, linux/send.rs,
-# nkb-sys/src/lib.rs and advance_sequence.rs).
+# nkb-sys/src/lib.rs and advance_sequence.rs). 11 since 2026-11-10, the
+# owner's choice: the ceiling came down to 793 and nkb-adapters/src/i18n/
+# windows.rs, which did not grow, joined at 557.
 [files.rust-product]
-ceiling = 802
-near = 10
+ceiling = 793
+near = 11
 
 # A whole Rust file, its tests included. nkb-gui/src/live.rs, then
 # nkb-adapters/src/i18n.rs at 2101. 2199 since 2026-10-27, when what a delivery

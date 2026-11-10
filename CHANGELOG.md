@@ -12,6 +12,11 @@ Changes wait under Unreleased until then.
 
 ### Added
 
+- A guide on the website to writing a pack of your own, from an empty folder to the first value
+  typed into a field: where the file goes, every field, characters nobody can see, long values,
+  dates that stay in the future, pairs, and the common errors `nkb lint` reports, each quoted from
+  the program. Four pack templates to download beside it: a first pack, a field with a length limit,
+  a sign-up form and booking dates, each passing `nkb lint` with no error and no warning.
 - Packs of your own and of your team. A pack file in your own folder, `packs` beside the settings
   file, or in a team folder named by `team-folder` under `[packs]` in the settings file, is offered
   beside the built-in packs: in the palette, the value window and `nkb packs`, `show`, `emit` and
@@ -57,6 +62,11 @@ Changes wait under Unreleased until then.
 
 ### Changed
 
+- `nkb lint` points at the line that holds the problem. A character written out instead of escaped,
+  a `breaks` too short and a field kind outside the list are reported on the line of `value`,
+  `unit`, `breaks` or `fields`, not on the first line of the value. A wrong field kind names the
+  pack when it is the pack's, and the sentence lists every kind the format allows. `nkb lint`,
+  `packs`, `show`, `emit` and `send` write one error, one value and one character in the singular.
 - `nkb lint` refuses a pack whose prose a reader cannot see or cannot get through. A name, a
   description or any other text around the values may not hold a control character, a direction
   mark, an invisible character or a space other than the ordinary one, written out or as an escape

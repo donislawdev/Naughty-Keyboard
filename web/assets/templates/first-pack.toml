@@ -1,0 +1,53 @@
+# Your first pack: three values for a name field. Replace them with your own.
+#
+# A pack is this one file. Put it in your own folder: in the palette, open
+# the value window, click Pack folders, then Create and open. Check it with
+# `nkb lint first-pack.toml`, which names every problem and how to fix it.
+#
+# The guide that explains every line: https://naughtykeyboard.donislawdev.com/docs/write-a-pack/
+#
+# A template from https://naughtykeyboard.donislawdev.com/docs/pack-templates/
+# Change anything in it. When you change `id`, rename the file to match,
+# first-pack.toml now, because a pack is found by its file name.
+
+format = 1
+
+[pack]
+id          = "first-pack"
+name        = "First pack"
+description = "Three values for a name field, to show how a pack is written."
+version     = "1.0"
+updated     = 2026-11-10
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["example", "names"]
+fields      = ["name", "text"]
+risk        = "normal"
+
+# Each value is one [[values]] block. The palette types them in this order,
+# so put the value most likely to find a bug first. A space at the end is
+# written as \u0020, because an editor can drop one written out.
+[[values]]
+id     = "trailing-space"
+name   = "Name with a space at the end"
+value  = "Kowalski\u0020"
+breaks = "The sign-up form keeps the space and the login form trims it, or the other way round, so the account is created and then cannot be found."
+expect = "Trimmed everywhere or kept everywhere, so the same name always finds the same account."
+since  = "1.0"
+
+[[values]]
+id     = "apostrophe"
+name   = "Name with an apostrophe"
+value  = "O'Brien"
+breaks = "Code that builds a query or a script by pasting text into it reads the apostrophe as the end of a string, so the save fails with a raw error or the name is cut short."
+expect = "Saved and shown as O'Brien, with no error."
+since  = "1.0"
+
+[[values]]
+id     = "empty"
+name   = "Empty value"
+value  = ""
+breaks = "The browser treats an empty field as missing and the server as an empty string, or the other way round, so a required field is saved empty."
+expect = "One clear answer on both sides: refused with a message, or saved as empty on purpose."
+since  = "1.0"

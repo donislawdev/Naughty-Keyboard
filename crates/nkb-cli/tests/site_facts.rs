@@ -14,6 +14,12 @@
 //! - `cli.json` - the general help and the help of every command, verbatim, and
 //!   what this test reads out of it: the usage, the options, the formats and
 //!   the exit codes each help names.
+//! - `pack-format.json` - the closed lists and the limits of the pack format,
+//!   from the constants the validator checks a file against, for the page that
+//!   teaches somebody to write a pack.
+//! - `pack-mistakes.json` - what `nkb lint` says about each file in
+//!   `web/assets/pack-mistakes/`, a pack with one mistake in it, so the page
+//!   that explains the mistakes quotes the program rather than a memory of it.
 //!
 //! With `NKB_WRITE_SITE=1` it writes the files. Without it, it compares them
 //! with what the program says now and fails on any difference, so a new option,
@@ -31,12 +37,22 @@
 
 #![allow(clippy::panic, clippy::expect_used)]
 
-use nkb_adapters::{BuiltInCatalogue, TomlPackFormat};
-use nkb_app::{Clock, EmitOutcome, PackEntry, ValueFacts, emit_values, list_packs};
-use nkb_core::calendar::Day;
+use nkb_adapters::pack_folder::FOLDER_FILES_LIMIT;
+use nkb_adapters::{BuiltInCatalogue, FOLDER_WAIT, TomlPackFormat};
+use nkb_app::{
+    Clock, EmitOutcome, PACK_FILE_LIMIT, PackEntry, ValueFacts, emit_values, list_packs,
+};
+use nkb_core::calendar::{Day, Weekday};
+use nkb_core::description::MIN_BREAKS_CODE_POINTS;
+use nkb_core::lint::MAX_VALUES_PER_PACK;
+use nkb_core::next_date::Week;
 use nkb_core::pack::{Pack, PairHalf};
 use nkb_core::preview::{ShapeFact, ValuePreview};
+use nkb_core::prose;
+use nkb_core::schema::{FIELD_KINDS, RELATIONS, RISK_LEVELS, VALUE_TYPES};
 use nkb_core::value::Definition;
+use nkb_core::value::{MAX_REPEAT_COUNT, MAX_VALUE_CODE_POINTS};
+use nkb_core::written_form::LITERAL_LENGTH_HINT;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -673,6 +689,126 @@ fn catalogue_facts() -> Json {
     ])
 }
 
+// ---- the pack format, for the page that teaches it -------------------------
+
+fn words<'a>(list: impl IntoIterator<Item = &'a str>) -> Json {
+    Json::List(list.into_iter().map(text).collect())
+}
+
+fn pack_format_facts() -> Json {
+    let mebibytes = PACK_FILE_LIMIT / (1024 * 1024);
+    Json::Object(vec![
+        ("min_breaks", count(MIN_BREAKS_CODE_POINTS)),
+        ("name_limit", count(prose::NAME_LIMIT)),
+        ("description_limit", count(prose::DESCRIPTION_LIMIT)),
+        ("explanation_limit", count(prose::EXPLANATION_LIMIT)),
+        ("field_kinds", words(FIELD_KINDS)),
+        ("risk_levels", words(RISK_LEVELS)),
+        ("relations", words(RELATIONS)),
+        ("value_types", words(VALUE_TYPES)),
+        ("weeks", words(Week::ALL.map(Week::name))),
+        ("weekdays", words(Weekday::ALL.map(Weekday::name))),
+        (
+            "max_repeat_count",
+            count(usize::try_from(MAX_REPEAT_COUNT).expect("the count fits")),
+        ),
+        ("max_code_points", count(MAX_VALUE_CODE_POINTS)),
+        ("literal_length_hint", count(LITERAL_LENGTH_HINT)),
+        ("max_values", count(MAX_VALUES_PER_PACK)),
+        (
+            "pack_file_mib",
+            count(usize::try_from(mebibytes).expect("a few mebibytes fit")),
+        ),
+        ("folder_files", count(FOLDER_FILES_LIMIT)),
+        (
+            "folder_wait_seconds",
+            count(usize::try_from(FOLDER_WAIT.as_secs()).expect("seconds fit")),
+        ),
+    ])
+}
+
+// ---- what nkb lint says about a mistake ------------------------------------
+
+fn mistakes_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/assets/pack-mistakes")
+}
+
+/// One line `nkb lint` printed about a problem in `file`: the line number, when
+/// the problem has one, and the code. `None` for any other line.
+fn problem_line(file: &str, line: &str) -> Option<(Option<usize>, String)> {
+    let rest = line.strip_prefix(file)?;
+    let (number, rest) = match rest.strip_prefix(':') {
+        Some(after) => {
+            let (digits, rest) = after.split_once("  ")?;
+            (Some(digits.parse().ok()?), rest)
+        }
+        None => (None, rest.strip_prefix("  ")?),
+    };
+    let (code, _) = rest.split_once("  ")?;
+    Some((number, code.to_owned()))
+}
+
+fn pack_mistake_facts() -> Json {
+    let dir = mistakes_dir();
+    let mut files: Vec<String> = std::fs::read_dir(&dir)
+        .unwrap_or_else(|e| panic!("{} must exist: {e}", dir.display()))
+        .filter_map(Result::ok)
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| name.ends_with(".toml"))
+        .collect();
+    files.sort();
+    assert!(
+        files.len() >= 5,
+        "{} holds {} pack files - the page would explain mistakes nobody can see",
+        dir.display(),
+        files.len()
+    );
+    let mut mistakes = Vec::new();
+    for file in &files {
+        // Run in the folder, so every line names the file alone and reads the
+        // same on every system.
+        let run = Command::new(env!("CARGO_BIN_EXE_nkb"))
+            .args(["lint", file])
+            .current_dir(&dir)
+            .output()
+            .unwrap_or_else(|e| panic!("`nkb lint {file}` must be runnable: {e}"));
+        // The verdict is what `nkb lint` makes, so it goes to standard output,
+        // the way a compiler's does, and the notes about the rules after it go
+        // to standard error. A terminal shows both, in that order.
+        let said = String::from_utf8(run.stdout).expect("nkb speaks UTF-8");
+        let notes = String::from_utf8(run.stderr).expect("nkb speaks UTF-8");
+        let mut problems = Vec::new();
+        for line in said.lines() {
+            if let Some((number, code)) = problem_line(file, line) {
+                problems.push(Json::Object(vec![
+                    ("line", number.map_or(Json::Null, count)),
+                    ("code", text(&code)),
+                    ("text", text(line)),
+                ]));
+            }
+        }
+        assert!(
+            !problems.is_empty(),
+            "{file} is in the folder of mistakes, and `nkb lint` finds none in it"
+        );
+        let summary = said
+            .lines()
+            .find(|line| {
+                line.contains(" error")
+                    && (line.ends_with(" warnings.") || line.ends_with(" warning."))
+            })
+            .unwrap_or_else(|| panic!("`nkb lint {file}` printed no count: {said}"));
+        let output = said.lines().chain(notes.lines()).map(text).collect();
+        mistakes.push(Json::Object(vec![
+            ("file", text(file)),
+            ("problems", Json::List(problems)),
+            ("summary", text(summary)),
+            ("output", Json::List(output)),
+        ]));
+    }
+    Json::Object(vec![("mistakes", Json::List(mistakes))])
+}
+
 // ---- the files -------------------------------------------------------------
 
 fn facts_dir() -> PathBuf {
@@ -731,6 +867,30 @@ fn the_site_lists_every_pack_and_value_the_program_ships() {
 #[test]
 fn the_site_lists_every_command_and_option_the_program_answers_to() {
     keep("cli.json", &cli_facts());
+}
+
+#[test]
+fn the_site_teaches_the_lists_and_limits_the_validator_checks() {
+    keep("pack-format.json", &pack_format_facts());
+}
+
+#[test]
+fn the_site_quotes_what_nkb_lint_says_about_each_mistake() {
+    keep("pack-mistakes.json", &pack_mistake_facts());
+}
+
+#[test]
+fn a_lint_line_is_read_with_and_without_a_line_number() {
+    assert_eq!(
+        problem_line("a.toml", "a.toml:14  E020  value `x` writes..."),
+        Some((Some(14), "E020".to_owned()))
+    );
+    assert_eq!(
+        problem_line("a.toml", "a.toml  E028  the pack names..."),
+        Some((None, "E028".to_owned()))
+    );
+    assert_eq!(problem_line("a.toml", "1 error, 0 warnings."), None);
+    assert_eq!(problem_line("a.toml", "b.toml:3  E004  x"), None);
 }
 
 // ---- the reader, proved on help it was not written from ---------------------

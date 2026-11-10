@@ -1,0 +1,10 @@
+{{- /*
+  The file of one pack template, by its name: (dict "name" "first-pack"
+  "position" .Position). A name with no file stops the build, so a page
+  cannot offer a download that is not there.
+*/ -}}
+{{- $file := resources.Get (printf "templates/%s.toml" .name) }}
+{{- if not $file }}
+  {{- errorf "%s: there is no pack template %q in assets/templates" .position .name }}
+{{- end }}
+{{- return $file }}
