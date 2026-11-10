@@ -10,6 +10,7 @@
 
 #![forbid(unsafe_code)]
 
+mod boundary;
 mod browse_report;
 mod clearing;
 mod emit_output;
@@ -44,7 +45,7 @@ use nkb_app::{
 use output::{out, outln};
 use pack_file::{NamedPack, NotRead, lint_exit, named_pack, say_not_read};
 use refusals::{NEEDS_PERMISSION, say_cut_short, say_not_cleared, say_not_delivered};
-use sent_notes::{say_pace, say_text_substitutions};
+use sent_notes::{say_pace, say_text_substitutions, sent_counts};
 use std::io::Write;
 use target_line::{Countdown, say_where_it_goes, where_it_goes};
 
@@ -92,6 +93,7 @@ fn run(args: &[String]) -> ExitCode {
         "show" => folders::then(&args[1..], "show", show),
         "emit" => folders::then(&args[1..], "emit", emit),
         "send" => folders::then(&args[1..], "send", send),
+        "boundary" => boundary::boundary(&args[1..]),
         "lint" => lint(&args[1..]),
         "fmt" => fmt(&args[1..]),
         "new-pack" => new_pack_command(&args[1..]),
@@ -851,23 +853,6 @@ fn report_send(err: &mut impl Write, wanted: &str, outcome: SendOutcome) -> Exit
 }
 
 /// Counts down on standard error so the person can put the focus where they mean.
-/// How much text `nkb send` sent, in the four units that differ.
-///
-/// Four, because the difference is the point: a family emoji is one cluster,
-/// five code points and eighteen bytes, and characters above the basic plane
-/// cross as two units each. In the singular where the count is one - "1
-/// graphemes" stood here until 2026-09-24, next to the shortest values in the
-/// catalogue (`OBS-120`).
-fn sent_counts(graphemes: usize, code_points: usize, bytes: usize, utf16_units: usize) -> String {
-    format!(
-        "{}, {}, {}, {}",
-        english::plural(graphemes, "grapheme"),
-        english::plural(code_points, "code point"),
-        english::plural(bytes, "byte"),
-        english::plural(utf16_units, "UTF-16 unit")
-    )
-}
-
 fn count_down(seconds: u64) {
     if seconds == 0 {
         return;
@@ -1032,20 +1017,6 @@ mod tests {
             "{}/../../tests/packs/{kind}/{name}.toml",
             env!("CARGO_MANIFEST_DIR")
         )
-    }
-
-    #[test]
-    fn what_send_sent_is_counted_in_the_number_each_count_is() {
-        // The shortest values in the catalogue are the ones this reads out
-        // most: `magic-values/dash-only` is one of everything.
-        assert_eq!(
-            sent_counts(1, 1, 1, 1),
-            "1 grapheme, 1 code point, 1 byte, 1 UTF-16 unit"
-        );
-        assert_eq!(
-            sent_counts(1, 5, 18, 8),
-            "1 grapheme, 5 code points, 18 bytes, 8 UTF-16 units"
-        );
     }
 
     // ---- nkb send ---------------------------------------------------------

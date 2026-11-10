@@ -156,10 +156,10 @@
     {
       "id": "M200",
       "why": "nkb send counts without inflection - the size line after a send says '1 graphemes'",
-      "file": "crates/nkb-cli/src/main.rs",
-      "find": "        english::plural(graphemes, \"grapheme\"),",
+      "file": "crates/nkb-cli/src/sent_notes.rs",
+      "find": "        plural(graphemes, \"grapheme\"),",
       "replace": "        format!(\"{graphemes} graphemes\"),",
-      "test": "tests::what_send_sent_is_counted_in_the_number_each_count_is",
+      "test": "sent_notes::tests::what_send_sent_is_counted_in_the_number_each_count_is",
       "runner": "rust:nkb-cli:bin=nkb"
     },
     {
@@ -13477,10 +13477,10 @@
     },
     {
       "id": "M1719",
-      "why": "the website quotes what nkb lint prints without the lines about the rules, which a terminal shows",
+      "why": "the website quotes only the first line nkb lint prints, without the count and the lines about the rules",
       "file": "crates/nkb-cli/tests/site_facts.rs",
-      "find": "        let output = said.lines().chain(notes.lines()).map(text).collect();",
-      "replace": "        let output = said.lines().chain(notes.lines().take(0)).map(text).collect();",
+      "find": "        let output = said.lines().map(text).collect();",
+      "replace": "        let output = said.lines().take(1).map(text).collect();",
       "test": "the_site_quotes_what_nkb_lint_says_about_each_mistake",
       "runner": "rust:nkb-cli:site_facts"
     },
@@ -13519,6 +13519,204 @@
       "replace": "https://naughtykeyboard.donislawdev.com/docs/write-your-pack/",
       "test": "every_page_a_template_points_to_is_on_the_site",
       "runner": "rust:nkb-cli:pack_templates"
+    },
+    {
+      "id": "M1724",
+      "why": "a value is short of the length asked when whole characters do not add up to it",
+      "file": "crates/nkb-core/src/boundary.rs",
+      "find": "            padding: length % weight,",
+      "replace": "            padding: 0,",
+      "test": "boundary::tests::every_value_is_as_long_as_it_says_in_every_unit_and_no_text_comes_twice",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1725",
+      "why": "the padding stands behind the heavy characters - a field cutting at the limit cuts a letter a and never a character in half",
+      "file": "crates/nkb-core/src/boundary.rs",
+      "find": "                text.push_str(&LETTER.repeat(padding as usize));\n                text.push_str(&character.repeat(count as usize));",
+      "replace": "                text.push_str(&character.repeat(count as usize));\n                text.push_str(&LETTER.repeat(padding as usize));",
+      "test": "boundary::tests::a_byte_limit_falls_inside_the_last_character_of_the_value_over_it",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1726",
+      "why": "a fill too heavy for the length comes out as padding alone - the letters value twice under another name",
+      "file": "crates/nkb-core/src/boundary.rs",
+      "find": "        (count > 0).then_some(Recipe::Repeated {",
+      "replace": "        Some(Recipe::Repeated {",
+      "test": "boundary::tests::a_fill_too_heavy_for_the_length_is_left_out_rather_than_padded_whole",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1727",
+      "why": "the value one over the limit is missing - the one that shows whether the limit is enforced",
+      "file": "crates/nkb-core/src/boundary.rs",
+      "find": "            lengths.extend([bound - 1, bound, bound + 1]);",
+      "replace": "            lengths.extend([bound - 1, bound, bound]);",
+      "test": "boundary::tests::at_most_fifty_is_nothing_then_six_fills_of_three_lengths",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1728",
+      "why": "the value one over the most is said to be within the limit",
+      "file": "crates/nkb-core/src/boundary.rs",
+      "find": "self.max.is_none_or(|most| length <= most)",
+      "replace": "self.max.is_none_or(|most| length <= most + 1)",
+      "test": "boundary::tests::only_the_length_over_the_most_is_outside",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1729",
+      "why": "the value one under the least is said to be within the limit",
+      "file": "crates/nkb-core/src/boundary.rs",
+      "find": "self.min.is_none_or(|least| length >= least)",
+      "replace": "self.min.is_none_or(|least| length + 1 >= least)",
+      "test": "boundary::tests::a_least_puts_the_empty_value_and_the_one_under_outside",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1730",
+      "why": "a least above the most is taken as a limit",
+      "file": "crates/nkb-core/src/boundary.rs",
+      "find": "            && least > most",
+      "replace": "            && least > most + 1",
+      "test": "boundary::tests::a_limit_needs_a_bound_in_range_and_a_least_not_above_the_most",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1731",
+      "why": "the numbers of a counterstring are one off - a field that cut it shows the wrong place",
+      "file": "crates/nkb-core/src/boundary.rs",
+      "find": "        let mut number = left;",
+      "replace": "        let mut number = left - 1;",
+      "test": "boundary::tests::a_counterstring_reads_as_the_known_examples",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1732",
+      "why": "the two-byte letter is one a normal form takes apart - a field that normalises changes the length of the value",
+      "file": "crates/nkb-core/src/boundary.rs",
+      "find": "            Self::TwoByte => Some(\"\\u{0142}\"),",
+      "replace": "            Self::TwoByte => Some(\"\\u{0105}\"),",
+      "test": "boundary::tests::the_fills_are_the_characters_that_no_normal_form_changes",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1733",
+      "why": "the largest limit describes values above the ceiling every other value lives under",
+      "file": "crates/nkb-core/src/boundary.rs",
+      "find": "pub const MAX_LIMIT: u32 = 100_000;",
+      "replace": "pub const MAX_LIMIT: u32 = 1_000_000;",
+      "test": "boundary::tests::the_largest_limit_is_measured_without_being_built_and_stays_under_the_ceiling",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1734",
+      "why": "nkb boundary takes +50 as a limit - a typing mistake read as a number",
+      "file": "crates/nkb-cli/src/boundary.rs",
+      "find": "    if word.is_empty() || !word.bytes().all(|byte| byte.is_ascii_digit()) {",
+      "replace": "    if word.is_empty() {",
+      "test": "boundary::tests::a_number_is_plain_digits_from_one_to_the_largest_limit",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1735",
+      "why": "nkb boundary settles an option given twice quietly - the second limit wins unseen",
+      "file": "crates/nkb-cli/src/boundary.rs",
+      "find": "        if taken {",
+      "replace": "        if taken && false {",
+      "test": "boundary::tests::an_option_given_twice_is_refused_rather_than_settled_quietly",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1736",
+      "why": "nkb boundary counts a limit in bytes when no unit was asked for",
+      "file": "crates/nkb-cli/src/boundary.rs",
+      "find": "self.unit.unwrap_or(Unit::Graphemes)",
+      "replace": "self.unit.unwrap_or(Unit::Bytes)",
+      "test": "boundary::tests::a_most_alone_is_counted_in_graphemes_and_printed_as_json",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1737",
+      "why": "nkb boundary takes --escaped and --raw together and picks one without a word",
+      "file": "crates/nkb-cli/src/boundary.rs",
+      "find": "        if self.form.is_some_and(|already| already != asked) {",
+      "replace": "        if self.form.is_some_and(|already| already != asked) && false {",
+      "test": "boundary::tests::opposite_forms_an_unknown_option_and_a_bare_word_are_each_named",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1738",
+      "why": "nkb boundary goes on building values after the reader closed the pipe",
+      "file": "crates/nkb-cli/src/boundary/output.rs",
+      "find": "        if !put(&piece) {",
+      "replace": "        if !put(&piece) && false {",
+      "test": "boundary::output::tests::a_reader_that_left_ends_the_work_at_once",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1739",
+      "why": "the JSON of nkb boundary says every value is within the limit",
+      "file": "crates/nkb-cli/src/boundary/output.rs",
+      "find": "        (\"within\".to_owned(), Json::Bool(value.within())),",
+      "replace": "        (\"within\".to_owned(), Json::Bool(true)),",
+      "test": "boundary::output::tests::a_value_says_its_fill_its_length_whether_it_is_within_and_its_four_sizes",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1740",
+      "why": "the JSON of nkb boundary gives bytes under the name of UTF-16 units",
+      "file": "crates/nkb-cli/src/boundary/output.rs",
+      "find": "        (\"utf16_units\".to_owned(), Json::count(sizes.utf16_units)),",
+      "replace": "        (\"utf16_units\".to_owned(), Json::count(sizes.bytes)),",
+      "test": "boundary::output::tests::a_value_says_its_fill_its_length_whether_it_is_within_and_its_four_sizes",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1741",
+      "why": "the name of a boundary value carries characters nobody can see instead of their code points",
+      "file": "crates/nkb-cli/src/boundary/output.rs",
+      "find": "    if character.is_ascii() {",
+      "replace": "    if !character.is_empty() {",
+      "test": "boundary::output::tests::a_name_says_how_the_value_is_made_in_plain_ascii",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1742",
+      "why": "the account nkb boundary gives before the values counts bytes as code points",
+      "file": "crates/nkb-cli/src/boundary/output.rs",
+      "find": "        code_points = code_points.saturating_add(sizes.code_points);",
+      "replace": "        code_points = code_points.saturating_add(sizes.bytes);",
+      "test": "boundary::output::tests::the_account_is_the_sum_of_what_gets_written",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1743",
+      "why": "a CSV row of nkb boundary puts bytes in the column of graphemes",
+      "file": "crates/nkb-cli/src/boundary/output.rs",
+      "find": "        sizes.graphemes.to_string(),",
+      "replace": "        sizes.bytes.to_string(),",
+      "test": "boundary::output::tests::csv_has_a_header_and_a_row_for_every_value",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1744",
+      "why": "a JSON document written piece by piece puts its commas before the first item instead of between items",
+      "file": "crates/nkb-cli/src/json.rs",
+      "find": "        if !first {",
+      "replace": "        if first {",
+      "test": "json::tests::a_document_written_piece_by_piece_is_the_document_rendered_whole",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1745",
+      "why": "the help of nkb boundary names another letter than the website does",
+      "file": "crates/nkb-cli/src/help.rs",
+      "find": "    outln!(\"  two-byte       A letter of two bytes (U+0142)\");",
+      "replace": "    outln!(\"  two-byte       A letter of two bytes (U+0105)\");",
+      "test": "the_site_lists_every_command_and_option_the_program_answers_to",
+      "runner": "rust:nkb-cli:site_facts"
     }
   ]
 }

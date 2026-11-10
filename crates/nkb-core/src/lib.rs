@@ -16,6 +16,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod boundary;
 pub mod calendar;
 pub mod description;
 pub mod graphemes;

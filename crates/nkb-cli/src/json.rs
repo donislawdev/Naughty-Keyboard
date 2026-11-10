@@ -62,6 +62,57 @@ impl Json {
         out
     }
 
+    /// The opening of a document written piece by piece: an object with the
+    /// members of `head`, and last an array under `array` whose items follow
+    /// one at a time through [`Json::stream_item`].
+    ///
+    /// For a document whose items are too large to hold all at once. The three
+    /// pieces put together are byte for byte what [`Json::render`] gives for
+    /// the same document, and a test here keeps them so.
+    #[must_use]
+    pub fn open_stream(head: &[(String, Self)], array: &str) -> String {
+        let mut out = String::from("{");
+        for (key, value) in head {
+            out.push('\n');
+            indent(&mut out, 1);
+            write_string(&mut out, key);
+            out.push_str(": ");
+            value.write(&mut out, 1);
+            out.push(',');
+        }
+        out.push('\n');
+        indent(&mut out, 1);
+        write_string(&mut out, array);
+        out.push_str(": [");
+        out
+    }
+
+    /// This value as the next item of the array [`Json::open_stream`] opened.
+    #[must_use]
+    pub fn stream_item(&self, first: bool) -> String {
+        let mut out = String::new();
+        if !first {
+            out.push(',');
+        }
+        out.push('\n');
+        indent(&mut out, 2);
+        self.write(&mut out, 2);
+        out
+    }
+
+    /// The end of the array and of the document. `any` says whether an item
+    /// was written, because an empty array closes on the line it opened on.
+    #[must_use]
+    pub fn close_stream(any: bool) -> String {
+        let mut out = String::new();
+        if any {
+            out.push('\n');
+            indent(&mut out, 1);
+        }
+        out.push_str("]\n}\n");
+        out
+    }
+
     fn write(&self, out: &mut String, depth: usize) {
         match self {
             Self::Null => out.push_str("null"),
@@ -170,6 +221,39 @@ mod tests {
 
     fn rendered(value: &Json) -> String {
         value.render().trim_end().to_owned()
+    }
+
+    #[test]
+    fn a_document_written_piece_by_piece_is_the_document_rendered_whole() {
+        let head = vec![
+            ("schema".to_owned(), Json::Number(1)),
+            (
+                "limit".to_owned(),
+                Json::Object(vec![("max".to_owned(), Json::Number(50))]),
+            ),
+        ];
+        let item = |id: &str| {
+            Json::Object(vec![
+                ("id".to_owned(), Json::text(id)),
+                ("fields".to_owned(), Json::Array(vec![Json::text("any")])),
+            ])
+        };
+        for count in [0usize, 1, 3] {
+            let items: Vec<Json> = (0..count).map(|n| item(&format!("value-{n}"))).collect();
+            let mut pieces = Json::open_stream(&head, "values");
+            for (index, one) in items.iter().enumerate() {
+                pieces.push_str(&one.stream_item(index == 0));
+            }
+            pieces.push_str(&Json::close_stream(count > 0));
+
+            let mut members = head.clone();
+            members.push(("values".to_owned(), Json::Array(items)));
+            assert_eq!(pieces, Json::Object(members).render(), "{count} items");
+        }
+        // With nothing in front of the array, no comma stands before it.
+        let bare = Json::open_stream(&[], "values") + &Json::close_stream(false);
+        let whole = Json::Object(vec![("values".to_owned(), Json::Array(Vec::new()))]);
+        assert_eq!(bare, whole.render());
     }
 
     #[test]

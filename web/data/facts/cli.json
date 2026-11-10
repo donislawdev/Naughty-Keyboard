@@ -28,9 +28,11 @@
         "help": "Print the version and exit with 0"
       }
     ],
+    "fills": [],
+    "units": [],
     "formats": [],
     "exit_codes": [],
-    "help": "nkb 0.3.0 - malicious test data, one shortcut away\n\nUsage:\n  nkb <command> [options]\n\nCommands:\n  packs             List the packs this build can offer\n  show <pack>       Print one pack in full\n  emit <pack>       Print a pack's values for a script or a file\n  send <pack>       Type one value into the focused field\n  lint <file>       Check a pack file against the format rules\n  fmt <file>        Rewrite a pack file in canonical shape\n  new-pack <name>   Write the skeleton for a new pack\n\nOptions:\n  -h, --help        Show this help and exit with 0\n      --version     Print the version and exit with 0\n\nThe graphical interface is a separate executable: nkb-gui\n"
+    "help": "nkb 0.3.0 - malicious test data, one shortcut away\n\nUsage:\n  nkb <command> [options]\n\nCommands:\n  packs             List the packs this build can offer\n  show <pack>       Print one pack in full\n  emit <pack>       Print a pack's values for a script or a file\n  boundary          Make the values that test the length limit of a field\n  send <pack>       Type one value into the focused field\n  lint <file>       Check a pack file against the format rules\n  fmt <file>        Rewrite a pack file in canonical shape\n  new-pack <name>   Write the skeleton for a new pack\n\nOptions:\n  -h, --help        Show this help and exit with 0\n      --version     Print the version and exit with 0\n\nThe graphical interface is a separate executable: nkb-gui\n"
   },
   "commands": [
     {
@@ -62,6 +64,8 @@
           "help": "Show this help and exit with 0"
         }
       ],
+      "fills": [],
+      "units": [],
       "formats": [],
       "exit_codes": [],
       "help": "nkb packs - list the packs this build can offer\n\nUsage:\n  nkb packs [--team-folder <folder>]\n\nPacks come from three places: the ones built in, the team folder (from\n--team-folder or the settings file) and your own folder beside the\nsettings file. A pack in a folder is used instead of a built-in pack of\nthe same name, and an own pack instead of a team pack.\n\nEvery run also states which pack sources were read and which were not,\nbecause a list drawn from one source looks exactly like a complete one.\n\nOptions:\n      --team-folder <folder>  Read the team's packs from this folder instead\n                 of the one the settings file names. A relative path is\n                 read from the current folder\n  -h, --help     Show this help and exit with 0\n"
@@ -95,6 +99,8 @@
           "help": "Show this help and exit with 0"
         }
       ],
+      "fills": [],
+      "units": [],
       "formats": [],
       "exit_codes": [],
       "help": "nkb show - print one pack in full\n\nUsage:\n  nkb show <pack> [--team-folder <folder>]\n\nValues are printed ESCAPED, which is the only readable form for a value\nmade of characters nobody can see. A generated value is printed as its\nrecipe and is never expanded here. The first line says where the pack\ncomes from when it is not built in.\n\nPacks come from three places: the ones built in, the team folder (from\n--team-folder or the settings file) and your own folder beside the\nsettings file. A pack in a folder is used instead of a built-in pack of\nthe same name, and an own pack instead of a team pack.\n\nOptions:\n      --team-folder <folder>  Read the team's packs from this folder instead\n                 of the one the settings file names. A relative path is\n                 read from the current folder\n  -h, --help     Show this help and exit with 0\n"
@@ -164,6 +170,8 @@
           "help": "Show this help and exit with 0"
         }
       ],
+      "fills": [],
+      "units": [],
       "formats": [
         {
           "name": "json",
@@ -180,6 +188,156 @@
       ],
       "exit_codes": [],
       "help": "nkb emit - print a pack's values for a script or a file\n\nUsage:\n  nkb emit <pack> [--format json|csv|lines] [--escaped|--raw] [--base64]\n\nValues go to standard output. The account of what came out, and any\nnote about what a format could not carry, go to standard error - so a\nredirected file holds values and nothing else.\n\nPacks come from three places: the ones built in, the team folder (from\n--team-folder or the settings file) and your own folder beside the\nsettings file. A pack in a folder is used instead of a built-in pack of\nthe same name, and an own pack instead of a team pack.\n\nFormats:\n  json     Both forms of every value, and every field. The default,\n           because it is the only one that carries the whole catalogue\n  csv      One row per value. Escaped by default, because this\n           catalogue contains values that destroy CSV files\n  lines    One value per line. Refuses a value containing a line\n           break by name, rather than splitting it silently\n\nOptions:\n      --escaped  Print values as a pack file stores them\n      --raw      Print values literally\n      --base64   Encode values, for channels that damage text\n      --team-folder <folder>  Read the team's packs from this folder instead\n                 of the one the settings file names. A relative path is\n                 read from the current folder\n  -h, --help     Show this help and exit with 0\n"
+    },
+    {
+      "name": "boundary",
+      "summary": "make the values that test the length limit of a field",
+      "usage": [
+        "nkb boundary [--max-length N] [--min-length N]",
+        "             [--unit graphemes|code-points|utf16|bytes]",
+        "             [--format json|csv|lines] [--escaped|--raw] [--base64]"
+      ],
+      "about": [
+        "Give the limit the field states and get the values worth trying: nothing, then one under, exactly at and one over each bound. Every length comes in six fills, because \"50 characters\" is a different number in each unit.",
+        "Counted in graphemes, 50 two-byte letters are 100 bytes and 50 emoji are 100 UTF-16 units, so a field that refuses or cuts them counts something else. Run again in that unit: a value then has exactly that many units, padded with the letter a in front, and the limit falls inside the last character of the value one over it.",
+        "Values go to standard output and the account of what came out goes to standard error. \"within\" says whether the length of a value is inside the limit and nothing more: a required field still refuses the empty value."
+      ],
+      "options": [
+        {
+          "flags": [
+            "--max-length"
+          ],
+          "argument": "N",
+          "values": [],
+          "help": "The most the field takes, from 1 to 100000"
+        },
+        {
+          "flags": [
+            "--min-length"
+          ],
+          "argument": "N",
+          "values": [],
+          "help": "The least the field takes, from 1 to 100000"
+        },
+        {
+          "flags": [
+            "--unit"
+          ],
+          "argument": null,
+          "values": [
+            "graphemes",
+            "code-points",
+            "utf16",
+            "bytes"
+          ],
+          "help": "What the limit is counted in (default: graphemes)"
+        },
+        {
+          "flags": [
+            "--format"
+          ],
+          "argument": null,
+          "values": [
+            "json",
+            "csv",
+            "lines"
+          ],
+          "help": null
+        },
+        {
+          "flags": [
+            "--escaped"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Print values as a pack file stores them"
+        },
+        {
+          "flags": [
+            "--raw"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Print values literally"
+        },
+        {
+          "flags": [
+            "--base64"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Encode values, for channels that damage text"
+        },
+        {
+          "flags": [
+            "-h",
+            "--help"
+          ],
+          "argument": null,
+          "values": [],
+          "help": "Show this help and exit with 0"
+        }
+      ],
+      "fills": [
+        {
+          "name": "letters",
+          "help": "The letter a"
+        },
+        {
+          "name": "counterstring",
+          "help": "Numbers and stars, as in *3*5*7*9*12*. Each number is the place of the star after it, so a field that cut the value shows where it cut"
+        },
+        {
+          "name": "two-byte",
+          "help": "A letter of two bytes (U+0142)"
+        },
+        {
+          "name": "three-byte",
+          "help": "A sign of three bytes (U+20AC)"
+        },
+        {
+          "name": "four-byte",
+          "help": "An emoji of four bytes and two UTF-16 units (U+1F600)"
+        },
+        {
+          "name": "cluster",
+          "help": "A family emoji: one character to the eye, five code points"
+        }
+      ],
+      "units": [
+        {
+          "name": "graphemes",
+          "help": "Characters as a person counts them. The default"
+        },
+        {
+          "name": "code-points",
+          "help": "Unicode code points"
+        },
+        {
+          "name": "utf16",
+          "help": "UTF-16 units, which a browser's maxlength and JavaScript count"
+        },
+        {
+          "name": "bytes",
+          "help": "Bytes of UTF-8"
+        }
+      ],
+      "formats": [
+        {
+          "name": "json",
+          "help": "Both forms of every value, with its fill, its length, whether it is within the limit and its size in all four units. The default"
+        },
+        {
+          "name": "csv",
+          "help": "One row per value, with the same columns. Escaped by default"
+        },
+        {
+          "name": "lines",
+          "help": "One value per line. The empty value is an empty line"
+        }
+      ],
+      "exit_codes": [],
+      "help": "nkb boundary - make the values that test the length limit of a field\n\nUsage:\n  nkb boundary [--max-length N] [--min-length N]\n               [--unit graphemes|code-points|utf16|bytes]\n               [--format json|csv|lines] [--escaped|--raw] [--base64]\n\nGive the limit the field states and get the values worth trying: nothing,\nthen one under, exactly at and one over each bound. Every length comes in\nsix fills, because \"50 characters\" is a different number in each unit.\n\nFills:\n  letters        The letter a\n  counterstring  Numbers and stars, as in *3*5*7*9*12*. Each number is the\n                 place of the star after it, so a field that cut the value\n                 shows where it cut\n  two-byte       A letter of two bytes (U+0142)\n  three-byte     A sign of three bytes (U+20AC)\n  four-byte      An emoji of four bytes and two UTF-16 units (U+1F600)\n  cluster        A family emoji: one character to the eye, five code points\n\nUnits:\n  graphemes    Characters as a person counts them. The default\n  code-points  Unicode code points\n  utf16        UTF-16 units, which a browser's maxlength and JavaScript count\n  bytes        Bytes of UTF-8\n\nCounted in graphemes, 50 two-byte letters are 100 bytes and 50 emoji are\n100 UTF-16 units, so a field that refuses or cuts them counts something\nelse. Run again in that unit: a value then has exactly that many units,\npadded with the letter a in front, and the limit falls inside the last\ncharacter of the value one over it.\n\nValues go to standard output and the account of what came out goes to\nstandard error. \"within\" says whether the length of a value is inside the\nlimit and nothing more: a required field still refuses the empty value.\n\nFormats:\n  json     Both forms of every value, with its fill, its length, whether it\n           is within the limit and its size in all four units. The default\n  csv      One row per value, with the same columns. Escaped by default\n  lines    One value per line. The empty value is an empty line\n\nOptions:\n      --max-length N  The most the field takes, from 1 to 100000\n      --min-length N  The least the field takes, from 1 to 100000\n      --unit          What the limit is counted in (default: graphemes)\n      --escaped       Print values as a pack file stores them\n      --raw           Print values literally\n      --base64        Encode values, for channels that damage text\n  -h, --help          Show this help and exit with 0\n"
     },
     {
       "name": "send",
@@ -235,6 +393,8 @@
           "help": "Show this help and exit with 0"
         }
       ],
+      "fills": [],
+      "units": [],
       "formats": [],
       "exit_codes": [],
       "help": "nkb send - type one value into the focused field\n\nUsage:\n  nkb send <pack> [--index N] [--delay S] [--clear] [--team-folder <folder>]\n\nPut one value of a pack into whatever field has the keyboard focus.\n\nPacks come from three places: the ones built in, the team folder (from\n--team-folder or the settings file) and your own folder beside the\nsettings file. A pack in a folder is used instead of a built-in pack of\nthe same name, and an own pack instead of a team pack.\n\nOptions:\n  --index N      which value, counting from 1 in the pack's own order\n                 (default: 1). The order of values is the order of testing.\n  --delay S      seconds to wait first, so you can focus the target\n                 (default: 3). Use 0 when something else focuses it.\n  --clear        press Home, Shift+End, Delete first, clearing the current\n                 line of the field. Never selects beyond the line, so a\n                 multi-line field keeps its other lines. Without this switch\n                 the only keys sent are the value's own characters.\n      --team-folder <folder>  Read the team's packs from this folder instead\n                 of the one the settings file names. A relative path is\n                 read from the current folder\n  -h, --help     Show this help and exit with 0\n\nThe value goes to the focused window, not to standard output.\nEverything you read here is on standard error.\nNothing is sent while Ctrl, Alt, Shift or Win is held on the keyboard:\nthe command waits up to two seconds for them to come up, then refuses.\nNothing is sent to a window running with higher privileges than nkb,\nsuch as an application started as administrator: the system would drop\nthe keystrokes without a word, so the command refuses and exits with 4.\nNothing is sent when the keyboard focus is on a button, a link, a list item\nor a page that is not editable: keys there act on that control, so the\ncommand refuses and exits with 4. Where it cannot tell, it sends.\nPress Escape to stop a send in progress: nothing more is typed, the command\nsays how much arrived and exits with 4. Escape belongs to the command only\nwhile it types - before and after, the key is the application's.\n"
@@ -273,6 +433,8 @@
           "help": "Show this help and exit with 0"
         }
       ],
+      "fills": [],
+      "units": [],
       "formats": [],
       "exit_codes": [
         {
@@ -326,6 +488,8 @@
           "help": "Show this help and exit with 0"
         }
       ],
+      "fills": [],
+      "units": [],
       "formats": [],
       "exit_codes": [
         {
@@ -375,6 +539,8 @@
           "help": "Show this help and exit with 0"
         }
       ],
+      "fills": [],
+      "units": [],
       "formats": [],
       "exit_codes": [],
       "help": "nkb new-pack - write the skeleton for a new pack\n\nUsage:\n  nkb new-pack <name>\n\nThe name becomes both the file name and the pack identifier, so it has\nto be lower case letters, digits and hyphens, starting with a letter.\nThe file is written in the current folder and never over an existing one.\n\nOptions:\n  -h, --help     Show this help and exit with 0\n"
