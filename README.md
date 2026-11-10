@@ -61,7 +61,8 @@ needs it finds out it exists.
 - **Values for the limit your field states** - `nkb boundary --max-length 50` makes the empty value and
   values of 49, 50 and 51, in letters, in characters of two, three and four bytes, in a family emoji and
   as a counterstring that shows where a field cut it. The limit can be counted in characters, code
-  points, UTF-16 units or bytes.
+  points, UTF-16 units or bytes. The palette makes the same values: **Length limit**, the first row of
+  the value window, opens a window where you type the limit, and the shortcuts then walk its values.
 - **Offline, free, no telemetry** - GPL-3.0, no account, and it opens no network connection.
 
 <p align="center">
