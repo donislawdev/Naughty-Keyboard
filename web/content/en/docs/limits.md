@@ -29,7 +29,7 @@ On macOS it still can, in one kind of application. A Command, Control or Option 
 
 ## Can I load my own packs?
 
-Yes, from your own folder and from a team folder, in the palette and on the command line - [the palette page](/docs/palette/) says how. The Pack folders window chooses the team folder in your system's folder window. On Windows and macOS that window runs inside the palette, as it does in any program, so it loads the add-ons other programs give the file browser, such as cloud drives, which may connect to the network while it is open, and its path box copies and pastes by itself. Dropping the folder on the window avoids both. On macOS a team folder in Documents, Desktop or Downloads makes the system ask once whether Naughty Keyboard may read it.
+Yes, from your own folder and from a team folder, in the palette and on the command line - [the palette page](/docs/palette/) says how. The Pack folders window chooses the team folder in your system's folder window. On Windows and macOS that window runs inside the palette, as it does in any program, so it loads the add-ons other programs give the file browser, such as cloud drives, which may connect to the network while it is open, and its path box copies and pastes by itself. Dropping the folder on the window avoids both, except on a palette run as administrator, which Windows does not let a program with ordinary rights drop anything on. On macOS a team folder in Documents, Desktop or Downloads makes the system ask once whether Naughty Keyboard may read it.
 
 ## Is the pack format stable?
 

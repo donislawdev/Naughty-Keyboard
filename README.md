@@ -435,9 +435,10 @@ says so.
   palette, as it does in any program that opens it, so it loads the add-ons other programs give the file
   browser, such as cloud drives and icon overlays, and they may connect to the network while it is open.
   Its path box also copies and pastes by itself when you press the keys for that in it. Dropping the
-  folder on the Pack folders window avoids both. On macOS a team folder in Documents, Desktop or
-  Downloads makes the system ask once whether Naughty Keyboard may read it, and until you allow that, the
-  window says the folder could not be read.
+  folder on the Pack folders window avoids both, except on a palette run as administrator, which Windows
+  does not let a program with ordinary rights drop anything on. On macOS a team folder in Documents,
+  Desktop or Downloads makes the system ask once whether Naughty Keyboard may read it, and until you
+  allow that, the window says the folder could not be read.
 - **The pack format is not frozen.** A later release may still change it, and its notes will say how.
   `nkb lint` checks 43 of its 49 rules today, and `nkb lint --explain` lists every one and why a few wait.
 - **It does not look at the result.** It types the value and does not read what the window shows, only
