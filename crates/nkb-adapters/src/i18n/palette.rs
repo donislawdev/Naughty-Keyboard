@@ -61,6 +61,12 @@ pub enum PaletteLabel {
     PairFirst,
     /// The next value is the half named `b`.
     PairSecond,
+    /// The value was made for a limit, and its length is inside it: a field
+    /// that keeps to the limit takes it (`D178`). About the length and nothing
+    /// else - a field that must be filled in still refuses the empty value.
+    InsideLimit,
+    /// The same, with the length outside: over the most, or under the least.
+    OutsideLimit,
     /// The standing bar of clipboard mode, `ux-spec.md` 2. Until `D71` it read
     /// `direct input refused`, because a bar saying `clipboard mode` while
     /// nothing put a value on the clipboard would have been worse than silence.
@@ -294,6 +300,8 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::OnClipboard => "on the clipboard",
         PaletteLabel::Interrupted => "interrupted",
         PaletteLabel::Warnings => "pack warnings: {count}",
+        PaletteLabel::InsideLimit => "inside the limit",
+        PaletteLabel::OutsideLimit => "outside the limit",
         PaletteLabel::PairFirst => "pair 1 of 2",
         PaletteLabel::PairSecond => "pair 2 of 2",
         PaletteLabel::ClipboardMode => "clipboard mode",
@@ -632,6 +640,17 @@ pub fn pair_half(half: PairHalf) -> &'static str {
     })
 }
 
+/// Which side of its limit a made value is on, in the words the palette
+/// writes beside it (`D178`).
+#[must_use]
+pub fn limit_side(within: bool) -> &'static str {
+    pattern_palette_label(if within {
+        PaletteLabel::InsideLimit
+    } else {
+        PaletteLabel::OutsideLimit
+    })
+}
+
 /// How many warnings the pack carried when it loaded.
 ///
 /// Written as `pack warnings: 1` rather than `1 pack warnings` on purpose: the
@@ -832,6 +851,8 @@ mod tests {
             PaletteLabel::Warnings,
             PaletteLabel::PairFirst,
             PaletteLabel::PairSecond,
+            PaletteLabel::InsideLimit,
+            PaletteLabel::OutsideLimit,
             PaletteLabel::ClipboardMode,
             PaletteLabel::ClipboardForWindow,
             PaletteLabel::PreviewElided,
@@ -933,6 +954,8 @@ mod tests {
                 | PaletteLabel::Interrupted
                 | PaletteLabel::PairFirst
                 | PaletteLabel::PairSecond
+                | PaletteLabel::InsideLimit
+                | PaletteLabel::OutsideLimit
                 | PaletteLabel::ClipboardMode
                 | PaletteLabel::ClipboardForWindow
                 | PaletteLabel::ShortcutsPaused

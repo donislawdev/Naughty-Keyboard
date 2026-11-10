@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 
 pub(crate) mod atomic_write;
+pub mod boundary_text;
 pub mod built_in;
 pub mod canonical;
 pub mod catalogue;
@@ -30,6 +31,7 @@ pub mod system_folders;
 pub mod team_folder;
 pub mod toml_pack;
 
+pub use boundary_text::EnglishBoundary;
 pub use built_in::BUILT_IN_PACKS;
 pub use catalogue::{BuiltInCatalogue, FolderCatalogue, FolderHolds, PackFolders};
 pub use clipboard_delivery::ClipboardDelivery;

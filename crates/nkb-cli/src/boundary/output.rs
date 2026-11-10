@@ -23,7 +23,8 @@
 use crate::emit_output::{EmitFormat, Form, csv_cell, encode_base64, not_a_formula};
 use crate::english::plural;
 use crate::json::Json;
-use nkb_core::boundary::{BoundaryValue, Limit, Recipe};
+use nkb_adapters::boundary_text::value_name;
+use nkb_core::boundary::{BoundaryValue, Limit};
 use nkb_core::text::LiteralText;
 
 /// Version of the JSON THIS command prints. An axis of its own: it says
@@ -143,46 +144,11 @@ impl Text {
     }
 }
 
-/// What a person calls the value: how it is made, in plain ASCII. A character
-/// outside ASCII is named by its code points, because a name is read in a
-/// terminal and in a bug report, and one of these characters is joined by
-/// characters nobody can see.
-pub(super) fn name(value: &BoundaryValue) -> String {
-    match value.recipe() {
-        Recipe::Empty => "Empty value".to_owned(),
-        Recipe::Counterstring { length } => format!("Counterstring of {length}"),
-        Recipe::Repeated {
-            padding,
-            character,
-            count,
-        } => {
-            let repeated = format!("{count} x {}", spelled(character));
-            if padding == 0 {
-                repeated
-            } else {
-                // The padding is always the letter a (`nkb_core::boundary`).
-                format!("{padding} x a + {repeated}")
-            }
-        }
-    }
-}
-
-fn spelled(character: &str) -> String {
-    if character.is_ascii() {
-        return character.to_owned();
-    }
-    let points: Vec<String> = character
-        .chars()
-        .map(|point| format!("U+{:04X}", u32::from(point)))
-        .collect();
-    points.join(" ")
-}
-
 fn as_json(value: &BoundaryValue, text: &Text, base64: bool) -> Json {
     let sizes = value.sizes();
     Json::Object(vec![
         ("id".to_owned(), Json::text(value.id())),
-        ("name".to_owned(), Json::text(name(value))),
+        ("name".to_owned(), Json::text(value_name(value))),
         // Both forms, always, as in `nkb emit`.
         (
             "value".to_owned(),
@@ -212,7 +178,7 @@ fn csv_row(value: &BoundaryValue, text: &Text, form: Form, base64: bool) -> Stri
     let body = text.body(form, base64);
     let row = [
         value.id(),
-        name(value),
+        value_name(value),
         // No value here starts like a formula today. The same door as `nkb
         // emit` all the same, so a fill added later cannot be the first to.
         if form == Form::Escaped && !base64 {
@@ -322,33 +288,6 @@ mod tests {
         assert_eq!(of("empty", "fill"), "null");
         assert_eq!(of("empty", "value"), "\"\"");
         assert_eq!(of("empty", "within"), "true");
-    }
-
-    #[test]
-    fn a_name_says_how_the_value_is_made_in_plain_ascii() {
-        let bytes = values(limit(Unit::Bytes, None, Some(50)));
-        let names: Vec<String> = bytes.iter().map(name).collect();
-        for expected in [
-            "Empty value",
-            "49 x a",
-            "Counterstring of 51",
-            "1 x a + 24 x U+0142",
-            "25 x U+0142",
-            "2 x a + 16 x U+20AC",
-            "3 x a + 12 x U+1F600",
-            "15 x a + 2 x U+1F468 U+200D U+1F469 U+200D U+1F467",
-        ] {
-            assert!(names.iter().any(|name| name == expected), "{expected}");
-        }
-        for (value, name) in bytes.iter().zip(&names) {
-            assert!(name.is_ascii(), "{name}");
-            // What the name says about the padding is what the text starts with.
-            if let Recipe::Repeated { padding, .. } = value.recipe() {
-                let text = value.materialise();
-                let letters = text.chars().take_while(|&c| c == 'a').count();
-                assert!(letters >= padding as usize, "{name}");
-            }
-        }
     }
 
     #[test]

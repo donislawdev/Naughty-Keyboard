@@ -1066,6 +1066,9 @@ fn open_packs_later(palette: &Weak<Palette>) {
 }
 
 #[cfg(test)]
+mod samples;
+
+#[cfg(test)]
 #[allow(
     clippy::expect_used,
     clippy::panic,
@@ -1091,6 +1094,7 @@ mod tests {
     use nkb_app::ports::{Availability, SettingChange, ValueDelivery};
     use nkb_app::{AdvanceSequence, KeptSettings};
 
+    use super::samples::an_upcoming;
     use super::{
         Command, CopyButton, Delivery, Duration, HotkeyAction, InFlight, LiveShortcuts, Memory,
         Outcome, Palette, Progress, ShortcutRegistration, ShownKey, Standing, ValueBand, ValueKey,
@@ -1165,6 +1169,7 @@ mod tests {
                 field: ControlKind::TextField,
             }),
             report: Some(String::from("Value:    unicode-text/zero-width @ pack 1.0")),
+            within: None,
         }
     }
 
@@ -1179,22 +1184,6 @@ mod tests {
             attempted_send: true,
             clipboard_for_window: false,
             upcoming: Some(an_upcoming()),
-        }
-    }
-
-    /// The value after the one that went out, with its own name, reference and
-    /// preview, so the next band cannot borrow a line from the value band and
-    /// still pass.
-    fn an_upcoming() -> UpcomingValue {
-        UpcomingValue::Value {
-            index: 8,
-            total: 34,
-            key: value_key("unicode-text", "trailing-nbsp"),
-            name: "Trailing no-break space".to_owned(),
-            reference: "unicode-text/trailing-nbsp".to_owned(),
-            preview: ValuePreview::Text(nkb_core::preview::preview("Kowalski\u{A0}")),
-            offensive: true,
-            halves: Vec::new(),
         }
     }
 

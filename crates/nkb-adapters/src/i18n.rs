@@ -102,9 +102,9 @@ pub use folders::{
 };
 use palette::pattern_palette_label;
 pub use palette::{
-    PaletteLabel, back_to, browser_did_not_open, counter, counts, label, next_end_of_pack,
-    next_value, no_value_yet, not_guaranteed, pair_half, previous_types, sent_to, skip_to,
-    typing_counter, warnings,
+    PaletteLabel, back_to, browser_did_not_open, counter, counts, label, limit_side,
+    next_end_of_pack, next_value, no_value_yet, not_guaranteed, pair_half, previous_types, sent_to,
+    skip_to, typing_counter, warnings,
 };
 pub use registration::{ended, entry_news, registration, registrations, shortcuts_unavailable};
 pub use stop::stop_reason;

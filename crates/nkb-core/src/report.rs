@@ -32,6 +32,7 @@
 //! later disagree, and a ticket quoting a size the palette never showed is a
 //! ticket nobody trusts.
 
+use crate::boundary::Limit;
 use crate::calendar::Day;
 use crate::normalization;
 use crate::pack::{Pack, PackValue};
@@ -55,6 +56,13 @@ pub struct ReportBlock {
     /// block built from the pack alone - [`ReportBlock::describe`] leaves it
     /// `None`, for the reason it leaves [`ReportBlock::target`] `None`.
     pub folder: Option<PackFolder>,
+    /// The limit the value was made for, when the tool made it rather than a
+    /// pack holding it (`D178`). Such a value is in no catalogue to look up:
+    /// what lets a reader have it again is the limit, which the text layer
+    /// writes as the command that makes the same values. `None` for a value
+    /// of a pack, and [`ReportBlock::describe`] leaves it `None`, for the
+    /// reason it leaves [`ReportBlock::folder`] `None`.
+    pub made_for: Option<Limit>,
     pub name: String,
     pub typed: Typed,
     /// The value as code points - present only when [`Typed`] holds a
@@ -255,6 +263,7 @@ impl ReportBlock {
             reference: format!("{}/{}", pack.id, value.id),
             pack_version: pack.version.clone(),
             folder: None,
+            made_for: None,
             name: value.name.clone(),
             spelled_out: spelled_out(&body, &typed),
             typed,

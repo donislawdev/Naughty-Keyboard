@@ -3090,8 +3090,8 @@
       "id": "M535",
       "why": "the palette does not get the target of a typed value (D104)",
       "file": "crates/nkb-app/src/advance_sequence.rs",
-      "find": "            target,\n            report,\n            ..sent",
-      "replace": "            target: None,\n            report,\n            ..sent",
+      "find": "            target,\n            report,\n            within,\n            ..sent",
+      "replace": "            target: None,\n            report,\n            within,\n            ..sent",
       "test": "advance_sequence::tests::a_typed_value_says_where_it_went_as_read_once_at_the_press",
       "runner": "rust:nkb-app:lib"
     },
@@ -6615,8 +6615,8 @@
       "id": "M932",
       "why": "Sent does not carry the block - the palette has nothing to show (D121)",
       "file": "crates/nkb-app/src/advance_sequence.rs",
-      "find": "            target,\n            report,\n            ..sent",
-      "replace": "            target,\n            report: None,\n            ..sent",
+      "find": "            target,\n            report,\n            within,\n            ..sent",
+      "replace": "            target,\n            report: None,\n            within,\n            ..sent",
       "test": "advance_sequence::tests::the_block_shown_with_a_value_is_the_block_the_report_copies",
       "runner": "rust:nkb-app:lib"
     },
@@ -13101,8 +13101,8 @@
       "id": "M1677",
       "why": "the report block of a team pack reads as the built-in one - a developer looks up the wrong values (D173)",
       "file": "crates/nkb-adapters/src/report_text.rs",
-      "find": "                    Some(PackFolder::Team) => ReportPhrase::ReferenceTeam,",
-      "replace": "                    Some(PackFolder::Team) => ReportPhrase::Reference,",
+      "find": "            Some(PackFolder::Team) => ReportPhrase::ReferenceTeam,",
+      "replace": "            Some(PackFolder::Team) => ReportPhrase::Reference,",
       "test": "report_text::tests::a_pack_from_a_folder_is_named_by_kind_on_the_value_line_and_nothing_else_moves",
       "runner": "rust:nkb-adapters:lib"
     },
@@ -13676,11 +13676,11 @@
     {
       "id": "M1741",
       "why": "the name of a boundary value carries characters nobody can see instead of their code points",
-      "file": "crates/nkb-cli/src/boundary/output.rs",
+      "file": "crates/nkb-adapters/src/boundary_text.rs",
       "find": "    if character.is_ascii() {",
       "replace": "    if !character.is_empty() {",
-      "test": "boundary::output::tests::a_name_says_how_the_value_is_made_in_plain_ascii",
-      "runner": "rust:nkb-cli:bin=nkb"
+      "test": "boundary_text::tests::a_name_is_the_recipe_in_plain_ascii",
+      "runner": "rust:nkb-adapters:lib"
     },
     {
       "id": "M1742",
@@ -13717,6 +13717,105 @@
       "replace": "    outln!(\"  two-byte       A letter of two bytes (U+0105)\");",
       "test": "the_site_lists_every_command_and_option_the_program_answers_to",
       "runner": "rust:nkb-cli:site_facts"
+    },
+    {
+      "id": "M1746",
+      "why": "a padded value is measured without its padding - the size shown before it goes is smaller than what is typed (D178)",
+      "file": "crates/nkb-core/src/value.rs",
+      "find": "                    code_points: front.code_points.checked_add(rest.code_points)?,",
+      "replace": "                    code_points: Some(rest.code_points)?,",
+      "test": "value::tests::a_padded_value_is_the_padding_and_then_the_unit_and_as_long_as_it_says",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1747",
+      "why": "a value with no padding at all passes as a padded one - two recipes say one text (D178)",
+      "file": "crates/nkb-core/src/value.rs",
+      "find": "            if count == 0 || count > MAX_REPEAT_COUNT {",
+      "replace": "            if count > MAX_REPEAT_COUNT {",
+      "test": "value::tests::a_padded_value_with_no_padding_or_no_unit_is_refused",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1748",
+      "why": "the start of a long counterstring in the preview is cut short - the walk goes past the place it has to build from (D178)",
+      "file": "crates/nkb-core/src/counterstring.rs",
+      "find": "    while let Some(next) = before(left).filter(|&next| next >= kept) {",
+      "replace": "    while let Some(next) = before(left).filter(|&next| next >= 1) {",
+      "test": "counterstring::tests::the_ends_are_the_ends_of_the_built_text_at_every_length",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1749",
+      "why": "a counterstring longer than a preview is shown without saying how long it is (D178)",
+      "file": "crates/nkb-core/src/preview.rs",
+      "find": "                elided_total: (length > PREVIEW_LIMIT).then_some(length),",
+      "replace": "                elided_total: None,",
+      "test": "preview::tests::a_counterstring_previews_exactly_as_its_built_text_would",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1750",
+      "why": "the report block writes a counterstring of the wrong length - the reader makes another value (D178)",
+      "file": "crates/nkb-core/src/report.rs",
+      "find": "        ValueBody::Counterstring { length } => Typed::Counterstring { length: *length },",
+      "replace": "        ValueBody::Counterstring { length } => Typed::Counterstring { length: *length + 1 },",
+      "test": "report::tests::the_two_recipes_the_tool_makes_are_typed_as_recipes_and_counted_from_the_text",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1751",
+      "why": "the report block of a value made for a limit reads as a value of a pack - nobody can look it up (D178)",
+      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "find": "                    made_for: loaded.made.as_ref().map(|made| made.limit),",
+      "replace": "                    made_for: None,",
+      "test": "advance_sequence::made::tests::the_block_of_a_made_value_carries_the_limit_and_the_words_it_was_given",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1752",
+      "why": "the palette says every made value is inside its limit (D178)",
+      "file": "crates/nkb-app/src/advance_sequence/made.rs",
+      "find": "        let within = values.iter().map(BoundaryValue::within).collect();",
+      "replace": "        let within = values.iter().map(|_| true).collect();",
+      "test": "advance_sequence::made::tests::every_press_types_the_text_the_core_makes_and_says_which_side_of_the_limit_it_is",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1753",
+      "why": "a pack chosen after a made set still says which side of a limit its values are on (D178)",
+      "file": "crates/nkb-app/src/advance_sequence/choose.rs",
+      "find": "            made: None,",
+      "replace": "            made: self.loaded.take().and_then(|loaded| loaded.made),",
+      "test": "advance_sequence::made::tests::a_pack_chosen_after_a_made_set_is_a_pack_again",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1754",
+      "why": "the command a report block gives leaves the least out - it makes other values than the ones typed (D178)",
+      "file": "crates/nkb-adapters/src/boundary_text.rs",
+      "find": "    let bounds = option(BoundaryPhrase::CommandMin, \"min\", limit.min())",
+      "replace": "    let bounds = option(BoundaryPhrase::CommandMin, \"min\", None)",
+      "test": "boundary_text::tests::the_command_writes_every_option_in_the_words_of_the_command",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1755",
+      "why": "a value over the most is said to be under the least - the tester expects the wrong refusal (D178)",
+      "file": "crates/nkb-adapters/src/boundary_text.rs",
+      "find": "            (false, length) if limit.max().is_some_and(|most| length > most) => {",
+      "replace": "            (false, length) if limit.max().is_some_and(|most| length < most) => {",
+      "test": "boundary_text::tests::what_to_expect_follows_which_side_of_the_limit_the_length_is_on",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1756",
+      "why": "the pill of a value outside its limit says inside (D178)",
+      "file": "crates/nkb-adapters/src/i18n/palette.rs",
+      "find": "    pattern_palette_label(if within {\n        PaletteLabel::InsideLimit",
+      "replace": "    pattern_palette_label(if !within {\n        PaletteLabel::InsideLimit",
+      "test": "live::view::tests::a_value_made_for_a_limit_says_which_side_of_the_limit_it_is_on",
+      "runner": "rust:nkb-gui:lib"
     }
   ]
 }

@@ -90,6 +90,7 @@ impl AdvanceSequence {
             pack: loaded.pack,
             warnings: loaded.warnings,
             origin,
+            made: None,
         });
         self.sequence = self.sequence.apply(Event::PackChosen { total }).sequence;
         Ok(())

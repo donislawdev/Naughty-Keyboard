@@ -103,6 +103,9 @@ pub enum ReportPhrase {
     ReferenceTeam,
     /// The same, for a pack from the tester's own folder.
     ReferenceOwn,
+    /// A value the tool made for a limit (`D178`): no pack and no version to
+    /// look up, so the line gives the command that makes the same values.
+    ReferenceMade,
     /// A generated value, exact at every length.
     Recipe,
     /// A generated value as code points: the unit's, and how many in a row.
@@ -173,6 +176,7 @@ fn pattern_report_phrase(phrase: ReportPhrase) -> &'static str {
         ReportPhrase::ReferenceOwn => {
             "{reference} @ pack {version}, from the tester's own pack folder"
         }
+        ReportPhrase::ReferenceMade => "{reference}, from {command}",
         ReportPhrase::Recipe => "{count} × \"{unit}\"",
         ReportPhrase::RecipeCodePoints => "{count} × {list}",
         ReportPhrase::PaddedRecipe => "{padding} + {rest}",
@@ -250,20 +254,7 @@ const LINE_END: &str = "\n";
 #[must_use]
 pub fn report_text(block: &ReportBlock) -> String {
     let mut lines: Vec<(ReportLabel, String)> = vec![
-        (
-            ReportLabel::Value,
-            fill(
-                pattern_report_phrase(match block.folder {
-                    None => ReportPhrase::Reference,
-                    Some(PackFolder::Team) => ReportPhrase::ReferenceTeam,
-                    Some(PackFolder::Own) => ReportPhrase::ReferenceOwn,
-                }),
-                &[
-                    ("reference", &escaped_prose(&block.reference)),
-                    ("version", &escaped_prose(&block.pack_version)),
-                ],
-            ),
-        ),
+        (ReportLabel::Value, reference(block)),
         (ReportLabel::Name, escaped_prose(&block.name)),
         (ReportLabel::Typed, typed(&block.typed)),
     ];
@@ -320,6 +311,32 @@ pub fn report_text(block: &ReportBlock) -> String {
         })
         .collect::<Vec<_>>()
         .join(LINE_END)
+}
+
+/// The `Value:` line: which value, and where a reader finds it again - a pack
+/// and its version, or the command that makes the values of a limit.
+fn reference(block: &ReportBlock) -> String {
+    let reference = escaped_prose(&block.reference);
+    if let Some(limit) = block.made_for {
+        return fill(
+            pattern_report_phrase(ReportPhrase::ReferenceMade),
+            &[
+                ("reference", &reference),
+                ("command", &crate::boundary_text::command(limit)),
+            ],
+        );
+    }
+    fill(
+        pattern_report_phrase(match block.folder {
+            None => ReportPhrase::Reference,
+            Some(PackFolder::Team) => ReportPhrase::ReferenceTeam,
+            Some(PackFolder::Own) => ReportPhrase::ReferenceOwn,
+        }),
+        &[
+            ("reference", &reference),
+            ("version", &escaped_prose(&block.pack_version)),
+        ],
+    )
 }
 
 fn typed(typed: &Typed) -> String {
@@ -552,7 +569,27 @@ mod tests {
                 program: Some("notepad.exe".to_owned()),
                 field: ControlKind::TextField,
             }),
+            made_for: None,
         }
+    }
+
+    #[test]
+    fn a_value_made_for_a_limit_gives_the_command_that_makes_it_and_nothing_else_moves() {
+        // `D178`: no pack and no version, so the first line says how to have
+        // the same values again - every option written out.
+        use nkb_core::boundary::{Limit, Unit};
+        let built_in = report_text(&block());
+        let limit = Limit::new(Unit::Bytes, Some(8), Some(50)).expect("in range");
+        let text = report_text(&ReportBlock {
+            reference: "boundary/two-byte-51".to_owned(),
+            made_for: Some(limit),
+            ..block()
+        });
+        assert_eq!(
+            lines(&text)[0],
+            "Value:    boundary/two-byte-51, from nkb boundary --min-length 8 --max-length 50 --unit bytes"
+        );
+        assert_eq!(lines(&text)[1..], lines(&built_in)[1..]);
     }
 
     fn lines(text: &str) -> Vec<&str> {

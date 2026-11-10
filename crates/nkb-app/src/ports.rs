@@ -10,6 +10,7 @@
 //! blind until the version that introduces the input oracle, and leaving the
 //! capability undeclared means it cannot be reached for by accident.
 
+use nkb_core::boundary::{BoundaryValue, Limit};
 use nkb_core::calendar::Day;
 use nkb_core::hotkeys::{ChordError, HotkeyAction, HotkeyChord};
 use nkb_core::identity::ValueKey;
@@ -642,6 +643,27 @@ pub trait Clipboard {
 pub trait ReportText {
     /// The block, ready to paste.
     fn report_text(&self, block: &ReportBlock) -> String;
+}
+
+/// The words of the values made for a limit (`D178`): the name of the set, and
+/// of each value what it is called, what it breaks and what to expect.
+///
+/// # Why text is a port here as well
+///
+/// The palette holds the values made for a limit the way it holds a pack, and
+/// a pack carries its own prose - the name the palette draws, the two
+/// sentences a report block quotes. For a pack that prose comes out of a file.
+/// For a made set somebody has to write it, and words are never written in
+/// `app` (untouchable rule 9), so they come in here. English always, as a
+/// pack's prose is: the adapter says why.
+pub trait BoundaryText {
+    /// What the set is called, where a pack would have its name.
+    fn set_name(&self, limit: Limit) -> String;
+    fn value_name(&self, value: &BoundaryValue) -> String;
+    /// What mishandling this value shows.
+    fn breaks(&self, value: &BoundaryValue) -> String;
+    /// What a field that keeps to `limit` does with this value.
+    fn expected(&self, limit: Limit, value: &BoundaryValue) -> String;
 }
 
 /// Supplies the raw text of a pack file.
