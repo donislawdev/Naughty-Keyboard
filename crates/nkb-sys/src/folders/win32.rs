@@ -83,6 +83,16 @@ unsafe fn method<F: Copy>(object: Raw, slot: usize) -> F {
 /// A COM reference this module holds, released on every path out.
 struct Com(Raw);
 
+impl Com {
+    /// The reference a call handed out, or `None` when it handed out none.
+    /// Every `Com` is made here, so none holds a null pointer for `method` to
+    /// read through (CodeQL `rust/access-invalid-pointer` knows only this
+    /// shape of the check, not one joined to the call's result by `||`).
+    fn owned(raw: Raw) -> Option<Self> {
+        if raw.is_null() { None } else { Some(Self(raw)) }
+    }
+}
+
 impl Drop for Com {
     fn drop(&mut self) {
         let release: unsafe extern "system" fn(Raw) -> u32 =
@@ -158,10 +168,11 @@ fn pick_on_this_thread(request: &PickRequest) -> Result<Picked, PickError> {
             &mut raw,
         )
     };
-    if made < 0 || raw.is_null() {
+    if made < 0 {
         return Err(failed("the folder window could not be made", made));
     }
-    let dialog = Com(raw);
+    let dialog =
+        Com::owned(raw).ok_or_else(|| failed("the folder window could not be made", made))?;
     configure(&dialog, request)?;
     let show: unsafe extern "system" fn(Raw, *mut c_void) -> HRESULT =
         unsafe { method(dialog.0, SLOT_SHOW) };
@@ -222,10 +233,12 @@ fn open_in(dialog: &Com, start: &Path) {
     let parsed = unsafe {
         SHCreateItemFromParsingName(path.as_ptr(), null_mut(), &IID_ISHELLITEM, &mut raw)
     };
-    if parsed < 0 || raw.is_null() {
+    if parsed < 0 {
         return;
     }
-    let item = Com(raw);
+    let Some(item) = Com::owned(raw) else {
+        return;
+    };
     let set_folder: unsafe extern "system" fn(Raw, Raw) -> HRESULT =
         unsafe { method(dialog.0, SLOT_SET_FOLDER) };
     let _ = unsafe { set_folder(dialog.0, item.0) };
@@ -237,10 +250,10 @@ fn chosen(dialog: &Com) -> Result<PathBuf, PickError> {
         unsafe { method(dialog.0, SLOT_GET_RESULT) };
     let mut raw: Raw = null_mut();
     let got = unsafe { get_result(dialog.0, &mut raw) };
-    if got < 0 || raw.is_null() {
+    if got < 0 {
         return Err(failed("the folder chosen could not be read", got));
     }
-    let item = Com(raw);
+    let item = Com::owned(raw).ok_or_else(|| failed("the folder chosen could not be read", got))?;
     let display_name: unsafe extern "system" fn(Raw, i32, *mut PWSTR) -> HRESULT =
         unsafe { method(item.0, SLOT_GET_DISPLAY_NAME) };
     let mut name: PWSTR = null_mut();
