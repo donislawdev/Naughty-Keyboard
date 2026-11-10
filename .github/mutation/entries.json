@@ -13231,6 +13231,159 @@
       "replace": "    let limit = prose::OTHER_TEXT_LIMIT;",
       "test": "lint_report::tests::prose_findings_name_the_field_its_owner_and_what_was_found",
       "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1692",
+      "why": "a space goes to the desktop as itself - the portal reads an address that is not one and opens no folder or another (D175)",
+      "file": "crates/nkb-sys/src/linux_folder_rules.rs",
+      "find": "        if plain(byte) {",
+      "replace": "        if plain(byte) || byte == b' ' {",
+      "test": "linux_folder_rules::tests::a_folder_goes_to_the_desktop_with_every_other_byte_escaped",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1693",
+      "why": "a folder of another machine comes back as a path of this one - the team folder points somewhere else (D175)",
+      "file": "crates/nkb-sys/src/linux_folder_rules.rs",
+      "find": "    if !(host.is_empty() || host.eq_ignore_ascii_case(\"localhost\")) {",
+      "replace": "    if false {",
+      "test": "linux_folder_rules::tests::an_address_that_is_not_a_folder_of_this_machine_is_refused",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1694",
+      "why": "an escaped NUL comes back inside a path, which the settings file and the system cut short at it (D175)",
+      "file": "crates/nkb-sys/src/linux_folder_rules.rs",
+      "find": "    (bytes.first() == Some(&b'/') && !bytes.contains(&0)).then_some(bytes)",
+      "replace": "    (bytes.first() == Some(&b'/')).then_some(bytes)",
+      "test": "linux_folder_rules::tests::an_address_that_is_not_a_folder_of_this_machine_is_refused",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1695",
+      "why": "the folder to open in goes to the portal without the closing zero its byte string needs (D175)",
+      "file": "crates/nkb-sys/src/linux_folder_rules.rs",
+      "find": "        .then(|| path.iter().copied().chain(Some(0)).collect())",
+      "replace": "        .then(|| path.to_vec())",
+      "test": "linux_folder_rules::tests::the_folder_to_open_in_closes_with_a_zero",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1696",
+      "why": "the palette window is named to the portal in decimal - the folder window belongs to another window or to none (D175)",
+      "file": "crates/nkb-sys/src/linux_folder_rules.rs",
+      "find": "    owner.map_or_else(String::new, |window| format!(\"x11:{window:x}\"))",
+      "replace": "    owner.map_or_else(String::new, |window| format!(\"x11:{window}\"))",
+      "test": "linux_folder_rules::tests::the_window_belongs_to_the_palette_window_in_hexadecimal",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1697",
+      "why": "closing the folder window is told as a failure of it (D175)",
+      "file": "crates/nkb-sys/src/linux_folder_rules.rs",
+      "find": "        Answer::Cancelled => Ok(None),",
+      "replace": "        Answer::Cancelled => Err(PickError::NoWindow),",
+      "test": "linux_folder_rules::tests::the_answer_is_the_first_folder_or_a_cancel",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1698",
+      "why": "a fault on the helper thread leaves the window waiting for an answer that never comes - its buttons stay off (D175)",
+      "file": "crates/nkb-sys/src/folders.rs",
+      "find": "            let result = catch_unwind(AssertUnwindSafe(work)).unwrap_or_else(faulted);",
+      "replace": "            let result = { let _ = &faulted; work() };",
+      "test": "folders::tests::a_thread_that_stops_on_a_fault_still_answers",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1699",
+      "why": "a quote in a folder name ends the argument of Explorer early, and the rest of the name becomes more of its arguments (D175)",
+      "file": "crates/nkb-sys/src/folders/win32.rs",
+      "find": "        .any(|unit| unit == u16::from(b'\"') || unit == 0)",
+      "replace": "        .any(|unit| unit == 0)",
+      "test": "folders::win32::tests::a_path_that_could_end_the_quotes_never_reaches_explorer",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1700",
+      "why": "a chosen team folder is said to be saved and never reaches the settings file - the next start does not know it (D175)",
+      "file": "crates/nkb-app/src/keep_settings.rs",
+      "find": "            Keeping::Saving => store.save(&change).map_err(Some),",
+      "replace": "            Keeping::Saving => Ok(()),",
+      "test": "keep_settings::tests::the_team_folder_is_saved_and_stopping_it_always_reaches_the_store",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1701",
+      "why": "the own folder becomes the team folder too - its packs are read twice and each is used instead of itself (D175)",
+      "file": "crates/nkb-adapters/src/team_folder.rs",
+      "find": "        Some(FolderHolds::Skipped(SourceSkipped::SameAsOwn)) => Err(TeamFolderRefusal::OwnFolder),",
+      "replace": "        Some(FolderHolds::Skipped(SourceSkipped::SameAsOwn)) => Ok((text.to_owned(), taken.clone())),",
+      "test": "team_folder::tests::what_is_not_a_folder_or_is_the_own_folder_is_refused",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1702",
+      "why": "a relative team folder is refused as a missing folder, not as a path that must be full (D175)",
+      "file": "crates/nkb-adapters/src/team_folder.rs",
+      "find": "    if !chosen.is_absolute() {",
+      "replace": "    if false {",
+      "test": "team_folder::tests::what_is_not_a_folder_or_is_the_own_folder_is_refused",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1703",
+      "why": "Stop using leaves team-folder in the settings file - the next start uses the team folder again (D175)",
+      "file": "crates/nkb-adapters/src/settings_file.rs",
+      "find": "        SettingChange::TeamFolder(None) => (current.is_none(), None),",
+      "replace": "        SettingChange::TeamFolder(None) => (true, None),",
+      "test": "settings_file::tests::the_team_folder_is_written_read_back_and_removed",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1704",
+      "why": "a team pack the own folder overrides is counted among the ones the team folder puts in place of another (D175)",
+      "file": "crates/nkb-adapters/src/catalogue.rs",
+      "find": "                            origin.source == source && !origin.overrides.is_empty()",
+      "replace": "                            !origin.overrides.is_empty()",
+      "test": "catalogue::tests::each_folder_says_how_many_packs_it_holds_and_how_many_win",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1705",
+      "why": "a folder whose packs replace none says so with a count of zero - noise in every line (D175)",
+      "file": "crates/nkb-adapters/src/i18n/folders.rs",
+      "find": "            if instead > 0 {",
+      "replace": "            if true {",
+      "test": "i18n::folders::tests::a_folder_that_was_read_says_its_counts_after_their_labels",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1706",
+      "why": "every thing of a drop of several becomes the team folder in turn, so the last one wins (D175)",
+      "file": "crates/nkb-gui/src/pack_folders.rs",
+      "find": "            .is_some_and(|first| now.duration_since(first) < ONE_DROP);",
+      "replace": "            .is_some_and(|first| now.duration_since(first) > ONE_DROP);",
+      "test": "the_first_thing_of_a_drop_is_taken_and_the_rest_are_named_once",
+      "runner": "rust:nkb-gui:folders_window"
+    },
+    {
+      "id": "M1707",
+      "why": "the worker's answer for the first thing of a drop hides that the rest were not used (D175)",
+      "file": "crates/nkb-gui/src/pack_folders.rs",
+      "find": "        if named {",
+      "replace": "        if false {",
+      "test": "the_first_thing_of_a_drop_is_taken_and_the_rest_are_named_once",
+      "runner": "rust:nkb-gui:folders_window"
+    },
+    {
+      "id": "M1708",
+      "why": "a new drop keeps the sentences of the last one beside its own answer (D175)",
+      "file": "crates/nkb-gui/src/pack_folders.rs",
+      "find": "        self.last_drop.set(Some(now));\n        self.notes.borrow_mut().clear();",
+      "replace": "        self.last_drop.set(Some(now));",
+      "test": "the_first_thing_of_a_drop_is_taken_and_the_rest_are_named_once",
+      "runner": "rust:nkb-gui:folders_window"
     }
   ]
 }

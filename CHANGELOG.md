@@ -20,6 +20,11 @@ Changes wait under Unreleased until then.
   folder is refused, never swapped for the built-in one.
 - `--team-folder <folder>` on `nkb packs`, `show`, `emit` and `send` names the team folder for one
   run, so a pipeline with no settings file can use a team's packs.
+- A Pack folders window, opened from the header of the value window. It shows your own folder and
+  the team folder, how many packs each holds and how many of them replace another pack. Choose
+  folder sets the team folder in the system's folder window, or drop a folder on the window. Stop
+  using forgets it, Open shows a folder in the file manager, and Create and open makes your own
+  folder. The choice is saved as `team-folder` in the settings file.
 - A `passwords` pack of seventeen passwords that registration and login read differently. Four pairs
   are tests in three steps: register with the first half, log in with the second, read the result.
   They catch a hash that reads only 72 bytes, also behind a 37-character Polish password, a trailing

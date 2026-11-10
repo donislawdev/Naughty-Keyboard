@@ -2,7 +2,7 @@
 title: Uczciwe ograniczenia
 slug: ograniczenia
 seoTitle: Uczciwe ograniczenia - czego program jeszcze nie robi
-description: "Gdzie Naughty Keyboard się kończy: wpisywanie ma warunki w każdym systemie, Linux zmierzono na jednym, folder zespołu wpisujesz ręcznie, format nie jest stały."
+description: "Gdzie Naughty Keyboard się kończy: wpisywanie ma warunki w każdym systemie, Linux zmierzono na jednym, wybór folderu jest systemowy, format nie jest stały."
 lead: "Narzędzie, które po cichu robi mniej, niż się wydaje, jest gorsze od takiego, które to mówi. Oto, czego jeszcze nie robi."
 ---
 
@@ -30,7 +30,7 @@ Na macOS nadal może, w jednym rodzaju aplikacji. Command, Control albo Option t
 
 ## Czy mogę wczytać własne paczki?
 
-Tak, z własnego folderu i z folderu zespołu, w palecie i w wierszu poleceń - jak, mówi [strona o palecie](/docs/palette/). Brakuje przycisku: folder zespołu to wiersz w `settings.toml` albo `--team-folder` w wierszu poleceń, a paleta nie umie go jeszcze wybrać.
+Tak, z własnego folderu i z folderu zespołu, w palecie i w wierszu poleceń - jak, mówi [strona o palecie](/docs/palette/). Okno folderów paczek wybiera folder zespołu w oknie wyboru Twojego systemu. Na Windows i macOS to okno działa wewnątrz palety, jak w każdym programie, więc wczytuje dodatki, które inne programy dokładają do przeglądarki plików, na przykład dyski w chmurze, a one mogą łączyć się z siecią, gdy okno jest otwarte. Jego pole ścieżki samo kopiuje i wkleja. Upuszczenie folderu na okno omija jedno i drugie. Na macOS folder zespołu w Dokumentach, na Biurku albo w Pobranych sprawia, że system raz pyta, czy Naughty Keyboard może go czytać.
 
 ## Czy format paczki jest stabilny?
 
