@@ -1,0 +1,20 @@
+{{- /*
+  A limit or a closed list of the pack format in the text of a page: format
+  "min_breaks" gives 40, format "relations" gives `look-alike`, `range`,
+  `identity`. The facts come from the constants the validator checks a file
+  against (data/facts/pack-format.json), so a page cannot teach a limit the
+  program does not keep. A name the facts do not have stops the build.
+*/ -}}
+{{- $facts := index hugo.Data.facts "pack-format" -}}
+{{- $name := .Get 0 -}}
+{{- if not (isset $facts $name) -}}
+  {{- errorf "%s: data/facts/pack-format.json has no %q" .Position $name -}}
+{{- end -}}
+{{- $value := index $facts $name -}}
+{{- if reflect.IsSlice $value -}}
+  {{- $words := slice -}}
+  {{- range $value }}{{ $words = $words | append (printf "<code>%s</code>" (htmlEscape .)) }}{{ end -}}
+  {{- delimit $words ", " | safeHTML -}}
+{{- else -}}
+  {{- lang.FormatNumber 0 $value -}}
+{{- end -}}

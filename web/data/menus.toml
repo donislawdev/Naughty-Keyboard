@@ -32,6 +32,10 @@ key = "side_palette"
 pages = ["/docs/palette", "/docs/shortcuts", "/docs/clipboard-mode"]
 
 [[sidebar]]
+key = "side_own"
+pages = ["/docs/write-a-pack", "/docs/pack-templates"]
+
+[[sidebar]]
 key = "side_cli"
 pages = [
   "/docs/cli",
@@ -67,7 +71,13 @@ pages = ["/download", "/packs", "/security", "/faq"]
 
 [[footer]]
 key = "footer_docs"
-pages = ["/docs/getting-started", "/docs/palette", "/docs/shortcuts", "/docs/cli"]
+pages = [
+  "/docs/getting-started",
+  "/docs/palette",
+  "/docs/shortcuts",
+  "/docs/write-a-pack",
+  "/docs/cli",
+]
 
 [[footer]]
 key = "footer_guides"

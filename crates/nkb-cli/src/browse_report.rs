@@ -190,6 +190,16 @@ fn origin_note(origin: &PackOrigin) -> String {
     }
 }
 
+/// The first line `nkb show`, `send` and `emit` say about a pack that has
+/// errors, and so is not loaded at all.
+#[must_use]
+pub fn not_loaded(command: &str, wanted: &str, errors: usize) -> String {
+    format!(
+        "nkb {command}: '{wanted}' has {} and is not loaded at all.",
+        plural(errors, "error")
+    )
+}
+
 /// How to see what is wrong with a refused pack: `nkb lint` on its file, named
 /// for a pack from a folder - `nkb lint` reads a path, not a name (R04).
 #[must_use]
@@ -272,7 +282,8 @@ pub fn listing(listing: &Listing, folders: &PackFolders) -> Vec<String> {
             PackEntry::Refused { id, errors, origin } => {
                 let lint = lint_hint(id, origin, folders);
                 lines.push(format!(
-                    "{id:<24}   -- not loaded: {errors} errors - {lint}{from}"
+                    "{id:<24}   -- not loaded: {} - {lint}{from}",
+                    plural(*errors, "error")
                 ));
             }
             PackEntry::Unreadable { id, reason, .. } => lines.push(format!(
@@ -385,9 +396,9 @@ pub fn pack(pack: &Pack, warnings: usize) -> Vec<String> {
     }
 
     lines.push(format!(
-        "{} values, {} pairs.",
-        pack.values.len(),
-        pack.pairs.len()
+        "{}, {}.",
+        plural(pack.values.len(), "value"),
+        plural(pack.pairs.len(), "pair")
     ));
     lines
 }
@@ -401,6 +412,20 @@ pub fn pack(pack: &Pack, warnings: usize) -> Vec<String> {
 mod tests {
     use super::*;
     use nkb_core::text::LiteralText;
+
+    #[test]
+    fn a_pack_with_errors_is_counted_in_the_number_it_has() {
+        // A pack file somebody is writing for the first time usually has one
+        // mistake left, and "1 errors" is the sentence they meet then.
+        assert_eq!(
+            not_loaded("show", "checkout", 1),
+            "nkb show: 'checkout' has 1 error and is not loaded at all."
+        );
+        assert_eq!(
+            not_loaded("emit", "checkout", 3),
+            "nkb emit: 'checkout' has 3 errors and is not loaded at all."
+        );
+    }
 
     #[test]
     fn an_invisible_value_is_printed_escaped_and_not_as_nothing() {

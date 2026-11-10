@@ -1,0 +1,20 @@
+format = 1
+
+[pack]
+id          = "single-quotes"
+name        = "My shop"
+description = "Values for the checkout of my shop."
+version     = "1.0"
+updated     = 2026-11-10
+license     = "CC-BY-4.0"
+authors     = ["Me"]
+language    = "en"
+tags        = ["checkout"]
+
+[[values]]
+id     = "trailing-space"
+name   = "Name with a space at the end"
+value  = 'Kowalski '
+breaks = "The sign-up form keeps the space and the login form trims it, so the account is created and then cannot be found."
+expect = "Trimmed everywhere or kept everywhere."
+since  = "1.0"

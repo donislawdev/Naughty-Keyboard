@@ -1,0 +1,163 @@
+{
+  "mistakes": [
+    {
+      "file": "curly-quotes.toml",
+      "problems": [
+        {
+          "line": 16,
+          "code": "E004",
+          "text": "curly-quotes.toml:16  E004  not valid TOML: string values must be quoted, expected literal string. Nothing else in this file could be checked."
+        }
+      ],
+      "summary": "1 error, 0 warnings.",
+      "output": [
+        "curly-quotes.toml:16  E004  not valid TOML: string values must be quoted, expected literal string. Nothing else in this file could be checked.",
+        "1 error, 0 warnings.",
+        "Checked 43 of 49 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.",
+        "The pack format is not frozen yet: a later release may still change it."
+      ]
+    },
+    {
+      "file": "file-name.toml",
+      "problems": [
+        {
+          "line": 4,
+          "code": "E010",
+          "text": "file-name.toml:4  E010  the pack declares id `my-shop`, which is not this file's name. A pack is addressed by its file name, so rename one of the two to match the other."
+        }
+      ],
+      "summary": "1 error, 0 warnings.",
+      "output": [
+        "file-name.toml:4  E010  the pack declares id `my-shop`, which is not this file's name. A pack is addressed by its file name, so rename one of the two to match the other.",
+        "1 error, 0 warnings.",
+        "Checked 43 of 49 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.",
+        "The pack format is not frozen yet: a later release may still change it."
+      ]
+    },
+    {
+      "file": "no-breaks.toml",
+      "problems": [
+        {
+          "line": 14,
+          "code": "E030",
+          "text": "no-breaks.toml:14  E030  value `trailing-space` declares no `breaks`. It is the field this catalogue exists for: say what this value usually breaks and why, or the value is a curiosity rather than a test case."
+        }
+      ],
+      "summary": "1 error, 0 warnings.",
+      "output": [
+        "no-breaks.toml:14  E030  value `trailing-space` declares no `breaks`. It is the field this catalogue exists for: say what this value usually breaks and why, or the value is a curiosity rather than a test case.",
+        "1 error, 0 warnings.",
+        "Checked 43 of 49 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.",
+        "The pack format is not frozen yet: a later release may still change it."
+      ]
+    },
+    {
+      "file": "short-breaks.toml",
+      "problems": [
+        {
+          "line": 18,
+          "code": "E031",
+          "text": "short-breaks.toml:18  E031  value `trailing-space` has a `breaks` of 17 characters, where the format asks for 40. Say what this value usually breaks and why - the sentence is the work this catalogue is made of."
+        }
+      ],
+      "summary": "1 error, 0 warnings.",
+      "output": [
+        "short-breaks.toml:18  E031  value `trailing-space` has a `breaks` of 17 characters, where the format asks for 40. Say what this value usually breaks and why - the sentence is the work this catalogue is made of.",
+        "1 error, 0 warnings.",
+        "Checked 43 of 49 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.",
+        "The pack format is not frozen yet: a later release may still change it."
+      ]
+    },
+    {
+      "file": "single-quotes.toml",
+      "problems": [
+        {
+          "line": 17,
+          "code": "E022",
+          "text": "single-quotes.toml:17  E022  value `trailing-space` needs \\u0020 escaped, but is written in single quotes where nothing is an escape. Use double quotes and write \\u0020."
+        }
+      ],
+      "summary": "1 error, 0 warnings.",
+      "output": [
+        "single-quotes.toml:17  E022  value `trailing-space` needs \\u0020 escaped, but is written in single quotes where nothing is an escape. Use double quotes and write \\u0020.",
+        "1 error, 0 warnings.",
+        "Checked 43 of 49 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.",
+        "The pack format is not frozen yet: a later release may still change it."
+      ]
+    },
+    {
+      "file": "space-written-out.toml",
+      "problems": [
+        {
+          "line": 17,
+          "code": "E020",
+          "text": "space-written-out.toml:17  E020  value `trailing-space` writes \\u0020 out instead of escaping it. A reviewer cannot see it and an editor can drop it - write it as \\u0020."
+        }
+      ],
+      "summary": "1 error, 0 warnings.",
+      "output": [
+        "space-written-out.toml:17  E020  value `trailing-space` writes \\u0020 out instead of escaping it. A reviewer cannot see it and an editor can drop it - write it as \\u0020.",
+        "1 error, 0 warnings.",
+        "Checked 43 of 49 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.",
+        "The pack format is not frozen yet: a later release may still change it."
+      ]
+    },
+    {
+      "file": "typo-in-a-key.toml",
+      "problems": [
+        {
+          "line": 14,
+          "code": "W032",
+          "text": "typo-in-a-key.toml:14  W032  value `trailing-space` declares no `expect`. Without it a tester sees what happened and has nothing to compare it against, so a bug and correct behaviour look the same."
+        },
+        {
+          "line": 20,
+          "code": "E002",
+          "text": "typo-in-a-key.toml:20  E002  `trailing-space` declares `expected`, which the format does not define. A key nobody reads is a setting nobody applied - check for a typo."
+        }
+      ],
+      "summary": "1 error, 1 warning.",
+      "output": [
+        "typo-in-a-key.toml:14  W032  value `trailing-space` declares no `expect`. Without it a tester sees what happened and has nothing to compare it against, so a bug and correct behaviour look the same.",
+        "typo-in-a-key.toml:20  E002  `trailing-space` declares `expected`, which the format does not define. A key nobody reads is a setting nobody applied - check for a typo.",
+        "1 error, 1 warning.",
+        "Checked 43 of 49 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.",
+        "The pack format is not frozen yet: a later release may still change it."
+      ]
+    },
+    {
+      "file": "untidy.toml",
+      "problems": [
+        {
+          "line": 15,
+          "code": "W064",
+          "text": "untidy.toml:15  W064  this file is not in the shape `nkb fmt` writes. Run `nkb fmt` on it, and a difference in a pull request stays a difference of content rather than of style."
+        }
+      ],
+      "summary": "0 errors, 1 warning.",
+      "output": [
+        "untidy.toml:15  W064  this file is not in the shape `nkb fmt` writes. Run `nkb fmt` on it, and a difference in a pull request stays a difference of content rather than of style.",
+        "0 errors, 1 warning.",
+        "Checked 43 of 49 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.",
+        "The pack format is not frozen yet: a later release may still change it."
+      ]
+    },
+    {
+      "file": "wrong-field-kind.toml",
+      "problems": [
+        {
+          "line": 20,
+          "code": "E028",
+          "text": "wrong-field-kind.toml:20  E028  value `trailing-space` names field kind `e-mail`, which is not in the format's closed list: any, text, multiline, name, username, password, email, url, search, number, integer, money, date, time, datetime, phone, postal-code, country-code, address, filename, path and id-number. Pick the nearest one rather than coining one."
+        }
+      ],
+      "summary": "1 error, 0 warnings.",
+      "output": [
+        "wrong-field-kind.toml:20  E028  value `trailing-space` names field kind `e-mail`, which is not in the format's closed list: any, text, multiline, name, username, password, email, url, search, number, integer, money, date, time, datetime, phone, postal-code, country-code, address, filename, path and id-number. Pick the nearest one rather than coining one.",
+        "1 error, 0 warnings.",
+        "Checked 43 of 49 rules, 1 of them only in part. 5 not checked - run `nkb lint --explain` to see which and why.",
+        "The pack format is not frozen yet: a later release may still change it."
+      ]
+    }
+  ]
+}

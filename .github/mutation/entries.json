@@ -13384,6 +13384,141 @@
       "replace": "        self.last_drop.set(Some(now));",
       "test": "the_first_thing_of_a_drop_is_taken_and_the_rest_are_named_once",
       "runner": "rust:nkb-gui:folders_window"
+    },
+    {
+      "id": "M1709",
+      "why": "the core names a type the validator does not produce - nkb lint and the website promise a kind that is refused",
+      "file": "crates/nkb-core/src/schema.rs",
+      "find": "pub const VALUE_TYPES: [&str; 3] = [\"literal\", \"repeat\", \"next-date\"];",
+      "replace": "pub const VALUE_TYPES: [&str; 3] = [\"literal\", \"repeat\", \"next-day\"];",
+      "test": "toml_pack::tests::every_type_the_core_names_is_one_this_build_produces",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1710",
+      "why": "a field kind outside the list is reported with no line of its own - an editor jumps to the top of the value, or nowhere in the pack table",
+      "file": "crates/nkb-adapters/src/toml_pack.rs",
+      "find": "            LintProblem::new(RuleCode::FieldOutsideVocabulary)\n                .at(line)\n                .about(kind)",
+      "replace": "            LintProblem::new(RuleCode::FieldOutsideVocabulary).about(kind)",
+      "test": "toml_pack::tests::a_field_kind_outside_the_closed_list_is_refused",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1711",
+      "why": "a character written out in a value is reported on the first line of the value, not on the line that holds it",
+      "file": "crates/nkb-adapters/src/toml_pack/body.rs",
+      "find": "    problems\n        .into_iter()\n        .map(|problem| problem.at(line))\n        .collect()",
+      "replace": "    problems",
+      "test": "toml_pack::tests::a_character_written_out_is_reported_on_the_line_that_holds_it",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1712",
+      "why": "a character written out in the unit of a repeat is reported away from the unit",
+      "file": "crates/nkb-adapters/src/toml_pack/body.rs",
+      "find": "                .map(|problem| problem.at(line)),",
+      "replace": "                .map(|problem| problem.at(line + 1)),",
+      "test": "toml_pack::tests::a_character_written_out_is_reported_on_the_line_that_holds_it",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1713",
+      "why": "a breaks too short is reported on the first line of the value, not on the sentence to rewrite",
+      "file": "crates/nkb-adapters/src/toml_pack.rs",
+      "find": "                    LintProblem::new(RuleCode::BreaksTooShortOrEchoesName)\n                        .at(line)\n                        .about(code_points.to_string()),",
+      "replace": "                    LintProblem::new(RuleCode::BreaksTooShortOrEchoesName)\n                        .about(code_points.to_string()),",
+      "test": "toml_pack::tests::a_short_breaks_is_reported_on_the_line_of_the_sentence",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1714",
+      "why": "the sentence about a wrong field kind names three kinds of twenty-two - a writer cannot pick the nearest",
+      "file": "crates/nkb-cli/src/lint_report.rs",
+      "find": "            listed(&FIELD_KINDS)",
+      "replace": "            listed(&FIELD_KINDS[..3])",
+      "test": "lint_report::tests::a_field_kind_outside_the_list_names_its_owner_and_every_kind_allowed",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1715",
+      "why": "a wrong word in the pack table is reported as a value named pack",
+      "file": "crates/nkb-cli/src/lint_report.rs",
+      "find": "        \"the pack\".to_owned()",
+      "replace": "        \"value `pack`\".to_owned()",
+      "test": "lint_report::tests::a_field_kind_outside_the_list_names_its_owner_and_every_kind_allowed",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1716",
+      "why": "a breaks of one character is counted as 1 characters",
+      "file": "crates/nkb-cli/src/lint_report.rs",
+      "find": "                |n| plural(n, \"character\")",
+      "replace": "                |n: usize| format!(\"{n} characters\")",
+      "test": "lint_report::tests::a_short_breaks_of_one_character_is_counted_in_the_singular",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1717",
+      "why": "a closed list in a sentence loses its last and",
+      "file": "crates/nkb-cli/src/english.rs",
+      "find": "            format!(\"{} and {}\", head.join(\", \"), last.as_ref())",
+      "replace": "            format!(\"{}, {}\", head.join(\", \"), last.as_ref())",
+      "test": "english::tests::a_list_is_joined_with_commas_and_a_last_and",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1718",
+      "why": "nkb show, send and emit say 1 errors about a pack with one mistake left",
+      "file": "crates/nkb-cli/src/browse_report.rs",
+      "find": "        \"nkb {command}: '{wanted}' has {} and is not loaded at all.\",\n        plural(errors, \"error\")",
+      "replace": "        \"nkb {command}: '{wanted}' has {} and is not loaded at all.\",\n        format!(\"{errors} errors\")",
+      "test": "browse_report::tests::a_pack_with_errors_is_counted_in_the_number_it_has",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1719",
+      "why": "the website quotes what nkb lint prints without the lines about the rules, which a terminal shows",
+      "file": "crates/nkb-cli/tests/site_facts.rs",
+      "find": "        let output = said.lines().chain(notes.lines()).map(text).collect();",
+      "replace": "        let output = said.lines().chain(notes.lines().take(0)).map(text).collect();",
+      "test": "the_site_quotes_what_nkb_lint_says_about_each_mistake",
+      "runner": "rust:nkb-cli:site_facts"
+    },
+    {
+      "id": "M1720",
+      "why": "the website teaches a breaks length the validator does not ask for",
+      "file": "crates/nkb-cli/tests/site_facts.rs",
+      "find": "        (\"min_breaks\", count(MIN_BREAKS_CODE_POINTS)),",
+      "replace": "        (\"min_breaks\", count(MIN_BREAKS_CODE_POINTS + 1)),",
+      "test": "the_site_teaches_the_lists_and_limits_the_validator_checks",
+      "runner": "rust:nkb-cli:site_facts"
+    },
+    {
+      "id": "M1721",
+      "why": "a template teaches a warning - the first pack loses its tags",
+      "file": "web/assets/templates/first-pack.toml",
+      "find": "tags        = [\"example\", \"names\"]\n",
+      "replace": "",
+      "test": "every_template_passes_every_rule_with_no_warning",
+      "runner": "rust:nkb-cli:pack_templates"
+    },
+    {
+      "id": "M1722",
+      "why": "the Polish templates page leaves out a template the English one shows",
+      "file": "web/content/pl/docs/pack-templates.md",
+      "find": "{{< template \"booking-dates\" >}}",
+      "replace": "",
+      "test": "every_template_is_shown_in_every_language_and_nothing_else_is",
+      "runner": "rust:nkb-cli:pack_templates"
+    },
+    {
+      "id": "M1723",
+      "why": "a downloaded template points its reader at a page of the site that does not exist",
+      "file": "web/assets/templates/first-pack.toml",
+      "find": "https://naughtykeyboard.donislawdev.com/docs/write-a-pack/",
+      "replace": "https://naughtykeyboard.donislawdev.com/docs/write-your-pack/",
+      "test": "every_page_a_template_points_to_is_on_the_site",
+      "runner": "rust:nkb-cli:pack_templates"
     }
   ]
 }

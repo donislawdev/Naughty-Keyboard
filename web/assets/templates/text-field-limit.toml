@@ -1,0 +1,94 @@
+# A field with a limit of 50 characters. Change 50 to the limit of your field
+# in every `count` and every name below, and the pack tests that limit.
+#
+# A value this long is written as a short piece and a count, with
+# type = "repeat", so the file stays readable.
+#
+# A template from https://naughtykeyboard.donislawdev.com/docs/pack-templates/
+# Change anything in it. When you change `id`, rename the file to match,
+# text-field-limit.toml now, because a pack is found by its file name.
+
+format = 1
+
+[pack]
+id          = "text-field-limit"
+name        = "Text field limit"
+description = "Values at the edge of a 50-character limit, counted in letters, in bytes and in the units a browser counts."
+version     = "1.0"
+updated     = 2026-11-10
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["length", "limit", "boundary"]
+fields      = ["text", "name"]
+risk        = "normal"
+
+[[values]]
+id     = "len-51"
+name   = "51 characters, one over the limit"
+type   = "repeat"
+unit   = "a"
+count  = 51
+breaks = "A limit checked only in the browser lets it through when the request is sent another way, and a database column of 50 cuts the last letter or refuses the row with a raw error."
+expect = "Refused with a message that names the limit, and never saved cut short."
+since  = "1.0"
+
+[[values]]
+id     = "len-50"
+name   = "50 characters, exactly the limit"
+type   = "repeat"
+unit   = "a"
+count  = 50
+breaks = "A check written as less than instead of at most refuses a value the field promises to take, so the longest allowed text is the one that fails."
+expect = "Accepted and saved whole."
+since  = "1.0"
+
+[[values]]
+id     = "polish-letters-50"
+name   = "50 Polish letters, 100 bytes"
+type   = "repeat"
+unit   = "ą"
+count  = 50
+breaks = "Each of these letters takes two bytes in UTF-8, so a column or an API with a limit in bytes refuses or cuts a value the form counted as 50 characters."
+expect = "Accepted whole, or refused with the same limit the form shows."
+since  = "1.0"
+
+[[values]]
+id     = "emoji-50"
+name   = "50 emoji"
+type   = "repeat"
+unit   = "😀"
+count  = 50
+breaks = "JavaScript counts length in UTF-16 units, two for each of these, so the form sees 100 where the server may see 50, and a cut in the middle of one leaves a broken character."
+expect = "The browser and the server count the same way, and nothing is cut in half."
+since  = "1.0"
+
+[[values]]
+id     = "spaces-51"
+name   = "51 spaces"
+type   = "repeat"
+unit   = "\u0020"
+count  = 51
+breaks = "Over the limit before trimming and empty after it, so the answer depends on which check runs first, and a required field can be saved empty."
+expect = "Refused as empty, with the same answer whichever check runs first."
+since  = "1.0"
+
+[[values]]
+id     = "combining-50"
+name   = "50 letters with a separate accent"
+type   = "repeat"
+unit   = "e\u0301"
+count  = 50
+breaks = "Each letter is two code points, an e and an accent, so a counter in code points sees 100 where a reader sees 50 letters, and a cut can drop the accent from the last one."
+expect = "Counted as 50 letters, or normalised on save and counted the same way everywhere."
+since  = "1.0"
+
+[[values]]
+id     = "len-49"
+name   = "49 characters, one under the limit"
+type   = "repeat"
+unit   = "a"
+count  = 49
+breaks = "The control just under the limit. If it is refused too, the limit is smaller than the form says, and every other result here needs reading again."
+expect = "Accepted and saved whole."
+since  = "1.0"

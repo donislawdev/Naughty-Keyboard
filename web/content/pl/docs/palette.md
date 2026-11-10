@@ -41,7 +41,7 @@ Tak. Plik paczki w Twoim własnym folderze, `packs` obok pliku ustawień, jest p
 team-folder = 'C:\work\shop\qa-packs'
 ```
 
-Paczka z folderu własnego zastępuje paczkę zespołu o tej samej nazwie, a paczka zespołu paczkę wbudowaną. Okno mówi, skąd jest każda paczka i co zastępuje, a paleta mówi to samo, gdy taką paczkę otwiera. Paczka z błędami nie jest wczytywana, a paczka, którą miałaby zastąpić, też nie wchodzi na jej miejsce. Foldery są czytane od nowa przy każdym otwarciu okna, więc poprawiony plik paczki widać bez restartu.
+Paczka z folderu własnego zastępuje paczkę zespołu o tej samej nazwie, a paczka zespołu paczkę wbudowaną. Okno mówi, skąd jest każda paczka i co zastępuje, a paleta mówi to samo, gdy taką paczkę otwiera. Paczka z błędami nie jest wczytywana, a paczka, którą miałaby zastąpić, też nie wchodzi na jej miejsce. Foldery są czytane od nowa przy każdym otwarciu okna, więc poprawiony plik paczki widać bez restartu. Jak napisać paczkę, pokazuje strona [Własna paczka](/docs/write-a-pack/).
 
 ## Czy mogę ją zmniejszyć?
 

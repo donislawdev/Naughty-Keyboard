@@ -33,7 +33,7 @@ use nkb_app::{Date, PackFormat, TranslationCheck, TranslationTarget};
 use nkb_core::description::{self, BreaksFault};
 use nkb_core::identity::{is_pack_id, is_value_id};
 use nkb_core::lint::{LintProblem, MAX_VALUES_PER_PACK, RuleCode};
-use nkb_core::schema::{FieldKind, kind_of};
+use nkb_core::schema::{FIELD_KINDS, FieldKind, RELATIONS, RISK_LEVELS, kind_of};
 use nkb_core::source_text::SourceText;
 use std::collections::{HashMap, HashSet};
 use toml_edit::{Document, Item, Table, TableLike};
@@ -134,18 +134,10 @@ const TRANSLATION_PACK_KEYS: [&str; 2] = ["name", "description"];
 /// including fields that are harmless in a source pack.
 const TRANSLATION_ENTRY_KEYS: [&str; 3] = ["name", "breaks", "expect"];
 
-/// The two values `risk` may hold, from `pack-format.md` 4 and 5.
-///
-/// Closed like the field vocabulary, and until 2026-09-07 the only closed set in
-/// the format with no rule behind it. It decides whether a value is marked as
-/// offensive before a tester sends it, so a misspelling here does not degrade to
-/// a smaller feature - it degrades to no warning at all.
-const RISK_LEVELS: [&str; 2] = ["normal", "offensive"];
-
 /// The risk level that marks a value in the palette before a tester sends it.
 ///
-/// Named rather than spelled out at each use: W063 and the vocabulary above have
-/// to mean the same word, and two literals eventually stop doing that.
+/// Named rather than spelled out at each use: W063 and `RISK_LEVELS` in the core
+/// have to mean the same word, and two literals eventually stop doing that.
 const OFFENSIVE: &str = "offensive";
 
 /// Fields a source pack must declare. Absent means the pack cannot be cited,
@@ -166,13 +158,6 @@ const REQUIRED_PACK_FIELDS: [&str; 8] = [
 /// A pair names two values that already exist, so `a` and `b` are as necessary
 /// as the identifier: without them there is no pair, only a description of one.
 const REQUIRED_PAIR_FIELDS: [&str; 6] = ["id", "name", "since", "relation", "a", "b"];
-
-/// The three relations the format defines.
-///
-/// Closed for the same reason the field vocabulary is closed: left open, the
-/// palette cannot tell a contributor what a pair will do, and neither can the
-/// contributor.
-const RELATIONS: [&str; 3] = ["look-alike", "range", "identity"];
 
 /// The fields that decide what the tool sends into somebody else's application.
 ///
@@ -195,36 +180,6 @@ const INSERTION_FIELDS: [&str; 8] = [
 /// `breaks` is deliberately absent from this list: the format gives it a rule of
 /// its own, E030, and reporting it here as well would give one mistake two codes.
 const REQUIRED_VALUE_FIELDS: [&str; 3] = ["id", "name", "since"];
-
-/// The closed vocabulary of field kinds.
-///
-/// Closed on purpose. Left open, fifty contributions would bring `email`,
-/// `e-mail`, `mail` and `email-address` for one thing, matching packs to a field
-/// would stop working, and the repair would mean editing every pack at once.
-const FIELD_VOCABULARY: [&str; 22] = [
-    "any",
-    "text",
-    "multiline",
-    "name",
-    "username",
-    "password",
-    "email",
-    "url",
-    "search",
-    "number",
-    "integer",
-    "money",
-    "date",
-    "time",
-    "datetime",
-    "phone",
-    "postal-code",
-    "country-code",
-    "address",
-    "filename",
-    "path",
-    "id-number",
-];
 
 /// Checks everything that needs the file parsed.
 ///
@@ -532,7 +487,7 @@ fn check_pack_kinds(text: &SourceText<'_>, root: &Table) -> Vec<LintProblem> {
     problems.extend(
         check_field_kinds(text, pack.iter())
             .into_iter()
-            .chain(check_fields_of(pack))
+            .chain(check_fields_of(text, pack))
             .chain(check_risk(text, pack))
             .map(|problem| problem.owned_by("pack")),
     );
@@ -593,25 +548,32 @@ fn check_pack_id(text: &SourceText<'_>, root: &Table, expected_id: &str) -> Vec<
 /// module exists at all. Everywhere else that rule is editorial policy, which is
 /// another way of saying it holds while somebody remembers it.
 fn check_description(
+    text: &SourceText<'_>,
     table: &Table,
     pack: &PackContext,
     values_are_attributed_one_by_one: bool,
 ) -> Vec<LintProblem> {
     let mut problems = Vec::new();
 
-    if table.contains_key("breaks") {
+    if let Some(item) = table.get("breaks") {
         // A `breaks` that is present but is not text goes unjudged here. No rule
         // in the set covers a field of the wrong type, for any field, and
         // inventing a code for this one would be inventing a rule.
-        if let Some(breaks) = table.get("breaks").and_then(Item::as_str) {
+        if let Some(breaks) = item.as_str() {
+            // On the line of the sentence, which is what the reader rewrites.
+            let line = span_line(text, item);
             let name = table.get("name").and_then(Item::as_str);
             match description::check_breaks(breaks, name) {
                 Some(BreaksFault::TooShort { code_points }) => problems.push(
                     LintProblem::new(RuleCode::BreaksTooShortOrEchoesName)
+                        .at(line)
                         .about(code_points.to_string()),
                 ),
-                Some(BreaksFault::EchoesName) => problems
-                    .push(LintProblem::new(RuleCode::BreaksTooShortOrEchoesName).about("name")),
+                Some(BreaksFault::EchoesName) => problems.push(
+                    LintProblem::new(RuleCode::BreaksTooShortOrEchoesName)
+                        .at(line)
+                        .about("name"),
+                ),
                 None => {}
             }
 
@@ -621,7 +583,11 @@ fn check_description(
             if pack.language.is_none_or(|language| language == "en")
                 && !description::looks_english(breaks)
             {
-                problems.push(LintProblem::new(RuleCode::BreaksProbablyNotEnglish).about("breaks"));
+                problems.push(
+                    LintProblem::new(RuleCode::BreaksProbablyNotEnglish)
+                        .at(line)
+                        .about("breaks"),
+                );
             }
         }
     } else {
@@ -749,10 +715,10 @@ fn check_values<'a>(
             .into_iter()
             .chain(identity_problems)
             .chain(check_body(text, table))
-            .chain(check_fields(table))
+            .chain(check_fields(text, table))
             .chain(check_keys(text, table, &VALUE_KEYS, ""))
             .chain(check_risk(text, table))
-            .chain(check_description(table, pack, attributed_one_by_one))
+            .chain(check_description(text, table, pack, attributed_one_by_one))
             .chain(check_prose(text, table))
         {
             problem.line = problem.line.or(Some(line));
@@ -851,7 +817,7 @@ fn check_pairs<'a>(
         // A pair carries a description for the same reason a value does, and the
         // sentence rule reaches it for the same reason. W033 does not: crediting
         // a source belongs to the values a pair joins, not to the joining.
-        found.extend(check_description(table, pack, false));
+        found.extend(check_description(text, table, pack, false));
         found.extend(check_prose(text, table));
 
         for mut problem in found {
@@ -1134,8 +1100,8 @@ fn check_risk(text: &SourceText<'_>, table: &dyn TableLike) -> Vec<LintProblem> 
 }
 
 /// E028: field kinds outside the closed vocabulary, in a value table.
-fn check_fields(table: &Table) -> Vec<LintProblem> {
-    check_fields_of(table)
+fn check_fields(text: &SourceText<'_>, table: &Table) -> Vec<LintProblem> {
+    check_fields_of(text, table)
 }
 
 /// The same rule over anything that carries a `fields` array.
@@ -1143,16 +1109,26 @@ fn check_fields(table: &Table) -> Vec<LintProblem> {
 /// Written against the shared trait rather than the concrete table so that the
 /// pack table and a value table cannot drift into two readings of one rule - the
 /// drift that let the pack table go unchecked in the first place.
-fn check_fields_of(table: &dyn TableLike) -> Vec<LintProblem> {
-    let Some(fields) = table.get("fields").and_then(Item::as_array) else {
+///
+/// The line is the one `fields` stands on, so an editor jumps to the word
+/// rather than to the top of the value - or, in the pack table, to nowhere.
+fn check_fields_of(text: &SourceText<'_>, table: &dyn TableLike) -> Vec<LintProblem> {
+    let Some(item) = table.get("fields") else {
         return Vec::new();
     };
-
+    let Some(fields) = item.as_array() else {
+        return Vec::new();
+    };
+    let line = span_line(text, item);
     fields
         .iter()
         .filter_map(|entry| entry.as_str())
-        .filter(|kind| !FIELD_VOCABULARY.contains(kind))
-        .map(|kind| LintProblem::new(RuleCode::FieldOutsideVocabulary).about(kind))
+        .filter(|kind| !FIELD_KINDS.contains(kind))
+        .map(|kind| {
+            LintProblem::new(RuleCode::FieldOutsideVocabulary)
+                .at(line)
+                .about(kind)
+        })
         .collect()
 }
 
@@ -1253,6 +1229,7 @@ fn span_line(text: &SourceText<'_>, item: &Item) -> u32 {
 )]
 mod tests {
     use super::*;
+    use nkb_core::schema::VALUE_TYPES;
 
     /// The name the good file below is read under. Every test here reads a file
     /// whose pack identifier is this one, so the identity rules stay silent and
@@ -1672,6 +1649,80 @@ mod tests {
             .find(|p| p.code == RuleCode::FieldOutsideVocabulary)
             .expect("E028 must be reported");
         assert_eq!(found.subject.as_deref(), Some("e-mail"));
+        assert_eq!(
+            found.line,
+            Some(line_of(&text, "fields = ")),
+            "an editor jumps to the word, not to the top of the value"
+        );
+    }
+
+    /// The line, counted from one, that starts with `start`.
+    fn line_of(text: &str, start: &str) -> u32 {
+        let index = text
+            .lines()
+            .position(|line| line.starts_with(start))
+            .expect("the line is in the text");
+        u32::try_from(index + 1).expect("a test file is short")
+    }
+
+    #[test]
+    fn a_character_written_out_is_reported_on_the_line_that_holds_it() {
+        // The value starts four lines higher. A line number that sends an
+        // editor to `[[values]]` leaves the reader hunting for a space nobody
+        // can see, which is the one thing this rule is about.
+        let text = with_value("value = \"Kowalski \"\n");
+        let found = check(&text, PACK_ID)
+            .into_iter()
+            .find(|p| p.code == RuleCode::UnescapedCharacter)
+            .expect("E020 must be reported");
+        assert_eq!(found.line, Some(line_of(&text, "value = ")));
+
+        let text = with_value("type = \"repeat\"\nunit = \"a \"\ncount = 2\n");
+        let found = check(&text, PACK_ID)
+            .into_iter()
+            .find(|p| p.code == RuleCode::UnescapedCharacter)
+            .expect("E020 must be reported for a unit");
+        assert_eq!(found.line, Some(line_of(&text, "unit = ")));
+    }
+
+    #[test]
+    fn a_short_breaks_is_reported_on_the_line_of_the_sentence() {
+        let text = GOOD.replace(
+            "breaks = \"Sorting puts the record at the top of every list, and an exact match against the trimmed name finds nothing.\"\n",
+            "breaks = \"Breaks the login.\"\n",
+        );
+        assert_ne!(text, GOOD, "the breaks line of the good file moved");
+        let found = check(&text, PACK_ID)
+            .into_iter()
+            .find(|p| p.code == RuleCode::BreaksTooShortOrEchoesName)
+            .expect("E031 must be reported");
+        assert_eq!(found.line, Some(line_of(&text, "breaks = ")));
+    }
+
+    #[test]
+    fn every_type_the_core_names_is_one_this_build_produces() {
+        // `VALUE_TYPES` is the list `nkb lint` and the website name. A name in it
+        // that the body rules did not produce would be a promise the validator
+        // breaks, so each one is written into a value here and must pass.
+        for kind in VALUE_TYPES {
+            let body = match kind {
+                "literal" => "type   = \"literal\"\nvalue  = \"a\"\n",
+                "repeat" => "type   = \"repeat\"\nunit   = \"a\"\ncount  = 2\n",
+                "next-date" => concat!(
+                    "type    = \"next-date\"\n",
+                    "month   = 3\n",
+                    "week    = \"last\"\n",
+                    "weekday = \"sunday\"\n",
+                ),
+                other => panic!("`{other}` is new - write a value of it into this test"),
+            };
+            let text = with_value(body);
+            assert!(
+                codes(&text).is_empty(),
+                "{kind}: {:?}",
+                check(&text, PACK_ID)
+            );
+        }
     }
 
     /// Appends a second value to the good pack, so two bodies can be compared.
@@ -1872,6 +1923,7 @@ mod tests {
             Some("pack"),
             "the reader has to be told which of the two places carries it"
         );
+        assert_eq!(found.line, Some(line_of(&text, "fields = ")));
     }
 
     #[test]

@@ -9,6 +9,7 @@ cards:
   - /docs/palette
   - /docs/shortcuts
   - /docs/clipboard-mode
+  - /docs/write-a-pack
   - /docs/cli
   - /packs
   - /docs/verify-a-download

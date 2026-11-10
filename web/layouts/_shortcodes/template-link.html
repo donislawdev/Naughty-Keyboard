@@ -1,0 +1,7 @@
+{{- /*
+  A link in the text that downloads one pack template: template-link
+  "first-pack". The link reads the file name, which is also the pack's id.
+*/ -}}
+{{- $file := partial "template-file.html" (dict "name" (.Get 0) "position" .Position) -}}
+<a href="{{ $file.RelPermalink }}" download><code>{{ path.Base $file.Name }}</code></a>
+{{- /* no newline, so the sentence goes on right after the link */ -}}

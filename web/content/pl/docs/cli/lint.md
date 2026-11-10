@@ -30,6 +30,8 @@ my-pack.toml:38  E030  value `trailing-space` declares no `breaks`. It is the fi
 1 error, 0 warnings.
 ```
 
+Najczęstsze błędy, każdy z tym, co mówi `nkb lint`, i z poprawką, pokazuje strona [Własna paczka](/docs/write-a-pack/#co-znaczą-najczęstsze-błędy).
+
 Ten sam werdykt dla pipeline, z `--json`, i nic poza nim na standardowym wyjściu:
 
 ```console

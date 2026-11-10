@@ -1,0 +1,82 @@
+# A sign-up form: an e-mail field with a second field that repeats it, and a
+# login that has to be unique. Two pairs join values that are typed one after
+# the other: the first half into one field, the second half into the next.
+#
+# A template from https://naughtykeyboard.donislawdev.com/docs/pack-templates/
+# Change anything in it. When you change `id`, rename the file to match,
+# sign-up-form.toml now, because a pack is found by its file name.
+
+format = 1
+
+[pack]
+id          = "sign-up-form"
+name        = "Sign-up form"
+description = "Values for an e-mail field, the field that repeats it, and a login that has to be unique."
+version     = "1.0"
+updated     = 2026-11-10
+license     = "CC-BY-4.0"
+authors     = ["Naughty Keyboard"]
+language    = "en"
+tags        = ["sign-up", "email", "login"]
+fields      = ["email", "username"]
+risk        = "normal"
+
+[[values]]
+id     = "email"
+name   = "E-mail address"
+value  = "jan.kowalski@example.com"
+breaks = "The first half of a pair, and on its own a plain address every form takes. Type it into the e-mail field, then the next value into the field that repeats it."
+expect = "Accepted."
+since  = "1.0"
+
+[[values]]
+id     = "email-trailing-space"
+name   = "The same address with a space at the end"
+value  = "jan.kowalski@example.com\u0020"
+breaks = "The second half of the pair. A form that trims one field and not the other says the two addresses differ, or saves the address with the space and no mail arrives."
+expect = "Trimmed in both fields, and accepted as the same address."
+since  = "1.0"
+
+[[values]]
+id     = "login-latin"
+name   = "Login in Latin letters"
+value  = "kowalski"
+breaks = "The first half of a pair, and on its own an ordinary login. Sign up with it, then try to sign up again with the next value."
+expect = "Accepted."
+since  = "1.0"
+
+[[values]]
+id     = "login-cyrillic-o"
+name   = "The same login with a Cyrillic o"
+value  = "k\u043Ewalski"
+breaks = "The second half. It looks exactly like the first login, but one letter is Cyrillic, so a uniqueness check that compares bytes makes a second account nobody can tell from the first."
+expect = "Refused as taken, or accepted and shown so the difference can be seen."
+since  = "1.0"
+
+[[values]]
+id     = "email-plus-tag"
+name   = "Address with a plus sign"
+value  = "jan.kowalski+shop@example.com"
+breaks = "A check that allows only letters, digits and dots refuses a valid address many people use to sort their mail, and they cannot sign up at all."
+expect = "Accepted, and the confirmation mail arrives."
+since  = "1.0"
+
+[[pairs]]
+id       = "repeat-email"
+name     = "E-mail and the field that repeats it"
+relation = "identity"
+a        = "email"
+b        = "email-trailing-space"
+breaks   = "The two fields are compared before they are trimmed, so a person who typed the same address twice is told the addresses differ."
+expect   = "Both fields trimmed the same way, and the two accepted as one address."
+since    = "1.0"
+
+[[pairs]]
+id       = "look-alike-login"
+name     = "Two logins that look the same"
+relation = "look-alike"
+a        = "login-latin"
+b        = "login-cyrillic-o"
+breaks   = "Two accounts with logins nobody can tell apart, so a message, a payment or an invitation goes to the wrong person."
+expect   = "The second login refused as taken, or both kept and shown so they can be told apart."
+since    = "1.0"

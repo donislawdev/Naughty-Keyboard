@@ -1,0 +1,11 @@
+{{- /*
+  A pack template in full, with a link that downloads the file: template
+  "first-pack". The file is web/assets/templates/first-pack.toml, which
+  crates/nkb-cli/tests/pack_templates.rs holds to every rule of the format, so
+  the page shows exactly what that test read.
+*/ -}}
+{{- $file := partial "template-file.html" (dict "name" (.Get 0) "position" .Position) }}
+<div class="template">
+  <p class="template-download"><a class="button" href="{{ $file.RelPermalink }}" download>{{ T "template_download" (dict "file" (path.Base $file.Name)) }}</a></p>
+  {{ transform.Highlight $file.Content "toml" "" }}
+</div>

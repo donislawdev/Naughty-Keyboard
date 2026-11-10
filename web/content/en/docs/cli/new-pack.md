@@ -20,4 +20,4 @@ Edit it, then run `nkb lint my-pack.toml` - it reports everything in one pass.
 The pack format is not frozen yet: a later release may still change it.
 ```
 
-Put the file in your own folder, `packs` beside the settings file, and the palette and `nkb` offer it beside the built-in packs. [The palette page](/docs/palette/) says more.
+Put the file in your own folder, `packs` beside the settings file, and the palette and `nkb` offer it beside the built-in packs. [Write your own pack](/docs/write-a-pack/) explains every field of the file, and [the pack templates](/docs/pack-templates/) are fuller examples to start from.

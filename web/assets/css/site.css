@@ -1092,6 +1092,44 @@ pre .stderr {
   border-radius: 0;
 }
 
+/* A pack template, and a mistake in a pack with what nkb lint says about it. */
+
+.template-download {
+  margin: 0 0 var(--space-3);
+}
+
+.mistake-label {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--size-small);
+  color: var(--text-secondary);
+}
+
+.mistake-label:first-child {
+  margin-top: 0;
+}
+
+.pack-lines .line-number {
+  display: inline-block;
+  min-width: 2ch;
+  margin-right: var(--space-3);
+  text-align: right;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.pack-lines mark {
+  background: var(--accent-soft);
+  color: inherit;
+  outline: var(--line) solid var(--accent-line);
+  border-radius: var(--radius-small);
+}
+
+/* What nkb lint prints is prose, so it wraps instead of running off the side. */
+.lint-output {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .breadcrumbs {
   display: flex;
   flex-wrap: wrap;

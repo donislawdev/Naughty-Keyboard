@@ -406,6 +406,10 @@ A folder is read again each time the value window opens and each time a pack is 
 file shows without a restart. A team folder on a share that stops answering is skipped after two seconds
 and said, and the built-in and own packs keep working.
 
+The website has [a step-by-step guide to writing a pack](https://naughtykeyboard.donislawdev.com/docs/write-a-pack/),
+with every field, the common errors `nkb lint` reports, and
+[templates to download](https://naughtykeyboard.donislawdev.com/docs/pack-templates/) and change.
+
 ---
 
 ## Honest limits

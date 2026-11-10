@@ -34,7 +34,10 @@ use nkb_core::lint::{
     RuleStatus, Severity, SkipReason, SkippedRule,
 };
 use nkb_core::prose;
+use nkb_core::schema::{FIELD_KINDS, RELATIONS, RISK_LEVELS, VALUE_TYPES};
 use nkb_core::text::escaped_prose;
+
+use crate::english::{listed, plural};
 
 /// A field a problem names, as it may be printed (R25): absent is empty.
 fn shown(field: Option<&str>) -> String {
@@ -86,8 +89,8 @@ pub fn summary(report: &LintReport) -> Vec<String> {
     let mut lines = vec![
         format!(
             "{}, {}.",
-            count(report.errors(), "error"),
-            count(report.warnings(), "warning")
+            plural(report.errors(), "error"),
+            plural(report.warnings(), "warning")
         ),
         format!(
             "Checked {} of {} rules{}. {} not checked - run `nkb lint --explain` to see which and why.",
@@ -110,7 +113,7 @@ pub fn summary(report: &LintReport) -> Vec<String> {
     if !report.skipped.is_empty() {
         lines.push(format!(
             "{} could not be checked for this file:",
-            count(report.skipped.len(), "more rule")
+            plural(report.skipped.len(), "more rule")
         ));
         lines.extend(
             report
@@ -214,12 +217,35 @@ fn expected(field: &str) -> &'static str {
     kind_of(field).map_or("a value of another kind", |kind| kind.as_str())
 }
 
-/// English plural, used only for the two words this module counts.
-fn count(n: usize, noun: &str) -> String {
-    if n == 1 {
-        format!("{n} {noun}")
+/// A closed list of the format in a sentence, each word as it is written in
+/// a pack file.
+fn quoted_list(words: &[&str]) -> String {
+    let quoted: Vec<String> = words.iter().map(|word| format!("`{word}`")).collect();
+    listed(&quoted)
+}
+
+/// The sentences about a word outside one of the format's closed lists: `risk`
+/// (E017) and a field kind (E028), each for the pack or for one value. The
+/// list in the sentence is the one the validator checks against.
+fn vocabulary_sentence(code: RuleCode, owner: &str, subject: &str) -> String {
+    let whose = if owner == "pack" {
+        "the pack".to_owned()
     } else {
-        format!("{n} {noun}s")
+        format!("value `{owner}`")
+    };
+    match code {
+        RuleCode::RiskOutsideVocabulary if owner == "pack" => format!(
+            "{whose} sets `risk` to `{subject}`. The format has {}, and anything else is read as normal - so a pack meaning to warn about its values would ship them unmarked.",
+            listed(&RISK_LEVELS)
+        ),
+        RuleCode::RiskOutsideVocabulary => format!(
+            "{whose} sets `risk` to `{subject}`. The format has {}, and anything else is read as normal - so a value meaning to warn would be inserted with no warning shown.",
+            listed(&RISK_LEVELS)
+        ),
+        _ => format!(
+            "{whose} names field kind `{subject}`, which is not in the format's closed list: {}. Pick the nearest one rather than coining one.",
+            listed(&FIELD_KINDS)
+        ),
     }
 }
 
@@ -236,7 +262,8 @@ fn kind_sentence(code: RuleCode, owner: &str, subject: &str) -> String {
             "value `{owner}` is a `next-date` and declares no `{subject}`. A rule needs a month, a week and a weekday to name a day."
         ),
         _ => format!(
-            "value `{owner}` declares type `{subject}`. This build produces `literal`, `repeat` and `next-date` - the other names are reserved and not yet defined."
+            "value `{owner}` declares type `{subject}`. This build produces {} - the other names are reserved and not yet defined.",
+            quoted_list(&VALUE_TYPES)
         ),
     }
 }
@@ -249,7 +276,8 @@ fn pair_sentence(code: RuleCode, owner: &str, subject: &str) -> String {
             "pair `{owner}` names `{subject}` as one of its two halves, and no value in this pack has that id. A pair joins values that already exist, so that each half keeps its own description and can be cited on its own."
         ),
         RuleCode::UnknownRelation => format!(
-            "pair `{owner}` declares relation `{subject}`. The format has look-alike, range and identity - a relation nothing recognises is a pair the palette cannot present."
+            "pair `{owner}` declares relation `{subject}`. The format has {} - a relation nothing recognises is a pair the palette cannot present.",
+            listed(&RELATIONS)
         ),
         RuleCode::PairEndpointsIdentical => format!(
             "pair `{owner}` names `{subject}` on both sides. A pair is two values put next to each other, and one value twice compares nothing with nothing."
@@ -272,7 +300,11 @@ fn description_sentence(code: RuleCode, owner: &str, subject: &str) -> String {
             "value `{owner}` has a `breaks` that only says its name again. The name is already on the screen beside it, so this value arrives with no explanation at all."
         ),
         RuleCode::BreaksTooShortOrEchoesName => format!(
-            "value `{owner}` has a `breaks` of {subject} characters, where the format asks for {MIN_BREAKS_CODE_POINTS}. Say what this value usually breaks and why - the sentence is the work this catalogue is made of."
+            "value `{owner}` has a `breaks` of {}, where the format asks for {MIN_BREAKS_CODE_POINTS}. Say what this value usually breaks and why - the sentence is the work this catalogue is made of.",
+            subject.parse().map_or_else(
+                |_| format!("{subject} characters"),
+                |n| plural(n, "character")
+            )
         ),
         RuleCode::MissingExpect => format!(
             "value `{owner}` declares no `expect`. Without it a tester sees what happened and has nothing to compare it against, so a bug and correct behaviour look the same."
@@ -331,12 +363,9 @@ pub fn sentence(problem: &LintProblem) -> String {
         RuleCode::UnknownKey => format!(
             "`{owner}` declares `{subject}`, which the format does not define. A key nobody reads is a setting nobody applied - check for a typo."
         ),
-        RuleCode::RiskOutsideVocabulary if owner == "pack" => format!(
-            "the pack sets `risk` to `{subject}`. The format has normal and offensive, and anything else is read as normal - so a pack meaning to warn about its values would ship them unmarked."
-        ),
-        RuleCode::RiskOutsideVocabulary => format!(
-            "value `{owner}` sets `risk` to `{subject}`. The format has normal and offensive, and anything else is read as normal - so a value meaning to warn would be inserted with no warning shown."
-        ),
+        RuleCode::RiskOutsideVocabulary | RuleCode::FieldOutsideVocabulary => {
+            vocabulary_sentence(problem.code, owner, subject)
+        }
         RuleCode::TranslatesNonPack => format!(
             "`translates` names `{subject}`, which is itself a translation rather than a source pack. A translation follows a pack, and a chain of them has no pack at the end to follow."
         ),
@@ -392,9 +421,6 @@ pub fn sentence(problem: &LintProblem) -> String {
         ),
         RuleCode::RepeatProductTooLarge => format!(
             "value `{owner}` describes more than 1000000 code points. The count alone is in range - it is the unit multiplied by the count that is not."
-        ),
-        RuleCode::FieldOutsideVocabulary => format!(
-            "value `{owner}` names field kind `{subject}`, which is not in the format's closed list. Pick the nearest listed kind rather than coining one."
         ),
         RuleCode::EscapeOutsideCommonSubset => format!(
             "value `{owner}` uses the escape `{subject}`, which is valid in TOML 1.1.0 and an error in 1.0.0. Write the character itself, so the pack parses for everyone who receives it."
@@ -506,6 +532,44 @@ mod tests {
             .first()
             .cloned()
             .unwrap_or_default()
+    }
+
+    #[test]
+    fn a_field_kind_outside_the_list_names_its_owner_and_every_kind_allowed() {
+        // Somebody writing a first pack cannot pick "the nearest listed kind"
+        // from a list nobody showed them, and the pack table is not a value.
+        let pack = one(LintProblem::new(RuleCode::FieldOutsideVocabulary)
+            .at(12)
+            .about("e-mail")
+            .owned_by("pack"));
+        assert!(
+            pack.contains("  E028  the pack names field kind `e-mail`"),
+            "{pack}"
+        );
+        let value = one(LintProblem::new(RuleCode::FieldOutsideVocabulary)
+            .at(30)
+            .about("e-mail")
+            .owned_by("login"));
+        assert!(value.contains("  E028  value `login` names"), "{value}");
+        for line in [&pack, &value] {
+            for kind in FIELD_KINDS {
+                assert!(line.contains(kind), "{kind} is missing from: {line}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_short_breaks_of_one_character_is_counted_in_the_singular() {
+        let line = one(LintProblem::new(RuleCode::BreaksTooShortOrEchoesName)
+            .at(19)
+            .about("1")
+            .owned_by("emoji"));
+        assert!(line.contains("a `breaks` of 1 character,"), "{line}");
+        let line = one(LintProblem::new(RuleCode::BreaksTooShortOrEchoesName)
+            .at(19)
+            .about("12")
+            .owned_by("emoji"));
+        assert!(line.contains("a `breaks` of 12 characters,"), "{line}");
     }
 
     #[test]
