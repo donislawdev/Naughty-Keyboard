@@ -53,7 +53,8 @@ needs it finds out it exists.
 - **Clipboard mode** - put values on the clipboard to paste yourself, for one window or for all of them.
 - **Packs of your own and of your team** - a pack file in your own folder, or in a folder your team keeps
   in its repository, is offered beside the built-in packs, in the palette and on the command line. A pack
-  of the same name as a built-in one is used instead of it, and both say so. `nkb lint` checks a pack
+  of the same name as a built-in one is used instead of it, and both say so. The palette's Pack folders
+  window sets the team folder and opens either folder in your file manager. `nkb lint` checks a pack
   against the format rules, `nkb fmt` puts it in canonical shape and `nkb new-pack` writes the skeleton.
 - **Made for scripts too** - `nkb emit` prints a pack as JSON, CSV or one value per line, escaped or
   raw, optionally as base64. Every command has exit codes you can branch on.
@@ -383,7 +384,12 @@ window, `nkb packs`, `nkb show` and the report block all say where a pack came f
 errors is not loaded, and the built-in pack it would replace is not loaded in its place either - you
 learn that your pack is broken rather than quietly get another one.
 
-The team folder is a line in `settings.toml`, a full path:
+In the palette, **Pack folders** in the header of the value window opens a window with both folders:
+where each one is, how many packs it holds and how many of them are used instead of another pack.
+**Choose folder** sets the team folder in your system's folder window, or you can drop a folder on the
+window instead. **Stop using** forgets the team folder, **Open** shows a folder in your file manager, and
+**Create and open** makes your own folder the first time. The window keeps the team folder as one line
+in `settings.toml`, a full path, which you can also write by hand:
 
 ```toml
 [packs]
@@ -425,8 +431,14 @@ says so.
 - **The system may change what is typed.** On macOS the text substitutions of the system can turn a
   typed value into another one, and the palette and `nkb send` say so when one that is switched on could
   have acted on that very value.
-- **The team folder is a line in the settings file.** The palette offers the packs from it but has no
-  button to choose the folder yet, so it is written by hand, as above. Your own folder needs no setting.
+- **Choosing a folder uses your system's window.** On Windows and macOS that window runs inside the
+  palette, as it does in any program that opens it, so it loads the add-ons other programs give the file
+  browser, such as cloud drives and icon overlays, and they may connect to the network while it is open.
+  Its path box also copies and pastes by itself when you press the keys for that in it. Dropping the
+  folder on the Pack folders window avoids both, except on a palette run as administrator, which Windows
+  does not let a program with ordinary rights drop anything on. On macOS a team folder in Documents,
+  Desktop or Downloads makes the system ask once whether Naughty Keyboard may read it, and until you
+  allow that, the window says the folder could not be read.
 - **The pack format is not frozen.** A later release may still change it, and its notes will say how.
   `nkb lint` checks 43 of its 49 rules today, and `nkb lint --explain` lists every one and why a few wait.
 - **It does not look at the result.** It types the value and does not read what the window shows, only

@@ -13,6 +13,7 @@
 //! - `layout` - what the keyboard layouts type with `Option`,
 //! - `window` - keeping the front where the tester put it, and lending it,
 //! - `spaces` - letting the windows of the process stand in a full screen space,
+//! - `folders` - the system's folder panel, and a folder shown in Finder,
 //! - `ffi` - the calls themselves.
 //!
 //! The decisions that need no system are in `macos_rules.rs` and tested on every
@@ -20,6 +21,7 @@
 
 mod ax;
 pub(crate) mod ffi;
+pub(crate) mod folders;
 mod front;
 pub(crate) mod hotkey;
 pub(crate) mod layout;

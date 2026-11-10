@@ -121,7 +121,8 @@ thread_local! {
 
 /// How the worker tells the shortcuts window its answers: each is handed to
 /// the main thread's event loop, where the window registered by
-/// [`Shortcuts::new`] takes it.
+/// [`Shortcuts::new`] takes it - and an answer about the team folder goes to
+/// the pack folders window instead (`D175`).
 ///
 /// The result of the hand-over is dropped for the reason `live::show` gives:
 /// after the loop has quit it reports success for work nobody does, and there
@@ -129,6 +130,10 @@ thread_local! {
 pub fn tell() -> Tell {
     Box::new(|told| {
         let _ = slint::invoke_from_event_loop(move || {
+            if let Told::TeamFolder(news) = told {
+                crate::pack_folders::hear(news);
+                return;
+            }
             if let Some(window) = WINDOW.with(|slot| slot.borrow().upgrade()) {
                 window.told(told);
             }
@@ -352,6 +357,8 @@ impl Shortcuts {
                     self.told_after_closing(action, &change, not_saved);
                 }
             }
+            // The pack folders window's, routed there by `tell`.
+            Told::TeamFolder(news) => crate::pack_folders::hear(news),
         }
     }
 

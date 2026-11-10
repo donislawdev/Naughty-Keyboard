@@ -136,7 +136,7 @@ fn the_pack_window_asks_for_its_preferred_size_before_it_is_ever_shown() {
         commands,
         in_use(),
         Box::new(|_| {}),
-        nkb_adapters::PackFolders::none(),
+        nkb_gui::pack_folders::FolderLink::new(nkb_adapters::PackFolders::none()),
     );
     let asked = first_asked(&adapters);
     assert!(

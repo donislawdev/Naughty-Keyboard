@@ -100,7 +100,7 @@ use nkb_adapters::{
 use nkb_app::advance_sequence::{InFlight, Ports, RouteRequest, Sent};
 use nkb_app::browse_packs::{Direction, list_packs};
 use nkb_app::ports::{
-    Clearing, GivenShortcut, LiveShortcuts, Progress, SettingChange, Settings, SettingsStore,
+    Clearing, GivenShortcut, LiveShortcuts, Progress, SettingChange, Settings,
     ShortcutRegistration, Wait, Waiting,
 };
 use nkb_app::{
@@ -128,6 +128,7 @@ mod folders;
 mod folds;
 mod hold;
 mod links;
+mod memory;
 mod presses;
 mod recent;
 mod taking;
@@ -137,12 +138,14 @@ use aside::Question;
 use copy::show_copied;
 pub use copy::{CopyButton, copy_command, label_copies};
 pub use fault::{WorkerEnd, guarded};
+pub use folders::TeamFolderNews;
 use folders::{Folders, PackOpening, open_pack};
 use folds::{Collapse, draw_toggle};
 pub use folds::{label_shortcut_list, starts_with_shortcut_list, wire_shortcut_list};
 use hold::Hold;
 use links::ShortcutLink;
 pub use links::wire_shortcut_links;
+use memory::Memory;
 use presses::{PaletteShortcuts, between_presses};
 use recent::{after_press, carry_out_noting, keep_recent};
 pub(crate) use view::preview_line;
@@ -269,6 +272,9 @@ pub enum Command {
     /// Take that entry away again - the link beside it, carried out only for an
     /// entry this program made.
     RemoveEntry,
+    /// Make this folder the team folder, or stop using one for `None` - the pack
+    /// folders window (`D175`). Answered with [`Told::TeamFolder`].
+    TeamFolder(Option<std::path::PathBuf>),
 }
 
 /// What the worker tells the shortcuts window.
@@ -287,6 +293,8 @@ pub enum Told {
         change: ShortcutChange,
         not_saved: Option<String>,
     },
+    /// What came of one [`Command::TeamFolder`] - for the pack folders window.
+    TeamFolder(TeamFolderNews),
 }
 
 /// How the shortcuts window hears what the worker has to tell it.
@@ -848,6 +856,7 @@ impl Worker<'_> {
                 toggled: Some(self.collapse.toggle()),
             },
             Command::ShortcutList(open) => self.remember_list(open),
+            Command::TeamFolder(chosen) => self.team_folder(chosen),
             // `D101`: the way asked for, in effect from the next press and kept
             // for the next run. Between presses like every command, so a value
             // in flight keeps the way it started with. The band is rebuilt as
@@ -1026,36 +1035,6 @@ fn choose_value(
         said.push(i18n::value_gone(value, &shown(sequence, pack)));
     }
     view_between(sequence, pack, said, band, standing, held_back)
-}
-
-/// The settings of this run and where they are saved, shared by everything the
-/// worker remembers: collapsing the palette and choosing a pack.
-///
-/// One [`KeptSettings`] for both, never two: each save rewrites one key of the
-/// file (`D84`), but a failure is said once PER RUN, and two copies would say
-/// it twice and disagree about what is in effect.
-struct Memory<'a> {
-    kept: RefCell<KeptSettings>,
-    store: &'a dyn SettingsStore,
-    /// Where the settings live, for a sentence saying they were not saved.
-    file: String,
-    /// The shortcuts registered last, for the sentences that name one. A
-    /// cell, because the shortcuts window changes them while the palette runs
-    /// (K5.3).
-    bindings: Cell<Bindings>,
-    /// The pack folders, read again at every choice of a pack (`D173`).
-    folders: Folders,
-}
-
-impl Memory<'_> {
-    /// Remembers one change, in effect at once and saved when it can be. A
-    /// line to say when saving failed for a reason not said before.
-    fn keep(&self, change: SettingChange) -> Option<String> {
-        self.kept
-            .borrow_mut()
-            .keep(self.store, change)
-            .and_then(|message| i18n::settings_message(&message, &self.file, &self.bindings.get()))
-    }
 }
 
 /// Adds one line to the message band, below what is already there.

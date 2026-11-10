@@ -78,7 +78,9 @@ in its help.
 
 **It uses the clipboard in three places, and only writes to it.** Copying the report block, clipboard
 mode and the palette's Copy buttons, each after a press or a click of yours. It never pastes for you
-and never reads the clipboard. The test `clipboard_has_named_doors` names the places.
+and never reads the clipboard. The test `clipboard_has_named_doors` names the places. The system's
+folder window, which the Pack folders window opens on Windows and macOS, has a path box of its own that
+copies and pastes when you press the keys for that in it, as it does in any program.
 
 **It installs no keyboard hook.** Its shortcuts are registered with the system's hotkey call, with a
 key grab on X11 and with the desktop's global shortcuts portal under Wayland, and each tells it only
@@ -112,7 +114,11 @@ the browser, or a crate in `Cargo.lock` that `deny.toml` bans as a network clien
 granted by name: the GitHub and Donate links in the palette's header hand your browser one of two
 fixed addresses, `https://github.com/donislawdev/Naughty-Keyboard` or
 `https://donislawdev.com/support/`, when you click one, and the test refuses any other address in
-that file and the same call anywhere else. The browser makes that connection, not the tool. The test
+that file and the same call anywhere else. The browser makes that connection, not the tool. Open and
+Create and open in the Pack folders window start your file manager on that folder - Explorer from the
+Windows folder, Finder, or the desktop's file manager over the session bus - each from one file the test
+names. The system's folder window on Windows and macOS runs inside the palette and loads the add-ons
+other programs give the file browser, which may make connections of their own while it is open. The test
 `links_nothing_off_the_machine` reads the import table of both built programs, and fails if either
 links a network library, or a call that starts a program or opens a socket, beyond what its
 register names with a reason. One connection on Linux is not this project's to choose: the palette's
@@ -127,7 +133,9 @@ symbolic link. `nkb new-pack` writes one file in the current folder and never ov
 `nkb fmt` rewrites only the file it is given, and refuses and writes nothing if the change would
 alter a value. Under Wayland the palette also keeps the portal's permission in a small file in your
 state folder, and writes the desktop entry that a desktop wants before it offers shortcuts to a
-program only after you click the button for it. The other button takes it away.
+program only after you click the button for it. The other button takes it away. The Pack folders
+window writes or removes `team-folder` in `settings.toml` when you choose a team folder or stop using it,
+and creates your own `packs` folder when you click Create and open.
 
 ### In scope
 

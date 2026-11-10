@@ -1112,6 +1112,11 @@ pub enum SettingChange {
     /// The values the tester last used, the most recent first - the whole
     /// list, which is one key, so one save writes it whole (`UX-GUI-016`).
     Recent(Vec<ValueKey>),
+    /// The team's pack folder (`[packs] team-folder`, `D175`): `Some` is a full
+    /// path the pack folders window was given, `None` stops using one - by
+    /// REMOVING the key, so a value the file holds and nobody could read goes
+    /// with it.
+    TeamFolder(Option<String>),
 }
 
 /// How many values the value window remembers as recent (`UX-GUI-016`, the

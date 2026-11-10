@@ -222,15 +222,36 @@ unsafe extern "C" {
     pub(crate) fn proc_pidpath(pid: i32, buffer: *mut c_void, size: u32) -> i32;
     /// 1 on the main thread, 0 on any other.
     pub(crate) fn pthread_main_np() -> i32;
+    /// Runs `work` with `context` on `queue`, later. The main queue is drained
+    /// by the main thread's run loop, between the window toolkit's handlers
+    /// (`folders.rs`).
+    pub(crate) fn dispatch_async_f(
+        queue: *const DispatchQueue,
+        context: MutRef,
+        work: extern "C" fn(MutRef),
+    );
+    /// The main queue. `dispatch_get_main_queue()` is a macro for its address.
+    #[allow(non_upper_case_globals, reason = "the name libdispatch exports")]
+    pub(crate) static _dispatch_main_q: DispatchQueue;
 }
 
-// The Objective-C runtime: three functions, to send messages to the windows of
-// this very process (`spaces.rs`). Not AppKit - the classes are found by name at
-// run time, so a program that never opens a window never asks for them.
+/// A queue of libdispatch, only ever handled by its address.
+#[repr(C)]
+pub(crate) struct DispatchQueue {
+    _opaque: [u8; 0],
+}
+
+// The Objective-C runtime: to send messages to the windows of this very process
+// (`spaces.rs`) and to the system's folder panel and file manager (`folders.rs`).
+// Not AppKit - the classes are found by name at run time, so a program that
+// never opens a window never asks for them.
 #[link(name = "objc")]
 unsafe extern "C" {
     pub(crate) fn objc_getClass(name: *const c_char) -> MutRef;
     pub(crate) fn sel_registerName(name: *const c_char) -> MutRef;
+    /// The pool the objects AppKit hands back for a moment are released into.
+    pub(crate) fn objc_autoreleasePoolPush() -> MutRef;
+    pub(crate) fn objc_autoreleasePoolPop(pool: MutRef);
     // `objc_msgSend` is declared without its arguments and cast to the signature
     // of each message at the call, the only way messages of several shapes can be
     // sent without a declaration per shape.

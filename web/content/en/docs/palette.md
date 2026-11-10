@@ -33,7 +33,7 @@ Press {{< kbd "Alt+Shift+Space" >}}. The window that opens shows every pack as a
 
 ## Can it offer packs of my own or of my team?
 
-Yes. A pack file in your own folder, `packs` beside the settings file, is offered beside the built-in packs, and so is a pack in a team folder, a folder your team keeps, for example in the repository of the application you test. The team folder is a line in `settings.toml`:
+Yes. A pack file in your own folder, `packs` beside the settings file, is offered beside the built-in packs, and so is a pack in a team folder, a folder your team keeps, for example in the repository of the application you test. Set the team folder in the Pack folders window, which **Pack folders** in the header of the value window opens. **Choose folder** picks the folder in your system's folder window, or drop a folder on the window. **Stop using** forgets it, **Open** shows a folder in your file manager, and **Create and open** makes your own folder the first time. The window keeps the team folder as one line in `settings.toml`, which you can also write by hand:
 
 ```toml
 [packs]

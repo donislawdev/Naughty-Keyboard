@@ -42,6 +42,7 @@ import {
     Tokens,
     TextBody,
     TextSmallMuted,
+    PickerOpener,
     HintRow,
     HintBar,
     WindowFrame,
@@ -74,6 +75,11 @@ export component PacksWindow inherits Window {
     // list on every opening while a source is unread: a list from one source
     // of three looks exactly like a complete one (untouchable rule 1).
     in property <[string]> notes;
+    // The link to the pack folders window, beside the count in the header
+    // (`D175`): the list says where packs come from, and this is where that is
+    // set.
+    in property <string> folders-link;
+    in property <string> folders-link-action;
 
     callback query-pressed <=> field.pressed;
     callback previous <=> keys.previous;
@@ -86,6 +92,7 @@ export component PacksWindow inherits Window {
     callback unfold <=> keys.unfold;
     callback deactivated <=> field.window-left;
     callback activated <=> field.window-entered;
+    callback open-folders();
 
     // The keyboard goes to the query line when the window opens, so the
     // first letter the tester types filters the list (PORADNIK-GUI: the focus
@@ -114,10 +121,21 @@ export component PacksWindow inherits Window {
         WindowFrame {
             WindowHeader {
                 title: root.heading;
-                VerticalLayout {
-                    alignment: center;
-                    TextSmallMuted {
-                        text: root.summary;
+                HorizontalLayout {
+                    spacing: Tokens.space-3;
+                    alignment: end;
+                    VerticalLayout {
+                        alignment: center;
+                        TextSmallMuted {
+                            text: root.summary;
+                        }
+                    }
+                    PickerOpener {
+                        text: root.folders-link;
+                        action: root.folders-link-action;
+                        clicked => {
+                            root.open-folders();
+                        }
                     }
                 }
             }

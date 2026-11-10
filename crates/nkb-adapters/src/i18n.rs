@@ -83,6 +83,7 @@ use crate::settings_file::SCHEMA;
 mod catalogue;
 mod causes;
 mod fill;
+mod folders;
 mod palette;
 mod registration;
 mod stop;
@@ -95,6 +96,10 @@ pub use catalogue::{
 };
 pub use causes::closed_window as closed_window_cause;
 pub(crate) use fill::fill;
+pub use folders::{
+    FoldersLabel, file_manager_failed, folder_state, folder_window_failed, folders_label,
+    own_folder_not_made, shown_folder, team_folder_kept, team_folder_refused,
+};
 use palette::pattern_palette_label;
 pub use palette::{
     PaletteLabel, back_to, browser_did_not_open, counter, counts, label, next_end_of_pack,
@@ -651,6 +656,9 @@ pub enum Environment {
     /// The About window opened, and the system kept the keyboard somewhere
     /// else - Esc would go to the application under test, not close it.
     AboutFocusNotTaken,
+    /// The pack folders window opened, and the system kept the keyboard
+    /// somewhere else - Esc would go to the application under test (`D175`).
+    FoldersFocusNotTaken,
     /// The palette could not be let into the space of an application in full
     /// screen (macOS), so the shortcuts work and the palette is out of sight
     /// there (`OBS-193`).
@@ -691,6 +699,9 @@ fn pattern_environment(limit: Environment) -> &'static str {
         }
         Environment::AboutFocusNotTaken => {
             "The About window could not take the keyboard focus: {reason}. Close it with its Close button."
+        }
+        Environment::FoldersFocusNotTaken => {
+            "The pack folders window could not take the keyboard focus: {reason}. Close it with its Close button."
         }
         Environment::NotOverFullScreen => {
             "The palette may stay out of sight while an application is in full screen: {reason}. The shortcuts still work. Leave full screen to see it."

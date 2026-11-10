@@ -148,10 +148,10 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
         Box::new(move |line| heard.borrow_mut().push(line)),
         // An own folder that is not there: the window says where own packs
         // go, and reads nothing from it (`D173`).
-        nkb_adapters::PackFolders::new(
+        nkb_gui::pack_folders::FolderLink::new(nkb_adapters::PackFolders::new(
             Err(nkb_app::SourceSkipped::NotSet),
             Ok(std::path::PathBuf::from("nkb-test-own-folder-not-made")),
-        ),
+        )),
     );
     let window = packs.window();
     let weak = std::rc::Rc::downgrade(&packs);
@@ -534,7 +534,7 @@ fn a_minimized_window_is_left_and_comes_back_on_the_screen() {
         choose,
         in_use,
         Box::new(move |line| heard.borrow_mut().push(line)),
-        nkb_adapters::PackFolders::none(),
+        nkb_gui::pack_folders::FolderLink::new(nkb_adapters::PackFolders::none()),
     );
     let window = packs.window();
     let shown = || window.window().is_visible();

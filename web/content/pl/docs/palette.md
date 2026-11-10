@@ -34,7 +34,7 @@ Naciśnij {{< kbd "Alt+Shift+Space" >}}. Okno, które się otworzy, pokazuje ka�
 
 ## Czy może pokazać moje paczki albo paczki zespołu?
 
-Tak. Plik paczki w Twoim własnym folderze, `packs` obok pliku ustawień, jest pokazywany obok paczek wbudowanych, tak samo jak paczka w folderze zespołu, czyli folderze, który zespół trzyma na przykład w repozytorium testowanej aplikacji. Folder zespołu to jeden wiersz w `settings.toml`:
+Tak. Plik paczki w Twoim własnym folderze, `packs` obok pliku ustawień, jest pokazywany obok paczek wbudowanych, tak samo jak paczka w folderze zespołu, czyli folderze, który zespół trzyma na przykład w repozytorium testowanej aplikacji. Folder zespołu ustawiasz w oknie folderów paczek, które otwiera **Pack folders** w nagłówku okna wartości. **Choose folder** wybiera folder w oknie wyboru Twojego systemu, a możesz też upuścić folder na to okno. **Stop using** przestaje go używać, **Open** pokazuje folder w menedżerze plików, a **Create and open** za pierwszym razem tworzy Twój własny folder. Okno zapisuje folder zespołu jako jeden wiersz w `settings.toml`, który możesz też wpisać ręcznie:
 
 ```toml
 [packs]

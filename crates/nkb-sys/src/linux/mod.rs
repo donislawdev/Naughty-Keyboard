@@ -33,11 +33,13 @@
 //! - `portal` - global shortcuts on a Wayland session, asked of the portal,
 //! - `atspi` - the kind of control that holds the keyboard focus, asked of the bus of
 //!   accessibility on either kind of session.
+//! - `folders` - the desktop's folder window and file manager, over the session bus.
 
 mod atspi;
 mod bus;
 mod connect;
 mod escape;
+pub(crate) mod folders;
 mod front;
 pub(crate) mod hotkey;
 mod ibus;

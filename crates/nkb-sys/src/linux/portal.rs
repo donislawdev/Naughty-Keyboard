@@ -172,8 +172,9 @@ const fn refusal(answer: Answer) -> Unavailable {
     }
 }
 
-/// A connection to the session bus that has been introduced to the portal.
-struct Portal {
+/// A connection to the session bus that has been introduced to the portal. The folder
+/// window and the file manager (`folders`) ask through it too.
+pub(super) struct Portal {
     connection: Connection,
     /// A second handle on the socket, to shut it and to keep a watch on it.
     stream: Handle,
@@ -182,7 +183,13 @@ struct Portal {
 }
 
 impl Portal {
-    fn open() -> Result<Self, Unavailable> {
+    pub(super) fn open() -> Result<Self, Unavailable> {
+        Self::open_waiting(CALL_WAIT)
+    }
+
+    /// [`Self::open`] with calls that may each take up to `call_wait` - for a call that
+    /// starts a program first, the file manager the bus starts when none is running.
+    pub(super) fn open_waiting(call_wait: core::time::Duration) -> Result<Self, Unavailable> {
         let address = std::env::var("DBUS_SESSION_BUS_ADDRESS").ok();
         let runtime = std::env::var("XDG_RUNTIME_DIR").ok();
         let socket = session_bus_socket(address.as_deref(), runtime.as_deref())
@@ -191,7 +198,7 @@ impl Portal {
         // The introduction to the bus is waited for like any answer, and has the same limit.
         let _watch = kept.watch(ANSWER_WAIT)?;
         let connection = Builder::async_io_unix_stream(stream)
-            .method_timeout(CALL_WAIT)
+            .method_timeout(call_wait)
             .build()?;
         let unique = connection
             .unique_name()
@@ -208,7 +215,7 @@ impl Portal {
     /// Says who the program is. Only a program with an entry is accepted. A portal without
     /// the call, or a program that has an identifier by other means, goes on to the next
     /// call, which says whether it was enough.
-    fn introduce(&self) -> Result<(), Unavailable> {
+    pub(super) fn introduce(&self) -> Result<(), Unavailable> {
         let options: HashMap<&str, Value<'_>> = HashMap::new();
         let said = self.connection.call_method(
             Some(PORTAL_NAME),
@@ -226,6 +233,11 @@ impl Portal {
         }
     }
 
+    /// The connection, for a call that the portal answers at once.
+    pub(super) const fn connection(&self) -> &Connection {
+        &self.connection
+    }
+
     fn next_token(&mut self, prefix: &str) -> String {
         self.requests += 1;
         token(prefix, std::process::id(), self.requests)
@@ -234,7 +246,7 @@ impl Portal {
     /// Makes a call that the portal answers with a signal, and waits for the answer for at
     /// most `wait`. The listening starts before the call, on the path the answer will come
     /// from, so it cannot be missed.
-    fn request<F>(
+    pub(super) fn request<F>(
         &mut self,
         wait: core::time::Duration,
         call: F,

@@ -22,8 +22,11 @@
 //! starting a process, and a local socket. Two tests start the `nkb` they were
 //! built with, and one stands in for an output that refuses every write with a
 //! socket nobody connects. Each use is registered below with its reason, a use
-//! anywhere else fails, and the register may only name a test - the product
-//! itself starts nothing and opens nothing.
+//! anywhere else fails, and the register may only name a test - with ONE
+//! exception, register 5: the system's file manager, opened on one of the two
+//! pack folders when the tester clicks for it (the owner's decision, `D173`
+//! point 2c), from one file per system. It is the one program the product
+//! starts, and it opens a folder of this machine or of a share the tester named.
 //!
 //! Views are read too. Slint has `Platform.open-url(...)`, which hands an
 //! address to the system's browser, and a view can call it without a line of
@@ -158,6 +161,14 @@ const FORBIDDEN: &[(&str, &str)] = &[
         "Launch Services, which opens an address or a program",
     ),
     ("xdg-open", "hands an address to the Linux desktop's opener"),
+    (
+        "portal.OpenURI",
+        "hands an address or a file to the opener of the desktop portal",
+    ),
+    (
+        "org.freedesktop.FileManager1",
+        "asks the desktop's file manager to open something",
+    ),
     (
         "RustConnection::connect(",
         "the X11 library's own connect, which follows DISPLAY to a host over TCP",
@@ -319,6 +330,7 @@ fn granted(rel: &str, name: &str) -> bool {
         || SPELLINGS_GRANTED_TO_THE_PRODUCT
             .iter()
             .any(|(file, spelling, _)| *file == rel && *spelling == name)
+        || opens_the_file_manager(rel, name)
 }
 
 // ---------------------------------------------------------------------------
@@ -359,6 +371,54 @@ const LOCAL_SOCKETS_GRANTED_TO_THE_PRODUCT: &[(&str, &str, &str)] = &[
          the bus library, which never sees an address",
     ),
 ];
+
+// ---------------------------------------------------------------------------
+// Register 5: the file manager, the one program the product starts
+// ---------------------------------------------------------------------------
+
+/// The file manager of each system, which the pack folders window opens on one of
+/// the two pack folders when the tester clicks for it (`D173` point 2c, `D175`):
+/// the one program the PRODUCT starts, in one file per system. Each entry is the
+/// file, the spelling or the kind of watched spelling it may use there, a word the
+/// file must hold so the grant stays tied to live code (the program it starts, or
+/// the call it makes), and why. Everywhere else the spelling stays forbidden or
+/// unregistered as before, and the granted files are refused the network and the
+/// shell like any other - the canary below watches all of it.
+const FILE_MANAGER_GRANTED_TO_THE_PRODUCT: &[(&str, &str, &str, &str)] = &[
+    (
+        "crates/nkb-sys/src/folders/win32.rs",
+        "spawn",
+        "\"explorer.exe\"",
+        "Windows: Explorer, from the system's own Windows directory and never by name, with \
+         the folder as its one argument in quotes. The folder was found to be one before, \
+         and a path that holds a quote is refused beside the command line, so nothing of it \
+         can be read as Explorer's own switches (measured: tools/sondy/explorer-sciezki.ps1)",
+    ),
+    (
+        "crates/nkb-sys/src/macos/folders.rs",
+        "NSWorkspace",
+        "c\"openURL:\"",
+        "macOS: Finder, through `openURL:` with the folder's file address. A package, which \
+         `openURL:` would open - an application started - is shown selected in its folder \
+         instead, so nothing in it runs",
+    ),
+    (
+        "crates/nkb-sys/src/linux/folders.rs",
+        "org.freedesktop.FileManager1",
+        "\"ShowFolders\"",
+        "Linux: the desktop's file manager, asked on the session bus to show the folder's \
+         file address. The bus starts it by the desktop's own entry when it is not running, \
+         and the connection is the file socket the shortcuts already use",
+    ),
+];
+
+/// Whether the file `rel` is granted `name` - a spelling or a kind of watched
+/// spelling - by register 5.
+fn opens_the_file_manager(rel: &str, name: &str) -> bool {
+    FILE_MANAGER_GRANTED_TO_THE_PRODUCT
+        .iter()
+        .any(|(file, spelling, _, _)| *file == rel && *spelling == name)
+}
 
 /// Files whose string literals NAME what they refuse, so their literals are not
 /// read for either register. Their code is read like any other file's.
@@ -402,6 +462,7 @@ fn is_allowed(rel: &str, kind: &str) -> bool {
             && LOCAL_SOCKETS_GRANTED_TO_THE_PRODUCT
                 .iter()
                 .any(|(file, _, _)| *file == rel))
+        || opens_the_file_manager(rel, kind)
 }
 
 fn refuses(rel: &str) -> bool {
@@ -649,6 +710,59 @@ fn a_spelling_granted_to_one_file_is_forbidden_everywhere_else() {
             "the granted file may name Shutdown and never a network type: {file}"
         );
     }
+}
+
+/// Register 5 lets one file per system start the file manager, and the canary sees
+/// every refusal: the same spelling in any other file, and the network and the
+/// shell in a granted one. Each grant is held to live code, and Explorer stays the
+/// one program the Windows file starts.
+#[test]
+fn the_file_manager_is_the_one_program_the_product_starts_from_one_file_per_system() {
+    assert_eq!(
+        FILE_MANAGER_GRANTED_TO_THE_PRODUCT.len(),
+        3,
+        "a second program the product starts is a decision to write down here, not a line \
+         to add"
+    );
+    for (file, spelling, held, reason) in FILE_MANAGER_GRANTED_TO_THE_PRODUCT {
+        assert!(!reason.is_empty());
+        let source = read(&workspace_root().join(file));
+        assert!(
+            source.contains(held),
+            "{file} no longer holds {held} - take register 5 out rather than keep the door open"
+        );
+        let use_of_it = if *spelling == "spawn" {
+            String::from("let c = Command::new(program);\n")
+        } else {
+            format!("let c = class(c\"{spelling}\");\n")
+        };
+        assert_eq!(
+            findings(Syntax::Rust, &use_of_it, file),
+            Vec::new(),
+            "{file}"
+        );
+        assert!(
+            !findings(Syntax::Rust, &use_of_it, "crates/nkb-sys/src/linux/send.rs").is_empty(),
+            "the grant is for {file} alone, and the same spelling anywhere else is refused"
+        );
+        for refused in [
+            "let s = TcpStream::connect(a);\n",
+            "ShellExecuteW(0, verb, file, none, none, 1);\n",
+        ] {
+            assert!(
+                findings(Syntax::Rust, refused, file)
+                    .iter()
+                    .any(|finding| finding.0 == "forbidden"),
+                "a granted file is refused the network and the shell like any other: {file}"
+            );
+        }
+    }
+    let windows = read(&workspace_root().join(FILE_MANAGER_GRANTED_TO_THE_PRODUCT[0].0));
+    assert_eq!(
+        windows.matches("Command::new(").count(),
+        1,
+        "Explorer is the one program the Windows file starts"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -914,6 +1028,16 @@ const BAD_RUST: &[(&str, &str, &str)] = &[
     (
         "the Linux opener, in a literal",
         "let c = run(\"xdg-open\", url);",
+        "forbidden",
+    ),
+    (
+        "the opener of the desktop portal",
+        "call(\"org.freedesktop.portal.OpenURI\", \"OpenURI\", url)?;",
+        "forbidden",
+    ),
+    (
+        "the desktop's file manager, outside register 5",
+        "call(\"org.freedesktop.FileManager1\", \"ShowItems\", uris)?;",
         "forbidden",
     ),
     (

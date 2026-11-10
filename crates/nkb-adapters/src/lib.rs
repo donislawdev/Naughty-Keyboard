@@ -26,10 +26,12 @@ pub(crate) mod shortcut_claim;
 pub mod shortcuts;
 pub mod skeleton;
 pub mod startup;
+pub mod system_folders;
+pub mod team_folder;
 pub mod toml_pack;
 
 pub use built_in::BUILT_IN_PACKS;
-pub use catalogue::{BuiltInCatalogue, FolderCatalogue, PackFolders};
+pub use catalogue::{BuiltInCatalogue, FolderCatalogue, FolderHolds, PackFolders};
 pub use clipboard_delivery::ClipboardDelivery;
 pub use focus::{
     Aside, KeptFocus, LentFocus, StackingError, no_keyboard_menu, stand_over_full_screen,
@@ -46,4 +48,5 @@ pub use shortcuts::{
     ChordHeld, GlobalShortcuts, chord_held, default_bindings, layout_character, refresh_layouts,
 };
 pub use startup::{report_window_failure, report_worker_failure};
+pub use team_folder::{TeamFolderRefusal, take_team_folder};
 pub use toml_pack::TomlPackFormat;
