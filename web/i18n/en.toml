@@ -354,6 +354,12 @@ other = "Commands"
 [options]
 other = "Options"
 
+[fills]
+other = "Fills"
+
+[units]
+other = "Units"
+
 [formats]
 other = "Formats"
 

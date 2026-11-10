@@ -94,6 +94,13 @@ pub(crate) fn settle(found: ExitCode) -> ExitCode {
     settled(found, Stdout::from_u8(STDOUT.load(Ordering::Relaxed)))
 }
 
+/// Whether standard output still takes what is written. A command that builds
+/// its answer piece by piece asks before it builds the next one, so a reader
+/// that left does not keep it working for nobody.
+pub(crate) fn is_open() -> bool {
+    STDOUT.load(Ordering::Relaxed) == Stdout::Open as u8
+}
+
 /// Text on standard output, or nothing once standard output has failed. Use
 /// it through `out!` and `outln!`.
 ///

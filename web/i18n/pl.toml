@@ -383,6 +383,12 @@ other = "Polecenia"
 [options]
 other = "Opcje"
 
+[fills]
+other = "Wypełnienia"
+
+[units]
+other = "Jednostki"
+
 [formats]
 other = "Formaty"
 

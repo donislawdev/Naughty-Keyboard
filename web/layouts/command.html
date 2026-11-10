@@ -1,7 +1,7 @@
 {{- /*
   A command of `nkb`. The page's own words are its content. Everything the
-  program says about the command - the usage, every option, every format, the
-  exit codes its help names, and the help word for word - comes from
+  program says about the command - the usage, every option, every fill, unit
+  and format, the exit codes its help names, and the help word for word - comes from
   data/facts/cli.json, which a test keeps equal to what the built program
   prints. An option the program gains appears here without anyone writing it,
   and in another language the build stops until it is translated.
@@ -16,7 +16,7 @@
 {{- end }}
 {{- /* In any language but English every sentence of the program goes through a translation, and a missing one stops the build. */ -}}
 {{- $translate := ne site.Language.Lang "en" }}
-{{- $table := dict "options" false "formats" false "exit_codes" false }}
+{{- $table := dict "options" false "fills" false "units" false "formats" false "exit_codes" false }}
 {{- if $translate }}
   {{- with index hugo.Data.translations site.Language.Lang }}{{ with index . "cli" }}{{ with index . $name }}{{ $table = merge $table . }}{{ end }}{{ end }}{{ end }}
 {{- end }}
@@ -51,21 +51,24 @@
       {{- end }}
     </div>
 
-    {{- with $command.formats }}
-    {{- $extra = $extra | append (dict "id" "formats" "title" (T "formats")) }}
-    <h2 id="formats">{{ T "formats" }}</h2>
+    {{- /* The lists a help may have besides its options, each under its own heading. */ -}}
+    {{- range $list := slice "fills" "units" "formats" }}
+    {{- with index $command $list }}
+    {{- $extra = $extra | append (dict "id" $list "title" (T $list)) }}
+    <h2 id="{{ $list }}">{{ T $list }}</h2>
     <div class="options">
       {{- range . }}
       {{- $words := .help }}
       {{- if $translate }}
-        {{- $words = partial "translated.html" (dict "english" .help "table" (index $table "formats") "key" .name "what" (printf "nkb %s, format %s" $name .name)) }}
+        {{- $words = partial "translated.html" (dict "english" .help "table" (index $table $list) "key" .name "what" (printf "nkb %s, %s %s" $name $list .name)) }}
       {{- end }}
-      <div class="option" id="format-{{ .name }}">
+      <div class="option" id="{{ strings.TrimSuffix "s" $list }}-{{ .name }}">
         <div class="flag">{{ .name }}</div>
         <div class="about"><p>{{ $words }}</p></div>
       </div>
       {{- end }}
     </div>
+    {{- end }}
     {{- end }}
 
     {{- $extra = $extra | append (dict "id" "exit-codes" "title" (T "exit_codes")) }}

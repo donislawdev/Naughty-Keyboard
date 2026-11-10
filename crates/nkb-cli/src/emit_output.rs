@@ -157,7 +157,7 @@ const FORMULA_STARTS: [char; 4] = ['=', '+', '-', '@'];
 /// its note says what that costs. Base64 cannot start with any of these: `+`
 /// and `/` would need a first byte from 0xF8 up, which UTF-8 never has, `=`
 /// only pads the end, and `-` and `@` are not in the alphabet.
-fn not_a_formula(escaped: &str) -> String {
+pub(crate) fn not_a_formula(escaped: &str) -> String {
     let mut rest = escaped.chars();
     match rest.next() {
         Some(first) if FORMULA_STARTS.contains(&first) => {
@@ -280,7 +280,7 @@ fn as_csv(emission: &Emission, form: Form, base64: bool, notes: &mut Vec<String>
 /// RFC 4180: a field holding a comma, a quotation mark or a line break is
 /// wrapped in quotation marks, and a quotation mark inside is doubled. Written
 /// out because the catalogue contains values designed to break exactly this.
-fn csv_cell(text: &str) -> String {
+pub(crate) fn csv_cell(text: &str) -> String {
     let needs_quoting = text.contains([',', '"', '\n', '\r']);
     if !needs_quoting {
         return text.to_owned();
@@ -323,7 +323,7 @@ fn as_lines(emission: &Emission, form: Form, base64: bool, notes: &mut Vec<Strin
 /// Twenty lines against a dependency in an artifact meant for other people's
 /// continuous integration - the same trade the JSON writer next door made, for
 /// the same reason.
-fn encode_base64(bytes: &[u8]) -> String {
+pub(crate) fn encode_base64(bytes: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
 

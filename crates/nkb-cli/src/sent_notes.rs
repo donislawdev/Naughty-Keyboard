@@ -5,8 +5,31 @@
 
 use std::io::Write;
 
+use crate::english::plural;
 use nkb_app::Following;
 use nkb_core::substitutions::Substitutions;
+
+/// How much text `nkb send` sent, in the four units that differ.
+///
+/// Four, because the difference is the point: a family emoji is one cluster,
+/// five code points and eighteen bytes, and characters above the basic plane
+/// cross as two units each. In the singular where the count is one - "1
+/// graphemes" stood here until 2026-09-24, next to the shortest values in the
+/// catalogue (`OBS-120`).
+pub(crate) fn sent_counts(
+    graphemes: usize,
+    code_points: usize,
+    bytes: usize,
+    utf16_units: usize,
+) -> String {
+    format!(
+        "{}, {}, {}, {}",
+        plural(graphemes, "grapheme"),
+        plural(code_points, "code point"),
+        plural(bytes, "byte"),
+        plural(utf16_units, "UTF-16 unit")
+    )
+}
 
 /// How far the value could be followed after it left, said plainly, because the
 /// shorter sentence reads as a stronger claim than the tool can make. Followed by
@@ -87,5 +110,19 @@ mod tests {
         assert!(!handed.contains("keystroke"), "{handed}");
         assert!(!handed.contains("typed"), "{handed}");
         assert!(handed.contains("check the field"), "{handed}");
+    }
+
+    #[test]
+    fn what_send_sent_is_counted_in_the_number_each_count_is() {
+        // The shortest values in the catalogue are the ones this reads out
+        // most: `magic-values/dash-only` is one of everything.
+        assert_eq!(
+            sent_counts(1, 1, 1, 1),
+            "1 grapheme, 1 code point, 1 byte, 1 UTF-16 unit"
+        );
+        assert_eq!(
+            sent_counts(1, 5, 18, 8),
+            "1 grapheme, 5 code points, 18 bytes, 8 UTF-16 units"
+        );
     }
 }

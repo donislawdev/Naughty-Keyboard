@@ -58,6 +58,10 @@ needs it finds out it exists.
   against the format rules, `nkb fmt` puts it in canonical shape and `nkb new-pack` writes the skeleton.
 - **Made for scripts too** - `nkb emit` prints a pack as JSON, CSV or one value per line, escaped or
   raw, optionally as base64. Every command has exit codes you can branch on.
+- **Values for the limit your field states** - `nkb boundary --max-length 50` makes the empty value and
+  values of 49, 50 and 51, in letters, in characters of two, three and four bytes, in a family emoji and
+  as a counterstring that shows where a field cut it. The limit can be counted in characters, code
+  points, UTF-16 units or bytes.
 - **Offline, free, no telemetry** - GPL-3.0, no account, and it opens no network connection.
 
 <p align="center">
@@ -263,6 +267,16 @@ true
 NaN
 ```
 
+Make the values for a limit a specification states. Fifty of a two-byte letter are fifty characters
+and a hundred bytes, so a field that cuts them counts bytes. Asked again in bytes, the value one over
+the limit is cut through its last letter:
+
+```console
+$ nkb boundary --max-length 50 --format lines > limit-50.txt
+nkb boundary: 19 values, 1500 code points, 4350 bytes
+$ nkb boundary --max-length 50 --unit bytes --format csv
+```
+
 Type one value into the focused field. You get three seconds to click the field:
 
 ```console
@@ -425,7 +439,7 @@ says so.
   the desktop asks for in a window of its own the first time. Where a system has no way, `nkb send`
   says so and exits with code 4, and a value reaches a field through the clipboard, with the palette's
   Copy buttons and its clipboard switch. The command line and the pack tools, `packs`, `show`, `emit`,
-  `lint`, `fmt` and `new-pack`, do not touch the system and work everywhere.
+  `boundary`, `lint`, `fmt` and `new-pack`, do not touch the system and work everywhere.
 - **Linux was measured on one system.** That is Ubuntu 26.04: GNOME 50 on Wayland, and X11 with openbox
   and xfwm4. KDE and other desktops are untested. Under Wayland `nkb send` hands the text to the input
   method and cannot tell whether a field had the focus. A program that reads keys through an input method

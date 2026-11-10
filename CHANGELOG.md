@@ -12,6 +12,12 @@ Changes wait under Unreleased until then.
 
 ### Added
 
+- `nkb boundary` makes the values that test the length limit of a field. Give `--max-length`,
+  `--min-length` or both, and it prints the empty value and the values one under, at and one over
+  each bound, in six fills: the letter a, a counterstring that shows where a field cut it, characters
+  of two, three and four bytes and a family emoji. `--unit` counts the limit in graphemes, code
+  points, UTF-16 units or bytes, and in the last two the limit falls inside the last character of the
+  value one over it. The formats are those of `nkb emit`.
 - A guide on the website to writing a pack of your own, from an empty folder to the first value
   typed into a field: where the file goes, every field, characters nobody can see, long values,
   dates that stay in the future, pairs, and the common errors `nkb lint` reports, each quoted from

@@ -95,6 +95,21 @@ fn cases() -> Vec<Case> {
         case(&["emit", "whitespace"], 0),
         case(&["emit", "length-bombs", "--format", "lines", "--raw"], 0),
         case(&["emit", "--help"], 0),
+        // Written one value at a time, so the reader can leave in the middle.
+        case(&["boundary", "--max-length", "50"], 0),
+        case(
+            &[
+                "boundary",
+                "--max-length",
+                "2000",
+                "--unit",
+                "bytes",
+                "--format",
+                "csv",
+            ],
+            0,
+        ),
+        case(&["boundary", "--help"], 0),
         case(&["send", "--help"], 0),
         case(&["lint", shipped], 0),
         case(&["lint", shipped, "--json"], 0),

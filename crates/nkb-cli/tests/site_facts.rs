@@ -155,7 +155,15 @@ fn document(value: &Json) -> String {
 /// The sections a help may have. A heading outside this list stops the test:
 /// a reader that skipped what it did not know would compare the site with
 /// part of the help and pass.
-const SECTIONS: [&str; 5] = ["Usage", "Commands", "Options", "Formats", "Exit codes"];
+const SECTIONS: [&str; 7] = [
+    "Usage",
+    "Commands",
+    "Options",
+    "Fills",
+    "Units",
+    "Formats",
+    "Exit codes",
+];
 
 #[derive(Default)]
 struct Entry {
@@ -172,6 +180,9 @@ struct Help {
     about: Vec<String>,
     commands: Vec<Entry>,
     options: Vec<Entry>,
+    /// What `nkb boundary` fills a value with, and what it counts a limit in.
+    fills: Vec<Entry>,
+    units: Vec<Entry>,
     formats: Vec<Entry>,
     exit_codes: Vec<Entry>,
 }
@@ -189,6 +200,8 @@ fn entries_of<'a>(help: &'a mut Help, section: &str) -> &'a mut Vec<Entry> {
     match section {
         "Commands" => &mut help.commands,
         "Options" => &mut help.options,
+        "Fills" => &mut help.fills,
+        "Units" => &mut help.units,
         "Formats" => &mut help.formats,
         "Exit codes" => &mut help.exit_codes,
         other => panic!("{other} is not a section of entries"),
@@ -242,7 +255,14 @@ fn read_help(text: &str) -> Help {
         }
         match section {
             None => panic!("an indented line outside every section: {line:?}"),
-            Some("Usage") => help.usage.push(line.trim().to_owned()),
+            // Two columns are the indent of the section. What stands beyond them
+            // lines a second line of usage up under the first, and is kept.
+            Some("Usage") => help.usage.push(
+                line.strip_prefix("  ")
+                    .unwrap_or(line)
+                    .trim_end()
+                    .to_owned(),
+            ),
             Some(name) => read_entry(name, entries_of(&mut help, name), line),
         }
     }
@@ -439,6 +459,8 @@ fn help_json(name: &str, raw: &str, help: &Help) -> Json {
         ("usage", texts(&help.usage)),
         ("about", texts(&help.about)),
         ("options", options_json(&options_of(help))),
+        ("fills", entries_json(&help.fills)),
+        ("units", entries_json(&help.units)),
         ("formats", entries_json(&help.formats)),
         ("exit_codes", entries_json(&help.exit_codes)),
         ("help", text(raw)),

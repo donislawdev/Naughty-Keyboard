@@ -42,6 +42,7 @@ pages = [
   "/docs/cli/packs",
   "/docs/cli/show",
   "/docs/cli/emit",
+  "/docs/cli/boundary",
   "/docs/cli/send",
   "/docs/cli/lint",
   "/docs/cli/fmt",

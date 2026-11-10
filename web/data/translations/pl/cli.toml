@@ -73,6 +73,90 @@ text = "Jeden wiersz na wartość. Domyślnie w postaci escapowanej, bo ten kata
 source = "0790ecc25541"
 text = "Jedna wartość na wiersz. Wartość z podziałem wiersza odrzuca i nazywa, zamiast po cichu ją rozdzielić"
 
+[boundary.summary]
+source = "cd4b610097c1"
+text = "tworzy wartości, które testują limit długości pola"
+
+[boundary.options.--max-length]
+source = "291d939176f1"
+text = "Najwięcej, ile pole przyjmuje, od 1 do 100000"
+
+[boundary.options.--min-length]
+source = "fa78f17245c7"
+text = "Najmniej, ile pole przyjmuje, od 1 do 100000"
+
+[boundary.options.--unit]
+source = "770a97edd460"
+text = "W czym liczony jest limit (domyślnie: graphemes)"
+
+[boundary.options.--escaped]
+source = "993fb60c19f4"
+text = "Wypisuje wartości tak, jak zapisuje je plik paczki"
+
+[boundary.options.--raw]
+source = "31a07ce3a71a"
+text = "Wypisuje wartości dosłownie"
+
+[boundary.options.--base64]
+source = "ca742413c92f"
+text = "Koduje wartości dla kanałów, które psują tekst"
+
+[boundary.options.--help]
+source = "9014c4c690f2"
+text = "Pokazuje tę pomoc i kończy kodem 0"
+
+[boundary.fills.letters]
+source = "1bd3e67f1a40"
+text = "Litera a"
+
+[boundary.fills.counterstring]
+source = "84b8960c28e4"
+text = "Liczby i gwiazdki, jak w *3*5*7*9*12*. Każda liczba to miejsce gwiazdki, która po niej stoi, więc pole, które ucięło wartość, samo pokazuje, gdzie ucięło"
+
+[boundary.fills.two-byte]
+source = "0cc69a5d2179"
+text = "Litera o dwóch bajtach (U+0142)"
+
+[boundary.fills.three-byte]
+source = "539511208879"
+text = "Znak o trzech bajtach (U+20AC)"
+
+[boundary.fills.four-byte]
+source = "c911e16add19"
+text = "Emoji o czterech bajtach i dwóch jednostkach UTF-16 (U+1F600)"
+
+[boundary.fills.cluster]
+source = "e08381552ece"
+text = "Emoji rodziny: dla oka jeden znak, a pięć punktów kodowych"
+
+[boundary.units.graphemes]
+source = "41cf535ece63"
+text = "Znaki tak, jak liczy je człowiek. Jednostka domyślna"
+
+[boundary.units.code-points]
+source = "9203e013e0e1"
+text = "Punkty kodowe Unicode"
+
+[boundary.units.utf16]
+source = "30ca569ceb15"
+text = "Jednostki UTF-16, które liczy maxlength w przeglądarce i JavaScript"
+
+[boundary.units.bytes]
+source = "16e2c01f5586"
+text = "Bajty UTF-8"
+
+[boundary.formats.json]
+source = "ac90f4ed8372"
+text = "Obie postacie każdej wartości, z jej wypełnieniem, długością, tym, czy mieści się w limicie, i rozmiarem we wszystkich czterech jednostkach. Format domyślny"
+
+[boundary.formats.csv]
+source = "3100d014020c"
+text = "Jeden wiersz na wartość, z tymi samymi kolumnami. Domyślnie w postaci escapowanej"
+
+[boundary.formats.lines]
+source = "e9fb00461f6f"
+text = "Jedna wartość na wiersz. Wartość pusta to pusty wiersz"
+
 [send.summary]
 source = "d12d3637abc8"
 text = "wpisuje jedną wartość w pole z fokusem"

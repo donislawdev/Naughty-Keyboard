@@ -103,6 +103,60 @@ pub(crate) fn print_emit_help() {
     outln!("  -h, --help     Show this help and exit with 0");
 }
 
+pub(crate) fn print_boundary_help() {
+    outln!("nkb boundary - make the values that test the length limit of a field");
+    outln!();
+    outln!("Usage:");
+    outln!("  nkb boundary [--max-length N] [--min-length N]");
+    outln!("               [--unit graphemes|code-points|utf16|bytes]");
+    outln!("               [--format json|csv|lines] [--escaped|--raw] [--base64]");
+    outln!();
+    outln!("Give the limit the field states and get the values worth trying: nothing,");
+    outln!("then one under, exactly at and one over each bound. Every length comes in");
+    outln!("six fills, because \"50 characters\" is a different number in each unit.");
+    outln!();
+    outln!("Fills:");
+    outln!("  letters        The letter a");
+    outln!("  counterstring  Numbers and stars, as in *3*5*7*9*12*. Each number is the");
+    outln!("                 place of the star after it, so a field that cut the value");
+    outln!("                 shows where it cut");
+    outln!("  two-byte       A letter of two bytes (U+0142)");
+    outln!("  three-byte     A sign of three bytes (U+20AC)");
+    outln!("  four-byte      An emoji of four bytes and two UTF-16 units (U+1F600)");
+    outln!("  cluster        A family emoji: one character to the eye, five code points");
+    outln!();
+    outln!("Units:");
+    outln!("  graphemes    Characters as a person counts them. The default");
+    outln!("  code-points  Unicode code points");
+    outln!("  utf16        UTF-16 units, which a browser's maxlength and JavaScript count");
+    outln!("  bytes        Bytes of UTF-8");
+    outln!();
+    outln!("Counted in graphemes, 50 two-byte letters are 100 bytes and 50 emoji are");
+    outln!("100 UTF-16 units, so a field that refuses or cuts them counts something");
+    outln!("else. Run again in that unit: a value then has exactly that many units,");
+    outln!("padded with the letter a in front, and the limit falls inside the last");
+    outln!("character of the value one over it.");
+    outln!();
+    outln!("Values go to standard output and the account of what came out goes to");
+    outln!("standard error. \"within\" says whether the length of a value is inside the");
+    outln!("limit and nothing more: a required field still refuses the empty value.");
+    outln!();
+    outln!("Formats:");
+    outln!("  json     Both forms of every value, with its fill, its length, whether it");
+    outln!("           is within the limit and its size in all four units. The default");
+    outln!("  csv      One row per value, with the same columns. Escaped by default");
+    outln!("  lines    One value per line. The empty value is an empty line");
+    outln!();
+    outln!("Options:");
+    outln!("      --max-length N  The most the field takes, from 1 to 100000");
+    outln!("      --min-length N  The least the field takes, from 1 to 100000");
+    outln!("      --unit          What the limit is counted in (default: graphemes)");
+    outln!("      --escaped       Print values as a pack file stores them");
+    outln!("      --raw           Print values literally");
+    outln!("      --base64        Encode values, for channels that damage text");
+    outln!("  -h, --help          Show this help and exit with 0");
+}
+
 pub(crate) fn print_show_help() {
     outln!("nkb show - print one pack in full");
     outln!();
@@ -131,6 +185,7 @@ pub(crate) fn print_help() {
     outln!("  packs             List the packs this build can offer");
     outln!("  show <pack>       Print one pack in full");
     outln!("  emit <pack>       Print a pack's values for a script or a file");
+    outln!("  boundary          Make the values that test the length limit of a field");
     outln!("  send <pack>       Type one value into the focused field");
     outln!("  lint <file>       Check a pack file against the format rules");
     outln!("  fmt <file>        Rewrite a pack file in canonical shape");
