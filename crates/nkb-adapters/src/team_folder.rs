@@ -138,8 +138,9 @@ mod tests {
         use std::os::unix::ffi::OsStrExt;
         let scratch = Scratch::new("not-text");
         let own = scratch.sub("own");
+        // Never made on the disk: APFS refuses such a name (EILSEQ, the macOS
+        // runner), and the refusal comes before anything is read anyway.
         let odd = scratch.0.join(std::ffi::OsStr::from_bytes(b"packs-\xff"));
-        std::fs::create_dir_all(&odd).expect("a folder with a name that is not text");
         assert_eq!(
             take_team_folder(&folders(&own), &odd).map(|(text, _)| text),
             Err(TeamFolderRefusal::NotText)
