@@ -132,7 +132,7 @@ too_many_arguments = "warn"
 # with `event`, which is `poll`, and `std`, which the conversion to `std::io::Error` needs.
 [target.'cfg(target_os = "linux")'.dependencies]
 x11rb = { version = "=0.14.0", default-features = false, features = ["xtest"] }
-rustix = { version = "=1.1.5", default-features = false, features = ["event", "std"] }
+rustix = { version = "=1.1.6", default-features = false, features = ["event", "std"] }
 zbus = { version = "=5.19.0", default-features = false, features = ["async-io", "blocking-api"] }
 
 [target.'cfg(windows)'.dependencies]
