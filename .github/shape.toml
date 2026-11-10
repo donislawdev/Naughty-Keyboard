@@ -102,9 +102,13 @@ near = 11
 # from live.rs to live/folders.rs with the pack folders. 2168 the same day, when
 # what the worker remembers went to live/memory.rs and the command that sets the
 # team folder came in. 2160 on 2026-11-10, when a sample value of the tests went
-# to live/samples.rs to make room for the limit a value was made for.
+# to live/samples.rs to make room for the limit a value was made for. 2133 the
+# same day, when the step to another pack and what the value window is told went
+# to live/made.rs with the values made for a limit, the words of what the
+# environment would not allow left i18n.rs for i18n/environment.rs, and what a
+# query is matched in left nkb-gui/src/picker.rs for picker/haystack.rs.
 [files.rust-whole]
-ceiling = 2160
+ceiling = 2133
 # 5 since 2026-10-10, the owner's choice twice that day: the ceiling came down
 # from 2907 to 2481, 2408, 2407 and 2363 as live.rs moved code into modules, the
 # band came down with it, and it reached advance_sequence.rs, settings_file.rs

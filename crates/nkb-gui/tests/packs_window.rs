@@ -39,6 +39,7 @@ use slint::{ComponentHandle, Model, SharedString};
 
 const RETURN: &str = "\n";
 const ESCAPE: &str = "\u{1b}";
+const UP: &str = "\u{F700}";
 const DOWN: &str = "\u{F701}";
 const LEFT: &str = "\u{F702}";
 const RIGHT: &str = "\u{F703}";
@@ -136,6 +137,7 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
         next: None,
         restart: HotkeyChord::parse("Alt+Shift+F9").ok(),
         recent: Vec::new(),
+        made: None,
     };
     let in_use_slot = std::sync::Arc::clone(&in_use);
     let said: Rc<RefCell<Vec<String>>> = Rc::default();
@@ -178,16 +180,16 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     );
     assert_eq!(
         titles(window).len(),
-        1 + 22,
-        "every shipped pack under one heading, no value spread out: {:?}",
+        2 + 22,
+        "the limit's row, then every shipped pack under one heading, no value spread out: {:?}",
         titles(window)
     );
-    assert_eq!(titles(window)[0], "Packs");
+    assert_eq!(titles(window)[..2], ["Length limit", "Packs"]);
     assert!(
         window
             .get_rows()
             .iter()
-            .skip(1)
+            .skip(2)
             .all(|row| row.tree && row.foldable && !row.open && row.detail_wraps),
         "every pack a closed fold whose description wraps"
     );
@@ -208,7 +210,7 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     // table in effect at its end, choosable.
     let whitespace = window.get_selected();
     tap(window, RIGHT);
-    assert_eq!(titles(window).len(), 1 + 22 + 1 + 12);
+    assert_eq!(titles(window).len(), 2 + 22 + 1 + 12);
     assert_eq!(window.get_selected(), whitespace, "the pack stays selected");
     tap(window, RIGHT);
     let restart = window
@@ -235,7 +237,7 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     tap(window, LEFT);
     assert_eq!(window.get_selected(), whitespace);
     tap(window, LEFT);
-    assert_eq!(titles(window).len(), 1 + 22);
+    assert_eq!(titles(window).len(), 2 + 22);
     // A click on a fold mark opens and closes it, and selects the pack.
     let unicode = titles(window)
         .iter()
@@ -245,12 +247,12 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     window.invoke_toggled(unicode);
     assert_eq!(
         titles(window).len(),
-        1 + 22 + 12,
+        2 + 22 + 12,
         "no restart row under another pack"
     );
     assert_eq!(window.get_selected(), unicode);
     window.invoke_toggled(unicode);
-    assert_eq!(titles(window).len(), 1 + 22);
+    assert_eq!(titles(window).len(), 2 + 22);
     assert!(
         packs.is_open(),
         "folding chooses nothing and closes nothing"
@@ -510,6 +512,93 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     );
 }
 
+/// The row of the length limit asks for its window, and this one gives way
+/// when that one is about to show (`D178`) - not at the Enter that asked: that
+/// window is made at its first opening, and the digits typed meanwhile must
+/// not reach the field under test.
+#[test]
+fn the_row_of_the_length_limit_asks_for_its_window_and_gives_way() {
+    let _surface = offscreen::start(440, 560);
+    let keyboard = Rc::new(Recorded::default());
+    let (choose, commands) = mpsc::channel();
+    let in_use = live::in_use();
+    in_use.lock().expect("a fresh lock").pack = Some(String::from("whitespace"));
+    let said: Rc<RefCell<Vec<String>>> = Rc::default();
+    let heard = Rc::clone(&said);
+    let packs = Packs::new(
+        PacksWindow::new().expect("the pack window must build"),
+        Box::new(Shared(Rc::clone(&keyboard))),
+        choose,
+        std::sync::Arc::clone(&in_use),
+        Box::new(move |line| heard.borrow_mut().push(line)),
+        nkb_gui::pack_folders::FolderLink::new(nkb_adapters::PackFolders::none()),
+    );
+    let window = packs.window();
+    let asked: Rc<RefCell<Vec<Option<u32>>>> = Rc::default();
+    packs.set_open_limit(Box::new({
+        let asked = Rc::clone(&asked);
+        move |most| asked.borrow_mut().push(most)
+    }));
+    packs.open();
+    let _ = calls(&keyboard);
+    tap(window, UP);
+    assert_eq!(
+        selected_title(window),
+        "Length limit",
+        "one step up from the first pack, past the heading"
+    );
+    tap(window, RETURN);
+    assert_eq!(*asked.borrow(), [None]);
+    assert!(
+        packs.is_open(),
+        "the window went before the other one was ready"
+    );
+    assert!(calls(&keyboard).is_empty());
+    assert_eq!(commands.try_recv(), Err(mpsc::TryRecvError::Empty));
+    assert!(said.borrow().is_empty(), "{:?}", said.borrow());
+    packs.give_way();
+    assert!(!packs.is_open());
+    assert!(!window.window().is_visible(), "giving way hides the window");
+    assert!(
+        calls(&keyboard).is_empty(),
+        "giving way hands the keyboard over, never back"
+    );
+    packs.give_way();
+    assert!(
+        calls(&keyboard).is_empty(),
+        "a closed window gave way again"
+    );
+    // A number in the search is the limit: its row is first, Enter takes it,
+    // and the other window is asked to open with the number.
+    packs.open();
+    type_text(window, "255");
+    assert_eq!(titles(window)[0], "Length limit: at most 255 graphemes");
+    assert_eq!(window.get_selected(), 0);
+    tap(window, RETURN);
+    assert_eq!(*asked.borrow(), [None, Some(255)]);
+    tap(window, ESCAPE);
+    let _ = calls(&keyboard);
+
+    // While the palette walks the values of a limit, the window opens on the
+    // row of that limit, and no pack is the one in use.
+    {
+        let mut now = in_use.lock().expect("the slot");
+        now.pack = None;
+        now.made =
+            nkb_core::boundary::Limit::new(nkb_core::boundary::Unit::Bytes, None, Some(50)).ok();
+    }
+    packs.open();
+    assert_eq!(selected_title(window), "Length limit: at most 50 bytes");
+    let row = window.get_rows().row_data(0).expect("the first row");
+    assert!(row.current, "the limit in use does not say so");
+    assert!(
+        window.get_rows().iter().skip(1).all(|row| !row.current),
+        "a pack is marked in use beside a limit"
+    );
+    tap(window, RETURN);
+    assert_eq!(*asked.borrow(), [None, Some(255), None]);
+}
+
 /// Minimizing the window is leaving it (`OBS-183`). Measured on live windows
 /// before this held: the next opening came up minimized - with the keyboard,
 /// and nothing on the screen - and a window left standing while closed
@@ -525,6 +614,7 @@ fn a_minimized_window_is_left_and_comes_back_on_the_screen() {
         next: None,
         restart: None,
         recent: Vec::new(),
+        made: None,
     };
     let said: Rc<RefCell<Vec<String>>> = Rc::default();
     let heard = Rc::clone(&said);

@@ -175,7 +175,13 @@ pub struct Packs {
     /// window hands the keyboard it lent over in.
     open_folders: RefCell<Option<Box<dyn Fn()>>>,
     handed_over: HandedOver,
+    /// Opens the length limit window - set once it exists - with the number
+    /// the search suggested as its most (`D178`).
+    open_limit: RefCell<Option<OpenLimit>>,
 }
+
+/// What opens the length limit window: handed the most the search suggested.
+pub type OpenLimit = Box<dyn Fn(Option<u32>)>;
 
 impl Packs {
     /// The window, labelled and wired, not yet shown.
@@ -204,6 +210,7 @@ impl Packs {
             folders: link.folders,
             open_folders: RefCell::new(None),
             handed_over: link.handed_over,
+            open_limit: RefCell::new(None),
         });
         let weak = Rc::downgrade(&packs);
         packs.window.on_open_folders(move || {
@@ -326,6 +333,7 @@ impl Packs {
                 now.pack.as_deref(),
                 now.next.as_deref(),
             )
+            .with_limit(now.made)
             .with_notes(notes)
             .with_restart_key(now.restart.map(i18n::chord))
             .with_recent(&now.recent);
@@ -383,6 +391,39 @@ impl Packs {
         let _ = self.window.hide();
         open();
         *self.open_folders.borrow_mut() = Some(open);
+    }
+
+    /// What opens the length limit window from this one's first row.
+    pub fn set_open_limit(&self, open: OpenLimit) {
+        *self.open_limit.borrow_mut() = Some(open);
+    }
+
+    /// The row of the length limit: asks for that window, and stays until it
+    /// is about to show - see [`Self::give_way`].
+    fn to_limit(&self, most: Option<u32>) {
+        let Some(open) = self.open_limit.borrow_mut().take() else {
+            return;
+        };
+        open(most);
+        *self.open_limit.borrow_mut() = Some(open);
+    }
+
+    /// Gives way to the length limit window, which calls this just before it
+    /// shows: the keyboard this window lent goes over to that one, so closing
+    /// it gives the keyboard back to the field under test, and this window
+    /// closes without handing anything back.
+    ///
+    /// Not at the Enter that asked for it: that window is made at its first
+    /// opening, and the digits typed while it is made would go wherever the
+    /// keyboard went meanwhile - into the field under test (`OBS-148`). A
+    /// window closed in that wait gives way with nothing to hand over.
+    pub fn give_way(&self) {
+        if !self.is_open() {
+            return;
+        }
+        self.handed_over.set(self.keyboard.pass_on());
+        *self.picker.borrow_mut() = None;
+        let _ = self.window.hide();
     }
 
     /// The window stopped being the active one: the tester is elsewhere.
@@ -492,6 +533,7 @@ impl Packs {
             Chosen::Pack(pack) => self.hand_over(Command::Choose(pack)),
             Chosen::Value { pack, value } => self.hand_over(Command::ChooseValue { pack, value }),
             Chosen::Restart { pack, value } => self.hand_over(Command::Restart { pack, value }),
+            Chosen::Limit { most } => self.to_limit(most),
         }
     }
 

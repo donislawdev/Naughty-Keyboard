@@ -80,9 +80,10 @@
 
 use std::collections::BTreeSet;
 
-use nkb_adapters::i18n::{self, MatchPlace, PacksLabel};
+use nkb_adapters::i18n::{self, PacksLabel};
 use nkb_app::browse_packs::Listing;
 use nkb_app::ports::SourceError;
+use nkb_core::boundary::Limit;
 use nkb_core::calendar::Day;
 use nkb_core::hotkeys::HotkeyAction;
 use nkb_core::identity::ValueKey;
@@ -90,8 +91,12 @@ use nkb_core::pack::PairHalf;
 
 use crate::query::{KeyPress, Pressed, Query};
 
+mod haystack;
+mod limit;
 mod rows;
 
+use haystack::{Haystack, words_of};
+use limit::{LimitRow, Place};
 use rows::choice_of;
 
 /// One pack as the window offers it.
@@ -124,75 +129,11 @@ struct ValueChoice {
     haystack: Haystack,
 }
 
-/// What a query is matched in, lower-cased once: the parts a row shows, and
-/// the parts it does not, each under its place (`UX-GUI-008`).
-///
-/// One structure answers both questions - does the row match, and where - so
-/// the two cannot drift: a row is listed exactly when every word is in some
-/// part, and it names a place exactly for a word no shown part holds.
-#[derive(Debug, Clone, Default)]
-struct Haystack {
-    /// The shown parts, one per line - a word never spans two, because a word
-    /// holds no line break.
-    shown: String,
-    /// The parts the row does not show, in the order of [`MatchPlace`], so the
-    /// first that holds a word is the place the row names.
-    hidden: Vec<(MatchPlace, String)>,
-}
-
-impl Haystack {
-    fn new<'a>(shown: &[&str], hidden: impl IntoIterator<Item = (MatchPlace, &'a str)>) -> Self {
-        let mut hidden: Vec<(MatchPlace, String)> = hidden
-            .into_iter()
-            .map(|(place, part)| (place, part.to_lowercase()))
-            .collect();
-        // Stable, so the parts of one place keep their order.
-        hidden.sort_by_key(|(place, _)| *place);
-        Self {
-            shown: shown.join("\n").to_lowercase(),
-            hidden,
-        }
-    }
-
-    fn holds(&self, word: &str) -> bool {
-        self.shown.contains(word) || self.hidden.iter().any(|(_, part)| part.contains(word))
-    }
-
-    /// Whether every word is somewhere in it.
-    fn matches(&self, words: &[String]) -> bool {
-        words.iter().all(|word| self.holds(word))
-    }
-
-    /// The places a row names: for every word no shown part holds, the first
-    /// hidden part that does. Empty when the row shows every word. One per
-    /// such word, in the query's order - the words of `i18n` name each place
-    /// once and in one order, so that is done in one place.
-    fn places(&self, words: &[String]) -> Vec<MatchPlace> {
-        words
-            .iter()
-            .filter(|word| !self.shown.contains(word.as_str()))
-            .filter_map(|word| {
-                self.hidden
-                    .iter()
-                    .find(|(_, part)| part.contains(word.as_str()))
-                    .map(|(place, _)| *place)
-            })
-            .collect()
-    }
-}
-
-/// The query as words, lower-cased - all of which must match.
-fn words_of(query: &str) -> Vec<String> {
-    query
-        .to_lowercase()
-        .split_whitespace()
-        .map(str::to_owned)
-        .collect()
-}
-
 /// What a row of the list is, by index into the packs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Item {
+    /// The row that opens the length limit window (`D178`), above the packs.
+    Limit,
     Heading(Section),
     /// The fold of the values chosen last.
     RecentFold,
@@ -243,6 +184,9 @@ pub enum RowKind {
     Value,
     /// The row that starts the pack in use again.
     Restart,
+    /// The row that opens the length limit window: one line, with what it is
+    /// for at the end where a value has what it types.
+    Limit,
 }
 
 /// A row as the window draws it: finished strings and facts, no toolkit type.
@@ -287,6 +231,9 @@ pub enum Chosen {
     /// chosen would put it - but no value the tester chose, so it does not
     /// become recent (`D106`).
     Restart { pack: String, value: String },
+    /// The length limit window, opening with `most` typed when the query was
+    /// that number (`D178`).
+    Limit { most: Option<u32> },
     /// A fold opened or closed: the list changed shape, and the window stays.
     Folded,
     /// No row can be chosen - nothing matches, or nothing loads. The window
@@ -337,6 +284,8 @@ pub struct PackPicker {
     recent_open: bool,
     /// The packs whose values stand under them, by index.
     open: BTreeSet<usize>,
+    /// The row above the packs that opens the length limit window.
+    limit: LimitRow,
 }
 
 impl PackPicker {
@@ -376,6 +325,7 @@ impl PackPicker {
             recent: Vec::new(),
             recent_open: false,
             open: BTreeSet::new(),
+            limit: LimitRow::new(None),
         };
         picker.filter();
         picker.select_on_opening();
@@ -394,11 +344,33 @@ impl PackPicker {
         self
     }
 
+    /// The same picker while the palette walks the values made for a limit
+    /// (`D178`): no pack is in use then, and the window opens on the row of
+    /// the limit, which says which one.
+    #[must_use]
+    pub fn with_limit(mut self, made: Option<Limit>) -> Self {
+        self.limit = LimitRow::new(made);
+        self.filter();
+        self.select_on_opening();
+        self
+    }
+
     /// Where the selection stands when the window opens: the pack in use,
     /// where Enter out of habit only closes - never on a value, where it would
-    /// move the tester's place.
+    /// move the tester's place. While a limit is in use, its row - and
+    /// otherwise never that row while a pack can be chosen: the window is
+    /// opened for a pack far more often than for a limit.
     fn select_on_opening(&mut self) {
-        self.selected = self.position_of_in_use().or_else(|| self.first_enabled());
+        let limit = self.visible.iter().position(|&at| at == Item::Limit);
+        let first_pack = || {
+            (0..self.visible.len())
+                .find(|&at| self.visible[at] != Item::Limit && self.enabled_at(at))
+        };
+        self.selected = limit
+            .filter(|_| self.limit.in_use())
+            .or_else(|| self.position_of_in_use())
+            .or_else(first_pack)
+            .or_else(|| self.first_enabled());
     }
 
     /// The same picker, with the notes under its list - made by the window,
@@ -424,8 +396,12 @@ impl PackPicker {
         if pressed == Pressed::Changed {
             let kept = self.selected_item();
             self.filter();
-            self.selected = kept
-                .and_then(|item| self.position_or_parent(item))
+            // A number is most likely a limit: its row is the one Enter takes,
+            // whatever else the digits find (`D178`).
+            let suggested = LimitRow::suggested(self.query.as_str())
+                .and_then(|_| self.visible.iter().position(|&at| at == Item::Limit));
+            self.selected = suggested
+                .or_else(|| kept.and_then(|item| self.position_or_parent(item)))
                 .or_else(|| self.first_enabled());
         }
         pressed
@@ -480,6 +456,9 @@ impl PackPicker {
                         value: first.id.clone(),
                     })
             }
+            Some(Item::Limit) => Chosen::Limit {
+                most: LimitRow::suggested(self.query.as_str()).and_then(Limit::max),
+            },
             // A heading is never selected, so this is "nothing selected".
             Some(Item::Heading(_) | Item::RecentFold) | None => Chosen::Nothing,
         }
@@ -560,7 +539,9 @@ impl PackPicker {
         let parent = match item {
             Item::Value { pack, .. } | Item::Restart(pack) => Item::Pack(pack),
             Item::Recent { .. } => Item::RecentFold,
-            Item::Heading(_) | Item::RecentFold | Item::Pack(_) => return Folding::Nothing,
+            Item::Limit | Item::Heading(_) | Item::RecentFold | Item::Pack(_) => {
+                return Folding::Nothing;
+            }
         };
         match self.visible.iter().position(|&at| at == parent) {
             Some(at) => {
@@ -642,6 +623,15 @@ impl PackPicker {
         let words = words_of(self.query.as_str());
         let matches = |haystack: &Haystack| haystack.matches(&words);
         let mut visible = Vec::new();
+        // Not over a catalogue that could not be read or holds nothing: the
+        // list then says so in place of its rows, and one row would hide it.
+        let limit = match self.empty {
+            None => self.limit.place(self.query.as_str(), &words),
+            Some(_) => None,
+        };
+        if limit == Some(Place::First) {
+            visible.push(Item::Limit);
+        }
         if words.is_empty() {
             let recent = self.recent_items();
             if !recent.is_empty() {
@@ -693,6 +683,9 @@ impl PackPicker {
                 visible.extend(packs);
             }
         }
+        if limit == Some(Place::Last) {
+            visible.push(Item::Limit);
+        }
         self.visible = visible;
     }
 
@@ -705,7 +698,11 @@ impl PackPicker {
                     self.open.insert(at);
                 }
             }
-            Item::Heading(_) | Item::Value { .. } | Item::Recent { .. } | Item::Restart(_) => {
+            Item::Limit
+            | Item::Heading(_)
+            | Item::Value { .. }
+            | Item::Recent { .. }
+            | Item::Restart(_) => {
                 return;
             }
         }
@@ -743,7 +740,7 @@ impl PackPicker {
         find(item).or_else(|| match item {
             Item::Value { pack, .. } | Item::Restart(pack) => find(Item::Pack(pack)),
             Item::Recent { .. } => find(Item::RecentFold),
-            Item::Heading(_) | Item::RecentFold | Item::Pack(_) => None,
+            Item::Limit | Item::Heading(_) | Item::RecentFold | Item::Pack(_) => None,
         })
     }
 
@@ -751,6 +748,7 @@ impl PackPicker {
     fn row_of(&self, item: Item, words: &[String]) -> Row {
         let tree = words.is_empty();
         match item {
+            Item::Limit => self.limit.row(self.query.as_str(), tree),
             Item::Heading(section) => Row {
                 kind: RowKind::Heading,
                 title: i18n::packs_label(match section {
@@ -871,7 +869,11 @@ impl PackPicker {
         match self.visible[position] {
             Item::Heading(_) => false,
             Item::Pack(at) => self.packs[at].enabled,
-            Item::RecentFold | Item::Value { .. } | Item::Recent { .. } | Item::Restart(_) => true,
+            Item::Limit
+            | Item::RecentFold
+            | Item::Value { .. }
+            | Item::Recent { .. }
+            | Item::Restart(_) => true,
         }
     }
 
@@ -933,7 +935,7 @@ mod tests {
     use nkb_adapters::{BuiltInCatalogue, TomlPackFormat};
 
     /// 2026-10-15, so that a `next-date` value previews the same in every run.
-    const TODAY: Day = Day::from_days_since_1970(20_741);
+    pub(super) const TODAY: Day = Day::from_days_since_1970(20_741);
     use nkb_app::browse_packs::{PackEntry, list_packs};
     use nkb_app::ports::{CatalogueCoverage, CatalogueSource};
     use nkb_core::pack::Risk;
@@ -941,7 +943,7 @@ mod tests {
 
     use crate::live::preview_line;
 
-    fn key(text: &str) -> KeyPress<'_> {
+    pub(super) fn key(text: &str) -> KeyPress<'_> {
         KeyPress {
             text,
             control: false,
@@ -950,19 +952,19 @@ mod tests {
         }
     }
 
-    fn type_in(picker: &mut PackPicker, text: &str) {
+    pub(super) fn type_in(picker: &mut PackPicker, text: &str) {
         for character in text.chars() {
             let typed = character.to_string();
             picker.press(key(&typed));
         }
     }
 
-    fn listing() -> Listing {
+    pub(super) fn listing() -> Listing {
         list_packs(&BuiltInCatalogue::new(), &TomlPackFormat)
             .expect("the built-in catalogue must list")
     }
 
-    fn shipped(in_use: Option<&str>) -> PackPicker {
+    pub(super) fn shipped(in_use: Option<&str>) -> PackPicker {
         PackPicker::new(Ok(listing()), TODAY, in_use, None)
     }
 
@@ -1016,7 +1018,7 @@ mod tests {
         )
     }
 
-    fn of_kind(picker: &PackPicker, kind: RowKind) -> Vec<Row> {
+    pub(super) fn of_kind(picker: &PackPicker, kind: RowKind) -> Vec<Row> {
         picker
             .rows()
             .into_iter()
@@ -1024,7 +1026,7 @@ mod tests {
             .collect()
     }
 
-    fn selected_row(picker: &PackPicker) -> Row {
+    pub(super) fn selected_row(picker: &PackPicker) -> Row {
         picker.rows()[picker.selected().expect("a row is selected")].clone()
     }
 
@@ -1035,8 +1037,9 @@ mod tests {
         let next = value_id("whitespace", 3);
         let picker = PackPicker::new(Ok(listing()), TODAY, Some("whitespace"), Some(&next));
         let rows = picker.rows();
-        assert_eq!(rows[0].kind, RowKind::Heading);
-        assert_eq!(rows[0].title, "Packs");
+        assert_eq!(rows[0].kind, RowKind::Limit, "the limit's row stands first");
+        assert_eq!(rows[1].kind, RowKind::Heading);
+        assert_eq!(rows[1].title, "Packs");
         assert!(
             of_kind(&picker, RowKind::Value).is_empty(),
             "no value is spread out on opening"
@@ -1241,11 +1244,11 @@ mod tests {
     fn a_pack_not_in_the_list_starts_on_the_first_that_can_be_chosen() {
         let picker = shipped(Some("no-such-pack"));
         let rows = picker.rows();
-        assert_eq!(rows[0].kind, RowKind::Heading, "only the packs section");
+        assert_eq!(rows[1].kind, RowKind::Heading, "only the packs section");
         assert_eq!(
             picker.selected(),
-            Some(1),
-            "the first pack, past its heading"
+            Some(2),
+            "the first pack, past its heading - not the row of the limit above it"
         );
     }
 
@@ -1520,14 +1523,14 @@ mod tests {
                 recent_key("unicode-text", &value_id("unicode-text", 2)),
             ]);
         let rows = picker.rows();
-        assert_eq!(rows[0].kind, RowKind::Fold);
+        assert_eq!(rows[1].kind, RowKind::Fold);
         assert_eq!(
-            rows[0].title, "Recent (3)",
+            rows[1].title, "Recent (3)",
             "a value of the pack in use is here too"
         );
-        assert_eq!(rows[0].fold, Some(false));
+        assert_eq!(rows[1].fold, Some(false));
         assert_eq!(
-            rows[1].title, "Packs",
+            rows[2].title, "Packs",
             "closed: nothing between it and the packs"
         );
         assert_eq!(
@@ -1537,21 +1540,21 @@ mod tests {
         );
 
         assert_eq!(
-            picker.click(0),
+            picker.click(1),
             Chosen::Folded,
             "a click on the fold opens it"
         );
         let rows = picker.rows();
-        assert_eq!(rows[0].fold, Some(true));
-        assert_eq!(rows[1].title, "PESEL with a valid checksum");
-        assert_eq!(rows[1].aside.as_deref(), Some("Polish locale"));
-        assert!(rows[1].child);
-        assert_eq!(rows[2].title, "Trailing space");
-        assert_eq!(rows[2].aside.as_deref(), Some("Whitespace"));
-        assert_eq!(rows[2].badge, None, "value one, and value three is next");
-        assert_eq!(rows[3].aside.as_deref(), Some("Unicode and text"));
+        assert_eq!(rows[1].fold, Some(true));
+        assert_eq!(rows[2].title, "PESEL with a valid checksum");
+        assert_eq!(rows[2].aside.as_deref(), Some("Polish locale"));
+        assert!(rows[2].child);
+        assert_eq!(rows[3].title, "Trailing space");
+        assert_eq!(rows[3].aside.as_deref(), Some("Whitespace"));
+        assert_eq!(rows[3].badge, None, "value one, and value three is next");
+        assert_eq!(rows[4].aside.as_deref(), Some("Unicode and text"));
         assert_eq!(
-            picker.click(1),
+            picker.click(2),
             Chosen::Value {
                 pack: String::from("locale-pl"),
                 value: String::from("pesel-valid")
@@ -1560,18 +1563,18 @@ mod tests {
         );
         // Left from a recent value steps out to its fold, Enter folds it.
         assert_eq!(picker.fold(), Folding::Moved);
-        assert_eq!(picker.selected(), Some(0));
+        assert_eq!(picker.selected(), Some(1));
         assert_eq!(picker.enter(), Chosen::Folded);
-        assert_eq!(picker.rows()[1].title, "Packs");
+        assert_eq!(picker.rows()[2].title, "Packs");
 
         // A recent value that is the next one wears the pill, as it does
         // under its own pack.
         let first = value_id("whitespace", 1);
         let mut on_first = PackPicker::new(Ok(listing()), TODAY, Some("whitespace"), Some(&first))
             .with_recent(&[recent_key("whitespace", &first)]);
-        on_first.click(0);
+        on_first.click(1);
         assert_eq!(
-            on_first.rows()[1].badge,
+            on_first.rows()[2].badge,
             Some(Badge {
                 text: String::from("next"),
                 risky: false,
@@ -1583,7 +1586,7 @@ mod tests {
         // each choosing it.
         let mut both =
             shipped(Some("whitespace")).with_recent(&[recent_key("locale-pl", "pesel-valid")]);
-        both.click(0);
+        both.click(1);
         let locale = both
             .rows()
             .iter()
@@ -1621,13 +1624,13 @@ mod tests {
         ];
         let picker = mixed().with_recent(&gone);
         assert_eq!(
-            picker.rows()[0].title,
+            picker.rows()[1].title,
             "Recent (1)",
             "the one value the catalogue still has"
         );
 
         let picker = mixed().with_recent(&gone[..3]);
-        assert_eq!(picker.rows()[0].title, "Packs", "no fold over nothing");
+        assert_eq!(picker.rows()[1].title, "Packs", "no fold over nothing");
     }
 
     /// A query searches the whole catalogue, so the fold is gone while one is
@@ -1636,12 +1639,12 @@ mod tests {
     fn a_query_hides_the_recent_values_and_erasing_it_brings_the_tree_back() {
         let mut picker =
             shipped(Some("whitespace")).with_recent(&[recent_key("locale-pl", "pesel-valid")]);
-        picker.click(0);
+        picker.click(1);
         type_in(&mut picker, "p");
         assert!(picker.rows().iter().all(|row| row.kind != RowKind::Fold));
         picker.press(key("\u{8}"));
         assert_eq!(
-            picker.rows()[0].fold,
+            picker.rows()[1].fold,
             Some(true),
             "the fold as the tester left it"
         );
@@ -1682,26 +1685,30 @@ mod tests {
         let mut picker = shipped(None);
         assert_eq!(
             picker.selected(),
-            Some(1),
+            Some(2),
             "the first pack, under its heading"
+        );
+        assert_eq!(picker.click(1), Chosen::Nothing);
+        assert_eq!(
+            picker.selected(),
+            Some(2),
+            "a click on a heading moves nothing"
+        );
+        assert_eq!(
+            picker.toggle(1),
+            Folding::Nothing,
+            "a heading does not fold"
         );
         picker.previous();
         assert_eq!(
             picker.selected(),
-            Some(1),
-            "the heading above is skipped and there is no wrap"
+            Some(0),
+            "the heading is skipped on the way to the row above it"
         );
-        assert_eq!(picker.click(0), Chosen::Nothing);
-        assert_eq!(
-            picker.selected(),
-            Some(1),
-            "a click on a heading moves nothing"
-        );
-        assert_eq!(
-            picker.toggle(0),
-            Folding::Nothing,
-            "a heading does not fold"
-        );
+        picker.previous();
+        assert_eq!(picker.selected(), Some(0), "and there is no wrap");
+        picker.next();
+        assert_eq!(picker.selected(), Some(2), "skipped on the way down too");
     }
 
     #[test]
@@ -1711,56 +1718,56 @@ mod tests {
         let titles: Vec<&str> = rows.iter().map(|row| row.title.as_str()).collect();
         assert_eq!(
             titles.len(),
-            6,
-            "a heading and five packs, nothing vanished: {titles:?}"
+            7,
+            "the limit's row, a heading and five packs, nothing vanished: {titles:?}"
         );
-        assert_eq!((titles[2], titles[5]), ("broken", "gone"));
-        assert!(!rows[2].enabled && !rows[5].enabled);
+        assert_eq!((titles[3], titles[6]), ("broken", "gone"));
+        assert!(!rows[3].enabled && !rows[6].enabled);
         assert_eq!(
-            rows[2].fold, None,
+            rows[3].fold, None,
             "a pack that does not load does not fold"
         );
-        assert_eq!(rows[2].detail, "broken, does not load");
+        assert_eq!(rows[3].detail, "broken, does not load");
         assert_eq!(
-            rows[2].badge,
+            rows[3].badge,
             Some(Badge {
                 text: String::from("problems: 3"),
                 risky: true,
                 current: false
             })
         );
-        assert_eq!(rows[5].detail, "gone, cannot be read");
-        assert_eq!(picker.toggle(2), Folding::Nothing);
+        assert_eq!(rows[6].detail, "gone, cannot be read");
+        assert_eq!(picker.toggle(3), Folding::Nothing);
 
-        assert_eq!(picker.selected(), Some(1));
+        assert_eq!(picker.selected(), Some(2));
         picker.next();
-        assert_eq!(picker.selected(), Some(3), "the refused row is skipped");
+        assert_eq!(picker.selected(), Some(4), "the refused row is skipped");
         picker.next();
         picker.next();
         assert_eq!(
             picker.selected(),
-            Some(4),
+            Some(5),
             "the unreadable last row is skipped and the selection stays"
         );
         picker.previous();
         picker.previous();
-        assert_eq!(picker.selected(), Some(1), "skipped on the way up too");
+        assert_eq!(picker.selected(), Some(2), "skipped on the way up too");
         picker.previous();
         assert_eq!(
             picker.selected(),
-            Some(1),
-            "the heading is skipped and there is no wrap"
+            Some(0),
+            "the heading is skipped, and the row of the limit is the top"
         );
     }
 
     #[test]
     fn a_click_on_a_row_that_cannot_be_chosen_chooses_nothing() {
         let mut picker = mixed();
-        assert_eq!(picker.click(2), Chosen::Nothing);
-        assert_eq!(picker.selected(), Some(1), "and moves nothing");
+        assert_eq!(picker.click(3), Chosen::Nothing);
+        assert_eq!(picker.selected(), Some(2), "and moves nothing");
         assert_eq!(picker.click(99), Chosen::Nothing);
         assert_eq!(picker.toggle(99), Folding::Nothing);
-        assert_eq!(picker.click(3), Chosen::Pack(String::from("unicode-text")));
+        assert_eq!(picker.click(4), Chosen::Pack(String::from("unicode-text")));
     }
 
     #[test]

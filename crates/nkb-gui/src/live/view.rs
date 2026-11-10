@@ -311,13 +311,14 @@ pub(super) fn clipboard_bar(delivery: Delivery, for_window: bool) -> Option<&'st
     }
 }
 
-pub(super) fn view_of(
+pub(super) fn view_of<'a>(
     outcome: &Outcome,
     pack_shown: &str,
-    pack: &str,
+    playing: impl Into<i18n::InPlay<'a>>,
     standing: &Standing,
     bindings: &Bindings,
 ) -> View {
+    let playing = playing.into();
     View {
         pack: pack_shown.to_owned(),
         counter: outcome
@@ -332,7 +333,7 @@ pub(super) fn view_of(
             outcome
                 .messages
                 .iter()
-                .map(|message| i18n::message(message, pack, bindings))
+                .map(|message| i18n::message(message, playing, bindings))
                 .collect(),
             standing,
         ),

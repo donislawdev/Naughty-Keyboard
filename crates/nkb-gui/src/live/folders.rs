@@ -166,7 +166,9 @@ pub(super) fn open_pack(
     pack: &mut String,
     asked: &str,
 ) -> PackOpening {
-    if sequence.pack_id() == Some(asked) {
+    // A set made for a limit is no pack, whatever it is called (`D178`): a
+    // pack of that name opens in its place.
+    if sequence.pack_id() == Some(asked) && sequence.made_for().is_none() {
         return PackOpening::Same;
     }
     let (chosen, mut said) = memory.folders.choose(sequence, asked);

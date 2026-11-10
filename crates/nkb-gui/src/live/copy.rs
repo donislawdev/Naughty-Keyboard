@@ -94,7 +94,8 @@ impl Worker<'_> {
             .sequence
             .copy_value(&key.pack, &key.value, copy_from(button), self.ports);
         let copied = copied_by(std::slice::from_ref(&said), button);
-        let line = i18n::message(&said, &key.pack, &self.memory.bindings.get());
+        let playing = in_play(&self.sequence, &key.pack);
+        let line = i18n::message(&said, playing, &self.memory.bindings.get());
         Carried {
             view: Some(View {
                 copied,
