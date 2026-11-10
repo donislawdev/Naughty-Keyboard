@@ -794,11 +794,17 @@ fn pack_mistake_facts() -> Json {
             .current_dir(&dir)
             .output()
             .unwrap_or_else(|e| panic!("`nkb lint {file}` must be runnable: {e}"));
-        // The verdict is what `nkb lint` makes, so it goes to standard output,
-        // the way a compiler's does, and the notes about the rules after it go
-        // to standard error. A terminal shows both, in that order.
+        // The verdict is what `nkb lint` makes, so all of it goes to standard
+        // output, the way a compiler's does: the problems, the count and the
+        // lines about the rules. Standard error stays empty, and the site
+        // quotes standard output alone - so a line that one day goes to the
+        // other stream stops this test instead of leaving the site quietly.
         let said = String::from_utf8(run.stdout).expect("nkb speaks UTF-8");
         let notes = String::from_utf8(run.stderr).expect("nkb speaks UTF-8");
+        assert!(
+            notes.is_empty(),
+            "`nkb lint {file}` wrote on standard error, which the site does not quote: {notes}"
+        );
         let mut problems = Vec::new();
         for line in said.lines() {
             if let Some((number, code)) = problem_line(file, line) {
@@ -820,7 +826,7 @@ fn pack_mistake_facts() -> Json {
                     && (line.ends_with(" warnings.") || line.ends_with(" warning."))
             })
             .unwrap_or_else(|| panic!("`nkb lint {file}` printed no count: {said}"));
-        let output = said.lines().chain(notes.lines()).map(text).collect();
+        let output = said.lines().map(text).collect();
         mistakes.push(Json::Object(vec![
             ("file", text(file)),
             ("problems", Json::List(problems)),

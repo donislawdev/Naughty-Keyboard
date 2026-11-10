@@ -13477,10 +13477,10 @@
     },
     {
       "id": "M1719",
-      "why": "the website quotes what nkb lint prints without the lines about the rules, which a terminal shows",
+      "why": "the website quotes only the first line nkb lint prints, without the count and the lines about the rules",
       "file": "crates/nkb-cli/tests/site_facts.rs",
-      "find": "        let output = said.lines().chain(notes.lines()).map(text).collect();",
-      "replace": "        let output = said.lines().chain(notes.lines().take(0)).map(text).collect();",
+      "find": "        let output = said.lines().map(text).collect();",
+      "replace": "        let output = said.lines().take(1).map(text).collect();",
       "test": "the_site_quotes_what_nkb_lint_says_about_each_mistake",
       "runner": "rust:nkb-cli:site_facts"
     },
