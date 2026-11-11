@@ -17,6 +17,7 @@ pub mod format_pack;
 pub mod keep_settings;
 pub mod lint_pack;
 pub mod load_pack;
+pub mod made_set;
 pub mod new_pack;
 pub mod ports;
 pub mod send_value;
@@ -37,6 +38,7 @@ pub use keep_settings::{
 };
 pub use lint_pack::{LintOutcome, lint_pack};
 pub use load_pack::{LoadedPack, Refused, load};
+pub use made_set::MadeSet;
 pub use new_pack::{NewPackOutcome, new_pack};
 pub use ports::{
     Availability, BoundaryText, CatalogueCoverage, CatalogueSource, Clock, Date, Delivered,
@@ -50,5 +52,5 @@ pub use ports::{
 };
 pub use send_value::{
     Chosen, Clearing, ClearingOutcome, Means, OnTheWay, SendOutcome, SendRequest, Sending,
-    SkipReason, ValueFacts, deliver_value, send_value,
+    SkipReason, ValueFacts, Wanted, deliver_value, send_value,
 };

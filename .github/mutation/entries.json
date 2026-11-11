@@ -940,7 +940,7 @@
       "why": "the normalisation question is asked of the VALUE instead of the Typed: line - a no-break space Typed: already escapes gets a false line (D70)",
       "file": "crates/nkb-core/src/report.rs",
       "find": "        Typed::Written(escaped) => normalization::may_change(escaped.as_str()),",
-      "replace": "        Typed::Written(_) => match body {\n            ValueBody::Literal(text) => normalization::may_change(text.as_str()),\n            ValueBody::Repeat { .. } => false,\n        },",
+      "replace": "        Typed::Written(_) => match body {\n            ValueBody::Literal(text) => normalization::may_change(text.as_str()),\n            _ => false,\n        },",
       "test": "report::tests::a_character_the_typed_form_already_escapes_earns_no_spelling",
       "runner": "rust:nkb-core:lib"
     },
@@ -3773,28 +3773,28 @@
     {
       "id": "M615",
       "why": "nkb send ends 'no value with that number' with code 2 (wrong call) instead of 3 - the exit code table (D46) says otherwise",
-      "file": "crates/nkb-cli/src/main.rs",
-      "find": "                \"Positions start at 1, like the counter in the palette.\"\n            );\n            ExitCode::NotFound",
-      "replace": "                \"Positions start at 1, like the counter in the palette.\"\n            );\n            ExitCode::Usage",
-      "test": "tests::every_ending_of_a_send_has_its_exit_code_and_only_a_delivery_says_sent",
+      "file": "crates/nkb-cli/src/send.rs",
+      "find": "        }\n    }\n    ExitCode::NotFound\n}",
+      "replace": "        }\n    }\n    ExitCode::Usage\n}",
+      "test": "send::tests::every_ending_of_a_send_has_its_exit_code_and_only_a_delivery_says_sent",
       "runner": "rust:nkb-cli:bin=nkb"
     },
     {
       "id": "M616",
       "why": "the sentence about a cleared line comes after the news that the value did not arrive - the tester reads the order of events in the field backwards",
-      "file": "crates/nkb-cli/src/main.rs",
+      "file": "crates/nkb-cli/src/send.rs",
       "find": "            say_clearing_before_failure(err, clearing);\n            say_not_delivered(err, &error);",
       "replace": "            say_not_delivered(err, &error);\n            say_clearing_before_failure(err, clearing);",
-      "test": "tests::a_cleared_line_is_said_before_the_news_that_the_value_did_not_arrive",
+      "test": "send::tests::a_cleared_line_is_said_before_the_news_that_the_value_did_not_arrive",
       "runner": "rust:nkb-cli:bin=nkb"
     },
     {
       "id": "M617",
       "why": "nkb send takes --clear and does not read it - the line is not cleared and the command says nothing",
-      "file": "crates/nkb-cli/src/main.rs",
-      "find": "            \"--clear\" => clearing = Clearing::Line,",
-      "replace": "            \"--clear\" => clearing = Clearing::Keep,",
-      "test": "tests::send_reads_its_switches_into_what_it_was_asked_to_do",
+      "file": "crates/nkb-cli/src/send.rs",
+      "find": "            \"--clear\" => self.clearing = Clearing::Line,",
+      "replace": "            \"--clear\" => self.clearing = Clearing::Keep,",
+      "test": "send::tests::send_reads_its_switches_into_what_it_was_asked_to_do",
       "runner": "rust:nkb-cli:bin=nkb"
     },
     {
@@ -3803,7 +3803,7 @@
       "file": "crates/nkb-cli/src/refusals.rs",
       "find": "        KeystrokeError::NoTextField => writeln!(err, \"{NO_TEXT_FIELD}\"),",
       "replace": "        KeystrokeError::NoTextField => writeln!(err, \"{HIGHER_PRIVILEGES}\"),",
-      "test": "tests::every_failure_to_clear_or_to_deliver_has_a_sentence_of_its_own",
+      "test": "send::tests::every_failure_to_clear_or_to_deliver_has_a_sentence_of_its_own",
       "runner": "rust:nkb-cli:bin=nkb"
     },
     {
@@ -12338,7 +12338,7 @@
       "file": "crates/nkb-cli/src/refusals.rs",
       "find": "    if in_flight {",
       "replace": "    if false {",
-      "test": "tests::keys_still_on_their_way_name_the_value_and_ask_to_look_not_to_send_again",
+      "test": "send::tests::keys_still_on_their_way_name_the_value_and_ask_to_look_not_to_send_again",
       "runner": "rust:nkb-cli:bin=nkb"
     },
     {
@@ -13613,16 +13613,16 @@
     {
       "id": "M1734",
       "why": "nkb boundary takes +50 as a limit - a typing mistake read as a number",
-      "file": "crates/nkb-cli/src/boundary.rs",
+      "file": "crates/nkb-cli/src/limit_args.rs",
       "find": "    if word.is_empty() || !word.bytes().all(|byte| byte.is_ascii_digit()) {",
       "replace": "    if word.is_empty() {",
-      "test": "boundary::tests::a_number_is_plain_digits_from_one_to_the_largest_limit",
+      "test": "limit_args::tests::a_number_is_plain_digits_from_one_to_the_largest_limit",
       "runner": "rust:nkb-cli:bin=nkb"
     },
     {
       "id": "M1735",
       "why": "nkb boundary settles an option given twice quietly - the second limit wins unseen",
-      "file": "crates/nkb-cli/src/boundary.rs",
+      "file": "crates/nkb-cli/src/limit_args.rs",
       "find": "        if taken {",
       "replace": "        if taken && false {",
       "test": "boundary::tests::an_option_given_twice_is_refused_rather_than_settled_quietly",
@@ -13631,7 +13631,7 @@
     {
       "id": "M1736",
       "why": "nkb boundary counts a limit in bytes when no unit was asked for",
-      "file": "crates/nkb-cli/src/boundary.rs",
+      "file": "crates/nkb-cli/src/limit_args.rs",
       "find": "self.unit.unwrap_or(Unit::Graphemes)",
       "replace": "self.unit.unwrap_or(Unit::Bytes)",
       "test": "boundary::tests::a_most_alone_is_counted_in_graphemes_and_printed_as_json",
@@ -13775,7 +13775,7 @@
     {
       "id": "M1752",
       "why": "the palette says every made value is inside its limit (D178)",
-      "file": "crates/nkb-app/src/advance_sequence/made.rs",
+      "file": "crates/nkb-app/src/made_set.rs",
       "find": "        let within = values.iter().map(BoundaryValue::within).collect();",
       "replace": "        let within = values.iter().map(|_| true).collect();",
       "test": "advance_sequence::made::tests::every_press_types_the_text_the_core_makes_and_says_which_side_of_the_limit_it_is",
@@ -14032,6 +14032,69 @@
       "replace": "        InPlay::Limit(_) => fill(pattern_printed(printed), &[(\"pack\", \"boundary\")]),",
       "test": "i18n::limit::tests::a_failed_copy_names_the_command_that_prints_what_is_in_play",
       "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1781",
+      "why": "nkb send takes a limit without --index and types its first value, the empty one, as if asked for it (D179)",
+      "file": "crates/nkb-cli/src/send.rs",
+      "find": "            (Source::Limit(limit), None) => return Err(say_index_needed(limit)),",
+      "replace": "            (Source::Limit(_), None) => 1,",
+      "test": "send::tests::a_limit_without_an_index_with_a_pack_or_without_a_bound_is_a_usage_error",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1782",
+      "why": "nkb send given a pack and a limit types from the pack and drops the limit unsaid (D179)",
+      "file": "crates/nkb-cli/src/send.rs",
+      "find": "        match (self.pack, self.limit.any()) {",
+      "replace": "        match (self.pack, self.limit.any() && self.pack.is_none()) {",
+      "test": "send::tests::a_limit_without_an_index_with_a_pack_or_without_a_bound_is_a_usage_error",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1783",
+      "why": "nkb send takes --team-folder beside a limit and reads no folder, without a word (D179)",
+      "file": "crates/nkb-cli/src/send.rs",
+      "find": "        Source::Limit(_) if team.is_some() => say_refused(&[",
+      "replace": "        Source::Limit(_) if team.is_some() && false => say_refused(&[",
+      "test": "send::tests::a_limit_refuses_a_team_folder_and_a_number_past_its_values_before_any_countdown",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1784",
+      "why": "nkb send counts down three seconds before saying that a limit has no value of that number (D179)",
+      "file": "crates/nkb-cli/src/send.rs",
+      "find": "    if position == 0 || position > available {",
+      "replace": "    if position == 0 && position > available {",
+      "test": "send::tests::a_limit_refuses_a_team_folder_and_a_number_past_its_values_before_any_countdown",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1785",
+      "why": "nkb send types a value made for a limit and does not say what a field that keeps to the limit should do with it (D179)",
+      "file": "crates/nkb-cli/src/send.rs",
+      "find": "            if let Some(expected) = about.expected() {",
+      "replace": "            if let Some(expected) = None::<&str> {",
+      "test": "send::tests::a_value_made_for_a_limit_is_named_with_what_to_expect_and_a_missing_one_with_its_command",
+      "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1786",
+      "why": "a value made for a limit is sent as if its set carried a warning, which nkb send then reports (D179)",
+      "file": "crates/nkb-app/src/send_value.rs",
+      "find": "            return deliver_one(set.pack(), delivery, keys, request, 0, progress);",
+      "replace": "            return deliver_one(set.pack(), delivery, keys, request, 1, progress);",
+      "test": "send_value::tests::a_value_made_for_a_limit_reads_no_pack_and_goes_by_its_place_in_the_set",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1787",
+      "why": "nkb boundary settles --format given twice quietly - the second format wins unseen",
+      "file": "crates/nkb-cli/src/boundary.rs",
+      "find": "        if self.format.is_some() {",
+      "replace": "        if self.format.is_some() && false {",
+      "test": "boundary::tests::an_option_given_twice_is_refused_rather_than_settled_quietly",
+      "runner": "rust:nkb-cli:bin=nkb"
     }
   ]
 }

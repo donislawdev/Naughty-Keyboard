@@ -92,9 +92,9 @@ mod classify;
 mod copy;
 mod made;
 
+pub use crate::made_set::MADE_SET_ID;
 pub use choose::ChooseError;
 pub use copy::CopyFrom;
-pub use made::MADE_SET_ID;
 
 /// Everything an action may reach outside the sequence, one port each.
 ///
