@@ -113,6 +113,14 @@ class ThresholdTests(unittest.TestCase):
         self.assertEqual(shape_gate.near_edge(LINES, 163, 0.7), 115)
         self.assertEqual(shape_gate.near_edge(COMPLEXITY, 76, 0.7), 54)
 
+    def test_the_pinned_run_asks_one_below_each_edge(self):
+        asked = shape_gate.asked_thresholds(CEILINGS, 0.7)
+        self.assertEqual(asked, {LINES.key: 111, COMPLEXITY.key: 48, ARGUMENTS.key: 6, NESTING.key: 9})
+
+    def test_reporting_from_lower_asks_only_the_band_axes_lower(self):
+        asked = shape_gate.asked_thresholds(CEILINGS, 0.7, report_from=0.4)
+        self.assertEqual(asked, {LINES.key: 63, COMPLEXITY.key: 27, ARGUMENTS.key: 6, NESTING.key: 9})
+
     def test_the_small_axes_are_near_only_at_the_ceiling(self):
         self.assertEqual(shape_gate.near_edge(ARGUMENTS, 7, 0.7), 7)
         self.assertEqual(shape_gate.band_threshold(ARGUMENTS, 7, 0.7), 6)
@@ -260,6 +268,29 @@ class JudgeTests(unittest.TestCase):
         problems = self.judge(findings, near={**NEAR, NESTING.key: 0})
         self.assertEqual(len(problems), 1)
         self.assertIn("no block reaches it", problems[0])
+
+    def test_what_stands_below_the_band_changes_no_verdict(self):
+        findings = at_the_measurement() + [found("too_many_lines", 70, 8), found("cognitive_complexity", 30, 9)]
+        self.assertEqual(self.judge(findings), [])
+
+    def test_the_report_keeps_what_is_below_the_band_apart_from_the_count(self):
+        findings = at_the_measurement() + [found("too_many_lines", 70, 8, "smaller")]
+        out = io.StringIO()
+        shape_gate.report("product", CEILINGS, 0.7, findings, out)
+        text = out.getvalue()
+        self.assertIn("too_many_lines: ceiling 160, near from 112, 2 near", text)
+        below = text.index("too_many_lines: below the band")
+        self.assertGreater(text.index("smaller"), below)
+        self.assertLess(text.index("crates/one/src/lib.rs:2 f"), below)
+
+    def test_report_from_needs_the_pinned_run_and_a_fraction(self):
+        # Clippy is never started here: a refusal that let the run through would
+        # end in the stand-in below rather than in a real cargo clippy.
+        ran = AssertionError("the arguments were accepted and clippy was asked")
+        for args in (["--report-from", "0.4"], ["--pinned", "--report-from", "1.5"]):
+            with mock.patch.object(shape_gate, "run_clippy", side_effect=ran), \
+                    self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                shape_gate.main(args)
 
     def test_a_run_at_the_ceilings_blocks_on_anything_it_reports(self):
         self.assertEqual(shape_gate.judge_over("product", []), [])
