@@ -8136,8 +8136,8 @@
       "id": "M1117",
       "why": "colour codes stay in the output - a coloured FAILED line is never read",
       "file": ".github/scripts/mutate.py",
-      "find": "    text = COLOURS.sub(\"\", output.decode(\"utf-8\", \"replace\")).replace(\"\\r\\n\", \"\\n\")",
-      "replace": "    text = output.decode(\"utf-8\", \"replace\").replace(\"\\r\\n\", \"\\n\")",
+      "find": "    text = COLOURS.sub(\"\", (output + errors).decode(\"utf-8\", \"replace\")).replace(\"\\r\\n\", \"\\n\")",
+      "replace": "    text = (output + errors).decode(\"utf-8\", \"replace\").replace(\"\\r\\n\", \"\\n\")",
       "test": "test_colours_are_stripped",
       "runner": "pyunit:.github/scripts:test_mutate"
     },
@@ -8145,8 +8145,8 @@
       "id": "M1118",
       "why": "a command past its time is never stopped - a hanging test holds a part for six hours",
       "file": ".github/scripts/mutate.py",
-      "find": "        output, _ = process.communicate(timeout=timeout)",
-      "replace": "        output, _ = process.communicate()",
+      "find": "        output, errors = process.communicate(timeout=timeout)",
+      "replace": "        output, errors = process.communicate()",
       "test": "test_a_command_past_its_time_is_stopped",
       "runner": "pyunit:.github/scripts:test_mutate"
     },
