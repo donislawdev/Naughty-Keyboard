@@ -25,6 +25,14 @@
 //! - with the probe not run, the same window reported an empty field, so the
 //!   measurement distinguishes arrival from intent.
 //!
+//! Measured again on 2026-11-11, with each event sent alone as below: a Win32 edit
+//! control and Edge put every pair back together, and a field of an application
+//! built on winit 0.30 (Slint is one) drops every character above the basic plane,
+//! however the events are ordered and with the whole value in one `SendInput` too.
+//! Each `VK_PACKET` press gives one `WM_CHAR`, winit builds the text of a press from
+//! the `WM_CHAR`s that follow it, and a lone half of a pair is no text. Nothing on
+//! this side can change that, so the public limits say it.
+//!
 //! That is why the unit of work below is a UTF-16 code unit rather than a
 //! `char`: the API takes one `u16` per event, so anything above the basic plane
 //! is two events and there is no way to make it one.

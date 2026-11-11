@@ -458,6 +458,12 @@ says so.
 - **The system may change what is typed.** On macOS the text substitutions of the system can turn a
   typed value into another one, and the palette and `nkb send` say so when one that is switched on could
   have acted on that very value.
+- **Some applications on Windows drop emoji.** On Windows a program that types text sends a character
+  beyond the basic plane, such as most emoji, in two halves. Standard Windows fields and Edge put the
+  halves back together. Applications built on winit, a windowing library many Rust programs use,
+  including ones made with Slint, drop such a character, so a value with emoji arrives without them.
+  `nkb send` and the palette cannot see this from outside, so check the field. On macOS and Linux these
+  applications get the whole value.
 - **Choosing a folder uses your system's window.** On Windows and macOS that window runs inside the
   palette, as it does in any program that opens it, so it loads the add-ons other programs give the file
   browser, such as cloud drives and icon overlays, and they may connect to the network while it is open.

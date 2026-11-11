@@ -19,6 +19,10 @@ No. It was measured on Ubuntu 26.04 only: GNOME 50 on Wayland, and X11 with open
 
 On macOS, yes. The text substitutions of the system can turn a typed value into another one, and the palette and `nkb send` say so when one that is switched on could have acted on that very value.
 
+## Do emoji reach every application?
+
+Not on Windows. There a program that types text sends a character beyond the basic plane, such as most emoji, in two halves. Standard Windows fields and Edge put the halves back together. Applications built on winit, a windowing library many Rust programs use, including ones made with Slint, drop such a character, so a value with emoji arrives without them. `nkb send` and the palette cannot see this from outside, so check the field. On macOS and Linux these applications get the whole value.
+
 ## What do a tab and a line break in a value do?
 
 What the keys do. On Windows, macOS and X11 a tab is pressed as the Tab key and a line feed as Enter, the way a keyboard types them. In a field of several lines a line feed starts a new line. In a single-line field it may send the form, and a tab may move the focus to the next control, so the rest of the value goes there. A carriage return is typed as a character, which most fields drop, so CR LF ends up as one line break, and as two on macOS. Under Wayland the value is handed to the input method whole, so a tab or a line feed arrives as a character.
