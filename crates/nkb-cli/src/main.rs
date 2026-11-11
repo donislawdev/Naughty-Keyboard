@@ -56,7 +56,7 @@ fn main() -> std::process::ExitCode {
         .collect::<Result<Vec<String>, _>>()
     else {
         let _ = writeln!(
-            std::io::stderr(),
+            crate::output::err(),
             "nkb: an argument is not valid Unicode text, and nkb reads only text."
         );
         return std::process::ExitCode::from(2);
@@ -94,7 +94,7 @@ fn run(args: &[String]) -> ExitCode {
         "fmt" => fmt(&args[1..]),
         "new-pack" => new_pack_command(&args[1..]),
         unknown => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(err, "nkb: unknown command '{unknown}'");
             let _ = writeln!(err, "Run 'nkb --help' to see what is available.");
             ExitCode::Usage
@@ -123,7 +123,7 @@ fn lint(args: &[String]) -> ExitCode {
                 return ExitCode::Ok;
             }
             other if other.starts_with('-') => {
-                let mut err = std::io::stderr();
+                let mut err = crate::output::err();
                 let _ = writeln!(err, "nkb lint: unknown option '{other}'");
                 let _ = writeln!(err, "Run 'nkb lint --help' to see what is available.");
                 return ExitCode::Usage;
@@ -157,7 +157,7 @@ fn lint(args: &[String]) -> ExitCode {
     }
 
     let Some(path) = path else {
-        let mut err = std::io::stderr();
+        let mut err = crate::output::err();
         let _ = writeln!(err, "nkb lint: name a pack file to check.");
         let _ = writeln!(err, "Usage: nkb lint <file.toml> [--json] [--explain]");
         return ExitCode::Usage;
@@ -214,7 +214,7 @@ fn fmt(args: &[String]) -> ExitCode {
                 return ExitCode::Ok;
             }
             other if other.starts_with('-') => {
-                let mut err = std::io::stderr();
+                let mut err = crate::output::err();
                 let _ = writeln!(err, "nkb fmt: unknown option '{other}'");
                 let _ = writeln!(err, "Run 'nkb fmt --help' to see what is available.");
                 return ExitCode::Usage;
@@ -224,7 +224,7 @@ fn fmt(args: &[String]) -> ExitCode {
     }
 
     let Some(path) = path else {
-        let mut err = std::io::stderr();
+        let mut err = crate::output::err();
         let _ = writeln!(err, "nkb fmt: name a pack file to format.");
         let _ = writeln!(err, "Usage: nkb fmt <file.toml> [--dry-run]");
         return ExitCode::Usage;
@@ -251,7 +251,7 @@ fn fmt(args: &[String]) -> ExitCode {
             ExitCode::Ok
         }
         FormatOutcome::DidNotParse => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(
                 err,
                 "nkb fmt: '{shown}' is not a pack file this tool can read, so there is nothing to put in order."
@@ -263,7 +263,7 @@ fn fmt(args: &[String]) -> ExitCode {
         FormatOutcome::Unreadable => say_not_read("fmt", &shown, NotRead::Unreadable),
         FormatOutcome::TooLarge => say_not_read("fmt", &shown, NotRead::TooLarge),
         FormatOutcome::Unwritable => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(
                 err,
                 "nkb fmt: '{shown}' could not be written. Check that you can write to this folder - the file has not been changed."
@@ -273,7 +273,7 @@ fn fmt(args: &[String]) -> ExitCode {
         FormatOutcome::WouldChangeValues => {
             // 🔴 A fault in this tool, not in the file, and the loudest thing the
             // command can say. Nothing was written.
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(
                 err,
                 "nkb fmt: formatting '{shown}' would change what one of its values inserts, so nothing was written."
@@ -305,7 +305,7 @@ fn new_pack_command(args: &[String]) -> ExitCode {
                 return ExitCode::Ok;
             }
             other if other.starts_with('-') => {
-                let mut err = std::io::stderr();
+                let mut err = crate::output::err();
                 let _ = writeln!(err, "nkb new-pack: unknown option '{other}'");
                 let _ = writeln!(err, "Run 'nkb new-pack --help' to see what is available.");
                 return ExitCode::Usage;
@@ -315,7 +315,7 @@ fn new_pack_command(args: &[String]) -> ExitCode {
     }
 
     let Some(name) = name else {
-        let mut err = std::io::stderr();
+        let mut err = crate::output::err();
         let _ = writeln!(err, "nkb new-pack: name the pack you want to start.");
         let _ = writeln!(err, "Usage: nkb new-pack <name>");
         return ExitCode::Usage;
@@ -332,7 +332,7 @@ fn new_pack_command(args: &[String]) -> ExitCode {
             ExitCode::Ok
         }
         NewPackOutcome::NameNotAnIdentifier => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(
                 err,
                 "nkb new-pack: '{name}' is not the shape a pack name has: lower case letters, digits and hyphens, starting with a letter, two to forty characters."
@@ -343,7 +343,7 @@ fn new_pack_command(args: &[String]) -> ExitCode {
         NewPackOutcome::AlreadyExists { file } => {
             // 🔴 Never an overwrite, and the message says the file is untouched
             // rather than leaving the reader to wonder.
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(
                 err,
                 "nkb new-pack: {file} is already here and has not been touched. Pick another name, or move that file first."
@@ -351,7 +351,7 @@ fn new_pack_command(args: &[String]) -> ExitCode {
             ExitCode::Usage
         }
         NewPackOutcome::Unwritable { file } => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(
                 err,
                 "nkb new-pack: {file} could not be written here. Check that this folder exists and that you can write to it."
@@ -381,7 +381,7 @@ fn packs(args: &[String], folders: &PackFolders) -> ExitCode {
             return ExitCode::Ok;
         }
         Some(other) => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(err, "nkb packs: unexpected argument '{other}'");
             let _ = writeln!(err, "Run 'nkb packs --help' to see what is available.");
             return ExitCode::Usage;
@@ -402,7 +402,7 @@ fn packs(args: &[String], folders: &PackFolders) -> ExitCode {
             ExitCode::Ok
         }
         Err(reason) => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(
                 err,
                 "nkb packs: the catalogue could not be examined ({reason})"
@@ -423,7 +423,7 @@ fn show(args: &[String], folders: &PackFolders) -> ExitCode {
                 return ExitCode::Ok;
             }
             other if other.starts_with('-') => {
-                let mut err = std::io::stderr();
+                let mut err = crate::output::err();
                 let _ = writeln!(err, "nkb show: unknown option '{other}'");
                 let _ = writeln!(err, "Run 'nkb show --help' to see what is available.");
                 return ExitCode::Usage;
@@ -433,7 +433,7 @@ fn show(args: &[String], folders: &PackFolders) -> ExitCode {
     }
 
     let Some(wanted) = wanted else {
-        let mut err = std::io::stderr();
+        let mut err = crate::output::err();
         let _ = writeln!(err, "nkb show: name a pack.");
         let _ = writeln!(err, "Run 'nkb packs' to see what there is.");
         return ExitCode::Usage;
@@ -457,7 +457,7 @@ fn show(args: &[String], folders: &PackFolders) -> ExitCode {
             ExitCode::Ok
         }
         ShowOutcome::Refused { errors, origin } => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(err, "{}", browse_report::not_loaded("show", wanted, errors));
             let lint = browse_report::lint_hint(wanted, &origin, folders);
             let _ = writeln!(
@@ -467,14 +467,14 @@ fn show(args: &[String], folders: &PackFolders) -> ExitCode {
             ExitCode::ValidationFailed
         }
         ShowOutcome::NotFound => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(err, "nkb show: no pack called '{wanted}'.");
             let _ = writeln!(err, "Run 'nkb packs' to see what there is.");
             folders::say_not_read(&mut err, "show", &catalogue, folders);
             ExitCode::NotFound
         }
         ShowOutcome::Unreadable { .. } => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(err, "nkb show: '{wanted}' could not be read.");
             ExitCode::IoFailed
         }
@@ -496,7 +496,7 @@ fn emit(args: &[String], folders: &PackFolders) -> ExitCode {
     for arg in args {
         if expecting_format {
             let Some(chosen) = EmitFormat::parse(arg) else {
-                let mut err = std::io::stderr();
+                let mut err = crate::output::err();
                 let _ = writeln!(err, "nkb emit: unknown format '{arg}'");
                 let _ = writeln!(err, "Available: json, csv, lines.");
                 return ExitCode::Usage;
@@ -521,7 +521,7 @@ fn emit(args: &[String], folders: &PackFolders) -> ExitCode {
                     Form::Literal
                 };
                 if form.is_some_and(|already| already != asked) {
-                    let mut err = std::io::stderr();
+                    let mut err = crate::output::err();
                     let _ = writeln!(
                         err,
                         "nkb emit: --escaped and --raw ask for opposite things."
@@ -533,7 +533,7 @@ fn emit(args: &[String], folders: &PackFolders) -> ExitCode {
             }
             "--base64" => base64 = true,
             other if other.starts_with('-') => {
-                let mut err = std::io::stderr();
+                let mut err = crate::output::err();
                 let _ = writeln!(err, "nkb emit: unknown option '{other}'");
                 let _ = writeln!(err, "Run 'nkb emit --help' to see what is available.");
                 return ExitCode::Usage;
@@ -543,14 +543,14 @@ fn emit(args: &[String], folders: &PackFolders) -> ExitCode {
     }
 
     if expecting_format {
-        let mut err = std::io::stderr();
+        let mut err = crate::output::err();
         let _ = writeln!(err, "nkb emit: --format needs a name.");
         let _ = writeln!(err, "Available: json, csv, lines.");
         return ExitCode::Usage;
     }
 
     let Some(wanted) = wanted else {
-        let mut err = std::io::stderr();
+        let mut err = crate::output::err();
         let _ = writeln!(err, "nkb emit: name a pack.");
         let _ = writeln!(err, "Run 'nkb packs' to see what there is.");
         return ExitCode::Usage;
@@ -561,7 +561,7 @@ fn emit(args: &[String], folders: &PackFolders) -> ExitCode {
     match emit_values(&catalogue, &TomlPackFormat, &SystemClock, wanted) {
         EmitOutcome::Emitted(emission) => {
             let rendered = emit_output::render(&emission, format, form, base64);
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             for note in &rendered.notes {
                 let _ = writeln!(err, "nkb emit: {note}");
             }
@@ -571,7 +571,7 @@ fn emit(args: &[String], folders: &PackFolders) -> ExitCode {
             ExitCode::Ok
         }
         EmitOutcome::Refused { errors } => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(err, "{}", browse_report::not_loaded("emit", wanted, errors));
             let _ = writeln!(
                 err,
@@ -580,19 +580,19 @@ fn emit(args: &[String], folders: &PackFolders) -> ExitCode {
             ExitCode::ValidationFailed
         }
         EmitOutcome::NotFound => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(err, "nkb emit: no pack called '{wanted}'.");
             let _ = writeln!(err, "Run 'nkb packs' to see what there is.");
             folders::say_not_read(&mut err, "emit", &catalogue, folders);
             ExitCode::NotFound
         }
         EmitOutcome::Unreadable => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(err, "nkb emit: '{wanted}' could not be read.");
             ExitCode::IoFailed
         }
         EmitOutcome::ValueTooLarge { id, code } => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(
                 err,
                 "nkb emit: value '{id}' passed validation and could not be built ({code})."

@@ -39,7 +39,7 @@ pub fn named_pack(command: &str, path: &str) -> Option<NamedPack> {
     match DirectoryPackSource::split(Path::new(path)) {
         Ok((source, id)) => Some(NamedPack { source, id, shown }),
         Err(why) => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = match why {
                 NotAPackFile::NoFileName => {
                     writeln!(err, "nkb {command}: '{shown}' does not name a file.")
@@ -76,7 +76,7 @@ impl NotRead {
 
 /// Says why the file named was not read, and returns the exit code for it.
 pub fn say_not_read(command: &str, shown: &str, why: NotRead) -> ExitCode {
-    let mut err = std::io::stderr();
+    let mut err = crate::output::err();
     let _ = match why {
         NotRead::NotFound => writeln!(err, "nkb {command}: no pack file at '{shown}'."),
         NotRead::Unreadable => writeln!(

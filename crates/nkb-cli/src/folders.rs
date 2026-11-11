@@ -57,7 +57,7 @@ pub(crate) fn take(
             rest.push(word.clone());
             continue;
         }
-        let mut err = std::io::stderr();
+        let mut err = crate::output::err();
         match words.next() {
             Some(folder) if !folder.is_empty() && team.is_none() => {
                 team = Some(PathBuf::from(folder));

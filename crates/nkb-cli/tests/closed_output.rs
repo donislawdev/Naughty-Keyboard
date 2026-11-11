@@ -30,6 +30,11 @@
 //! - on Linux, a full disk, through `/dev/full`.
 //! - that no package of the workspace writes with a macro that panics, so the
 //!   next command or the next package cannot bring the failure back.
+//! - that `nkb` takes standard error only through `output::err()`, which under
+//!   `cargo test` hands the text to the test harness. Measured 2026-11-11, before
+//!   that door: the unit tests of `nkb` wrote every refusal they provoke onto the
+//!   process's own standard error, between the lines of the test report, where a
+//!   line cut in two once read as a test that never ran.
 //!
 //! # What it cannot see
 //!
@@ -414,4 +419,63 @@ fn the_scan_finds_a_panicking_writer_in_code_and_nowhere_else() {
     // A `#[cfg(test)]` on something other than the test module cuts nothing.
     let gated = "#[cfg(test)]\nuse std::fmt;\nfn c() { print!(\"q\"); }\n";
     assert_eq!(panicking_writers(gated), ["3: print!"]);
+}
+
+/// A handle on standard error taken anywhere but the door.
+const STDERR_HANDLE: &str = "stderr()";
+
+/// The one door to standard error in `nkb` (`src/output.rs`).
+const STDERR_DOOR: &str = "output::err()";
+
+/// The lines of one file, tests included, that take standard error without
+/// the door. A test is where it matters most: it is the test report that a
+/// write past the harness cuts.
+fn stderr_handles(text: &str) -> Vec<usize> {
+    text.lines()
+        .enumerate()
+        .filter(|(_, line)| code_only(line).contains(STDERR_HANDLE))
+        .map(|(number, _)| number + 1)
+        .collect()
+}
+
+#[test]
+fn nkb_takes_standard_error_through_one_door() {
+    let src = workspace_root().join("crates").join("nkb-cli").join("src");
+    let mut files = Vec::new();
+    rust_files(&src, &mut files);
+    let mut doors = 0;
+    let mut offenders = Vec::new();
+    for path in &files {
+        let text = std::fs::read_to_string(path).expect("a source file is readable");
+        doors += text
+            .lines()
+            .map(|line| code_only(line).matches(STDERR_DOOR).count())
+            .sum::<usize>();
+        if path.ends_with("output.rs") {
+            continue;
+        }
+        for line in stderr_handles(&text) {
+            offenders.push(format!("{}:{line}", path.display()));
+        }
+    }
+    // A literal, not a count derived from what it checks: 49 uses of the door
+    // when this was written. Fewer means the scan stopped reading where the
+    // writing happens, which would look exactly like a clean program.
+    assert!(
+        doors >= 45,
+        "the scan saw only {doors} uses of {STDERR_DOOR} - it went blind or the door was renamed"
+    );
+    assert!(
+        offenders.is_empty(),
+        "these lines take standard error past the door, so under `cargo test` they write into \
+         the middle of the test report. Write through `crate::output::err()`: {offenders:#?}"
+    );
+}
+
+/// The scan for a handle on standard error, on text written for it.
+#[test]
+fn the_scan_finds_a_handle_on_standard_error_and_not_the_door() {
+    let source = "let mut err = std::io::stderr();\n// io::stderr() in a comment\n\
+                  let e = crate::output::err();\nlet _ = writeln!(io::stderr(), \"x\");\n";
+    assert_eq!(stderr_handles(source), [1, 4]);
 }

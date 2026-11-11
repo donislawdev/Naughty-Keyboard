@@ -133,7 +133,7 @@ pub(crate) fn send(args: &[String]) -> ExitCode {
 
 /// Says a wrong call on standard error, and ends with the code for one.
 fn say_refused(lines: &Refusal) -> ExitCode {
-    let mut err = std::io::stderr();
+    let mut err = crate::output::err();
     let _ = writeln!(err, "nkb {COMMAND}: {}", lines[0]);
     let _ = writeln!(err, "{}", lines[1]);
     ExitCode::Usage
@@ -144,7 +144,7 @@ fn send_from_pack(asked: &SendArgs<'_>, name: &str, folders: &PackFolders) -> Ex
     let catalogue = folders.catalogue();
     let code = deliver(asked, Wanted::Pack(name), &About::Pack(name), &catalogue);
     if code == ExitCode::NotFound {
-        folders::say_not_read(&mut std::io::stderr(), COMMAND, &catalogue, folders);
+        folders::say_not_read(&mut crate::output::err(), COMMAND, &catalogue, folders);
     }
     code
 }
@@ -163,7 +163,7 @@ fn send_made(asked: &SendArgs<'_>, limit: Limit) -> ExitCode {
         // Known without the machine, so said before the countdown rather than
         // after three seconds of watching it.
         return report_send(
-            &mut std::io::stderr(),
+            &mut crate::output::err(),
             &about,
             SendOutcome::NoSuchIndex {
                 asked: position,
@@ -262,7 +262,7 @@ fn deliver(
     // `OBS-160`, `D145` point 76: what the send says on its way, in the words of this command.
     let mut on_the_way = |way: OnTheWay<'_>| {
         if let Some(line) = on_the_way::line_for(way, started.elapsed(), &mut said) {
-            let _ = writeln!(std::io::stderr(), "{line}");
+            let _ = writeln!(crate::output::err(), "{line}");
         }
     };
     let outcome = send_value(
@@ -273,7 +273,7 @@ fn deliver(
         &request,
         &mut on_the_way,
     );
-    report_send(&mut std::io::stderr(), about, outcome)
+    report_send(&mut crate::output::err(), about, outcome)
 }
 
 /// The arguments of `nkb send`, or the exit code to stop with.
@@ -315,14 +315,14 @@ impl<'a> Words<'a> {
             "--delay" => self.expecting = Some(SendSwitch::Delay),
             "--clear" => self.clearing = Clearing::Line,
             other if other.starts_with('-') => {
-                let mut err = std::io::stderr();
+                let mut err = crate::output::err();
                 let _ = writeln!(err, "nkb send: unknown switch '{other}'");
                 let _ = writeln!(err, "Run 'nkb send --help' to see what is available.");
                 return Err(ExitCode::Usage);
             }
             name => {
                 if self.pack.is_some() {
-                    let mut err = std::io::stderr();
+                    let mut err = crate::output::err();
                     let _ = writeln!(err, "nkb send: name one pack, not two.");
                     return Err(ExitCode::Usage);
                 }
@@ -342,7 +342,7 @@ impl<'a> Words<'a> {
         }
         let name = which.name();
         let Ok(number) = arg.parse::<u64>() else {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(err, "nkb send: {name} needs a whole number, got '{arg}'.");
             return Err(ExitCode::Usage);
         };
@@ -365,7 +365,7 @@ impl<'a> Words<'a> {
                     .map_or_else(|lines| say_refused(&lines), |()| ExitCode::Usage));
             }
             let name = which.name();
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(err, "nkb send: {name} needs a number.");
             return Err(ExitCode::Usage);
         }
@@ -397,7 +397,7 @@ impl<'a> Words<'a> {
                 .map(Source::Limit)
                 .map_err(|lines| say_refused(&lines)),
             (None, false) => {
-                let mut err = std::io::stderr();
+                let mut err = crate::output::err();
                 let _ = writeln!(
                     err,
                     "nkb send: name a pack, or give a limit with --max-length or --min-length."
@@ -437,7 +437,7 @@ fn wait_for_a_target(
     match delivery.availability() {
         Availability::Ready => {}
         Availability::Unavailable { reason } => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(
                 err,
                 "nkb send: no way to deliver keystrokes on {reason} yet."
@@ -449,7 +449,7 @@ fn wait_for_a_target(
             return Err(ExitCode::InsertFailed);
         }
         Availability::NeedsPermission => {
-            let mut err = std::io::stderr();
+            let mut err = crate::output::err();
             let _ = writeln!(err, "{NEEDS_PERMISSION}");
             let _ = writeln!(
                 err,
@@ -481,7 +481,7 @@ fn wait_for_a_target(
     // can act on, and the palette says the same after each value (parity,
     // untouchable rule 12).
     say_where_it_goes(
-        &mut std::io::stderr(),
+        &mut crate::output::err(),
         &Countdown {
             before,
             after,
@@ -648,7 +648,7 @@ fn count_down(seconds: u64) {
     if seconds == 0 {
         return;
     }
-    let mut err = std::io::stderr();
+    let mut err = crate::output::err();
     let _ = writeln!(
         err,
         "nkb send: click into the target field - sending in {seconds}s"
