@@ -576,14 +576,18 @@ def execute(command, root, timeout):
     else:
         options["start_new_session"] = True
     started = time.monotonic()
+    # The two streams apart, and standard error after standard output. A test that
+    # writes to standard error does it while libtest writes its result lines, and
+    # merged into one stream the sentence lands inside a line such as
+    # `test boundary::tests::x ... ok`, so the test reads as not run (NO TEST).
     process = subprocess.Popen(command, cwd=root, env=environment, stdin=subprocess.DEVNULL,
-                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, **options)
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, **options)
     try:
-        output, _ = process.communicate(timeout=timeout)
+        output, errors = process.communicate(timeout=timeout)
         timed_out = False
     except subprocess.TimeoutExpired:
         stop_tree(process)
-        output, _ = process.communicate()
+        output, errors = process.communicate()
         timed_out = True
     except BaseException:
         # Ctrl+C reaches this script and not the command, which runs in a group
@@ -591,7 +595,7 @@ def execute(command, root, timeout):
         # put back.
         stop_tree(process)
         raise
-    text = COLOURS.sub("", output.decode("utf-8", "replace")).replace("\r\n", "\n")
+    text = COLOURS.sub("", (output + errors).decode("utf-8", "replace")).replace("\r\n", "\n")
     return Outcome(process.returncode, text, time.monotonic() - started, timed_out)
 
 
