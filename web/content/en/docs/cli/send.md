@@ -4,7 +4,7 @@ command: send
 layout: command
 seoTitle: nkb send - type a test value into the focused field
 description: nkb send types one test value into the focused field on Windows, macOS and Linux, clears the line first with --clear, and refuses where keys get lost.
-lead: "Type one value of a pack into the field that has the keyboard focus. On Windows, macOS and Linux."
+lead: "Type one value of a pack, or one made for a length limit, into the field that has the keyboard focus. On Windows, macOS and Linux."
 ---
 
 ## How do I use it?
@@ -16,6 +16,16 @@ $ nkb send magic-values --index 2 --delay 3
 ```
 
 The value goes to the focused window, not to standard output, and everything the command says is on standard error. Add `--clear` to clear the current line of the field first with Home, Shift+End and Delete, the way the palette does by default. Without it, the only keys sent are the value's own characters. A tab in the value is pressed as the Tab key and a line feed as Enter, so in a single-line field they may move the focus or send the form, as [Honest limits](/docs/limits/) explains.
+
+## Can it type a value for a length limit?
+
+Yes. Give the limit instead of a pack, with the options of [nkb boundary](/docs/cli/boundary/), and `--index` for the place of the value in the order that command prints them. `--index` is needed here, because the first value is the empty one:
+
+```console
+$ nkb send --max-length 50 --unit bytes --index 10
+```
+
+That is `two-byte-51`, one letter `a` and twenty-five two-byte letters: 51 bytes, one over the limit. After the value the command says what a field that keeps to the limit should do with it, the sentence a report block quotes. A number past the last value ends with exit code 3 before the countdown, and so does 0.
 
 ## When does it refuse?
 

@@ -13,6 +13,8 @@ Dla pola, które przyjmuje najwyżej 50 znaków: wartość pustą, a potem warto
 
 Paczki to listy nietypowych znaków. To polecenie odpowiada na jedno zdanie, które specyfikacja mówi o polu.
 
+Żeby wpisać jedną z tych wartości w pole, podaj [nkb send](/docs/cli/send/) ten sam limit i miejsce wartości w tej kolejności: `nkb send --max-length 50 --index 4` wpisuje `letters-51`.
+
 ## Dlaczego sześć wypełnień?
 
 Bo „50 znaków” to jedna z czterech liczb, a rzadko wiadomo, którą z nich liczy aplikacja:

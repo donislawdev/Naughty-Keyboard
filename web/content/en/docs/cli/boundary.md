@@ -13,6 +13,8 @@ For a field that takes at most 50 characters: the empty value, and then values o
 
 The packs hold lists of odd characters. This command answers the one sentence a specification gives you about a field.
 
+To type one of the values into a field, give [nkb send](/docs/cli/send/) the same limit and the place of the value in this order: `nkb send --max-length 50 --index 4` types `letters-51`.
+
 ## Why six fills?
 
 Because "50 characters" is one of four numbers, and you rarely know which one the application counts:
