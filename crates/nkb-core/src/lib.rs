@@ -18,6 +18,7 @@
 
 pub mod boundary;
 pub mod calendar;
+pub mod counterstring;
 pub mod description;
 pub mod graphemes;
 pub mod hotkeys;

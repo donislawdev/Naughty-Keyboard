@@ -64,6 +64,7 @@ use nkb_app::ports::Settings;
 use nkb_app::{KeptSettings, RouteRequest};
 use nkb_core::hotkeys::{Bindings, HotkeyAction};
 use nkb_gui::about::About;
+use nkb_gui::length_limit::LengthLimit;
 use nkb_gui::on_request::Later;
 use nkb_gui::pack_folders::{FolderLink, Folders, Wiring};
 use nkb_gui::packs::{Packs, SystemKeyboard};
@@ -216,6 +217,45 @@ fn wire_folders(
     folders
 }
 
+/// The length limit window (`D178`): made at its first opening, and opened by
+/// the first row of the value window, which gives way to it when it is about to
+/// show and hands it the keyboard it lent. Its values go to the worker, which
+/// holds the sequence.
+fn wire_limit(
+    palette: &Palette,
+    packs: &Rc<Packs>,
+    choose: &std::sync::mpsc::Sender<live::Command>,
+    in_use: &live::InUse,
+    link: &FolderLink,
+) -> Rc<Later<LengthLimit>> {
+    let suggested = nkb_gui::length_limit::Suggested::default();
+    let limit = LengthLimit::later(
+        nkb_gui::length_limit::Wiring {
+            commands: choose.clone(),
+            in_use: Arc::clone(in_use),
+            handed_over: Rc::clone(&link.handed_over),
+            suggested: Rc::clone(&suggested),
+            give_way: Box::new({
+                let packs = Rc::downgrade(packs);
+                move || {
+                    if let Some(packs) = packs.upgrade() {
+                        packs.give_way();
+                    }
+                }
+            }),
+        },
+        say_in(palette),
+    );
+    packs.set_open_limit(Box::new({
+        let limit = Rc::clone(&limit);
+        move |most| {
+            suggested.set(most);
+            limit.open();
+        }
+    }));
+    limit
+}
+
 /// The worker holds the sequence and the settings, so each click sends a command,
 /// as the shortcut of the same action does.
 fn wire_clicks(palette: &Palette, choose: &std::sync::mpsc::Sender<live::Command>) {
@@ -338,6 +378,7 @@ fn run_palette(
         say_in(&palette),
         link.clone(),
     );
+    let length_limit = wire_limit(&palette, &packs, &choose, &in_use, &link);
     let pack_folders = wire_folders(&palette, &packs, &choose, link, &store);
     wire_clicks(&palette, &choose);
     // Shown on request too, but made at its first opening and kept from then
@@ -419,6 +460,7 @@ fn run_palette(
         let shortcuts = std::rc::Rc::clone(&shortcuts);
         let about = Rc::clone(&about);
         let pack_folders = Rc::clone(&pack_folders);
+        let length_limit = Rc::clone(&length_limit);
         let closed_at = std::rc::Rc::clone(&closed_at);
         let palette = palette.as_weak();
         let welcome = welcome.clone();
@@ -430,6 +472,7 @@ fn run_palette(
             shortcuts.close();
             about.close();
             pack_folders.close();
+            length_limit.close();
             if let Some(welcome) = &welcome {
                 welcome.dismiss();
             }

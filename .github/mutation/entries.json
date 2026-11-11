@@ -623,7 +623,7 @@
     {
       "id": "M236",
       "why": "a query of two words lets through packs that match one - the list does not narrow the way the tester types",
-      "file": "crates/nkb-gui/src/picker.rs",
+      "file": "crates/nkb-gui/src/picker/haystack.rs",
       "find": "        words.iter().all(|word| self.holds(word))",
       "replace": "        words.iter().any(|word| self.holds(word))",
       "test": "picker::tests::words_must_all_match_and_case_is_not_minded",
@@ -633,7 +633,7 @@
       "id": "M238",
       "why": "choosing the pack in use opens it anew - the pack window works on a snapshot, and the count 7 / 34 goes back to zero though nothing changed",
       "file": "crates/nkb-gui/src/live/folders.rs",
-      "find": "    if sequence.pack_id() == Some(asked) {",
+      "find": "    if sequence.pack_id() == Some(asked) && sequence.made_for().is_none() {",
       "replace": "    if false {",
       "test": "live::tests::choosing_the_pack_in_use_changes_nothing_and_draws_nothing",
       "runner": "rust:nkb-gui:lib"
@@ -2298,8 +2298,8 @@
       "id": "M417",
       "why": "the window opens on the first pack instead of the pack in use - Enter out of habit changes the pack (D108)",
       "file": "crates/nkb-gui/src/picker.rs",
-      "find": "        self.selected = self.position_of_in_use().or_else(|| self.first_enabled());",
-      "replace": "        self.selected = self.first_enabled().or_else(|| self.position_of_in_use());",
+      "find": "            .or_else(|| self.position_of_in_use())\n            .or_else(first_pack)\n",
+      "replace": "            .or_else(first_pack)\n            .or_else(|| self.position_of_in_use())\n",
       "test": "picker::tests::the_selection_stays_on_its_row_while_the_query_still_shows_it",
       "runner": "rust:nkb-gui:lib"
     },
@@ -2333,7 +2333,7 @@
     {
       "id": "M421",
       "why": "the slot for the window does not carry the next value - the window never opens on it",
-      "file": "crates/nkb-gui/src/live.rs",
+      "file": "crates/nkb-gui/src/live/made.rs",
       "find": "        held.next = next_id(sequence.upcoming().as_ref());",
       "replace": "        held.next = None;",
       "test": "live::tests::the_slot_says_the_pack_in_use_and_the_value_its_next_press_sends",
@@ -2729,7 +2729,7 @@
     {
       "id": "M480",
       "why": "the worker thread does not publish the restart shortcut - the value window does not know what to call it (D100)",
-      "file": "crates/nkb-gui/src/live.rs",
+      "file": "crates/nkb-gui/src/live/made.rs",
       "find": "        held.restart = bindings.named(HotkeyAction::RestartPack);",
       "replace": "        held.restart = None;",
       "test": "live::tests::the_slot_says_the_pack_in_use_and_the_value_its_next_press_sends",
@@ -3090,8 +3090,8 @@
       "id": "M535",
       "why": "the palette does not get the target of a typed value (D104)",
       "file": "crates/nkb-app/src/advance_sequence.rs",
-      "find": "            target,\n            report,\n            ..sent",
-      "replace": "            target: None,\n            report,\n            ..sent",
+      "find": "            target,\n            report,\n            within,\n            ..sent",
+      "replace": "            target: None,\n            report,\n            within,\n            ..sent",
       "test": "advance_sequence::tests::a_typed_value_says_where_it_went_as_read_once_at_the_press",
       "runner": "rust:nkb-app:lib"
     },
@@ -3269,7 +3269,7 @@
     {
       "id": "M555",
       "why": "the row names the place also for a word it shows itself - the value's name does not explain the hit (UX-GUI-008)",
-      "file": "crates/nkb-gui/src/picker.rs",
+      "file": "crates/nkb-gui/src/picker/haystack.rs",
       "find": "            .filter(|word| !self.shown.contains(word.as_str()))\n",
       "replace": "            .filter(|_| true)\n",
       "test": "picker::tests::a_value_found_by_its_id_says_so",
@@ -3278,7 +3278,7 @@
     {
       "id": "M556",
       "why": "a word gets the LAST hidden place that holds it and not the first (UX-GUI-008)",
-      "file": "crates/nkb-gui/src/picker.rs",
+      "file": "crates/nkb-gui/src/picker/haystack.rs",
       "find": "                    .find(|(_, part)| part.contains(word.as_str()))\n",
       "replace": "                    .rfind(|(_, part)| part.contains(word.as_str()))\n",
       "test": "picker::tests::the_row_names_each_hidden_place_a_word_needed_once_and_in_order",
@@ -3396,8 +3396,8 @@
       "id": "M570",
       "why": "after the Recent section is added the selection stays on the old row number and not on the next value (D106)",
       "file": "crates/nkb-gui/src/picker.rs",
-      "find": "        self.filter();\n        self.select_on_opening();\n        self\n",
-      "replace": "        self.filter();\n        self\n",
+      "find": "        recent.clone_into(&mut self.recent);\n        self.filter();\n        self.select_on_opening();\n        self\n",
+      "replace": "        recent.clone_into(&mut self.recent);\n        self.filter();\n        self\n",
       "test": "picker::tests::the_values_chosen_last_stand_in_a_closed_fold_on_top",
       "runner": "rust:nkb-gui:lib"
     },
@@ -3422,7 +3422,7 @@
     {
       "id": "M574",
       "why": "a publish after a command empties the recent list - every change of pack loses it (D106)",
-      "file": "crates/nkb-gui/src/live.rs",
+      "file": "crates/nkb-gui/src/live/made.rs",
       "find": "        held.restart = bindings.named(HotkeyAction::RestartPack);\n",
       "replace": "        held.restart = bindings.named(HotkeyAction::RestartPack);\n        held.recent.clear();\n",
       "test": "live::tests::a_value_that_went_out_is_not_recent_and_a_publish_keeps_the_list",
@@ -6615,8 +6615,8 @@
       "id": "M932",
       "why": "Sent does not carry the block - the palette has nothing to show (D121)",
       "file": "crates/nkb-app/src/advance_sequence.rs",
-      "find": "            target,\n            report,\n            ..sent",
-      "replace": "            target,\n            report: None,\n            ..sent",
+      "find": "            target,\n            report,\n            within,\n            ..sent",
+      "replace": "            target,\n            report: None,\n            within,\n            ..sent",
       "test": "advance_sequence::tests::the_block_shown_with_a_value_is_the_block_the_report_copies",
       "runner": "rust:nkb-app:lib"
     },
@@ -10646,7 +10646,7 @@
     {
       "id": "M1394",
       "why": "the restart row of the value window names the chord asked for although the desktop gave none",
-      "file": "crates/nkb-gui/src/live.rs",
+      "file": "crates/nkb-gui/src/live/made.rs",
       "find": "        held.restart = bindings.named(HotkeyAction::RestartPack);",
       "replace": "        held.restart = Some(bindings.chord(HotkeyAction::RestartPack));",
       "test": "live::tests::the_slot_says_the_pack_in_use_and_the_value_its_next_press_sends",
@@ -11741,7 +11741,7 @@
     {
       "id": "M1515",
       "why": "a palette left behind the other windows does not say how to bring it back",
-      "file": "crates/nkb-adapters/src/i18n.rs",
+      "file": "crates/nkb-adapters/src/i18n/environment.rs",
       "find": "{reason}. Restart it to bring it back.",
       "replace": "{reason}.",
       "test": "i18n::tests::a_palette_that_stayed_behind_says_why_and_how_to_bring_it_back",
@@ -13101,8 +13101,8 @@
       "id": "M1677",
       "why": "the report block of a team pack reads as the built-in one - a developer looks up the wrong values (D173)",
       "file": "crates/nkb-adapters/src/report_text.rs",
-      "find": "                    Some(PackFolder::Team) => ReportPhrase::ReferenceTeam,",
-      "replace": "                    Some(PackFolder::Team) => ReportPhrase::Reference,",
+      "find": "            Some(PackFolder::Team) => ReportPhrase::ReferenceTeam,",
+      "replace": "            Some(PackFolder::Team) => ReportPhrase::Reference,",
       "test": "report_text::tests::a_pack_from_a_folder_is_named_by_kind_on_the_value_line_and_nothing_else_moves",
       "runner": "rust:nkb-adapters:lib"
     },
@@ -13532,9 +13532,9 @@
     {
       "id": "M1725",
       "why": "the padding stands behind the heavy characters - a field cutting at the limit cuts a letter a and never a character in half",
-      "file": "crates/nkb-core/src/boundary.rs",
-      "find": "                text.push_str(&LETTER.repeat(padding as usize));\n                text.push_str(&character.repeat(count as usize));",
-      "replace": "                text.push_str(&character.repeat(count as usize));\n                text.push_str(&LETTER.repeat(padding as usize));",
+      "file": "crates/nkb-core/src/value.rs",
+      "find": "                push(padding, *padding_count);\n                push(unit, *count);",
+      "replace": "                push(unit, *count);\n                push(padding, *padding_count);",
       "test": "boundary::tests::a_byte_limit_falls_inside_the_last_character_of_the_value_over_it",
       "runner": "rust:nkb-core:lib"
     },
@@ -13586,10 +13586,10 @@
     {
       "id": "M1731",
       "why": "the numbers of a counterstring are one off - a field that cut it shows the wrong place",
-      "file": "crates/nkb-core/src/boundary.rs",
+      "file": "crates/nkb-core/src/counterstring.rs",
       "find": "        let mut number = left;",
       "replace": "        let mut number = left - 1;",
-      "test": "boundary::tests::a_counterstring_reads_as_the_known_examples",
+      "test": "counterstring::tests::a_counterstring_reads_as_the_known_examples",
       "runner": "rust:nkb-core:lib"
     },
     {
@@ -13676,11 +13676,11 @@
     {
       "id": "M1741",
       "why": "the name of a boundary value carries characters nobody can see instead of their code points",
-      "file": "crates/nkb-cli/src/boundary/output.rs",
+      "file": "crates/nkb-adapters/src/boundary_text.rs",
       "find": "    if character.is_ascii() {",
       "replace": "    if !character.is_empty() {",
-      "test": "boundary::output::tests::a_name_says_how_the_value_is_made_in_plain_ascii",
-      "runner": "rust:nkb-cli:bin=nkb"
+      "test": "boundary_text::tests::a_name_is_the_recipe_in_plain_ascii",
+      "runner": "rust:nkb-adapters:lib"
     },
     {
       "id": "M1742",
@@ -13717,6 +13717,321 @@
       "replace": "    outln!(\"  two-byte       A letter of two bytes (U+0105)\");",
       "test": "the_site_lists_every_command_and_option_the_program_answers_to",
       "runner": "rust:nkb-cli:site_facts"
+    },
+    {
+      "id": "M1746",
+      "why": "a padded value is measured without its padding - the size shown before it goes is smaller than what is typed (D178)",
+      "file": "crates/nkb-core/src/value.rs",
+      "find": "                    code_points: front.code_points.checked_add(rest.code_points)?,",
+      "replace": "                    code_points: Some(rest.code_points)?,",
+      "test": "value::tests::a_padded_value_is_the_padding_and_then_the_unit_and_as_long_as_it_says",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1747",
+      "why": "a value with no padding at all passes as a padded one - two recipes say one text (D178)",
+      "file": "crates/nkb-core/src/value.rs",
+      "find": "            if count == 0 || count > MAX_REPEAT_COUNT {",
+      "replace": "            if count > MAX_REPEAT_COUNT {",
+      "test": "value::tests::a_padded_value_with_no_padding_or_no_unit_is_refused",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1748",
+      "why": "the start of a long counterstring in the preview is cut short - the walk goes past the place it has to build from (D178)",
+      "file": "crates/nkb-core/src/counterstring.rs",
+      "find": "    while let Some(next) = before(left).filter(|&next| next >= kept) {",
+      "replace": "    while let Some(next) = before(left).filter(|&next| next >= 1) {",
+      "test": "counterstring::tests::the_ends_are_the_ends_of_the_built_text_at_every_length",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1749",
+      "why": "a counterstring longer than a preview is shown without saying how long it is (D178)",
+      "file": "crates/nkb-core/src/preview.rs",
+      "find": "                elided_total: (length > PREVIEW_LIMIT).then_some(length),",
+      "replace": "                elided_total: None,",
+      "test": "preview::tests::a_counterstring_previews_exactly_as_its_built_text_would",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1750",
+      "why": "the report block writes a counterstring of the wrong length - the reader makes another value (D178)",
+      "file": "crates/nkb-core/src/report.rs",
+      "find": "        ValueBody::Counterstring { length } => Typed::Counterstring { length: *length },",
+      "replace": "        ValueBody::Counterstring { length } => Typed::Counterstring { length: *length + 1 },",
+      "test": "report::tests::the_two_recipes_the_tool_makes_are_typed_as_recipes_and_counted_from_the_text",
+      "runner": "rust:nkb-core:lib"
+    },
+    {
+      "id": "M1751",
+      "why": "the report block of a value made for a limit reads as a value of a pack - nobody can look it up (D178)",
+      "file": "crates/nkb-app/src/advance_sequence.rs",
+      "find": "                    made_for: loaded.made.as_ref().map(|made| made.limit),",
+      "replace": "                    made_for: None,",
+      "test": "advance_sequence::made::tests::the_block_of_a_made_value_carries_the_limit_and_the_words_it_was_given",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1752",
+      "why": "the palette says every made value is inside its limit (D178)",
+      "file": "crates/nkb-app/src/advance_sequence/made.rs",
+      "find": "        let within = values.iter().map(BoundaryValue::within).collect();",
+      "replace": "        let within = values.iter().map(|_| true).collect();",
+      "test": "advance_sequence::made::tests::every_press_types_the_text_the_core_makes_and_says_which_side_of_the_limit_it_is",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1753",
+      "why": "a pack chosen after a made set still says which side of a limit its values are on (D178)",
+      "file": "crates/nkb-app/src/advance_sequence/choose.rs",
+      "find": "            made: None,",
+      "replace": "            made: self.loaded.take().and_then(|loaded| loaded.made),",
+      "test": "advance_sequence::made::tests::a_pack_chosen_after_a_made_set_is_a_pack_again",
+      "runner": "rust:nkb-app:lib"
+    },
+    {
+      "id": "M1754",
+      "why": "the command a report block gives leaves the least out - it makes other values than the ones typed (D178)",
+      "file": "crates/nkb-adapters/src/boundary_text.rs",
+      "find": "    let bounds = option(BoundaryPhrase::CommandMin, \"min\", limit.min())",
+      "replace": "    let bounds = option(BoundaryPhrase::CommandMin, \"min\", None)",
+      "test": "boundary_text::tests::the_command_writes_every_option_in_the_words_of_the_command",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1755",
+      "why": "a value over the most is said to be under the least - the tester expects the wrong refusal (D178)",
+      "file": "crates/nkb-adapters/src/boundary_text.rs",
+      "find": "            (false, length) if limit.max().is_some_and(|most| length > most) => {",
+      "replace": "            (false, length) if limit.max().is_some_and(|most| length < most) => {",
+      "test": "boundary_text::tests::what_to_expect_follows_which_side_of_the_limit_the_length_is_on",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1756",
+      "why": "the pill of a value outside its limit says inside (D178)",
+      "file": "crates/nkb-adapters/src/i18n/palette.rs",
+      "find": "    pattern_palette_label(if within {\n        PaletteLabel::InsideLimit",
+      "replace": "    pattern_palette_label(if !within {\n        PaletteLabel::InsideLimit",
+      "test": "live::view::tests::a_value_made_for_a_limit_says_which_side_of_the_limit_it_is_on",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1757",
+      "why": "a zero typed before a digit stays in the number - 07 where the tester typed 7 (D178)",
+      "file": "crates/nkb-gui/src/limit_form.rs",
+      "find": "        if self.digits == \"0\" {\n            self.digits.clear();\n        }\n",
+      "replace": "",
+      "test": "limit_form::tests::a_number_never_starts_with_a_zero_and_holds_six_digits",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1758",
+      "why": "a number takes a seventh digit - more than the largest limit has (D178)",
+      "file": "crates/nkb-gui/src/limit_form.rs",
+      "find": "        if self.digits.len() >= MAX_DIGITS {",
+      "replace": "        if self.digits.len() > MAX_DIGITS {",
+      "test": "limit_form::tests::a_number_never_starts_with_a_zero_and_holds_six_digits",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1759",
+      "why": "a digit pressed with Ctrl is typed into the limit - a shortcut becomes a number (D178)",
+      "file": "crates/nkb-gui/src/limit_form.rs",
+      "find": "        if is_shortcut(press) || !digit.is_ascii_digit() {",
+      "replace": "        if !digit.is_ascii_digit() {",
+      "test": "limit_form::tests::only_digits_and_backspace_are_the_number_s",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1760",
+      "why": "a most that is out of range marks the other number as the one at fault (D178)",
+      "file": "crates/nkb-gui/src/limit_form.rs",
+      "find": "            (Bound::Most, Err(LimitProblem::MaxOutOfRange))",
+      "replace": "            (Bound::Least, Err(LimitProblem::MaxOutOfRange))",
+      "test": "limit_form::tests::the_number_at_fault_is_named_and_the_action_is_off",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1761",
+      "why": "the start keeps its row number when a digit makes another list - the walk starts at a value nobody chose (D178)",
+      "file": "crates/nkb-gui/src/limit_form.rs",
+      "find": "            .map(|limit| (limit, boundary::values(limit)));\n        self.selected = 0;\n",
+      "replace": "            .map(|limit| (limit, boundary::values(limit)));\n",
+      "test": "limit_form::tests::the_start_moves_within_the_list_and_goes_back_to_the_top_with_a_new_one",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1762",
+      "why": "the window hands the palette the first value whatever row the tester chose to start from (D178)",
+      "file": "crates/nkb-gui/src/limit_form.rs",
+      "find": "            .then(|| values.get(self.selected).map(BoundaryValue::id))",
+      "replace": "            .then(|| values.first().map(BoundaryValue::id))",
+      "test": "limit_form::tests::the_start_moves_within_the_list_and_goes_back_to_the_top_with_a_new_one",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1763",
+      "why": "the start moves past the last value of the list (D178)",
+      "file": "crates/nkb-gui/src/limit_form.rs",
+      "find": "        if self.selected + 1 < self.values().len() {",
+      "replace": "        if self.selected < self.values().len() {",
+      "test": "limit_form::tests::the_start_moves_within_the_list_and_goes_back_to_the_top_with_a_new_one",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1764",
+      "why": "a query with a sign before its digits is taken for a limit (D178)",
+      "file": "crates/nkb-gui/src/picker/limit.rs",
+      "find": "        if !number.bytes().all(|byte| byte.is_ascii_digit()) {",
+      "replace": "        if false {",
+      "test": "picker::limit::tests::a_number_in_the_search_suggests_the_limit_with_that_number",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1765",
+      "why": "the row of the limit found by its words stands first - Enter after the first letters of a pack's name opens the limit window (D178)",
+      "file": "crates/nkb-gui/src/picker/limit.rs",
+      "find": "            Some(Place::Last)",
+      "replace": "            Some(Place::First)",
+      "test": "picker::limit::tests::the_row_is_found_by_its_own_words_below_what_else_they_find",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1766",
+      "why": "the row offering another limit says the one in use is that one (D178)",
+      "file": "crates/nkb-gui/src/picker/limit.rs",
+      "find": "            current: self.in_use() && suggested.is_none(),",
+      "replace": "            current: self.in_use(),",
+      "test": "picker::limit::tests::a_limit_in_use_is_where_the_window_opens_and_no_pack_is_in_use",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1767",
+      "why": "a number typed in the search leaves the selection on a value its digits found - Enter does not take the limit (D178)",
+      "file": "crates/nkb-gui/src/picker.rs",
+      "find": "            self.selected = suggested\n",
+      "replace": "            self.selected = suggested\n                .filter(|_| false)\n",
+      "test": "picker::limit::tests::a_number_in_the_search_suggests_the_limit_with_that_number",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1768",
+      "why": "the row of the limit stands over a catalogue that could not be read and hides the sentence saying so (D178)",
+      "file": "crates/nkb-gui/src/picker.rs",
+      "find": "            Some(_) => None,\n        };\n        if limit == Some(Place::First) {",
+      "replace": "            Some(_) => self.limit.place(self.query.as_str(), &words),\n        };\n        if limit == Some(Place::First) {",
+      "test": "picker::limit::tests::the_row_does_not_stand_over_a_catalogue_that_could_not_be_read",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1769",
+      "why": "with a limit in use the value window opens on the first pack and not on the row of the limit (D178)",
+      "file": "crates/nkb-gui/src/picker.rs",
+      "find": "            .filter(|_| self.limit.in_use())",
+      "replace": "            .filter(|_| false)",
+      "test": "picker::limit::tests::a_limit_in_use_is_where_the_window_opens_and_no_pack_is_in_use",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1770",
+      "why": "the values made for a limit are published as a pack called boundary - the value window marks a pack of that name as in use (D178)",
+      "file": "crates/nkb-gui/src/live/made.rs",
+      "find": "            Some(_) => None,\n            None => sequence.pack_id().map(str::to_owned),",
+      "replace": "            Some(_) => sequence.pack_id().map(str::to_owned),\n            None => sequence.pack_id().map(str::to_owned),",
+      "test": "live::made::tests::a_limit_is_in_use_at_once_and_nothing_is_remembered",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1771",
+      "why": "the step to another pack from a made set starts at the pack that was in use before it, not at the ends of the list (D178)",
+      "file": "crates/nkb-gui/src/live/made.rs",
+      "find": "            Some(_) => \"\",\n            None => self.pack.as_str(),",
+      "replace": "            Some(_) => self.pack.as_str(),\n            None => self.pack.as_str(),",
+      "test": "live::made::tests::a_step_from_a_set_goes_to_the_first_pack_and_back_to_the_last",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1772",
+      "why": "the walk starts at the first value whatever value the limit window named (D178)",
+      "file": "crates/nkb-gui/src/live/made.rs",
+      "find": "            let _ = self.sequence.choose_next(start);",
+      "replace": "            let _ = start;",
+      "test": "live::made::tests::the_walk_starts_at_the_value_the_window_named",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1773",
+      "why": "a failed copy of a value made for a limit sends the tester to nkb emit boundary, a pack that does not exist (D178)",
+      "file": "crates/nkb-gui/src/live/made.rs",
+      "find": "        .map_or(InPlay::Pack(pack), InPlay::Limit)",
+      "replace": "        .map_or(InPlay::Pack(pack), |_| InPlay::Pack(pack))",
+      "test": "live::made::tests::a_sentence_about_a_made_set_names_its_command_and_not_a_pack",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1774",
+      "why": "a pack called boundary cannot be opened while a made set is in use - the names are equal and the set is taken for the pack (D178)",
+      "file": "crates/nkb-gui/src/live/folders.rs",
+      "find": "    if sequence.pack_id() == Some(asked) && sequence.made_for().is_none() {",
+      "replace": "    if sequence.pack_id() == Some(asked) {",
+      "test": "live::made::tests::a_pack_called_as_the_set_opens_in_its_place",
+      "runner": "rust:nkb-gui:lib"
+    },
+    {
+      "id": "M1775",
+      "why": "the limit window uses the values and closes on Enter while the numbers make no limit (D178)",
+      "file": "crates/nkb-gui/src/length_limit.rs",
+      "find": "        let Some(chosen) = self.with_form(|form| form.chosen()).flatten() else {\n            return;\n        };",
+      "replace": "        let Some(chosen) = self.with_form(|form| form.chosen()).flatten() else {\n            self.close();\n            return;\n        };",
+      "test": "a_limit_is_typed_with_the_keyboard_alone_and_its_values_go_to_the_palette",
+      "runner": "rust:nkb-gui:limit_window"
+    },
+    {
+      "id": "M1776",
+      "why": "the value window closes at the Enter on the row of the limit, before the limit window is ready - the digits typed meanwhile reach the field under test (D178, OBS-148)",
+      "file": "crates/nkb-gui/src/packs.rs",
+      "find": "        open(most);\n        *self.open_limit.borrow_mut() = Some(open);",
+      "replace": "        open(most);\n        self.give_way();\n        *self.open_limit.borrow_mut() = Some(open);",
+      "test": "the_row_of_the_length_limit_asks_for_its_window_and_gives_way",
+      "runner": "rust:nkb-gui:packs_window"
+    },
+    {
+      "id": "M1777",
+      "why": "the limit window remembers who holds the keyboard before the value window gave way - it is the value window, and closing hands the keyboard to a hidden window (D178)",
+      "file": "crates/nkb-gui/src/length_limit.rs",
+      "find": "            (self.wiring.give_way)();\n            match self.wiring.handed_over.take() {\n                Some(lent) => self.keyboard.take_over(lent),\n                None => self.keyboard.remember(),\n            }\n",
+      "replace": "            match self.wiring.handed_over.take() {\n                Some(lent) => self.keyboard.take_over(lent),\n                None => self.keyboard.remember(),\n            }\n            (self.wiring.give_way)();\n",
+      "test": "a_limit_is_typed_with_the_keyboard_alone_and_its_values_go_to_the_palette",
+      "runner": "rust:nkb-gui:limit_window"
+    },
+    {
+      "id": "M1778",
+      "why": "the number the search suggested is typed into every later opening of the limit window (D178)",
+      "file": "crates/nkb-gui/src/length_limit.rs",
+      "find": "            let opening = self.wiring.suggested.take().map_or_else(",
+      "replace": "            let opening = self.wiring.suggested.get().map_or_else(",
+      "test": "it_opens_on_the_number_from_the_search_or_on_the_limit_in_use",
+      "runner": "rust:nkb-gui:limit_window"
+    },
+    {
+      "id": "M1779",
+      "why": "the sentence of a number out of range does not say the range (D178)",
+      "file": "crates/nkb-adapters/src/i18n/limit.rs",
+      "find": "        &[(\"limit\", &MAX_LIMIT.to_string())],",
+      "replace": "        &[],",
+      "test": "i18n::limit::tests::every_problem_has_a_sentence_of_its_own_with_every_place_filled",
+      "runner": "rust:nkb-adapters:lib"
+    },
+    {
+      "id": "M1780",
+      "why": "a failed copy names the command for a pack although the values were made for a limit (D178)",
+      "file": "crates/nkb-adapters/src/i18n/limit.rs",
+      "find": "        InPlay::Limit(limit) => crate::boundary_text::command(limit),",
+      "replace": "        InPlay::Limit(_) => fill(pattern_printed(printed), &[(\"pack\", \"boundary\")]),",
+      "test": "i18n::limit::tests::a_failed_copy_names_the_command_that_prints_what_is_in_play",
+      "runner": "rust:nkb-adapters:lib"
     }
   ]
 }

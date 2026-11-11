@@ -103,10 +103,19 @@ pub enum ReportPhrase {
     ReferenceTeam,
     /// The same, for a pack from the tester's own folder.
     ReferenceOwn,
+    /// A value the tool made for a limit (`D178`): no pack and no version to
+    /// look up, so the line gives the command that makes the same values.
+    ReferenceMade,
     /// A generated value, exact at every length.
     Recipe,
     /// A generated value as code points: the unit's, and how many in a row.
     RecipeCodePoints,
+    /// A generated value of two parts, each written as a recipe is: the
+    /// padding, and what follows it.
+    PaddedRecipe,
+    /// A counterstring, as a recipe a reader can make again - with what one
+    /// is, because the word alone does not say.
+    Counterstring,
     /// A list of code points cut at `CODE_POINTS_LISTED`.
     CodePointsMore,
     /// `value = ""` is a legal test value, and a label followed by nothing
@@ -167,8 +176,13 @@ fn pattern_report_phrase(phrase: ReportPhrase) -> &'static str {
         ReportPhrase::ReferenceOwn => {
             "{reference} @ pack {version}, from the tester's own pack folder"
         }
+        ReportPhrase::ReferenceMade => "{reference}, from {command}",
         ReportPhrase::Recipe => "{count} × \"{unit}\"",
         ReportPhrase::RecipeCodePoints => "{count} × {list}",
+        ReportPhrase::PaddedRecipe => "{padding} + {rest}",
+        ReportPhrase::Counterstring => {
+            "counterstring of {length} characters - every star stands at the position the number before it says"
+        }
         ReportPhrase::CodePointsMore => "{list} and {rest} more",
         ReportPhrase::EmptyValue => "empty - the value has no characters",
         ReportPhrase::NoShape => "no invisible characters, no controls, no edge spaces",
@@ -240,20 +254,7 @@ const LINE_END: &str = "\n";
 #[must_use]
 pub fn report_text(block: &ReportBlock) -> String {
     let mut lines: Vec<(ReportLabel, String)> = vec![
-        (
-            ReportLabel::Value,
-            fill(
-                pattern_report_phrase(match block.folder {
-                    None => ReportPhrase::Reference,
-                    Some(PackFolder::Team) => ReportPhrase::ReferenceTeam,
-                    Some(PackFolder::Own) => ReportPhrase::ReferenceOwn,
-                }),
-                &[
-                    ("reference", &escaped_prose(&block.reference)),
-                    ("version", &escaped_prose(&block.pack_version)),
-                ],
-            ),
-        ),
+        (ReportLabel::Value, reference(block)),
         (ReportLabel::Name, escaped_prose(&block.name)),
         (ReportLabel::Typed, typed(&block.typed)),
     ];
@@ -312,17 +313,64 @@ pub fn report_text(block: &ReportBlock) -> String {
         .join(LINE_END)
 }
 
+/// The `Value:` line: which value, and where a reader finds it again - a pack
+/// and its version, or the command that makes the values of a limit.
+fn reference(block: &ReportBlock) -> String {
+    let reference = escaped_prose(&block.reference);
+    if let Some(limit) = block.made_for {
+        return fill(
+            pattern_report_phrase(ReportPhrase::ReferenceMade),
+            &[
+                ("reference", &reference),
+                ("command", &crate::boundary_text::command(limit)),
+            ],
+        );
+    }
+    fill(
+        pattern_report_phrase(match block.folder {
+            None => ReportPhrase::Reference,
+            Some(PackFolder::Team) => ReportPhrase::ReferenceTeam,
+            Some(PackFolder::Own) => ReportPhrase::ReferenceOwn,
+        }),
+        &[
+            ("reference", &reference),
+            ("version", &escaped_prose(&block.pack_version)),
+        ],
+    )
+}
+
 fn typed(typed: &Typed) -> String {
     match typed {
         Typed::Written(escaped) if escaped.as_str().is_empty() => {
             pattern_report_phrase(ReportPhrase::EmptyValue).to_owned()
         }
         Typed::Written(escaped) => escaped.as_str().to_owned(),
-        Typed::Recipe { unit, count } => fill(
-            pattern_report_phrase(ReportPhrase::Recipe),
-            &[("count", &count.to_string()), ("unit", unit.as_str())],
+        Typed::Recipe { unit, count } => recipe(unit.as_str(), *count),
+        Typed::Padded {
+            padding,
+            padding_count,
+            unit,
+            count,
+        } => fill(
+            pattern_report_phrase(ReportPhrase::PaddedRecipe),
+            &[
+                ("padding", &recipe(padding.as_str(), *padding_count)),
+                ("rest", &recipe(unit.as_str(), *count)),
+            ],
+        ),
+        Typed::Counterstring { length } => fill(
+            pattern_report_phrase(ReportPhrase::Counterstring),
+            &[("length", &length.to_string())],
         ),
     }
+}
+
+/// A unit and how many of it in a row, the unit already escaped.
+fn recipe(unit: &str, count: u32) -> String {
+    fill(
+        pattern_report_phrase(ReportPhrase::Recipe),
+        &[("count", &count.to_string()), ("unit", unit)],
+    )
 }
 
 /// How many code points the `Unicode:` line lists before it says how many more.
@@ -340,11 +388,28 @@ const CODE_POINTS_LISTED: usize = 100;
 fn spelled_out(spelled: &SpelledOut) -> String {
     match spelled {
         SpelledOut::Written(characters) => code_points(characters),
-        SpelledOut::Recipe { unit, count } => fill(
-            pattern_report_phrase(ReportPhrase::RecipeCodePoints),
-            &[("count", &count.to_string()), ("list", &code_points(unit))],
+        SpelledOut::Recipe { unit, count } => recipe_code_points(unit, *count),
+        SpelledOut::Padded {
+            padding,
+            padding_count,
+            unit,
+            count,
+        } => fill(
+            pattern_report_phrase(ReportPhrase::PaddedRecipe),
+            &[
+                ("padding", &recipe_code_points(padding, *padding_count)),
+                ("rest", &recipe_code_points(unit, *count)),
+            ],
         ),
     }
+}
+
+/// A unit as code points and how many of it in a row.
+fn recipe_code_points(unit: &[char], count: u32) -> String {
+    fill(
+        pattern_report_phrase(ReportPhrase::RecipeCodePoints),
+        &[("count", &count.to_string()), ("list", &code_points(unit))],
+    )
 }
 
 fn code_points(characters: &[char]) -> String {
@@ -504,7 +569,27 @@ mod tests {
                 program: Some("notepad.exe".to_owned()),
                 field: ControlKind::TextField,
             }),
+            made_for: None,
         }
+    }
+
+    #[test]
+    fn a_value_made_for_a_limit_gives_the_command_that_makes_it_and_nothing_else_moves() {
+        // `D178`: no pack and no version, so the first line says how to have
+        // the same values again - every option written out.
+        use nkb_core::boundary::{Limit, Unit};
+        let built_in = report_text(&block());
+        let limit = Limit::new(Unit::Bytes, Some(8), Some(50)).expect("in range");
+        let text = report_text(&ReportBlock {
+            reference: "boundary/two-byte-51".to_owned(),
+            made_for: Some(limit),
+            ..block()
+        });
+        assert_eq!(
+            lines(&text)[0],
+            "Value:    boundary/two-byte-51, from nkb boundary --min-length 8 --max-length 50 --unit bytes"
+        );
+        assert_eq!(lines(&text)[1..], lines(&built_in)[1..]);
     }
 
     fn lines(text: &str) -> Vec<&str> {
@@ -601,6 +686,54 @@ mod tests {
         assert!(text.contains("Typed:    100000 × \"a\""), "{text}");
         assert!(
             text.contains("Shape:    no invisible characters, no controls, no edge spaces"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_padded_value_is_typed_as_both_of_its_parts() {
+        // Seven letters in front of three families: the join of a family is
+        // written as its escape, as it is in any value.
+        let mut padded = block();
+        padded.typed = Typed::Padded {
+            padding: LiteralText::new("a").escape(),
+            padding_count: 7,
+            unit: LiteralText::new("\u{1F468}\u{200D}\u{1F469}").escape(),
+            count: 3,
+        };
+        let text = report_text(&padded);
+        assert!(
+            text.contains("Typed:    7 × \"a\" + 3 × \"\u{1F468}\\u200D\u{1F469}\""),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_padded_value_is_spelled_out_as_both_of_its_parts() {
+        let mut padded = block();
+        padded.spelled_out = Some(SpelledOut::Padded {
+            padding: vec!['a'],
+            padding_count: 2,
+            unit: vec!['e', '\u{0301}'],
+            count: 5,
+        });
+        let text = report_text(&padded);
+        assert!(
+            text.contains("Unicode:  2 × U+0061 + 5 × U+0065 U+0301"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_counterstring_is_typed_as_a_recipe_that_says_what_one_is() {
+        // Never as its text: a hundred thousand characters of a ticket.
+        let mut counted = block();
+        counted.typed = Typed::Counterstring { length: 100_000 };
+        let text = report_text(&counted);
+        assert!(
+            text.contains(
+                "Typed:    counterstring of 100000 characters - every star stands at the position the number before it says"
+            ),
             "{text}"
         );
     }

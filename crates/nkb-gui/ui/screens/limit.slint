@@ -1,0 +1,256 @@
+// The length limit window (`D178`): the limit a field states, typed as one or
+// two numbers and a unit, and the values that test it.
+//
+// Opened from the value window, by the row that stands first in its list. A
+// window of its own for the reason the value window is one: the palette
+// refuses the keyboard (`D62`), and two numbers have to be typed.
+//
+// # Chrome, content, chrome (PORADNIK-GUI 4)
+//
+//     header    the window's heading
+//     content   the form: the most, the least, the unit - a column of labels
+//               and the controls beside it (GUI rule 13)
+//               how much the values come to, and the values themselves, made
+//               again at every digit
+//     footer    the keys the window answers, and its main action
+//
+// The frame every window stands in (`components/frame.slint`, `D110`).
+//
+// # No sentence above the form, and no status line
+//
+// What to type and what comes of it is said where the values will be - the
+// list's own empty sentence - and gives way to them at the first digit: a
+// sentence standing above the form for good would be read once and cost a row
+// of the list ever after (the owner's word on the palette, "too much to read",
+// `D107`). A pair of numbers that gives no values says why in the same place,
+// and the number at fault wears the edge of a wrong value. So nothing appears
+// and disappears under the form while the tester types, and the button in the
+// footer never moves (the owner's point 1 of 2026-10-07, `D110`).
+//
+// # Two lines that take digits, and no text field
+//
+// `QueryField`, for the reason the search is one (`OBS-145`, `D85`): a text
+// field of the toolkit copies and pastes by itself. Rust keeps both numbers
+// (`nkb_gui::limit_form`) and sends them back after every press.
+//
+// # The keyboard does all of it
+//
+// Digits go to the line with the keyboard, Tab moves between the two lines -
+// the toolkit's own, they are the only two things here that take the keyboard -
+// the left and right arrows step the unit, up and down move the value the walk
+// starts from, Enter uses the values and Esc closes. The arrows and the two
+// keys are caught before the lines see them, as in the value window.
+//
+// # Nothing is decided here
+//
+// Which numbers are a limit, what the list holds and what Enter does are
+// Rust's, every word arrives finished from `nkb-adapters::i18n` (untouchable
+// rule 9), and the callbacks are aliases or hand on one call (GUI rule 11).
+
+import {
+    Tokens,
+    TextSmallMuted,
+    HintRow,
+    HintBar,
+    Zone,
+    ZoneFill,
+    WindowFrame,
+    WindowHeader,
+    WindowFooter,
+    QueryField,
+    PickerKeys,
+    PickRow,
+    PickList,
+    SmallButton,
+    Segmented,
+} from "../components.slint";
+
+export component LimitWindow inherits Window {
+    in property <string> window-title;
+    in property <string> heading;
+    in property <string> most-label;
+    in property <string> least-label;
+    in property <string> unit-label;
+    // The digits typed so far. Rust keeps them and sends them back after every
+    // press - the lines have no text of their own.
+    in property <string> most;
+    in property <string> least;
+    // The number that stands in the way of a list.
+    in property <bool> most-at-fault;
+    in property <bool> least-at-fault;
+    // The four units, and the one the limit is counted in.
+    in property <[string]> units;
+    in property <int> unit;
+    // How much the values come to together. Empty while there are none.
+    in property <string> account;
+    // Why there are no values, where they would be listed.
+    in property <string> empty-text;
+    in property <[PickRow]> rows;
+    in property <int> selected;
+    // The words of a row's pill, which lend every row its height.
+    in property <string> pill-label;
+    in property <[HintRow]> hints;
+    in property <string> use-label;
+    in property <string> use-action;
+    // False while the numbers make no limit.
+    in property <bool> can-use;
+    // Where the keyboard is, for a test of what Tab does.
+    out property <bool> most-has-focus: most-line.has-focus;
+    out property <bool> least-has-focus: least-line.has-focus;
+
+    callback most-pressed <=> most-line.pressed;
+    callback least-pressed <=> least-line.pressed;
+    callback unit-chosen <=> switch.chosen;
+    callback unit-back <=> keys.fold;
+    callback unit-forward <=> keys.unfold;
+    callback previous <=> keys.previous;
+    callback next <=> keys.next;
+    callback use <=> keys.choose;
+    callback cancel <=> keys.cancel;
+    callback clicked <=> list.clicked;
+    callback deactivated();
+    callback activated();
+
+    // The keyboard goes to the first number when the window opens, so the
+    // first digit the tester types is the limit (PORADNIK-GUI: the focus
+    // stands on the first field, never on a button).
+    public function focus-most() {
+        most-line.focus-field();
+    }
+
+    title: root.window-title;
+    icon: Tokens.app-icon;
+    background: Tokens.surface;
+    // BOUND, both: the list is made again at every digit, and the backend
+    // creates the window at a size its rows had not been part of
+    // (`slint.md` 2.38, 2.40). The list scrolls inside it.
+    width: Tokens.limit-width;
+    height: Tokens.limit-height;
+    // Above the palette, which is always on top itself.
+    always-on-top: true;
+
+    keys := PickerKeys {
+        WindowFrame {
+            WindowHeader {
+                title: root.heading;
+            }
+
+            Zone {
+                divided: false;
+
+                GridLayout {
+                    spacing: Tokens.space-2;
+                    Row {
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 0;
+                            TextSmallMuted {
+                                text: root.most-label;
+                            }
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            horizontal-stretch: 1;
+                            most-line := QueryField {
+                                width: Tokens.limit-number-width;
+                                query: root.most;
+                                invalid: root.most-at-fault;
+                                accessible-name: root.most-label;
+                                window-left => {
+                                    root.deactivated();
+                                }
+                                window-entered => {
+                                    root.activated();
+                                }
+                            }
+                        }
+                    }
+                    Row {
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 0;
+                            TextSmallMuted {
+                                text: root.least-label;
+                            }
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            horizontal-stretch: 1;
+                            least-line := QueryField {
+                                width: Tokens.limit-number-width;
+                                query: root.least;
+                                invalid: root.least-at-fault;
+                                accessible-name: root.least-label;
+                                window-left => {
+                                    root.deactivated();
+                                }
+                                window-entered => {
+                                    root.activated();
+                                }
+                            }
+                        }
+                    }
+                    Row {
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 0;
+                            TextSmallMuted {
+                                text: root.unit-label;
+                            }
+                        }
+                        HorizontalLayout {
+                            alignment: start;
+                            horizontal-stretch: 1;
+                            switch := Segmented {
+                                label: root.unit-label;
+                                options: root.units;
+                                selected: root.unit;
+                            }
+                        }
+                    }
+                }
+            }
+
+            ZoneFill {
+                // Kept while it is empty, so the list under it starts on one
+                // line whether the numbers make a limit or not.
+                TextSmallMuted {
+                    text: root.account;
+                    overflow: elide;
+                }
+
+                list := PickList {
+                    rows: root.rows;
+                    selected: root.selected;
+                    current-label: root.pill-label;
+                    empty-text: root.empty-text;
+                    vertical-stretch: 1;
+                }
+            }
+
+            WindowFooter {
+                HorizontalLayout {
+                    spacing: Tokens.space-3;
+                    HintBar {
+                        rows: root.hints;
+                    }
+                    // At the foot of the keys, so the main action stands in
+                    // the window's corner whatever the count of the keys.
+                    VerticalLayout {
+                        alignment: end;
+                        horizontal-stretch: 0;
+                        SmallButton {
+                            text: root.use-label;
+                            action: root.use-action;
+                            primary: true;
+                            enabled: root.can-use;
+                            clicked => {
+                                root.use();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

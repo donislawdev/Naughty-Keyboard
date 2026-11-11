@@ -42,6 +42,14 @@ team-folder = 'C:\work\shop\qa-packs'
 
 A pack in your own folder is used instead of a team pack of the same name, and a team pack instead of a built-in one. The window says where each pack comes from and what it is used instead of, and so does the palette when it opens such a pack. A pack that has errors is not loaded, and the pack it would replace is not loaded in its place either. The folders are read again each time the window opens, so a pack file you fixed shows without a restart. [Write your own pack](/docs/write-a-pack/) shows how to write one.
 
+## Can it make values for a length limit?
+
+Yes. **Length limit** is the first row of the value window. It opens a window where you type the limit your field states: **At most**, **At least** or both, counted in graphemes, code points, UTF-16 units or bytes. The values are listed as you type: the empty value, and one under, exactly at and one over each bound, in letters, in characters of two, three and four bytes, in a family emoji and as a counterstring. Each row says how long the value is and whether that length is inside the limit. **Use these values** hands them to the palette, and the shortcuts walk them the way they walk a pack.
+
+Typing a number in the search of the value window puts the row first with that number as the most, so `50` and Enter is the short way in. The whole window works from the keyboard: Tab moves between the two numbers, the left and right arrows change the unit, and up and down choose the value to start from.
+
+In the palette each of these values wears `inside the limit` or `outside the limit`, and its report block names the command that makes the same values, for example `nkb boundary --max-length 50 --unit bytes`. The values are the ones [nkb boundary](/docs/cli/boundary/) prints, and that page says why there are six kinds. The palette does not keep them: after a restart it opens the pack you used last.
+
 ## Can I make it smaller?
 
 {{< kbd "Alt+Shift+H" >}} collapses the palette to its header and expands it again. Once you know the shortcuts, click **Shortcuts** at the bottom to fold their list under its heading, and click it again to open it. The shortcuts keep working while their list is folded. The palette never hides and never moves on its own. It is exactly as tall as what it shows.

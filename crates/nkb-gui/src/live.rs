@@ -107,6 +107,7 @@ use nkb_app::{
     AdvanceSequence, Ended, KeptSettings, Message, Opening, Outcome, SettingsMessage,
     ShortcutChange, UpcomingValue, ValueFacts, ValueKey, drive_sequence, note_used,
 };
+use nkb_core::boundary::Limit;
 use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord};
 use nkb_core::preview::ValuePreview;
 use nkb_core::report::Arrival;
@@ -128,6 +129,7 @@ mod folders;
 mod folds;
 mod hold;
 mod links;
+mod made;
 mod memory;
 mod presses;
 mod recent;
@@ -145,6 +147,7 @@ pub use folds::{label_shortcut_list, starts_with_shortcut_list, wire_shortcut_li
 use hold::Hold;
 use links::ShortcutLink;
 pub use links::wire_shortcut_links;
+use made::{in_play, publish};
 use memory::Memory;
 use presses::{PaletteShortcuts, between_presses};
 use recent::{after_press, carry_out_noting, keep_recent};
@@ -275,6 +278,10 @@ pub enum Command {
     /// Make this folder the team folder, or stop using one for `None` - the pack
     /// folders window (`D175`). Answered with [`Told::TeamFolder`].
     TeamFolder(Option<std::path::PathBuf>),
+    /// Walk the values made for this limit in place of the pack in use, from
+    /// `start` or from the first - the length limit window (`D178`). Nothing
+    /// of it is remembered: `made` says why.
+    UseLimit { limit: Limit, start: Option<String> },
 }
 
 /// What the worker tells the shortcuts window.
@@ -384,6 +391,9 @@ pub struct InUseNow {
     /// the worker keeps it here, for the window to read when it opens, and
     /// saves it from here when the palette closes.
     pub recent: Vec<ValueKey>,
+    /// The limit the values in use were made for (`D178`). `pack` is `None`
+    /// then: the values are no pack of the catalogue, whatever they are called.
+    pub made: Option<Limit>,
 }
 
 /// A fresh slot, empty until the worker opens a pack.
@@ -398,14 +408,6 @@ pub fn in_use() -> InUse {
 #[must_use]
 pub fn in_use_now(in_use: &InUse) -> InUseNow {
     in_use.lock().map(|held| held.clone()).unwrap_or_default()
-}
-
-fn publish(in_use: &InUse, sequence: &AdvanceSequence, bindings: &Bindings) {
-    if let Ok(mut held) = in_use.lock() {
-        held.pack = sequence.pack_id().map(str::to_owned);
-        held.next = next_id(sequence.upcoming().as_ref());
-        held.restart = bindings.named(HotkeyAction::RestartPack);
-    }
 }
 
 /// After a press: the pack is the same, the next value may have moved.
@@ -572,7 +574,7 @@ pub fn drive(
                 // each view cannot reach it - and the pack or the table may
                 // have changed since the last one.
                 let pack_shown = shown(&worker.sequence, &worker.pack);
-                let pack = &worker.pack;
+                let playing = in_play(&worker.sequence, &worker.pack);
                 let bindings = memory.bindings.get();
                 let mut keep_going = || between_presses(stop, commands, &pending);
                 let mut present = |outcome: Outcome| {
@@ -581,7 +583,7 @@ pub fn drive(
                     after_press(in_use, &outcome);
                     show(
                         palette,
-                        view_of(&outcome, &pack_shown, pack, standing, &bindings),
+                        view_of(&outcome, &pack_shown, playing, standing, &bindings),
                     );
                 };
                 let ended = drive_sequence(
@@ -731,37 +733,6 @@ impl Worker<'_> {
         self.saying(&outcome.messages)
     }
 
-    /// The pack one step along the value window's list, opened as a choice
-    /// there opens it - from its first value, and remembered (`D120`). With no
-    /// other pack that opens, the palette says so rather than doing nothing.
-    fn step_pack(&mut self, direction: Direction) -> Carried {
-        let listing = list_packs(&self.memory.folders.catalogue(), &TomlPackFormat).ok();
-        let other = listing
-            .as_ref()
-            .and_then(|listing| listing.neighbour(&self.pack, direction))
-            .map(str::to_owned);
-        let view = match other {
-            Some(pack) => choose(
-                &mut self.sequence,
-                self.memory,
-                &mut self.pack,
-                &pack,
-                self.standing,
-                self.hold.held_back(),
-            ),
-            None => Some(self.view(
-                vec![i18n::label(PaletteLabel::NoOtherPack).to_owned()],
-                ValueBand::Keep,
-                None,
-            )),
-        };
-        Carried {
-            view,
-            told: None,
-            toggled: None,
-        }
-    }
-
     fn carry_out(&mut self, command: Command) -> Carried {
         match command {
             Command::Choose(asked) => Carried {
@@ -857,6 +828,7 @@ impl Worker<'_> {
             },
             Command::ShortcutList(open) => self.remember_list(open),
             Command::TeamFolder(chosen) => self.team_folder(chosen),
+            Command::UseLimit { limit, start } => self.use_limit(limit, start.as_deref()),
             // `D101`: the way asked for, in effect from the next press and kept
             // for the next run. Between presses like every command, so a value
             // in flight keeps the way it started with. The band is rebuilt as
@@ -953,7 +925,7 @@ impl Worker<'_> {
         let bindings = self.memory.bindings.get();
         let lines = said
             .iter()
-            .map(|message| i18n::message(message, &self.pack, &bindings))
+            .map(|message| i18n::message(message, in_play(&self.sequence, &self.pack), &bindings))
             .collect();
         Carried {
             view: Some(self.view(lines, ValueBand::Keep, None)),
@@ -1066,6 +1038,9 @@ fn open_packs_later(palette: &Weak<Palette>) {
 }
 
 #[cfg(test)]
+mod samples;
+
+#[cfg(test)]
 #[allow(
     clippy::expect_used,
     clippy::panic,
@@ -1091,6 +1066,7 @@ mod tests {
     use nkb_app::ports::{Availability, SettingChange, ValueDelivery};
     use nkb_app::{AdvanceSequence, KeptSettings};
 
+    use super::samples::an_upcoming;
     use super::{
         Command, CopyButton, Delivery, Duration, HotkeyAction, InFlight, LiveShortcuts, Memory,
         Outcome, Palette, Progress, ShortcutRegistration, ShownKey, Standing, ValueBand, ValueKey,
@@ -1165,6 +1141,7 @@ mod tests {
                 field: ControlKind::TextField,
             }),
             report: Some(String::from("Value:    unicode-text/zero-width @ pack 1.0")),
+            within: None,
         }
     }
 
@@ -1179,22 +1156,6 @@ mod tests {
             attempted_send: true,
             clipboard_for_window: false,
             upcoming: Some(an_upcoming()),
-        }
-    }
-
-    /// The value after the one that went out, with its own name, reference and
-    /// preview, so the next band cannot borrow a line from the value band and
-    /// still pass.
-    fn an_upcoming() -> UpcomingValue {
-        UpcomingValue::Value {
-            index: 8,
-            total: 34,
-            key: value_key("unicode-text", "trailing-nbsp"),
-            name: "Trailing no-break space".to_owned(),
-            reference: "unicode-text/trailing-nbsp".to_owned(),
-            preview: ValuePreview::Text(nkb_core::preview::preview("Kowalski\u{A0}")),
-            offensive: true,
-            halves: Vec::new(),
         }
     }
 
@@ -2454,6 +2415,7 @@ mod tests {
                 next: Some(String::from("trailing-space")),
                 restart: Some(chord("Alt+Shift+F9")),
                 recent: Vec::new(),
+                made: None,
             }
         );
         let mut later = on("whitespace");

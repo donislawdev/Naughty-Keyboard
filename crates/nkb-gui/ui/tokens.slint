@@ -192,6 +192,20 @@ export global Tokens {
     // content, bound for the same reason. A path longer than its line breaks
     // inside itself.
     out property <length> folders-width: 480px;
+    // The length limit window (`D178`): as wide as the value window opens,
+    // because its rows are that window's rows - a name, and a length at the
+    // right edge - and its switch holds four units side by side. The height is
+    // bound as well, unlike the other bound windows: the list is made again at
+    // every digit and scrolls inside the window, so the window must not be as
+    // tall as a list that changes under the tester's hands. Tall enough for
+    // seven values above the keys, and under the 720 a small laptop screen
+    // leaves a window.
+    out property <length> limit-width: 520px;
+    out property <length> limit-height: 640px;
+    // A line that takes a number of six digits - the largest limit - with room
+    // for the mark after it. Not the window's width: a line as wide as the
+    // window says "a sentence goes here".
+    out property <length> limit-number-width: 96px;
     // The thumb that says a list scrolls. Thin, because it is a sign rather
     // than a control - the list scrolls with the wheel and the arrow keys.
     out property <length> scroll-thumb: 4px;

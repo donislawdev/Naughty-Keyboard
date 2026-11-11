@@ -93,6 +93,13 @@ pub mod about;
 // file manager (`D175`). It stays open when the tester goes elsewhere, so a
 // folder can be dropped on it - the module says why.
 pub mod pack_folders;
+// The length limit window's form: two numbers typed a digit at a time, a unit
+// and the values they give, tested without a window like `query` (`D178`).
+pub mod limit_form;
+// The length limit window itself, on the main thread: what `limit_form`
+// decides moved onto the window, opened from the value window's first row,
+// which gives way to it and hands it the keyboard it lent (`D178`).
+pub mod length_limit;
 // How the three windows above that open on request stand on the screen and
 // go away - never minimized, Close as the only button (`OBS-183`, `D137`).
 // One place, because the three got it wrong the same way. And how two of them

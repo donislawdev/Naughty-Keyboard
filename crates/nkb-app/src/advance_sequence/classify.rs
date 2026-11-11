@@ -44,6 +44,7 @@ pub(super) fn classify(
                 // block, which it builds once the value is the last one.
                 target: None,
                 report: None,
+                within: None,
             }),
             notes_after_landing(following, may_alter, clearing),
         ),
@@ -80,6 +81,7 @@ pub(super) fn classify(
                     arrival,
                     target: None,
                     report: None,
+                    within: None,
                 }),
                 std::iter::once(cut_short(arrival, units_sent, units_expected, reason))
                     .chain(skipped_clearing(clearing))

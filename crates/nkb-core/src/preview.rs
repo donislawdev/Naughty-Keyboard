@@ -203,6 +203,9 @@ pub enum ValuePreview {
     Text(Preview),
     /// A generated value, shown as what generates it (`ux-spec.md` 2).
     Recipe(Recipe),
+    /// A generated value of two parts, shown as both: `1 × "a"` and then
+    /// `25 × "ł"`. The words between them are the palette's.
+    Padded { padding: Recipe, rest: Recipe },
 }
 
 /// A generated value as a person reads it: `255 × "a"`.
@@ -244,6 +247,72 @@ pub fn preview_of(body: &ValueBody) -> ValuePreview {
                 ValuePreview::Text(preview_repeated(unit, *count))
             }
         }
+        ValueBody::Padded {
+            padding,
+            padding_count,
+            unit,
+            count,
+        } => {
+            let runs = [(padding.as_str(), *padding_count), (unit.as_str(), *count)];
+            if runs
+                .iter()
+                .all(|(unit, _)| unit.chars().count() <= PREVIEW_LIMIT)
+            {
+                let [padding, rest] = runs.map(|(unit, count)| Recipe {
+                    unit: unit.chars().map(substitute).collect(),
+                    count,
+                });
+                ValuePreview::Padded { padding, rest }
+            } else {
+                ValuePreview::Text(preview_of_runs(&runs))
+            }
+        }
+        // 🔴 As text, where every other generated value is a recipe: a
+        // counterstring ends in its own length, so its two ends tell `49`
+        // from `50` on sight - the thing the wall of `a` could not do.
+        ValueBody::Counterstring { length } => {
+            let length = *length as usize;
+            let shown = match crate::counterstring::ends(length, KEPT_PER_END) {
+                Some((head, tail)) if length > PREVIEW_LIMIT => head + &tail,
+                _ => crate::counterstring::counterstring(length.min(PREVIEW_LIMIT)),
+            };
+            ValuePreview::Text(Preview {
+                shown,
+                elided_total: (length > PREVIEW_LIMIT).then_some(length),
+            })
+        }
+    }
+}
+
+/// The preview of several units in a row, each repeated, without building the
+/// text - exactly what [`preview`] would return for it. Both ends are reached
+/// from their own side, so the cost is the preview's, not the value's.
+fn preview_of_runs(runs: &[(&str, u32)]) -> Preview {
+    let length = |(unit, count): &(&str, u32)| unit.chars().count().saturating_mul(*count as usize);
+    let total = runs.iter().map(length).fold(0, usize::saturating_add);
+    let forwards = runs
+        .iter()
+        .flat_map(|run| run.0.chars().cycle().take(length(run)));
+    if total <= PREVIEW_LIMIT {
+        return Preview {
+            shown: forwards.map(substitute).collect(),
+            elided_total: None,
+        };
+    }
+    let mut end: Vec<char> = runs
+        .iter()
+        .rev()
+        .flat_map(|run| run.0.chars().rev().cycle().take(length(run)))
+        .take(KEPT_PER_END)
+        .collect();
+    end.reverse();
+    Preview {
+        shown: forwards
+            .take(KEPT_PER_END)
+            .chain(end)
+            .map(substitute)
+            .collect(),
+        elided_total: Some(total),
     }
 }
 
@@ -657,6 +726,64 @@ mod tests {
             unit: unit.to_owned(),
             count,
         })
+    }
+
+    fn padded(padding_count: u32, unit: &str, count: u32) -> ValueBody {
+        ValueBody::Padded {
+            padding: crate::text::LiteralText::new("a"),
+            padding_count,
+            unit: crate::text::LiteralText::new(unit),
+            count,
+        }
+    }
+
+    #[test]
+    fn a_padded_value_shows_both_of_its_parts() {
+        // The join of a family is invisible, and the marker stands in for it as
+        // it does in any unit.
+        assert_eq!(
+            preview_of(&padded(7, "\u{1F468}\u{200D}\u{1F469}", 3)),
+            ValuePreview::Padded {
+                padding: Recipe {
+                    unit: "a".to_owned(),
+                    count: 7
+                },
+                rest: Recipe {
+                    unit: "\u{1F468}\u{2423}\u{1F469}".to_owned(),
+                    count: 3
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn a_padded_value_with_a_long_unit_previews_exactly_as_its_built_text_would() {
+        let unit: String = ('a'..='z').cycle().take(PREVIEW_LIMIT + 1).collect();
+        for (padding_count, count) in [(1, 1), (3, 2), (60, 1), (120, 3)] {
+            let body = padded(padding_count, &unit, count);
+            let built = body.materialise().expect("fits");
+            assert_eq!(preview_of(&body), ValuePreview::Text(preview(&built)));
+        }
+        // And with nothing long, the same function agrees for a text that fits.
+        let runs = [("a", 2), ("b\u{200B}", 3)];
+        assert_eq!(
+            preview_of_runs(&runs),
+            preview("aab\u{200B}b\u{200B}b\u{200B}")
+        );
+    }
+
+    #[test]
+    fn a_counterstring_previews_exactly_as_its_built_text_would() {
+        // Its two ends, which is where it says how long it is.
+        for length in [1, 12, 99, 100, 101, 102, 255, 100_001] {
+            let body = ValueBody::Counterstring { length };
+            let built = body.materialise().expect("fits");
+            assert_eq!(
+                preview_of(&body),
+                ValuePreview::Text(preview(&built)),
+                "{length}"
+            );
+        }
     }
 
     #[test]

@@ -535,6 +535,9 @@ fn preview_json(preview: &ValuePreview) -> (Json, Json) {
                 ("count", Json::Number(u64::from(recipe.count))),
             ]),
         ),
+        ValuePreview::Padded { .. } => {
+            panic!("no pack file says a padded value, so no page of a pack shows one")
+        }
     }
 }
 

@@ -82,8 +82,10 @@ use crate::settings_file::SCHEMA;
 // what they were: every name below is still `nkb_adapters::i18n::<name>`.
 mod catalogue;
 mod causes;
+mod environment;
 mod fill;
 mod folders;
+mod limit;
 mod palette;
 mod registration;
 mod stop;
@@ -95,16 +97,21 @@ pub use catalogue::{
     catalogue_notes, choose_error, folder_not_read, pack_overrides, pack_source, source_badge,
 };
 pub use causes::closed_window as closed_window_cause;
+pub use environment::{Environment, environment};
 pub(crate) use fill::fill;
 pub use folders::{
     FoldersLabel, file_manager_failed, folder_state, folder_window_failed, folders_label,
     own_folder_not_made, shown_folder, team_folder_kept, team_folder_refused,
 };
+pub use limit::{
+    InPlay, LimitLabel, limit_account, limit_label, limit_length, limit_problem, limit_unit,
+};
+use limit::{Printed, printed_by};
 use palette::pattern_palette_label;
 pub use palette::{
-    PaletteLabel, back_to, browser_did_not_open, counter, counts, label, next_end_of_pack,
-    next_value, no_value_yet, not_guaranteed, pair_half, previous_types, sent_to, skip_to,
-    typing_counter, warnings,
+    PaletteLabel, back_to, browser_did_not_open, counter, counts, label, limit_side,
+    next_end_of_pack, next_value, no_value_yet, not_guaranteed, pair_half, previous_types, sent_to,
+    skip_to, typing_counter, warnings,
 };
 pub use registration::{ended, entry_news, registration, registrations, shortcuts_unavailable};
 pub use stop::stop_reason;
@@ -305,7 +312,7 @@ fn pattern_message(message: &Message) -> &'static str {
             "Another application is holding the clipboard, so the report block was not copied. Press {shortcut} again in a moment."
         }
         Message::ReportFailed { .. } => {
-            "The report block was not copied: {detail}. The same facts are printed by: nkb show {pack}"
+            "The report block was not copied: {detail}. The same facts are printed by: {command}"
         }
         Message::ValueCopied { .. } => {
             "Value {reference} is on the clipboard. Paste it where you need it - the counter did not move."
@@ -314,7 +321,7 @@ fn pattern_message(message: &Message) -> &'static str {
             "Another application is holding the clipboard, so the value was not copied. Click {button} again in a moment."
         }
         Message::CopyFailed { .. } => {
-            "The value was not copied: {detail}. The same value is printed by: nkb emit {pack}"
+            "The value was not copied: {detail}. The same value is printed by: {command}"
         }
         Message::CopyGone { .. } => {
             "{reference} is not in the pack in use any more, so nothing was copied. Click {button} beside the value on screen now."
@@ -324,13 +331,18 @@ fn pattern_message(message: &Message) -> &'static str {
 
 /// What the palette says about one message, ready to show.
 ///
-/// `pack` names the pack in play, for the two sentences that mention one. A
-/// caller with no pack chosen passes an empty string, which only reaches a
-/// sentence that cannot occur without a pack.
+/// `in_play` names what the palette walks - a pack by its identifier, or the
+/// limit its values were made for (`D178`) - for the two sentences that give
+/// the command printing the same thing. A caller with no pack chosen passes an
+/// empty string, which only reaches a sentence that cannot occur without one.
 ///
 /// `bindings` are the shortcuts in effect, for the sentences that name one.
 #[must_use]
-pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
+pub fn message<'a>(
+    message: &Message,
+    in_play: impl Into<InPlay<'a>>,
+    bindings: &Bindings,
+) -> String {
     if let Some(line) = palette::message_without_key(message, bindings) {
         return line;
     }
@@ -417,11 +429,23 @@ pub fn message(message: &Message, pack: &str, bindings: &Bindings) -> String {
             pattern,
             &[("shortcut", &chord_text(bindings, HotkeyAction::CopyReport))],
         ),
-        Message::ReportFailed { detail } => fill(pattern, &[("detail", detail), ("pack", pack)]),
+        Message::ReportFailed { detail } => fill(
+            pattern,
+            &[
+                ("detail", detail),
+                ("command", &printed_by(in_play.into(), Printed::Facts)),
+            ],
+        ),
         Message::ValueCopied { reference } => fill(pattern, &[("reference", reference)]),
         // The button's own words, so the sentence and the button cannot drift.
         Message::CopyBusy => fill(pattern, &[("button", label(PaletteLabel::Copy))]),
-        Message::CopyFailed { detail } => fill(pattern, &[("detail", detail), ("pack", pack)]),
+        Message::CopyFailed { detail } => fill(
+            pattern,
+            &[
+                ("detail", detail),
+                ("command", &printed_by(in_play.into(), Printed::Value)),
+            ],
+        ),
         Message::CopyGone { reference } => fill(
             pattern,
             &[
@@ -621,106 +645,14 @@ pub fn recipe(count: u32, unit: &str) -> String {
     )
 }
 
-// ---------------------------------------------------------------------------
-// What the environment would not let the tool do
-// ---------------------------------------------------------------------------
-
-/// Something about the machine or the session that stops the tool doing its job.
-///
-/// `ux-spec.md` 6 section B announces four of these. One stands today, and the
-/// other three keep their announcement mark there rather than being invented
-/// here: a key with a sentence nobody can reach is a promise, and the bridge in
-/// `tools/sprawdz-kontrakt.py` would not tell the difference.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Environment {
-    /// The palette could not be made to refuse the keyboard focus.
-    FocusNotRefused,
-    /// The pack window opened, and the system kept the keyboard somewhere
-    /// else - the letters of the search would go to the application under
-    /// test (`ux-spec.md` 5.2, measured by `tools/sonda-okno-paczek`).
-    PacksFocusNotTaken,
-    /// The pack window closed, and the keyboard could not be handed back to
-    /// the window it was taken from (`ux-spec.md` 5.2).
-    FocusNotReturned,
-    /// The shortcuts window opened, and the system kept the keyboard somewhere
-    /// else - a combination pressed to record it would go to the application
-    /// under test, whose keys the palette does not hold meanwhile (`D90`).
-    ShortcutsFocusNotTaken,
-    /// The shortcuts window could not keep its menu from opening on
-    /// `Alt+Space` (`D91`, `slint.md` 2.37).
-    ShortcutsMenuOpen,
-    /// The welcome window opened, and the system kept the keyboard somewhere
-    /// else - the first value would go to the window in front, not the box
-    /// (UX7, `D105`).
-    WelcomeFocusNotTaken,
-    /// The About window opened, and the system kept the keyboard somewhere
-    /// else - Esc would go to the application under test, not close it.
-    AboutFocusNotTaken,
-    /// The pack folders window opened, and the system kept the keyboard
-    /// somewhere else - Esc would go to the application under test (`D175`).
-    FoldersFocusNotTaken,
-    /// The palette could not be let into the space of an application in full
-    /// screen (macOS), so the shortcuts work and the palette is out of sight
-    /// there (`OBS-193`).
-    NotOverFullScreen,
-    /// The palette stepped aside from the window the desktop shows to ask the person
-    /// whether keys may be pressed, and could not get back on top of the other windows
-    /// (`D145` point 77), so it may stay behind the application under test.
-    NotBackOnTop,
-}
-
-/// The pattern for an environment limit. `ux-spec.md` 6, section B.
-///
-/// The sentence has two halves and both are load-bearing. The first says what
-/// the tool could not do, because untouchable rule 1 forbids a run that did less
-/// than it promised from looking whole. The second says what the tester can do
-/// INSTEAD, and it is a real remedy rather than a consolation: clicking into the
-/// field under test moves the focus there, and measured 2026-09-22 the palette
-/// does not take it back on its own.
-fn pattern_environment(limit: Environment) -> &'static str {
-    match limit {
-        Environment::FocusNotRefused => {
-            "The palette could not refuse the keyboard focus: {reason}. Click into the field you are testing before pressing a shortcut."
-        }
-        Environment::PacksFocusNotTaken => {
-            "The pack window could not take the keyboard focus: {reason}. Click the pack window before typing, or the letters go to the application you are testing."
-        }
-        Environment::FocusNotReturned => {
-            "The keyboard focus could not be returned to the window you were in: {reason}. Click into the field you are testing before pressing a shortcut."
-        }
-        Environment::ShortcutsFocusNotTaken => {
-            "The shortcuts window could not take the keyboard focus: {reason}. Click the shortcuts window before pressing a combination, or it goes to the application you are testing."
-        }
-        Environment::ShortcutsMenuOpen => {
-            "The shortcuts window could not keep its menu shut: {reason}. Press Esc if a menu opens."
-        }
-        Environment::WelcomeFocusNotTaken => {
-            "The welcome window could not take the keyboard focus: {reason}. Click the box in the welcome window before pressing the shortcut."
-        }
-        Environment::AboutFocusNotTaken => {
-            "The About window could not take the keyboard focus: {reason}. Close it with its Close button."
-        }
-        Environment::FoldersFocusNotTaken => {
-            "The pack folders window could not take the keyboard focus: {reason}. Close it with its Close button."
-        }
-        Environment::NotOverFullScreen => {
-            "The palette may stay out of sight while an application is in full screen: {reason}. The shortcuts still work. Leave full screen to see it."
-        }
-        Environment::NotBackOnTop => {
-            "The palette may stay behind the other windows: {reason}. Restart it to bring it back."
-        }
-    }
-}
-
-/// What the tool says when the environment limited it.
-///
-/// `reason` is the system layer's own wording, for the same reason
-/// `startup_failure` passes the graphics library's through: it is the one
-/// specific thing in the sentence, and shortening it here would leave a tester
-/// with nothing to put in a bug report.
+/// A generated value of two parts as the preview shows it:
+/// `1 × "a" + 25 × "ł"`. Each part is a [`recipe`], already written.
 #[must_use]
-pub fn environment(limit: Environment, reason: &str) -> String {
-    fill(pattern_environment(limit), &[("reason", reason)])
+pub fn padded_recipe(padding: &str, rest: &str) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::PaddedRecipe),
+        &[("padding", padding), ("rest", rest)],
+    )
 }
 
 // ---------------------------------------------------------------------------

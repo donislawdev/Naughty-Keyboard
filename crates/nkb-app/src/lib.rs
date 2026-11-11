@@ -39,13 +39,14 @@ pub use lint_pack::{LintOutcome, lint_pack};
 pub use load_pack::{LoadedPack, Refused, load};
 pub use new_pack::{NewPackOutcome, new_pack};
 pub use ports::{
-    Availability, CatalogueCoverage, CatalogueSource, Clock, Date, Delivered, DeliveryError,
-    DesktopRefusal, Following, Found, GivenShortcut, HotkeyRegistrar, KeystrokeError,
-    KeystrokeSender, Listed, LiveShortcuts, PACK_FILE_LIMIT, POSITIONS_KEPT, PackCatalogue,
-    PackFormat, PackOrigin, PackSink, PackSource, Progress, RECENT_KEPT, SaveError, SettingChange,
-    Settings, SettingsLoad, SettingsNote, SettingsStore, SettingsUnusable, ShortcutRegistration,
-    ShortcutUnreadable, ShortcutsUnavailable, SinkError, SourceError, SourceSkipped, StopReason,
-    TargetInspector, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery, Wait, Waiting,
+    Availability, BoundaryText, CatalogueCoverage, CatalogueSource, Clock, Date, Delivered,
+    DeliveryError, DesktopRefusal, Following, Found, GivenShortcut, HotkeyRegistrar,
+    KeystrokeError, KeystrokeSender, Listed, LiveShortcuts, PACK_FILE_LIMIT, POSITIONS_KEPT,
+    PackCatalogue, PackFormat, PackOrigin, PackSink, PackSource, Progress, RECENT_KEPT, SaveError,
+    SettingChange, Settings, SettingsLoad, SettingsNote, SettingsStore, SettingsUnusable,
+    ShortcutRegistration, ShortcutUnreadable, ShortcutsUnavailable, SinkError, SourceError,
+    SourceSkipped, StopReason, TargetInspector, TargetRef, TranslationCheck, TranslationTarget,
+    ValueDelivery, Wait, Waiting,
 };
 pub use send_value::{
     Chosen, Clearing, ClearingOutcome, Means, OnTheWay, SendOutcome, SendRequest, Sending,

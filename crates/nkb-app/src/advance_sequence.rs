@@ -90,9 +90,11 @@ use crate::send_value::{Chosen, Clearing, OnTheWay, SendOutcome, ValueFacts, del
 mod choose;
 mod classify;
 mod copy;
+mod made;
 
 pub use choose::ChooseError;
 pub use copy::CopyFrom;
+pub use made::MADE_SET_ID;
 
 /// Everything an action may reach outside the sequence, one port each.
 ///
@@ -209,6 +211,9 @@ struct Loaded {
     /// Where the pack came from and what it overrides (`D173`): the report
     /// block names a folder, and the palette says what a pack overrides.
     origin: PackOrigin,
+    /// What the tool made this "pack" for, when no file holds it (`D178`) -
+    /// see `made.rs`. `None` for a pack of the catalogue.
+    made: Option<made::Made>,
 }
 
 /// What the palette shows after one action. Holds no toolkit and no sentence -
@@ -261,6 +266,9 @@ pub enum UpcomingValue {
         /// and in the order of the pairs in the file - usually none or one.
         /// `pack-format.md` 9 has the palette say which half is next.
         halves: Vec<PairHalf>,
+        /// Whether the value's length is inside the limit it was made for -
+        /// `None` for a value of a pack, which was made for no limit (`D178`).
+        within: Option<bool>,
     },
     /// The press only says the pack is finished.
     EndOfPack { total: usize },
@@ -317,6 +325,9 @@ pub struct Sent {
     /// block the palette shows is the block a ticket gets. `None` only where
     /// the block cannot be built, which a value that just went out never is.
     pub report: Option<String>,
+    /// Whether the value's length is inside the limit it was made for, as
+    /// [`UpcomingValue::Value`] said before it went (`D178`).
+    pub within: Option<bool>,
 }
 
 /// A thing the palette must say. A key with its numbers - untouchable rule 9
@@ -620,6 +631,7 @@ impl AdvanceSequence {
                     preview: preview_of(&value.definition.on(self.clock.today())),
                     offensive: offensive(&loaded.pack, value),
                     halves: halves.collect(),
+                    within: loaded.within(index),
                 })
             }
         }
@@ -816,6 +828,7 @@ impl AdvanceSequence {
                         CatalogueSource::Team => Some(PackFolder::Team),
                         CatalogueSource::Own => Some(PackFolder::Own),
                     },
+                    made_for: loaded.made.as_ref().map(|made| made.limit),
                     ..block
                 })
                 .map_err(|_| value.id.clone()),
@@ -884,6 +897,7 @@ impl AdvanceSequence {
             return refuse(&mut self.sequence, Vec::new());
         };
         let offensive = offensive(&loaded.pack, value);
+        let within = loaded.within(index);
         let key = ValueKey {
             pack: loaded.pack.id.clone(),
             value: value.id.clone(),
@@ -967,6 +981,7 @@ impl AdvanceSequence {
         let sent = sent.map(|sent| Sent {
             target,
             report,
+            within,
             ..sent
         });
         messages.extend(classified);

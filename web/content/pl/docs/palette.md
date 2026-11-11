@@ -43,6 +43,14 @@ team-folder = 'C:\work\shop\qa-packs'
 
 Paczka z folderu własnego zastępuje paczkę zespołu o tej samej nazwie, a paczka zespołu paczkę wbudowaną. Okno mówi, skąd jest każda paczka i co zastępuje, a paleta mówi to samo, gdy taką paczkę otwiera. Paczka z błędami nie jest wczytywana, a paczka, którą miałaby zastąpić, też nie wchodzi na jej miejsce. Foldery są czytane od nowa przy każdym otwarciu okna, więc poprawiony plik paczki widać bez restartu. Jak napisać paczkę, pokazuje strona [Własna paczka](/docs/write-a-pack/).
 
+## Czy może zrobić wartości dla limitu długości?
+
+Tak. **Length limit** to pierwszy wiersz okna wartości. Otwiera okno, w którym wpisujesz limit podany dla pola: **At most**, **At least** albo oba, liczone w grafemach, punktach kodowych, jednostkach UTF-16 albo bajtach. Wartości pojawiają się na liście w trakcie pisania: wartość pusta oraz jedna poniżej, dokładnie na i jedna powyżej każdej granicy, z liter, ze znaków dwu-, trzy- i czterobajtowych, z emoji rodziny i jako counterstring. Każdy wiersz mówi, jak długa jest wartość i czy ta długość mieści się w limicie. **Use these values** oddaje je palecie, a skróty chodzą po nich tak samo jak po paczce.
+
+Liczba wpisana w wyszukiwaniu okna wartości stawia ten wiersz na górze z tą liczbą jako największą długością, więc `50` i Enter to najkrótsza droga. Całe okno działa z klawiatury: Tab przechodzi między dwiema liczbami, strzałki w lewo i w prawo zmieniają jednostkę, a w górę i w dół wybierają wartość, od której zaczniesz.
+
+W palecie każda z tych wartości nosi `inside the limit` albo `outside the limit`, a jej blok do zgłoszenia podaje komendę, która robi te same wartości, na przykład `nkb boundary --max-length 50 --unit bytes`. To są te same wartości, które wypisuje [nkb boundary](/docs/cli/boundary/), a tamta strona mówi, dlaczego rodzajów jest sześć. Paleta ich nie zapamiętuje: po ponownym uruchomieniu otwiera ostatnio używaną paczkę.
+
 ## Czy mogę ją zmniejszyć?
 
 {{< kbd "Alt+Shift+H" >}} zwija paletę do samego nagłówka i rozwija ją z powrotem. Gdy znasz już skróty, kliknij **Shortcuts** na dole, a ich lista zwinie się pod nagłówkiem. Kolejne kliknięcie ją rozwija. Skróty działają także przy zwiniętej liście. Paleta nigdy się nie chowa i nigdy sama się nie przesuwa. Jest dokładnie tak wysoka, jak to, co pokazuje.

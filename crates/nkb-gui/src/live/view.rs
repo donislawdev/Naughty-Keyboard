@@ -311,13 +311,14 @@ pub(super) fn clipboard_bar(delivery: Delivery, for_window: bool) -> Option<&'st
     }
 }
 
-pub(super) fn view_of(
+pub(super) fn view_of<'a>(
     outcome: &Outcome,
     pack_shown: &str,
-    pack: &str,
+    playing: impl Into<i18n::InPlay<'a>>,
     standing: &Standing,
     bindings: &Bindings,
 ) -> View {
+    let playing = playing.into();
     View {
         pack: pack_shown.to_owned(),
         counter: outcome
@@ -332,7 +333,7 @@ pub(super) fn view_of(
             outcome
                 .messages
                 .iter()
-                .map(|message| i18n::message(message, pack, bindings))
+                .map(|message| i18n::message(message, playing, bindings))
                 .collect(),
             standing,
         ),
@@ -365,6 +366,7 @@ pub(super) fn next_view(upcoming: Option<&UpcomingValue>, sequence: &Sequence) -
             preview,
             offensive,
             halves,
+            within,
             ..
         } => Some(NextView {
             index: Some(*index),
@@ -374,7 +376,7 @@ pub(super) fn next_view(upcoming: Option<&UpcomingValue>, sequence: &Sequence) -
                 key: key.clone(),
                 name: name.clone(),
                 preview: preview_line(preview).0,
-                markers: next_markers(*offensive, halves),
+                markers: next_markers(*offensive, *within, halves),
             }),
             can_go_back,
         }),
@@ -382,14 +384,16 @@ pub(super) fn next_view(upcoming: Option<&UpcomingValue>, sequence: &Sequence) -
 }
 
 /// The markers of the value the next press sends: the one risk known before a
-/// send, then which half of a pair it is (`pack-format.md` 9, `OBS-181`).
+/// send, then which side of its limit a made value is on (`D178`) and which
+/// half of a pair it is (`pack-format.md` 9, `OBS-181`).
 /// Warnings, `cleared first` and the rest are about a delivery that has not
 /// happened, so they wait for the band of the value that went out.
-fn next_markers(offensive: bool, halves: &[PairHalf]) -> Vec<(String, bool)> {
+fn next_markers(offensive: bool, within: Option<bool>, halves: &[PairHalf]) -> Vec<(String, bool)> {
     let mut markers = Vec::new();
     if offensive {
         markers.push((i18n::label(PaletteLabel::Offensive).to_owned(), true));
     }
+    markers.extend(limit_marker(within));
     // Not a risk: a pair is how the pack meant the value to be typed.
     markers.extend(
         halves
@@ -418,6 +422,13 @@ pub(crate) fn preview_line(preview: &ValuePreview) -> (String, String) {
         // A recipe is the whole value, exactly, so nothing is elided and there
         // is nothing to confess.
         ValuePreview::Recipe(recipe) => (i18n::recipe(recipe.count, &recipe.unit), String::new()),
+        ValuePreview::Padded { padding, rest } => (
+            i18n::padded_recipe(
+                &i18n::recipe(padding.count, &padding.unit),
+                &i18n::recipe(rest.count, &rest.unit),
+            ),
+            String::new(),
+        ),
     }
 }
 
@@ -517,6 +528,13 @@ pub(super) fn apply_waiting(palette: &Palette, messages: Vec<String>) {
     )));
 }
 
+/// Which side of its limit a value made for one is on, as a marker. Not a
+/// risk on either side: outside the limit is what the value is for, and the
+/// field refusing it is the test passing.
+fn limit_marker(within: Option<bool>) -> Option<(String, bool)> {
+    within.map(|within| (i18n::limit_side(within).to_owned(), false))
+}
+
 /// The markers a value earns before it is in: the two that are facts about
 /// the value. `cleared first`, `interrupted` and `on the clipboard` are facts
 /// about the delivery, and the delivery is not over.
@@ -580,6 +598,7 @@ pub(super) fn markers_of(sent: &Sent) -> Vec<(String, bool)> {
     ) {
         markers.push((i18n::label(PaletteLabel::Interrupted).to_owned(), true));
     }
+    markers.extend(limit_marker(sent.within));
     if sent.facts.warnings > 0 {
         markers.push((i18n::warnings(sent.facts.warnings), true));
     }
@@ -974,6 +993,38 @@ mod tests {
     use crate::live::tests::{a_palette, a_sent, an_outcome, on, quiet, quiet_sent};
     use slint::Model;
 
+    /// `D178`: a value made for a limit says which side of the limit its length
+    /// is on - after the risk, before the pair, and never as a risk itself.
+    #[test]
+    fn a_value_made_for_a_limit_says_which_side_of_the_limit_it_is_on() {
+        let said = |text: &str, risky| (text.to_owned(), risky);
+        assert_eq!(
+            next_markers(false, Some(true), &[]),
+            [said("inside the limit", false)]
+        );
+        assert_eq!(
+            next_markers(true, Some(false), &[PairHalf::First]),
+            [
+                said("offensive", true),
+                said("outside the limit", false),
+                said("pair 1 of 2", false)
+            ]
+        );
+        assert_eq!(next_markers(false, None, &[]), []);
+
+        // The value that went out says what it said before it went.
+        let outside = Sent {
+            within: Some(false),
+            ..quiet_sent()
+        };
+        assert!(markers_of(&outside).contains(&said("outside the limit", false)));
+        let of_a_pack = markers_of(&quiet_sent());
+        assert!(
+            of_a_pack.iter().all(|(text, _)| !text.contains("limit")),
+            "{of_a_pack:?}"
+        );
+    }
+
     /// Keys still on their way are a value cut short too, and a risk: the field
     /// holds an unknown part of it (`D158`).
     #[test]
@@ -1244,6 +1295,7 @@ mod tests {
             preview: ValuePreview::Text(nkb_core::preview::preview("pawel")),
             offensive,
             halves,
+            within: None,
         };
         // `None` would be a band with no value - compared, not unwrapped.
         let markers = |offensive, halves| {

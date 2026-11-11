@@ -57,7 +57,7 @@ pub enum Pressed {
 }
 
 /// The Backspace key, as the toolkit reports it.
-const BACKSPACE: &str = "\u{8}";
+pub(crate) const BACKSPACE: &str = "\u{8}";
 
 /// The query of the pack search.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -105,7 +105,7 @@ impl Query {
 /// Slint clears both flags when it can see the key was remapped, and when it
 /// cannot, text that arrives with both held is still a character. Non-ASCII
 /// text with one of them is a character too: `Option+a` on macOS types `U+00E5`.
-fn is_shortcut(press: KeyPress<'_>) -> bool {
+pub(crate) fn is_shortcut(press: KeyPress<'_>) -> bool {
     press.meta || (press.control != press.alt && press.text.is_ascii())
 }
 

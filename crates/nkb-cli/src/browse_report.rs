@@ -42,6 +42,22 @@ pub fn written_form(definition: &Definition) -> String {
         Definition::Fixed(ValueBody::Repeat { unit, count }) => {
             format!("{} x {count}", unit.escape().as_str())
         }
+        // No pack file says the next two today - the tool makes them for a
+        // limit - and they are written out all the same, so that the day a
+        // pack can say one, `nkb show` does not print a gap.
+        Definition::Fixed(ValueBody::Padded {
+            padding,
+            padding_count,
+            unit,
+            count,
+        }) => format!(
+            "{} x {padding_count} + {} x {count}",
+            padding.escape().as_str(),
+            unit.escape().as_str()
+        ),
+        Definition::Fixed(ValueBody::Counterstring { length }) => {
+            format!("counterstring x {length}")
+        }
         Definition::NextDate(rule) => rule_in_words(rule),
     }
 }
