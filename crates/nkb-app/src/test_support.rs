@@ -18,11 +18,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::advance_sequence::{AdvanceSequence, InFlight, Ports};
 use crate::ports::{
-    Availability, CatalogueCoverage, CatalogueSource, Clipboard, ClipboardError, Date, Delivered,
-    DeliveryError, Following, Found, History, KeystrokeError, KeystrokeSender, Listed,
-    PackCatalogue, PackFormat, PackOrigin, PackSource, Progress, ReportText, SourceError,
+    Availability, BoundaryText, CatalogueCoverage, CatalogueSource, Clipboard, ClipboardError,
+    Date, Delivered, DeliveryError, Following, Found, History, KeystrokeError, KeystrokeSender,
+    Listed, PackCatalogue, PackFormat, PackOrigin, PackSource, Progress, ReportText, SourceError,
     TargetInspector, TargetRef, TranslationCheck, TranslationTarget, ValueDelivery, Waiting,
 };
+use nkb_core::boundary::{BoundaryValue, Limit};
 use nkb_core::calendar::Day;
 use nkb_core::keys::KeyChord;
 use nkb_core::lint::{LintProblem, RuleCode};
@@ -311,6 +312,25 @@ impl ReportText for FakeReportText {
     fn report_text(&self, block: &ReportBlock) -> String {
         self.blocks.borrow_mut().push(block.clone());
         format!("report of {}", block.reference)
+    }
+}
+
+/// Words of a made set that say which question was asked, so a test can tell
+/// the name of a value from its two sentences (`D178`).
+pub(crate) struct FakeBoundaryText;
+
+impl BoundaryText for FakeBoundaryText {
+    fn set_name(&self, limit: Limit) -> String {
+        format!("set for {}", limit.unit().id())
+    }
+    fn value_name(&self, value: &BoundaryValue) -> String {
+        format!("name of {}", value.id())
+    }
+    fn breaks(&self, value: &BoundaryValue) -> String {
+        format!("breaks of {}", value.id())
+    }
+    fn expected(&self, _limit: Limit, value: &BoundaryValue) -> String {
+        format!("expected of {}", value.id())
     }
 }
 

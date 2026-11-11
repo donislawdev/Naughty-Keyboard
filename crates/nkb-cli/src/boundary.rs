@@ -11,47 +11,35 @@ use crate::emit_output::{EmitFormat, Form};
 use crate::english::listed;
 use crate::exit::ExitCode;
 use crate::help::print_boundary_help;
+use crate::limit_args::{LimitOption, LimitWishes, Refusal, see_help};
 use crate::output::{is_open, out};
-use nkb_core::boundary::{Limit, LimitProblem, MAX_LIMIT, Unit, values};
+use nkb_core::boundary::{Limit, values};
 use output::Shape;
 use std::io::Write;
+
+/// The name of this command, for the sentences that send a person to its help.
+const COMMAND: &str = "boundary";
 
 /// An option of this command that takes a word after it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Awaited {
-    Max,
-    Min,
-    Unit,
+    Limit(LimitOption),
     Format,
 }
 
 impl Awaited {
     fn of(option: &str) -> Option<Self> {
-        match option {
-            "--max-length" => Some(Self::Max),
-            "--min-length" => Some(Self::Min),
-            "--unit" => Some(Self::Unit),
-            "--format" => Some(Self::Format),
-            _ => None,
+        if option == "--format" {
+            return Some(Self::Format);
         }
-    }
-
-    const fn option(self) -> &'static str {
-        match self {
-            Self::Max => "--max-length",
-            Self::Min => "--min-length",
-            Self::Unit => "--unit",
-            Self::Format => "--format",
-        }
+        LimitOption::of(option).map(Self::Limit)
     }
 }
 
 /// What was asked for, as far as the arguments said.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct Wishes {
-    max: Option<u32>,
-    min: Option<u32>,
-    unit: Option<Unit>,
+    limit: LimitWishes,
     format: Option<EmitFormat>,
     form: Option<Form>,
     base64: bool,
@@ -64,69 +52,28 @@ enum Asked {
     Values(Limit, Shape),
 }
 
-/// Two lines on standard error: what is wrong, and what to do about it.
-type Refusal = [String; 2];
-
-fn see_help() -> String {
-    "Run 'nkb boundary --help' to see what is available.".to_owned()
-}
-
-fn units() -> String {
-    let words: Vec<&str> = Unit::ALL.into_iter().map(Unit::id).collect();
-    format!("Available: {}.", words.join(", "))
-}
-
-/// A whole number from 1 to the largest limit, written in plain digits.
-///
-/// Digits only, checked before the number is read: the standard reading of a
-/// number also takes a plus sign, and `+50` is a typing mistake here rather
-/// than a limit.
-fn bound(word: &str) -> Option<u32> {
-    if word.is_empty() || !word.bytes().all(|byte| byte.is_ascii_digit()) {
-        return None;
-    }
-    word.parse()
-        .ok()
-        .filter(|number| (1..=MAX_LIMIT).contains(number))
-}
-
 impl Wishes {
     /// Takes the word after an option. An option given twice is refused
-    /// rather than settled quietly, because the two numbers of a limit are
-    /// easy to mistype for each other.
+    /// rather than settled quietly, as `limit_args` refuses a part of the
+    /// limit given twice.
     fn take(&mut self, awaited: Awaited, word: Option<&str>) -> Result<(), Refusal> {
-        let option = awaited.option();
-        let taken = match awaited {
-            Awaited::Max => self.max.is_some(),
-            Awaited::Min => self.min.is_some(),
-            Awaited::Unit => self.unit.is_some(),
-            Awaited::Format => self.format.is_some(),
+        let Awaited::Limit(option) = awaited else {
+            return self.take_format(word);
         };
-        if taken {
-            return Err([format!("{option} was given twice."), see_help()]);
+        self.limit.take(option, word, COMMAND)
+    }
+
+    fn take_format(&mut self, word: Option<&str>) -> Result<(), Refusal> {
+        if self.format.is_some() {
+            return Err(["--format was given twice.".to_owned(), see_help(COMMAND)]);
         }
-        match awaited {
-            Awaited::Max => self.max = Some(a_bound(option, word)?),
-            Awaited::Min => self.min = Some(a_bound(option, word)?),
-            Awaited::Unit => {
-                self.unit = Some(word.and_then(Unit::parse).ok_or_else(|| {
-                    let said = word.map_or_else(
-                        || format!("{option} needs a name."),
-                        |word| format!("unknown unit '{word}'"),
-                    );
-                    [said, units()]
-                })?);
-            }
-            Awaited::Format => {
-                self.format = Some(word.and_then(EmitFormat::parse).ok_or_else(|| {
-                    let said = word.map_or_else(
-                        || format!("{option} needs a name."),
-                        |word| format!("unknown format '{word}'"),
-                    );
-                    [said, "Available: json, csv, lines.".to_owned()]
-                })?);
-            }
-        }
+        self.format = Some(word.and_then(EmitFormat::parse).ok_or_else(|| {
+            let said = word.map_or_else(
+                || "--format needs a name.".to_owned(),
+                |word| format!("unknown format '{word}'"),
+            );
+            [said, "Available: json, csv, lines.".to_owned()]
+        })?);
         Ok(())
     }
 
@@ -144,27 +91,7 @@ impl Wishes {
 
     /// The limit and the shape these wishes come to.
     fn settled(self) -> Result<Asked, Refusal> {
-        let limit = Limit::new(self.unit.unwrap_or(Unit::Graphemes), self.min, self.max).map_err(
-            |problem| match problem {
-                LimitProblem::NoBound => [
-                    "give the limit of the field: --max-length, --min-length or both.".to_owned(),
-                    see_help(),
-                ],
-                LimitProblem::MinAboveMax => [
-                    format!(
-                        "--min-length {} is above --max-length {}.",
-                        self.min.unwrap_or_default(),
-                        self.max.unwrap_or_default()
-                    ),
-                    "The least a field takes cannot be more than the most.".to_owned(),
-                ],
-                // `bound` lets no such number through. Said all the same, so
-                // that the two checks drifting apart is a sentence, not a crash.
-                LimitProblem::MinOutOfRange | LimitProblem::MaxOutOfRange => {
-                    [out_of_range("a limit"), see_help()]
-                }
-            },
-        )?;
+        let limit = self.limit.settled(COMMAND)?;
         let shape = Shape {
             format: self.format.unwrap_or(EmitFormat::Json),
             form: self.form,
@@ -172,22 +99,6 @@ impl Wishes {
         };
         Ok(Asked::Values(limit, shape))
     }
-}
-
-fn out_of_range(option: &str) -> String {
-    format!("{option} needs a whole number from 1 to {MAX_LIMIT}")
-}
-
-fn a_bound(option: &str, word: Option<&str>) -> Result<u32, Refusal> {
-    let Some(word) = word else {
-        return Err([format!("{}.", out_of_range(option)), see_help()]);
-    };
-    bound(word).ok_or_else(|| {
-        [
-            format!("{}, got '{word}'.", out_of_range(option)),
-            see_help(),
-        ]
-    })
 }
 
 /// Reads the arguments of `nkb boundary`.
@@ -213,11 +124,11 @@ fn asked(args: &[String]) -> Result<Asked, Refusal> {
 
 fn not_an_option(word: &str) -> Refusal {
     if word.starts_with('-') {
-        return [format!("unknown option '{word}'"), see_help()];
+        return [format!("unknown option '{word}'"), see_help(COMMAND)];
     }
-    let options: Vec<&str> = [Awaited::Max, Awaited::Min]
+    let options: Vec<&str> = [LimitOption::Max, LimitOption::Min]
         .into_iter()
-        .map(Awaited::option)
+        .map(LimitOption::option)
         .collect();
     [
         format!("'{word}' is not an option, and this command takes no name."),
@@ -264,6 +175,7 @@ pub(crate) fn boundary(args: &[String]) -> ExitCode {
 )]
 mod tests {
     use super::*;
+    use nkb_core::boundary::Unit;
 
     fn read(words: &[&str]) -> Result<Asked, Refusal> {
         let args: Vec<String> = words.iter().map(|&word| word.to_owned()).collect();
@@ -335,30 +247,6 @@ mod tests {
     fn help_is_help_wherever_it_stands() {
         assert_eq!(read(&["--help"]), Ok(Asked::Help));
         assert_eq!(read(&["--max-length", "50", "-h"]), Ok(Asked::Help));
-    }
-
-    #[test]
-    fn a_number_is_plain_digits_from_one_to_the_largest_limit() {
-        assert_eq!(bound("1"), Some(1));
-        assert_eq!(bound("050"), Some(50), "leading zeros are still digits");
-        assert_eq!(bound("100000"), Some(MAX_LIMIT));
-        for word in [
-            "",
-            "0",
-            "100001",
-            "+50",
-            "-5",
-            "5.0",
-            " 5",
-            "5 ",
-            "0x32",
-            "1e3",
-            "fifty",
-            "99999999999999999999",
-            "\u{0665}\u{0660}",
-        ] {
-            assert_eq!(bound(word), None, "{word:?}");
-        }
     }
 
     #[test]

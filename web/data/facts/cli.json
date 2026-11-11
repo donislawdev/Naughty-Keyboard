@@ -32,7 +32,7 @@
     "units": [],
     "formats": [],
     "exit_codes": [],
-    "help": "nkb 0.3.0 - malicious test data, one shortcut away\n\nUsage:\n  nkb <command> [options]\n\nCommands:\n  packs             List the packs this build can offer\n  show <pack>       Print one pack in full\n  emit <pack>       Print a pack's values for a script or a file\n  boundary          Make the values that test the length limit of a field\n  send <pack>       Type one value into the focused field\n  lint <file>       Check a pack file against the format rules\n  fmt <file>        Rewrite a pack file in canonical shape\n  new-pack <name>   Write the skeleton for a new pack\n\nOptions:\n  -h, --help        Show this help and exit with 0\n      --version     Print the version and exit with 0\n\nThe graphical interface is a separate executable: nkb-gui\n"
+    "help": "nkb 0.3.0 - malicious test data, one shortcut away\n\nUsage:\n  nkb <command> [options]\n\nCommands:\n  packs             List the packs this build can offer\n  show <pack>       Print one pack in full\n  emit <pack>       Print a pack's values for a script or a file\n  boundary          Make the values that test the length limit of a field\n  send              Type one value into the focused field\n  lint <file>       Check a pack file against the format rules\n  fmt <file>        Rewrite a pack file in canonical shape\n  new-pack <name>   Write the skeleton for a new pack\n\nOptions:\n  -h, --help        Show this help and exit with 0\n      --version     Print the version and exit with 0\n\nThe graphical interface is a separate executable: nkb-gui\n"
   },
   "commands": [
     {
@@ -343,11 +343,14 @@
       "name": "send",
       "summary": "type one value into the focused field",
       "usage": [
-        "nkb send <pack> [--index N] [--delay S] [--clear] [--team-folder <folder>]"
+        "nkb send <pack> [--index N] [--delay S] [--clear] [--team-folder <folder>]",
+        "nkb send [--max-length N] [--min-length N] [--unit U] --index N",
+        "         [--delay S] [--clear]"
       ],
       "about": [
-        "Put one value of a pack into whatever field has the keyboard focus.",
+        "Put one value into whatever field has the keyboard focus: a value of a pack, or one of the values nkb boundary makes for a length limit.",
         "Packs come from three places: the ones built in, the team folder (from --team-folder or the settings file) and your own folder beside the settings file. A pack in a folder is used instead of a built-in pack of the same name, and an own pack instead of a team pack.",
+        "A limit takes the place of the pack. Its values are the ones nkb boundary prints for the same limit, in the same order, and --index says which one, so it is needed. After the value the command says whether a field that keeps to the limit should take it.",
         "The value goes to the focused window, not to standard output. Everything you read here is on standard error. Nothing is sent while Ctrl, Alt, Shift or Win is held on the keyboard: the command waits up to two seconds for them to come up, then refuses. Nothing is sent to a window running with higher privileges than nkb, such as an application started as administrator: the system would drop the keystrokes without a word, so the command refuses and exits with 4. Nothing is sent when the keyboard focus is on a button, a link, a list item or a page that is not editable: keys there act on that control, so the command refuses and exits with 4. Where it cannot tell, it sends. Press Escape to stop a send in progress: nothing more is typed, the command says how much arrived and exits with 4. Escape belongs to the command only while it types - before and after, the key is the application's."
       ],
       "options": [
@@ -357,7 +360,7 @@
           ],
           "argument": "N",
           "values": [],
-          "help": "which value, counting from 1 in the pack's own order (default: 1). The order of values is the order of testing."
+          "help": "which value, counting from 1 in the pack's own order (default: 1), or in the order nkb boundary prints the values of a limit (needed then). The order of values is the order of testing."
         },
         {
           "flags": [
@@ -385,6 +388,30 @@
         },
         {
           "flags": [
+            "--max-length"
+          ],
+          "argument": "N",
+          "values": [],
+          "help": "the most the field takes, from 1 to 100000: type a value made for this limit instead of a value of a pack"
+        },
+        {
+          "flags": [
+            "--min-length"
+          ],
+          "argument": "N",
+          "values": [],
+          "help": "the least the field takes, from 1 to 100000"
+        },
+        {
+          "flags": [
+            "--unit"
+          ],
+          "argument": "U",
+          "values": [],
+          "help": "what the limit is counted in: graphemes (the default), code-points, utf16 or bytes"
+        },
+        {
+          "flags": [
             "-h",
             "--help"
           ],
@@ -397,7 +424,7 @@
       "units": [],
       "formats": [],
       "exit_codes": [],
-      "help": "nkb send - type one value into the focused field\n\nUsage:\n  nkb send <pack> [--index N] [--delay S] [--clear] [--team-folder <folder>]\n\nPut one value of a pack into whatever field has the keyboard focus.\n\nPacks come from three places: the ones built in, the team folder (from\n--team-folder or the settings file) and your own folder beside the\nsettings file. A pack in a folder is used instead of a built-in pack of\nthe same name, and an own pack instead of a team pack.\n\nOptions:\n  --index N      which value, counting from 1 in the pack's own order\n                 (default: 1). The order of values is the order of testing.\n  --delay S      seconds to wait first, so you can focus the target\n                 (default: 3). Use 0 when something else focuses it.\n  --clear        press Home, Shift+End, Delete first, clearing the current\n                 line of the field. Never selects beyond the line, so a\n                 multi-line field keeps its other lines. Without this switch\n                 the only keys sent are the value's own characters.\n      --team-folder <folder>  Read the team's packs from this folder instead\n                 of the one the settings file names. A relative path is\n                 read from the current folder\n  -h, --help     Show this help and exit with 0\n\nThe value goes to the focused window, not to standard output.\nEverything you read here is on standard error.\nNothing is sent while Ctrl, Alt, Shift or Win is held on the keyboard:\nthe command waits up to two seconds for them to come up, then refuses.\nNothing is sent to a window running with higher privileges than nkb,\nsuch as an application started as administrator: the system would drop\nthe keystrokes without a word, so the command refuses and exits with 4.\nNothing is sent when the keyboard focus is on a button, a link, a list item\nor a page that is not editable: keys there act on that control, so the\ncommand refuses and exits with 4. Where it cannot tell, it sends.\nPress Escape to stop a send in progress: nothing more is typed, the command\nsays how much arrived and exits with 4. Escape belongs to the command only\nwhile it types - before and after, the key is the application's.\n"
+      "help": "nkb send - type one value into the focused field\n\nUsage:\n  nkb send <pack> [--index N] [--delay S] [--clear] [--team-folder <folder>]\n  nkb send [--max-length N] [--min-length N] [--unit U] --index N\n           [--delay S] [--clear]\n\nPut one value into whatever field has the keyboard focus: a value of a\npack, or one of the values nkb boundary makes for a length limit.\n\nPacks come from three places: the ones built in, the team folder (from\n--team-folder or the settings file) and your own folder beside the\nsettings file. A pack in a folder is used instead of a built-in pack of\nthe same name, and an own pack instead of a team pack.\n\nA limit takes the place of the pack. Its values are the ones nkb boundary\nprints for the same limit, in the same order, and --index says which one,\nso it is needed. After the value the command says whether a field that\nkeeps to the limit should take it.\n\nOptions:\n  --index N      which value, counting from 1 in the pack's own order\n                 (default: 1), or in the order nkb boundary prints the\n                 values of a limit (needed then). The order of values is\n                 the order of testing.\n  --max-length N  the most the field takes, from 1 to 100000: type a value\n                 made for this limit instead of a value of a pack\n  --min-length N  the least the field takes, from 1 to 100000\n  --unit U       what the limit is counted in: graphemes (the default),\n                 code-points, utf16 or bytes\n  --delay S      seconds to wait first, so you can focus the target\n                 (default: 3). Use 0 when something else focuses it.\n  --clear        press Home, Shift+End, Delete first, clearing the current\n                 line of the field. Never selects beyond the line, so a\n                 multi-line field keeps its other lines. Without this switch\n                 the only keys sent are the value's own characters.\n      --team-folder <folder>  Read the team's packs from this folder instead\n                 of the one the settings file names. A relative path is\n                 read from the current folder\n  -h, --help     Show this help and exit with 0\n\nThe value goes to the focused window, not to standard output.\nEverything you read here is on standard error.\nNothing is sent while Ctrl, Alt, Shift or Win is held on the keyboard:\nthe command waits up to two seconds for them to come up, then refuses.\nNothing is sent to a window running with higher privileges than nkb,\nsuch as an application started as administrator: the system would drop\nthe keystrokes without a word, so the command refuses and exits with 4.\nNothing is sent when the keyboard focus is on a button, a link, a list item\nor a page that is not editable: keys there act on that control, so the\ncommand refuses and exits with 4. Where it cannot tell, it sends.\nPress Escape to stop a send in progress: nothing more is typed, the command\nsays how much arrived and exits with 4. Escape belongs to the command only\nwhile it types - before and after, the key is the application's.\n"
     },
     {
       "name": "lint",

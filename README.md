@@ -63,6 +63,7 @@ needs it finds out it exists.
   as a counterstring that shows where a field cut it. The limit can be counted in characters, code
   points, UTF-16 units or bytes. The palette makes the same values: **Length limit**, the first row of
   the value window, opens a window where you type the limit, and the shortcuts then walk its values.
+  `nkb send` types one of them.
 - **Offline, free, no telemetry** - GPL-3.0, no account, and it opens no network connection.
 
 <p align="center">
@@ -282,6 +283,13 @@ Type one value into the focused field. You get three seconds to click the field:
 
 ```console
 $ nkb send magic-values --index 2 --delay 3
+```
+
+Or one of the values for a limit, by its place in the order `nkb boundary` prints them. The tenth for
+50 bytes is one letter a and twenty-five two-byte letters, one byte over:
+
+```console
+$ nkb send --max-length 50 --unit bytes --index 10
 ```
 
 Add `--clear` to clear the current line first, which the palette does by default. `send` refuses rather

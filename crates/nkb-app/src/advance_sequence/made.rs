@@ -2,10 +2,11 @@
 //!
 //! A specification says "at most 50 characters", and the tester wants the
 //! values that test that sentence under the same shortcut that walks a pack.
-//! So the set is built in memory as a [`Pack`] and handed to the sequence the
-//! way a chosen pack is: the walk, the value shown before it goes, the Copy
-//! buttons, clipboard mode and the report block are the code they already
-//! were, and none of them learns a second kind of thing to hold.
+//! So the set is built in memory as a pack ([`MadeSet`], the one `nkb send`
+//! types from too) and handed to the sequence the way a chosen pack is: the
+//! walk, the value shown before it goes, the Copy buttons, clipboard mode and
+//! the report block are the code they already were, and none of them learns a
+//! second kind of thing to hold.
 //!
 //! # What tells a made set from a pack
 //!
@@ -14,23 +15,13 @@
 //! limit, and for each value whether its length is inside it - and the report
 //! block takes the limit from it, so a ticket gives the command that makes the
 //! same values rather than a pack version nobody can look up.
-//!
-//! # Nothing is built here
-//!
-//! Every value stays the recipe [`nkb_core::boundary`] gave it. The largest
-//! limit describes values of more than a megabyte, and they become text when
-//! one is typed and not before (`architektura.md` 6.1).
 
-use nkb_core::boundary::{self, BoundaryValue, Limit};
-use nkb_core::pack::{Pack, PackValue, Risk};
+use nkb_core::boundary::Limit;
 use nkb_core::sequence::Event;
 
 use super::{AdvanceSequence, Loaded};
+use crate::made_set::MadeSet;
 use crate::ports::{BoundaryText, PackOrigin};
-
-/// The identifier a made set has where a pack has its own: the first half of
-/// `boundary/two-byte-51`, the name of the command that makes the same values.
-pub const MADE_SET_ID: &str = "boundary";
 
 /// What a set was made for, beside the pack that holds its values.
 #[derive(Debug)]
@@ -67,43 +58,7 @@ impl AdvanceSequence {
     ///
     /// ⚠️ Called only between actions, as [`Self::choose_pack`] is.
     pub fn choose_limit(&mut self, limit: Limit, text: &dyn BoundaryText) {
-        let values = boundary::values(limit);
-        let within = values.iter().map(BoundaryValue::within).collect();
-        let pack = Pack {
-            id: MADE_SET_ID.to_owned(),
-            name: text.set_name(limit),
-            description: String::new(),
-            // The version of the tool that made the values: what "the same
-            // values" depends on, where a pack has a version of its own.
-            version: env!("CARGO_PKG_VERSION").to_owned(),
-            updated: String::new(),
-            license: String::new(),
-            authors: Vec::new(),
-            language: "en".to_owned(),
-            risk: Risk::Normal,
-            tags: Vec::new(),
-            fields: Vec::new(),
-            source: None,
-            values: values
-                .iter()
-                .map(|value| PackValue {
-                    id: value.id(),
-                    name: text.value_name(value),
-                    definition: value.body().into(),
-                    breaks: Some(text.breaks(value)),
-                    expect: Some(text.expected(limit, value)),
-                    risk: None,
-                    fields: Vec::new(),
-                    tags: Vec::new(),
-                    source: None,
-                    since: None,
-                    shape: None,
-                    deprecated: false,
-                    replaced_by: None,
-                })
-                .collect(),
-            pairs: Vec::new(),
-        };
+        let (limit, pack, within) = MadeSet::new(limit, text).into_parts();
         let total = pack.values.len();
         self.last = None;
         self.loaded = Some(Loaded {
@@ -127,28 +82,10 @@ impl AdvanceSequence {
 mod tests {
     use super::*;
     use crate::advance_sequence::UpcomingValue;
+    use crate::made_set::MADE_SET_ID;
     use crate::test_support::*;
-    use nkb_core::boundary::Unit;
+    use nkb_core::boundary::{self, Unit};
     use nkb_core::hotkeys::HotkeyAction;
-
-    /// Words that say which question was asked, so a test can tell the name
-    /// from the two sentences.
-    struct Words;
-
-    impl BoundaryText for Words {
-        fn set_name(&self, limit: Limit) -> String {
-            format!("set for {}", limit.unit().id())
-        }
-        fn value_name(&self, value: &BoundaryValue) -> String {
-            format!("name of {}", value.id())
-        }
-        fn breaks(&self, value: &BoundaryValue) -> String {
-            format!("breaks of {}", value.id())
-        }
-        fn expected(&self, _limit: Limit, value: &BoundaryValue) -> String {
-            format!("expected of {}", value.id())
-        }
-    }
 
     fn at_most_fifty_bytes() -> Limit {
         Limit::new(Unit::Bytes, None, Some(50)).expect("in range")
@@ -156,7 +93,7 @@ mod tests {
 
     fn made() -> AdvanceSequence {
         let mut advance = AdvanceSequence::new(Box::new(StoppedClock::default()));
-        advance.choose_limit(at_most_fifty_bytes(), &Words);
+        advance.choose_limit(at_most_fifty_bytes(), &FakeBoundaryText);
         advance
     }
 
@@ -259,7 +196,7 @@ mod tests {
     fn choosing_a_limit_forgets_the_value_sent_last_as_choosing_a_pack_does() {
         let mut advance = chosen(nkb_core::pack::Risk::Normal);
         let _ = advance.on_action(HotkeyAction::NextValue, &Kit::ready().ports());
-        advance.choose_limit(at_most_fifty_bytes(), &Words);
+        advance.choose_limit(at_most_fifty_bytes(), &FakeBoundaryText);
         let kit = Kit::ready();
         let _ = advance.on_action(HotkeyAction::CopyReport, &kit.ports());
         assert!(

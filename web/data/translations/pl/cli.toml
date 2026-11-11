@@ -162,8 +162,20 @@ source = "d12d3637abc8"
 text = "wpisuje jedną wartość w pole z fokusem"
 
 [send.options.--index]
-source = "052577110735"
-text = "która wartość, licząc od 1 w kolejności paczki (domyślnie: 1). Kolejność wartości to kolejność testowania."
+source = "f4dc12b851be"
+text = "która wartość, licząc od 1 w kolejności paczki (domyślnie: 1) albo w kolejności, w jakiej nkb boundary wypisuje wartości limitu (wtedy wymagane). Kolejność wartości to kolejność testowania."
+
+[send.options.--max-length]
+source = "bc87f1a10501"
+text = "najwięcej, ile pole przyjmuje, od 1 do 100000: wpisuje wartość zrobioną dla tego limitu zamiast wartości z paczki"
+
+[send.options.--min-length]
+source = "e14b45e5a038"
+text = "najmniej, ile pole przyjmuje, od 1 do 100000"
+
+[send.options.--unit]
+source = "18403d823bae"
+text = "w czym liczony jest limit: graphemes (domyślnie), code-points, utf16 albo bytes"
 
 [send.options.--delay]
 source = "859f9a80980b"

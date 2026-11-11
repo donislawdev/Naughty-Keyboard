@@ -24,6 +24,11 @@ Changes wait under Unreleased until then.
   type, and Use these values hands them to the palette, where each says whether it is inside or
   outside the limit. A number typed in the value window's search opens it with that number. The
   report block names the `nkb boundary` command that makes them.
+- `nkb send` types one of the values for a length limit. Give the limit instead of a pack, with the
+  options of `nkb boundary`, and `--index` for the place of the value in the order `nkb boundary`
+  prints them, as in `nkb send --max-length 50 --unit bytes --index 10`. `--index` is needed with a
+  limit, because the first value is the empty one. After the value the command says what a field that
+  keeps to the limit should do with it.
 - A guide on the website to writing a pack of your own, from an empty folder to the first value
   typed into a field: where the file goes, every field, characters nobody can see, long values,
   dates that stay in the future, pairs, and the common errors `nkb lint` reports, each quoted from

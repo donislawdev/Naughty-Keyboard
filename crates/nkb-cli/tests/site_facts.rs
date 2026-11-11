@@ -313,9 +313,10 @@ struct Option_ {
 
 /// `[--format json|csv|lines]`, `[--escaped|--raw]`, `[--index N]` - the
 /// options a usage line names, which is where an option without an entry of
-/// its own (`--format`) is found.
+/// its own (`--format`) is found. Each once, where it is first named: two
+/// usage lines of one command (`nkb send`) name some options twice.
 fn usage_options(usage: &[String]) -> Vec<Option_> {
-    let mut found = Vec::new();
+    let mut found: Vec<Option_> = Vec::new();
     for line in usage {
         for group in line.split('[').skip(1) {
             let inside = group.split(']').next().unwrap_or("");
@@ -325,6 +326,12 @@ fn usage_options(usage: &[String]) -> Vec<Option_> {
                 continue;
             }
             let rest: Vec<&str> = words.collect();
+            if found
+                .iter()
+                .any(|o| first.split('|').any(|flag| o.flags[0] == flag))
+            {
+                continue;
+            }
             if first.contains('|') {
                 for flag in first.split('|') {
                     found.push(Option_ {

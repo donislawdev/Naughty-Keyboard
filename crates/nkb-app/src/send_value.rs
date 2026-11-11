@@ -1,7 +1,9 @@
 //! Putting one value of one pack into whatever field has the focus.
 //!
 //! This is the use case behind `nkb send`, and the first one in the project that
-//! reaches outside the process to something that is not a file.
+//! reaches outside the process to something that is not a file. The value comes
+//! from a pack of the catalogue, or from the values made for a limit
+//! ([`MadeSet`], `D178`) - the same set the palette walks.
 //!
 //! # Clearing the field first, and what that costs
 //!
@@ -40,6 +42,7 @@
 
 use std::sync::atomic::AtomicBool;
 
+use crate::made_set::MadeSet;
 use crate::ports::{
     Availability, DeliveryError, Following, KeystrokeError, KeystrokeSender, PackFormat,
     PackSource, Progress, SourceError, StopReason, TargetRef, ValueDelivery, Waiting,
@@ -91,10 +94,21 @@ pub enum SkipReason {
     NoClearingKeys,
 }
 
+/// Where the value to send is taken from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Wanted<'a> {
+    /// A pack of the catalogue, by its identifier: read and checked when the
+    /// send begins.
+    Pack(&'a str),
+    /// The values made for a limit (`D178`): nothing to read and nothing that
+    /// could be refused.
+    Made(&'a MadeSet),
+}
+
 /// What to send: which value of which pack, where, and whether to clear first.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SendRequest<'a> {
-    pub pack_id: &'a str,
+    pub wanted: Wanted<'a>,
     /// Counted from one, in the pack's own order - see [`send_value`].
     pub position: usize,
     pub clearing: Clearing,
@@ -284,7 +298,8 @@ pub enum SendOutcome {
     },
 }
 
-/// Sends one value, addressed by position within its pack.
+/// Sends one value, addressed by position within its pack or within the
+/// values made for a limit.
 ///
 /// # Positions start at one
 ///
@@ -298,7 +313,8 @@ pub enum SendOutcome {
 ///
 /// `D47`: the order of `[[values]]` is the order of testing and is untouchable.
 /// So position 3 means the third value as the pack file writes it, not the third
-/// alphabetically and not the third of some filtered view.
+/// alphabetically and not the third of some filtered view. For a limit it is
+/// the third value as `nkb boundary` prints them.
 #[must_use]
 pub fn send_value(
     source: &dyn PackSource,
@@ -326,7 +342,15 @@ pub fn send_value(
         }
     }
 
-    let text = match source.read(request.pack_id) {
+    let pack_id = match request.wanted {
+        // Made from the limit, so nothing was read, and nothing carries a
+        // warning.
+        Wanted::Made(set) => {
+            return deliver_one(set.pack(), delivery, keys, request, 0, progress);
+        }
+        Wanted::Pack(pack_id) => pack_id,
+    };
+    let text = match source.read(pack_id) {
         Ok(text) => text,
         Err(SourceError::NotFound) => return SendOutcome::NotFound,
         Err(SourceError::Unreadable | SourceError::NotUtf8 | SourceError::TooLarge) => {
@@ -336,7 +360,7 @@ pub fn send_value(
 
     // check first, refuse on any error, parse after - pack-format.md 11 and the
     // binding order in architektura.md 3, both of which live in `load_pack`.
-    match crate::load_pack::load(format, request.pack_id, &text) {
+    match crate::load_pack::load(format, pack_id, &text) {
         Ok(loaded) => deliver_one(
             &loaded.pack,
             delivery,
@@ -566,6 +590,8 @@ mod tests {
     use crate::ports::{
         Date, Delivered, Following, TargetRef, TranslationCheck, TranslationTarget,
     };
+    use crate::test_support::FakeBoundaryText;
+    use nkb_core::boundary::{self, Limit, Unit};
     use nkb_core::keys::KeyChord;
     use nkb_core::lint::{LintProblem, RuleCode};
     use nkb_core::pack::Risk;
@@ -755,7 +781,7 @@ mod tests {
 
     fn request(position: usize, clearing: Clearing) -> SendRequest<'static> {
         SendRequest {
-            pack_id: "sample",
+            wanted: Wanted::Pack("sample"),
             position,
             clearing,
             on: crate::test_support::WRITTEN_ON,
@@ -1162,6 +1188,63 @@ mod tests {
             log.borrow().as_slice(),
             [sent].as_slice(),
             "the field must receive the whole value and nothing else"
+        );
+    }
+
+    #[test]
+    fn a_value_made_for_a_limit_reads_no_pack_and_goes_by_its_place_in_the_set() {
+        // `D178`: the set the palette walks, typed by position as `nkb boundary`
+        // prints it. Nothing is read, so a source that would panic is never asked.
+        struct Untouched;
+        impl PackSource for Untouched {
+            fn read(&self, _id: &str) -> Result<String, SourceError> {
+                panic!("a made set reads no pack");
+            }
+        }
+        let limit = Limit::new(Unit::Bytes, None, Some(4)).expect("in range");
+        let set = MadeSet::new(limit, &FakeBoundaryText);
+        let values = boundary::values(limit);
+        let made = |position| SendRequest {
+            wanted: Wanted::Made(&set),
+            ..request(position, Clearing::Keep)
+        };
+        let log = log();
+        let spy = Spy::ready(&log);
+        let keys = KeySpy::working(&log);
+        for (position, value) in (1..).zip(&values) {
+            let outcome = send_value(
+                &Untouched,
+                &Scripted::two(),
+                &spy,
+                &keys,
+                &made(position),
+                &mut |_| {},
+            );
+            let SendOutcome::Sent { facts, .. } = outcome else {
+                panic!("value {position} of the set goes, got {outcome:?}");
+            };
+            assert_eq!(facts.reference, format!("boundary/{}", value.id()));
+            assert_eq!(facts.name, format!("name of {}", value.id()));
+            assert_eq!(facts.warnings, 0);
+            assert_eq!(
+                log.borrow().last().map(String::as_str),
+                Some(format!("text:{}", value.materialise()).as_str())
+            );
+        }
+        let past = values.len() + 1;
+        assert_eq!(
+            send_value(
+                &Untouched,
+                &Scripted::two(),
+                &spy,
+                &keys,
+                &made(past),
+                &mut |_| {},
+            ),
+            SendOutcome::NoSuchIndex {
+                asked: past,
+                available: values.len()
+            }
         );
     }
 

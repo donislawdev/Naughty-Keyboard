@@ -37,13 +37,18 @@ pub(crate) fn then(
     run: fn(&[String], &PackFolders) -> ExitCode,
 ) -> ExitCode {
     match take(args, command) {
-        Ok((rest, team)) => run(&rest, &folders(team)),
+        Ok((rest, team)) => run(&rest, &of_run(team)),
         Err(code) => code,
     }
 }
 
-/// Takes `--team-folder <folder>` out of `args`, once at most.
-fn take(args: &[String], command: &str) -> Result<(Vec<String>, Option<PathBuf>), ExitCode> {
+/// Takes `--team-folder <folder>` out of `args`, once at most. Apart from
+/// [`of_run`] for a command that reads the folders on one of its paths only:
+/// `nkb send` with a limit reads no pack (`D178`).
+pub(crate) fn take(
+    args: &[String],
+    command: &str,
+) -> Result<(Vec<String>, Option<PathBuf>), ExitCode> {
     let mut rest = Vec::with_capacity(args.len());
     let mut team = None;
     let mut words = args.iter();
@@ -72,7 +77,7 @@ fn take(args: &[String], command: &str) -> Result<(Vec<String>, Option<PathBuf>)
 }
 
 /// The folders of this run: the option when given, else the settings.
-fn folders(team: Option<PathBuf>) -> PackFolders {
+pub(crate) fn of_run(team: Option<PathBuf>) -> PackFolders {
     let file = SettingsFile::for_this_user();
     if team.is_some() {
         return PackFolders::for_run(&file, &nkb_app::Settings::default(), &[], team);

@@ -4,7 +4,7 @@ command: send
 layout: command
 seoTitle: nkb send - wpisz wartość testową w pole z fokusem
 description: nkb send wpisuje jedną wartość w pole z fokusem na Windows, macOS i Linuksie, z --clear najpierw czyści wiersz i odmawia tam, gdzie klawisze by przepadły.
-lead: "Wpisuje jedną wartość z paczki w pole, które ma fokus klawiatury. Na Windows, macOS i Linuksie."
+lead: "Wpisuje jedną wartość z paczki albo zrobioną dla limitu długości w pole, które ma fokus klawiatury. Na Windows, macOS i Linuksie."
 ---
 
 ## Jak go używać?
@@ -16,6 +16,16 @@ $ nkb send magic-values --index 2 --delay 3
 ```
 
 Wartość trafia do okna z fokusem, a nie na standardowe wyjście, a wszystko, co mówi polecenie, idzie na standardowe wyjście błędów. Dodaj `--clear`, żeby najpierw wyczyścić bieżący wiersz pola klawiszami Home, Shift+End i Delete, tak jak paleta robi domyślnie. Bez tej opcji jedyne wysyłane klawisze to znaki samej wartości. Tabulator w wartości jest naciskany jako klawisz Tab, a znak nowej linii jako Enter, więc w polu jednowierszowym mogą przenieść fokus albo wysłać formularz, o czym mówią [Uczciwe ograniczenia](/docs/limits/).
+
+## Czy wpisze wartość dla limitu długości?
+
+Tak. Zamiast paczki podaj limit, opcjami [nkb boundary](/docs/cli/boundary/), a `--index` wskaże miejsce wartości w kolejności, w jakiej wypisuje je tamto polecenie. Tutaj `--index` jest wymagane, bo pierwsza wartość jest pusta:
+
+```console
+$ nkb send --max-length 50 --unit bytes --index 10
+```
+
+To `two-byte-51`, jedna litera `a` i dwadzieścia pięć liter dwubajtowych: 51 bajtów, jeden ponad limit. Po wartości polecenie mówi, co pole trzymające się limitu powinno z nią zrobić, tym samym zdaniem, które cytuje blok do zgłoszenia. Numer za ostatnią wartością kończy się kodem wyjścia 3 jeszcze przed odliczaniem, tak samo jak 0.
 
 ## Kiedy odmawia?
 
