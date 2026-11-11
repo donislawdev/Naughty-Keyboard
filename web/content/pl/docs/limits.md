@@ -20,6 +20,10 @@ Nie. Zmierzono to tylko na Ubuntu 26.04: GNOME 50 na Waylandzie i X11 z openbox 
 
 Na macOS tak. Podstawienia tekstu w systemie mogą zamienić wpisaną wartość w inną, a paleta i `nkb send` mówią o tym, gdy włączone podstawienie mogło zadziałać na właśnie tę wartość.
 
+## Czy emoji docierają do każdej aplikacji?
+
+Na Windows nie. Tam program, który wpisuje tekst, wysyła znak spoza podstawowej płaszczyzny Unicode, na przykład większość emoji, w dwóch połówkach. Zwykłe pola Windows i Edge składają połówki z powrotem. Aplikacje zbudowane na winit, bibliotece okien, której używa wiele programów w Ruście, w tym tych zrobionych w Slincie, gubią taki znak, więc wartość z emoji dociera bez nich. `nkb send` i paleta nie widzą tego z zewnątrz, więc sprawdź pole. Na macOS i Linuksie te aplikacje dostają całą wartość.
+
 ## Co robią tabulator i złamanie linii w wartości?
 
 To, co klawisze. Na Windows, macOS i X11 tabulator jest naciskany jako klawisz Tab, a znak nowej linii jako Enter, tak jak pisze je klawiatura. W polu wielowierszowym znak nowej linii zaczyna nowy wiersz. W polu jednowierszowym może wysłać formularz, a tabulator może przenieść fokus do następnej kontrolki, więc reszta wartości trafia tam. Powrót karetki jest wpisywany jako znak, który większość pól pomija, więc CR LF daje jedno złamanie linii, a na macOS dwa. Pod Waylandem wartość trafia do metody wprowadzania w całości, więc tabulator i znak nowej linii przychodzą jako znaki.
