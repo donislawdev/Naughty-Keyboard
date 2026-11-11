@@ -30,7 +30,11 @@
 //!
 //! Standard error is written with `let _ = writeln!(err, ...)` everywhere, and
 //! its failures are dropped on purpose: a sentence nobody can read is no reason
-//! to stop the work it describes.
+//! to stop the work it describes. Every such `err` comes from [`err`], the one
+//! door to standard error, which under `cargo test` hands the text to the test
+//! harness. A handle taken straight from `io::stderr()` writes past the harness
+//! into the middle of its report, and a test report cut that way once read as a
+//! test that never ran.
 //!
 //! `tests/closed_output.rs` measures both cases on the built binary and keeps
 //! the panicking macros out of every package of the workspace.
@@ -115,6 +119,44 @@ pub(crate) fn to_stdout(args: fmt::Arguments<'_>, newline: bool) {
     write_to_stdout(args, newline);
 }
 
+/// Standard error, the one way to it in this program.
+///
+/// Under `cargo test` the text goes where the test harness collects it, next
+/// to what the same test wrote on standard output, instead of onto the
+/// process's own standard error between the lines of the test report.
+pub(crate) const fn err() -> Stderr {
+    Stderr
+}
+
+/// What [`err`] gives. A write never fails here in a test build, and in a real
+/// run it fails the way standard error does.
+pub(crate) struct Stderr;
+
+impl Write for Stderr {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        #[cfg(test)]
+        {
+            tests::collect_err(buf);
+            Ok(buf.len())
+        }
+        #[cfg(not(test))]
+        {
+            io::stderr().write(buf)
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        #[cfg(test)]
+        {
+            Ok(())
+        }
+        #[cfg(not(test))]
+        {
+            io::stderr().flush()
+        }
+    }
+}
+
 #[cfg_attr(
     test,
     allow(dead_code, reason = "a test build sends the text to the harness")
@@ -192,6 +234,12 @@ mod tests {
         } else {
             print!("{args}");
         }
+    }
+
+    /// Where `err` sends its text in a test build: through `eprint!`, which
+    /// the test harness collects per test like `print!`.
+    pub(super) fn collect_err(buf: &[u8]) {
+        eprint!("{}", String::from_utf8_lossy(buf));
     }
 
     /// A sink that refuses every write with one kind of error.

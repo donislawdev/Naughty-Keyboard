@@ -141,7 +141,7 @@ fn not_an_option(word: &str) -> Refusal {
 /// Values go to standard output and the account of them to standard error, as
 /// with `nkb emit`. Nothing here can fail but the call itself and the writing.
 pub(crate) fn boundary(args: &[String]) -> ExitCode {
-    let mut err = std::io::stderr();
+    let mut err = crate::output::err();
     let (limit, shape) = match asked(args) {
         Ok(Asked::Help) => {
             print_boundary_help();
