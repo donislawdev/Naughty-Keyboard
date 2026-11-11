@@ -3,6 +3,7 @@
 
     python3 .github/scripts/shape_gate.py            # nothing is over a ceiling
     python3 .github/scripts/shape_gate.py --pinned   # and every number is the measurement
+    python3 .github/scripts/shape_gate.py --pinned --report-from 0.4   # and what stands below the band
 
 Why a ceiling, when nothing has gone wrong
 ------------------------------------------
@@ -54,6 +55,15 @@ reads the numbers out of the JSON. Nesting reports no number, so its run asks
 one level below the ceiling, and a second run at the ceiling itself says that
 nothing goes deeper. Lints are capped at warn in these runs, so one crate that
 fails cannot stop the crates above it from being measured.
+
+Below the band
+--------------
+Lowering a ceiling lowers the edge of its band, and functions that did not
+grow join it. Who joins is the owner's question, and it is best asked before
+the change rather than after it. With `--report-from` the band axes are asked
+lower, down to that fraction of each ceiling, and the report lists what stands
+below the band apart from what stands in it. The verdict is the same either
+way, because the count of what is near is always taken at the edge.
 
 Where it is pinned
 ------------------
@@ -246,6 +256,23 @@ def band_threshold(axis, ceiling, band):
     return max(near_edge(axis, ceiling, band) - 1, 0)
 
 
+def asked_thresholds(ceilings, band, report_from=None):
+    """The thresholds the pinned run asks clippy with.
+
+    Each is one below the edge of its band. With `report_from` the band axes are
+    asked lower, down to that fraction of their ceiling. Only the band axes: the
+    small axes count everything reported as near, so asking them lower would
+    change the count.
+    """
+    asked = {axis.key: band_threshold(axis, ceilings[axis.key], band) for axis in AXES}
+    if report_from is not None:
+        for axis in AXES:
+            if axis.near_is_band:
+                floor = math.ceil(Fraction(ceilings[axis.key]) * Fraction(repr(report_from)))
+                asked[axis.key] = min(asked[axis.key], max(floor - 1, 0))
+    return asked
+
+
 def with_thresholds(text, thresholds):
     """`text` of a clippy.toml with each shape threshold replaced, the rest kept."""
     out = []
@@ -403,9 +430,15 @@ def report(scope, ceilings, band, findings, out):
         if axis.numbered:
             mine.sort(key=lambda f: (-f.value, f.path, f.line))
             edge = near_edge(axis, ceiling, band)
-            print(f"  {axis.lint}: ceiling {ceiling}, near from {edge}, {len(mine)} near", file=out)
-            for finding in mine:
+            inside = [f for f in mine if f.value >= edge]
+            below = [f for f in mine if f.value < edge]
+            print(f"  {axis.lint}: ceiling {ceiling}, near from {edge}, {len(inside)} near", file=out)
+            for finding in inside:
                 print(f"    {finding.value:5}  {finding.where()}", file=out)
+            if below:
+                print(f"  {axis.lint}: below the band", file=out)
+                for finding in below:
+                    print(f"    {finding.value:5}  {finding.where()}", file=out)
         else:
             print(f"  {axis.lint}: ceiling {ceiling}, {len(mine)} block(s) at it", file=out)
             for finding in sorted(mine, key=lambda f: (f.path, f.line)):
@@ -453,7 +486,17 @@ def main(argv=None):
         help="also require every ceiling and count to be the measurement (Windows)",
     )
     parser.add_argument("--jobs", type=int, default=0, help="passed to cargo as --jobs")
+    parser.add_argument(
+        "--report-from",
+        type=float,
+        default=None,
+        help="with --pinned, also list what stands below the band, down to this fraction of each ceiling",
+    )
     args = parser.parse_args(argv)
+    if args.report_from is not None and not args.pinned:
+        parser.error("--report-from reports on the pinned run, so it needs --pinned")
+    if args.report_from is not None and not 0 < args.report_from < 1:
+        parser.error("--report-from is a fraction between 0 and 1")
 
     try:
         settings = read_settings(ROOT)
@@ -466,9 +509,7 @@ def main(argv=None):
         if args.pinned:
             for scope in ("product", "all"):
                 ceilings = settings.ceilings[scope]
-                asked = {
-                    axis.key: band_threshold(axis, ceilings[axis.key], settings.band) for axis in AXES
-                }
+                asked = asked_thresholds(ceilings, settings.band, args.report_from)
                 found = run_clippy(ROOT, scope, clippy_text, asked, settings.members, args.jobs)
                 report(scope, ceilings, settings.band, found, sys.stdout)
                 problems += judge_near(

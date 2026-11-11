@@ -688,6 +688,12 @@ fn measure() -> Measured {
 /// bands. Measured 2026-10-08: never at 0.7 for a ceiling below 5000, but
 /// 100 * 0.55 is a hair above 55, and twelve of the 99 two-digit bands do that
 /// somewhere.
+/// How far below the band the measurement is printed, as a fraction of the
+/// ceiling. Lowering a ceiling lowers the edge of its band, and files that did
+/// not grow join it, so the printout shows who would before the change is made.
+/// Nothing is judged by it.
+const BELOW_THE_BAND: &str = "0.4";
+
 fn near_edge(ceiling: usize, band: &str) -> usize {
     let digits = band
         .strip_prefix("0.")
@@ -745,6 +751,15 @@ fn no_file_has_grown_past_its_ceiling_and_each_ceiling_is_the_measurement() {
             sizes
                 .iter()
                 .take_while(|(size, _)| *size >= edge)
+                .collect::<Vec<_>>()
+        );
+        let floor = near_edge(ceiling, BELOW_THE_BAND);
+        println!(
+            "{axis}: below the band down to {floor}: {:?}",
+            sizes
+                .iter()
+                .skip_while(|(size, _)| *size >= edge)
+                .take_while(|(size, _)| *size >= floor)
                 .collect::<Vec<_>>()
         );
         problems.extend(file_problems(axis, sizes, ceiling, frozen, edge));

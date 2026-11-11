@@ -418,6 +418,32 @@ fn described_options(help: &Help) -> Vec<Option_> {
     options
 }
 
+/// What would read wrong on the website about the options of one command: a
+/// flag listed twice, or an option with neither a line of help nor a list of
+/// values to choose from. Before the usage reader took each option once, the
+/// help of `nkb send`, whose two usage lines both name `--delay` and `--clear`,
+/// gave the website each of them twice, the second time with no description,
+/// and only a look at the page showed it.
+fn option_problems(command: &str, options: &[Option_]) -> Vec<String> {
+    let mut problems = Vec::new();
+    let mut seen: Vec<&str> = Vec::new();
+    for option in options {
+        for flag in &option.flags {
+            if seen.contains(&flag.as_str()) {
+                problems.push(format!("{command}: {flag} is listed twice"));
+            }
+            seen.push(flag);
+        }
+        if option.help.is_none() && option.values.is_empty() {
+            problems.push(format!(
+                "{command}: {} has no line of help and no values to choose from",
+                option.flags.join(", ")
+            ));
+        }
+    }
+    problems
+}
+
 // ---- asking the program ----------------------------------------------------
 
 fn nkb(args: &[&str]) -> String {
@@ -959,6 +985,47 @@ fn the_help_reader_keeps_each_section_apart_and_joins_what_carries_on() {
         "an option only the usage names has no help line"
     );
     assert_eq!(options[2].help.as_deref(), Some("louder"));
+}
+
+#[test]
+fn every_option_of_every_command_is_listed_once_and_says_what_it_does() {
+    let general = read_help(&nkb(&["--help"]));
+    let mut problems = option_problems("nkb", &options_of(&general));
+    for entry in &general.commands {
+        let name = entry
+            .name
+            .split_whitespace()
+            .next()
+            .expect("a command entry starts with its name");
+        let help = read_help(&nkb(&[name, "--help"]));
+        problems.extend(option_problems(name, &options_of(&help)));
+    }
+    assert!(problems.is_empty(), "\n{}\n", problems.join("\n"));
+}
+
+#[test]
+fn an_option_listed_twice_or_saying_nothing_is_named() {
+    let option = |flag: &str, help: Option<&str>, values: &[&str]| Option_ {
+        flags: vec![flag.to_owned()],
+        argument: None,
+        values: values.iter().map(|v| (*v).to_owned()).collect(),
+        help: help.map(str::to_owned),
+    };
+    let problems = option_problems(
+        "demo",
+        &[
+            option("--delay", Some("wait first"), &[]),
+            option("--delay", None, &[]),
+            option("--format", None, &["json", "csv"]),
+        ],
+    );
+    assert_eq!(
+        problems,
+        [
+            "demo: --delay is listed twice",
+            "demo: --delay has no line of help and no values to choose from"
+        ]
+    );
 }
 
 #[test]

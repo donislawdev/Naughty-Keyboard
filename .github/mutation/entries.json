@@ -14095,6 +14095,51 @@
       "replace": "        if self.format.is_some() && false {",
       "test": "boundary::tests::an_option_given_twice_is_refused_rather_than_settled_quietly",
       "runner": "rust:nkb-cli:bin=nkb"
+    },
+    {
+      "id": "M1830",
+      "why": "an option the help names twice reaches the website twice, unseen until someone looks at the page",
+      "file": "crates/nkb-cli/tests/site_facts.rs",
+      "find": "            if seen.contains(&flag.as_str()) {",
+      "replace": "            if false {",
+      "test": "an_option_listed_twice_or_saying_nothing_is_named",
+      "runner": "rust:nkb-cli:site_facts"
+    },
+    {
+      "id": "M1831",
+      "why": "an option with no line of help and no values reaches the website saying nothing",
+      "file": "crates/nkb-cli/tests/site_facts.rs",
+      "find": "        if option.help.is_none() && option.values.is_empty() {",
+      "replace": "        if false {",
+      "test": "an_option_listed_twice_or_saying_nothing_is_named",
+      "runner": "rust:nkb-cli:site_facts"
+    },
+    {
+      "id": "M1832",
+      "why": "--report-from asks nothing lower, so the report never shows who would join the band",
+      "file": ".github/scripts/shape_gate.py",
+      "find": "            if axis.near_is_band:\n                floor = math.ceil(",
+      "replace": "            if False:\n                floor = math.ceil(",
+      "test": "test_reporting_from_lower_asks_only_the_band_axes_lower",
+      "runner": "pyunit:.github/scripts:test_shape_gate"
+    },
+    {
+      "id": "M1833",
+      "why": "what stands below the band is counted as near in the report, so the count shown is not the one judged",
+      "file": ".github/scripts/shape_gate.py",
+      "find": "near from {edge}, {len(inside)} near\", file=out)",
+      "replace": "near from {edge}, {len(mine)} near\", file=out)",
+      "test": "test_the_report_keeps_what_is_below_the_band_apart_from_the_count",
+      "runner": "pyunit:.github/scripts:test_shape_gate"
+    },
+    {
+      "id": "M1834",
+      "why": "--report-from without --pinned is accepted and reports on a run that never asks below the band",
+      "file": ".github/scripts/shape_gate.py",
+      "find": "    if args.report_from is not None and not args.pinned:",
+      "replace": "    if False:",
+      "test": "test_report_from_needs_the_pinned_run_and_a_fraction",
+      "runner": "pyunit:.github/scripts:test_shape_gate"
     }
   ]
 }
