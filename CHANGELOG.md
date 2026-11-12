@@ -112,6 +112,11 @@ Changes wait under Unreleased until then.
 
 ### Fixed
 
+- On Windows a value typed into a WPF application no longer loses characters. While `nkb send` and
+  the palette followed the pace of a WPF window, the application dropped some of the keys, most
+  often a few of a long value, and the send still said it took every keystroke. A WPF window now
+  gets the keys at the pace the system takes them, every character arrives, and the send says that
+  it could not follow the application, so check the field.
 - `nkb` and `nkb-gui` no longer stop with a crash when an argument is not valid text, such as a file
   name on Linux that is not UTF-8. `nkb` says so and exits with 2.
 - `nkb packs` and `nkb show` print the name, the description and the sentences of a pack escaped, and
