@@ -79,6 +79,8 @@ mod macos_rules;
 pub mod portal;
 pub mod privilege;
 pub mod program;
+#[cfg(any(windows, test))]
+mod queue_rules;
 pub mod screens;
 pub mod spaces;
 pub mod startup;
@@ -500,7 +502,9 @@ mod windows_impl {
     /// joined, `GetFocus` names a window: that is the system saying the keyboard
     /// focus is in the queue we joined. Anything else - our own thread, a join
     /// the system refuses, a focus held in another queue (applications framed by
-    /// another process) - is `None`, and the send goes on unpaced and says so.
+    /// another process), a window that loses keys while its queue is joined
+    /// (WPF, `queue_rules.rs`) - is `None`, and the send goes on unpaced and
+    /// says so.
     fn join_focus(window: HWND) -> Option<Joined> {
         let mut process = 0u32;
         let front = unsafe { GetWindowThreadProcessId(window, &mut process) };
@@ -511,12 +515,18 @@ mod windows_impl {
             cbSize: core::mem::size_of::<GUITHREADINFO>() as u32,
             ..GUITHREADINFO::default()
         };
-        let theirs =
+        let focus =
             if unsafe { GetGUIThreadInfo(front, &mut info) } != 0 && !info.hwndFocus.is_null() {
-                unsafe { GetWindowThreadProcessId(info.hwndFocus, core::ptr::null_mut()) }
+                info.hwndFocus
             } else {
-                front
+                window
             };
+        // Asked before anything is joined: the join itself is what loses the
+        // keys (`D182`, `OBS-249`).
+        if !super::queue_rules::window_joinable(focus) {
+            return None;
+        }
+        let theirs = unsafe { GetWindowThreadProcessId(focus, core::ptr::null_mut()) };
         let ours = unsafe { GetCurrentThreadId() };
         if theirs == 0 || theirs == ours {
             // Our own queue would never show the keys taken - we do not take

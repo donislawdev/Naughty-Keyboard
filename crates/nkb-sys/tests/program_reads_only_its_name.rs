@@ -15,6 +15,10 @@
 //! - the one call that reads a process image path, `QueryFullProcessImageNameW`,
 //!   appears in `program.rs` and nowhere else, so every caller goes through the
 //!   function that cuts the path down to its file name,
+//! - the one call that reads a window's class, `GetClassNameW`, appears in
+//!   `queue_rules.rs` and nowhere else, where it reads the first twelve units
+//!   of the class of the focused window to tell WPF (`D182`) - never the part
+//!   that follows, which names the program,
 //! - none of the calls that read a window's text or a process beyond its name
 //!   appears anywhere in `crates/nkb-sys/src`: the window text calls and
 //!   message, the process memory and command line, the module and image file
@@ -37,6 +41,11 @@ use std::path::Path;
 /// may stand in.
 const IMAGE_PATH_CALL: &str = "QueryFullProcessImageNameW";
 const IMAGE_PATH_FILE: &str = "program.rs";
+
+/// The one call that reads a window's class, and the file it may stand in.
+/// Matched as a prefix, so the `A` form is caught too.
+const CLASS_CALL: &str = "GetClassName";
+const CLASS_FILE: &str = "queue_rules.rs";
 
 /// Calls, messages and rights that read more than a program's name - or watch
 /// the tester. Matched as plain text in code, so a prefix covers both the `A`
@@ -90,6 +99,11 @@ fn findings(files: &[(String, String)]) -> Vec<String> {
                 "{name} reads a process image path - only {IMAGE_PATH_FILE} may, where the folder is cut off"
             ));
         }
+        if code.contains(CLASS_CALL) && name != CLASS_FILE {
+            problems.push(format!(
+                "{name} reads a window class - only {CLASS_FILE} may, where the read stops before the program's name"
+            ));
+        }
         for forbidden in FORBIDDEN {
             if code.contains(forbidden) {
                 problems.push(format!("{name} uses {forbidden}"));
@@ -121,6 +135,12 @@ fn the_window_in_front_gives_its_program_name_and_nothing_more() {
             .any(|(name, code)| name == IMAGE_PATH_FILE && code.contains(IMAGE_PATH_CALL)),
         "the guard no longer sees the one read it is about - was program.rs renamed?"
     );
+    assert!(
+        files
+            .iter()
+            .any(|(name, code)| name == CLASS_FILE && code.contains(CLASS_CALL)),
+        "the guard no longer sees the window class read - was queue_rules.rs renamed?"
+    );
     let problems = findings(&files);
     assert!(problems.is_empty(), "{problems:#?}");
 }
@@ -138,6 +158,10 @@ fn the_scanner_sees_what_it_is_meant_to_forbid() {
             "privilege.rs",
             "OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid)\n",
         ),
+        file(
+            "queue_rules.rs",
+            "let length = unsafe { GetClassNameW(window, class.as_mut_ptr(), 13) };\n",
+        ),
     ];
     assert!(findings(&clean).is_empty(), "{:?}", findings(&clean));
 
@@ -154,6 +178,14 @@ fn the_scanner_sees_what_it_is_meant_to_forbid() {
     names_it(
         file("field.rs", "QueryFullProcessImageNameW(p, 0, b, &mut s);\n"),
         "field.rs reads a process image path",
+    );
+    // A window's class read somewhere the read is not cut before the program's name.
+    names_it(
+        file(
+            "field.rs",
+            "GetClassNameW(hwnd, buffer.as_mut_ptr(), 256);\n",
+        ),
+        "field.rs reads a window class",
     );
     // The window's title.
     names_it(
