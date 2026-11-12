@@ -11,16 +11,30 @@
 //! hiding, and a tester who goes to another window finds it closed, with the
 //! keyboard left where they put it (`OBS-147`).
 //!
-//! # The value window gives way when this one is ready, not before
+//! # The value window gives way once this one holds the keyboard, not before
 //!
-//! The window is made at its first opening (R23, `D167`), and that opening
-//! waits for the window's graphics context - a tenth of a second and more. The
-//! tester has just pressed Enter and is about to type a number. Had the value
-//! window closed at that Enter, the digits typed in the wait would go wherever
-//! the system put the keyboard meanwhile, which is the field under test
-//! (`OBS-148`). So the value window stays, holding the keyboard, until this
-//! one is about to show, and only then hands over the keyboard it lent
-//! ([`Wiring::give_way`]).
+//! The tester has just pressed Enter and is about to type a number. Wherever
+//! the keyboard is meanwhile, the digits go - and a hidden window that held the
+//! foreground has the system give it to the next window in line, which is the
+//! application under test. So the value window stays, holding the keyboard,
+//! through both waits of the opening:
+//!
+//! 1. The window is made at its first opening (R23, `D167`), and that opening
+//!    waits for the window's graphics context - a tenth of a second and more.
+//!    Had the value window closed at the Enter, the digits typed in that wait
+//!    went into the field under test (`OBS-148`).
+//! 2. Showing this window and taking the keyboard come after it. 🔴 Had the
+//!    value window hidden first, the application under test held the foreground
+//!    until this window took it: measured with `tools/okno-paczek.ps1`, scene
+//!    `pospiech`, 2026-11-12. On a debug build from 120-160 ms after the Enter
+//!    to 300 ms, and five digits of about fifty in the field. On a release
+//!    build from 27 ms to 78 ms, and one digit (`OBS-248`).
+//!
+//! So the value window hands over the keyboard it lent just before this one
+//! shows ([`Wiring::hand_keyboard_over`]) - showing it makes the value window
+//! inactive, and an inactive one closes - and hides only once this one has
+//! taken the keyboard, or could not ([`Wiring::give_way`]). Hidden then, it is
+//! not the active window, and the foreground stays where it is.
 //!
 //! # What is decided here, and what is not
 //!
@@ -58,11 +72,15 @@ pub struct Wiring {
     pub commands: Sender<Command>,
     /// What the palette walks now: a limit in use is what the window opens on.
     pub in_use: InUse,
-    /// The keyboard the value window lent, handed over as it gives way.
+    /// The keyboard the value window lent, handed over just before this window
+    /// shows.
     pub handed_over: HandedOver,
     pub suggested: Suggested,
-    /// Has the value window give way, just before this one shows - see the
-    /// module header.
+    /// Has the value window hand over the keyboard it lent, just before this
+    /// one shows - see the module header.
+    pub hand_keyboard_over: Box<dyn Fn()>,
+    /// Has the value window close, once this one has taken the keyboard or
+    /// could not - see the module header.
     pub give_way: Box<dyn Fn()>,
 }
 
@@ -73,6 +91,9 @@ pub struct LengthLimit {
     form: RefCell<Option<LimitForm>>,
     keyboard: Box<dyn Keyboard>,
     wiring: Wiring,
+    /// Set by an opening the value window stays up for, until it gives way:
+    /// once, whatever ends the opening.
+    value_window_up: Cell<bool>,
     /// Puts a line in the palette's message band.
     say: Box<dyn Fn(String)>,
 }
@@ -94,6 +115,7 @@ impl LengthLimit {
             form: RefCell::new(None),
             keyboard,
             wiring,
+            value_window_up: Cell::new(false),
             say,
         });
         wire(&limit);
@@ -140,7 +162,8 @@ impl LengthLimit {
     /// opening to the next (`D178`).
     pub fn open(self: &Rc<Self>) {
         if !self.is_open() {
-            (self.wiring.give_way)();
+            (self.wiring.hand_keyboard_over)();
+            self.value_window_up.set(true);
             match self.wiring.handed_over.take() {
                 Some(lent) => self.keyboard.take_over(lent),
                 None => self.keyboard.remember(),
@@ -158,6 +181,7 @@ impl LengthLimit {
         }
         if let Err(error) = on_request::bring_up(self.window.window()) {
             *self.form.borrow_mut() = None;
+            self.value_window_gives_way();
             (self.say)(i18n::startup_failure(
                 Startup::WindowFailed,
                 &error.to_string(),
@@ -178,12 +202,14 @@ impl LengthLimit {
         }
         let _ = self.window.hide();
         *self.form.borrow_mut() = None;
+        self.value_window_gives_way();
     }
 
     /// The window stopped being the active one: the tester is elsewhere. It
     /// closes without handing the keyboard back, as the value window does.
     fn left(self: &Rc<Self>) {
         *self.form.borrow_mut() = None;
+        self.value_window_gives_way();
         on_request::hide_once_left(
             self,
             |limit| !limit.is_open(),
@@ -196,10 +222,8 @@ impl LengthLimit {
         if handle.is_none() && started.elapsed() < HANDLE_WAIT {
             let weak = Rc::downgrade(self);
             slint::Timer::single_shot(POLL, move || {
-                if let Some(limit) = weak.upgrade()
-                    && limit.is_open()
-                {
-                    limit.take_keyboard(started);
+                if let Some(limit) = weak.upgrade() {
+                    limit.look_again(started);
                 }
             });
             return;
@@ -207,12 +231,33 @@ impl LengthLimit {
         self.take_with(handle);
     }
 
+    /// The handle looked for once more - or, the window closed meanwhile, the
+    /// value window gives way without it.
+    fn look_again(self: &Rc<Self>, started: Instant) {
+        if self.is_open() {
+            self.take_keyboard(started);
+        } else {
+            self.value_window_gives_way();
+        }
+    }
+
     /// Takes the keyboard for `handle`, and says so when the system keeps it
-    /// elsewhere - the digits would go to the application under test. Public
+    /// elsewhere - the digits would go to the application under test. Then,
+    /// and not before, the value window gives way (the module header). Public
     /// so a test with no window handle to wait for reaches the same code.
     pub fn take_with(&self, handle: Option<u64>) {
         if let Err(reason) = self.keyboard.take(handle) {
             (self.say)(i18n::environment(Environment::LimitFocusNotTaken, &reason));
+        }
+        self.value_window_gives_way();
+    }
+
+    /// Has the value window close, if this opening left it up: once, and
+    /// whatever ended the opening - the keyboard taken, the window that could
+    /// not show, or closed before it got a handle - so it never stays behind.
+    fn value_window_gives_way(&self) {
+        if self.value_window_up.replace(false) {
+            (self.wiring.give_way)();
         }
     }
 

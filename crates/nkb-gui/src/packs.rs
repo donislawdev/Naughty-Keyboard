@@ -398,8 +398,9 @@ impl Packs {
         *self.open_limit.borrow_mut() = Some(open);
     }
 
-    /// The row of the length limit: asks for that window, and stays until it
-    /// is about to show - see [`Self::give_way`].
+    /// The row of the length limit: asks for that window, and stays up,
+    /// holding the keyboard, until that one has taken it - see
+    /// [`Self::hand_keyboard_over`] and [`Self::give_way`].
     fn to_limit(&self, most: Option<u32>) {
         let Some(open) = self.open_limit.borrow_mut().take() else {
             return;
@@ -408,20 +409,34 @@ impl Packs {
         *self.open_limit.borrow_mut() = Some(open);
     }
 
-    /// Gives way to the length limit window, which calls this just before it
-    /// shows: the keyboard this window lent goes over to that one, so closing
-    /// it gives the keyboard back to the field under test, and this window
-    /// closes without handing anything back.
+    /// Hands the keyboard this window lent over to the length limit window,
+    /// which calls this just before it shows: closing that one gives the
+    /// keyboard back to the field under test. This window stays up.
     ///
-    /// Not at the Enter that asked for it: that window is made at its first
-    /// opening, and the digits typed while it is made would go wherever the
-    /// keyboard went meanwhile - into the field under test (`OBS-148`). A
-    /// window closed in that wait gives way with nothing to hand over.
+    /// Before that window shows, because showing it makes this one inactive,
+    /// and an inactive window closes (`left`). A window the tester left while
+    /// the other one was made has nothing to hand over, and that one
+    /// remembers who holds the keyboard instead.
+    pub fn hand_keyboard_over(&self) {
+        if self.is_open() {
+            self.handed_over.set(self.keyboard.pass_on());
+        }
+    }
+
+    /// Gives way to the length limit window, which calls this once it has
+    /// taken the keyboard, or could not: this window closes without handing
+    /// anything back - it handed the keyboard over - and hides.
+    ///
+    /// 🔴 Not before. Hidden while it held the foreground, it had the system
+    /// give the foreground to the application under test until the other
+    /// window took it, and the digits typed then went into the field under
+    /// test (`OBS-248`, the length limit module's header). Nor at the Enter
+    /// that asked for the other window: that one is made at its first opening,
+    /// and the wait is longer still (`OBS-148`).
     pub fn give_way(&self) {
         if !self.is_open() {
             return;
         }
-        self.handed_over.set(self.keyboard.pass_on());
         *self.picker.borrow_mut() = None;
         let _ = self.window.hide();
     }

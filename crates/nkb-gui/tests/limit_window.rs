@@ -118,6 +118,10 @@ fn wired() -> Opened {
             in_use: std::sync::Arc::clone(&in_use),
             handed_over: Rc::default(),
             suggested: Rc::clone(&suggested),
+            hand_keyboard_over: Box::new({
+                let record = Rc::clone(&record);
+                move || record.borrow_mut().push("hand over")
+            }),
             give_way: Box::new({
                 let record = Rc::clone(&record);
                 move || record.borrow_mut().push("give way")
@@ -173,14 +177,27 @@ fn a_limit_is_typed_with_the_keyboard_alone_and_its_values_go_to_the_palette() {
     let opened = wired();
     let window = opened.window();
 
+    // The value window hands the keyboard over before this one shows, and
+    // stays up until this one has taken it: hidden earlier, it left the
+    // foreground to the application under test (`OBS-248`).
     opened.limit.open();
     assert_eq!(
         opened.asked(),
-        ["give way", "remember"],
-        "the value window gives way before the keyboard is remembered"
+        ["hand over", "remember"],
+        "the value window must hand over first and stay up while this one shows"
     );
     opened.limit.take_with(None);
-    assert_eq!(opened.asked(), ["take"]);
+    assert_eq!(
+        opened.asked(),
+        ["take", "give way"],
+        "the value window gives way once this one has taken the keyboard, not before"
+    );
+    opened.limit.take_with(None);
+    assert_eq!(
+        opened.asked(),
+        ["take"],
+        "the value window gave way twice in one opening"
+    );
     assert!(
         window.get_most_has_focus(),
         "the keyboard is not in the first number"
@@ -351,10 +368,12 @@ fn it_opens_on_the_number_from_the_search_or_on_the_limit_in_use() {
         "the number outlived its opening"
     );
 
-    // Esc closes, the keyboard goes back, nothing goes to the palette.
+    // Esc closes, the keyboard goes back, nothing goes to the palette. Closed
+    // before it took the keyboard, the window still has the value window give
+    // way: it must not stay behind.
     opened.asked();
     tap(window, ESCAPE);
-    assert_eq!(opened.asked(), ["give back"]);
+    assert_eq!(opened.asked(), ["give back", "give way"]);
     assert!(opened.commands.try_recv().is_err());
 
     // Nothing is remembered: the next opening is empty.
@@ -387,11 +406,12 @@ fn it_opens_on_the_number_from_the_search_or_on_the_limit_in_use() {
     );
 
     // The tester went to another window: closed, and the keyboard stays there.
+    // The value window, still up as this opening never took the keyboard, goes.
     window.invoke_deactivated();
     assert!(!opened.limit.is_open());
     assert_eq!(
         opened.asked(),
-        Vec::<&str>::new(),
-        "the keyboard was taken back"
+        ["give way"],
+        "the keyboard was taken back, or the value window stayed"
     );
 }

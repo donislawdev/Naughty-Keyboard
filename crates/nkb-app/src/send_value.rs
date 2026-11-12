@@ -270,8 +270,10 @@ pub enum SendOutcome {
     },
     /// No pack of that name.
     NotFound,
-    /// Present but unreadable, or not UTF-8.
-    Unreadable,
+    /// Present and with no text to send: it would not open, is not UTF-8 or
+    /// is larger than a pack file may be - `reason` says which, so the
+    /// sentence can (`OBS-247`).
+    Unreadable { reason: SourceError },
     /// The pack has errors, so it is not loaded at all - pack-format.md 11.
     Refused { errors: usize },
     /// The pack loaded, but has no value at that position.
@@ -353,8 +355,8 @@ pub fn send_value(
     let text = match source.read(pack_id) {
         Ok(text) => text,
         Err(SourceError::NotFound) => return SendOutcome::NotFound,
-        Err(SourceError::Unreadable | SourceError::NotUtf8 | SourceError::TooLarge) => {
-            return SendOutcome::Unreadable;
+        Err(reason @ (SourceError::Unreadable | SourceError::NotUtf8 | SourceError::TooLarge)) => {
+            return SendOutcome::Unreadable { reason };
         }
     };
 

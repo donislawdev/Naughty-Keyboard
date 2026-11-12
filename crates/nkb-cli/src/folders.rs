@@ -86,6 +86,18 @@ pub(crate) fn of_run(team: Option<PathBuf>) -> PackFolders {
     PackFolders::for_run(&file, kept.settings(), &said, None)
 }
 
+/// The file the pack `id` is read from in this run: `None` for a built-in
+/// pack, and for one no source holds. Nothing is read to answer.
+pub(crate) fn pack_file(
+    catalogue: &FolderCatalogue,
+    folders: &PackFolders,
+    id: &str,
+) -> Option<PathBuf> {
+    catalogue
+        .origin_of(id)
+        .and_then(|origin| crate::browse_report::pack_file(id, &origin, folders))
+}
+
 /// Says, after "no such pack", which folder was not read and why - the pack
 /// may well be in it. Nothing when every folder named was read.
 pub(crate) fn say_not_read(
