@@ -110,7 +110,7 @@ pub(super) fn classify(
         // did, nothing is known to have been sent, so refuse and stay quiet
         // rather than invent a message.
         SendOutcome::NotFound
-        | SendOutcome::Unreadable
+        | SendOutcome::Unreadable { .. }
         | SendOutcome::Refused { .. }
         | SendOutcome::NoSuchIndex { .. }
         | SendOutcome::RouteUnavailable { .. } => (Event::InsertionRefused, None, Vec::new()),

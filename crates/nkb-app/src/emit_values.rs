@@ -103,7 +103,12 @@ pub enum EmitOutcome {
         errors: usize,
     },
     NotFound,
-    Unreadable,
+    /// Present and with no text to emit: it would not open, is not UTF-8 or is
+    /// larger than a pack file may be - `reason` says which, so the sentence
+    /// can (`OBS-247`).
+    Unreadable {
+        reason: SourceError,
+    },
     /// A value passed validation and could not be built anyway.
     ///
     /// 🔴 Should be unreachable: `check` runs first and the size rules refuse
@@ -134,8 +139,8 @@ pub fn emit_values(
     let text = match source.read(id) {
         Ok(text) => text,
         Err(SourceError::NotFound) => return EmitOutcome::NotFound,
-        Err(SourceError::Unreadable | SourceError::NotUtf8 | SourceError::TooLarge) => {
-            return EmitOutcome::Unreadable;
+        Err(reason @ (SourceError::Unreadable | SourceError::NotUtf8 | SourceError::TooLarge)) => {
+            return EmitOutcome::Unreadable { reason };
         }
     };
 

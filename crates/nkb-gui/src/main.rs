@@ -218,9 +218,9 @@ fn wire_folders(
 }
 
 /// The length limit window (`D178`): made at its first opening, and opened by
-/// the first row of the value window, which gives way to it when it is about to
-/// show and hands it the keyboard it lent. Its values go to the worker, which
-/// holds the sequence.
+/// the first row of the value window, which hands it the keyboard it lent just
+/// before it shows and gives way once it has taken the keyboard (`OBS-248`).
+/// Its values go to the worker, which holds the sequence.
 fn wire_limit(
     palette: &Palette,
     packs: &Rc<Packs>,
@@ -235,6 +235,14 @@ fn wire_limit(
             in_use: Arc::clone(in_use),
             handed_over: Rc::clone(&link.handed_over),
             suggested: Rc::clone(&suggested),
+            hand_keyboard_over: Box::new({
+                let packs = Rc::downgrade(packs);
+                move || {
+                    if let Some(packs) = packs.upgrade() {
+                        packs.hand_keyboard_over();
+                    }
+                }
+            }),
             give_way: Box::new({
                 let packs = Rc::downgrade(packs);
                 move || {

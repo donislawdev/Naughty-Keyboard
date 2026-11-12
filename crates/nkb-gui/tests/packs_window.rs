@@ -91,6 +91,10 @@ impl Keyboard for Shared {
             Ok(())
         }
     }
+    fn pass_on(&self) -> Option<nkb_adapters::LentFocus> {
+        self.0.calls.borrow_mut().push("pass on");
+        None
+    }
     fn give_back(&self, _window: Option<u64>) -> Result<(), String> {
         self.0.calls.borrow_mut().push("give back");
         let shown = self
@@ -512,10 +516,11 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     );
 }
 
-/// The row of the length limit asks for its window, and this one gives way
-/// when that one is about to show (`D178`) - not at the Enter that asked: that
-/// window is made at its first opening, and the digits typed meanwhile must
-/// not reach the field under test.
+/// The row of the length limit asks for its window, and this one stays up,
+/// holding the keyboard, until that one has taken it (`D178`, `OBS-248`): it
+/// hands the keyboard over just before that window shows, and gives way after.
+/// Not at the Enter that asked - that window is made at its first opening, and
+/// the digits typed meanwhile must not reach the field under test.
 #[test]
 fn the_row_of_the_length_limit_asks_for_its_window_and_gives_way() {
     let _surface = offscreen::start(440, 560);
@@ -556,17 +561,24 @@ fn the_row_of_the_length_limit_asks_for_its_window_and_gives_way() {
     assert!(calls(&keyboard).is_empty());
     assert_eq!(commands.try_recv(), Err(mpsc::TryRecvError::Empty));
     assert!(said.borrow().is_empty(), "{:?}", said.borrow());
+    packs.hand_keyboard_over();
+    assert_eq!(calls(&keyboard), ["pass on"]);
+    assert!(
+        packs.is_open() && window.window().is_visible(),
+        "handing the keyboard over closed the window: the field under test would hold the foreground until the other window took it"
+    );
     packs.give_way();
     assert!(!packs.is_open());
     assert!(!window.window().is_visible(), "giving way hides the window");
     assert!(
         calls(&keyboard).is_empty(),
-        "giving way hands the keyboard over, never back"
+        "giving way hands nothing over a second time, and never back"
     );
     packs.give_way();
+    packs.hand_keyboard_over();
     assert!(
         calls(&keyboard).is_empty(),
-        "a closed window gave way again"
+        "a closed window gave way or handed over again"
     );
     // A number in the search is the limit: its row is first, Enter takes it,
     // and the other window is asked to open with the number.

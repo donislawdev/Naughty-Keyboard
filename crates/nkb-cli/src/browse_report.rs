@@ -20,6 +20,8 @@
 //! and the simplest way to obey a rule about a condition is not to have the
 //! behaviour the condition applies to.
 
+use std::path::{Path, PathBuf};
+
 use crate::english::plural;
 use nkb_adapters::{FOLDER_WAIT, PackFolders};
 use nkb_app::{CatalogueSource, Listing, PackEntry, PackOrigin, SourceError, SourceSkipped};
@@ -220,13 +222,39 @@ pub fn not_loaded(command: &str, wanted: &str, errors: usize) -> String {
 /// for a pack from a folder - `nkb lint` reads a path, not a name (R04).
 #[must_use]
 pub fn lint_hint(id: &str, origin: &PackOrigin, folders: &PackFolders) -> String {
-    match folders.path_of(origin.source) {
-        Some(folder) => format!(
+    match pack_file(id, origin, folders) {
+        Some(file) => format!(
             "run nkb lint \"{}\"",
-            escaped_prose(&folder.join(format!("{id}.toml")).to_string_lossy())
+            escaped_prose(&file.to_string_lossy())
         ),
         None => "run `nkb lint` on it".to_owned(),
     }
+}
+
+/// The file a pack from a folder is read from. `None` for a built-in pack,
+/// which is no file of the tester's.
+#[must_use]
+pub fn pack_file(id: &str, origin: &PackOrigin, folders: &PackFolders) -> Option<PathBuf> {
+    folders
+        .path_of(origin.source)
+        .map(|folder| folder.join(format!("{id}.toml")))
+}
+
+/// What `nkb show`, `send` and `emit` say about a pack whose file gave no
+/// text: why, and which file when it comes from a folder - what `nkb packs`
+/// says in its line and the palette in its sentence (`OBS-247`). Not UTF-8 is
+/// `E005` for `nkb lint`, and here it is the same thing as a file that would
+/// not open: nothing to show, send or print.
+#[must_use]
+pub fn unreadable(command: &str, wanted: &str, reason: SourceError, file: Option<&Path>) -> String {
+    let subject = file.map_or_else(
+        || "the file".to_owned(),
+        |file| format!("\"{}\"", escaped_prose(&file.to_string_lossy())),
+    );
+    format!(
+        "nkb {command}: '{wanted}' could not be read - {}.",
+        reason_words(reason, &subject)
+    )
 }
 
 /// The first line of `nkb show` for a pack that does not come with the tool:
@@ -251,12 +279,19 @@ pub fn origin_line(origin: &PackOrigin, folders: &PackFolders) -> Vec<String> {
 }
 
 fn source_error(reason: SourceError) -> String {
+    reason_words(reason, "the file")
+}
+
+/// Why a pack file gave no text, said of `subject` - "the file", or its path.
+fn reason_words(reason: SourceError, subject: &str) -> String {
     match reason {
-        SourceError::NotFound => "the file is gone".to_owned(),
-        SourceError::Unreadable => "the file would not open".to_owned(),
-        SourceError::NotUtf8 => "the file is not valid UTF-8, which the format requires".to_owned(),
+        SourceError::NotFound => format!("{subject} is gone"),
+        SourceError::Unreadable => format!("{subject} would not open"),
+        SourceError::NotUtf8 => {
+            format!("{subject} is not valid UTF-8, which the format requires")
+        }
         SourceError::TooLarge => format!(
-            "the file is larger than {}, the most a pack file may be",
+            "{subject} is larger than {}, the most a pack file may be",
             crate::lint_report::pack_file_limit()
         ),
     }
@@ -285,10 +320,12 @@ pub fn listing(listing: &Listing, folders: &PackFolders) -> Vec<String> {
                 if pack.carries_offensive() {
                     note.push_str("  (offensive)");
                 }
+                // "1 value " keeps the names in the column "2 values" puts them in.
+                let count = pack.values.len();
+                let noun = if count == 1 { "value " } else { "values" };
                 lines.push(format!(
-                    "{:<24}{:>4} values  {}{note}{from}",
+                    "{:<24}{count:>4} {noun}  {}{note}{from}",
                     pack.id,
-                    pack.values.len(),
                     escaped_prose(&pack.name)
                 ));
             }
@@ -315,9 +352,10 @@ pub fn listing(listing: &Listing, folders: &PackFolders) -> Vec<String> {
 
     lines.push(String::new());
     lines.push(format!(
-        "{} of {} packs loaded, {values} values.",
+        "{} of {} packs loaded, {}.",
         listing.loaded(),
-        listing.entries.len()
+        listing.entries.len(),
+        plural(values, "value")
     ));
     lines.extend(coverage_lines(listing, folders));
     lines
@@ -440,6 +478,96 @@ mod tests {
         assert_eq!(
             not_loaded("emit", "checkout", 3),
             "nkb emit: 'checkout' has 3 errors and is not loaded at all."
+        );
+    }
+
+    /// A built-in pack cut down to its first `values`, as `nkb packs` lists it.
+    fn listed(id: &str, values: usize) -> PackEntry {
+        use nkb_adapters::{BuiltInCatalogue, TomlPackFormat};
+        use nkb_app::ports::{PackFormat, PackSource};
+        let text = BuiltInCatalogue::new()
+            .read(id)
+            .expect("the pack is built in");
+        let mut pack = TomlPackFormat.parse(&text).expect("a shipped pack parses");
+        pack.values.truncate(values);
+        PackEntry::Loaded {
+            pack: Box::new(pack),
+            warnings: 0,
+            origin: PackOrigin {
+                source: CatalogueSource::BuiltIn,
+                overrides: Vec::new(),
+            },
+        }
+    }
+
+    fn built_in_only(entries: Vec<PackEntry>) -> Listing {
+        Listing {
+            entries,
+            coverage: nkb_app::CatalogueCoverage {
+                consulted: vec![CatalogueSource::BuiltIn],
+                skipped: Vec::new(),
+                misnamed: Vec::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn a_pack_of_one_value_says_value_and_keeps_the_column_of_names() {
+        // `OBS-247`: the skeleton `nkb new-pack` writes has one value, and no
+        // pack the tool ships has one, so this is the line a team's first pack
+        // gets and no test on the shipped packs reaches.
+        let one = listing(
+            &built_in_only(vec![listed("whitespace", 1)]),
+            &PackFolders::none(),
+        );
+        assert!(
+            one[0].starts_with("whitespace                 1 value   "),
+            "{one:?}"
+        );
+        assert!(
+            one.contains(&"1 of 1 packs loaded, 1 value.".to_owned()),
+            "{one:?}"
+        );
+
+        let two = listing(
+            &built_in_only(vec![listed("whitespace", 1), listed("injections", 2)]),
+            &PackFolders::none(),
+        );
+        let name_at = |line: &str, name: &str| line.find(name).expect("the name is on its line");
+        assert_eq!(
+            name_at(&two[0], "Whitespace"),
+            name_at(&two[1], "Injections"),
+            "one value moved the names: {two:?}"
+        );
+        assert!(two[1].contains("   2 values  "), "{two:?}");
+        assert!(
+            two.contains(&"2 of 2 packs loaded, 3 values.".to_owned()),
+            "{two:?}"
+        );
+    }
+
+    #[test]
+    fn a_file_that_gave_no_text_is_named_with_the_reason() {
+        // `OBS-247`: "could not be read" alone sent the tester looking for a
+        // reason `nkb packs` and the palette both had.
+        let file = Path::new("team/bad-coding.toml");
+        assert_eq!(
+            unreadable("show", "bad-coding", SourceError::NotUtf8, Some(file)),
+            "nkb show: 'bad-coding' could not be read - \"team/bad-coding.toml\" is not valid UTF-8, which the format requires."
+        );
+        assert_eq!(
+            unreadable("emit", "locked", SourceError::Unreadable, Some(file)),
+            "nkb emit: 'locked' could not be read - \"team/bad-coding.toml\" would not open."
+        );
+        let huge = unreadable("send", "huge", SourceError::TooLarge, None);
+        assert!(
+            huge.starts_with("nkb send: 'huge' could not be read - the file is larger than ")
+                && huge.ends_with(", the most a pack file may be."),
+            "{huge}"
+        );
+        assert_eq!(
+            unreadable("show", "gone", SourceError::NotFound, None),
+            "nkb show: 'gone' could not be read - the file is gone."
         );
     }
 

@@ -6,78 +6,26 @@
 //! file is not opened for it.
 
 use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use nkb_adapters::boundary_text::command;
 use nkb_adapters::{DirectInjection, EnglishBoundary, PackFolders, SystemClock, TomlPackFormat};
 use nkb_app::{
-    Availability, Clearing, ClearingOutcome, Clock, MadeSet, OnTheWay, PackSource, SendOutcome,
-    SendRequest, SourceError, TargetInspector, TargetRef, ValueDelivery, ValueFacts, Wanted,
-    send_value,
+    Availability, ClearingOutcome, Clock, MadeSet, OnTheWay, PackSource, SendOutcome, SendRequest,
+    SourceError, TargetInspector, TargetRef, ValueDelivery, ValueFacts, Wanted, send_value,
 };
-use nkb_core::boundary::{Limit, values};
+use nkb_core::boundary::Limit;
 
 use crate::browse_report;
 use crate::clearing::{not_cleared, say_clearing_before_failure};
 use crate::exit::ExitCode;
 use crate::folders;
-use crate::help::print_send_help;
-use crate::limit_args::{LimitOption, LimitWishes, Refusal, see_help};
+use crate::limit_args::see_help;
 use crate::on_the_way;
 use crate::refusals::{NEEDS_PERMISSION, say_cut_short, say_not_cleared, say_not_delivered};
+use crate::send_args::{COMMAND, SendArgs, Source, say_refused, send_args};
 use crate::sent_notes::{say_pace, say_text_substitutions, sent_counts};
 use crate::target_line::{Countdown, say_where_it_goes, where_it_goes};
-
-/// The name of this command, for the sentences that send a person to its help.
-const COMMAND: &str = "send";
-
-/// Which switch is still waiting for the word after it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SendSwitch {
-    Index,
-    Delay,
-    /// A part of a limit, read by the reader `nkb boundary` reads it with.
-    Limit(LimitOption),
-}
-
-impl SendSwitch {
-    /// The switch as the person typed it, for the sentence that says what is
-    /// missing after it.
-    const fn name(self) -> &'static str {
-        match self {
-            Self::Index => "--index",
-            Self::Delay => "--delay",
-            Self::Limit(option) => option.option(),
-        }
-    }
-}
-
-/// Where the value comes from, as the arguments named it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Source<'a> {
-    /// A pack, by the name the person typed.
-    Pack(&'a str),
-    /// The values made for a limit (`D178`).
-    Limit(Limit),
-}
-
-/// What `nkb send` was asked to do, read from its arguments.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct SendArgs<'a> {
-    wanted: Source<'a>,
-    position: u64,
-    delay_seconds: u64,
-    clearing: Clearing,
-}
-
-/// What the arguments said so far, before they are settled into [`SendArgs`].
-struct Words<'a> {
-    pack: Option<&'a str>,
-    position: Option<u64>,
-    delay_seconds: u64,
-    clearing: Clearing,
-    limit: LimitWishes,
-    expecting: Option<SendSwitch>,
-}
 
 /// `nkb send <pack> [--index N] [--delay S] [--clear] [--team-folder <folder>]`
 /// or `nkb send --max-length N [--min-length N] [--unit U] --index N [--delay S]
@@ -131,18 +79,14 @@ pub(crate) fn send(args: &[String]) -> ExitCode {
     }
 }
 
-/// Says a wrong call on standard error, and ends with the code for one.
-fn say_refused(lines: &Refusal) -> ExitCode {
-    let mut err = crate::output::err();
-    let _ = writeln!(err, "nkb {COMMAND}: {}", lines[0]);
-    let _ = writeln!(err, "{}", lines[1]);
-    ExitCode::Usage
-}
-
 /// One value of the pack `name`, read from the folders of this run.
 fn send_from_pack(asked: &SendArgs<'_>, name: &str, folders: &PackFolders) -> ExitCode {
     let catalogue = folders.catalogue();
-    let code = deliver(asked, Wanted::Pack(name), &About::Pack(name), &catalogue);
+    let about = About::Pack {
+        name,
+        file: folders::pack_file(&catalogue, folders, name),
+    };
+    let code = deliver(asked, Wanted::Pack(name), &about, &catalogue);
     if code == ExitCode::NotFound {
         folders::say_not_read(&mut crate::output::err(), COMMAND, &catalogue, folders);
     }
@@ -186,8 +130,13 @@ impl PackSource for NoPacks {
 
 /// What the send is about, in the words its sentences need.
 enum About<'a> {
-    /// A pack, by the name the person typed.
-    Pack(&'a str),
+    /// A pack, by the name the person typed, and the file it is read from
+    /// when a folder holds it - what a sentence about a file that gave no
+    /// text names (`OBS-247`).
+    Pack {
+        name: &'a str,
+        file: Option<PathBuf>,
+    },
     /// The values made for a limit: the value at `position`, and the command
     /// that prints the same values.
     Made {
@@ -202,15 +151,24 @@ impl About<'_> {
     /// sentence of that kind never reaches it.
     fn named(&self) -> &str {
         match self {
-            Self::Pack(name) => name,
+            Self::Pack { name, .. } => name,
             Self::Made { set, .. } => &set.pack().id,
+        }
+    }
+
+    /// The file the pack is read from when a folder holds it. None for a
+    /// built-in pack, and for a made set, which no file holds.
+    fn file(&self) -> Option<&Path> {
+        match self {
+            Self::Pack { file, .. } => file.as_deref(),
+            Self::Made { .. } => None,
         }
     }
 
     /// The command that prints the values instead of typing one.
     fn instead(&self) -> String {
         match self {
-            Self::Pack(name) => format!("nkb emit {name}"),
+            Self::Pack { name, .. } => format!("nkb emit {name}"),
             Self::Made { command, .. } => command.clone(),
         }
     }
@@ -274,154 +232,6 @@ fn deliver(
         &mut on_the_way,
     );
     report_send(&mut crate::output::err(), about, outcome)
-}
-
-/// The arguments of `nkb send`, or the exit code to stop with.
-///
-/// `Err` means the command is over and what there was to say has been said: a
-/// usage error on standard error, or the help on standard output - which is why
-/// `--help` comes back as `Err(ExitCode::Ok)`.
-fn send_args(args: &[String]) -> Result<SendArgs<'_>, ExitCode> {
-    let mut words = Words {
-        pack: None,
-        position: None,
-        delay_seconds: 3,
-        clearing: Clearing::Keep,
-        limit: LimitWishes::default(),
-        expecting: None,
-    };
-    for arg in args {
-        words.read(arg)?;
-    }
-    words.settled()
-}
-
-impl<'a> Words<'a> {
-    /// Reads one word: a switch, the word a switch waits for, or the pack.
-    fn read(&mut self, arg: &'a str) -> Result<(), ExitCode> {
-        if let Some(which) = self.expecting.take() {
-            return self.after(which, arg);
-        }
-        if let Some(option) = LimitOption::of(arg) {
-            self.expecting = Some(SendSwitch::Limit(option));
-            return Ok(());
-        }
-        match arg {
-            "-h" | "--help" => {
-                print_send_help();
-                return Err(ExitCode::Ok);
-            }
-            "--index" => self.expecting = Some(SendSwitch::Index),
-            "--delay" => self.expecting = Some(SendSwitch::Delay),
-            "--clear" => self.clearing = Clearing::Line,
-            other if other.starts_with('-') => {
-                let mut err = crate::output::err();
-                let _ = writeln!(err, "nkb send: unknown switch '{other}'");
-                let _ = writeln!(err, "Run 'nkb send --help' to see what is available.");
-                return Err(ExitCode::Usage);
-            }
-            name => {
-                if self.pack.is_some() {
-                    let mut err = crate::output::err();
-                    let _ = writeln!(err, "nkb send: name one pack, not two.");
-                    return Err(ExitCode::Usage);
-                }
-                self.pack = Some(name);
-            }
-        }
-        Ok(())
-    }
-
-    /// Takes the word a switch was waiting for.
-    fn after(&mut self, which: SendSwitch, arg: &str) -> Result<(), ExitCode> {
-        if let SendSwitch::Limit(option) = which {
-            return self
-                .limit
-                .take(option, Some(arg), COMMAND)
-                .map_err(|lines| say_refused(&lines));
-        }
-        let name = which.name();
-        let Ok(number) = arg.parse::<u64>() else {
-            let mut err = crate::output::err();
-            let _ = writeln!(err, "nkb send: {name} needs a whole number, got '{arg}'.");
-            return Err(ExitCode::Usage);
-        };
-        if which == SendSwitch::Index {
-            self.position = Some(number);
-        } else {
-            self.delay_seconds = number;
-        }
-        Ok(())
-    }
-
-    /// What the words came to, once every one was read.
-    fn settled(mut self) -> Result<SendArgs<'a>, ExitCode> {
-        if let Some(which) = self.expecting {
-            if let SendSwitch::Limit(option) = which {
-                // The reader's own sentence for an option with nothing after it.
-                return Err(self
-                    .limit
-                    .take(option, None, COMMAND)
-                    .map_or_else(|lines| say_refused(&lines), |()| ExitCode::Usage));
-            }
-            let name = which.name();
-            let mut err = crate::output::err();
-            let _ = writeln!(err, "nkb send: {name} needs a number.");
-            return Err(ExitCode::Usage);
-        }
-        let wanted = self.source()?;
-        let position = match (wanted, self.position) {
-            (_, Some(position)) => position,
-            (Source::Pack(_), None) => 1,
-            (Source::Limit(limit), None) => return Err(say_index_needed(limit)),
-        };
-        Ok(SendArgs {
-            wanted,
-            position,
-            delay_seconds: self.delay_seconds,
-            clearing: self.clearing,
-        })
-    }
-
-    /// The pack named, or the limit given - one of the two, never both.
-    fn source(&self) -> Result<Source<'a>, ExitCode> {
-        match (self.pack, self.limit.any()) {
-            (Some(_), true) => Err(say_refused(&[
-                "name a pack or give a limit, not both.".to_owned(),
-                see_help(COMMAND),
-            ])),
-            (Some(name), false) => Ok(Source::Pack(name)),
-            (None, true) => self
-                .limit
-                .settled(COMMAND)
-                .map(Source::Limit)
-                .map_err(|lines| say_refused(&lines)),
-            (None, false) => {
-                let mut err = crate::output::err();
-                let _ = writeln!(
-                    err,
-                    "nkb send: name a pack, or give a limit with --max-length or --min-length."
-                );
-                let _ = writeln!(err, "Run 'nkb packs' to see what there is.");
-                Err(ExitCode::Usage)
-            }
-        }
-    }
-}
-
-/// A limit with no `--index`: how many values there are, and the command that
-/// lists them.
-fn say_index_needed(limit: Limit) -> ExitCode {
-    say_refused(&[
-        format!(
-            "--index is needed with a limit, which gives {} values.",
-            values(limit).len()
-        ),
-        format!(
-            "`{}` lists them in that order, counting from 1.",
-            command(limit)
-        ),
-    ])
 }
 
 /// Asks whether this system can send at all, counts down and says where the
@@ -554,8 +364,9 @@ fn report_send(err: &mut impl Write, about: &About<'_>, outcome: SendOutcome) ->
             let _ = writeln!(err, "Run 'nkb packs' to see what there is.");
             ExitCode::NotFound
         }
-        SendOutcome::Unreadable => {
-            let _ = writeln!(err, "nkb send: '{wanted}' could not be read.");
+        SendOutcome::Unreadable { reason } => {
+            let line = browse_report::unreadable("send", wanted, reason, about.file());
+            let _ = writeln!(err, "{line}");
             ExitCode::IoFailed
         }
         SendOutcome::Refused { errors } => {
@@ -619,7 +430,7 @@ fn say_no_such_index(
     available: usize,
 ) -> ExitCode {
     match about {
-        About::Pack(name) => {
+        About::Pack { name, .. } => {
             let _ = writeln!(
                 err,
                 "nkb send: '{name}' has {available} values, so there is no number {asked}."
@@ -669,8 +480,8 @@ fn count_down(seconds: u64) {
 mod tests {
     use super::*;
     use crate::run;
-    use nkb_app::{DeliveryError, Following, KeystrokeError, StopReason};
-    use nkb_core::boundary::Unit;
+    use nkb_app::{Clearing, DeliveryError, Following, KeystrokeError, StopReason};
+    use nkb_core::boundary::{Unit, values};
     use nkb_core::preview::{Recipe, ValuePreview};
     use nkb_core::substitutions::Substitutions;
 
@@ -943,10 +754,18 @@ mod tests {
         assert!(pack.contains("like the counter in the palette"), "{pack}");
     }
 
+    /// A pack the built-in catalogue would hold: no file to name.
+    fn some_pack() -> About<'static> {
+        About::Pack {
+            name: "some-pack",
+            file: None,
+        }
+    }
+
     /// What `report_send` said, and the code it ended with.
     fn reported(outcome: SendOutcome) -> (String, ExitCode) {
         let mut said = Vec::new();
-        let code = report_send(&mut said, &About::Pack("some-pack"), outcome);
+        let code = report_send(&mut said, &some_pack(), outcome);
         let said = String::from_utf8(said).unwrap_or_else(|e| panic!("not UTF-8: {e}"));
         (said, code)
     }
@@ -1001,7 +820,7 @@ mod tests {
         let mut said = Vec::new();
         let code = report_send(
             &mut said,
-            &About::Pack("some-pack"),
+            &some_pack(),
             SendOutcome::InFlight {
                 facts: some_facts(),
                 units_sent: 0,
@@ -1061,7 +880,12 @@ mod tests {
                 ExitCode::InsertFailed,
             ),
             (SendOutcome::NotFound, ExitCode::NotFound),
-            (SendOutcome::Unreadable, ExitCode::IoFailed),
+            (
+                SendOutcome::Unreadable {
+                    reason: SourceError::NotUtf8,
+                },
+                ExitCode::IoFailed,
+            ),
             (
                 SendOutcome::Refused { errors: 2 },
                 ExitCode::ValidationFailed,

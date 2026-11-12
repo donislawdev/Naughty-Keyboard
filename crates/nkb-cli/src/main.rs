@@ -27,6 +27,7 @@ mod output;
 mod pack_file;
 mod refusals;
 mod send;
+mod send_args;
 mod sent_notes;
 mod target_line;
 
@@ -473,9 +474,10 @@ fn show(args: &[String], folders: &PackFolders) -> ExitCode {
             folders::say_not_read(&mut err, "show", &catalogue, folders);
             ExitCode::NotFound
         }
-        ShowOutcome::Unreadable { .. } => {
-            let mut err = crate::output::err();
-            let _ = writeln!(err, "nkb show: '{wanted}' could not be read.");
+        ShowOutcome::Unreadable { reason, origin } => {
+            let file = browse_report::pack_file(wanted, &origin, folders);
+            let line = browse_report::unreadable("show", wanted, reason, file.as_deref());
+            let _ = writeln!(crate::output::err(), "{line}");
             ExitCode::IoFailed
         }
     }
@@ -586,9 +588,10 @@ fn emit(args: &[String], folders: &PackFolders) -> ExitCode {
             folders::say_not_read(&mut err, "emit", &catalogue, folders);
             ExitCode::NotFound
         }
-        EmitOutcome::Unreadable => {
-            let mut err = crate::output::err();
-            let _ = writeln!(err, "nkb emit: '{wanted}' could not be read.");
+        EmitOutcome::Unreadable { reason } => {
+            let file = folders::pack_file(&catalogue, folders, wanted);
+            let line = browse_report::unreadable("emit", wanted, reason, file.as_deref());
+            let _ = writeln!(crate::output::err(), "{line}");
             ExitCode::IoFailed
         }
         EmitOutcome::ValueTooLarge { id, code } => {

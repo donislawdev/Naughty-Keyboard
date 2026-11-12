@@ -3791,7 +3791,7 @@
     {
       "id": "M617",
       "why": "nkb send takes --clear and does not read it - the line is not cleared and the command says nothing",
-      "file": "crates/nkb-cli/src/send.rs",
+      "file": "crates/nkb-cli/src/send_args.rs",
       "find": "            \"--clear\" => self.clearing = Clearing::Line,",
       "replace": "            \"--clear\" => self.clearing = Clearing::Keep,",
       "test": "send::tests::send_reads_its_switches_into_what_it_was_asked_to_do",
@@ -13999,10 +13999,10 @@
     },
     {
       "id": "M1777",
-      "why": "the limit window remembers who holds the keyboard before the value window gave way - it is the value window, and closing hands the keyboard to a hidden window (D178)",
+      "why": "the limit window remembers who holds the keyboard before the value window handed it over - it is the value window, and closing hands the keyboard to a hidden window (D178)",
       "file": "crates/nkb-gui/src/length_limit.rs",
-      "find": "            (self.wiring.give_way)();\n            match self.wiring.handed_over.take() {\n                Some(lent) => self.keyboard.take_over(lent),\n                None => self.keyboard.remember(),\n            }\n",
-      "replace": "            match self.wiring.handed_over.take() {\n                Some(lent) => self.keyboard.take_over(lent),\n                None => self.keyboard.remember(),\n            }\n            (self.wiring.give_way)();\n",
+      "find": "            (self.wiring.hand_keyboard_over)();\n            self.value_window_up.set(true);\n            match self.wiring.handed_over.take() {\n                Some(lent) => self.keyboard.take_over(lent),\n                None => self.keyboard.remember(),\n            }\n",
+      "replace": "            self.value_window_up.set(true);\n            match self.wiring.handed_over.take() {\n                Some(lent) => self.keyboard.take_over(lent),\n                None => self.keyboard.remember(),\n            }\n            (self.wiring.hand_keyboard_over)();\n",
       "test": "a_limit_is_typed_with_the_keyboard_alone_and_its_values_go_to_the_palette",
       "runner": "rust:nkb-gui:limit_window"
     },
@@ -14036,7 +14036,7 @@
     {
       "id": "M1781",
       "why": "nkb send takes a limit without --index and types its first value, the empty one, as if asked for it (D179)",
-      "file": "crates/nkb-cli/src/send.rs",
+      "file": "crates/nkb-cli/src/send_args.rs",
       "find": "            (Source::Limit(limit), None) => return Err(say_index_needed(limit)),",
       "replace": "            (Source::Limit(_), None) => 1,",
       "test": "send::tests::a_limit_without_an_index_with_a_pack_or_without_a_bound_is_a_usage_error",
@@ -14045,7 +14045,7 @@
     {
       "id": "M1782",
       "why": "nkb send given a pack and a limit types from the pack and drops the limit unsaid (D179)",
-      "file": "crates/nkb-cli/src/send.rs",
+      "file": "crates/nkb-cli/src/send_args.rs",
       "find": "        match (self.pack, self.limit.any()) {",
       "replace": "        match (self.pack, self.limit.any() && self.pack.is_none()) {",
       "test": "send::tests::a_limit_without_an_index_with_a_pack_or_without_a_bound_is_a_usage_error",
@@ -14140,6 +14140,15 @@
       "replace": "    if False:",
       "test": "test_report_from_needs_the_pinned_run_and_a_fraction",
       "runner": "pyunit:.github/scripts:test_shape_gate"
+    },
+    {
+      "id": "M1858",
+      "why": "the value window gives way as soon as it hands the keyboard over, before the limit window shows and takes it - the application under test holds the foreground meanwhile and the digits typed then go into its field (OBS-248)",
+      "file": "crates/nkb-gui/src/length_limit.rs",
+      "find": "            self.value_window_up.set(true);\n",
+      "replace": "            self.value_window_up.set(true);\n            self.value_window_gives_way();\n",
+      "test": "a_limit_is_typed_with_the_keyboard_alone_and_its_values_go_to_the_palette",
+      "runner": "rust:nkb-gui:limit_window"
     }
   ]
 }

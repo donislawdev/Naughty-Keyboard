@@ -341,7 +341,13 @@ impl FolderCatalogue {
         holders
     }
 
-    fn origin_of(&self, id: &str) -> Option<PackOrigin> {
+    /// Where the pack `id` comes from in this catalogue, from what the folders
+    /// listed when it was made - no file is read. `None` when no source holds
+    /// it. What `nkb emit` and `nkb send` name a file by when it gave no text
+    /// (`OBS-247`): they read through [`PackSource`], which says nothing of
+    /// origins.
+    #[must_use]
+    pub fn origin_of(&self, id: &str) -> Option<PackOrigin> {
         let mut holders = self.holders(id).into_iter();
         let source = holders.next()?;
         Some(PackOrigin {
