@@ -416,6 +416,23 @@ const TEXT_ROLES: &[&str] = &["AXTextField", "AXTextArea", "AXSearchField", "AXC
 /// entry needs a measurement, not a guess.
 pub(crate) const TERMINAL_PROGRAMS: &[&str] = &["Terminal"];
 
+/// `kAXErrorCannotComplete`: what a request answers when the application did not
+/// answer within the messaging limit - and also when messaging failed at once.
+pub(crate) const AX_CANNOT_COMPLETE: i32 = -25204;
+
+/// What a reading of the focused element that failed with `error`, `waited` after
+/// it was asked, makes of the focus. The application that let the question run for
+/// (nearly) the whole `limit` did not identify its focus in time (`OBS-258`) - the
+/// rule [`pulse_verdict`] uses for a hung queue. Any other failure, and the same
+/// code coming at once, says nothing about time.
+pub(crate) fn failed_reading(error: i32, waited: Duration, limit: Duration) -> FocusedInput {
+    if error == AX_CANNOT_COMPLETE && pulse_verdict(error, waited, limit) == PulseVerdict::Hung {
+        FocusedInput::Unanswered
+    } else {
+        FocusedInput::Unknown
+    }
+}
+
 /// What an application that shows no focused element for the whole second look
 /// is: a window with nothing inside it for the system to see - Chrome and the
 /// Electron applications until accessibility is asked of them - or no window.
@@ -969,6 +986,34 @@ mod tests {
         // "no value" while the application had its window in front.
         assert_eq!(silent_answer(true), FocusedInput::ClosedToAccessibility);
         assert_eq!(silent_answer(false), FocusedInput::Unknown);
+    }
+
+    #[test]
+    fn only_a_question_that_ran_for_its_whole_limit_was_not_answered_in_time() {
+        // `OBS-258`: a stopped application lets the question run out, and the person
+        // is told it did not answer in time rather than that the focus is no field.
+        let limit = Duration::from_millis(500);
+        for waited in [limit, Duration::from_millis(460), Duration::from_secs(3)] {
+            assert_eq!(
+                failed_reading(AX_CANNOT_COMPLETE, waited, limit),
+                FocusedInput::Unanswered,
+                "{waited:?}"
+            );
+        }
+        // The same code at once is messaging that failed, not time.
+        assert_eq!(
+            failed_reading(AX_CANNOT_COMPLETE, Duration::from_millis(3), limit),
+            FocusedInput::Unknown
+        );
+        // Another error, late or not, and our own refusal (-1: an element of another
+        // process) say nothing about time.
+        for error in [-1, -25202, -25205, AX_NO_VALUE] {
+            assert_eq!(
+                failed_reading(error, limit, limit),
+                FocusedInput::Unknown,
+                "{error}"
+            );
+        }
     }
 
     #[test]

@@ -436,6 +436,12 @@ pub enum Message {
     /// [`Message::ClearingSkipped`], because this cause is known and the
     /// tester can change it: the sentence names the setting.
     ClearingSkippedClosedToAccessibility,
+    /// The value went in, but the field was NOT cleared first, because the
+    /// system did not identify the focus in time - the application did not
+    /// answer within the limit of the question (`OBS-258`). A separate sentence
+    /// from [`Message::ClearingSkipped`], because the cause is time, not what
+    /// the focus is, and the next press may find the application ready.
+    ClearingSkippedUnanswered,
     /// The value went in, but the field was NOT cleared first, because this build cannot
     /// press the clearing keys on this system, though it types. A separate sentence from
     /// [`Message::ClearingSkipped`], because the focus may well be a field and saying the
@@ -2613,6 +2619,22 @@ mod tests {
             outcome.messages,
             vec![Message::ClearingSkippedClosedToAccessibility]
         );
+        let sent = outcome.sent.expect("the value went in");
+        assert!(!sent.cleared);
+        assert_eq!(advance.counter(), Some((1, 3)));
+    }
+
+    #[test]
+    fn a_focus_not_identified_in_time_gets_the_value_uncleared_and_says_the_time_is_why() {
+        // `OBS-258`: a page Firefox had just opened did not answer the look in
+        // time, and the general sentence told the tester the focus is no field.
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::with_keys(FakeKeys::failing(KeystrokeError::FocusUnanswered));
+        let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+
+        assert_eq!(*kit.direct.handed.borrow(), vec!["alpha"]);
+        assert!(kit.by_clipboard.handed.borrow().is_empty());
+        assert_eq!(outcome.messages, vec![Message::ClearingSkippedUnanswered]);
         let sent = outcome.sent.expect("the value went in");
         assert!(!sent.cleared);
         assert_eq!(advance.counter(), Some((1, 3)));

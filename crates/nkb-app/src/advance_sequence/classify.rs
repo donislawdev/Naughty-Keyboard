@@ -275,13 +275,17 @@ fn notes_after_landing(
 }
 
 /// The sentence a value that went in UNCLEARED carries, if it did (`D76`,
-/// `OBS-141`, `D125`) - whole or cut short, the field held something before it.
+/// `OBS-141`, `D125`, `OBS-258`) - whole or cut short, the field held something
+/// before it.
 fn skipped_clearing(clearing: ClearingOutcome) -> Option<Message> {
     match clearing {
         ClearingOutcome::Skipped(SkipReason::Unconfirmed) => Some(Message::ClearingSkipped),
         ClearingOutcome::Skipped(SkipReason::Terminal) => Some(Message::ClearingSkippedInTerminal),
         ClearingOutcome::Skipped(SkipReason::ClosedToAccessibility) => {
             Some(Message::ClearingSkippedClosedToAccessibility)
+        }
+        ClearingOutcome::Skipped(SkipReason::Unanswered) => {
+            Some(Message::ClearingSkippedUnanswered)
         }
         ClearingOutcome::Skipped(SkipReason::NoClearingKeys) => {
             Some(Message::ClearingSkippedNoKeys)
@@ -330,6 +334,7 @@ fn after_clearing(error: KeystrokeError) -> (Event, Message) {
         KeystrokeError::FieldUnconfirmed
         | KeystrokeError::InTerminal
         | KeystrokeError::ClosedToAccessibility
+        | KeystrokeError::FocusUnanswered
         | KeystrokeError::NoClearingKeys => (Event::InsertionRefused, Message::ClearingFailed),
     }
 }

@@ -483,6 +483,12 @@ pub enum KeystrokeError {
     /// because its cause is known: the caller sends the value without clearing
     /// and names the setting.
     ClosedToAccessibility,
+    /// The system did not identify the focus in time - the application did not
+    /// answer within the limit of the question (`OBS-258`) - so no key was
+    /// pressed, for [`KeystrokeError::FieldUnconfirmed`]'s reason. Named apart
+    /// because the tester is told the cause: an application busy or opening a
+    /// page answers late, and the next press may find it ready.
+    FocusUnanswered,
     /// This build types on this system but cannot press the clearing keys in another
     /// application (Linux, where the keys are another route than the text, `D145`). No
     /// key was pressed, so the caller sends the value without clearing and says why.
@@ -507,6 +513,7 @@ impl fmt::Display for KeystrokeError {
             Self::FieldUnconfirmed => f.write_str("field-unconfirmed"),
             Self::InTerminal => f.write_str("in-terminal"),
             Self::ClosedToAccessibility => f.write_str("closed-to-accessibility"),
+            Self::FocusUnanswered => f.write_str("focus-unanswered"),
             Self::NoClearingKeys => f.write_str("no-clearing-keys"),
         }
     }

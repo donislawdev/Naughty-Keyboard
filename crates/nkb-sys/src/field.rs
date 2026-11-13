@@ -97,16 +97,17 @@
 //! with the Text pattern. A missing Value pattern says nothing about writing,
 //! so it changes nothing.
 //!
-//! # Five answers, and the unknown is never folded into another
+//! # Six answers, and the unknown is never folded into another
 //!
 //! [`FocusedInput::NotTextField`] is claimed only for control types that take no
 //! text by definition, and it is the only answer that stops a send. Everything
-//! the module does not recognise, every read that fails or times out, and every
-//! element that belongs to another process than the window in front is
+//! the module does not recognise, every read that fails, and every element that
+//! belongs to another process than the window in front is
 //! [`FocusedInput::Unknown`] - and `Unknown` presses exactly as before this
 //! module existed. Guessing a cause the tool did not recognise is what
-//! `product-spec.md` 9.3 forbids. A window closed to accessibility presses as
-//! `Unknown` does, and is named apart only so the tester is told why.
+//! `product-spec.md` 9.3 forbids. A window closed to accessibility, and a read
+//! that ran out of time ([`FocusedInput::Unanswered`]), press as `Unknown` does,
+//! and are named apart only so the tester is told why.
 //!
 //! # What this reads, and what it does not
 //!
@@ -129,7 +130,9 @@
 //! ~100 ms for the first on a thread. The client is made once per thread and
 //! kept. An application that does not answer would hold a UIA call for its
 //! default timeouts - seconds - so both are set to [`TIMEOUT_MS`], and a
-//! timeout is `Unknown`, never a frozen palette.
+//! request that runs out of it (`UIA_E_TIMEOUT`) is
+//! [`FocusedInput::Unanswered`], never a frozen palette. Only that code: a
+//! request refused at once says nothing about time, and is `Unknown`.
 
 // On macOS the question is answered by accessibility (`macos/ax.rs`), on Linux by the
 // bus of accessibility (`linux/atspi.rs`), and the machinery below is what Windows and
@@ -159,14 +162,20 @@ pub enum FocusedInput {
     /// A control that takes no text by definition - a button, a link, a list
     /// item, a page that is not editable. Keys sent there act on the control.
     NotTextField,
-    /// Not recognised, not readable, not answered in time, not in the window
-    /// in front, or a field that says it is read-only (`D153`). The send goes
-    /// ahead exactly as before, without the clearing recipe.
+    /// Not recognised, not readable, not in the window in front, or a field
+    /// that says it is read-only (`D153`). The send goes ahead exactly as
+    /// before, without the clearing recipe.
     Unknown,
     /// A window that shows the system nothing inside it - Firefox while it
     /// keeps accessibility services out (`OBS-175`, `D125`). Pressed as
     /// `Unknown` is: the value is sent, the clearing recipe never.
     ClosedToAccessibility,
+    /// The system did not identify the focus in time: the application did not
+    /// answer within the limit of the question - one that has just opened a
+    /// page or is busy (`OBS-258`). Pressed as `Unknown` is: the value is sent,
+    /// the clearing recipe never. Named apart because the same press a moment
+    /// later may find the application ready, which `Unknown` would not suggest.
+    Unanswered,
 }
 
 /// How long one UI Automation request may take before the answer is `Unknown`.
@@ -212,16 +221,54 @@ pub fn focused_input(window: WindowRef) -> FocusedInput {
 /// The question asked through the facts of one element, as Windows reads them.
 #[cfg(not(target_os = "macos"))]
 fn focused_input_by_facts(window: WindowRef) -> FocusedInput {
-    let Some(first) = platform::facts(window) else {
-        return FocusedInput::Unknown;
-    };
-    let deadline = Instant::now() + Duration::from_millis(SECOND_LOOK_MS);
-    let again = || {
-        std::thread::sleep(Duration::from_millis(LOOK_STEP_MS));
-        platform::facts(window)
-    };
-    settle(first, again, || Instant::now() < deadline)
-        .map_or(FocusedInput::Unknown, |facts| classify(&facts))
+    let read = platform::facts(window).and_then(|first| {
+        let deadline = Instant::now() + Duration::from_millis(SECOND_LOOK_MS);
+        let again = || {
+            std::thread::sleep(Duration::from_millis(LOOK_STEP_MS));
+            platform::facts(window)
+        };
+        settle(first, again, || Instant::now() < deadline)
+    });
+    answer(read)
+}
+
+/// Why UI Automation gave no facts about the focused element.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(windows), allow(dead_code))]
+enum Unread {
+    /// A request ran out of [`TIMEOUT_MS`]: the application did not answer in
+    /// time.
+    Late,
+    /// Anything else - no client, a request refused at once, an element of
+    /// another process, a property that came back in another kind.
+    Other,
+}
+
+/// `UIA_E_TIMEOUT`, what a request answers when it ran out of its limit.
+/// Fixed by the platform (`UIAutomationCoreApi.h`), repeated here so the rule
+/// is tested on every system - a Windows-only test pins it to `windows-sys`.
+const UIA_E_TIMEOUT: u32 = 0x8013_1505;
+
+/// Why a request that failed with `code` gave nothing: only the code of a
+/// request that ran out of time is about time.
+#[cfg_attr(not(windows), allow(dead_code))]
+const fn unread_of(code: u32) -> Unread {
+    if code == UIA_E_TIMEOUT {
+        Unread::Late
+    } else {
+        Unread::Other
+    }
+}
+
+/// The answer to a reading: what its facts make of the focus, or why there
+/// are none.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+fn answer(read: Result<Facts, Unread>) -> FocusedInput {
+    match read {
+        Ok(facts) => classify(&facts),
+        Err(Unread::Late) => FocusedInput::Unanswered,
+        Err(Unread::Other) => FocusedInput::Unknown,
+    }
 }
 
 /// What UI Automation said about the focused element - all of it.
@@ -313,18 +360,18 @@ fn worth_a_second_look(facts: &Facts) -> bool {
 
 /// The answer to classify: `first`, or - while it looks like a waking
 /// provider and `time_left` says so - whatever `again` reads next. A read that
-/// fails on the way is `None`, the same as a first read that fails: the focus
-/// may have left the window, and then nothing is known about it.
-fn settle(
+/// fails on the way fails the whole, the same as a first read that fails: the
+/// focus may have left the window, and then nothing is known about it.
+fn settle<E>(
     first: Facts,
-    mut again: impl FnMut() -> Option<Facts>,
+    mut again: impl FnMut() -> Result<Facts, E>,
     mut time_left: impl FnMut() -> bool,
-) -> Option<Facts> {
+) -> Result<Facts, E> {
     let mut facts = first;
     while worth_a_second_look(&facts) && time_left() {
         facts = again()?;
     }
-    Some(facts)
+    Ok(facts)
 }
 
 /// UI Automation control type identifiers.
@@ -471,7 +518,7 @@ const fn field_unless_read_only(value: Option<bool>) -> FocusedInput {
 
 #[cfg(windows)]
 mod platform {
-    use super::{Facts, KnownClass, TIMEOUT_MS, known_class};
+    use super::{Facts, KnownClass, TIMEOUT_MS, Unread, known_class, unread_of};
     use crate::WindowRef;
     use core::ffi::c_void;
     use core::ptr::{null, null_mut};
@@ -600,20 +647,25 @@ mod platform {
             })
         }
 
-        fn facts(&self, process: u32) -> Option<Facts> {
+        fn facts(&self, process: u32) -> Result<Facts, Unread> {
             let get_focused: unsafe extern "system" fn(Raw, *mut Raw) -> HRESULT =
                 unsafe { method(self.automation.0, SLOT_GET_FOCUSED_ELEMENT) };
             let mut raw: Raw = null_mut();
-            if unsafe { get_focused(self.automation.0, &mut raw) } < 0 || raw.is_null() {
-                return None;
+            let asked = unsafe { get_focused(self.automation.0, &mut raw) };
+            if asked < 0 {
+                return Err(unread(asked));
+            }
+            if raw.is_null() {
+                return Err(Unread::Other);
             }
             let element = Com(raw);
             // The focus of the SYSTEM, which is not always inside the window in
             // front - a race, a focus left in another application. An element
             // of another process says nothing about this window.
-            let owner = u32::try_from(int_property(&element, PROPERTY_PROCESS_ID)?).ok()?;
+            let owner = u32::try_from(int_property(&element, PROPERTY_PROCESS_ID)?)
+                .map_err(|_| Unread::Other)?;
             if owner != process {
-                return None;
+                return Err(Unread::Other);
             }
             let control_type = int_property(&element, PROPERTY_CONTROL_TYPE)?;
             let value = if bool_property(&element, PROPERTY_IS_VALUE_PATTERN_AVAILABLE)? {
@@ -625,7 +677,7 @@ mod platform {
             // Compared with zero and dropped - the handle itself is not kept.
             let windowed = int_property(&element, PROPERTY_NATIVE_WINDOW_HANDLE)? != 0;
             let class = class_of(&element);
-            Some(Facts {
+            Ok(Facts {
                 control_type,
                 value,
                 text,
@@ -635,12 +687,18 @@ mod platform {
         }
     }
 
+    /// Why a request that answered `code` gave nothing - the HRESULT compared
+    /// with the platform's error codes bit for bit.
+    const fn unread(code: HRESULT) -> Unread {
+        unread_of(code.cast_unsigned())
+    }
+
     /// Which closed list the element's class name is on. Read, compared and
     /// released here - the name goes nowhere else. A class that cannot be read
     /// is on no list: the element is then decided by its type, as it was before
     /// classes were asked.
     fn class_of(element: &Com) -> KnownClass {
-        let Some(value) = property(element, PROPERTY_CLASS_NAME) else {
+        let Ok(value) = property(element, PROPERTY_CLASS_NAME) else {
             return KnownClass::Other;
         };
         let inner = unsafe { &value.0.Anonymous.Anonymous };
@@ -669,61 +727,62 @@ mod platform {
         }
     }
 
-    fn property(element: &Com, id: i32) -> Option<Variant> {
+    fn property(element: &Com, id: i32) -> Result<Variant, Unread> {
         let get: unsafe extern "system" fn(Raw, i32, *mut VARIANT) -> HRESULT =
             unsafe { method(element.0, SLOT_GET_CURRENT_PROPERTY_VALUE) };
         let mut value = Variant(VARIANT::default());
-        if unsafe { get(element.0, id, &mut value.0) } < 0 {
-            return None;
+        let asked = unsafe { get(element.0, id, &mut value.0) };
+        if asked < 0 {
+            return Err(unread(asked));
         }
-        Some(value)
+        Ok(value)
     }
 
     // The tag is checked BEFORE the union is read, and written as a plain `if`
     // on purpose: `then_some` would read the member first and compare after.
-    fn int_property(element: &Com, id: i32) -> Option<i32> {
+    fn int_property(element: &Com, id: i32) -> Result<i32, Unread> {
         let value = property(element, id)?;
         let inner = unsafe { &value.0.Anonymous.Anonymous };
         if inner.vt != VT_I4 {
-            return None;
+            return Err(Unread::Other);
         }
-        Some(unsafe { inner.Anonymous.lVal })
+        Ok(unsafe { inner.Anonymous.lVal })
     }
 
-    fn bool_property(element: &Com, id: i32) -> Option<bool> {
+    fn bool_property(element: &Com, id: i32) -> Result<bool, Unread> {
         let value = property(element, id)?;
         let inner = unsafe { &value.0.Anonymous.Anonymous };
         if inner.vt != VT_BOOL {
-            return None;
+            return Err(Unread::Other);
         }
-        Some(unsafe { inner.Anonymous.boolVal } != 0)
+        Ok(unsafe { inner.Anonymous.boolVal } != 0)
     }
 
-    pub fn facts(window: WindowRef) -> Option<Facts> {
+    pub fn facts(window: WindowRef) -> Result<Facts, Unread> {
         let mut process = 0u32;
         unsafe { GetWindowThreadProcessId(window.0 as usize as HWND, &mut process) };
         if process == 0 {
-            return None;
+            return Err(Unread::Other);
         }
         CLIENT.with_borrow_mut(|slot| {
             if slot.is_none() {
                 *slot = Client::new();
             }
-            slot.as_ref()?.facts(process)
+            slot.as_ref().ok_or(Unread::Other)?.facts(process)
         })
     }
 }
 
 #[cfg(not(windows))]
 mod platform {
-    use super::Facts;
+    use super::{Facts, Unread};
     use crate::WindowRef;
 
-    // No route to type into other windows exists here yet (`send_text` says so
-    // by name), so there is no focus to ask about. `None` makes the answer
-    // `Unknown`, never a claim this build cannot see.
-    pub fn facts(_window: WindowRef) -> Option<Facts> {
-        None
+    // UI Automation is the question of Windows: macOS and Linux ask their own
+    // (see `focused_input`). `Other` makes the answer `Unknown`, never a claim
+    // this build cannot see.
+    pub fn facts(_window: WindowRef) -> Result<Facts, Unread> {
+        Err(Unread::Other)
     }
 }
 
@@ -1168,7 +1227,7 @@ mod tests {
             facts(control::PANE, None, false),
             || {
                 asked += 1;
-                answers.pop()
+                answers.pop().ok_or(Unread::Other)
             },
             || true,
         )
@@ -1185,7 +1244,7 @@ mod tests {
             facts(control::PANE, None, false),
             || {
                 asked += 1;
-                Some(facts(control::PANE, None, false))
+                Ok::<_, Unread>(facts(control::PANE, None, false))
             },
             || {
                 looks_left -= 1;
@@ -1204,23 +1263,56 @@ mod tests {
             facts(control::EDIT, RW, true),
             || {
                 asked += 1;
-                None
+                Err(Unread::Other)
             },
             || true,
         );
         assert_eq!(asked, 0);
-        assert_eq!(settled, Some(facts(control::EDIT, RW, true)));
+        assert_eq!(settled, Ok(facts(control::EDIT, RW, true)));
         // A window of its own is a native pane, not a waking provider.
         let native = windowed(facts(control::PANE, None, false));
-        assert_eq!(settle(native, || None, || true), Some(native));
+        assert_eq!(settle(native, || Err(Unread::Other), || true), Ok(native));
     }
 
     #[test]
     fn a_read_that_fails_during_the_second_look_is_unknown() {
         // The focus left the window while the browser was waking up: nothing
         // is known about where it went, so nothing is claimed.
-        let settled = settle(facts(control::PANE, None, false), || None, || true);
-        assert_eq!(settled, None);
+        let settled = settle(
+            facts(control::PANE, None, false),
+            || Err(Unread::Other),
+            || true,
+        );
+        assert_eq!(answer(settled), FocusedInput::Unknown);
+    }
+
+    #[test]
+    fn only_a_request_that_ran_out_of_time_is_unanswered() {
+        // `OBS-258`: the person is told the application did not answer in
+        // time, and only when the code says so. A request refused at once -
+        // the element has gone, the provider failed - is about no time.
+        assert_eq!(unread_of(UIA_E_TIMEOUT), Unread::Late);
+        for refused in [
+            0x8004_0201_u32, // UIA_E_ELEMENTNOTAVAILABLE
+            0x8000_4005,     // E_FAIL
+            0x8007_0005,     // E_ACCESSDENIED
+            0x8001_010E,     // RPC_E_WRONG_THREAD
+        ] {
+            assert_eq!(unread_of(refused), Unread::Other, "{refused:#x}");
+        }
+        assert_eq!(answer(Err(Unread::Late)), FocusedInput::Unanswered);
+        assert_eq!(answer(Err(Unread::Other)), FocusedInput::Unknown);
+        assert_eq!(
+            answer(Ok(facts(control::EDIT, RW, true))),
+            FocusedInput::TextField
+        );
+        // A second look that runs out of time is the same as a first one.
+        let settled = settle(
+            facts(control::PANE, None, false),
+            || Err(Unread::Late),
+            || true,
+        );
+        assert_eq!(answer(settled), FocusedInput::Unanswered);
     }
 
     #[cfg(windows)]
@@ -1292,6 +1384,7 @@ mod tests {
         for (ours, platform) in properties {
             assert_eq!(ours, platform);
         }
+        assert_eq!(UIA_E_TIMEOUT, uia::UIA_E_TIMEOUT);
     }
 
     #[test]
@@ -1304,7 +1397,7 @@ mod tests {
     #[test]
     fn the_client_answers_where_the_route_exists() {
         // The whole COM path on this machine, against whatever is in front:
-        // any of the five answers is fine, a crash or a hang is not. Asked
+        // any of the six answers is fine, a crash or a hang is not. Asked
         // twice, so the kept client is exercised as well as the new one.
         if !crate::can_send() {
             return;

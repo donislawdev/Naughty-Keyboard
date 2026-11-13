@@ -143,6 +143,8 @@ pub enum ReportPhrase {
     ControlNotTextField,
     /// `D125`: Firefox keeping accessibility services out.
     ControlClosedToAccessibility,
+    /// `OBS-258`: the system did not identify the focus in time.
+    ControlUnanswered,
     /// Sessions are not saved yet - `W4`, `session-format.md`.
     SessionNotRecorded,
     /// The value arrived in part.
@@ -196,6 +198,7 @@ fn pattern_report_phrase(phrase: ReportPhrase) -> &'static str {
         ReportPhrase::ControlUnconfirmed => "control not confirmed as a field",
         ReportPhrase::ControlNotTextField => "not a text field",
         ReportPhrase::ControlClosedToAccessibility => "window closed to accessibility",
+        ReportPhrase::ControlUnanswered => "control not identified in time",
         ReportPhrase::SessionNotRecorded => "not recorded - this version does not save sessions",
         ReportPhrase::Interrupted => {
             "interrupted after {sent} of {expected} UTF-16 units - the field holds a fragment"
@@ -460,6 +463,7 @@ fn target(block: &ReportBlock) -> String {
                 ControlKind::Unconfirmed => ReportPhrase::ControlUnconfirmed,
                 ControlKind::NotTextField => ReportPhrase::ControlNotTextField,
                 ControlKind::ClosedToAccessibility => ReportPhrase::ControlClosedToAccessibility,
+                ControlKind::Unanswered => ReportPhrase::ControlUnanswered,
             });
             match program {
                 Some(program) => fill(
