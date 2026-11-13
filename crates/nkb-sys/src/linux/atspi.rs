@@ -13,7 +13,9 @@
 //! 3. The applications are the children of the root of the registry, their windows the
 //!    children of those, and the window in front the one whose states hold `ACTIVE`. The
 //!    element with the focus is the first one in the windows in front whose states hold
-//!    `FOCUSED`.
+//!    `FOCUSED`, looked for a level of the tree at a time: the questions of one level go out
+//!    together on the one connection, at most `AT_ONCE` waiting, and the library files each
+//!    reply under the number of its question.
 //!
 //! # What this asks, and what it does not
 //!
@@ -25,9 +27,9 @@
 //!
 //! # A hung application
 //!
-//! Every question has its own limit, the whole look has another (`LOOK_WAIT`), and a watch
-//! over both sockets shuts them when twice that has passed, so nothing in a look can hold a
-//! press for good. A look whose time ran out is `Unanswered`, and so is the whole look when
+//! Every question has its own limit, the whole look has another (`LOOK_WAIT`) after which no
+//! question of an element is started, and a watch over both sockets shuts them when twice
+//! that has passed, so nothing in a look can hold a press for good. A look whose time ran out is `Unanswered`, and so is the whole look when
 //! an application did not answer, because the window in front may be its own (`OBS-238`):
 //! the system did not identify the focus in time, and the person is told so (`OBS-258`).
 
@@ -41,9 +43,10 @@ use zbus::{Error, Message};
 
 use super::bus::{self, Handle};
 use crate::field::FocusedInput;
+use crate::linux_at_once::{at_most, block_on};
 use crate::linux_atspi_rules::{
-    ACCESSIBLE_INTERFACE, CALL_WAIT, LAUNCHER_NAME, LAUNCHER_PATH, LOOK_WAIT, REGISTRY_NAME,
-    REGISTRY_ROOT, Recent, Reply, STATUS_INTERFACE, Tree, failed, find, settle,
+    ACCESSIBLE_INTERFACE, AT_ONCE, CALL_WAIT, LAUNCHER_NAME, LAUNCHER_PATH, LOOK_WAIT,
+    REGISTRY_NAME, REGISTRY_ROOT, Recent, Reply, STATUS_INTERFACE, Tree, failed, find, settle,
 };
 use crate::linux_ibus_rules::socket_in_address;
 use crate::linux_portal_rules::session_bus_socket;
@@ -167,21 +170,54 @@ struct Bus<'c> {
 }
 
 impl Bus<'_> {
-    /// Calls `member` of the accessible interface on `element`. An error that came back is
-    /// `Refused` (which includes an application that has gone), and a question that ran out
-    /// of time is `Silent`.
-    fn ask(&self, element: &Element, member: &str) -> Reply<Message> {
-        match self.connection.call_method(
-            Some(element.0.as_str()),
-            element.1.as_str(),
-            Some(ACCESSIBLE_INTERFACE),
-            member,
-            &(),
-        ) {
-            Ok(message) => Reply::Said(message),
-            Err(Error::MethodError(name, _, _)) => failed(Some(name.as_str())),
-            Err(_) => failed(None),
-        }
+    /// Calls `member` of the accessible interface on every one of `elements`, at most
+    /// [`AT_ONCE`] waiting at a time, and starts a call only while `may_start` says so. An
+    /// error that came back is `Refused` (which includes an application that has gone), and
+    /// a question that ran out of time is `Silent`. `None` when a call was never started.
+    fn ask(
+        &self,
+        elements: &[Element],
+        member: &str,
+        may_start: impl FnMut() -> bool,
+    ) -> Option<Vec<Reply<Message>>> {
+        let connection = self.connection.inner();
+        let questions = elements
+            .iter()
+            .map(|element| {
+                connection.call_method(
+                    Some(element.0.as_str()),
+                    element.1.as_str(),
+                    Some(ACCESSIBLE_INTERFACE),
+                    member,
+                    &(),
+                )
+            })
+            .collect();
+        block_on(at_most(AT_ONCE, questions, may_start))
+            .into_iter()
+            .map(|answer| answer.map(reply_of))
+            .collect()
+    }
+
+    /// `member` of every one of `elements` while the look has time, each answer read by
+    /// `read`.
+    fn ask_in_time<A>(
+        &self,
+        elements: &[Element],
+        member: &str,
+        read: impl Fn(Message) -> Option<A>,
+    ) -> Option<Vec<Reply<A>>> {
+        let replies = self.ask(elements, member, || Instant::now() < self.until)?;
+        Some(replies.into_iter().map(|reply| reply.then(&read)).collect())
+    }
+}
+
+/// What came back for one call, in the words of [`Reply`].
+fn reply_of(answer: zbus::Result<Message>) -> Reply<Message> {
+    match answer {
+        Ok(message) => Reply::Said(message),
+        Err(Error::MethodError(name, _, _)) => failed(Some(name.as_str())),
+        Err(_) => failed(None),
     }
 }
 
@@ -190,27 +226,29 @@ impl Tree for Bus<'_> {
 
     fn applications(&mut self) -> Option<Vec<Element>> {
         let root = ObjectPath::try_from(REGISTRY_ROOT).ok()?;
-        self.children(&(REGISTRY_NAME.to_owned(), OwnedObjectPath::from(root)))
+        self.children(&[(REGISTRY_NAME.to_owned(), OwnedObjectPath::from(root))])?
+            .pop()?
             .said()
     }
 
-    fn children(&mut self, node: &Element) -> Reply<Vec<Element>> {
-        self.ask(node, "GetChildren")
-            .then(|message| message.body().deserialize().ok())
+    fn children(&mut self, nodes: &[Element]) -> Option<Vec<Reply<Vec<Element>>>> {
+        self.ask_in_time(nodes, "GetChildren", |message| {
+            message.body().deserialize().ok()
+        })
     }
 
-    fn states(&mut self, node: &Element) -> Reply<Vec<u32>> {
-        self.ask(node, "GetState")
-            .then(|message| message.body().deserialize().ok())
+    fn states(&mut self, nodes: &[Element]) -> Option<Vec<Reply<Vec<u32>>>> {
+        self.ask_in_time(nodes, "GetState", |message| {
+            message.body().deserialize().ok()
+        })
     }
 
+    /// Asked of the one element found, whatever is left of the time: the question has its
+    /// own limit, and the element is not found again.
     fn role(&mut self, node: &Element) -> Option<u32> {
-        self.ask(node, "GetRole")
+        self.ask(std::slice::from_ref(node), "GetRole", || true)?
+            .pop()?
             .then(|message| message.body().deserialize().ok())
             .said()
-    }
-
-    fn time_left(&self) -> bool {
-        Instant::now() < self.until
     }
 }
