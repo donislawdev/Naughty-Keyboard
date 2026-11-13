@@ -18,7 +18,11 @@
 //!   `PUSH_BUTTON`, a link `LINK`, a `<select>` `COMBO_BOX`,
 //! - the number of questions to the bus is two per element visited (its children, its
 //!   states). Firefox needed 70 to 80 elements before the one with the focus, a GTK4 or
-//!   Slint window 7 to 31,
+//!   Slint window 7 to 31. 2026-11-13, Firefox 158 on the page of the field receiver: the
+//!   same look asked one question after the other took 231 ms in the median (8 looks), and
+//!   with the questions of one level of the tree asked together 46 ms with the whole level
+//!   waiting, 62 ms with at most 32 waiting and 81 ms with 4 (76 elements over six levels,
+//!   71 one after the other, `tools/sondy/linux/atspi_rownolegle.py`),
 //! - with the switch of the bus (`org.a11y.Status.IsEnabled`) off, GTK applications still
 //!   show their trees, and Slint, Qt, Firefox and Chromium do not show a window at all.
 //!   Chromium, switch on, showed a window with no children in the run made.
@@ -47,6 +51,12 @@
 //! in front, and is passed over. A look that visited as many elements as it may is not about
 //! time - a larger page answers so every time - and stays `Unknown`.
 //!
+//! The windows in front are walked down in the order of the tree, as depth first, but the
+//! next [`AT_ONCE`] elements are asked together ([`find`]): a look costs a journey to the bus
+//! for every so many elements and every level down, rather than one for every question. In
+//! each window the element with the focus is the first one met. A field above a long list
+//! is met after a few questions, where a walk a level at a time asks the whole list first.
+//!
 //! Nothing here reads a name, a description or text of any element: the questions are the
 //! children, the states and the role of an element, and `tests/atspi_reads_only_kinds.rs`
 //! holds the list of what the code may say to the bus.
@@ -62,6 +72,7 @@
 )]
 
 use core::time::Duration;
+use std::collections::VecDeque;
 use std::time::Instant;
 
 use crate::field::FocusedInput;
@@ -89,16 +100,24 @@ pub(crate) const LOOK_WAIT: Duration = Duration::from_millis(900);
 /// of elements is not walked to its end.
 pub(crate) const MAX_ELEMENTS: usize = 1500;
 
+/// How many elements the walk asks together, and how many questions may wait for an answer
+/// at a time. Measured on Firefox: 32 waiting is as fast as a whole level within the noise
+/// (above). The bus of accessibility of GNOME allows a connection 50000 questions waiting,
+/// and the number `dbus-daemon` is built with is 128 (2026-11-13, Ubuntu 26.04).
+pub(crate) const AT_ONCE: usize = 32;
+
 /// How long an answer is kept for the next question. A press asks three times in a few
 /// milliseconds (the target line, the refusal of a button, the clearing), and a look that
 /// walks a browser is not made three times. The answer of the last look is the one of this
 /// press only while it is this fresh, and a press a second later looks again.
 pub(crate) const REUSE: Duration = Duration::from_millis(300);
 
-/// The names of the two errors the bus sends back in place of a reply that never came. Read
-/// off an answer, never said.
+/// The names of the two errors the bus sends back in place of a reply that never came, and
+/// of the one it sends when this program has more questions waiting than it allows: none of
+/// them is an answer of the application. Read off an answer, never said.
 const NO_REPLY: &str = "org.freedesktop.DBus.Error.NoReply";
 const TIMED_OUT: &str = "org.freedesktop.DBus.Error.TimedOut";
+const LIMITS_EXCEEDED: &str = "org.freedesktop.DBus.Error.LimitsExceeded";
 
 /// The states of an element the code asks about. `GetState` answers two words of 32 bits,
 /// and a state is the bit of that number.
@@ -255,12 +274,12 @@ impl<T> Reply<T> {
 }
 
 /// What a question that failed means, from the name of the error that came back, if one
-/// did. An error is an answer, except the two the bus sends for a reply that never came.
-/// No error at all is a question that ran out of time or a connection that was shut, and
-/// that is silence.
+/// did. An error is an answer, except the two the bus sends for a reply that never came and
+/// the one for too many questions waiting, which the application never saw. No error at all
+/// is a question that ran out of time or a connection that was shut, and that is silence.
 pub(crate) fn failed<T>(error: Option<&str>) -> Reply<T> {
     match error {
-        Some(NO_REPLY | TIMED_OUT) | None => Reply::Silent,
+        Some(NO_REPLY | TIMED_OUT | LIMITS_EXCEEDED) | None => Reply::Silent,
         Some(_) => Reply::Refused,
     }
 }
@@ -269,20 +288,28 @@ pub(crate) fn failed<T>(error: Option<&str>) -> Reply<T> {
 /// Inside the windows in front a part that does not answer is passed over, and so is an
 /// application that answered with an error. An application that did not answer at all
 /// makes the look [`Found::Silent`].
+///
+/// The children and the states are asked of many elements together, and come back one
+/// answer for each element, in their order. No question of them is started once the time
+/// of the look is out, and `None` is a time that ran out before every one was asked.
 pub(crate) trait Tree {
     type Node;
 
     /// The applications that show a tree.
     fn applications(&mut self) -> Option<Vec<Self::Node>>;
-    /// The children of an element.
-    fn children(&mut self, node: &Self::Node) -> Reply<Vec<Self::Node>>;
-    /// The states of an element, as `GetState` words them.
-    fn states(&mut self, node: &Self::Node) -> Reply<Vec<u32>>;
+    /// The children of each element.
+    fn children(&mut self, nodes: &[Self::Node]) -> Option<Vec<Reply<Vec<Self::Node>>>>;
+    /// The states of each element, as `GetState` words them.
+    fn states(&mut self, nodes: &[Self::Node]) -> Option<Vec<Reply<Vec<u32>>>>;
     /// The role of an element.
     fn role(&mut self, node: &Self::Node) -> Option<u32>;
-    /// Whether there is time for another question.
-    fn time_left(&self) -> bool;
 }
+
+/// The element that holds the focus in a window, with the states it answered.
+type Holder<N> = (N, Vec<u32>);
+
+/// One question asked of many elements together, as [`Tree`] asks it.
+type Question<T, A> = fn(&mut T, &[<T as Tree>::Node]) -> Option<Vec<A>>;
 
 /// What a look found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -305,92 +332,129 @@ pub(crate) enum Found {
     Silent,
 }
 
-/// What a walk down one window found.
-enum Walk<N> {
-    Holder(N, Vec<u32>),
-    Nothing,
-    Spent,
-    TooMany,
-}
-
 /// Looks for the element that holds the keyboard focus, in the windows in front.
 pub(crate) fn find<T: Tree>(tree: &mut T) -> Found {
     let Some(applications) = tree.applications() else {
         return Found::NoWindow;
     };
-    let mut windows = Vec::new();
-    let mut silent = false;
-    for application in applications {
-        if !tree.time_left() {
-            return Found::Spent;
-        }
-        let tops = match tree.children(&application) {
-            Reply::Said(tops) => tops,
-            Reply::Refused => continue,
-            Reply::Silent => {
-                silent = true;
-                continue;
-            }
-        };
-        for top in tops {
-            match tree.states(&top) {
-                Reply::Said(states) if has(&states, state::ACTIVE) => windows.push(top),
-                Reply::Silent => silent = true,
-                Reply::Said(_) | Reply::Refused => {}
-            }
-        }
-    }
-    if silent {
-        return Found::Silent;
-    }
-    if windows.is_empty() {
-        return Found::NoWindow;
-    }
-    let mut left = MAX_ELEMENTS;
-    let mut holders = Vec::new();
-    for window in windows {
-        match walk(tree, window, &mut left) {
-            Walk::Holder(node, states) => holders.push((node, states)),
-            Walk::Nothing => {}
-            Walk::Spent => return Found::Spent,
-            Walk::TooMany => return Found::TooMany,
-        }
-    }
-    match holders.pop() {
-        None => Found::NoFocus,
-        Some(_) if !holders.is_empty() => Found::Several,
-        Some((node, states)) => Found::Kind(
+    let holders = match in_front(tree, &applications).and_then(|windows| walk(tree, windows)) {
+        Ok(holders) => holders,
+        Err(found) => return found,
+    };
+    let mut holders = holders.into_iter();
+    match (holders.next(), holders.next()) {
+        (None, _) => Found::NoFocus,
+        (Some(_), Some(_)) => Found::Several,
+        (Some((node, states)), None) => Found::Kind(
             tree.role(&node)
                 .map_or(FocusedInput::Unknown, |role| kind_of(role, &states)),
         ),
     }
 }
 
-/// Depth first down `window`, to the first element with the focus.
-fn walk<T: Tree>(tree: &mut T, window: T::Node, left: &mut usize) -> Walk<T::Node> {
-    let mut stack = vec![window];
-    while let Some(node) = stack.pop() {
-        if *left == 0 {
-            return Walk::TooMany;
-        }
-        if !tree.time_left() {
-            return Walk::Spent;
-        }
-        *left -= 1;
-        let Some(states) = tree.states(&node).said() else {
-            continue;
-        };
-        if has(&states, state::DEFUNCT) {
-            continue;
-        }
-        if has(&states, state::FOCUSED) {
-            return Walk::Holder(node, states);
-        }
-        if let Some(children) = tree.children(&node).said() {
-            stack.extend(children.into_iter().rev());
+/// The windows in front, asked of every application at once. An application or a window
+/// that did not answer makes it [`Found::Silent`], whatever the others show.
+fn in_front<T: Tree>(tree: &mut T, applications: &[T::Node]) -> Result<Vec<T::Node>, Found> {
+    let mut silent = false;
+    let mut tops = Vec::new();
+    for reply in ask(tree, applications, T::children)? {
+        match reply {
+            Reply::Said(more) => tops.extend(more),
+            Reply::Refused => {}
+            Reply::Silent => silent = true,
         }
     }
-    Walk::Nothing
+    let mut windows = Vec::new();
+    let replies = ask(tree, &tops, T::states)?;
+    for (top, reply) in tops.into_iter().zip(replies) {
+        match reply {
+            Reply::Said(states) if has(&states, state::ACTIVE) => windows.push(top),
+            Reply::Silent => silent = true,
+            Reply::Said(_) | Reply::Refused => {}
+        }
+    }
+    if silent {
+        Err(Found::Silent)
+    } else if windows.is_empty() {
+        Err(Found::NoWindow)
+    } else {
+        Ok(windows)
+    }
+}
+
+/// One question of every element of `nodes`: [`Found::Spent`] when the time ran out before
+/// every one was asked. No elements, no question.
+fn ask<T: Tree, A>(
+    tree: &mut T,
+    nodes: &[T::Node],
+    question: Question<T, A>,
+) -> Result<Vec<A>, Found> {
+    if nodes.is_empty() {
+        return Ok(Vec::new());
+    }
+    question(tree, nodes).ok_or(Found::Spent)
+}
+
+/// Down `windows` in the order of the tree, the windows one after the other, to the first
+/// element with the focus in each. The elements not asked yet wait in that order, and the
+/// first [`AT_ONCE`] of them are asked together: their states, then the children of those
+/// without the focus, which take their place at the head of the wait. One at a time this is
+/// the walk depth first, and all at a time the walk a level at a time. A window whose
+/// element was found is not walked further, and the elements with the focus come back one
+/// per window that has one, in the order of the windows.
+///
+/// A field above a long list is met after a few questions, as it is depth first, where a walk
+/// a level at a time would ask the whole list first. The walk visits at most
+/// [`MAX_ELEMENTS`], and the look is [`Found::TooMany`] when that many were asked and a
+/// window without its element still has something waiting.
+fn walk<T: Tree>(tree: &mut T, windows: Vec<T::Node>) -> Result<Vec<Holder<T::Node>>, Found> {
+    let mut holders: Vec<Option<Holder<T::Node>>> = windows.iter().map(|_| None).collect();
+    // The elements not asked yet, each with the window it is in, in the order of the tree.
+    let mut waiting: VecDeque<(usize, T::Node)> = windows.into_iter().enumerate().collect();
+    let mut left = MAX_ELEMENTS;
+    while !waiting.is_empty() {
+        if left == 0 {
+            return Err(Found::TooMany);
+        }
+        let now = waiting.len().min(AT_ONCE).min(left);
+        left -= now;
+        let (owners, nodes): (Vec<usize>, Vec<T::Node>) = waiting.drain(..now).unzip();
+        let replies = ask(tree, &nodes, T::states)?;
+        let mut parents = Vec::new();
+        for ((owner, node), reply) in owners.into_iter().zip(nodes).zip(replies) {
+            let Reply::Said(states) = reply else {
+                continue;
+            };
+            if holders[owner].is_some() || has(&states, state::DEFUNCT) {
+                continue;
+            }
+            if has(&states, state::FOCUSED) {
+                holders[owner] = Some((node, states));
+            } else {
+                parents.push((owner, node));
+            }
+        }
+        parents.retain(|(owner, _)| holders[*owner].is_none());
+        waiting.retain(|(owner, _)| holders[*owner].is_none());
+        let (owners, nodes): (Vec<usize>, Vec<T::Node>) = parents.into_iter().unzip();
+        let replies = ask(tree, &nodes, T::children)?;
+        let children: Vec<(usize, T::Node)> = owners
+            .into_iter()
+            .zip(replies)
+            .flat_map(|(owner, reply)| {
+                reply
+                    .said()
+                    .into_iter()
+                    .flatten()
+                    .map(move |child| (owner, child))
+            })
+            .collect();
+        // Where their parents were: ahead of everything that still waits.
+        for child in children.into_iter().rev() {
+            waiting.push_front(child);
+        }
+    }
+    Ok(holders.into_iter().flatten().collect())
 }
 
 /// The answer in the words of the question, given whether the bus is switched on.
@@ -483,12 +547,14 @@ mod tests {
         }
     }
 
-    /// A tree in a vector, with the root's children being the applications, and a count of
-    /// the questions asked.
+    /// A tree in a vector, with the root's children being the applications, a count of the
+    /// questions asked and of the times many of them went together. The time runs out after
+    /// `questions_allowed` questions, also in the middle of a batch.
     struct Fake {
         elements: Vec<Element>,
         applications: Vec<usize>,
         asked: usize,
+        batches: usize,
         questions_allowed: usize,
     }
 
@@ -498,8 +564,28 @@ mod tests {
                 elements: Vec::new(),
                 applications: Vec::new(),
                 asked: 0,
+                batches: 0,
                 questions_allowed: usize::MAX,
             }
+        }
+
+        /// One answer for each of `nodes`, or `None` when the time ran out before the last.
+        fn batch<A>(
+            &mut self,
+            nodes: &[usize],
+            answer: impl Fn(&Element) -> A,
+        ) -> Option<Vec<Reply<A>>> {
+            self.batches += 1;
+            let mut replies = Vec::new();
+            for node in nodes {
+                if self.asked >= self.questions_allowed {
+                    return None;
+                }
+                self.asked += 1;
+                let element = &self.elements[*node];
+                replies.push(element.reply(answer(element)));
+            }
+            Some(replies)
         }
 
         fn add(&mut self, role: u32, names: &[u32], children: &[usize]) -> usize {
@@ -528,24 +614,16 @@ mod tests {
             Some(self.applications.clone())
         }
 
-        fn children(&mut self, node: &usize) -> Reply<Vec<usize>> {
-            self.asked += 1;
-            let element = &self.elements[*node];
-            element.reply(element.children.clone())
+        fn children(&mut self, nodes: &[usize]) -> Option<Vec<Reply<Vec<usize>>>> {
+            self.batch(nodes, |element| element.children.clone())
         }
 
-        fn states(&mut self, node: &usize) -> Reply<Vec<u32>> {
-            self.asked += 1;
-            let element = &self.elements[*node];
-            element.reply(element.states.clone())
+        fn states(&mut self, nodes: &[usize]) -> Option<Vec<Reply<Vec<u32>>>> {
+            self.batch(nodes, |element| element.states.clone())
         }
 
         fn role(&mut self, node: &usize) -> Option<u32> {
             Some(self.elements[*node].role)
-        }
-
-        fn time_left(&self) -> bool {
-            self.asked < self.questions_allowed
         }
     }
 
@@ -763,6 +841,8 @@ mod tests {
         assert_eq!(failed::<()>(None), Reply::Silent);
         assert_eq!(failed::<()>(Some(NO_REPLY)), Reply::Silent);
         assert_eq!(failed::<()>(Some(TIMED_OUT)), Reply::Silent);
+        // Too many questions waiting: the bus refused, the application never saw it.
+        assert_eq!(failed::<()>(Some(LIMITS_EXCEEDED)), Reply::Silent);
         for refusal in [
             "org.freedesktop.DBus.Error.ServiceUnknown",
             "org.freedesktop.DBus.Error.NameHasNoOwner",
@@ -838,6 +918,107 @@ mod tests {
         window_with(&mut tree, role::ENTRY, &[state::FOCUSED, state::EDITABLE]);
         let _ = find(&mut tree);
         assert!(tree.asked <= 10, "{} questions", tree.asked);
+    }
+
+    #[test]
+    fn the_questions_of_one_level_go_together_however_wide_it_is() {
+        // A window, three panels and two elements in each, the focus in the last one: the
+        // children of the applications, the states of their windows, then the states and
+        // the children of every level - seven journeys, whatever the width.
+        let mut tree = Fake::new();
+        let mut panels = Vec::new();
+        for last in [false, false, true] {
+            let first = tree.add(role::PUSH_BUTTON, &[], &[]);
+            let focus: &[u32] = if last {
+                &[state::FOCUSED, state::EDITABLE]
+            } else {
+                &[]
+            };
+            let second = tree.add(role::ENTRY, focus, &[]);
+            panels.push(tree.add(39, &[], &[first, second]));
+        }
+        let window = tree.add(23, &[state::ACTIVE], &panels);
+        let application = tree.add(75, &[], &[window]);
+        tree.applications.push(application);
+        assert_eq!(find(&mut tree), Found::Kind(FocusedInput::TextField));
+        assert_eq!(tree.batches, 7);
+        assert_eq!(tree.asked, 16, "two questions per element above the focus");
+    }
+
+    #[test]
+    fn a_level_wider_than_what_is_left_still_answers_when_the_focus_is_in_the_part_asked() {
+        let mut tree = Fake::new();
+        let field = tree.add(role::ENTRY, &[state::FOCUSED, state::EDITABLE], &[]);
+        let mut row = vec![field];
+        for _ in 0..(MAX_ELEMENTS + 5) {
+            row.push(tree.add(role::LIST_ITEM, &[], &[]));
+        }
+        let window = tree.add(23, &[state::ACTIVE], &row);
+        let application = tree.add(75, &[], &[window]);
+        tree.applications.push(application);
+        assert_eq!(find(&mut tree), Found::Kind(FocusedInput::TextField));
+    }
+
+    #[test]
+    fn a_window_the_limit_cut_short_says_too_many_though_another_found_its_focus() {
+        let mut tree = Fake::new();
+        window_with(&mut tree, role::ENTRY, &[state::FOCUSED, state::EDITABLE]);
+        let mut row = Vec::new();
+        for _ in 0..(MAX_ELEMENTS + 5) {
+            row.push(tree.add(role::LIST_ITEM, &[], &[]));
+        }
+        let window = tree.add(23, &[state::ACTIVE], &row);
+        let application = tree.add(75, &[], &[window]);
+        tree.applications.push(application);
+        assert_eq!(find(&mut tree), Found::TooMany);
+    }
+
+    #[test]
+    fn a_field_above_a_long_list_is_met_after_a_few_questions() {
+        // A search box above a list of results longer than the walk may visit. Depth first
+        // it is met at once, and a walk a level at a time would ask the whole list before it.
+        let mut tree = Fake::new();
+        let field = tree.add(role::ENTRY, &[state::FOCUSED, state::EDITABLE], &[]);
+        let paragraph = tree.add(73, &[], &[field]);
+        let form = tree.add(87, &[], &[paragraph]);
+        let mut results = Vec::new();
+        for _ in 0..(MAX_ELEMENTS * 2) {
+            results.push(tree.add(role::LIST_ITEM, &[], &[]));
+        }
+        let list = tree.add(role::LIST, &[], &results);
+        let window = tree.add(23, &[state::ACTIVE], &[form, list]);
+        let application = tree.add(75, &[], &[window]);
+        tree.applications.push(application);
+        assert_eq!(find(&mut tree), Found::Kind(FocusedInput::TextField));
+        assert!(tree.asked < 4 * AT_ONCE, "{} questions", tree.asked);
+    }
+
+    #[test]
+    fn in_one_window_the_focus_met_first_is_the_one_taken_and_not_two() {
+        // A stale state deep in the first panel, and the focus on a button next to it: the
+        // button is asked with the panel, before what is under the panel.
+        let mut tree = Fake::new();
+        let deep = tree.add(role::ENTRY, &[state::FOCUSED, state::EDITABLE], &[]);
+        let inner = tree.add(39, &[], &[deep]);
+        let panel = tree.add(39, &[], &[inner]);
+        let button = tree.add(role::PUSH_BUTTON, &[state::FOCUSED], &[]);
+        let window = tree.add(23, &[state::ACTIVE], &[panel, button]);
+        let application = tree.add(75, &[], &[window]);
+        tree.applications.push(application);
+        assert_eq!(find(&mut tree), Found::Kind(FocusedInput::NotTextField));
+    }
+
+    #[test]
+    fn a_time_that_runs_out_inside_a_level_is_spent_though_the_focus_was_asked() {
+        // What was not asked may be a second window with the focus.
+        let mut tree = Fake::new();
+        let field = tree.add(role::ENTRY, &[state::FOCUSED, state::EDITABLE], &[]);
+        let other = tree.add(role::LIST_ITEM, &[], &[]);
+        let window = tree.add(23, &[state::ACTIVE], &[field, other]);
+        let application = tree.add(75, &[], &[window]);
+        tree.applications.push(application);
+        tree.questions_allowed = 5;
+        assert_eq!(find(&mut tree), Found::Spent);
     }
 
     #[test]

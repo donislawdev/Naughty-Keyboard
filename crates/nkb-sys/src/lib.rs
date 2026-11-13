@@ -53,6 +53,8 @@ pub mod layout;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(any(target_os = "linux", test))]
+mod linux_at_once;
+#[cfg(any(target_os = "linux", test))]
 mod linux_atspi_rules;
 #[cfg(any(target_os = "linux", test))]
 mod linux_clearing_rules;

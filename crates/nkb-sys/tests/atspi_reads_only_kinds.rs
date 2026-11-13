@@ -49,9 +49,12 @@ const WORDS: &[&str] = &[
     "GetState",
     "GetRole",
     // The names of the two errors the bus sends back for a reply that never came, read off
-    // an answer to tell an application that is silent from one that has gone (`OBS-238`).
+    // an answer to tell an application that is silent from one that has gone (`OBS-238`),
+    // and of the one it sends when more questions wait than it allows, which the
+    // application never saw (`OBS-258`: the questions of a level go out together).
     "org.freedesktop.DBus.Error.NoReply",
     "org.freedesktop.DBus.Error.TimedOut",
+    "org.freedesktop.DBus.Error.LimitsExceeded",
     // Where the session bus is.
     "DBUS_SESSION_BUS_ADDRESS",
     "XDG_RUNTIME_DIR",
