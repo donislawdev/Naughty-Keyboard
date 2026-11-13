@@ -137,6 +137,11 @@ pub enum ControlKind {
     /// Treated as [`ControlKind::Unconfirmed`], and named apart because its
     /// cause is known and the tester can change it.
     ClosedToAccessibility,
+    /// The system did not identify the focus in time - the application did
+    /// not answer within the limit of the question (`OBS-258`). Treated as
+    /// [`ControlKind::Unconfirmed`], and named apart because a later press may
+    /// find the application ready.
+    Unanswered,
     /// Not a text field. The direct route refuses to type there, so a value
     /// that reached it means the focus moved between the look and the send.
     NotTextField,

@@ -54,6 +54,14 @@
 //!   cannot be set, which the terminal rule of `classify` runs ahead of.
 //!
 //! Not measured, and so `Unknown` here: anything in a terminal beyond Terminal.
+//!
+//! # An application that does not answer
+//!
+//! Every request is limited to [`TIMEOUT_MS`] (`AXUIElementSetMessagingTimeout`). A
+//! reading whose request ran for that whole limit and came back `-25204` is an
+//! application that did not identify its focus in time - stopped, or busy opening
+//! something - and is [`FocusedInput::Unanswered`] (`OBS-258`), by the rule the pulse
+//! of a send already tells a hung queue with (`macos_rules::failed_reading`).
 
 use core::time::Duration;
 use std::time::Instant;
@@ -62,7 +70,8 @@ use super::ffi::{self, CfRef, Owned};
 use crate::WindowRef;
 use crate::field::{FocusedInput, LOOK_STEP_MS, SECOND_LOOK_MS, TIMEOUT_MS};
 use crate::macos_rules::{
-    AX_NO_VALUE as NO_VALUE, PULSE_LOOK, TERMINAL_PROGRAMS, classify, pid_of, silent_answer,
+    AX_NO_VALUE as NO_VALUE, PULSE_LOOK, TERMINAL_PROGRAMS, classify, failed_reading, pid_of,
+    silent_answer,
 };
 
 /// What the system said about the focused element, once: the properties and
@@ -172,6 +181,7 @@ pub(crate) fn focused_input(window: WindowRef) -> FocusedInput {
 
     let deadline = Instant::now() + Duration::from_millis(SECOND_LOOK_MS);
     let reading = loop {
+        let asked = Instant::now();
         match read(app.0, pid) {
             Ok(reading) => break reading,
             Err(NO_VALUE) if Instant::now() < deadline => {
@@ -180,7 +190,10 @@ pub(crate) fn focused_input(window: WindowRef) -> FocusedInput {
             // The whole second look went by and the application still shows no
             // focus: a window with nothing inside it, or no window at all.
             Err(NO_VALUE) => return silent_answer(has_window(app.0)),
-            Err(_) => return FocusedInput::Unknown,
+            Err(error) => {
+                let limit = Duration::from_millis(u64::from(TIMEOUT_MS));
+                return failed_reading(error, asked.elapsed(), limit);
+            }
         }
     };
     let terminal = crate::program::program_name(window)

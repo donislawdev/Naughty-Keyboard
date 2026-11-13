@@ -234,6 +234,10 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::ClearingSkippedClosedToAccessibility => {
             "Not cleared first: this window shows the system nothing inside it, so the clearing keys could reach beyond the field, and the value went in on top of what was there. {cause}"
         }
+        // `OBS-258`, ux-spec.md 6 A. The cause is time, so the sentence says a later press may do.
+        Message::ClearingSkippedUnanswered => {
+            "Not cleared first: the system did not identify the focus in time, so the clearing keys could reach beyond the field, and the value went in on top of what was there. An application that is busy, or has just opened a page, answers late, so the next press may find it ready."
+        }
         // `D139`, ux-spec.md 6 A. The settings are macOS's own, named as the person finds them.
         Message::MayBeAltered(_) => {
             "The system's text substitutions may have changed what went in: {what}. To type exactly what is shown, switch them off in System Settings, Keyboard, Text Input, Edit."
@@ -357,6 +361,7 @@ pub fn message<'a>(
         | Message::ClearingSkipped
         | Message::ClearingSkippedInTerminal
         | Message::ClearingSkippedNoKeys
+        | Message::ClearingSkippedUnanswered
         | Message::ClipboardBusy
         | Message::TypingBusy
         | Message::NoTarget
@@ -1080,6 +1085,7 @@ mod tests {
             Message::ClearingSkippedInTerminal,
             Message::ClearingSkippedNoKeys,
             Message::ClearingSkippedClosedToAccessibility,
+            Message::ClearingSkippedUnanswered,
             Message::MayBeAltered(Substitutions {
                 capitalization: true,
                 period: true,
@@ -1551,10 +1557,11 @@ mod tests {
             Message::TypingBusy => 39,
             Message::InFlight { .. } => 40,
             Message::CannotType { .. } => 41,
+            Message::ClearingSkippedUnanswered => 42,
         }
     }
 
-    const SLOTS: usize = 42;
+    const SLOTS: usize = 43;
 
     #[test]
     fn every_message_variant_is_listed_here() {

@@ -178,6 +178,7 @@ fn control_kind(focus: nkb_sys::field::FocusedInput) -> ControlKind {
         nkb_sys::field::FocusedInput::Unknown => ControlKind::Unconfirmed,
         nkb_sys::field::FocusedInput::NotTextField => ControlKind::NotTextField,
         nkb_sys::field::FocusedInput::ClosedToAccessibility => ControlKind::ClosedToAccessibility,
+        nkb_sys::field::FocusedInput::Unanswered => ControlKind::Unanswered,
     }
 }
 
@@ -238,6 +239,9 @@ fn clearing_verdict(focus: nkb_sys::field::FocusedInput) -> Result<(), Keystroke
         nkb_sys::field::FocusedInput::ClosedToAccessibility => {
             Err(KeystrokeError::ClosedToAccessibility)
         }
+        // `OBS-258`: no view of the field in time, for `Unknown`'s reason - and
+        // the cause is time, which the caller names.
+        nkb_sys::field::FocusedInput::Unanswered => Err(KeystrokeError::FocusUnanswered),
     }
 }
 
@@ -551,6 +555,11 @@ mod tests {
             clearing_verdict(FocusedInput::ClosedToAccessibility),
             Err(KeystrokeError::ClosedToAccessibility)
         );
+        // `OBS-258`: a page Firefox had just opened did not answer in time.
+        assert_eq!(
+            clearing_verdict(FocusedInput::Unanswered),
+            Err(KeystrokeError::FocusUnanswered)
+        );
     }
 
     #[test]
@@ -574,6 +583,10 @@ mod tests {
         assert_eq!(
             control_kind(FocusedInput::ClosedToAccessibility),
             ControlKind::ClosedToAccessibility
+        );
+        assert_eq!(
+            control_kind(FocusedInput::Unanswered),
+            ControlKind::Unanswered
         );
     }
 

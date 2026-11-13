@@ -11124,8 +11124,8 @@
       "id": "M1448",
       "why": "the walk has no limit on the elements it visits, so a page of thousands is walked to its end",
       "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
-      "find": "if *left == 0 || !tree.time_left() {",
-      "replace": "if !tree.time_left() {",
+      "find": "        if *left == 0 {\n            return Walk::TooMany;\n        }\n",
+      "replace": "",
       "test": "linux_atspi_rules::tests::the_walk_stops_at_the_most_elements_it_may_visit",
       "runner": "rust:nkb-sys:lib"
     },
@@ -11133,8 +11133,8 @@
       "id": "M1449",
       "why": "the walk does not look at the time, so a hung application holds a press",
       "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
-      "find": "if *left == 0 || !tree.time_left() {",
-      "replace": "if *left == 0 {",
+      "find": "        if !tree.time_left() {\n            return Walk::Spent;\n        }\n",
+      "replace": "",
       "test": "linux_atspi_rules::tests::the_walk_stops_when_the_time_is_out_and_does_not_guess",
       "runner": "rust:nkb-sys:lib"
     },

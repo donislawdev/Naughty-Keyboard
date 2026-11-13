@@ -72,6 +72,7 @@ pub(crate) fn where_it_goes(target: &Target) -> String {
         ControlKind::Unconfirmed => "a control not confirmed as a field",
         ControlKind::NotTextField => "not a text field",
         ControlKind::ClosedToAccessibility => "a window closed to accessibility",
+        ControlKind::Unanswered => "a control not identified in time",
     };
     match &target.program {
         Some(program) => format!("{}, {control}", program.escape_debug()),
@@ -171,6 +172,10 @@ mod tests {
         assert_eq!(
             where_it_goes(&at(Some("firefox.exe"), ControlKind::ClosedToAccessibility)),
             "firefox.exe, a window closed to accessibility"
+        );
+        assert_eq!(
+            where_it_goes(&at(Some("firefox"), ControlKind::Unanswered)),
+            "firefox, a control not identified in time"
         );
     }
 }

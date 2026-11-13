@@ -27,8 +27,9 @@
 //!
 //! Every question has its own limit, the whole look has another (`LOOK_WAIT`), and a watch
 //! over both sockets shuts them when twice that has passed, so nothing in a look can hold a
-//! press for good. An answer that did not come is `Unknown`, and so is the whole look when
-//! an application did not answer, because the window in front may be its own (`OBS-238`).
+//! press for good. A look whose time ran out is `Unanswered`, and so is the whole look when
+//! an application did not answer, because the window in front may be its own (`OBS-238`):
+//! the system did not identify the focus in time, and the person is told so (`OBS-258`).
 
 use std::sync::Mutex;
 use std::time::Instant;

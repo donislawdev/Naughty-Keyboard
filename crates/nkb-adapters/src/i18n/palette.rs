@@ -286,6 +286,8 @@ pub enum PaletteLabel {
     ControlNotTextField,
     /// `D125`: Firefox keeping accessibility services out.
     ControlClosedToAccessibility,
+    /// `OBS-258`: the system did not identify the focus in time.
+    ControlUnanswered,
 }
 
 pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
@@ -390,6 +392,7 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::ControlUnconfirmed => "a control not confirmed as a field",
         PaletteLabel::ControlNotTextField => "not a text field",
         PaletteLabel::ControlClosedToAccessibility => "a window closed to accessibility",
+        PaletteLabel::ControlUnanswered => "a control not identified in time",
     }
 }
 
@@ -413,6 +416,7 @@ pub fn sent_to(target: &Target) -> String {
         ControlKind::Unconfirmed => PaletteLabel::ControlUnconfirmed,
         ControlKind::NotTextField => PaletteLabel::ControlNotTextField,
         ControlKind::ClosedToAccessibility => PaletteLabel::ControlClosedToAccessibility,
+        ControlKind::Unanswered => PaletteLabel::ControlUnanswered,
     });
     match &target.program {
         Some(program) => {
@@ -910,6 +914,7 @@ mod tests {
             PaletteLabel::ControlUnconfirmed,
             PaletteLabel::ControlNotTextField,
             PaletteLabel::ControlClosedToAccessibility,
+            PaletteLabel::ControlUnanswered,
             PaletteLabel::Back,
             PaletteLabel::BackAction,
             PaletteLabel::Skip,
@@ -998,6 +1003,7 @@ mod tests {
                 | PaletteLabel::ControlUnconfirmed
                 | PaletteLabel::ControlNotTextField
                 | PaletteLabel::ControlClosedToAccessibility
+                | PaletteLabel::ControlUnanswered
                 | PaletteLabel::BackAction
                 | PaletteLabel::SkipAction
                 | PaletteLabel::NoOtherPack => false,

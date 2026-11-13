@@ -78,8 +78,9 @@ pub enum ClearingOutcome {
 
 /// Why clearing was left out. A reason each, because the tester is told a
 /// different true sentence for each: a focus the system does not describe as a
-/// field, one it does while the tool still keeps the keys out, and a window
-/// that shows nothing inside it for a cause the tester can change.
+/// field, one it does while the tool still keeps the keys out, a window that
+/// shows nothing inside it for a cause the tester can change, and a focus the
+/// system did not identify in time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SkipReason {
     /// The focus could not be confirmed as a text field (`D76`).
@@ -90,6 +91,8 @@ pub enum SkipReason {
     /// The focus is a window closed to accessibility - Firefox with its
     /// accessibility services kept out (`D125`).
     ClosedToAccessibility,
+    /// The system did not identify the focus in time (`OBS-258`).
+    Unanswered,
     /// This system types, and this build cannot press the clearing keys on it.
     NoClearingKeys,
 }
@@ -285,7 +288,8 @@ pub enum SendOutcome {
     /// Clearing was asked for and did not go through. The value was NOT sent.
     /// Never [`KeystrokeError::FieldUnconfirmed`],
     /// [`KeystrokeError::InTerminal`] or
-    /// [`KeystrokeError::ClosedToAccessibility`] or [`KeystrokeError::NoClearingKeys`]:
+    /// [`KeystrokeError::ClosedToAccessibility`], [`KeystrokeError::FocusUnanswered`] or
+    /// [`KeystrokeError::NoClearingKeys`]:
     /// those are skips, and the value goes on
     /// ([`ClearingOutcome::Skipped`]).
     NotCleared { error: KeystrokeError },
@@ -525,6 +529,9 @@ pub fn deliver_value(
                 Err(KeystrokeError::InTerminal) => ClearingOutcome::Skipped(SkipReason::Terminal),
                 Err(KeystrokeError::ClosedToAccessibility) => {
                     ClearingOutcome::Skipped(SkipReason::ClosedToAccessibility)
+                }
+                Err(KeystrokeError::FocusUnanswered) => {
+                    ClearingOutcome::Skipped(SkipReason::Unanswered)
                 }
                 Err(KeystrokeError::NoClearingKeys) => {
                     ClearingOutcome::Skipped(SkipReason::NoClearingKeys)
@@ -955,6 +962,36 @@ mod tests {
             clearing,
             ClearingOutcome::Skipped(SkipReason::ClosedToAccessibility)
         );
+        assert_eq!(
+            log.borrow().as_slice(),
+            ["keys:Home,Shift+End,Delete", "text:ab"]
+        );
+    }
+
+    #[test]
+    fn a_focus_not_identified_in_time_gets_the_value_uncleared_and_the_outcome_names_it() {
+        // `OBS-258`: the door pressed nothing, because the application did not
+        // answer in time. The value goes, and the reason is the time, so the
+        // tester is told that rather than that the focus is no field.
+        let log = log();
+        let spy = Spy::ready(&log);
+        let keys = KeySpy {
+            fail_with: Some(KeystrokeError::FocusUnanswered),
+            says: Vec::new(),
+            log: Rc::clone(&log),
+        };
+        let outcome = send_value(
+            &Shelf,
+            &Scripted::two(),
+            &spy,
+            &keys,
+            &request(1, Clearing::Line),
+            &mut |_| {},
+        );
+        let SendOutcome::Sent { clearing, .. } = outcome else {
+            panic!("a focus not identified in time is a skip, not a refusal, got {outcome:?}");
+        };
+        assert_eq!(clearing, ClearingOutcome::Skipped(SkipReason::Unanswered));
         assert_eq!(
             log.borrow().as_slice(),
             ["keys:Home,Shift+End,Delete", "text:ab"]

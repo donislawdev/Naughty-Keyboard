@@ -33,6 +33,7 @@ pub(crate) fn not_cleared(reason: SkipReason) -> String {
             "{CLEARING_SKIPPED_CLOSED_TO_ACCESSIBILITY} {}",
             nkb_adapters::i18n::closed_window_cause()
         ),
+        SkipReason::Unanswered => CLEARING_SKIPPED_UNANSWERED.to_owned(),
     }
 }
 
@@ -68,6 +69,16 @@ const CLEARING_SKIPPED_NO_KEYS: &str = "nkb send: not cleared first - this build
 /// this cause is known and the tester can change it, so the sentence ends with
 /// the cause of the system it runs on, in the program's own words (`D139`).
 const CLEARING_SKIPPED_CLOSED_TO_ACCESSIBILITY: &str = "nkb send: not cleared first - this window shows the system nothing inside it, so the clearing keys could reach beyond the field, and the value went in on top of what was there.";
+
+/// What `nkb send --clear` says when the system did not identify the focus in
+/// time (`OBS-258`).
+///
+/// The application did not answer within the limit of the question - measured
+/// on Linux, a page Firefox has just opened answers in 1 to 8 s, and in under a
+/// second once it has been shown for a while. The focus may well be a field, so
+/// the first sentence above would be false, and this one names the time and
+/// that the next send may find the application ready.
+const CLEARING_SKIPPED_UNANSWERED: &str = "nkb send: not cleared first - the system did not identify the focus in time, so the clearing keys could reach beyond the field, and the value went in on top of what was there. An application that is busy, or has just opened a page, answers late, so the next send may find it ready.";
 
 #[cfg(test)]
 mod tests {
@@ -107,6 +118,19 @@ mod tests {
                 "{closed}"
             );
         }
+    }
+
+    #[test]
+    fn a_focus_not_identified_in_time_says_so_and_not_that_the_focus_is_no_field() {
+        // `OBS-258`: the person was told "does not report this focus as a text
+        // field" about a field of a page that had just opened.
+        let said = not_cleared(SkipReason::Unanswered);
+        assert_eq!(said, CLEARING_SKIPPED_UNANSWERED);
+        assert!(
+            said.contains("did not identify the focus in time"),
+            "{said}"
+        );
+        assert!(!said.contains("does not report"), "{said}");
     }
 
     #[test]

@@ -41,9 +41,11 @@
 //!
 //! The answer is about the window in front only while every application answered. One that
 //! said nothing in time may be the one in front ([`Reply::Silent`]), and then whatever the
-//! others show is not about its window, so the look is `Unknown`. One that answered with an
-//! error has gone or does not know the question, holds no window in front, and is passed
-//! over.
+//! others show is not about its window, so the look is [`FocusedInput::Unanswered`], as is a
+//! look whose time ran out (`OBS-258`: a page Firefox has just opened answered in 1 to 8 s).
+//! One that answered with an error has gone or does not know the question, holds no window
+//! in front, and is passed over. A look that visited as many elements as it may is not about
+//! time - a larger page answers so every time - and stays `Unknown`.
 //!
 //! Nothing here reads a name, a description or text of any element: the questions are the
 //! children, the states and the role of an element, and `tests/atspi_reads_only_kinds.rs`
@@ -78,7 +80,8 @@ pub(crate) const STATUS_INTERFACE: &str = "org.a11y.Status";
 pub(crate) const CALL_WAIT: Duration = Duration::from_millis(300);
 
 /// How long the whole look may take. Measured on Firefox: 70 to 80 elements and two
-/// questions each, a few hundred milliseconds. A look that runs out is `Unknown`, never a
+/// questions each, a few hundred milliseconds, and on a page it has just opened 1 to 8 s
+/// (2026-11-13, `OBS-258`). A look that runs out is [`FocusedInput::Unanswered`], never a
 /// palette that hangs.
 pub(crate) const LOOK_WAIT: Duration = Duration::from_millis(900);
 
@@ -293,8 +296,10 @@ pub(crate) enum Found {
     /// More than one window in front shows an element with the focus. One of them is
     /// stale, and which is not known.
     Several,
-    /// The time or the number of elements ran out before the answer.
+    /// The time ran out before the answer.
     Spent,
+    /// The walk visited as many elements as it may before the answer.
+    TooMany,
     /// An application did not answer, so the window in front may be one of its windows and
     /// what the others show is not about it (`OBS-238`).
     Silent,
@@ -305,6 +310,7 @@ enum Walk<N> {
     Holder(N, Vec<u32>),
     Nothing,
     Spent,
+    TooMany,
 }
 
 /// Looks for the element that holds the keyboard focus, in the windows in front.
@@ -347,6 +353,7 @@ pub(crate) fn find<T: Tree>(tree: &mut T) -> Found {
             Walk::Holder(node, states) => holders.push((node, states)),
             Walk::Nothing => {}
             Walk::Spent => return Found::Spent,
+            Walk::TooMany => return Found::TooMany,
         }
     }
     match holders.pop() {
@@ -363,7 +370,10 @@ pub(crate) fn find<T: Tree>(tree: &mut T) -> Found {
 fn walk<T: Tree>(tree: &mut T, window: T::Node, left: &mut usize) -> Walk<T::Node> {
     let mut stack = vec![window];
     while let Some(node) = stack.pop() {
-        if *left == 0 || !tree.time_left() {
+        if *left == 0 {
+            return Walk::TooMany;
+        }
+        if !tree.time_left() {
             return Walk::Spent;
         }
         *left -= 1;
@@ -388,15 +398,16 @@ fn walk<T: Tree>(tree: &mut T, window: T::Node, left: &mut usize) -> Walk<T::Nod
 /// A look that found no window in front or nothing with the focus, with the switch of the
 /// bus off, is an application that shows nothing because it was not asked to: that is
 /// `ClosedToAccessibility`, and the person is told so. With the switch on the same
-/// finding is just not recognised. A look that ran out, found two, or met an application
-/// that did not answer, says nothing.
+/// finding is just not recognised. A look whose time ran out, or that met an application
+/// that did not answer, is `Unanswered`: the system did not identify the focus in time, and
+/// the person is told that rather than that the focus is no field. A look that found two,
+/// or visited as many elements as it may, says nothing.
 pub(crate) fn settle(found: Found, switched_on: bool) -> FocusedInput {
     match found {
         Found::Kind(kind) => kind,
         Found::NoWindow | Found::NoFocus if !switched_on => FocusedInput::ClosedToAccessibility,
-        Found::NoWindow | Found::NoFocus | Found::Several | Found::Spent | Found::Silent => {
-            FocusedInput::Unknown
-        }
+        Found::Spent | Found::Silent => FocusedInput::Unanswered,
+        Found::NoWindow | Found::NoFocus | Found::Several | Found::TooMany => FocusedInput::Unknown,
     }
 }
 
@@ -816,7 +827,7 @@ mod tests {
         let window = tree.add(23, &[state::ACTIVE], &row);
         let application = tree.add(75, &[], &[window]);
         tree.applications.push(application);
-        assert_eq!(find(&mut tree), Found::Spent);
+        assert_eq!(find(&mut tree), Found::TooMany);
     }
 
     #[test]
@@ -844,11 +855,20 @@ mod tests {
     }
 
     #[test]
-    fn a_look_that_ran_out_found_two_or_met_silence_says_nothing_whatever_the_switch() {
+    fn a_look_that_ran_out_of_time_or_met_silence_was_not_answered_in_time_whatever_the_switch() {
+        // `OBS-258`: a page Firefox had just opened answered the look in 1 to 8 s, or not at
+        // all, and the person was told the focus is no field.
         for on in [true, false] {
-            assert_eq!(settle(Found::Spent, on), FocusedInput::Unknown);
+            assert_eq!(settle(Found::Spent, on), FocusedInput::Unanswered);
+            assert_eq!(settle(Found::Silent, on), FocusedInput::Unanswered);
+        }
+    }
+
+    #[test]
+    fn a_look_that_found_two_or_visited_all_it_may_says_nothing_whatever_the_switch() {
+        for on in [true, false] {
             assert_eq!(settle(Found::Several, on), FocusedInput::Unknown);
-            assert_eq!(settle(Found::Silent, on), FocusedInput::Unknown);
+            assert_eq!(settle(Found::TooMany, on), FocusedInput::Unknown);
         }
     }
 

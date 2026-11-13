@@ -103,6 +103,11 @@ pub(crate) fn say_not_cleared(err: &mut impl Write, error: &KeystrokeError) {
             err,
             "nkb send: the window shows the system nothing inside it, so it was not cleared and nothing was sent."
         ),
+        // And for a focus the system did not identify in time (`OBS-258`).
+        KeystrokeError::FocusUnanswered => writeln!(
+            err,
+            "nkb send: the system did not identify the focus in time, so it was not cleared and nothing was sent."
+        ),
         // And for a system whose clearing keys this build cannot press.
         KeystrokeError::NoClearingKeys => writeln!(
             err,

@@ -977,6 +977,8 @@ mod tests {
             KeystrokeError::NoTextField,
             KeystrokeError::FieldUnconfirmed,
             KeystrokeError::InTerminal,
+            KeystrokeError::ClosedToAccessibility,
+            KeystrokeError::FocusUnanswered,
             KeystrokeError::NoClearingKeys,
         ];
         let mut seen = std::collections::BTreeSet::new();
