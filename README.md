@@ -453,8 +453,9 @@ says so.
   and xfwm4. KDE and other desktops are untested. Under Wayland `nkb send` hands the text to the input
   method and cannot tell whether a field had the focus. A program that reads keys through an input method
   under X11, such as xterm with IBus, can lose the end of a long run of characters the keyboard layout
-  lacks. On Linux the palette does not remember where it stood, and under X11 its shortcuts window cannot
-  record a chord.
+  lacks. Under Wayland such a program, which runs through XWayland, can also drop combining accents, the
+  joiner inside emoji sequences and the end of a long value, so check the field. On Linux the palette
+  does not remember where it stood, and under X11 its shortcuts window cannot record a chord.
 - **The system may change what is typed.** On macOS the text substitutions of the system can turn a
   typed value into another one, and the palette and `nkb send` say so when one that is switched on could
   have acted on that very value.
