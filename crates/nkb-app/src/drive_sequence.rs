@@ -34,14 +34,20 @@
 //! values go in, of which the tester sees the last.
 //!
 //! So after every action that reached the field, the loop asks the shortcuts
-//! for whatever is already queued - a zero wait - and answers each such press
-//! with [`Message::PressedWhileBusy`] rather than acting on it. The gate is
+//! for whatever is already queued - a zero wait - and answers such presses
+//! with [`Message::PressedWhileBusy`] rather than acting on them, once per
+//! action and in the outcome of the send they arrived during. An outcome of
+//! their own would replace the words of that send on the palette, which shows
+//! the messages of the last outcome only, and a send that failed would go
+//! unsaid behind "press it again" (`OBS-255`). The gate is
 //! [`Outcome::attempted_send`]: a press queued behind an instant answer (an
 //! end-of-pack warning, a missing target) was not pressed while the tool was
 //! busy, and dropping it would lose the "press again to start over" that
 //! `ux-spec.md` 4 promises.
 
 use std::time::Duration;
+
+use nkb_core::hotkeys::HotkeyAction;
 
 use crate::advance_sequence::{AdvanceSequence, Message, Outcome, Ports};
 use crate::ports::{LiveShortcuts, Wait};
@@ -70,8 +76,9 @@ pub enum Ended {
 /// gives it a fraction of a second. A zero tick is not refused - a test with a
 /// scripted source wants exactly that - but in a product it would spin.
 ///
-/// Every outcome reaches `present` in the order it was produced, including one
-/// per press dropped for arriving during a send.
+/// Every outcome reaches `present` in the order it was produced. A press
+/// dropped for arriving during a send is named after the messages of that
+/// send, in its outcome, once per action.
 pub fn drive_sequence(
     shortcuts: &dyn LiveShortcuts,
     sequence: &mut AdvanceSequence,
@@ -98,24 +105,23 @@ pub fn drive_sequence(
             Wait::Pressed(action) => action,
         };
 
-        let outcome = sequence.on_action(action, ports);
-        let reached_the_field = outcome.attempted_send;
-        present(outcome);
-
-        if reached_the_field {
+        let mut outcome = sequence.on_action(action, ports);
+        if outcome.attempted_send {
             // Whatever queued up during the send was pressed while busy. It is
-            // answered, one message per press, and never acted on - `W1`.
+            // answered after the words of the send and never acted on - `W1`.
+            let mut dropped: Vec<HotkeyAction> = Vec::new();
             while let Wait::Pressed(late) = shortcuts.next(Duration::ZERO) {
-                present(Outcome {
-                    sequence: sequence.sequence(),
-                    sent: None,
-                    messages: vec![Message::PressedWhileBusy { action: late }],
-                    attempted_send: false,
-                    clipboard_for_window: sequence.clipboard_for_window(),
-                    upcoming: sequence.upcoming(),
-                });
+                if !dropped.contains(&late) {
+                    dropped.push(late);
+                }
             }
+            outcome.messages.extend(
+                dropped
+                    .into_iter()
+                    .map(|action| Message::PressedWhileBusy { action }),
+            );
         }
+        present(outcome);
     }
 }
 
@@ -127,7 +133,7 @@ pub fn drive_sequence(
 )]
 mod tests {
     use super::*;
-    use crate::ports::{KeystrokeError, ShortcutRegistration, TargetRef};
+    use crate::ports::{KeystrokeError, ShortcutRegistration, StopReason, TargetRef};
     use crate::test_support::*;
     use nkb_core::hotkeys::HotkeyAction;
     use nkb_core::pack::Risk;
@@ -280,25 +286,84 @@ mod tests {
         let (ended, presented) = run(&shortcuts, &mut sequence, turns(1));
 
         assert_eq!(ended, Ended::Stopped);
-        assert_eq!(presented.len(), 3);
-        assert!(presented[0].sent.is_some());
-        for late in &presented[1..] {
-            assert!(late.sent.is_none(), "a dropped press sends nothing");
-            assert_eq!(
-                late.messages,
-                vec![Message::PressedWhileBusy {
-                    action: HotkeyAction::NextValue
-                }]
-            );
-            // The next band (UX-GUI-001) stays what it is: a dropped press
-            // changes nothing about which value comes next.
-            assert_eq!(late.upcoming, sequence.upcoming());
-            assert!(late.upcoming.is_some(), "value 2 of 3 is still upcoming");
-        }
+        assert_eq!(
+            presented.len(),
+            1,
+            "a dropped press has no outcome of its own, which would replace the words of the send"
+        );
+        let outcome = &presented[0];
+        assert!(outcome.sent.is_some());
+        assert_eq!(
+            outcome.messages.last(),
+            Some(&Message::PressedWhileBusy {
+                action: HotkeyAction::NextValue
+            })
+        );
+        assert_eq!(
+            outcome
+                .messages
+                .iter()
+                .filter(|message| matches!(message, Message::PressedWhileBusy { .. }))
+                .count(),
+            1,
+            "two presses of one action are named once"
+        );
+        assert_eq!(shortcuts.remaining(), 0, "both were drained");
+        // The next band (UX-GUI-001) stays what it is: a dropped press
+        // changes nothing about which value comes next.
+        assert_eq!(outcome.upcoming, sequence.upcoming());
+        assert!(outcome.upcoming.is_some(), "value 2 of 3 is still upcoming");
         assert_eq!(
             sequence.counter(),
             Some((1, 3)),
             "the counter moved once: the queued presses did not advance it"
+        );
+    }
+
+    #[test]
+    fn a_send_that_failed_keeps_its_words_when_a_press_arrives_during_it() {
+        // `OBS-255`: the second press came while the field was being cleared,
+        // the clearing stopped, and the answer to the press replaced the words
+        // that said so. The palette showed "press it again" and nothing else.
+        let shortcuts = Scripted::of(&[
+            (Arrives::Later, NEXT),
+            (Arrives::Queued, NEXT),
+            (Arrives::Queued, Wait::Pressed(HotkeyAction::MarkOk)),
+            (Arrives::Queued, NEXT),
+        ]);
+        let mut sequence = chosen(Risk::Normal);
+        let kit = Kit::with_keys(FakeKeys::failing(KeystrokeError::Partial {
+            chords_sent: 1,
+            chords_expected: 3,
+            reason: StopReason::Dropped,
+        }));
+        let mut presented: Vec<Outcome> = Vec::new();
+        let _ = drive_sequence(
+            &shortcuts,
+            &mut sequence,
+            &kit.ports(),
+            TICK,
+            &mut turns(1),
+            &mut |outcome| presented.push(outcome),
+        );
+
+        assert_eq!(presented.len(), 1);
+        let messages = &presented[0].messages;
+        assert!(
+            messages.contains(&Message::ClearingFailed),
+            "the send says why it stopped: {messages:?}"
+        );
+        assert_eq!(
+            messages.iter().rev().take(2).collect::<Vec<_>>(),
+            [
+                &Message::PressedWhileBusy {
+                    action: HotkeyAction::MarkOk
+                },
+                &Message::PressedWhileBusy {
+                    action: HotkeyAction::NextValue
+                },
+            ],
+            "after the words of the send, each dropped action once, in the order pressed"
         );
     }
 

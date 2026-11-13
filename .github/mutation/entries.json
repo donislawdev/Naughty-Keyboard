@@ -2214,15 +2214,6 @@
       "runner": "rust:nkb-app:lib"
     },
     {
-      "id": "M408",
-      "why": "a press refused during a send (W1) puts out the Next band, though the next value did not change",
-      "file": "crates/nkb-app/src/drive_sequence.rs",
-      "find": "                    upcoming: sequence.upcoming(),",
-      "replace": "                    upcoming: None,",
-      "test": "drive_sequence::tests::presses_queued_during_a_send_are_named_not_replayed",
-      "runner": "rust:nkb-app:lib"
-    },
-    {
       "id": "M409",
       "why": "the offensive mark does not reach the Next band in the window",
       "file": "crates/nkb-gui/src/live/view.rs",
@@ -11385,7 +11376,7 @@
       "id": "M1476",
       "why": "the engine reports a held modifier and does not take the key",
       "file": "crates/nkb-sys/src/linux/ibus/engine.rs",
-      "find": "        judged.taken()",
+      "find": "        handled.taken",
       "replace": "        false",
       "test": "linux::ibus::engine::tests::the_key_waited_for_is_told_to_the_send_and_taken_only_when_a_modifier_is_held",
       "runner": "rust:nkb-sys:lib",
@@ -11393,13 +11384,21 @@
     },
     {
       "id": "M1477",
-      "why": "the engine says the release of a key and not its press, so the send hears nothing and stops",
-      "file": "crates/nkb-sys/src/linux/ibus/engine.rs",
-      "find": "        if judged != Judgement::Unrelated && !is_release(state) {",
-      "replace": "        if judged != Judgement::Unrelated && is_release(state) {",
-      "test": "linux::ibus::engine::tests::the_release_of_a_key_is_judged_as_its_press_but_said_once",
-      "runner": "rust:nkb-sys:lib",
-      "system": "linux"
+      "why": "a press of the key waited for is not said, so the send hears nothing and stops",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "            said: (judged != Judgement::Unrelated).then_some(judged),",
+      "replace": "            said: None,",
+      "test": "linux_clearing_rules::tests::a_release_goes_where_its_press_went_whatever_the_hand_holds_by_then",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1859",
+      "why": "a release is judged by the modifiers of its own moment, so a key whose press went through stays down in the application, and a held Delete empties the field past its line",
+      "file": "crates/nkb-sys/src/linux_clearing_rules.rs",
+      "find": "                taken: down.take() == Some(Down::Withheld),",
+      "replace": "                taken: { let _ = down.take(); judge_key(keyval, state, expected).taken() },",
+      "test": "linux_clearing_rules::tests::a_release_goes_where_its_press_went_whatever_the_hand_holds_by_then",
+      "runner": "rust:nkb-sys:lib"
     },
     {
       "id": "M1478",
