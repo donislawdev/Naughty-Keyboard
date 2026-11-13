@@ -25,10 +25,15 @@
 //!
 //! So the engine is the sensor and the filter at once, and the recipe is sent as a dialogue:
 //! each key is announced to the engine first, and the engine says what it found on arrival.
+//!
+//! GNOME 50.1, 2026-11-13 (`OBS-255`): the hand pressed the shortcut again between a `Home`
+//! that went through and its release. A release judged by the modifiers of its own moment was
+//! taken, and the application kept `Home` down and repeated it 1748 times in a minute. So a
+//! release is not judged: it goes where its press went (`KeysDown`).
 
 use core::time::Duration;
 
-use crate::linux_ibus_rules::IBUS_MODIFIER_MASK;
+use crate::linux_ibus_rules::{IBUS_MODIFIER_MASK, is_release};
 use crate::linux_rules::{Keymap, LayoutKey};
 use crate::portal::Unavailable;
 use crate::{Chord, NavKey, SendError, StopReason};
@@ -132,26 +137,108 @@ impl Judgement {
     }
 }
 
-/// What to make of a key the engine was handed, while the dialogue of the recipe is on.
+/// What to make of the press of a key the engine was handed, while the dialogue of the recipe
+/// is on.
 ///
 /// Only the key being waited for is judged: every other key, the modifiers included, goes
 /// to the application as it came. A key of the recipe with a modifier it does not have is
-/// the hand holding that modifier, and is taken whole, press and release alike, so the
-/// application does not get half of it.
-pub(crate) fn judge_key(keyval: u32, state: u32, expected: Option<Expected>) -> Judgement {
+/// the hand holding that modifier, and is taken. A release is never judged here, because the
+/// hand may press or let go of a modifier between the press and the release (`KeysDown`).
+fn judge_key(keyval: u32, state: u32, expected: Option<Expected>) -> Judgement {
     let Some(expected) = expected else {
         return Judgement::Unrelated;
     };
     if keyval != expected.keysym {
         return Judgement::Unrelated;
     }
-    // The bit that marks a release is not among the modifiers, so a key is judged as its press was.
     let held = state & MODIFIERS;
     let ours = if expected.shifted { SHIFT } else { 0 };
     match held_name(held & !ours) {
         Some(name) => Judgement::Held(name),
         None if held & ours != ours => Judgement::NoShift,
         None => Judgement::Clean,
+    }
+}
+
+/// What the application saw of a key of the recipe that is down.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Down {
+    /// A press of it reached the application, which holds the key down until its release.
+    Delivered,
+    /// Every press of it since its last release was taken, so the application never saw it.
+    Withheld,
+}
+
+/// What the engine does with one event of a key: whether it takes it, and what it tells the
+/// send, which hears only of a press of the key it waits for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Handled {
+    pub taken: bool,
+    pub said: Option<Judgement>,
+}
+
+impl Handled {
+    /// Handed to the application, and nothing said.
+    const PASSED: Self = Self {
+        taken: false,
+        said: None,
+    };
+}
+
+/// The keys of the recipe that are down, each with what the application saw of it, so that a
+/// release goes where its press went. A release taken after a press that went through leaves
+/// the key down in the application, which repeats it until another key comes (`OBS-255`), and
+/// for `Delete` that is a field emptied past its line. Only the three keys of the recipe are
+/// ever taken, so only they are remembered, and each from its press to its release.
+#[derive(Debug, Default)]
+pub(crate) struct KeysDown {
+    home: Option<Down>,
+    end: Option<Down>,
+    delete: Option<Down>,
+}
+
+impl KeysDown {
+    /// What the engine does with the event of key `keyval` whose state is `state`, while it
+    /// waits for `expected`. A press is judged by the modifiers the hand holds. A release is
+    /// taken only when no press of its key since the last release reached the application,
+    /// and a release whose press the engine never saw goes to the application.
+    pub(crate) fn handle(
+        &mut self,
+        keyval: u32,
+        state: u32,
+        expected: Option<Expected>,
+    ) -> Handled {
+        let Some(down) = self.of(keyval) else {
+            return Handled::PASSED;
+        };
+        if is_release(state) {
+            return Handled {
+                taken: down.take() == Some(Down::Withheld),
+                said: None,
+            };
+        }
+        let judged = judge_key(keyval, state, expected);
+        let taken = judged.taken();
+        // An application that holds the key from an earlier press is given its release, so
+        // a press taken after it does not change what the release does.
+        *down = Some(if taken && *down != Some(Down::Delivered) {
+            Down::Withheld
+        } else {
+            Down::Delivered
+        });
+        Handled {
+            taken,
+            said: (judged != Judgement::Unrelated).then_some(judged),
+        }
+    }
+
+    fn of(&mut self, keyval: u32) -> Option<&mut Option<Down>> {
+        match keyval {
+            KEYSYM_HOME => Some(&mut self.home),
+            KEYSYM_END => Some(&mut self.end),
+            KEYSYM_DELETE => Some(&mut self.delete),
+            _ => None,
+        }
     }
 }
 
@@ -403,11 +490,10 @@ mod tests {
     }
 
     #[test]
-    fn the_lock_bits_and_the_release_bit_change_nothing() {
+    fn the_lock_bits_change_nothing() {
         // Measured: Num Lock is on in a virtual machine more often than not.
-        let state = LOCK | NUM_LOCK | IBUS_RELEASE_MASK;
         assert_eq!(
-            judge_key(KEYSYM_HOME, state, plain(NavKey::Home)),
+            judge_key(KEYSYM_HOME, LOCK | NUM_LOCK, plain(NavKey::Home)),
             Judgement::Clean
         );
     }
@@ -433,14 +519,96 @@ mod tests {
         }
     }
 
+    const RELEASED: u32 = IBUS_RELEASE_MASK;
+
     #[test]
-    fn the_release_of_a_key_is_judged_as_its_press_was() {
-        let held = CTRL | IBUS_RELEASE_MASK;
+    fn a_release_goes_where_its_press_went_whatever_the_hand_holds_by_then() {
+        // `OBS-255`: the hand pressed `Ctrl+Alt` between a clean `Home` and its release, the
+        // release was taken, and the application kept `Home` down. The send may also have
+        // moved on to the next key by the time a release arrives.
+        for (press, release, taken) in [
+            (0, 0, false),
+            (0, CTRL | ALT, false),
+            (CTRL, CTRL, true),
+            (CTRL, 0, true),
+            (SHIFT, LOCK | NUM_LOCK, true),
+        ] {
+            for later in [plain(NavKey::Home), shifted(NavKey::End), None] {
+                let mut down = KeysDown::default();
+                let pressed = down.handle(KEYSYM_HOME, press, plain(NavKey::Home));
+                assert_eq!(pressed.taken, taken, "press {press:#x}");
+                assert!(
+                    pressed.said.is_some(),
+                    "the press of the key waited for is said"
+                );
+                assert_eq!(
+                    down.handle(KEYSYM_HOME, release | RELEASED, later),
+                    Handled { taken, said: None },
+                    "press {press:#x}, release {release:#x}, waiting for {later:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_release_whose_press_the_engine_never_saw_goes_to_the_application() {
+        let mut down = KeysDown::default();
+        for state in [0, CTRL, SHIFT | ALT] {
+            assert_eq!(
+                down.handle(KEYSYM_HOME, state | RELEASED, plain(NavKey::Home)),
+                Handled::PASSED,
+                "{state:#x}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_key_is_forgotten_at_its_release_and_judged_afresh_at_its_next_press() {
+        let mut down = KeysDown::default();
+        let home = plain(NavKey::Home);
+        assert!(down.handle(KEYSYM_HOME, CTRL, home).taken);
+        assert!(down.handle(KEYSYM_HOME, RELEASED, home).taken);
         assert_eq!(
-            judge_key(KEYSYM_HOME, held, plain(NavKey::Home)),
-            Judgement::Held("Ctrl"),
-            "a press that was taken has its release taken, or the application gets half a key"
+            down.handle(KEYSYM_HOME, CTRL | RELEASED, home),
+            Handled::PASSED
         );
+        assert!(!down.handle(KEYSYM_HOME, 0, home).taken);
+        assert!(!down.handle(KEYSYM_HOME, CTRL | RELEASED, home).taken);
+    }
+
+    #[test]
+    fn an_application_that_holds_the_key_is_given_its_release_after_a_press_that_was_taken() {
+        // Two presses before a release are a key repeated by the compositor or pressed on two
+        // keyboards at once. The application saw the first and waits for a release.
+        let mut down = KeysDown::default();
+        let delete = plain(NavKey::Delete);
+        assert!(!down.handle(KEYSYM_DELETE, 0, delete).taken);
+        assert!(down.handle(KEYSYM_DELETE, CTRL, delete).taken);
+        assert!(!down.handle(KEYSYM_DELETE, CTRL | RELEASED, delete).taken);
+    }
+
+    #[test]
+    fn each_key_of_the_recipe_is_remembered_apart_and_no_other_key_is() {
+        let mut down = KeysDown::default();
+        assert!(down.handle(KEYSYM_HOME, CTRL, plain(NavKey::Home)).taken);
+        assert!(down.handle(KEYSYM_END, CTRL, plain(NavKey::End)).taken);
+        assert!(!down.handle(KEYSYM_DELETE, CTRL | RELEASED, None).taken);
+        assert!(down.handle(KEYSYM_END, RELEASED, None).taken);
+        assert!(down.handle(KEYSYM_HOME, RELEASED, None).taken);
+        // A letter or a modifier is the person's, pressed or let go, whatever is waited for.
+        for keyval in [0x0061, 0xffe3, KEYSYM_SHIFT_L] {
+            let waited = Some(Expected {
+                keysym: keyval,
+                shifted: false,
+            });
+            for state in [CTRL, CTRL | RELEASED] {
+                assert_eq!(
+                    down.handle(keyval, state, waited),
+                    Handled::PASSED,
+                    "{keyval:#x} {state:#x}"
+                );
+            }
+        }
     }
 
     #[test]

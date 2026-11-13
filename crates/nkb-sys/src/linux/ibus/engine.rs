@@ -7,7 +7,8 @@
 //! it ever does is the commit that `mod.rs` emits from its path. Two keys are the exception:
 //! `Escape`, which is the person asking for a send to stop, and, while the keys that clear a
 //! field are being sent (`keys.rs`), the one key of the recipe that is expected next, which
-//! the engine reports and takes when the hand holds a modifier (`OBS-229`). And it tells the
+//! the engine reports and takes when the hand holds a modifier (`OBS-229`), and whose release
+//! then goes where its press went (`OBS-255`). And it tells the
 //! send what the daemon says of the focus, with the input context and its client, which the
 //! daemon names to an engine that asks for them (`FocusId`, `D159`).
 
@@ -20,7 +21,7 @@ use zbus::zvariant::{OwnedObjectPath, StructureBuilder, Value};
 use zbus::{ObjectServer, interface};
 
 use super::Failed;
-use crate::linux_clearing_rules::{Expected, Judgement, judge_key};
+use crate::linux_clearing_rules::{Expected, Judgement, KeysDown};
 use crate::linux_ibus_rules::{Heard, is_plain_escape, is_release};
 
 /// The key the engine is waiting for, set by the send and read by the engine on every key.
@@ -97,6 +98,7 @@ impl Factory {
             events: self.events.clone(),
             escape: Arc::clone(&self.escape),
             gate: Arc::clone(&self.gate),
+            down: Mutex::default(),
         };
         server.at(path.as_str(), engine).await?;
         server.at(path.as_str(), Service).await?;
@@ -109,6 +111,8 @@ struct Engine {
     events: Sender<Event>,
     escape: Arc<AtomicBool>,
     gate: Gate,
+    /// The keys of the recipe that are down, so that each release goes where its press went.
+    down: Mutex<KeysDown>,
 }
 
 impl Engine {
@@ -116,16 +120,20 @@ impl Engine {
         let _ = self.events.send(Event::Focus(heard));
     }
 
-    /// What the engine makes of the key the recipe waits for: told to the send for its press,
-    /// and taken when the hand holds a modifier the recipe does not have. Every other key is
-    /// handed back.
+    /// What the engine makes of a key of the recipe: the press of the key the recipe waits for
+    /// is told to the send, and taken when the hand holds a modifier the recipe does not have,
+    /// and a release is taken when its press was. Every other key is handed back.
     fn recipe_key(&self, keyval: u32, state: u32) -> bool {
         let expected = *self.gate.lock().unwrap_or_else(PoisonError::into_inner);
-        let judged = judge_key(keyval, state, expected);
-        if judged != Judgement::Unrelated && !is_release(state) {
+        let handled = self
+            .down
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .handle(keyval, state, expected);
+        if let Some(judged) = handled.said {
             let _ = self.events.send(Event::Key(judged));
         }
-        judged.taken()
+        handled.taken
     }
 }
 
@@ -318,8 +326,19 @@ mod tests {
             events,
             escape: Arc::new(AtomicBool::new(false)),
             gate: Arc::clone(&gate),
+            down: Mutex::default(),
         };
         (engine, gate, heard)
+    }
+
+    fn keys_said(heard: &std::sync::mpsc::Receiver<Event>) -> Vec<Judgement> {
+        heard
+            .try_iter()
+            .filter_map(|event| match event {
+                Event::Key(judged) => Some(judged),
+                _ => None,
+            })
+            .collect()
     }
 
     const HOME: u32 = 0xff50;
@@ -357,7 +376,7 @@ mod tests {
     }
 
     #[test]
-    fn the_release_of_a_key_is_judged_as_its_press_but_said_once() {
+    fn a_release_goes_where_its_press_went_and_says_nothing() {
         let (engine, gate, heard) = engine_with_gate();
         expect(
             &gate,
@@ -366,9 +385,32 @@ mod tests {
                 shifted: false,
             }),
         );
-        assert!(engine.process_key_event(HOME, 0, CTRL | RELEASED));
-        assert!(!engine.process_key_event(HOME, 0, RELEASED));
-        assert!(heard.try_recv().is_err(), "a release says nothing");
+        // `OBS-255`: the hand pressed `Ctrl` between the press of the key and its release.
+        assert!(
+            !engine.process_key_event(HOME, 0, 0),
+            "the clean press goes"
+        );
+        assert!(
+            !engine.process_key_event(HOME, 0, CTRL | RELEASED),
+            "and so does its release, or the application keeps the key down"
+        );
+        assert!(
+            engine.process_key_event(HOME, 0, CTRL),
+            "a held press is taken"
+        );
+        assert!(
+            engine.process_key_event(HOME, 0, RELEASED),
+            "and so is its release, after the hand let go"
+        );
+        assert!(
+            !engine.process_key_event(HOME, 0, CTRL | RELEASED),
+            "a release whose press the engine did not see is the application's"
+        );
+        assert_eq!(
+            keys_said(&heard),
+            [Judgement::Clean, Judgement::Held("Ctrl")],
+            "each press is said once, and a release never"
+        );
     }
 
     #[test]

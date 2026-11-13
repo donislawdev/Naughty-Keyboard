@@ -162,8 +162,8 @@ pub fn starts_clearing(settings: &Settings) -> Clearing {
 
 /// What the value band does with this view.
 pub(super) enum ValueBand {
-    /// This turn produced no value - a warning, a refusal, a press that
-    /// arrived while busy. The palette KEEPS THE PREVIOUS VALUE on screen:
+    /// This turn produced no value - a warning or a refusal. The palette
+    /// KEEPS THE PREVIOUS VALUE on screen:
     /// blanking it would take away the thing the message is about.
     Keep,
     /// Another pack is in use now. The value on screen came from the one
