@@ -21,8 +21,10 @@
 //!    "sent" (`OBS-231`, `D160`),
 //! 4. when a spare key is needed, one tap of an unmapped key makes the server
 //!    announce its map. The first XTest key event of a connection does, and a
-//!    remap made before it is gone (point 1). A value the layout types alone gets
-//!    no tap and no remap,
+//!    remap made before it is gone (point 1). The key tapped is one the send never
+//!    rewrites (`SpareKeys`), so an application that reads the tap late finds it
+//!    still blank (`OBS-253`). A value the layout types alone gets no tap and no
+//!    remap,
 //! 5. a batch is: rewrite the spare keys, look at the modifiers the person holds and at
 //!    the layout group (`hands_off`: `Alt` and Caps Lock stop the send, `Ctrl` and `Super`
 //!    are waited for, `Shift`, `AltGr` and a switched group count for a batch with a key of
@@ -66,7 +68,7 @@ use super::watch::{
 };
 use crate::cadence::{Cadence, PROGRESS_INTERVAL};
 use crate::linux_clearing_rules::{NoKey, acted_after_silence, keys_for, modifier_stop};
-use crate::linux_remap_rules::{Rewrite, ours, span};
+use crate::linux_remap_rules::{Rewrite, SpareKeys, ours, span};
 use crate::linux_rules::{
     Batch, FIRST_BATCH_CHARS, KEYSYM_ESCAPE, Keymap, LOOK_EVERY, LayoutKey, LayoutKeys,
     PING_ANSWER_MASK, REMAP_SETTLE, Refusal, UNPACED_SETTLE, WARMUP_SETTLE, batch_of_value,
@@ -697,7 +699,11 @@ pub(crate) fn send_text(
     // What the keys of the layout type depends on the state just read, so the table of
     // them is made after the wait. A value they type alone needs no spare key.
     let layout = LayoutKeys::typing(&keyboard.keymap, keyboard.shift_key, state);
-    let spare = keyboard.keymap.spare_keycodes();
+    let all_spare = keyboard.keymap.spare_keycodes();
+    let SpareKeys {
+        warm_up: warm_up_key,
+        rewritten: spare,
+    } = SpareKeys::of(&all_spare);
     let needs_spare = keysyms
         .iter()
         .any(|keysym| layout.key_for(*keysym).is_none());
@@ -721,12 +727,12 @@ pub(crate) fn send_text(
     // a lock somebody left on is found here, before anything is pressed (`OBS-231`).
     hands_off(&server, &keyboard, state, false, front, &mut escape, halt)
         .map_err(|reason| stopped_before_batch(reason, 0, expected, true))?;
-    if needs_spare {
-        warm_up(&server, spare[0]).map_err(lost)?;
+    if let (true, Some(key)) = (needs_spare, warm_up_key) {
+        warm_up(&server, key).map_err(lost)?;
     }
     let mut remapped = Remapped {
         conn: &server.conn,
-        spare: &spare,
+        spare,
         written: vec![0; spare.len()],
         owed: Duration::ZERO,
         journal: lock.as_mut(),
@@ -783,7 +789,7 @@ pub(crate) fn send_text(
         )
         .map_err(|reason| stopped_before_batch(reason, arrived, expected, first == 0))?;
         let on_the_wire = move |reason| stopped_on_the_wire(arrived, expected, reason, layout_keys);
-        let Ok(used_spare) = type_batch(&server, &spare, &batch, &keysyms, &layout) else {
+        let Ok(used_spare) = type_batch(&server, spare, &batch, &keysyms, &layout) else {
             return Err(on_the_wire(StopReason::Dropped));
         };
         let answer = match pinged {

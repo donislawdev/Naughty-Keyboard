@@ -14,7 +14,7 @@ Tam, gdzie system nie ma sposobu, `nkb send` to mówi i kończy się kodem 4, a 
 
 ## Czy sprawdzono to na każdym pulpicie Linuksa?
 
-Nie. Zmierzono to tylko na Ubuntu 26.04: GNOME 50 na Waylandzie i X11 z openbox i xfwm4. KDE i inne pulpity nie były sprawdzane. Pod Waylandem `nkb send` przekazuje tekst metodzie wprowadzania i nie umie powiedzieć, czy jakieś pole miało fokus. Pod X11 program, który czyta klawisze przez metodę wprowadzania, na przykład xterm z IBus, może zgubić koniec długiego ciągu znaków, których układ klawiatury nie ma. Na Linuksie paleta nie pamięta, gdzie stała, a pod X11 jej okno skrótów nie nagra kombinacji.
+Nie. Zmierzono to tylko na Ubuntu 26.04: GNOME 50 na Waylandzie i X11 z openbox i xfwm4. KDE i inne pulpity nie były sprawdzane. Pod Waylandem `nkb send` przekazuje tekst metodzie wprowadzania i nie umie powiedzieć, czy jakieś pole miało fokus. Pod X11 program, który czyta klawisze przez metodę wprowadzania, na przykład xterm z IBus, może zgubić koniec długiego ciągu znaków, których układ klawiatury nie ma. Pod Waylandem taki program, który działa przez XWayland, może też zgubić doklejane akcenty, łącznik wewnątrz sekwencji emoji i koniec długiej wartości, więc sprawdź pole. Na Linuksie paleta nie pamięta, gdzie stała, a pod X11 jej okno skrótów nie nagra kombinacji.
 
 ## Czy system może zmienić to, co zostało wpisane?
 

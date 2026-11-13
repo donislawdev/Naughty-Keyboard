@@ -33,6 +33,11 @@
 //! journal. A program that wrote the same keysym on the same key looks like this one. A server
 //! restarted between two sends does not hold the key any more, so the journal names a key
 //! that carries nothing, and nothing happens to it.
+//!
+//! # The key of the warm-up
+//!
+//! The tap before the first remap goes to a spare key the send never rewrites
+//! (`SpareKeys`), so it is never in the journal and never given back.
 
 use core::time::Duration;
 
@@ -143,9 +148,65 @@ pub(crate) fn ours(keymap: &Keymap, rewrites: &[Rewrite]) -> Vec<u8> {
     keys
 }
 
+/// The spare keys of one send: the one the warm-up taps and the ones rewritten to
+/// the characters. The key tapped is never rewritten by the same send, so it types
+/// nothing whenever the application reads the tap. An application reads a key with
+/// the map it has when it reads it, and a Firefox just started read the tap after
+/// the remap and typed the first character of the value once more, at the start of
+/// the field (`OBS-253`, measured on the release build, 2026-11-13).
+///
+/// A server with one spare key has no other for the tap, and the two share it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SpareKeys<'a> {
+    /// The key of the warm-up, none on a server with no spare key.
+    pub warm_up: Option<u8>,
+    /// The keys rewritten to the characters, in the order the slots take them.
+    pub rewritten: &'a [u8],
+}
+
+impl<'a> SpareKeys<'a> {
+    /// The last spare key for the warm-up and the others for the characters, so the
+    /// slots keep the keys they had before the warm-up had a key of its own.
+    pub(crate) fn of(spare: &'a [u8]) -> Self {
+        match spare {
+            [] | [_] => Self {
+                warm_up: spare.first().copied(),
+                rewritten: spare,
+            },
+            [rewritten @ .., warm_up] => Self {
+                warm_up: Some(*warm_up),
+                rewritten,
+            },
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_key_of_the_warm_up_is_one_the_send_never_rewrites() {
+        // (spare keys, key of the warm-up, keys rewritten to the characters)
+        let cases: [(&[u8], Option<u8>, &[u8]); 5] = [
+            (&[], None, &[]),
+            (&[93], Some(93), &[93]),
+            (&[93, 97], Some(97), &[93]),
+            (&[93, 97, 120], Some(120), &[93, 97]),
+            (&[8, 9, 10, 255], Some(255), &[8, 9, 10]),
+        ];
+        for (spare, warm_up, rewritten) in cases {
+            let keys = SpareKeys::of(spare);
+            assert_eq!(keys.warm_up, warm_up, "{spare:?}");
+            assert_eq!(keys.rewritten, rewritten, "{spare:?}");
+            if spare.len() > 1 {
+                let apart = keys
+                    .warm_up
+                    .is_some_and(|tapped| !keys.rewritten.contains(&tapped));
+                assert!(apart, "{spare:?}");
+            }
+        }
+    }
 
     const A_OGONEK: u32 = 0x0100_0105;
     const CJK: u32 = 0x0100_4E2D;

@@ -13,7 +13,7 @@ Where a system has no way, `nkb send` says so and exits with code 4, and a value
 
 ## Was it tried on every Linux desktop?
 
-No. It was measured on Ubuntu 26.04 only: GNOME 50 on Wayland, and X11 with openbox and xfwm4. KDE and other desktops are untested. Under Wayland `nkb send` hands the text to the input method and cannot tell whether a field had the focus. Under X11 a program that reads keys through an input method, such as xterm with IBus, can lose the end of a long run of characters the keyboard layout lacks. On Linux the palette does not remember where it stood, and under X11 its shortcuts window cannot record a chord.
+No. It was measured on Ubuntu 26.04 only: GNOME 50 on Wayland, and X11 with openbox and xfwm4. KDE and other desktops are untested. Under Wayland `nkb send` hands the text to the input method and cannot tell whether a field had the focus. Under X11 a program that reads keys through an input method, such as xterm with IBus, can lose the end of a long run of characters the keyboard layout lacks. Under Wayland such a program, which runs through XWayland, can also drop combining accents, the joiner inside emoji sequences and the end of a long value, so check the field. On Linux the palette does not remember where it stood, and under X11 its shortcuts window cannot record a chord.
 
 ## Can the system change what is typed?
 
