@@ -46,6 +46,7 @@ mod ibus;
 mod lock;
 pub(crate) mod portal;
 mod send;
+mod shifted_chords;
 mod stream;
 mod watch;
 pub(crate) mod window;

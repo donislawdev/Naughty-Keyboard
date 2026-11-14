@@ -112,6 +112,11 @@ Changes wait under Unreleased until then.
 
 ### Fixed
 
+- On a Wayland desktop, pressing the palette's shortcut again while it clears a field no longer
+  sends the application a shortcut nobody pressed. The clearing holds Shift for a moment, and a
+  shortcut pressed then reached the application with Shift added, such as Ctrl+Alt+Shift+N, while
+  the palette never heard of it. The palette now takes that press and says it came while the
+  previous value was still going out, as it does for any press during a send.
 - On Windows a value typed into a WPF application no longer loses characters. While `nkb send` and
   the palette followed the pace of a WPF window, the application dropped some of the keys, most
   often a few of a long value, and the send still said it took every keystroke. A WPF window now

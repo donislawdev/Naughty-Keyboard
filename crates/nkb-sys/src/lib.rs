@@ -71,6 +71,8 @@ mod linux_remap_rules;
 #[cfg(any(target_os = "linux", test))]
 mod linux_rules;
 #[cfg(any(target_os = "linux", test))]
+mod linux_shifted_chord_rules;
+#[cfg(any(target_os = "linux", test))]
 mod linux_window_rules;
 #[cfg(target_os = "macos")]
 mod macos;
