@@ -30,6 +30,10 @@
 //! that went through and its release. A release judged by the modifiers of its own moment was
 //! taken, and the application kept `Home` down and repeated it 1748 times in a minute. So a
 //! release is not judged: it goes where its press went (`KeysDown`).
+//!
+//! GNOME 50.1, 2026-11-14 (`OBS-260`): the hand pressed the shortcut while the `Shift` of
+//! `Shift+End` was down, and the application got it with `Shift` added. What the engine
+//! does with such a key is in `linux_shifted_chord_rules.rs`.
 
 use core::time::Duration;
 

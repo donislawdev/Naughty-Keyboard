@@ -28,6 +28,7 @@ pub(crate) mod remote;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::Instant;
 
@@ -39,6 +40,7 @@ use zbus::zvariant::{ObjectPath, OwnedObjectPath, OwnedValue, Value};
 use zbus::{Error, MatchRule, Message, fdo};
 
 use super::bus::{self, Handle};
+use super::shifted_chords;
 use crate::Waiting;
 use crate::hotkey::HotkeyId;
 use crate::linux_portal_rules::{
@@ -47,6 +49,7 @@ use crate::linux_portal_rules::{
     after_wait, answer_of, bound_hotkey, preferred_trigger, request_path, session_bus_socket,
     token, wait_telling,
 };
+use crate::linux_shifted_chord_rules::ShiftedChord;
 use crate::portal::{Bound, Unavailable, Wish, names_usable};
 
 /// The answer of a request: a dictionary of what the portal has to say.
@@ -415,13 +418,24 @@ impl Portal {
 ///
 /// A key that is held is announced again and again with `Activated`, so only the first word
 /// after the keys were up is a press, and `Deactivated` is the keys coming up (`Held`).
+///
+/// While it hears, `chords` stand where the engine of a send finds a shortcut that the
+/// `Shift` of a clearing changed, and tells it to `fired` as well (`OBS-260`).
 fn hear(
     presses: MessageIterator,
     session: &str,
     names: &[(String, HotkeyId)],
+    chords: Vec<ShiftedChord>,
     fired: &Sender<HotkeyId>,
 ) {
-    let mut held = Held::default();
+    let held = Arc::new(Mutex::new(Held::default()));
+    let _watching = shifted_chords::watch(
+        session,
+        chords,
+        names.to_vec(),
+        Arc::clone(&held),
+        fired.clone(),
+    );
     for message in presses {
         let Ok(message) = message else {
             break;
@@ -441,10 +455,11 @@ fn hear(
         if from.as_str() != session {
             continue;
         }
+        let mut words = held.lock().unwrap_or_else(PoisonError::into_inner);
         if !activated {
-            held.released(&shortcut);
+            words.released(&shortcut);
         } else if let Some((_, id)) = names.iter().find(|(name, _)| *name == shortcut)
-            && held.pressed(&shortcut, Instant::now())
+            && words.pressed(&shortcut, Instant::now())
             && fired.send(*id).is_err()
         {
             break;
@@ -505,6 +520,11 @@ pub(crate) fn start(wishes: &[Wish]) -> Result<Begun, Unavailable> {
     let presses = portal.presses()?;
     let bound = portal.bind(&session, wishes)?;
     let (sender, fired) = mpsc::channel();
+    let chords: Vec<ShiftedChord> = bound
+        .iter()
+        .filter_map(|bound| bound.chord.as_ref())
+        .filter_map(ShiftedChord::of)
+        .collect();
     let thread = std::thread::Builder::new()
         .name("nkb-portal".to_owned())
         .spawn({
@@ -513,7 +533,7 @@ pub(crate) fn start(wishes: &[Wish]) -> Result<Begun, Unavailable> {
                 .iter()
                 .map(|wish| (wish.name.clone(), wish.hotkey.id))
                 .collect();
-            move || hear(presses, &session, &names, &sender)
+            move || hear(presses, &session, &names, chords, &sender)
         })?;
     let Portal {
         connection, stream, ..

@@ -11404,8 +11404,8 @@
       "id": "M1478",
       "why": "the engine never judges a key of the recipe, so the send hears nothing",
       "file": "crates/nkb-sys/src/linux/ibus/engine.rs",
-      "find": "            return self.recipe_key(keyval, state);",
-      "replace": "            return false;",
+      "find": "            return self.shifted_chord(keyval, keycode, state) || self.recipe_key(keyval, state);",
+      "replace": "            return self.shifted_chord(keyval, keycode, state);",
       "test": "linux::ibus::engine::tests::the_key_waited_for_is_told_to_the_send_and_taken_only_when_a_modifier_is_held",
       "runner": "rust:nkb-sys:lib",
       "system": "linux"

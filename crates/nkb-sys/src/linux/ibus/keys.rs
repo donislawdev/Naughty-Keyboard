@@ -26,6 +26,10 @@
 //!    again meanwhile, which costs nothing in the field because the engine took it,
 //! 4. a key the engine did not hear in time did not go through it, and the clearing stops.
 //!
+//! The `Shift` of `Shift+End` is a modifier of the seat while it is down, so a shortcut of the
+//! palette the hand presses then is no shortcut to the compositor. The engine takes it and
+//! tells the palette (`linux_shifted_chord_rules.rs`, `OBS-260`).
+//!
 //! What the dialogue does not say is whether the field is empty after it. The keys arrived
 //! as the recipe has them, and a multi-line field is cleared one line at a time, as on every
 //! system (`D54`).

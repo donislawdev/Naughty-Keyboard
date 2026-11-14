@@ -8,7 +8,9 @@
 //! `Escape`, which is the person asking for a send to stop, and, while the keys that clear a
 //! field are being sent (`keys.rs`), the one key of the recipe that is expected next, which
 //! the engine reports and takes when the hand holds a modifier (`OBS-229`), and whose release
-//! then goes where its press went (`OBS-255`). And it tells the
+//! then goes where its press went (`OBS-255`), and a shortcut of the palette that the `Shift`
+//! of the recipe changed, which the engine takes and tells the palette of (`OBS-260`,
+//! `linux_shifted_chord_rules.rs`). And it tells the
 //! send what the daemon says of the focus, with the input context and its client, which the
 //! daemon names to an engine that asks for them (`FocusId`, `D159`).
 
@@ -21,8 +23,10 @@ use zbus::zvariant::{OwnedObjectPath, StructureBuilder, Value};
 use zbus::{ObjectServer, interface};
 
 use super::Failed;
+use crate::linux::shifted_chords;
 use crate::linux_clearing_rules::{Expected, Judgement, KeysDown};
 use crate::linux_ibus_rules::{Heard, is_plain_escape, is_release};
+use crate::linux_shifted_chord_rules::ShiftedChords;
 
 /// The key the engine is waiting for, set by the send and read by the engine on every key.
 pub(super) type Gate = Arc<Mutex<Option<Expected>>>;
@@ -99,6 +103,7 @@ impl Factory {
             escape: Arc::clone(&self.escape),
             gate: Arc::clone(&self.gate),
             down: Mutex::default(),
+            shifted: Mutex::default(),
         };
         server.at(path.as_str(), engine).await?;
         server.at(path.as_str(), Service).await?;
@@ -113,6 +118,8 @@ struct Engine {
     gate: Gate,
     /// The keys of the recipe that are down, so that each release goes where its press went.
     down: Mutex<KeysDown>,
+    /// The keys of the shortcuts of the palette the engine took, until they are let go.
+    shifted: Mutex<ShiftedChords>,
 }
 
 impl Engine {
@@ -135,6 +142,24 @@ impl Engine {
         }
         handled.taken
     }
+
+    /// Whether the key is a shortcut of the palette that the `Shift` of the recipe changed,
+    /// or the release of one: taken, and the press told to the palette as the portal would
+    /// have told it (`OBS-260`). The recipe holds `Shift` while the key it waits for carries it.
+    fn shifted_chord(&self, keyval: u32, keycode: u32, state: u32) -> bool {
+        let ours = self
+            .gate
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_some_and(|expected| expected.shifted);
+        shifted_chords::meet(
+            &mut self.shifted.lock().unwrap_or_else(PoisonError::into_inner),
+            keyval,
+            keycode,
+            state,
+            ours,
+        )
+    }
 }
 
 // The daemon calls these on every engine. The focus matters here, and `Escape`, which is
@@ -142,9 +167,10 @@ impl Engine {
 // warnings. Every other key is handed back unconsumed, so the keyboard works as it did.
 #[interface(name = "org.freedesktop.IBus.Engine")]
 impl Engine {
-    fn process_key_event(&self, keyval: u32, _keycode: u32, state: u32) -> bool {
+    fn process_key_event(&self, keyval: u32, keycode: u32, state: u32) -> bool {
         if !is_plain_escape(keyval, state) {
-            return self.recipe_key(keyval, state);
+            // A shortcut is never a key of the recipe, so a key is one or the other.
+            return self.shifted_chord(keyval, keycode, state) || self.recipe_key(keyval, state);
         }
         // Taken whole, pressed and let go, so that the application does not get half of it
         // (`D96`). It is the person's again once this send is over, because so is the engine.
@@ -327,6 +353,7 @@ mod tests {
             escape: Arc::new(AtomicBool::new(false)),
             gate: Arc::clone(&gate),
             down: Mutex::default(),
+            shifted: Mutex::default(),
         };
         (engine, gate, heard)
     }
