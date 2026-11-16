@@ -242,6 +242,46 @@ fn surface_edge(buffer: &[offscreen::Pixel]) -> usize {
 /// no text and no control reaches it.
 const SURFACE_PROBE_INSET: u32 = 6;
 
+/// The tallest run of rows down to the surface's edge on which nothing is
+/// drawn between the gutters: no text, no control, one colour across. A window
+/// taller than its content (`D110`) keeps its room as such a run, wherever the
+/// layout puts it.
+fn tallest_blank_run(buffer: &[offscreen::Pixel]) -> usize {
+    let inset = SURFACE_PROBE_INSET as usize;
+    let (mut tallest, mut run) = (0, 0);
+    for row in buffer.chunks(WIDTH as usize).take(surface_edge(buffer) + 1) {
+        let inner = &row[inset..WIDTH as usize - inset];
+        run = if inner.iter().all(|pixel| *pixel == inner[0]) {
+            run + 1
+        } else {
+            0
+        };
+        tallest = tallest.max(run);
+    }
+    tallest
+}
+
+/// The tallest blank run the compact palette may have: a band of one row of
+/// text and a button, as `PACK_BAND` in `palette_collapse.rs`. Measured
+/// 2026-11-17: 25 rows, the gaps between its rows.
+const COMPACT_BLANK_LIMIT: usize = 48;
+
+/// Saves the compact palette's picture and checks that the window is as tall
+/// as what it shows. The shortest state is where a floor under the window
+/// shows first: the expanded palette is taller than any floor one might pick,
+/// the compact one is a header and a status line (`D110`).
+fn saved_compact(resting: &[offscreen::Pixel]) -> std::path::PathBuf {
+    let path = offscreen::save_cropped(resting, WIDTH, HEIGHT, "palette-resting.png");
+    let blank = tallest_blank_run(resting);
+    assert!(
+        blank < COMPACT_BLANK_LIMIT,
+        "the compact palette has {blank} blank rows in a row, so the window is taller than \
+         what it shows - the floor D110 removed. Look at {}",
+        path.display()
+    );
+    path
+}
+
 /// `surface` and `surface-raised`: the content's ground, and the ground of the
 /// header, the footer and the status line - copied, for the reason the colours
 /// above are copies.
@@ -313,7 +353,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
         "two renders of an unchanged palette differ, so comparing appearance between \
          runs is impossible and the loop this test supports does not work"
     );
-    let resting_path = offscreen::save_cropped(&resting, WIDTH, HEIGHT, "palette-resting.png");
+    let resting_path = saved_compact(&resting);
 
     // ---- showing: the positive control, and the rest of the window ---------
     palette.set_compact(false);
