@@ -75,6 +75,10 @@ pub fn open_beside(palette: &crate::Palette) {
 /// system, which `nkb_sys::screens` is not yet (Linux answers it with `None`).
 /// Without a palette, a screen or a native window - the tests' windows have
 /// none - the window opens where the system puts it, as it did before.
+///
+/// The OUTER frames, title bar and borders included: a window is placed by the
+/// corner of its frame, and its inner size alone would let a window pushed to
+/// the bottom of the screen hang off it by its title bar.
 fn place_beside_palette(window: &slint::Window) {
     if window.is_visible() {
         return;
@@ -91,17 +95,17 @@ fn place_beside_palette(window: &slint::Window) {
     else {
         return;
     };
-    let (at, size) = (anchor.position(), anchor.size());
+    let (at, size) = (anchor.position(), outer_size(anchor));
     let (corner, extent) = (screen.position(), screen.size());
     let gap = (GAP * anchor.scale_factor()).round();
     let place = beside(
         Rect {
             x: at.x,
             y: at.y,
-            width: size.width,
-            height: size.height,
+            width: size.0,
+            height: size.1,
         },
-        (window.size().width, window.size().height),
+        outer_size(window),
         Rect {
             x: corner.x,
             y: corner.y,
@@ -116,6 +120,17 @@ fn place_beside_palette(window: &slint::Window) {
         },
     );
     window.set_position(slint::PhysicalPosition::new(place.x, place.y));
+}
+
+/// A window's size with its frame, in physical pixels - its inner size where
+/// winit does not back it or cannot say.
+fn outer_size(window: &slint::Window) -> (u32, u32) {
+    window
+        .with_winit_window(|window| window.outer_size())
+        .map_or_else(
+            || (window.size().width, window.size().height),
+            |outer| (outer.width, outer.height),
+        )
 }
 
 /// Shows `window` - or, already shown, brings it back - as a window opened on
