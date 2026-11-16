@@ -206,6 +206,16 @@ pub(crate) struct Pressed {
     pub taken: usize,
     /// Why it stopped before the end, or `None` when every step was taken.
     pub stop: Option<StopReason>,
+    /// Whether the step after the `taken` ones is on its way: the system took
+    /// it and the application had not read it when the send stopped, so it
+    /// waits in the application's queue and acts whenever the application reads
+    /// it - after a suspended process is resumed, measured (`OBS-259`). Only a
+    /// paced send can tell, and only for a stop while it waited for the
+    /// application: every other stop comes before its event goes out, or for an
+    /// event the system did not take. Read on Windows only: macOS does not wait
+    /// for the application here.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    pub in_flight: bool,
 }
 
 /// Presses `steps` in order, each only after the previous one is shown.
@@ -229,6 +239,7 @@ pub(crate) fn press_confirmed<E: Copy>(
         let stopped = |reason| Pressed {
             taken: index,
             stop: Some(reason),
+            in_flight: false,
         };
         match wire.watch() {
             Watch::Steady => {}
@@ -249,12 +260,17 @@ pub(crate) fn press_confirmed<E: Copy>(
         if let Some(wait) = waits.target
             && let Err(reason) = target_takes(wire, step.key, step.down, wait)
         {
-            return stopped(reason);
+            // Taken by the system, not yet by the application: in its queue.
+            return Pressed {
+                in_flight: true,
+                ..stopped(reason)
+            };
         }
     }
     Pressed {
         taken: steps.len(),
         stop: None,
+        in_flight: false,
     }
 }
 
@@ -392,6 +408,39 @@ pub(crate) fn chord_steps<E>(
 /// not - and saying fewer would hide a character that is in the field.
 pub(crate) const fn units_arrived(before: usize, taken: usize) -> usize {
     before + if taken >= 1 { 1 } else { 0 }
+}
+
+#[cfg(any(windows, test))]
+/// What a text of `expected` UTF-16 units says when the unit after the first
+/// `before` stopped as `pressed` did, for `reason`.
+///
+/// A key-down on its way is a character the field may still get: the send
+/// ends there, and the application types it whenever it reads its queue. So
+/// the count is a floor (`InFlight`, as on Linux since `D158`) - "nothing
+/// reached the field" sent the person to press again, and a resumed
+/// application then held the first character twice (`OBS-259`). A key-up on
+/// its way adds nothing, because the character went in on the key-down,
+/// which [`units_arrived`] already counts - so the count stays exact.
+pub(crate) const fn text_stopped(
+    before: usize,
+    expected: usize,
+    pressed: Pressed,
+    reason: StopReason,
+) -> crate::SendError {
+    let units_sent = units_arrived(before, pressed.taken);
+    if pressed.in_flight && pressed.taken == 0 {
+        crate::SendError::InFlight {
+            units_sent,
+            units_expected: expected,
+            reason,
+        }
+    } else {
+        crate::SendError::Truncated {
+            units_sent,
+            units_expected: expected,
+            reason,
+        }
+    }
 }
 
 #[cfg(any(windows, test))]
@@ -611,7 +660,8 @@ mod tests {
             press_confirmed(&shifted_home(), &mut system, PATIENT),
             Pressed {
                 taken: 2,
-                stop: Some(StopReason::KeyPressed { key: "Alt" })
+                stop: Some(StopReason::KeyPressed { key: "Alt" }),
+                in_flight: false
             },
             "stopped at once, not after the wait for a release"
         );
@@ -628,7 +678,8 @@ mod tests {
             press_confirmed(&shifted_home(), &mut system, PATIENT),
             Pressed {
                 taken: 4,
-                stop: None
+                stop: None,
+                in_flight: false
             }
         );
         assert_eq!(system.sent.len(), 4);
@@ -647,7 +698,8 @@ mod tests {
             press_confirmed(&shifted_home(), &mut system, UNPACED),
             Pressed {
                 taken: 0,
-                stop: Some(StopReason::KeyPressed { key: "Ctrl" })
+                stop: Some(StopReason::KeyPressed { key: "Ctrl" }),
+                in_flight: false
             }
         );
         assert!(system.sent.is_empty(), "nothing pressed under Ctrl");
@@ -703,7 +755,8 @@ mod tests {
                 press_confirmed(&shifted_home(), &mut system, PATIENT),
                 Pressed {
                     taken: 0,
-                    stop: Some(reason)
+                    stop: Some(reason),
+                    in_flight: false
                 }
             );
             assert!(system.sent.is_empty());
@@ -718,7 +771,8 @@ mod tests {
                 press_confirmed(&shifted_home(), &mut system, waits),
                 Pressed {
                     taken: 4,
-                    stop: None
+                    stop: None,
+                    in_flight: false
                 }
             );
             assert_eq!(
@@ -740,7 +794,8 @@ mod tests {
             press_confirmed(&shifted_home(), &mut system, UNPACED),
             Pressed {
                 taken: 1,
-                stop: Some(StopReason::Dropped)
+                stop: Some(StopReason::Dropped),
+                in_flight: false
             },
             "Shift was shown, Home was not"
         );
@@ -756,7 +811,8 @@ mod tests {
             press_confirmed(&steps, &mut system, PACED),
             Pressed {
                 taken: 0,
-                stop: Some(StopReason::Dropped)
+                stop: Some(StopReason::Dropped),
+                in_flight: false
             }
         );
         assert_eq!(system.sent.len(), 1);
@@ -773,8 +829,10 @@ mod tests {
             press_confirmed(&shifted_home(), &mut system, PACED),
             Pressed {
                 taken: 2,
-                stop: Some(StopReason::NotTaking)
-            }
+                stop: Some(StopReason::NotTaking),
+                in_flight: true
+            },
+            "the system took the event, so it waits in the application's queue"
         );
         assert_eq!(system.sent.len(), 3, "nothing after the event not taken");
 
@@ -797,7 +855,8 @@ mod tests {
             press_confirmed(&shifted_home(), &mut system, UNPACED),
             Pressed {
                 taken: 2,
-                stop: Some(StopReason::FocusMoved)
+                stop: Some(StopReason::FocusMoved),
+                in_flight: false
             }
         );
         assert_eq!(system.sent.len(), 2, "the third event never went out");
@@ -818,8 +877,10 @@ mod tests {
             press_confirmed(&shifted_home(), &mut system, waits),
             Pressed {
                 taken: 0,
-                stop: Some(StopReason::FocusMoved)
-            }
+                stop: Some(StopReason::FocusMoved),
+                in_flight: true
+            },
+            "taken by the system before the window moved: still on its way to the first one"
         );
     }
 
@@ -831,7 +892,8 @@ mod tests {
             press_confirmed(&shifted_home(), &mut system, PACED),
             Pressed {
                 taken: 0,
-                stop: Some(StopReason::NotTaking)
+                stop: Some(StopReason::NotTaking),
+                in_flight: false
             }
         );
         assert!(system.sent.is_empty(), "nothing sent to a hung window");
@@ -847,7 +909,8 @@ mod tests {
             press_confirmed(&shifted_home(), &mut system, PACED),
             Pressed {
                 taken: 3,
-                stop: Some(StopReason::Escape)
+                stop: Some(StopReason::Escape),
+                in_flight: false
             }
         );
         assert_eq!(system.sent.len(), 3, "the fourth event never went out");
@@ -863,7 +926,8 @@ mod tests {
             press_confirmed(&shifted_home(), &mut system, PACED),
             Pressed {
                 taken: 2,
-                stop: Some(StopReason::Halted)
+                stop: Some(StopReason::Halted),
+                in_flight: false
             }
         );
         assert_eq!(system.sent.len(), 2, "the third event never went out");
@@ -949,7 +1013,8 @@ mod tests {
                 press_confirmed(&steps, &mut late, waits),
                 Pressed {
                     taken: 1,
-                    stop: Some(reason)
+                    stop: Some(reason),
+                    in_flight: false
                 },
                 "the key in flight is counted, and nothing goes after it"
             );
@@ -1036,7 +1101,8 @@ mod tests {
             press_confirmed(&steps, &mut Deaf, waits),
             Pressed {
                 taken: 0,
-                stop: Some(StopReason::Dropped)
+                stop: Some(StopReason::Dropped),
+                in_flight: false
             }
         );
     }
@@ -1107,7 +1173,8 @@ mod tests {
             press_confirmed(&steps, &mut late, waits),
             Pressed {
                 taken: 2,
-                stop: None
+                stop: None,
+                in_flight: false
             }
         );
     }
@@ -1125,6 +1192,88 @@ mod tests {
             "down shown, up not: the character is in"
         );
         assert_eq!(units_arrived(7, 2), 8);
+    }
+
+    #[test]
+    fn a_character_on_its_way_to_the_application_makes_the_count_a_floor() {
+        // `OBS-259`: a suspended application held the key-down the system had
+        // taken, and typed its character once resumed - after the send had said
+        // that nothing reached the field.
+        let reason = StopReason::NotTaking;
+        let stop = |taken, in_flight| Pressed {
+            taken,
+            stop: Some(reason),
+            in_flight,
+        };
+        assert_eq!(
+            text_stopped(7, 12, stop(0, true), reason),
+            crate::SendError::InFlight {
+                units_sent: 7,
+                units_expected: 12,
+                reason
+            },
+            "the key-down on its way: at least 7, and the eighth may still come"
+        );
+        assert_eq!(
+            text_stopped(7, 12, stop(1, true), reason),
+            crate::SendError::Truncated {
+                units_sent: 8,
+                units_expected: 12,
+                reason
+            },
+            "only the key-up on its way: the eighth went in on its key-down, so 8 exactly"
+        );
+        for taken in [0, 1] {
+            assert_eq!(
+                text_stopped(7, 12, stop(taken, false), reason),
+                crate::SendError::Truncated {
+                    units_sent: units_arrived(7, taken),
+                    units_expected: 12,
+                    reason
+                },
+                "nothing on its way: the count is exact"
+            );
+        }
+
+        // And from the press itself: a character the application never read, and
+        // one never sent because the window was already hung.
+        let character = [true, false].map(|down| Step {
+            event: (0xE7, !down),
+            key: 0xE7,
+            down,
+            shift_counts: false,
+        });
+        let mut deaf = System::new();
+        deaf.app_stops_from = Some(0);
+        let mut hung = System::new();
+        hung.watch_from = Some((0, Watch::Hung));
+        for (system, said) in [
+            (
+                &mut deaf,
+                crate::SendError::InFlight {
+                    units_sent: 0,
+                    units_expected: 1,
+                    reason,
+                },
+            ),
+            (
+                &mut hung,
+                crate::SendError::Truncated {
+                    units_sent: 0,
+                    units_expected: 1,
+                    reason,
+                },
+            ),
+        ] {
+            let pressed = press_confirmed(&character, system, PACED);
+            assert_eq!(text_stopped(0, 1, pressed, reason), said);
+        }
+        assert_eq!(
+            deaf.sent.len(),
+            1,
+            "the key-down went out and nothing after"
+        );
+        assert!(hung.sent.is_empty(), "nothing goes out to a hung window");
     }
 
     #[test]

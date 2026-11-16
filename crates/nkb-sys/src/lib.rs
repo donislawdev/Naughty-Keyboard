@@ -404,7 +404,7 @@ mod windows_impl {
     use super::cadence::{Cadence, PROGRESS_INTERVAL};
     use super::confirm::{
         Hand, Held, Pressed, Step, TAKEN_WAIT, TARGET_WAIT, Waits, Watch, chord_steps,
-        chords_acted, hand, press_confirmed, units_arrived,
+        chords_acted, hand, press_confirmed, text_stopped,
     };
     use super::escape::{ReservedEscape, SystemEscape};
     use super::windows_keys::{chord_event, steps_for};
@@ -684,6 +684,11 @@ mod windows_impl {
                 if let Some(shift) = shift {
                     let _ = send_one(chord_event(shift, true));
                 }
+                // A chord on its way (`pressed.in_flight`, `OBS-259`) is not
+                // counted, and the sentences stay true: past zero they already
+                // say the field may be half-cleared, and at zero only the first
+                // chord can be on its way - `Home` of `line_clearing_recipe`,
+                // which moves the caret and changes no text.
                 return Err(SendError::ChordsTruncated {
                     chords_sent: chords_acted(index, pressed.taken, shift.is_some()),
                     chords_expected: chords.len(),
@@ -765,11 +770,7 @@ mod windows_impl {
                 let _ = send_one(up);
                 // Stop at the first unit not taken. Carrying on would send the
                 // rest of the value into a field that just lost part of it.
-                return Err(SendError::Truncated {
-                    units_sent: units_arrived(index, pressed.taken),
-                    units_expected: expected,
-                    reason,
-                });
+                return Err(text_stopped(index, expected, pressed, reason));
             }
             // Between units, after this one was taken: the count is what the
             // application holds, never what is merely on its way.
