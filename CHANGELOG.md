@@ -112,6 +112,11 @@ Changes wait under Unreleased until then.
 
 ### Fixed
 
+- On Windows a value typed into an application that stops responding is no longer counted one
+  character short. The system had already taken the next key, and the application typed it once it
+  responded again, while `nkb send` and the palette said that nothing of the value, or only the
+  characters before it, reached the field. They now say how much arrived at least and that more may
+  still arrive, so check the field before the next test.
 - On a Wayland desktop, pressing the palette's shortcut again while it clears a field no longer
   sends the application a shortcut nobody pressed. The clearing holds Shift for a moment, and a
   shortcut pressed then reached the application with Shift added, such as Ctrl+Alt+Shift+N, while

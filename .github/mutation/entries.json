@@ -14148,6 +14148,15 @@
       "replace": "            self.value_window_up.set(true);\n            self.value_window_gives_way();\n",
       "test": "a_limit_is_typed_with_the_keyboard_alone_and_its_values_go_to_the_palette",
       "runner": "rust:nkb-gui:limit_window"
+    },
+    {
+      "id": "M1860",
+      "why": "a key-down the system took and a suspended application had not read yet is said to be nothing arrived, and the person presses again and gets the first character twice once the application is resumed (OBS-259)",
+      "file": "crates/nkb-sys/src/confirm.rs",
+      "find": "    if pressed.in_flight && pressed.taken == 0 {",
+      "replace": "    if false {",
+      "test": "confirm::tests::a_character_on_its_way_to_the_application_makes_the_count_a_floor",
+      "runner": "rust:nkb-sys:lib"
     }
   ]
 }
