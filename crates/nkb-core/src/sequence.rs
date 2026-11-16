@@ -63,7 +63,16 @@ pub enum Position {
     /// Carries what it was doing, because an interruption has to be able to say
     /// how far the counter got - and because `W1` needs somewhere to refuse
     /// from that is not "somewhere in the middle".
-    Inserting { sending: usize, total: usize },
+    ///
+    /// `before` is where the sequence stood before the press, so a send that
+    /// never started goes back exactly there. It cannot be worked out from
+    /// `sending`: after "next" it is the value before, after "previous" the
+    /// value after, and after "repeat" the value itself.
+    Inserting {
+        sending: usize,
+        total: usize,
+        before: Before,
+    },
     /// Every value has been sent.
     ///
     /// 🔴 `warned` is not bookkeeping. `ux-spec.md` 4 refuses to wrap silently:
@@ -71,6 +80,36 @@ pub enum Position {
     /// and only the second one starts over. Without this bit there are two
     /// options and both are forbidden - wrap quietly, or never wrap at all.
     Exhausted { total: usize, warned: bool },
+}
+
+/// Where a sequence stood before the press that put a value in flight - one of
+/// the positions a press starts from, without the count of values, which the
+/// value in flight carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Before {
+    Ready,
+    Running { done: usize },
+    Exhausted { warned: bool },
+}
+
+impl Before {
+    /// The position this was, in a pack of `total` values.
+    const fn position(self, total: usize) -> Position {
+        match self {
+            Self::Ready => Position::Ready { total },
+            Self::Running { done } => Position::Running { done, total },
+            Self::Exhausted { warned } => Position::Exhausted { total, warned },
+        }
+    }
+
+    /// How many values the counter says are done, in a pack of `total`.
+    const fn done(self, total: usize) -> usize {
+        match self {
+            Self::Ready => 0,
+            Self::Running { done } => done,
+            Self::Exhausted { .. } => total,
+        }
+    }
 }
 
 /// How values are reaching the field. Independent of [`Position`].
@@ -118,6 +157,11 @@ pub enum Event {
     Next,
     /// The "previous value" shortcut.
     Previous,
+    /// The "repeat last value" shortcut: types once more the value before the
+    /// next one - the last one typed, unless the tester walked the pack since -
+    /// and leaves the counter where it stands, so the next press of "next"
+    /// sends what it would have sent. For the same value in field after field.
+    Repeat,
     /// The "start this pack from the beginning" shortcut.
     Restart,
     /// Values are to go through the clipboard from now on: the tester asked
@@ -204,6 +248,9 @@ pub enum Effect {
     /// Say a step back has nothing behind it: nothing typed yet, or only the
     /// first value.
     AnnounceNothingBefore,
+    /// Say a repeat has nothing to type: no value of this pack stands before
+    /// the next one.
+    AnnounceNothingToRepeat,
     /// Say there is nowhere to send to.
     AnnounceNoTarget,
     /// Say no pack has been chosen yet.
@@ -229,6 +276,7 @@ impl fmt::Display for Effect {
             Self::AnnounceAtFirst { .. } => f.write_str("at-first"),
             Self::AnnounceCounterKept { .. } => f.write_str("counter-kept"),
             Self::AnnounceNothingBefore => f.write_str("nothing-before"),
+            Self::AnnounceNothingToRepeat => f.write_str("nothing-to-repeat"),
             Self::AnnounceNoTarget => f.write_str("no-target"),
             Self::AnnounceNoPack => f.write_str("no-pack"),
             Self::AnnounceInterrupted { .. } => f.write_str("interrupted"),
@@ -284,8 +332,9 @@ impl Sequence {
             Position::Running { done, total } => Some((done, total)),
             // The value in flight is not counted until it lands. An insertion
             // that is cancelled must not leave the counter claiming a value the
-            // field never received.
-            Position::Inserting { sending, total } => Some((sending.saturating_sub(1), total)),
+            // field never received - and a repeat must not make it blink back
+            // and forth, so it says what it said before the press.
+            Position::Inserting { total, before, .. } => Some((before.done(total), total)),
             Position::Exhausted { total, .. } => Some((total, total)),
         }
     }
@@ -344,6 +393,21 @@ impl Sequence {
         }
     }
 
+    /// The value a press of "repeat last value" ([`Event::Repeat`]) types: the
+    /// one before the next value - at the end of a pack its last one. `None`
+    /// where no value stands before the next one: nothing typed from this pack
+    /// yet, or the first value next after a restart or a walk. The palette
+    /// names it beside the next value, and a test holds it to what the event
+    /// really sends.
+    #[must_use]
+    pub const fn repeat_index(&self) -> Option<usize> {
+        match self.position {
+            Position::Running { done, .. } if done > 0 => Some(done),
+            Position::Exhausted { total, .. } if total > 0 => Some(total),
+            _ => None,
+        }
+    }
+
     /// Whether an insertion is in flight.
     ///
     /// Named rather than left to pattern matching, because `W3` makes `Escape`
@@ -362,14 +426,20 @@ impl Sequence {
         // second "next" is refused - and refused ALOUD, because a silent one
         // would interleave two values in somebody else's field, which is the
         // worst thing this product can do.
-        if let Position::Inserting { sending, total } = self.position {
-            return self.while_inserting(event, sending, total);
+        if let Position::Inserting {
+            sending,
+            total,
+            before,
+        } = self.position
+        {
+            return self.while_inserting(event, sending, total, before);
         }
 
         match event {
             Event::PackChosen { total } => self.pack_chosen(total),
             Event::Next => self.next(),
             Event::Previous => self.previous(),
+            Event::Repeat => self.repeat(),
             Event::Restart => self.restart(),
             Event::SetNext { index } => self.set_next(index),
             Event::Skip => self.skip(),
@@ -390,7 +460,7 @@ impl Sequence {
         }
     }
 
-    fn while_inserting(self, event: Event, sending: usize, total: usize) -> Step {
+    fn while_inserting(self, event: Event, sending: usize, total: usize, before: Before) -> Step {
         match event {
             Event::InsertionFinished => Step {
                 sequence: Self {
@@ -427,13 +497,13 @@ impl Sequence {
                 // The clipboard route reports its own trouble as a refusal, so
                 // this should not arrive here. If it does, asking again would be
                 // the loop the rule above exists to rule out: go back instead.
-                Delivery::ClipboardMode => self.back_before(sending, total),
+                Delivery::ClipboardMode => self.back_to(before, total),
             },
             // The send never started: no target, a held modifier, a clipboard
             // held by somebody else. Nothing reached the field and the route
             // stays as it was. No effect: the caller says WHY, because the
             // reason is a fact about delivery, not about the sequence.
-            Event::InsertionRefused => self.back_before(sending, total),
+            Event::InsertionRefused => self.back_to(before, total),
             // Escape, or the target moving out from under a running insertion
             // (`W2`). Both leave a FRAGMENT in the field, and both say so.
             Event::Cancelled | Event::TargetChanged | Event::TargetLost => Step {
@@ -447,7 +517,7 @@ impl Sequence {
                 effects: vec![Effect::AnnounceInterrupted { index: sending }],
             },
             // The refusal `W1` exists for. Loud, and the state does not budge.
-            Event::Next | Event::Previous | Event::Restart => Step {
+            Event::Next | Event::Previous | Event::Repeat | Event::Restart => Step {
                 sequence: self,
                 effects: vec![Effect::AnnounceStillInserting],
             },
@@ -465,20 +535,14 @@ impl Sequence {
         }
     }
 
-    /// Back to exactly where the sequence stood before the press that started
-    /// value `sending`: `Ready` when it was the first, `Running` on the value
-    /// already done when it was a later one.
-    fn back_before(self, sending: usize, total: usize) -> Step {
+    /// Back to exactly where the sequence stood before the press that put the
+    /// value in flight - kept, not worked out from the value in flight, which
+    /// would be true after "next" only: a refused "previous" from value 7
+    /// would go back to value 5 done.
+    fn back_to(self, before: Before, total: usize) -> Step {
         Step {
             sequence: Self {
-                position: if sending <= 1 {
-                    Position::Ready { total }
-                } else {
-                    Position::Running {
-                        done: sending - 1,
-                        total,
-                    }
-                },
+                position: before.position(total),
                 ..self
             },
             effects: Vec::new(),
@@ -553,6 +617,22 @@ impl Sequence {
                 // that does nothing - and until 2026-10-14 this said the
                 // sentence about a NEW FIELD, which was not what happened.
                 None => self.nothing_but(Effect::AnnounceNothingBefore),
+            },
+        }
+    }
+
+    fn repeat(self) -> Step {
+        match self.position {
+            Position::NoPack => self.nothing_but(Effect::AnnounceNoPack),
+            Position::Inserting { .. } => self.nothing_but(Effect::AnnounceStillInserting),
+            Position::Exhausted { total: 0, .. } => {
+                self.nothing_but(Effect::AnnounceEndOfPack { total: 0 })
+            }
+            Position::Ready { total }
+            | Position::Running { total, .. }
+            | Position::Exhausted { total, .. } => match self.repeat_index() {
+                Some(index) => self.begin(index, total),
+                None => self.nothing_but(Effect::AnnounceNothingToRepeat),
             },
         }
     }
@@ -710,11 +790,23 @@ impl Sequence {
     }
 
     fn begin(self, index: usize, total: usize) -> Step {
+        let before = match self.position {
+            Position::Running { done, .. } => Before::Running { done },
+            Position::Exhausted { warned, .. } => Before::Exhausted { warned },
+            Position::Ready { .. } => Before::Ready,
+            // No press sends from these: without a pack there is nothing to
+            // send, and in flight `W1` answers first. Should one ever, a
+            // refused send goes back where the sequence was, or to the start of
+            // the pack rather than anywhere invented.
+            Position::NoPack => Before::Ready,
+            Position::Inserting { before, .. } => before,
+        };
         Step {
             sequence: Self {
                 position: Position::Inserting {
                     sending: index,
                     total,
+                    before,
                 },
                 ..self
             },
@@ -818,7 +910,18 @@ mod tests {
                 positions.push(Position::Running { done, total });
             }
             for sending in 1..=total {
-                positions.push(Position::Inserting { sending, total });
+                for before in [
+                    Before::Ready,
+                    Before::Running { done: sending - 1 },
+                    Before::Running { done: sending },
+                    Before::Exhausted { warned: true },
+                ] {
+                    positions.push(Position::Inserting {
+                        sending,
+                        total,
+                        before,
+                    });
+                }
             }
         }
         positions
@@ -909,6 +1012,7 @@ mod tests {
             position: Position::Inserting {
                 sending: 2,
                 total: 3,
+                before: Before::Running { done: 1 },
             },
             delivery: Delivery::Direct,
         };
@@ -1321,7 +1425,8 @@ mod tests {
             before.position,
             Position::Inserting {
                 sending: 3,
-                total: 5
+                total: 5,
+                before: Before::Running { done: 2 },
             }
         );
 
@@ -1509,6 +1614,102 @@ mod tests {
             one.apply(Event::Previous).effects,
             vec![Effect::AnnounceNothingBefore]
         );
+    }
+
+    /// The palette names the value a repeat types beside the next value, so
+    /// what it names must be what the press types - in every position.
+    #[test]
+    fn repeat_index_names_exactly_what_repeat_types() {
+        for position in every_position() {
+            for delivery in [Delivery::Direct, Delivery::ClipboardMode] {
+                let sequence = Sequence { position, delivery };
+                let typed = sent_values(&sequence.apply(Event::Repeat));
+                let named: Vec<usize> = sequence.repeat_index().into_iter().collect();
+                assert_eq!(named, typed, "{position:?}");
+            }
+        }
+    }
+
+    /// The same value in field after field: each repeat types it again, the
+    /// counter never moves - not even while the value goes - and "next" then
+    /// sends what it would have sent without them.
+    #[test]
+    fn a_repeat_types_the_same_value_again_and_leaves_the_counter_where_it_stood() {
+        let mut sequence = run(
+            Sequence::new(),
+            &[
+                Event::PackChosen { total: 5 },
+                Event::Next,
+                Event::InsertionFinished,
+                Event::Next,
+                Event::InsertionFinished,
+            ],
+        )
+        .sequence;
+        for _ in 0..3 {
+            let step = sequence.apply(Event::Repeat);
+            assert_eq!(sent_values(&step), [2]);
+            assert_eq!(step.sequence.counter(), Some((2, 5)), "the counter blinked");
+            sequence = step.sequence.apply(Event::InsertionFinished).sequence;
+            assert_eq!(sequence.position, Position::Running { done: 2, total: 5 });
+        }
+        assert_eq!(sent_values(&sequence.apply(Event::Next)), [3]);
+    }
+
+    #[test]
+    fn a_repeat_with_nothing_before_the_next_value_says_so_and_types_nothing() {
+        assert_eq!(
+            Sequence::new().apply(Event::Repeat).effects,
+            vec![Effect::AnnounceNoPack]
+        );
+        let ready = Sequence::new()
+            .apply(Event::PackChosen { total: 3 })
+            .sequence;
+        let step = ready.apply(Event::Repeat);
+        assert_eq!(step.sequence, ready);
+        assert_eq!(step.effects, vec![Effect::AnnounceNothingToRepeat]);
+        let empty = Sequence::new()
+            .apply(Event::PackChosen { total: 0 })
+            .sequence;
+        assert_eq!(
+            empty.apply(Event::Repeat).effects,
+            vec![Effect::AnnounceEndOfPack { total: 0 }]
+        );
+    }
+
+    /// A send that never started leaves the sequence exactly where the press
+    /// found it, whichever press it was: with the value in flight worked out
+    /// from its number, a refused "previous" from value 7 went back to 5.
+    #[test]
+    fn a_send_that_never_started_goes_back_exactly_where_the_press_found_it() {
+        // In flight a press sends nothing (`W1`), so those positions drop out
+        // below. At the end of a pack the last value goes again, which
+        // `repeat_index_names_exactly_what_repeat_types` holds.
+        for position in every_position() {
+            for press in [Event::Next, Event::Previous, Event::Repeat] {
+                let start = Sequence {
+                    position,
+                    delivery: Delivery::Direct,
+                };
+                let pressed = start.apply(press);
+                if sent_values(&pressed).is_empty() {
+                    continue;
+                }
+                let refused = pressed.sequence.apply(Event::InsertionRefused);
+                assert_eq!(refused.sequence, start, "{position:?} {press:?}");
+                // The clipboard route reports its trouble as a refusal, and a
+                // failure that comes all the same goes back too.
+                let on_clipboard = Sequence {
+                    delivery: Delivery::ClipboardMode,
+                    ..start
+                };
+                let failed = on_clipboard
+                    .apply(press)
+                    .sequence
+                    .apply(Event::InsertionFailed);
+                assert_eq!(failed.sequence, on_clipboard, "{position:?} {press:?}");
+            }
+        }
     }
 
     #[test]
@@ -1743,6 +1944,7 @@ mod tests {
             Effect::AnnounceAtFirst { total: 1 },
             Effect::AnnounceCounterKept { done: 1, total: 2 },
             Effect::AnnounceNothingBefore,
+            Effect::AnnounceNothingToRepeat,
             Effect::AnnounceNoTarget,
             Effect::AnnounceNoPack,
             Effect::AnnounceInterrupted { index: 1 },

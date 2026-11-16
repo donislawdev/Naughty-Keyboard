@@ -2487,8 +2487,8 @@
       "id": "M445",
       "why": "leaving clipboard mode announces the return while the route stays the clipboard - a lie about the mode (D99)",
       "file": "crates/nkb-core/src/sequence.rs",
-      "find": "                    delivery: Delivery::Direct,",
-      "replace": "                    delivery: Delivery::ClipboardMode,",
+      "find": "            Delivery::ClipboardMode => Step {\n                sequence: Self {\n                    delivery: Delivery::Direct,",
+      "replace": "            Delivery::ClipboardMode => Step {\n                sequence: Self {\n                    delivery: Delivery::ClipboardMode,",
       "test": "sequence::tests::turning_clipboard_mode_off_changes_the_route_and_nothing_else",
       "runner": "rust:nkb-core:lib"
     },
@@ -2615,7 +2615,7 @@
       "file": "crates/nkb-gui/src/live.rs",
       "find": "    AdvanceSequence::handles(action) || PALETTE_OWN.contains(&action)",
       "replace": "    AdvanceSequence::handles(action)",
-      "test": "live::tests::the_legend_names_every_working_shortcut_of_the_table_in_effect",
+      "test": "live::view::tests::the_legend_names_every_working_shortcut_of_the_table_in_effect",
       "runner": "rust:nkb-gui:lib"
     },
     {
@@ -2624,7 +2624,7 @@
       "file": "crates/nkb-gui/src/live/view.rs",
       "find": "            .filter(|action| wired(**action))",
       "replace": "            .filter(|_action| true)",
-      "test": "live::tests::the_legend_names_every_working_shortcut_of_the_table_in_effect",
+      "test": "live::view::tests::the_legend_names_every_working_shortcut_of_the_table_in_effect",
       "runner": "rust:nkb-gui:lib"
     },
     {
@@ -3432,8 +3432,8 @@
       "id": "M576",
       "why": "the heading of the Next band becomes a button again - it lights up under the pointer and invites a click, and the pack's name is the one way in by the pointer",
       "file": "crates/nkb-gui/ui/components/next_band.slint",
-      "find": "            TextSmallMuted {\n                text: root.heading;\n                overflow: elide;\n            }",
-      "replace": "            SmallButton {\n                text: root.heading;\n                action: root.copy-action;\n                clicked => {\n                    root.copy();\n                }\n            }",
+      "find": "            heading-line := TextSmallMuted {\n                text: root.heading;\n                overflow: elide;\n            }",
+      "replace": "            heading-line := SmallButton {\n                text: root.heading;\n                action: root.copy-action;\n                clicked => {\n                    root.copy();\n                }\n            }",
       "test": "the_palette_links_answer_the_pointer_and_open_their_windows",
       "runner": "rust:nkb-gui:palette_opener"
     },
@@ -6390,8 +6390,8 @@
       "id": "M908",
       "why": "a step during a send skips the W1 refusal - instead of 'still sending' it says the pack has no value",
       "file": "crates/nkb-core/src/sequence.rs",
-      "find": "            return self.while_inserting(event, sending, total);\n",
-      "replace": "            if !matches!(event, Event::Skip | Event::Back) {\n                return self.while_inserting(event, sending, total);\n            }\n",
+      "find": "            return self.while_inserting(event, sending, total, before);\n",
+      "replace": "            if !matches!(event, Event::Skip | Event::Back) {\n                return self.while_inserting(event, sending, total, before);\n            }\n",
       "test": "sequence::tests::a_step_never_sends_and_never_changes_the_route",
       "runner": "rust:nkb-core:lib"
     },
@@ -6399,8 +6399,8 @@
       "id": "M909",
       "why": "a new action at the start of ALL - it takes the shortcut of the action that was before it (D89)",
       "file": "crates/nkb-core/src/hotkeys.rs",
-      "find": "        HotkeyAction::NextValue,\n        HotkeyAction::PreviousValue,\n        HotkeyAction::RepeatLast,",
-      "replace": "        HotkeyAction::SkipValue,\n        HotkeyAction::PreviousValue,\n        HotkeyAction::RepeatLast,",
+      "find": "        HotkeyAction::NextValue,\n        HotkeyAction::PreviousValue,\n        HotkeyAction::RepeatLast,\n        HotkeyAction::RestartPack,",
+      "replace": "        HotkeyAction::SkipValue,\n        HotkeyAction::PreviousValue,\n        HotkeyAction::RepeatLast,\n        HotkeyAction::RestartPack,",
       "test": "hotkeys::tests::the_reading_order_holds_every_action_once",
       "runner": "rust:nkb-core:lib"
     },
@@ -10386,7 +10386,7 @@
       "id": "M1366",
       "why": "the bands keep the chords of the first legend after the desktop answered",
       "file": "crates/nkb-gui/src/live/view.rs",
-      "find": "NAMED.set(Some((legend.next, legend.previous)));",
+      "find": "NAMED.set(Some(Named {\n        types: legend.next,\n        steps_back: legend.previous,\n        repeats: legend.repeat,\n    }));",
       "replace": "NAMED.set(None);",
       "test": "live::view::tests::the_bands_name_no_key_for_a_shortcut_that_is_apart",
       "runner": "rust:nkb-gui:lib"

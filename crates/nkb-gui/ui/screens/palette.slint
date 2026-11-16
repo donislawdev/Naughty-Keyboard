@@ -104,17 +104,9 @@ import {
     LastSentBand,
     SwitchesBand,
     Disclosure,
+    ValueKey,
+    KeyLines,
 } from "../components.slint";
-
-// Which value a Copy button copies: the pack's identifier and the value's.
-// Identifiers rather than a position, because the worker may have moved the
-// sequence between the click and its turn, and an identifier still names the
-// value the tester saw - or none (`D98`). Opaque to the view: it holds them
-// and never reads them.
-export struct ValueKey {
-    pack: string,
-    value: string,
-}
 
 // Which Copy button says "Copied" now, if any (`D121`).
 export enum CopiedButton { none, next, last, report }
@@ -147,6 +139,9 @@ export component Palette inherits Window {
     in property <bool> next-has-value;
     in property <string> next-name;
     in property <string> next-preview;
+    // What the value breaks, before it is typed (the owner's point 2,
+    // 2026-11-16) - empty where the pack says nothing.
+    in property <string> next-breaks;
     in property <[Marker]> next-markers;
 
     // ---- the value band ----------------------------------------------------
@@ -237,9 +232,9 @@ export component Palette inherits Window {
     in property <bool> can-go-back;
     in property <string> skip-label;
     in property <string> skip-action;
-    // Under the next value: what the shortcut that steps back types (the
-    // owner's point 6, 2026-10-14) - empty with nothing behind.
-    in property <string> previous-line;
+    // Under the next value: what the shortcuts that step back and that
+    // repeat type (the owner's point 6, 2026-10-14, and point 1, 2026-11-16).
+    in property <KeyLines> key-lines;
     // ⚠️ Declared, not aliases: the arrows stand in a band behind `if`. Each
     // click only hands on to its callback - one call, no logic.
     callback back-one-value();
@@ -431,6 +426,7 @@ export component Palette inherits Window {
             has-value: root.next-has-value;
             name: root.next-name;
             preview: root.next-preview;
+            breaks: root.next-breaks;
             markers: root.next-markers;
             copy-label: root.copy-label;
             copy-action: root.copy-next-action;
@@ -442,7 +438,7 @@ export component Palette inherits Window {
             can-go-back: root.can-go-back;
             skip-label: root.skip-label;
             skip-action: root.skip-action;
-            previous-line: root.previous-line;
+            key-lines: root.key-lines;
             copy => {
                 root.copy-next();
             }

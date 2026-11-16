@@ -113,9 +113,11 @@ near = 13
 # same day, when the step to another pack and what the value window is told went
 # to live/made.rs with the values made for a limit, the words of what the
 # environment would not allow left i18n.rs for i18n/environment.rs, and what a
-# query is matched in left nkb-gui/src/picker.rs for picker/haystack.rs.
+# query is matched in left nkb-gui/src/picker.rs for picker/haystack.rs. 2131
+# on 2026-11-16, when the test of the hint bar's words went from live.rs to
+# live/view.rs beside the words, and nkb-adapters/src/i18n.rs is the largest.
 [files.rust-whole]
-ceiling = 2133
+ceiling = 2131
 # 5 since 2026-10-10, the owner's choice twice that day: the ceiling came down
 # from 2907 to 2481, 2408, 2407 and 2363 as live.rs moved code into modules, the
 # band came down with it, and it reached advance_sequence.rs, settings_file.rs

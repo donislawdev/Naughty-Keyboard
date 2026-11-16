@@ -110,8 +110,8 @@ use limit::{Printed, printed_by};
 use palette::pattern_palette_label;
 pub use palette::{
     PaletteLabel, back_to, browser_did_not_open, counter, counts, label, limit_side,
-    next_end_of_pack, next_value, no_value_yet, not_guaranteed, pair_half, previous_types, sent_to,
-    skip_to, typing_counter, warnings,
+    next_end_of_pack, next_value, no_value_yet, not_guaranteed, pair_half, previous_types,
+    repeat_types, sent_to, skip_to, typing_counter, warnings,
 };
 pub use registration::{ended, entry_news, registration, registrations, shortcuts_unavailable};
 pub use stop::stop_reason;
@@ -282,6 +282,7 @@ fn pattern_message(message: &Message) -> &'static str {
         Message::EndOfPack { .. } => "End of pack ({total}/{total}). Press again to start over.",
         Message::AtFirstValue { .. } => "Already at the first value (1/{total}).",
         Message::NothingBefore => "Nothing to go back to: value 1 is the first of this pack.",
+        Message::NothingToRepeat => "Nothing to repeat: value 1 of this pack is the next one.",
         Message::CounterKept { .. } => {
             "New field - the counter is still at {done}/{total}. Press {shortcut} to start this pack from the beginning."
         }
@@ -369,6 +370,7 @@ pub fn message<'a>(
         | Message::NotPaced
         | Message::HandedOver
         | Message::NothingBefore
+        | Message::NothingToRepeat
         | Message::NothingToReport => pattern.to_owned(),
         Message::NoDirectRoute { system } => fill(pattern, &[("system", system)]),
         Message::MayBeAltered(services) => substitutions::sentence(pattern, *services),
@@ -1126,6 +1128,7 @@ mod tests {
             Message::EndOfPack { total: 34 },
             Message::AtFirstValue { total: 34 },
             Message::NothingBefore,
+            Message::NothingToRepeat,
             Message::CounterKept { done: 7, total: 34 },
             Message::NoPack,
             Message::ModifierHeld {
@@ -1558,10 +1561,11 @@ mod tests {
             Message::InFlight { .. } => 40,
             Message::CannotType { .. } => 41,
             Message::ClearingSkippedUnanswered => 42,
+            Message::NothingToRepeat => 43,
         }
     }
 
-    const SLOTS: usize = 43;
+    const SLOTS: usize = 44;
 
     #[test]
     fn every_message_variant_is_listed_here() {
@@ -1924,6 +1928,7 @@ mod tests {
             PacksLabel::FoundValues,
             PacksLabel::Recent,
             PacksLabel::PacksSection,
+            PacksLabel::Generators,
             PacksLabel::ValueGone,
             PacksLabel::Offensive,
             PacksLabel::Refused,
@@ -1967,6 +1972,7 @@ mod tests {
                 | PacksLabel::PlaceFields
                 | PacksLabel::PlacePair
                 | PacksLabel::PacksSection
+                | PacksLabel::Generators
                 | PacksLabel::Offensive
                 | PacksLabel::NoPacks
                 | PacksLabel::ListUnavailable
@@ -2111,6 +2117,7 @@ mod tests {
             next_value(4, 12, Some(nkb_core::hotkeys::DEFAULT_BINDINGS[0].1)),
             next_end_of_pack(12, Some(nkb_core::hotkeys::DEFAULT_BINDINGS[0].1)),
             previous_types(2, nkb_core::hotkeys::DEFAULT_BINDINGS[1].1),
+            repeat_types(3, nkb_core::hotkeys::DEFAULT_BINDINGS[2].1),
             back_to(3),
             skip_to(5),
             browser_did_not_open("example.test"),

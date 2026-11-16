@@ -15,7 +15,7 @@
     "id": "repeat-last",
     "name": "Repeat last value",
     "chord": "Alt+Shift+R",
-    "works": false
+    "works": true
   },
   {
     "id": "restart-pack",

@@ -31,14 +31,92 @@
 //!
 //! About and the shortcuts window are made the first time the tester opens
 //! them, not at start: [`Later`] says why, and why the pack window is not.
+//!
+//! # Beside the palette
+//!
+//! A window that is not on the screen opens beside the palette, not where the
+//! system puts a new window - at its first opening that was often the other
+//! end of the screen (the owner's point 3, 2026-11-16). Where exactly is the
+//! core's rule, `nkb_core::screens::beside`. A window already open stays where
+//! the tester has it, and one the tester moved is put back beside the palette
+//! at its next opening: it is a window opened for one choice, and it closes
+//! when it is left (`OBS-147`).
 
-use std::cell::{Cell, OnceCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
 use nkb_adapters::i18n::{self, Startup};
+use nkb_core::screens::{Rect, beside};
+use slint::ComponentHandle;
 use slint::winit_030::WinitWindowAccessor;
 use slint::winit_030::winit::window::WindowButtons;
+
+/// The room between the palette and a window opened beside it, in logical
+/// pixels - the space between two sections of a window (`Tokens.space-2`), so
+/// the two read as two windows and not as one.
+const GAP: f32 = 8.0;
+
+thread_local! {
+    /// The palette the windows opened on request stand beside, on the main
+    /// thread, where every window lives. Named once at start (`main.rs`).
+    static PALETTE: RefCell<Option<slint::Weak<crate::Palette>>> = const { RefCell::new(None) };
+}
+
+/// Names the palette the windows opened on request open beside.
+pub fn open_beside(palette: &crate::Palette) {
+    PALETTE.with(|named| *named.borrow_mut() = Some(palette.as_weak()));
+}
+
+/// Puts `window` beside the palette, unless it is on the screen already.
+///
+/// In physical pixels, the unit the toolkit reports the palette and its screen
+/// in, and the screen is the one winit says the palette stands on - on every
+/// system, which `nkb_sys::screens` is not yet (Linux answers it with `None`).
+/// Without a palette, a screen or a native window - the tests' windows have
+/// none - the window opens where the system puts it, as it did before.
+fn place_beside_palette(window: &slint::Window) {
+    if window.is_visible() {
+        return;
+    }
+    let Some(palette) =
+        PALETTE.with(|named| named.borrow().as_ref().and_then(slint::Weak::upgrade))
+    else {
+        return;
+    };
+    let anchor = palette.window();
+    let Some(screen) = anchor
+        .with_winit_window(|window| window.current_monitor())
+        .flatten()
+    else {
+        return;
+    };
+    let (at, size) = (anchor.position(), anchor.size());
+    let (corner, extent) = (screen.position(), screen.size());
+    let gap = (GAP * anchor.scale_factor()).round();
+    let place = beside(
+        Rect {
+            x: at.x,
+            y: at.y,
+            width: size.width,
+            height: size.height,
+        },
+        (window.size().width, window.size().height),
+        Rect {
+            x: corner.x,
+            y: corner.y,
+            width: extent.width,
+            height: extent.height,
+        },
+        // A scale is a small positive number, so the gap is a few pixels.
+        if gap.is_finite() && gap >= 0.0 {
+            gap as u32
+        } else {
+            0
+        },
+    );
+    window.set_position(slint::PhysicalPosition::new(place.x, place.y));
+}
 
 /// Shows `window` - or, already shown, brings it back - as a window opened on
 /// request stands: on the screen rather than in the taskbar, with Close as its
@@ -48,6 +126,9 @@ use slint::winit_030::winit::window::WindowButtons;
 ///
 /// The toolkit's own, when the window cannot be shown.
 pub(crate) fn bring_up(window: &slint::Window) -> Result<(), slint::PlatformError> {
+    // Before `show()`, while it is still off the screen: shown first, it would
+    // flash where the system put it.
+    place_beside_palette(window);
     window.show()?;
     // After `show()`, never before: bringing a hidden window back from the
     // taskbar shows it, and a window that is not minimized is left as it is.

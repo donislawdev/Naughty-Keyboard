@@ -350,16 +350,7 @@ fn run_palette(
     if own_frame {
         own_frame::wire(&palette);
     }
-    // Where the tester left it on this layout of screens (UX7). Asked after the
-    // window is built, because from then on the process sees physical pixels
-    // (`nkb_adapters::screens`), and before it is shown, because the backend
-    // keeps a place given to a window not yet created and creates it there
-    // (i-slint-backend-winit 1.18.1, `set_position`).
-    let (place, off_screen) = settings.position_on(screens::layout().as_ref());
-    said.extend(off_screen);
-    if let Some(at) = place {
-        palette.window().set_position(place::restore(at));
-    }
+    said.extend(stand(&palette, &settings));
     label_palette(&palette, &bindings, compact, settings.settings());
 
     // The two threads meet here. `focus` runs on this one and may produce a
@@ -547,6 +538,24 @@ fn run_palette(
 
 /// Every word of the palette that does not come with a view, and the state it
 /// starts in - set once, before the window is shown.
+/// Where the palette stands, and where the windows it opens stand: the place
+/// the tester left it on this layout of screens (UX7), and beside it for the
+/// windows opened on request (the owner's point 3, 2026-11-16). The sentence
+/// about a place that is off every screen now, if there is one.
+///
+/// After the window is built, because from then on the process sees physical
+/// pixels (`nkb_adapters::screens`), and before it is shown, because the
+/// backend keeps a place given to a window not yet created and creates it
+/// there (i-slint-backend-winit 1.18.1, `set_position`).
+fn stand(palette: &Palette, settings: &KeptSettings) -> Option<nkb_app::SettingsMessage> {
+    let (place, off_screen) = settings.position_on(screens::layout().as_ref());
+    if let Some(at) = place {
+        palette.window().set_position(place::restore(at));
+    }
+    nkb_gui::on_request::open_beside(palette);
+    off_screen
+}
+
 fn label_palette(palette: &Palette, bindings: &Bindings, compact: bool, settings: &Settings) {
     palette.set_window_title(i18n::label(PaletteLabel::Title).into());
     // The clipboard bar's words come with each view, because two conditions

@@ -2792,43 +2792,6 @@ mod tests {
         });
     }
 
-    /// The hint bar names every shortcut that does something, in the order a
-    /// person reads them (`D120`), and none that does not (`UX-GUI-007`) - and
-    /// the empty value band
-    /// names the one that sends a value.
-    #[test]
-    fn the_legend_names_every_working_shortcut_of_the_table_in_effect() {
-        let defaults = nkb_adapters::default_bindings();
-        let words = legend(&defaults);
-        // Worded through `i18n::chord`, because the table is this system's
-        // own and macOS names its modifiers differently.
-        let hint = |action| {
-            (
-                i18n::chord(defaults.chord(action)),
-                i18n::action_name(action).to_owned(),
-            )
-        };
-        assert_eq!(
-            words.hints,
-            vec![
-                hint(HotkeyAction::NextValue),
-                hint(HotkeyAction::PreviousValue),
-                hint(HotkeyAction::SkipValue),
-                hint(HotkeyAction::BackOneValue),
-                hint(HotkeyAction::RestartPack),
-                hint(HotkeyAction::NextPack),
-                hint(HotkeyAction::PreviousPack),
-                hint(HotkeyAction::OpenPacks),
-                hint(HotkeyAction::CopyReport),
-                hint(HotkeyAction::ToggleVisibility),
-            ]
-        );
-        assert_eq!(
-            words.no_value,
-            i18n::no_value_yet(Some(defaults.chord(HotkeyAction::NextValue)))
-        );
-    }
-
     /// While nothing is held the worker waits on the channel: a command
     /// wakes it, a closing window comes first, and a channel nobody sends on
     /// is not a reason to stop.
