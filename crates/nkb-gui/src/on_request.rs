@@ -79,22 +79,15 @@ pub fn open_beside(palette: &crate::Palette) {
 /// The OUTER frames, title bar and borders included: a window is placed by the
 /// corner of its frame, and its inner size alone would let a window pushed to
 /// the bottom of the screen hang off it by its title bar.
-fn place_beside_palette(window: &slint::Window) {
+fn place_beside_palette(window: &slint::Window) -> Option<slint::PhysicalPosition> {
     if window.is_visible() {
-        return;
+        return None;
     }
-    let Some(palette) =
-        PALETTE.with(|named| named.borrow().as_ref().and_then(slint::Weak::upgrade))
-    else {
-        return;
-    };
+    let palette = PALETTE.with(|named| named.borrow().as_ref().and_then(slint::Weak::upgrade))?;
     let anchor = palette.window();
-    let Some(screen) = anchor
+    let screen = anchor
         .with_winit_window(|window| window.current_monitor())
-        .flatten()
-    else {
-        return;
-    };
+        .flatten()?;
     let (at, size) = (anchor.position(), outer_size(anchor));
     let (corner, extent) = (screen.position(), screen.size());
     let gap = (GAP * anchor.scale_factor()).round();
@@ -119,7 +112,9 @@ fn place_beside_palette(window: &slint::Window) {
             0
         },
     );
-    window.set_position(slint::PhysicalPosition::new(place.x, place.y));
+    let at = slint::PhysicalPosition::new(place.x, place.y);
+    window.set_position(at);
+    Some(at)
 }
 
 /// A window's size with its frame, in physical pixels - its inner size where
@@ -143,8 +138,20 @@ fn outer_size(window: &slint::Window) -> (u32, u32) {
 pub(crate) fn bring_up(window: &slint::Window) -> Result<(), slint::PlatformError> {
     // Before `show()`, while it is still off the screen: shown first, it would
     // flash where the system put it.
-    place_beside_palette(window);
+    let place = place_beside_palette(window);
     window.show()?;
+    // And again once it is on the screen, on Linux: a window manager places a
+    // window it maps by its own rule and keeps only a move of a window already
+    // mapped. Measured 2026-11-16 under openbox (`tools/sondy/linux/dymek-x11.py`):
+    // the value window stood in the middle of the free part of the screen, the
+    // place given before `show()` ignored. The window may show at the manager's
+    // place for a moment before it moves.
+    #[cfg(target_os = "linux")]
+    if let Some(at) = place {
+        window.set_position(at);
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = place;
     // After `show()`, never before: bringing a hidden window back from the
     // taskbar shows it, and a window that is not minimized is left as it is.
     window.set_minimized(false);
