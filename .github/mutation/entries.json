@@ -1499,7 +1499,7 @@
       "file": "crates/nkb-adapters/src/i18n.rs",
       "find": "    if character.escape_debug().eq(core::iter::once(character)) {",
       "replace": "    if true {",
-      "test": "i18n::tests::every_sentence_about_a_shortcut_in_the_settings_file_is_whole_and_names_it",
+      "test": "i18n::typing::tests::the_settings_file_is_told_what_a_shortcut_in_use_takes",
       "runner": "rust:nkb-adapters:lib"
     },
     {
@@ -8606,7 +8606,7 @@
       "file": "crates/nkb-adapters/src/i18n.rs",
       "find": "                        (\"modifiers\", typing::command_modifiers()),",
       "replace": "                        (\"modifiers\", \"\"),",
-      "test": "i18n::tests::every_sentence_about_a_shortcut_in_the_settings_file_is_whole_and_names_it",
+      "test": "i18n::typing::tests::the_settings_file_is_told_what_a_shortcut_in_use_takes",
       "runner": "rust:nkb-adapters:lib"
     },
     {
