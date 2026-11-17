@@ -697,8 +697,10 @@ pub(crate) fn send_text(
     let keyboard = read_keyboard(&server.conn).map_err(lost)?;
     let state = wait_for_keys_released(&server, &keyboard)?;
     // What the keys of the layout type depends on the state just read, so the table of
-    // them is made after the wait. A value they type alone needs no spare key.
-    let layout = LayoutKeys::typing(&keyboard.keymap, keyboard.shift_key, state);
+    // them is made after the wait. A value they type alone needs no spare key. A key the
+    // palette grabs as a shortcut with no modifier is left to a spare key (`D189`).
+    let layout = LayoutKeys::typing(&keyboard.keymap, keyboard.shift_key, state)
+        .without(&super::hotkey::held_bare());
     let all_spare = keyboard.keymap.spare_keycodes();
     let SpareKeys {
         warm_up: warm_up_key,

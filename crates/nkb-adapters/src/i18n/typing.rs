@@ -1,30 +1,33 @@
 //! The sentences about the keys of a shortcut that depend on the keyboard in
 //! front of the tester: a chord a keyboard layout types a character on
 //! (`D88`, `D141`), where the key that types is `AltGr` on Windows and `Option`
-//! on a Mac and the way out differs with it, and a chord that holds no modifier
-//! at all (`OBS-196`), where the modifiers have other names on a Mac.
+//! on a Mac, and a chord that holds no modifier at all (`OBS-196`), where the
+//! modifiers have other names on a Mac. Both are warnings: the chord is used,
+//! and the tester is told what it takes from every application (`D189`).
 //!
-//! The sentence of the shortcuts window for the same refusals is a
+//! The sentence of the shortcuts window for the same risks is a
 //! `ShortcutsLabel` (`windows.rs`), which says the same of a chord being
 //! recorded.
 
-use nkb_core::Refusal;
+use nkb_core::ChordRisk;
 use nkb_core::hotkeys::Convention;
 
 use crate::shortcuts::CONVENTION;
 
-/// The sentence the settings file gets for a refusal about typing, or `None` for
-/// a refusal that is not one. `{file}`, `{action}`, `{wanted}`, `{character}` and
-/// `{shortcut}` are filled by the caller.
-pub(super) fn pattern_typing_refusal(why: Refusal) -> Option<&'static str> {
-    match why {
-        Refusal::TypesCharacter(_) => Some(
-            "The settings file {file} gives \"{action}\" the shortcut {wanted}, which types \"{character}\" as AltGr on a keyboard layout of this computer - taken globally it would stop that character working in every application, so the default {shortcut} is used. Choose a combination without Ctrl+Alt.",
-        ),
-        Refusal::OptionTypesCharacter(_) => Some(
-            "The settings file {file} gives \"{action}\" the shortcut {wanted}, which types \"{character}\" with Option on a keyboard layout of this computer - taken globally it would stop that character working in every application, so the default {shortcut} is used. Choose a combination that also holds Command.",
-        ),
-        Refusal::Problem(_) | Refusal::SameAs(_) => None,
+/// The sentence the palette says at start about a shortcut of the settings file
+/// that is in use and takes something from every application. `{file}`,
+/// `{action}`, `{wanted}`, `{character}` and `{modifiers}` are filled by the caller.
+pub(super) fn pattern_file_risk(risk: ChordRisk) -> &'static str {
+    match risk {
+        ChordRisk::NoCommandModifier => {
+            "The settings file {file} gives \"{action}\" the shortcut {wanted}. Without {modifiers}, it stops working in every application while the palette runs, the palette's own windows included."
+        }
+        ChordRisk::TypesCharacter(_) => {
+            "The settings file {file} gives \"{action}\" the shortcut {wanted}. On a keyboard layout of this computer it types \"{character}\" as AltGr, so while the palette runs, \"{character}\" cannot be typed that way."
+        }
+        ChordRisk::OptionTypesCharacter(_) => {
+            "The settings file {file} gives \"{action}\" the shortcut {wanted}. On a keyboard layout of this computer it types \"{character}\" with Option, so while the palette runs, \"{character}\" cannot be typed that way."
+        }
     }
 }
 
@@ -42,6 +45,10 @@ pub(super) const fn command_modifiers() -> &'static str {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::expect_used,
+    reason = "a failed expectation in a test is a failed test"
+)]
 mod tests {
     use super::*;
 
@@ -65,6 +72,68 @@ mod tests {
         let text = chord.display(CONVENTION);
         for word in named.split(", ").flat_map(|part| part.split(" or ")) {
             assert!(text.contains(word), "{word} is not in {text}");
+        }
+    }
+
+    /// The settings file is told what a shortcut in use takes from every application, in the
+    /// words of the key of this system (`D189`). The shortcut in use is the one asked for.
+    #[test]
+    fn the_settings_file_is_told_what_a_shortcut_in_use_takes() {
+        use nkb_app::keep_settings::SettingsMessage;
+        use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord, Risky};
+        let bindings = Bindings::defaults(CONVENTION);
+        let chord = |text: &str| HotkeyChord::parse(text).expect("reads");
+        for (risk, named) in [
+            // The modifiers are named by the keyboard of the system (`OBS-196`).
+            (
+                ChordRisk::NoCommandModifier,
+                format!("Without {}, it stops working", command_modifiers()).as_str(),
+            ),
+            (
+                ChordRisk::TypesCharacter('\u{105}'),
+                "types \"\u{105}\" as AltGr",
+            ),
+            // A quote from a layout cannot close the quotes around it.
+            (ChordRisk::TypesCharacter('"'), "types \"U+0022\" as AltGr"),
+            // A combining mark is named, not drawn onto the quote before it.
+            (
+                ChordRisk::TypesCharacter('\u{301}'),
+                "types \"U+0301\" as AltGr",
+            ),
+            // On the Mac the key is named Option.
+            (
+                ChordRisk::OptionTypesCharacter('\u{105}'),
+                "types \"\u{105}\" with Option",
+            ),
+            (
+                ChordRisk::OptionTypesCharacter('\u{301}'),
+                "types \"U+0301\" with Option",
+            ),
+        ] {
+            let out = super::super::settings_message(
+                &SettingsMessage::ShortcutRisky(Risky {
+                    action: HotkeyAction::NextValue,
+                    chord: chord("Shift+M"),
+                    risk,
+                }),
+                "f",
+                &bindings,
+            )
+            .expect("said");
+            assert!(!out.contains('{'), "{out}");
+            assert!(
+                out.contains("\"Type the value shown\" the shortcut Shift+M"),
+                "{out}"
+            );
+            assert!(out.contains(named), "{out}");
+            // The shortcut in use is the one asked for, not the default.
+            assert!(
+                !out.contains(&super::super::chord_text(
+                    &bindings,
+                    HotkeyAction::NextValue
+                )),
+                "no default is named: {out}"
+            );
         }
     }
 }

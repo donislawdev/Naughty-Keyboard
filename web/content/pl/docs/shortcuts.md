@@ -31,7 +31,16 @@ Ten plik to ten, który nazywa [strona palety](/docs/palette/). Paleta czyta go 
 
 Kombinacja, której paleta nie może użyć, zostaje odrzucona z podaniem przyczyny, a akcja zachowuje kombinację, którą miała:
 
-- kombinacja bez Ctrl, Alt ani Win, która zabrałaby klawisz pisaniu,
 - klawisz inny niż litera od A do Z, cyfra od 0 do 9, F1 do F24 albo Space,
-- kombinacja, którą ma już inna akcja albo którą trzyma już inny program,
-- `Ctrl+Alt` z klawiszem, który któryś z zainstalowanych układów klawiatury pisze z AltGr jako znak - taki znak komunikat nazywa.
+- kombinacja, którą ma już inna akcja albo którą trzyma już inny program.
+
+## Przed którymi kombinacjami ostrzega?
+
+Kombinacja, która zabiera coś wszystkim innym aplikacjom, zostaje przyjęta. Okno skrótów oznacza jej wiersz i mówi pod listą, co zabiera, a paleta mówi to samo, gdy startuje z taką kombinacją w `settings.toml`:
+
+- kombinacja bez Ctrl, Alt ani Win (na Macu bez Control, Option ani Command): dopóki paleta działa, ten klawisz nie pisze i nie działa w żadnej aplikacji, także w oknach samej palety,
+- `Ctrl+Alt` z klawiszem, który któryś z zainstalowanych układów klawiatury pisze z AltGr jako znak, albo na Macu `Option` z klawiszem, który układ pisze jako znak: dopóki paleta działa, tego znaku nie da się tak napisać.
+
+Gdy paleta trzyma sam klawisz jako skrót, na Linuksie i na Macu pisze wartości innymi klawiszami, więc dochodzą w całości.
+
+`nkb send` działa osobno i nie wie, które klawisze trzyma paleta. Dopóki paleta trzyma sam klawisz, wartość wpisywana przez `nkb send` traci na Linuksie z X11 znaki tego klawisza, a na Macu skrót na samym klawiszu A zabiera każdy znak, który wpisuje `nkb send`. `nkb send` tego nie widzi i dalej mówi, że aplikacja przyjęła każde naciśnięcie.

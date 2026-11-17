@@ -27,7 +27,7 @@
 //! `kVK_F*`), printed by a C program on the same machine and written out in the
 //! tests - not typed from memory.
 
-use crate::hotkey::HotkeyRegistration;
+use crate::hotkey::{Hotkey, HotkeyRegistration};
 
 /// The two high bytes of the signature of every hot key a listener registers,
 /// `NK` in capitals. The two low bytes are the serial of the listener that
@@ -81,7 +81,7 @@ pub(crate) const fn modifiers(ctrl: bool, alt: bool, shift: bool, win: bool) -> 
 }
 
 /// The virtual key codes of `A` to `Z`, in that order.
-const LETTERS: [u32; 26] = [
+pub(crate) const LETTERS: [u32; 26] = [
     0, 11, 8, 2, 14, 3, 5, 4, 34, 38, 40, 37, 46, 45, 31, 35, 12, 15, 1, 17, 32, 9, 13, 7, 16, 6,
 ];
 /// The virtual key codes of `0` to `9`, in that order.
@@ -111,6 +111,21 @@ pub(crate) const fn key_code(vk: u16) -> Option<u32> {
     }
 }
 
+/// The key code of a shortcut with no modifier at all, or `None`.
+///
+/// Such a shortcut takes every event of its key from every application, the
+/// events a send posts included, since they carry no modifier either
+/// (`macos_rules::letter_key`, `D189`). A modifier, `Shift` among them, keeps a
+/// shortcut off them: measured 2026-11-17 on macOS 27, a send of 73 characters
+/// on the key of `A` arrived whole with `Shift+A` held as a shortcut and not at
+/// all with `A` held alone.
+pub(crate) fn bare_code(hotkey: &Hotkey) -> Option<u16> {
+    if modifiers(hotkey.ctrl, hotkey.alt, hotkey.shift, hotkey.win) != 0 {
+        return None;
+    }
+    key_code(hotkey.vk).and_then(|code| u16::try_from(code).ok())
+}
+
 /// What the system's answer to registering one hot key means.
 pub(crate) const fn registration(status: i32) -> HotkeyRegistration {
     match status {
@@ -128,6 +143,7 @@ pub(crate) const fn registration(status: i32) -> HotkeyRegistration {
 )]
 mod tests {
     use super::*;
+    use crate::hotkey::HotkeyId;
 
     /// Name, the code the vocabulary gives the key, and the code the SDK header
     /// gives it: printed on the Mac by a C program from `kVK_ANSI_A` and the
@@ -262,5 +278,34 @@ mod tests {
             }
         );
         assert_ne!(NO_SUCH_KEY, (-9878i32) as u32);
+    }
+
+    #[test]
+    fn only_a_shortcut_with_no_modifier_at_all_takes_the_events_of_a_send() {
+        // The modifier at `modifier`, of ctrl, alt, shift and win, or none at 4.
+        let hotkey = |modifier: usize, vk| {
+            let mut held = [false; 4];
+            if let Some(one) = held.get_mut(modifier) {
+                *one = true;
+            }
+            let [ctrl, alt, shift, win] = held;
+            Hotkey {
+                id: HotkeyId(1),
+                ctrl,
+                alt,
+                shift,
+                win,
+                vk,
+            }
+        };
+        let none = 4;
+        assert_eq!(bare_code(&hotkey(none, 0x41)), Some(0));
+        assert_eq!(bare_code(&hotkey(none, 0x53)), Some(1));
+        assert_eq!(bare_code(&hotkey(none, 0x20)), Some(49));
+        for modifier in 0..none {
+            assert_eq!(bare_code(&hotkey(modifier, 0x41)), None, "{modifier}");
+        }
+        // F21 has no code to hold.
+        assert_eq!(bare_code(&hotkey(none, 0x84)), None);
     }
 }

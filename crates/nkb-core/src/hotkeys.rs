@@ -51,7 +51,7 @@
 //! Windows the chord is `Ctrl+Alt` (`AltGr`, `D88`), on macOS `Option` with no
 //! `Command` and no `Control` (`D141`), on Linux there is none. The core holds
 //! the SHAPE of that chord ([`Convention::can_type`]) and the system answers
-//! which character, if any, a layout types there: [`Bindings::typing_refusal`].
+//! which character, if any, a layout types there: [`Bindings::typing_risk`].
 
 /// One of the global actions the palette answers to.
 ///
@@ -368,8 +368,9 @@ impl HotkeyChord {
     /// `Control`, `Alt` or `Option`, `Win`, `Cmd`, `Command` or `Super` - and
     /// the key by its [`HotkeyKey::name`].
     ///
-    /// Only the grammar: whether the chord is a good shortcut is
-    /// [`HotkeyChord::problem`]'s question.
+    /// Only the grammar: what the chord takes from other applications is
+    /// [`Bindings::risk`]'s question, and whether another action has it is
+    /// [`Bindings::with`]'s.
     ///
     /// # Errors
     ///
@@ -412,24 +413,22 @@ impl HotkeyChord {
         Ok(chord)
     }
 
-    /// What is wrong with this chord as a GLOBAL shortcut, if anything.
+    /// Whether this chord holds `Ctrl`, `Alt` or `Win`.
     ///
     /// A global shortcut takes its combination from every application for as
-    /// long as the palette runs. Without `Ctrl`, `Alt` or `Win` the combination
-    /// is a key the applications use on their own - a letter, `Shift+letter`,
-    /// Space, `F5` - so the tester would lose it everywhere, the field under
-    /// test included.
+    /// long as the palette runs. Without one of these the combination is a key
+    /// the applications use on their own - a letter, `Shift+letter`, Space,
+    /// `F5` - so the tester loses it everywhere, the field under test and the
+    /// palette's own windows included. The tester may still choose it, and is
+    /// told what it takes ([`ChordRisk::NoCommandModifier`], `D189`).
     ///
     /// Not asked here, because the answer lives in the system: whether a
     /// `Ctrl+Alt` chord is `AltGr` for a character of the current layout
     /// ([`HotkeyChord::could_be_altgr`]), and whether another application holds
     /// the combination (registration reports that).
     #[must_use]
-    pub const fn problem(&self) -> Option<ChordProblem> {
-        if !(self.ctrl || self.alt || self.win) {
-            return Some(ChordProblem::NoCommandModifier);
-        }
-        None
+    pub const fn holds_command_modifier(&self) -> bool {
+        self.ctrl || self.alt || self.win
     }
 
     /// Whether `AltGr` can produce this chord: `Ctrl` and `Alt` without `Win`,
@@ -520,13 +519,6 @@ pub enum ChordError {
     KeyNotLast(String),
     /// The same modifier twice, under any of its names: `Alt+Option+N`.
     RepeatedModifier(String),
-}
-
-/// Why a chord that reads fine is still not a global shortcut.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ChordProblem {
-    /// No `Ctrl`, `Alt` or `Win` - see [`HotkeyChord::problem`].
-    NoCommandModifier,
 }
 
 /// Which set of default shortcuts a system follows.
@@ -766,50 +758,20 @@ impl Bindings {
             })
     }
 
-    /// Why a keyboard layout of this system refuses `chord` as a global
-    /// shortcut, if it does: `types` names a character the layout makes the
-    /// chord type, so taking the chord would take that character from every
-    /// application.
-    ///
-    /// `types` is the system's answer (the core knows no layout) and it is
-    /// asked ONLY for a chord the convention says can type ([`Convention::can_type`]):
-    /// an `Alt+Shift` chord is never `AltGr` whatever a layout does with
-    /// `Ctrl+Alt` on its key, and a `Cmd+Option` chord types nothing. `None`
-    /// from `types` means "no reason to refuse", so a chord is refused on a
-    /// character the answer can name, never on a guess. The one place this rule
-    /// stands, for the settings file and for the window that records a chord.
-    #[must_use]
-    pub fn typing_refusal(
-        &self,
-        chord: HotkeyChord,
-        types: &dyn Fn(HotkeyChord) -> Option<char>,
-    ) -> Option<Refusal> {
-        let may_type = self.convention.can_type(&chord);
-        let character = may_type.then(|| types(chord)).flatten()?;
-        Some(match self.convention {
-            // Linux never gets here: `can_type` is false there, so `character` is
-            // `None`. The arm names the refusal that would be true of `Ctrl+Alt`.
-            Convention::Windows | Convention::Linux => Refusal::TypesCharacter(character),
-            Convention::MacOs => Refusal::OptionTypesCharacter(character),
-        })
-    }
-
     /// These bindings with the tester's `wanted` chords on top, and every
     /// wanted chord that could not be used, with the reason.
     ///
-    /// A wanted chord is refused when:
-    /// - it has a [`HotkeyChord::problem`] - it would take a key from every
-    ///   application.
-    /// - a layout types a character with it ([`Bindings::typing_refusal`]) - it
-    ///   would take that character from every application: `AltGr` on Windows,
-    ///   `Option` on macOS.
-    /// - another action ends up answering to the same chord. First a wanted
-    ///   chord that is already the chord of an action NOT changing goes back
-    ///   (that action keeps it for good), then, of two wanted chords that
-    ///   are the same, the later in [`HotkeyAction::ALL`] goes back. Going
-    ///   back may make another wanted chord clash, so this repeats until
-    ///   nothing does - at most once per action. Two actions swapping their
-    ///   chords is not a clash: only the result is compared.
+    /// A wanted chord is refused only when another action ends up answering to
+    /// the same chord. First a wanted chord that is already the chord of an
+    /// action NOT changing goes back (that action keeps it for good), then, of
+    /// two wanted chords that are the same, the later in [`HotkeyAction::ALL`]
+    /// goes back. Going back may make another wanted chord clash, so this
+    /// repeats until nothing does - at most once per action. Two actions
+    /// swapping their chords is not a clash: only the result is compared.
+    ///
+    /// A chord that takes a key or a character from every application is
+    /// used: [`Bindings::risk`] says what it takes, and the caller says it
+    /// (`D189`).
     ///
     /// The action a clash names is read from the FINISHED table, so the
     /// sentence "already the shortcut for X" is true of the palette the tester
@@ -820,11 +782,7 @@ impl Bindings {
     /// twice in `wanted` takes the later chord - a table in the settings file
     /// cannot name a key twice, so this only decides what a caller gets.
     #[must_use]
-    pub fn with(
-        self,
-        wanted: &[(HotkeyAction, HotkeyChord)],
-        types: &dyn Fn(HotkeyChord) -> Option<char>,
-    ) -> (Self, Vec<Refused>) {
+    pub fn with(self, wanted: &[(HotkeyAction, HotkeyChord)]) -> (Self, Vec<Refused>) {
         let before = self.table;
         let mut table = self.table;
         let mut chosen = [false; HotkeyAction::COUNT];
@@ -833,22 +791,6 @@ impl Bindings {
             let Some(at) = table.iter().position(|(candidate, _)| candidate == action) else {
                 continue;
             };
-            if let Some(problem) = chord.problem() {
-                refused.push(Refused {
-                    action: *action,
-                    chord: *chord,
-                    why: Refusal::Problem(problem),
-                });
-                continue;
-            }
-            if let Some(why) = self.typing_refusal(*chord, types) {
-                refused.push(Refused {
-                    action: *action,
-                    chord: *chord,
-                    why,
-                });
-                continue;
-            }
             table[at].1 = *chord;
             chosen[at] = *chord != before[at].1;
         }
@@ -904,18 +846,12 @@ pub struct Refused {
     pub why: Refusal,
 }
 
+mod risk;
+pub use risk::{ChordRisk, Risky};
+
 /// Why a wanted chord was not used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Refusal {
-    /// Not a good global shortcut at all.
-    Problem(ChordProblem),
-    /// A `Ctrl+Alt` chord that is `AltGr` for this character on a layout the
-    /// system has - taken globally, the character is gone from every
-    /// application.
-    TypesCharacter(char),
-    /// A chord with `Option` that types this character on a layout the system
-    /// has (`D141`) - the same loss, on macOS.
-    OptionTypesCharacter(char),
     /// Another action answers to this chord.
     SameAs(HotkeyAction),
 }
@@ -1223,23 +1159,25 @@ mod tests {
     }
 
     #[test]
-    fn a_global_shortcut_needs_ctrl_alt_or_win() {
-        for text in ["N", "Shift+N", "F5", "Space", "Shift+Space"] {
-            let parsed = HotkeyChord::parse(text).expect("reads");
-            assert_eq!(
-                parsed.problem(),
-                Some(ChordProblem::NoCommandModifier),
-                "{text}"
-            );
-        }
-        for text in ["Alt+N", "Ctrl+N", "Win+N", "Ctrl+Shift+F5"] {
-            let parsed = HotkeyChord::parse(text).expect("reads");
-            assert_eq!(parsed.problem(), None, "{text}");
-        }
+    fn a_shortcut_without_ctrl_alt_or_win_takes_its_key_and_says_so() {
         for convention in CONVENTIONS {
-            for (action, default) in default_bindings(convention) {
-                assert_eq!(default.problem(), None, "{convention:?} {action:?}");
+            let defaults = Bindings::defaults(convention);
+            for text in ["N", "Shift+N", "F5", "Space", "Shift+Space"] {
+                let parsed = HotkeyChord::parse(text).expect("reads");
+                assert!(!parsed.holds_command_modifier(), "{text}");
+                assert_eq!(
+                    defaults.risk(parsed, &no_layout),
+                    Some(ChordRisk::NoCommandModifier),
+                    "{convention:?} {text}"
+                );
             }
+            for text in ["Alt+N", "Ctrl+N", "Win+N", "Ctrl+Shift+F5"] {
+                let parsed = HotkeyChord::parse(text).expect("reads");
+                assert!(parsed.holds_command_modifier(), "{text}");
+                assert_eq!(defaults.risk(parsed, &no_layout), None, "{text}");
+            }
+            // No default takes anything, whatever a layout types.
+            assert_eq!(defaults.risky(&|_| Some('x')), Vec::new(), "{convention:?}");
         }
     }
 
@@ -1263,26 +1201,22 @@ mod tests {
     const DEFAULTS: Bindings = Bindings::defaults(Convention::Windows);
 
     #[test]
-    fn a_ctrl_alt_chord_the_layout_types_on_is_refused_with_the_character() {
+    fn a_ctrl_alt_chord_the_layout_types_on_is_used_and_names_the_character() {
         let wanted = HotkeyChord::parse("Ctrl+Alt+A").expect("reads");
-        let (bindings, refused) = DEFAULTS.with(&[(HotkeyAction::NextValue, wanted)], &altgr_on_a);
-        assert_eq!(bindings, DEFAULTS);
-        assert_eq!(
-            refused,
-            vec![Refused {
-                action: HotkeyAction::NextValue,
-                chord: wanted,
-                why: Refusal::TypesCharacter('\u{105}'),
-            }]
-        );
-    }
-
-    #[test]
-    fn a_ctrl_alt_chord_the_layout_types_nothing_on_is_used() {
-        let wanted = HotkeyChord::parse("Ctrl+Alt+F5").expect("reads");
-        let (bindings, refused) = DEFAULTS.with(&[(HotkeyAction::NextValue, wanted)], &altgr_on_a);
+        let (bindings, refused) = DEFAULTS.with(&[(HotkeyAction::NextValue, wanted)]);
         assert!(refused.is_empty(), "{refused:?}");
         assert_eq!(bindings.chord(HotkeyAction::NextValue), wanted);
+        assert_eq!(
+            bindings.risky(&altgr_on_a),
+            vec![Risky {
+                action: HotkeyAction::NextValue,
+                chord: wanted,
+                risk: ChordRisk::TypesCharacter('\u{105}'),
+            }]
+        );
+        // `Ctrl+Alt` on a key the layout leaves empty takes nothing.
+        let empty = HotkeyChord::parse("Ctrl+Alt+F5").expect("reads");
+        assert_eq!(DEFAULTS.risk(empty, &altgr_on_a), None);
     }
 
     #[test]
@@ -1292,48 +1226,24 @@ mod tests {
             asked.borrow_mut().push(chord);
             Some('x')
         };
-        // A combination no default holds, so taking it moves nothing else.
         let alt_shift_k = alt_shift(HotkeyKey::K);
         let with_win = HotkeyChord::parse("Ctrl+Alt+Win+A").expect("reads");
         let altgr = HotkeyChord::parse("Ctrl+Alt+Shift+A").expect("reads");
-        let (bindings, refused) = DEFAULTS.with(
-            &[
-                (HotkeyAction::NextValue, alt_shift_k),
-                (HotkeyAction::PreviousValue, with_win),
-                (HotkeyAction::RepeatLast, altgr),
-            ],
-            &every_key_types,
-        );
+        let bare = HotkeyChord::parse("A").expect("reads");
+        let risks: Vec<_> = [alt_shift_k, with_win, altgr, bare]
+            .iter()
+            .map(|chord| DEFAULTS.risk(*chord, &every_key_types))
+            .collect();
         assert_eq!(*asked.borrow(), vec![altgr]);
-        assert_eq!(bindings.chord(HotkeyAction::NextValue), alt_shift_k);
-        assert_eq!(bindings.chord(HotkeyAction::PreviousValue), with_win);
         assert_eq!(
-            refused,
-            vec![Refused {
-                action: HotkeyAction::RepeatLast,
-                chord: altgr,
-                why: Refusal::TypesCharacter('x'),
-            }]
+            risks,
+            vec![
+                None,
+                None,
+                Some(ChordRisk::TypesCharacter('x')),
+                Some(ChordRisk::NoCommandModifier)
+            ]
         );
-    }
-
-    #[test]
-    fn two_actions_wanting_one_altgr_chord_are_both_refused_for_the_character() {
-        // Refused before the clash is looked at: the sentence names the real
-        // reason, not "already the shortcut for" an action that never got it.
-        let wanted = HotkeyChord::parse("Ctrl+Alt+A").expect("reads");
-        let (bindings, refused) = DEFAULTS.with(
-            &[
-                (HotkeyAction::NextValue, wanted),
-                (HotkeyAction::PreviousValue, wanted),
-            ],
-            &altgr_on_a,
-        );
-        assert_eq!(bindings, DEFAULTS);
-        assert_eq!(refused.len(), 2, "{refused:?}");
-        for refusal in &refused {
-            assert_eq!(refusal.why, Refusal::TypesCharacter('\u{105}'));
-        }
     }
 
     #[test]
@@ -1393,7 +1303,7 @@ mod tests {
     /// The system's own choice is not checked: a chord the settings would
     /// refuse is named when the desktop holds it, and so is one two actions share.
     #[test]
-    fn a_chord_the_system_holds_is_named_even_where_the_settings_would_refuse_it() {
+    fn a_chord_the_system_holds_is_named_even_one_that_takes_a_key() {
         let alone = chord(false, false, false, false, HotkeyKey::K);
         let shared = DEFAULTS.chord(HotkeyAction::NextValue);
         let bindings = DEFAULTS.as_given(&[
@@ -1401,7 +1311,10 @@ mod tests {
             (HotkeyAction::PreviousValue, shared),
         ]);
         assert_eq!(bindings.chord(HotkeyAction::RepeatLast), alone);
-        assert!(alone.problem().is_some(), "a chord the file would refuse");
+        assert!(
+            !alone.holds_command_modifier(),
+            "a chord that takes its key"
+        );
         assert_eq!(bindings.chord(HotkeyAction::PreviousValue), shared);
         assert_eq!(bindings.chord(HotkeyAction::NextValue), shared);
     }
@@ -1445,7 +1358,7 @@ mod tests {
     #[test]
     fn a_wanted_chord_replaces_the_default_and_the_rest_stay() {
         let m = alt_shift(HotkeyKey::M);
-        let (bindings, refused) = DEFAULTS.with(&[(HotkeyAction::NextValue, m)], &no_layout);
+        let (bindings, refused) = DEFAULTS.with(&[(HotkeyAction::NextValue, m)]);
         assert!(refused.is_empty(), "{refused:?}");
         assert_eq!(bindings.chord(HotkeyAction::NextValue), m);
         for action in &HotkeyAction::ALL[1..] {
@@ -1454,16 +1367,17 @@ mod tests {
     }
 
     #[test]
-    fn a_chord_that_would_take_a_key_everywhere_is_refused() {
+    fn a_chord_that_takes_a_key_everywhere_is_used_and_named_as_a_risk() {
         let plain = HotkeyChord::parse("Shift+M").expect("reads");
-        let (bindings, refused) = DEFAULTS.with(&[(HotkeyAction::NextValue, plain)], &no_layout);
-        assert_eq!(bindings, DEFAULTS);
+        let (bindings, refused) = DEFAULTS.with(&[(HotkeyAction::NextValue, plain)]);
+        assert!(refused.is_empty(), "{refused:?}");
+        assert_eq!(bindings.chord(HotkeyAction::NextValue), plain);
         assert_eq!(
-            refused,
-            vec![Refused {
+            bindings.risky(&no_layout),
+            vec![Risky {
                 action: HotkeyAction::NextValue,
                 chord: plain,
-                why: Refusal::Problem(ChordProblem::NoCommandModifier),
+                risk: ChordRisk::NoCommandModifier,
             }]
         );
     }
@@ -1471,7 +1385,7 @@ mod tests {
     #[test]
     fn a_chord_another_action_keeps_is_refused_and_names_that_action() {
         let p = alt_shift(HotkeyKey::P);
-        let (bindings, refused) = DEFAULTS.with(&[(HotkeyAction::NextValue, p)], &no_layout);
+        let (bindings, refused) = DEFAULTS.with(&[(HotkeyAction::NextValue, p)]);
         assert_eq!(bindings, DEFAULTS);
         assert_eq!(
             refused,
@@ -1497,13 +1411,10 @@ mod tests {
     #[test]
     fn two_actions_may_swap_their_chords() {
         let (n, p) = (alt_shift(HotkeyKey::N), alt_shift(HotkeyKey::P));
-        let (bindings, refused) = DEFAULTS.with(
-            &[
-                (HotkeyAction::NextValue, p),
-                (HotkeyAction::PreviousValue, n),
-            ],
-            &no_layout,
-        );
+        let (bindings, refused) = DEFAULTS.with(&[
+            (HotkeyAction::NextValue, p),
+            (HotkeyAction::PreviousValue, n),
+        ]);
         assert!(refused.is_empty(), "{refused:?}");
         assert_eq!(bindings.chord(HotkeyAction::NextValue), p);
         assert_eq!(bindings.chord(HotkeyAction::PreviousValue), n);
@@ -1513,10 +1424,8 @@ mod tests {
     fn of_two_actions_wanting_one_chord_the_later_goes_back() {
         // A combination no default holds - `X` has been `NextPack`'s since `D120`.
         let x = alt_shift(HotkeyKey::J);
-        let (bindings, refused) = DEFAULTS.with(
-            &[(HotkeyAction::MarkOk, x), (HotkeyAction::NextValue, x)],
-            &no_layout,
-        );
+        let (bindings, refused) =
+            DEFAULTS.with(&[(HotkeyAction::MarkOk, x), (HotkeyAction::NextValue, x)]);
         assert_eq!(bindings.chord(HotkeyAction::NextValue), x);
         assert_eq!(
             bindings.chord(HotkeyAction::MarkOk),
@@ -1539,20 +1448,15 @@ mod tests {
         // now clashes with previous, goes back to R, and pushes next back too.
         // Every sentence must name who holds the chord at the END.
         let (p, r) = (alt_shift(HotkeyKey::P), alt_shift(HotkeyKey::R));
-        let (bindings, refused) = DEFAULTS.with(
-            &[
-                (HotkeyAction::NextValue, r),
-                (HotkeyAction::PreviousValue, r),
-                (HotkeyAction::RepeatLast, p),
-            ],
-            &no_layout,
-        );
+        let (bindings, refused) = DEFAULTS.with(&[
+            (HotkeyAction::NextValue, r),
+            (HotkeyAction::PreviousValue, r),
+            (HotkeyAction::RepeatLast, p),
+        ]);
         assert_eq!(bindings, DEFAULTS);
         assert_eq!(refused.len(), 3, "{refused:?}");
         for refusal in &refused {
-            let Refusal::SameAs(owner) = refusal.why else {
-                panic!("{refusal:?}");
-            };
+            let Refusal::SameAs(owner) = refusal.why;
             assert_eq!(bindings.chord(owner), refusal.chord, "{refusal:?}");
             assert_ne!(owner, refusal.action);
         }
@@ -1591,17 +1495,20 @@ mod tests {
                         .zip([a, b, c])
                         .filter_map(|(action, chord)| chord.map(|chord| (*action, chord)))
                         .collect();
-                    let (bindings, refused) = DEFAULTS.with(&wanted, &altgr_on_a);
+                    let (bindings, refused) = DEFAULTS.with(&wanted);
                     let table = bindings.as_slice();
                     for (i, (_, one)) in table.iter().enumerate() {
-                        assert_eq!(one.problem(), None, "{wanted:?}");
-                        assert!(
-                            !(one.could_be_altgr() && altgr_on_a(*one).is_some()),
-                            "{wanted:?} -> {table:?}"
-                        );
                         for (_, other) in &table[i + 1..] {
                             assert_ne!(one, other, "{wanted:?} -> {table:?}");
                         }
+                    }
+                    // What takes something everywhere is a wish that came true:
+                    // the defaults take nothing.
+                    for risky in bindings.risky(&altgr_on_a) {
+                        assert!(
+                            wanted.contains(&(risky.action, risky.chord)),
+                            "{wanted:?} -> {risky:?}"
+                        );
                     }
                     for (action, chord) in &wanted {
                         let refusal = refused.iter().find(|r| r.action == *action);
@@ -1610,21 +1517,8 @@ mod tests {
                             Some(refusal) => {
                                 assert_eq!(bindings.chord(*action), DEFAULTS.chord(*action));
                                 assert_ne!(*chord, DEFAULTS.chord(*action), "own default refused");
-                                match refusal.why {
-                                    Refusal::SameAs(owner) => {
-                                        assert_eq!(bindings.chord(owner), *chord, "{wanted:?}");
-                                    }
-                                    Refusal::TypesCharacter(character) => {
-                                        assert!(chord.could_be_altgr(), "{wanted:?}");
-                                        assert_eq!(altgr_on_a(*chord), Some(character));
-                                    }
-                                    Refusal::OptionTypesCharacter(_) => {
-                                        panic!("Windows asks no Option question: {wanted:?}")
-                                    }
-                                    Refusal::Problem(problem) => {
-                                        assert_eq!(chord.problem(), Some(problem));
-                                    }
-                                }
+                                let Refusal::SameAs(owner) = refusal.why;
+                                assert_eq!(bindings.chord(owner), *chord, "{wanted:?}");
                             }
                         }
                     }
@@ -1673,32 +1567,18 @@ mod tests {
     const MAC_DEFAULTS: Bindings = Bindings::defaults(Convention::MacOs);
 
     #[test]
-    fn an_option_chord_the_layout_types_on_is_refused_with_the_character() {
+    fn an_option_chord_the_layout_types_on_names_the_character() {
         // With and without Shift: Option+Shift types the capital.
         for text in ["Option+A", "Option+Shift+A"] {
             let wanted = HotkeyChord::parse(text).expect("reads");
-            let (bindings, refused) =
-                MAC_DEFAULTS.with(&[(HotkeyAction::NextValue, wanted)], &option_on_a);
-            assert_eq!(bindings, MAC_DEFAULTS, "{text}");
             assert_eq!(
-                refused,
-                vec![Refused {
-                    action: HotkeyAction::NextValue,
-                    chord: wanted,
-                    why: Refusal::OptionTypesCharacter('\u{105}'),
-                }],
+                MAC_DEFAULTS.risk(wanted, &option_on_a),
+                Some(ChordRisk::OptionTypesCharacter('\u{105}')),
                 "{text}"
             );
         }
-    }
-
-    #[test]
-    fn an_option_chord_the_layout_types_nothing_on_is_used() {
-        let wanted = HotkeyChord::parse("Option+F5").expect("reads");
-        let (bindings, refused) =
-            MAC_DEFAULTS.with(&[(HotkeyAction::NextValue, wanted)], &option_on_a);
-        assert!(refused.is_empty(), "{refused:?}");
-        assert_eq!(bindings.chord(HotkeyAction::NextValue), wanted);
+        let empty = HotkeyChord::parse("Option+F5").expect("reads");
+        assert_eq!(MAC_DEFAULTS.risk(empty, &option_on_a), None);
     }
 
     #[test]
@@ -1713,66 +1593,48 @@ mod tests {
         let ctrl_alt = HotkeyChord::parse("Ctrl+Alt+Shift+K").expect("reads");
         let command_only = HotkeyChord::parse("Command+K").expect("reads");
         let option = HotkeyChord::parse("Option+Shift+K").expect("reads");
-        let (bindings, refused) = MAC_DEFAULTS.with(
-            &[
-                (HotkeyAction::NextValue, with_command),
-                (HotkeyAction::PreviousValue, with_control),
-                (HotkeyAction::RepeatLast, ctrl_alt),
-                (HotkeyAction::RestartPack, command_only),
-                (HotkeyAction::CopyReport, option),
-            ],
-            &every_key_types,
-        );
+        let risks: Vec<_> = [with_command, with_control, ctrl_alt, command_only, option]
+            .iter()
+            .map(|chord| MAC_DEFAULTS.risk(*chord, &every_key_types))
+            .collect();
         assert_eq!(*asked.borrow(), vec![option]);
-        for (action, chord) in [
-            (HotkeyAction::NextValue, with_command),
-            (HotkeyAction::PreviousValue, with_control),
-            (HotkeyAction::RepeatLast, ctrl_alt),
-            (HotkeyAction::RestartPack, command_only),
-        ] {
-            assert_eq!(bindings.chord(action), chord, "{chord:?}");
-        }
         assert_eq!(
-            refused,
-            vec![Refused {
-                action: HotkeyAction::CopyReport,
-                chord: option,
-                why: Refusal::OptionTypesCharacter('x'),
-            }]
+            risks,
+            vec![
+                None,
+                None,
+                None,
+                None,
+                Some(ChordRisk::OptionTypesCharacter('x'))
+            ]
         );
     }
 
     #[test]
     fn each_convention_asks_its_own_question_and_not_the_other() {
         // `Alt` alone is the Option shape and `Ctrl+Alt` the AltGr one. Asking
-        // Windows about `Alt+A` would refuse a shortcut that takes nothing, and
-        // asking macOS about `Ctrl+Alt+A` would refuse one the applications
-        // decide.
+        // Windows about `Alt+A` would warn of a shortcut that takes nothing, and
+        // asking macOS about `Ctrl+Alt+A` of one the applications decide.
         let option = HotkeyChord::parse("Alt+A").expect("reads");
         let altgr = HotkeyChord::parse("Ctrl+Alt+A").expect("reads");
-        let (bindings, refused) = DEFAULTS.with(&[(HotkeyAction::NextValue, option)], &option_on_a);
-        assert!(refused.is_empty(), "{refused:?}");
-        assert_eq!(bindings.chord(HotkeyAction::NextValue), option);
-        let (bindings, refused) =
-            MAC_DEFAULTS.with(&[(HotkeyAction::NextValue, altgr)], &option_on_a);
-        assert!(refused.is_empty(), "{refused:?}");
-        assert_eq!(bindings.chord(HotkeyAction::NextValue), altgr);
+        assert_eq!(DEFAULTS.risk(option, &option_on_a), None);
+        assert_eq!(MAC_DEFAULTS.risk(altgr, &option_on_a), None);
     }
 
     #[test]
-    fn typing_refusal_is_worded_for_the_key_of_the_convention() {
+    fn a_typing_risk_is_worded_for_the_key_of_the_convention() {
         let altgr = HotkeyChord::parse("Ctrl+Alt+A").expect("reads");
         let option = HotkeyChord::parse("Option+A").expect("reads");
         assert_eq!(
-            DEFAULTS.typing_refusal(altgr, &altgr_on_a),
-            Some(Refusal::TypesCharacter('\u{105}'))
+            DEFAULTS.typing_risk(altgr, &altgr_on_a),
+            Some(ChordRisk::TypesCharacter('\u{105}'))
         );
         assert_eq!(
-            MAC_DEFAULTS.typing_refusal(option, &option_on_a),
-            Some(Refusal::OptionTypesCharacter('\u{105}'))
+            MAC_DEFAULTS.typing_risk(option, &option_on_a),
+            Some(ChordRisk::OptionTypesCharacter('\u{105}'))
         );
-        assert_eq!(DEFAULTS.typing_refusal(altgr, &no_layout), None);
-        assert_eq!(MAC_DEFAULTS.typing_refusal(option, &no_layout), None);
+        assert_eq!(DEFAULTS.typing_risk(altgr, &no_layout), None);
+        assert_eq!(MAC_DEFAULTS.typing_risk(option, &no_layout), None);
     }
 
     #[test]
@@ -1833,24 +1695,16 @@ mod tests {
 
     #[test]
     fn a_layout_is_never_asked_about_a_chord_on_linux() {
-        // `altgr_on_a` answers for any chord it is asked about, so a refusal here
+        // `altgr_on_a` answers for any chord it is asked about, so a risk here
         // would mean the core asked.
         let linux = Bindings::defaults(Convention::Linux);
-        // The first has the shape `AltGr` has on Windows, so the same wish there
-        // is refused with the character.
+        // The first has the shape `AltGr` has on Windows, so there it names the
+        // character.
         let ctrl_alt_shift_a = HotkeyChord::parse("Ctrl+Alt+Shift+A").expect("reads");
         let alt_a = HotkeyChord::parse("Alt+A").expect("reads");
-        assert_eq!(
-            DEFAULTS
-                .with(&[(HotkeyAction::NextValue, ctrl_alt_shift_a)], &altgr_on_a)
-                .1
-                .len(),
-            1
-        );
+        assert!(DEFAULTS.risk(ctrl_alt_shift_a, &altgr_on_a).is_some());
         for wanted in [ctrl_alt_shift_a, alt_a] {
-            let (bindings, refused) = linux.with(&[(HotkeyAction::NextValue, wanted)], &altgr_on_a);
-            assert_eq!(refused, vec![], "{wanted:?}");
-            assert_eq!(bindings.chord(HotkeyAction::NextValue), wanted);
+            assert_eq!(linux.risk(wanted, &altgr_on_a), None, "{wanted:?}");
         }
     }
 }

@@ -2402,10 +2402,8 @@ mod tests {
     #[test]
     fn the_slot_says_the_pack_in_use_and_the_value_its_next_press_sends() {
         let slot = super::in_use();
-        let (mine, refused) = nkb_adapters::default_bindings().with(
-            &[(HotkeyAction::RestartPack, chord("Alt+Shift+F9"))],
-            &no_layout,
-        );
+        let (mine, refused) = nkb_adapters::default_bindings()
+            .with(&[(HotkeyAction::RestartPack, chord("Alt+Shift+F9"))]);
         assert!(refused.is_empty(), "{refused:?}");
         super::publish(&slot, &on("whitespace"), &mine);
         assert_eq!(

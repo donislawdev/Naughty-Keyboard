@@ -25,7 +25,7 @@
 
 use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, PoisonError};
 
 use super::ffi::{self, EventHotKeyId, EventTypeSpec, MutRef};
 use crate::hotkey::{Hotkey, HotkeyId, HotkeyRegistration, HotkeyUnavailable};
@@ -33,6 +33,23 @@ use crate::macos_hotkeys as rules;
 
 /// Who hears the presses of which listener: its serial, and where they go.
 static SINKS: Mutex<Vec<(u16, Sender<HotkeyId>)>> = Mutex::new(Vec::new());
+
+/// The key codes this process holds as global shortcuts with no modifier, each
+/// with the serial of its listener, for the send of a value to keep its letter
+/// off (`send.rs`, `macos_rules::letter_key`, `D189`): a character posted on one
+/// of them goes to the shortcut and never reaches the application.
+static HELD_BARE: Mutex<Vec<(u16, u16)>> = Mutex::new(Vec::new());
+
+/// The keys a send keeps off - see [`HELD_BARE`]. A poisoned lock still holds the
+/// last keys written, which are the ones registered.
+pub(super) fn held_bare() -> Vec<u16> {
+    HELD_BARE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .map(|&(_, code)| code)
+        .collect()
+}
 
 /// The serial of the next listener. A `u16` is the room the signature leaves,
 /// and a listener 65 536 starts older than the one being made is not alive.
@@ -110,6 +127,10 @@ impl Listener {
         if let Ok(mut sinks) = SINKS.lock() {
             sinks.retain(|(known, _)| *known != self.serial);
         }
+        HELD_BARE
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .retain(|&(serial, _)| serial != self.serial);
     }
 }
 
@@ -170,10 +191,20 @@ pub fn listen(hotkeys: &[Hotkey]) -> Result<Started, HotkeyUnavailable> {
         keys: Vec::new(),
     };
     let mut outcomes = Vec::with_capacity(hotkeys.len());
+    let mut bare = Vec::new();
     for hotkey in hotkeys {
         let (outcome, key) = register_one(serial, hotkey);
+        if key.is_some()
+            && let Some(code) = rules::bare_code(hotkey)
+        {
+            bare.push((serial, code));
+        }
         outcomes.push(outcome);
         listener.keys.extend(key);
     }
+    HELD_BARE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .extend(bare);
     Ok((outcomes, receiver, listener))
 }

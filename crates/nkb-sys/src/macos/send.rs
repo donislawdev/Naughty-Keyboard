@@ -26,8 +26,8 @@ use crate::confirm::press_confirmed;
 use crate::confirm::{Hand, Step, TAKEN_WAIT, Waits, Watch, Wire};
 use crate::escape::{ReservedEscape, SystemEscape};
 use crate::macos_rules::{
-    MacEvent, TEXT_KEY, chord_acted, chord_steps, hand, held_modifier, pid_of, scalars, text_steps,
-    units_after, window_of,
+    LetterKey, MacEvent, TEXT_LETTER, chord_acted, chord_steps, hand, held_modifier, letter_key,
+    pid_of, scalars, text_steps, units_after, window_of,
 };
 use crate::{
     Chord, Following, MODIFIER_RELEASE_WAIT, SendError, SendOutcome, SendProgress, StopReason,
@@ -43,23 +43,26 @@ pub(crate) fn send_allowed() -> bool {
 /// The first of the keys that would change what the tool types, if one is down.
 ///
 /// The modifiers, because a held `Command` turns the next letter into a
-/// shortcut - and `A`, because every character is posted as that key and the
-/// wait for it to show up would be answered by a key somebody is holding.
-fn held_key() -> Option<&'static str> {
+/// shortcut - and `letter`, because every character is posted as that key and
+/// the wait for it to show up would be answered by a key somebody is holding.
+fn held_key(letter: LetterKey) -> Option<&'static str> {
     let flags = unsafe { ffi::CGEventSourceFlagsState(ffi::STATE_HID) };
     if let Some(name) = held_modifier(flags) {
         return Some(name);
     }
-    unsafe { ffi::CGEventSourceKeyState(ffi::STATE_HID, TEXT_KEY) }.then_some("A")
+    unsafe { ffi::CGEventSourceKeyState(ffi::STATE_HID, letter.code) }.then_some(letter.name)
 }
 
 /// Waits for every such key to come up, for at most `MODIFIER_RELEASE_WAIT`,
 /// and no longer than the caller lets the send go on. The error names the key
 /// still down, or is `None` when the caller asked the send to stop (R03).
-fn wait_for_keys_released(halt: &AtomicBool) -> Result<(), Option<&'static str>> {
+fn wait_for_keys_released(
+    halt: &AtomicBool,
+    letter: LetterKey,
+) -> Result<(), Option<&'static str>> {
     let deadline = std::time::Instant::now() + MODIFIER_RELEASE_WAIT;
     loop {
-        let Some(key) = held_key() else {
+        let Some(key) = held_key(letter) else {
             return Ok(());
         };
         if halt.load(Ordering::Relaxed) {
@@ -251,7 +254,8 @@ pub(crate) fn send_text(
         units_expected: expected,
         reason,
     };
-    wait_for_keys_released(halt).map_err(|still| match still {
+    let letter = letter_key(&super::hotkey::held_bare());
+    wait_for_keys_released(halt, letter).map_err(|still| match still {
         Some(key) => SendError::ModifierHeld { key },
         None => nothing_sent(StopReason::Halted),
     })?;
@@ -262,7 +266,7 @@ pub(crate) fn send_text(
     let mut cadence = Cadence::starting(std::time::Instant::now(), PROGRESS_INTERVAL);
     let mut arrived = 0usize;
     for scalar in characters {
-        let steps = text_steps(scalar);
+        let steps = text_steps(scalar, letter.code);
         let pressed = session.press(&steps);
         if let Some(reason) = pressed.stop {
             // Always, unconfirmed (`D96`): a stop between the two halves of a
@@ -309,7 +313,7 @@ pub(crate) fn send_chords(
         chords_expected: chords.len(),
         reason,
     };
-    wait_for_keys_released(halt).map_err(|still| match still {
+    wait_for_keys_released(halt, TEXT_LETTER).map_err(|still| match still {
         Some(key) => SendError::ModifierHeld { key },
         None => nothing_pressed(StopReason::Halted),
     })?;

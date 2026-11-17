@@ -173,12 +173,15 @@ export global Tokens {
     // make it smaller than its content.
     out property <length> shortcuts-width: 480px;
     // Lines of body text kept free under the list for what the last press came
-    // to. Two hold the invitation to press a shortcut and the answer about
-    // one at the window's default width, so the list holds still through a
-    // recording (GUI rule 3). A longer refusal shortens the list by a line and
-    // its thumb says so. A count, not a length: the line is measured from the
-    // typeface in the window itself.
-    out property <int> shortcuts-message-lines: 2;
+    // to. Four hold the longest answer a recording gets at the window's default
+    // width: the shortcut kept, in two lines for a long action name, and the
+    // warning of what it takes from every application (`D189`), so the list
+    // holds still through a recording (GUI rule 3). The window does not grow
+    // for a longer sentence - measured 2026-11-17 with two lines kept: the
+    // third line of an answer and its warning was cut off by the bottom edge.
+    // A count, not a length: the line is measured from the typeface in the
+    // window itself.
+    out property <int> shortcuts-message-lines: 4;
     // Lines of the palette's next band given to what the value breaks (the
     // owner's point 2, 2026-11-16). Two hold the median sentence of the
     // shipped catalogue (107 characters, measured 2026-11-16) at the palette's

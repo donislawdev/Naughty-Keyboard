@@ -40,12 +40,54 @@ use core::time::Duration;
 
 use crate::confirm::{Hand, Step};
 use crate::field::FocusedInput;
+use crate::macos_hotkeys::LETTERS;
 use crate::text_keys::{TextKey, text_key};
 use crate::{Chord, NavKey};
 
 /// The key code of every character event: the letter `A`. Any ordinary
 /// character key would do, a function key does not (see the module text).
 pub(crate) const TEXT_KEY: u16 = 0x00;
+
+/// A letter key the characters of a send are posted as, and the name a held one
+/// is reported by.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct LetterKey {
+    pub code: u16,
+    pub name: &'static str,
+}
+
+/// `TEXT_KEY` with its name.
+pub(crate) const TEXT_LETTER: LetterKey = LetterKey {
+    code: TEXT_KEY,
+    name: "A",
+};
+
+/// The names of the letters of `LETTERS`, in the same order.
+const ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+/// The key the characters of a send are posted as: `TEXT_KEY`, unless this
+/// process holds it as a global shortcut with no modifier, and then the first
+/// letter it does not hold so (`D189`).
+///
+/// Such a shortcut takes every event of its key from the application, and the
+/// system still shows the key go down and up, so the send counted each
+/// character as taken: measured 2026-11-17 on macOS 27, not one of 73
+/// characters reached the field while `A` was held that way
+/// (`macos_hotkeys::bare_code`). The palette has fewer shortcuts than there are
+/// letters. With all 26 held the send stays on `TEXT_KEY`.
+pub(crate) fn letter_key(held_bare: &[u16]) -> LetterKey {
+    LETTERS
+        .iter()
+        .enumerate()
+        .filter_map(|(index, &code)| {
+            Some(LetterKey {
+                code: u16::try_from(code).ok()?,
+                name: ALPHABET.get(index..=index)?,
+            })
+        })
+        .find(|key| !held_bare.contains(&key.code))
+        .unwrap_or(TEXT_LETTER)
+}
 
 const KEY_COMMAND: u16 = 0x37;
 const KEY_SHIFT: u16 = 0x38;
@@ -144,12 +186,12 @@ pub(crate) fn scalars(text: &str) -> Vec<Scalar> {
 /// (`text_keys.rs`): Return with a line feed reached Safari and Chrome, where the
 /// line feed on `TEXT_KEY` was lost in Chrome (`OBS-194`). The person's `Shift`
 /// changes what those keys do, so it holds them back. Every other character is
-/// `TEXT_KEY`, which arrives as itself under `Shift`.
-pub(crate) fn text_steps(scalar: Scalar) -> [Step<MacEvent>; 2] {
+/// `letter` (`letter_key`), which arrives as itself under `Shift`.
+pub(crate) fn text_steps(scalar: Scalar, letter: u16) -> [Step<MacEvent>; 2] {
     let (key, shift_counts) = match (scalar.count, text_key(u32::from(scalar.units[0]))) {
         (1, Some(TextKey::Tab)) => (KEY_TAB, true),
         (1, Some(TextKey::Return)) => (KEY_RETURN, true),
-        _ => (TEXT_KEY, false),
+        _ => (letter, false),
     };
     let event = |down| MacEvent {
         key,
@@ -592,7 +634,7 @@ mod tests {
         let text = scalars("a\u{1F600}b");
         assert_eq!(text.iter().map(|s| s.count).collect::<Vec<_>>(), [1, 2, 1]);
         assert_eq!(text[1].units, [0xD83D, 0xDE00]);
-        let [down, up] = text_steps(text[1]);
+        let [down, up] = text_steps(text[1], TEXT_KEY);
         assert_eq!(down.event.unit_count, 2);
         assert_eq!(up.event.units, [0xD83D, 0xDE00]);
         assert!(down.down && !up.down);
@@ -603,7 +645,7 @@ mod tests {
         // The key code decides what an application sees (a function key makes it
         // ignore the string), and a character carries no modifier of its own.
         for scalar in scalars("Za\u{17C}\u{F3}\u{142}\u{107}\u{4E2D}") {
-            for step in text_steps(scalar) {
+            for step in text_steps(scalar, TEXT_KEY) {
                 assert_eq!(step.event.key, TEXT_KEY);
                 assert_eq!(step.key, TEXT_KEY);
                 assert_eq!(step.event.flags, 0);
@@ -614,7 +656,10 @@ mod tests {
     #[test]
     fn a_tab_and_a_line_feed_are_their_keys_and_wait_for_the_person_s_shift() {
         for (text, key) in [("\t", KEY_TAB), ("\n", KEY_RETURN)] {
-            for (index, step) in text_steps(scalars(text)[0]).into_iter().enumerate() {
+            for (index, step) in text_steps(scalars(text)[0], TEXT_KEY)
+                .into_iter()
+                .enumerate()
+            {
                 assert_eq!((step.key, step.event.key), (key, key), "{text:?}");
                 assert_eq!(step.event.units[0], u16::from(text.as_bytes()[0]));
                 assert_eq!(step.event.flags, 0);
@@ -627,9 +672,32 @@ mod tests {
     #[test]
     fn a_carriage_return_and_the_rest_stay_on_the_text_key() {
         for scalar in scalars("\r a\u{2028}\u{1F600}") {
-            for step in text_steps(scalar) {
+            for step in text_steps(scalar, TEXT_KEY) {
                 assert_eq!(step.key, TEXT_KEY);
                 assert!(!step.shift_counts);
+            }
+        }
+    }
+
+    #[test]
+    fn a_letter_held_as_a_shortcut_with_no_modifier_is_not_typed_on() {
+        assert_eq!(letter_key(&[]), TEXT_LETTER);
+        // Tab, held alone, is no key a character is posted as.
+        assert_eq!(letter_key(&[KEY_TAB]), TEXT_LETTER);
+        let b = LetterKey {
+            code: 11,
+            name: "B",
+        };
+        assert_eq!(letter_key(&[TEXT_KEY]), b);
+        assert_eq!(
+            letter_key(&[TEXT_KEY, 11]),
+            LetterKey { code: 8, name: "C" }
+        );
+        let every: Vec<u16> = (0..=50).collect();
+        assert_eq!(letter_key(&every), TEXT_LETTER);
+        for scalar in scalars("a1") {
+            for step in text_steps(scalar, b.code) {
+                assert_eq!((step.key, step.event.key), (11, 11));
             }
         }
     }
@@ -712,7 +780,11 @@ mod tests {
             assert!(counts[1..].iter().all(|counts| !counts), "{chord:?}");
         }
         for scalar in scalars("aB") {
-            assert!(text_steps(scalar).iter().all(|step| !step.shift_counts));
+            assert!(
+                text_steps(scalar, TEXT_KEY)
+                    .iter()
+                    .all(|step| !step.shift_counts)
+            );
         }
     }
 

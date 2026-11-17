@@ -33,7 +33,7 @@ use std::sync::mpsc;
 use nkb_adapters::{ChordHeld, default_bindings};
 use nkb_app::ShortcutChange;
 use nkb_app::ports::ShortcutRegistration;
-use nkb_core::hotkeys::{HotkeyAction, HotkeyChord, Refusal, Refused};
+use nkb_core::hotkeys::{ChordRisk, HotkeyAction, HotkeyChord, Refusal, Refused};
 use nkb_gui::ShortcutsWindow;
 use nkb_gui::live::{ShortcutsNow, Told};
 use nkb_gui::packs::Keyboard;
@@ -196,6 +196,17 @@ fn ink_bands(
 }
 
 /// Pixels of the scroll thumb in the strip at the content's right edge.
+/// Rows at the window's bottom edge with nothing drawn on them: the status
+/// band's own padding. A sentence longer than the room kept for it runs into
+/// this edge, and the window does not grow for it (`Tokens.shortcuts-message-lines`).
+const BOTTOM_PADDING: u32 = 4;
+
+/// Whether row `y` is one colour from one side to the other, inside the frame.
+fn blank_row(buffer: &[offscreen::Pixel], width: u32, y: u32) -> bool {
+    let first = pixel(buffer, width, 2, y);
+    (2..width - 2).all(|x| pixel(buffer, width, x, y) == first)
+}
+
 fn thumb(buffer: &[offscreen::Pixel], width: u32, rows: std::ops::Range<u32>) -> usize {
     rows.flat_map(|y| ((width - 24)..width).map(move |x| (x, y)))
         .filter(|&(x, y)| pixel(buffer, width, x, y) == THUMB)
@@ -297,10 +308,7 @@ fn the_shortcuts_window_asks_for_the_room_its_rows_and_sentences_need() {
     *held.borrow_mut() = ChordHeld::Chord(chord("Alt+Shift+M"));
     tap(window, "m");
     let bindings = defaults
-        .with(
-            &[(HotkeyAction::PreviousValue, chord("Alt+Shift+M"))],
-            &|_| None,
-        )
+        .with(&[(HotkeyAction::PreviousValue, chord("Alt+Shift+M"))])
         .0;
     shortcuts.told(Told::Shortcut {
         action: HotkeyAction::PreviousValue,
@@ -308,6 +316,7 @@ fn the_shortcuts_window_asks_for_the_room_its_rows_and_sentences_need() {
             bindings,
             also: Vec::new(),
             unchecked: None,
+            risk: None,
         },
         not_saved: None,
     });
@@ -327,10 +336,30 @@ fn the_shortcuts_window_asks_for_the_room_its_rows_and_sentences_need() {
     });
     let refused = adapter.draw();
     let refused_asks = asks();
+    // The longest answer: the shortcut kept, and the warning of what a single
+    // key takes from every application under it (`D189`).
+    tap_key(window, Key::Return);
+    *held.borrow_mut() = ChordHeld::Chord(chord("Shift+F12"));
+    tap(window, "x");
+    shortcuts.told(Told::Shortcut {
+        action: HotkeyAction::PreviousValue,
+        change: ShortcutChange::Changed {
+            bindings: defaults
+                .with(&[(HotkeyAction::PreviousValue, chord("Shift+F12"))])
+                .0,
+            also: Vec::new(),
+            unchecked: None,
+            risk: Some(ChordRisk::NoCommandModifier),
+        },
+        not_saved: None,
+    });
+    let warned = adapter.draw();
+    let warned_asks = asks();
     for (name, buffer, now) in [
         ("invitation", &invited, invited_asks),
         ("answer", &answered, answered_asks),
         ("refusal", &refused, refused_asks),
+        ("warning", &warned, warned_asks),
     ] {
         // The room under the list is kept from the start, so a sentence that
         // fits it changes nothing - not the rows, not the window's edge.
@@ -347,6 +376,12 @@ fn the_shortcuts_window_asks_for_the_room_its_rows_and_sentences_need() {
         );
         let area = content(buffer, width, height);
         let messages = window.get_messages();
+        assert!(
+            (height - BOTTOM_PADDING..height).all(|y| blank_row(buffer, width, y)),
+            "with the {name} under the list, text reaches the window's bottom edge - the \
+             sentences need more room than is kept for them, and the rest is cut off. Look at {}",
+            path.display()
+        );
         assert_eq!(
             thumb(buffer, width, area.clone()),
             0,

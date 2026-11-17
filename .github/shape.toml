@@ -116,8 +116,11 @@ near = 13
 # query is matched in left nkb-gui/src/picker.rs for picker/haystack.rs. 2131
 # on 2026-11-16, when the test of the hint bar's words went from live.rs to
 # live/view.rs beside the words, and nkb-adapters/src/i18n.rs is the largest.
+# 2120 on 2026-11-17, when the test of what the settings file says about a
+# shortcut that takes a key or a character went from i18n.rs to i18n/typing.rs
+# beside the sentences.
 [files.rust-whole]
-ceiling = 2131
+ceiling = 2120
 # 5 since 2026-10-10, the owner's choice twice that day: the ceiling came down
 # from 2907 to 2481, 2408, 2407 and 2363 as live.rs moved code into modules, the
 # band came down with it, and it reached advance_sequence.rs, settings_file.rs
@@ -136,8 +139,10 @@ ceiling = 2131
 # labels, and the tests of the sentence for a clearing that waits for the
 # person went to live/view.rs beside it, and live.rs is the largest again. 6 since
 # the same day, the owner's choice: nkb-app/src/keep_settings.rs, which did not
-# grow, joined the band at 1561.
-near = 6
+# grow, joined the band at 1561. 7 since 2026-11-17, the owner's choice: the
+# ceiling came down to 2120 and nkb-core/src/sequence.rs, which did not grow,
+# joined the band at 1486.
+near = 7
 
 # A Slint file, the gallery excepted. ui/screens/palette.slint since the fold
 # of its shortcut list (2026-10-11), then ui/components/list.slint at 260 once

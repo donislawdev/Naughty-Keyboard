@@ -380,6 +380,11 @@ pub enum ShortcutsLabel {
     /// The pill on an action this version does not carry out yet - its
     /// shortcut stays registered, so nobody else takes it (`UX-GUI-006`).
     NotAvailable,
+    /// The pill on a shortcut that holds no `Ctrl`, `Alt` or `Win`, in the
+    /// colour of a risk (`D189`).
+    BlocksKey,
+    /// The pill on a shortcut a keyboard layout types a character on.
+    BlocksCharacter,
     /// The footer: each key, and what it does here.
     KeyEnter,
     Record,
@@ -401,12 +406,13 @@ pub enum ShortcutsLabel {
     Also,
     /// Kept, but whether another application holds it could not be asked.
     Unchecked,
-    /// Refused: no `Ctrl`, `Alt` or `Win`.
-    NoModifier,
-    /// Refused: a keyboard layout types a character on it as `AltGr`.
-    TypesCharacter,
-    /// Refused: a keyboard layout types a character on it with `Option` (macOS).
-    OptionTypesCharacter,
+    /// In use, and holding no `Ctrl`, `Alt` or `Win` (`D189`).
+    RiskNoModifier,
+    /// In use, and a keyboard layout types a character on it as `AltGr`.
+    RiskTypesCharacter,
+    /// In use, and a keyboard layout types a character on it with `Option`
+    /// (macOS).
+    RiskOptionTypesCharacter,
     /// Refused: another action answers it.
     HeldBy,
     /// Refused: another application holds it.
@@ -612,6 +618,8 @@ pub(super) fn pattern_shortcuts_label(label: ShortcutsLabel) -> &'static str {
         ShortcutsLabel::Taken => "taken",
         ShortcutsLabel::NotRegistered => "not registered",
         ShortcutsLabel::NotAvailable => "not available yet",
+        ShortcutsLabel::BlocksKey => "blocks the key",
+        ShortcutsLabel::BlocksCharacter => "blocks a character",
         ShortcutsLabel::KeyEnter => "Enter",
         ShortcutsLabel::Record => "Record a new shortcut",
         ShortcutsLabel::KeyDelete => "Delete",
@@ -632,14 +640,14 @@ pub(super) fn pattern_shortcuts_label(label: ShortcutsLabel) -> &'static str {
         ShortcutsLabel::Unchecked => {
             "Whether another application holds {shortcut} could not be checked: {reason}."
         }
-        ShortcutsLabel::NoModifier => {
-            "{shortcut} holds no {modifiers} - taken globally it would stop that key working in every application. Add {modifiers} to it."
+        ShortcutsLabel::RiskNoModifier => {
+            "Without {modifiers}, {shortcut} stops working in every application while the palette runs, its own windows included."
         }
-        ShortcutsLabel::TypesCharacter => {
-            "{shortcut} types \"{character}\" as AltGr on a keyboard layout of this computer - taken globally it would stop that character working in every application. Choose a combination without Ctrl+Alt."
+        ShortcutsLabel::RiskTypesCharacter => {
+            "On a keyboard layout of this computer {shortcut} types \"{character}\" as AltGr, so while the palette runs, \"{character}\" cannot be typed that way."
         }
-        ShortcutsLabel::OptionTypesCharacter => {
-            "{shortcut} types \"{character}\" with Option on a keyboard layout of this computer - taken globally it would stop that character working in every application. Choose a combination that also holds Command."
+        ShortcutsLabel::RiskOptionTypesCharacter => {
+            "On a keyboard layout of this computer {shortcut} types \"{character}\" with Option, so while the palette runs, \"{character}\" cannot be typed that way."
         }
         ShortcutsLabel::HeldBy => {
             "{shortcut} is already the shortcut for \"{other}\". Give \"{other}\" another combination first."
@@ -724,6 +732,7 @@ pub fn shortcut_answer(
             bindings,
             also,
             unchecked,
+            ..
         } => {
             let now = bindings.chord(action);
             let kept = if asked.is_some() {
@@ -750,31 +759,12 @@ pub fn shortcut_answer(
             lines
         }
         ShortcutChange::Refused(refused) => {
-            let (label, other, character) = match refused.why {
-                Refusal::Problem(ChordProblem::NoCommandModifier) => {
-                    (ShortcutsLabel::NoModifier, "", String::new())
-                }
-                Refusal::TypesCharacter(character) => (
-                    ShortcutsLabel::TypesCharacter,
-                    "",
-                    shown_character(character),
-                ),
-                Refusal::OptionTypesCharacter(character) => (
-                    ShortcutsLabel::OptionTypesCharacter,
-                    "",
-                    shown_character(character),
-                ),
-                Refusal::SameAs(other) => {
-                    (ShortcutsLabel::HeldBy, action_name(other), String::new())
-                }
-            };
+            let Refusal::SameAs(other) = refused.why;
             vec![fill(
-                pattern_shortcuts_label(label),
+                pattern_shortcuts_label(ShortcutsLabel::HeldBy),
                 &[
                     ("shortcut", &chord(refused.chord)),
-                    ("other", other),
-                    ("character", &character),
-                    ("modifiers", super::typing::command_modifiers()),
+                    ("other", action_name(other)),
                 ],
             )]
         }
@@ -787,6 +777,45 @@ pub fn shortcut_answer(
             &[("shortcut", &chord(*held)), ("code", &code.to_string())],
         )],
     }
+}
+
+/// What a shortcut in use, `held`, takes from every application, said in the
+/// colour of a risk after the line that says it was kept (`D189`). A sentence
+/// of its own, so the window colours it by what it is and not by where it
+/// stands among the lines of [`shortcut_answer`].
+#[must_use]
+pub fn shortcut_risk(held: HotkeyChord, risk: ChordRisk) -> String {
+    let (label, character) = match risk {
+        ChordRisk::NoCommandModifier => (ShortcutsLabel::RiskNoModifier, String::new()),
+        ChordRisk::TypesCharacter(character) => (
+            ShortcutsLabel::RiskTypesCharacter,
+            shown_character(character),
+        ),
+        ChordRisk::OptionTypesCharacter(character) => (
+            ShortcutsLabel::RiskOptionTypesCharacter,
+            shown_character(character),
+        ),
+    };
+    fill(
+        pattern_shortcuts_label(label),
+        &[
+            ("shortcut", &chord(held)),
+            ("character", &character),
+            ("modifiers", super::typing::command_modifiers()),
+        ],
+    )
+}
+
+/// The pill on the row of a shortcut that takes something from every
+/// application: the key itself, or a character a layout types with it.
+#[must_use]
+pub fn shortcut_risk_pill(risk: ChordRisk) -> &'static str {
+    shortcuts_label(match risk {
+        ChordRisk::NoCommandModifier => ShortcutsLabel::BlocksKey,
+        ChordRisk::TypesCharacter(_) | ChordRisk::OptionTypesCharacter(_) => {
+            ShortcutsLabel::BlocksCharacter
+        }
+    })
 }
 
 #[cfg(test)]

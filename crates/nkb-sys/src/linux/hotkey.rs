@@ -34,8 +34,8 @@
 //! comes back when it has one. There is nowhere to say that to the person, since the
 //! outcomes were given when the listener started (`hotkey.rs`).
 
-use std::sync::Arc;
 use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::JoinHandle;
 
 use x11rb::COPY_FROM_PARENT;
@@ -53,7 +53,36 @@ use super::send::{Keyboard, read_keyboard};
 use super::stream::Conn;
 use crate::hotkey::{Hotkey, HotkeyId, HotkeyRegistration, HotkeyUnavailable};
 use crate::linux_hotkeys::{self as rules, Binding, ModifierBits};
-use crate::linux_rules::Refusal;
+use crate::linux_rules::{LayoutKey, Refusal};
+
+/// The keys this process grabs as global shortcuts with no modifier but Shift, for the
+/// send of a value to keep off (`send.rs`, `LayoutKeys::without`, `D189`): its key event
+/// on one of them would go to the grab and never reach the application. One per
+/// process, as the grabs are: they belong to the listener's connection, and a send on a
+/// connection of its own cannot see them.
+static HELD_BARE: Mutex<Vec<LayoutKey>> = Mutex::new(Vec::new());
+
+/// The keys a send keeps off - see [`HELD_BARE`]. A poisoned lock still holds the last
+/// keys written, which are the ones grabbed.
+pub(super) fn held_bare() -> Vec<LayoutKey> {
+    HELD_BARE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+}
+
+/// Writes the bare keys among `bindings` for the send to read.
+fn publish_bare(bindings: &[Binding]) {
+    let bare = bindings
+        .iter()
+        .filter(|binding| binding.modifiers & !rules::SHIFT == 0)
+        .map(|binding| LayoutKey {
+            keycode: binding.keycode,
+            shift: binding.modifiers & rules::SHIFT != 0,
+        })
+        .collect();
+    *HELD_BARE.lock().unwrap_or_else(PoisonError::into_inner) = bare;
+}
 
 /// What listening gives: one outcome per hotkey, the presses, and the listener.
 type Started = (Vec<HotkeyRegistration>, Receiver<HotkeyId>, Listener);
@@ -198,6 +227,7 @@ impl Held {
             .iter()
             .filter_map(|shortcut| shortcut.binding)
             .collect();
+        publish_bare(&self.bindings);
     }
 
     /// Moves the shortcuts whose key is another one now, after the server said the
@@ -249,6 +279,7 @@ impl Held {
     }
 
     fn release(&self, conn: &Conn, root: u32) {
+        publish_bare(&[]);
         for shortcut in &self.shortcuts {
             if let Some(binding) = &shortcut.binding {
                 ungrab(conn, root, binding, &self.variants);
