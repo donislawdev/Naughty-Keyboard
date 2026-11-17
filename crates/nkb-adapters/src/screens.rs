@@ -5,7 +5,7 @@
 //! neither the system nor the rule. No port: there is one way to ask and no
 //! second one to swap in, the same reasoning as `layout_character` (`D88`).
 
-use nkb_core::screens::{Layout, Screen};
+use nkb_core::screens::{Layout, Point, Rect, Screen};
 
 /// Whether the layout and the places remembered on it are in points rather than
 /// physical pixels - the unit this system places a window in (`D143`).
@@ -33,4 +33,19 @@ pub fn layout() -> Option<Layout> {
         width: monitor.width,
         height: monitor.height,
     }))
+}
+
+/// The part of the screen holding `at` that windows may use - the screen less
+/// the taskbar, the menu bar, the Dock or a panel (`D190`) - in the unit of the
+/// layout ([`IN_POINTS`]). On Linux the work area of the whole desktop, which
+/// the window layer meets with the screen its window stands on. `None` where
+/// the system does not say.
+#[must_use]
+pub fn work_area(at: Point) -> Option<Rect> {
+    nkb_sys::screens::work_area(at.x, at.y).map(|area| Rect {
+        x: area.x,
+        y: area.y,
+        width: area.width,
+        height: area.height,
+    })
 }

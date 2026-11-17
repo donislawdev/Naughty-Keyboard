@@ -121,3 +121,8 @@ pub mod place;
 // (Linux on Wayland, `D145` point 38): moving it by the header and closing it.
 // The arithmetic of a move needs no window, so it is tested without a screen.
 pub mod own_frame;
+
+// The room a screen has for a window as tall as its content - the palette and
+// the shortcuts window on a short screen (`D190`). The conversions need no
+// window, so they are tested without a screen.
+pub mod room;

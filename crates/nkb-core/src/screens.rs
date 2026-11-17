@@ -100,9 +100,10 @@ pub struct Rect {
 /// needs. A window larger than the screen keeps its top left corner on it,
 /// because that is where its title bar is.
 ///
-/// `screen` is the screen the palette stands on, as the system reports it -
-/// the whole screen, so a taskbar along its bottom edge may still cover the
-/// bottom of a window pushed down there.
+/// `screen` is where on the palette's screen the window may stand: the part
+/// windows may use, where the system says it (`D190`), else the whole screen -
+/// where a taskbar along its bottom edge may still cover the bottom of a window
+/// pushed down there.
 #[must_use]
 pub fn beside(palette: Rect, window: (u32, u32), screen: Rect, gap: u32) -> Point {
     let (width, height) = (i64::from(window.0), i64::from(window.1));
@@ -129,6 +130,48 @@ pub fn beside(palette: Rect, window: (u32, u32), screen: Rect, gap: u32) -> Poin
     Point {
         x: saturate(x),
         y: saturate(y),
+    }
+}
+
+/// How tall a window may be on a screen too short for its content: from the top
+/// of its content down to the bottom of `area`, the part of the screen windows
+/// may use - the screen less the taskbar, the Dock, the menu bar or a panel.
+/// In the unit of both.
+///
+/// Zero when that top stands at or below the area's bottom - a window put that
+/// low has no room, keeps what never scrolls and stands past the edge, as any
+/// window does there. A top above the area's top (a window pushed up past it)
+/// counts from where the window is, so the bottom edge stays on the area.
+#[must_use]
+pub fn room_below(top: i32, area: Rect) -> u32 {
+    let bottom = i64::from(area.y) + i64::from(area.height);
+    let room = (bottom - i64::from(top)).max(0);
+    u32::try_from(room).unwrap_or(u32::MAX)
+}
+
+impl Rect {
+    /// The part two rectangles share, or `None` where they do not overlap -
+    /// edges that only touch share nothing, as with every rectangle the window
+    /// system reports. The work area one system gives for the whole desktop,
+    /// met with the screen a window stands on, is that screen's work area.
+    #[must_use]
+    pub fn meet(self, other: Self) -> Option<Self> {
+        let left = i64::from(self.x).max(i64::from(other.x));
+        let top = i64::from(self.y).max(i64::from(other.y));
+        let right = (i64::from(self.x) + i64::from(self.width))
+            .min(i64::from(other.x) + i64::from(other.width));
+        let bottom = (i64::from(self.y) + i64::from(self.height))
+            .min(i64::from(other.y) + i64::from(other.height));
+        Some(Self {
+            x: i32::try_from(left).ok()?,
+            y: i32::try_from(top).ok()?,
+            width: u32::try_from(right - left)
+                .ok()
+                .filter(|width| *width > 0)?,
+            height: u32::try_from(bottom - top)
+                .ok()
+                .filter(|height| *height > 0)?,
+        })
     }
 }
 
@@ -244,6 +287,61 @@ mod tests {
     /// value window's default size.
     const SCREEN: Rect = rect(0, 0, 1920, 1080);
     const WINDOW: (u32, u32) = (520, 600);
+
+    /// A laptop at 1366 x 768 with a taskbar 48 high along its bottom.
+    const WORK_AREA: Rect = rect(0, 0, 1366, 720);
+
+    #[test]
+    fn the_room_runs_from_the_top_of_the_content_to_the_bottom_of_the_work_area() {
+        assert_eq!(room_below(100, WORK_AREA), 620);
+        assert_eq!(room_below(0, WORK_AREA), 720);
+        // A screen below and left of the main one: the same arithmetic.
+        assert_eq!(room_below(1200, rect(-1366, 1080, 1366, 720)), 600);
+        // Pushed up past the area's top, the window's top still counts.
+        assert_eq!(room_below(-40, WORK_AREA), 760);
+    }
+
+    #[test]
+    fn a_window_put_at_or_below_the_bottom_of_the_work_area_has_no_room() {
+        assert_eq!(room_below(720, WORK_AREA), 0);
+        assert_eq!(room_below(900, WORK_AREA), 0);
+        // The extremes of a coordinate do not wrap.
+        assert_eq!(room_below(i32::MAX, WORK_AREA), 0);
+        assert_eq!(
+            room_below(i32::MIN, rect(i32::MAX, i32::MAX, u32::MAX, u32::MAX)),
+            u32::MAX
+        );
+    }
+
+    #[test]
+    fn a_work_area_of_the_whole_desktop_met_with_one_screen_is_that_screens_part() {
+        // A desktop of two screens side by side, a panel 32 high along the
+        // top of both: the work area the desktop gives, met with each screen.
+        let desktop = rect(0, 32, 3200, 1048);
+        assert_eq!(
+            desktop.meet(rect(0, 0, 1920, 1080)),
+            Some(rect(0, 32, 1920, 1048))
+        );
+        assert_eq!(
+            desktop.meet(rect(1920, 0, 1280, 800)),
+            Some(rect(1920, 32, 1280, 768))
+        );
+        // Order does not matter.
+        assert_eq!(
+            rect(1920, 0, 1280, 800).meet(desktop),
+            Some(rect(1920, 32, 1280, 768))
+        );
+    }
+
+    #[test]
+    fn rectangles_that_only_touch_or_lie_apart_share_nothing() {
+        assert_eq!(rect(0, 0, 100, 100).meet(rect(100, 0, 100, 100)), None);
+        assert_eq!(rect(0, 0, 100, 100).meet(rect(0, 100, 100, 100)), None);
+        assert_eq!(rect(0, 0, 100, 100).meet(rect(300, 300, 10, 10)), None);
+        // The widest rectangles do not wrap.
+        let all = rect(i32::MIN, i32::MIN, u32::MAX, u32::MAX);
+        assert_eq!(all.meet(rect(5, 5, 10, 10)), Some(rect(5, 5, 10, 10)));
+    }
 
     #[test]
     fn a_window_opens_to_the_right_of_the_palette_level_with_its_top() {

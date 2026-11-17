@@ -58,7 +58,7 @@ In the palette each of these values wears `inside the limit` or `outside the lim
 
 ## Can I make it smaller?
 
-{{< kbd "Alt+Shift+H" >}} collapses the palette to its header and expands it again. Once you know the shortcuts, click **Shortcuts** at the bottom to fold their list under its heading, and click it again to open it. The shortcuts keep working while their list is folded. The palette never hides and never moves on its own. It is exactly as tall as what it shows.
+{{< kbd "Alt+Shift+H" >}} collapses the palette to its header and expands it again. Once you know the shortcuts, click **Shortcuts** at the bottom to fold their list under its heading, and click it again to open it. The shortcuts keep working while their list is folded. The palette never hides and never moves on its own. It is as tall as what it shows, and on a screen too small for that it ends at the bottom of the screen, above the taskbar or the Dock: the next value and the line at the bottom stay in view, and the last value sent, the two switches and the list of shortcuts scroll with the mouse wheel.
 
 ## What does it remember?
 

@@ -59,7 +59,7 @@ W palecie każda z tych wartości nosi `inside the limit` albo `outside the limi
 
 ## Czy mogę ją zmniejszyć?
 
-{{< kbd "Alt+Shift+H" >}} zwija paletę do samego nagłówka i rozwija ją z powrotem. Gdy znasz już skróty, kliknij **Shortcuts** na dole, a ich lista zwinie się pod nagłówkiem. Kolejne kliknięcie ją rozwija. Skróty działają także przy zwiniętej liście. Paleta nigdy się nie chowa i nigdy sama się nie przesuwa. Jest dokładnie tak wysoka, jak to, co pokazuje.
+{{< kbd "Alt+Shift+H" >}} zwija paletę do samego nagłówka i rozwija ją z powrotem. Gdy znasz już skróty, kliknij **Shortcuts** na dole, a ich lista zwinie się pod nagłówkiem. Kolejne kliknięcie ją rozwija. Skróty działają także przy zwiniętej liście. Paleta nigdy się nie chowa i nigdy sama się nie przesuwa. Jest tak wysoka, jak to, co pokazuje, a na ekranie, który jest na to za niski, kończy się na dole ekranu, nad paskiem zadań albo Dockiem: następna wartość i wiersz na dole zostają w widoku, a ostatnio wysłana wartość, oba przełączniki i lista skrótów przewijają się kółkiem myszy.
 
 ## Co pamięta?
 

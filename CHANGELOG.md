@@ -86,8 +86,15 @@ Changes wait under Unreleased until then.
 
 ### Changed
 
+- On a small screen the palette and the shortcuts window no longer reach past the bottom of the
+  screen. The palette is never taller than the room between its top edge and the bottom of the
+  screen, above the taskbar or the Dock: the next value and the line at the bottom stay in view, and
+  the last value sent, the two switches and the list of keys scroll with the mouse wheel when they
+  do not fit. The shortcuts window fits the same way, and its list scrolls with the selected
+  shortcut kept in view.
 - The windows the palette opens, such as the value window and the shortcuts window, open beside it,
   on the side of the screen that has room for them, instead of where the system puts a new window.
+  They now stay above the taskbar, the Dock or a panel.
 
 - A shortcut without Ctrl, Alt or Win, or one a keyboard layout types a character with (AltGr on
   Windows, Option on a Mac), is no longer refused. The shortcuts window keeps it, marks its row and

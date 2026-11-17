@@ -256,6 +256,10 @@ unsafe extern "C" {
     // of each message at the call, the only way messages of several shapes can be
     // sent without a declaration per shape.
     pub(crate) fn objc_msgSend();
+    // The same for a message that returns a structure too large for registers,
+    // on x86-64 - a screen's rectangle (`work_area.rs`). arm64 has no such entry.
+    #[cfg(target_arch = "x86_64")]
+    pub(crate) fn objc_msgSend_stret();
 }
 
 /// The identifier a hot key event was registered with, if it carries one.

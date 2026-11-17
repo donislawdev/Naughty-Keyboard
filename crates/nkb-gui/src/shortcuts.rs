@@ -410,6 +410,10 @@ impl Shortcuts {
         describe(&self.window, list.read_only());
         *self.list.borrow_mut() = Some(list);
         self.show_all();
+        // Never taller than the screen the palette stands on has room for
+        // (`D190`), told at every opening - the palette may have moved.
+        self.window
+            .set_room(on_request::room_beside(self.window.window()));
         if let Err(error) = on_request::bring_up(self.window.window()) {
             self.cannot_show(&error);
             return;

@@ -85,12 +85,27 @@ fn place_beside_palette(window: &slint::Window) -> Option<slint::PhysicalPositio
     }
     let palette = PALETTE.with(|named| named.borrow().as_ref().and_then(slint::Weak::upgrade))?;
     let anchor = palette.window();
-    let screen = anchor
-        .with_winit_window(|window| window.current_monitor())
-        .flatten()?;
+    // The part of the screen windows may use, where the system says it, so a
+    // window pushed down stays above the taskbar (`D190`) - else the screen.
+    let screen = crate::room::work_area_of(anchor).or_else(|| {
+        anchor
+            .with_winit_window(|window| window.current_monitor())
+            .flatten()
+            .map(|monitor| {
+                let (corner, extent) = (monitor.position(), monitor.size());
+                Rect {
+                    x: corner.x,
+                    y: corner.y,
+                    width: extent.width,
+                    height: extent.height,
+                }
+            })
+    })?;
     let (at, size) = (anchor.position(), outer_size(anchor));
-    let (corner, extent) = (screen.position(), screen.size());
     let gap = (GAP * anchor.scale_factor()).round();
+    // A window told its room a moment ago may not have taken that height yet,
+    // and is placed as tall as it will be: no taller than the screen.
+    let (width, height) = outer_size(window);
     let place = beside(
         Rect {
             x: at.x,
@@ -98,13 +113,8 @@ fn place_beside_palette(window: &slint::Window) -> Option<slint::PhysicalPositio
             width: size.0,
             height: size.1,
         },
-        outer_size(window),
-        Rect {
-            x: corner.x,
-            y: corner.y,
-            width: extent.width,
-            height: extent.height,
-        },
+        (width, height.min(screen.height)),
+        screen,
         // A scale is a small positive number, so the gap is a few pixels.
         if gap.is_finite() && gap >= 0.0 {
             gap as u32
@@ -115,6 +125,17 @@ fn place_beside_palette(window: &slint::Window) -> Option<slint::PhysicalPositio
     let at = slint::PhysicalPosition::new(place.x, place.y);
     window.set_position(at);
     Some(at)
+}
+
+/// The height a window opened beside the palette may have whole (`D190`): the
+/// work area of the palette's screen less the window's own frame, in the
+/// window's logical pixels. Zero - "not known" to the view - without a palette,
+/// or where the system does not say.
+pub(crate) fn room_beside(window: &slint::Window) -> f32 {
+    PALETTE
+        .with(|named| named.borrow().as_ref().and_then(slint::Weak::upgrade))
+        .and_then(|palette| crate::room::beside(palette.window(), window))
+        .unwrap_or(0.0)
 }
 
 /// A window's size with its frame, in physical pixels - its inner size where
