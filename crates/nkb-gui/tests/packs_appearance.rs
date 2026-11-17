@@ -46,6 +46,16 @@ const NEXT_ROW: usize = 4;
 /// [`specimen`] - the pack in use, so it is in view without scrolling.
 const LONG_ROW: usize = 2;
 
+/// What the pack in [`LONG_ROW`] is for, about twice as long as one line of
+/// the row holds in any system typeface. The pack's own description is not
+/// enough: it fills one line of SF, the prose typeface on macOS since Slint
+/// 1.19 (407 px of the row, measured in CI 2026-11-18), and wraps only in the
+/// wider faces of Windows and Linux - so the check that a description wraps
+/// would have measured the typeface instead.
+const LONG_DESCRIPTION: &str = "Characters that take up space, or claim to, and are impossible \
+                                to see in a form: spaces of every width, joiners that join \
+                                nothing, and marks that only turn the text around them.";
+
 /// Specimen data - the test's own, like the gallery's labels. The product fills
 /// these from `nkb-adapters::i18n` and the catalogue.
 fn fill(window: &PacksWindow, rows: Vec<PickRow>) {
@@ -135,10 +145,7 @@ fn specimen() -> Vec<PickRow> {
         PickRow {
             current: true,
             open: true,
-            ..pack(
-                "Whitespace",
-                "Characters that take up space, or claim to, and are impossible to see in a form.",
-            )
+            ..pack("Whitespace", LONG_DESCRIPTION)
         },
         PickRow {
             single_line: true,

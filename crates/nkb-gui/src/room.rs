@@ -60,7 +60,7 @@ pub fn refit_on_move(palette: &crate::Palette) {
 
 /// The room from the top of the window's content to the bottom of the work
 /// area of the screen it stands on, less the window manager's frame under the
-/// content ([`frame_below`]), in the window's logical pixels - at least one,
+/// content (`frame_below`), in the window's logical pixels - at least one,
 /// because zero is what a view reads as not known. `None` when the system does
 /// not say where the window or the work area is.
 #[must_use]
