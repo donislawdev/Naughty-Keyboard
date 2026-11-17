@@ -13,10 +13,16 @@ Paleta to `nkb-gui`, okno, które stoi obok testowanej aplikacji i jest sterowan
 ## Co pokazuje?
 
 - **Paczkę** na górze, z tym, jak daleko w niej jesteś. Kliknięcie jej nazwy otwiera okno szukania wartości.
-- **Następną wartość**, tę, którą wpisze następne naciśnięcie, narysowaną tak, żeby ją było widać. Znak, którego nikt nie zobaczy, jest rysowany jako znacznik, prostokąt otwarty od góry, a nie jako nic. Gdy wartość jest połową pary, obok jej nazwy stoi `pair 1 of 2` albo `pair 2 of 2`.
+- **Następną wartość**, tę, którą wpisze następne naciśnięcie, narysowaną tak, żeby ją było widać. Znak, którego nikt nie zobaczy, jest rysowany jako znacznik, prostokąt otwarty od góry, a nie jako nic. Gdy wartość jest połową pary, obok jej nazwy stoi `pair 1 of 2` albo `pair 2 of 2`. Pod nią stoją dwa wiersze o tym, co ta wartość psuje, więc wiesz, czego szukać, zanim ją wpiszesz, oraz to, które wartości wpisałyby {{< kbd "Alt+Shift+P" >}} i {{< kbd "Alt+Shift+R" >}}.
 - **Ostatnią wpisaną wartość**, zwiniętą, dopóki jej nie rozwiniesz, z czterema licznikami: grafemy, punkty kodowe, bajty i jednostki UTF-16. Te cztery liczby różnią się właśnie przy wartościach, które najczęściej psują pola.
 - **Sposób wpisania każdej wartości**: z klawiatury albo przez schowek, z którego ją wklejasz, i to, czy wiersz jest najpierw czyszczony, czy wartość trafia w miejsce kursora.
 - **Klawisze** każdego działającego skrótu, na dole, pod nagłówkiem, który je zwija.
+
+Nazwa albo zdanie za długie na swoje miejsce kończy się `...`. Zatrzymaj na nim wskaźnik, a obok pojawi się cały tekst. Okna, które otwiera paleta, na przykład okno wartości i okno skrótów, otwierają się obok niej, po tej stronie ekranu, po której jest na nie miejsce.
+
+## Czy mogę wpisać tę samą wartość w wiele pól?
+
+Tak. Wpisz ją raz skrótem {{< kbd "Alt+Shift+N" >}}, potem klikaj kolejne pola i w każdym naciśnij {{< kbd "Alt+Shift+R" >}}. Ten skrót wpisuje tę samą wartość jeszcze raz, a licznik stoi w miejscu, więc następne {{< kbd "Alt+Shift+N" >}} wpisze wartość, która jest po niej. Wiersz pod następną wartością mówi, którą wartość wpisze {{< kbd "Alt+Shift+R" >}}. Przed pierwszą wartością z paczki nie ma czego powtórzyć i paleta to mówi.
 
 ## Jak wartość trafia do pola?
 
@@ -45,7 +51,7 @@ Paczka z folderu własnego zastępuje paczkę zespołu o tej samej nazwie, a pac
 
 ## Czy może zrobić wartości dla limitu długości?
 
-Tak. **Length limit** to pierwszy wiersz okna wartości. Otwiera okno, w którym wpisujesz limit podany dla pola: **At most**, **At least** albo oba, liczone w grafemach, punktach kodowych, jednostkach UTF-16 albo bajtach. Wartości pojawiają się na liście w trakcie pisania: wartość pusta oraz jedna poniżej, dokładnie na i jedna powyżej każdej granicy, z liter, ze znaków dwu-, trzy- i czterobajtowych, z emoji rodziny i jako counterstring. Każdy wiersz mówi, jak długa jest wartość i czy ta długość mieści się w limicie. **Use these values** oddaje je palecie, a skróty chodzą po nich tak samo jak po paczce.
+Tak. **Length limit** stoi na górze okna wartości, pod nagłówkiem **Generators**. Otwiera okno, w którym wpisujesz limit podany dla pola: **At most**, **At least** albo oba, liczone w grafemach, punktach kodowych, jednostkach UTF-16 albo bajtach. Wartości pojawiają się na liście w trakcie pisania: wartość pusta oraz jedna poniżej, dokładnie na i jedna powyżej każdej granicy, z liter, ze znaków dwu-, trzy- i czterobajtowych, z emoji rodziny i jako counterstring. Każdy wiersz mówi, jak długa jest wartość i czy ta długość mieści się w limicie. **Use these values** oddaje je palecie, a skróty chodzą po nich tak samo jak po paczce.
 
 Liczba wpisana w wyszukiwaniu okna wartości stawia ten wiersz na górze z tą liczbą jako największą długością, więc `50` i Enter to najkrótsza droga. Całe okno działa z klawiatury: Tab przechodzi między dwiema liczbami, strzałki w lewo i w prawo zmieniają jednostkę, a w górę i w dół wybierają wartość, od której zaczniesz.
 

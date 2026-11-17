@@ -288,6 +288,17 @@ export component ProgressBar inherits Rectangle {
 // be able to pick the tint, or appearance would start living in Rust - document
 // 13 section 2.1. What is risky and what is merely worth saying is a question
 // about the value. Which colour that becomes is a question about the palette.
+// Which value a Copy button copies: the pack's identifier and the value's.
+// Identifiers rather than a position, because the worker may have moved the
+// sequence between the click and its turn, and an identifier still names the
+// value the tester saw - or none (`D98`). Opaque to the view: it holds them
+// and never reads them. Here with the other data a band is given, not in the
+// palette's file, which stands at the ceiling of `D113`.
+export struct ValueKey {
+    pack: string,
+    value: string,
+}
+
 export struct Marker {
     text: string,
     risky: bool,

@@ -184,16 +184,16 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     );
     assert_eq!(
         titles(window).len(),
-        2 + 22,
-        "the limit's row, then every shipped pack under one heading, no value spread out: {:?}",
+        3 + 22,
+        "the limit's row under its heading, then every shipped pack under one heading, no value spread out: {:?}",
         titles(window)
     );
-    assert_eq!(titles(window)[..2], ["Length limit", "Packs"]);
+    assert_eq!(titles(window)[..3], ["Generators", "Length limit", "Packs"]);
     assert!(
         window
             .get_rows()
             .iter()
-            .skip(2)
+            .skip(3)
             .all(|row| row.tree && row.foldable && !row.open && row.detail_wraps),
         "every pack a closed fold whose description wraps"
     );
@@ -214,7 +214,7 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     // table in effect at its end, choosable.
     let whitespace = window.get_selected();
     tap(window, RIGHT);
-    assert_eq!(titles(window).len(), 2 + 22 + 1 + 12);
+    assert_eq!(titles(window).len(), 3 + 22 + 1 + 12);
     assert_eq!(window.get_selected(), whitespace, "the pack stays selected");
     tap(window, RIGHT);
     let restart = window
@@ -241,7 +241,7 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     tap(window, LEFT);
     assert_eq!(window.get_selected(), whitespace);
     tap(window, LEFT);
-    assert_eq!(titles(window).len(), 2 + 22);
+    assert_eq!(titles(window).len(), 3 + 22);
     // A click on a fold mark opens and closes it, and selects the pack.
     let unicode = titles(window)
         .iter()
@@ -251,12 +251,12 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
     window.invoke_toggled(unicode);
     assert_eq!(
         titles(window).len(),
-        2 + 22 + 12,
+        3 + 22 + 12,
         "no restart row under another pack"
     );
     assert_eq!(window.get_selected(), unicode);
     window.invoke_toggled(unicode);
-    assert_eq!(titles(window).len(), 2 + 22);
+    assert_eq!(titles(window).len(), 3 + 22);
     assert!(
         packs.is_open(),
         "folding chooses nothing and closes nothing"
@@ -584,8 +584,11 @@ fn the_row_of_the_length_limit_asks_for_its_window_and_gives_way() {
     // and the other window is asked to open with the number.
     packs.open();
     type_text(window, "255");
-    assert_eq!(titles(window)[0], "Length limit: at most 255 graphemes");
-    assert_eq!(window.get_selected(), 0);
+    assert_eq!(
+        titles(window)[..2],
+        ["Generators", "Length limit: at most 255 graphemes"]
+    );
+    assert_eq!(window.get_selected(), 1);
     tap(window, RETURN);
     assert_eq!(*asked.borrow(), [None, Some(255)]);
     tap(window, ESCAPE);
@@ -601,10 +604,13 @@ fn the_row_of_the_length_limit_asks_for_its_window_and_gives_way() {
     }
     packs.open();
     assert_eq!(selected_title(window), "Length limit: at most 50 bytes");
-    let row = window.get_rows().row_data(0).expect("the first row");
+    let row = window
+        .get_rows()
+        .row_data(1)
+        .expect("the row under the heading");
     assert!(row.current, "the limit in use does not say so");
     assert!(
-        window.get_rows().iter().skip(1).all(|row| !row.current),
+        window.get_rows().iter().skip(2).all(|row| !row.current),
         "a pack is marked in use beside a limit"
     );
     tap(window, RETURN);

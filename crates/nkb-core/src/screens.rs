@@ -79,6 +79,66 @@ pub struct Point {
     pub y: i32,
 }
 
+/// A rectangle on the virtual desktop: a window's frame, or the screen it
+/// stands on - in one unit, whichever the caller measures both in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rect {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Where a window opened from the palette stands - the value window, the
+/// shortcuts window, About and the rest: beside the palette rather than where
+/// the system puts a new window, which is often the other end of the screen
+/// (the owner's point 3, 2026-11-16).
+///
+/// To the palette's right, `gap` away, where the screen has room for the whole
+/// window, else to its left, else over the palette, as far left as it fits.
+/// Its top level with the palette's, moved up as far as the screen's bottom
+/// needs. A window larger than the screen keeps its top left corner on it,
+/// because that is where its title bar is.
+///
+/// `screen` is the screen the palette stands on, as the system reports it -
+/// the whole screen, so a taskbar along its bottom edge may still cover the
+/// bottom of a window pushed down there.
+#[must_use]
+pub fn beside(palette: Rect, window: (u32, u32), screen: Rect, gap: u32) -> Point {
+    let (width, height) = (i64::from(window.0), i64::from(window.1));
+    let gap = i64::from(gap);
+    let (left, top) = (i64::from(screen.x), i64::from(screen.y));
+    let right = left + i64::from(screen.width);
+    let bottom = top + i64::from(screen.height);
+    let palette_left = i64::from(palette.x);
+    let palette_right = palette_left + i64::from(palette.width);
+    let after = palette_right + gap;
+    let before = palette_left - gap - width;
+    let x = if after + width <= right {
+        after
+    } else if before >= left {
+        before
+    } else {
+        palette_left
+    };
+    // Into the screen: the right edge first and the left one last, so a window
+    // wider than the screen keeps its left edge - and its title - on it. The
+    // same for the bottom and the top.
+    let x = x.min(right - width).max(left);
+    let y = i64::from(palette.y).min(bottom - height).max(top);
+    Point {
+        x: saturate(x),
+        y: saturate(y),
+    }
+}
+
+/// A coordinate worked out in a wider type, back in the type of a place. Every
+/// value [`beside`] works out lies between two coordinates that fit, so this
+/// only keeps the arithmetic free of a cast that could wrap.
+fn saturate(value: i64) -> i32 {
+    i32::try_from(value).unwrap_or(if value < 0 { i32::MIN } else { i32::MAX })
+}
+
 /// The screens of one machine at one moment, in the order of the text form.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Layout {
@@ -170,6 +230,92 @@ impl Layout {
 )]
 mod tests {
     use super::*;
+
+    const fn rect(x: i32, y: i32, width: u32, height: u32) -> Rect {
+        Rect {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    /// A full HD screen, a palette 480 wide and a window 520 by 600 - the
+    /// value window's default size.
+    const SCREEN: Rect = rect(0, 0, 1920, 1080);
+    const WINDOW: (u32, u32) = (520, 600);
+
+    #[test]
+    fn a_window_opens_to_the_right_of_the_palette_level_with_its_top() {
+        let palette = rect(300, 120, 480, 700);
+        assert_eq!(beside(palette, WINDOW, SCREEN, 8), Point { x: 788, y: 120 });
+    }
+
+    #[test]
+    fn with_no_room_on_the_right_it_opens_to_the_left() {
+        let palette = rect(1400, 120, 480, 700);
+        assert_eq!(beside(palette, WINDOW, SCREEN, 8), Point { x: 872, y: 120 });
+        // Exactly the room it needs on the right is room.
+        let snug = rect(1920 - 480 - 8 - 520, 0, 480, 300);
+        assert_eq!(beside(snug, WINDOW, SCREEN, 8).x, 1920 - 520);
+    }
+
+    #[test]
+    fn with_room_on_neither_side_it_opens_over_the_palette_and_on_the_screen() {
+        let narrow = rect(0, 0, 1280, 720);
+        let palette = rect(400, 50, 480, 600);
+        assert_eq!(beside(palette, WINDOW, narrow, 8), Point { x: 400, y: 50 });
+        // A wide window and a palette near the right edge: over it, pulled in
+        // so the window ends at the screen's edge.
+        let right = rect(700, 50, 480, 600);
+        assert_eq!(
+            beside(right, (700, 600), narrow, 8),
+            Point { x: 580, y: 50 }
+        );
+    }
+
+    #[test]
+    fn a_palette_low_on_the_screen_lifts_the_window_onto_it() {
+        let palette = rect(300, 900, 480, 150);
+        assert_eq!(beside(palette, WINDOW, SCREEN, 8), Point { x: 788, y: 480 });
+    }
+
+    #[test]
+    fn a_window_larger_than_the_screen_keeps_its_top_left_corner_on_it() {
+        let small = rect(0, 0, 400, 300);
+        let palette = rect(100, 100, 200, 100);
+        assert_eq!(beside(palette, WINDOW, small, 8), Point { x: 0, y: 0 });
+    }
+
+    #[test]
+    fn a_screen_left_of_and_above_the_main_one_is_kept_to() {
+        let left = rect(-1920, -200, 1920, 1080);
+        let palette = rect(-600, -150, 480, 700);
+        assert_eq!(
+            beside(palette, WINDOW, left, 8),
+            Point { x: -1128, y: -150 }
+        );
+        // A palette half off its screen still opens the window on the screen.
+        let off = rect(-2100, 700, 480, 400);
+        let at = beside(off, WINDOW, left, 8);
+        assert!(at.x >= -1920 && at.y + 600 <= 880, "{at:?}");
+    }
+
+    #[test]
+    fn the_extremes_of_a_coordinate_do_not_wrap() {
+        let far = rect(i32::MAX - 10, i32::MAX - 10, u32::MAX, u32::MAX);
+        let at = beside(far, (u32::MAX, u32::MAX), far, u32::MAX);
+        assert_eq!(at, Point { x: far.x, y: far.y });
+        let low = rect(i32::MIN, i32::MIN, 10, 10);
+        let at = beside(low, WINDOW, low, 8);
+        assert_eq!(
+            at,
+            Point {
+                x: i32::MIN,
+                y: i32::MIN
+            }
+        );
+    }
 
     fn screen(width: u32, height: u32, x: i32, y: i32) -> Screen {
         Screen {

@@ -201,6 +201,10 @@ pub const SHOWN_NAME: usize = crate::prose::NAME_LIMIT;
 /// the format's limit for the same reason as [`SHOWN_NAME`].
 pub const SHOWN_DESCRIPTION: usize = crate::prose::DESCRIPTION_LIMIT;
 
+/// The most characters of what a value breaks, or of what it expects, a window
+/// shows - tied to the format's limit for the same reason as [`SHOWN_NAME`].
+pub const SHOWN_EXPLANATION: usize = crate::prose::EXPLANATION_LIMIT;
+
 /// A pack's prose as a window shows it: escaped as [`escaped_prose`], and cut
 /// after `max` characters with an ellipsis.
 ///

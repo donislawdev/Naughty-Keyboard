@@ -200,6 +200,10 @@ pub enum PaletteLabel {
     /// and by which shortcut (the owner's point 6, 2026-10-14) - it types the
     /// one before the last value typed, which is not the one above it.
     PreviousTypes,
+    /// Under the next value: which value the shortcut that repeats types again,
+    /// and by which shortcut (the owner's point 1, 2026-11-16) - the value
+    /// before the next one, which is not the one above it either.
+    RepeatTypes,
     /// The heading of the value band, which shows the value that went out last.
     /// Named, because the band above it shows another value - the next one.
     LastSent,
@@ -360,6 +364,7 @@ pub(super) fn pattern_palette_label(label: PaletteLabel) -> &'static str {
         PaletteLabel::NextValueUnnamed => "Next to type: value {index} of {total}",
         PaletteLabel::NextEndOfPackUnnamed => "Next to type: end of pack ({total}/{total})",
         PaletteLabel::PreviousTypes => "{shortcut} goes back and types value {index}",
+        PaletteLabel::RepeatTypes => "{shortcut} types value {index} again",
         PaletteLabel::LastSent => "Last sent",
         PaletteLabel::Copy => "Copy",
         PaletteLabel::CopyNext => "Copy the next value",
@@ -481,6 +486,18 @@ pub fn previous_types(index: usize, previous_value: HotkeyChord) -> String {
         pattern_palette_label(PaletteLabel::PreviousTypes),
         &[
             ("shortcut", &chord(previous_value)),
+            ("index", &index.to_string()),
+        ],
+    )
+}
+
+/// Under the next value: `Alt+Shift+R types value 3 again`.
+#[must_use]
+pub fn repeat_types(index: usize, repeat_last: HotkeyChord) -> String {
+    fill(
+        pattern_palette_label(PaletteLabel::RepeatTypes),
+        &[
+            ("shortcut", &chord(repeat_last)),
             ("index", &index.to_string()),
         ],
     )
@@ -921,6 +938,7 @@ mod tests {
             PaletteLabel::SkipAction,
             PaletteLabel::NoOtherPack,
             PaletteLabel::PreviousTypes,
+            PaletteLabel::RepeatTypes,
             PaletteLabel::DonateLink,
             PaletteLabel::SourceCodeLink,
             PaletteLabel::BrowserDidNotOpen,
@@ -947,6 +965,7 @@ mod tests {
                 | PaletteLabel::NextValueUnnamed
                 | PaletteLabel::NextEndOfPackUnnamed
                 | PaletteLabel::PreviousTypes
+                | PaletteLabel::RepeatTypes
                 | PaletteLabel::Back
                 | PaletteLabel::Skip
                 | PaletteLabel::SentTo

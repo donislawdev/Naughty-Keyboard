@@ -115,7 +115,10 @@ mod tests {
     #[test]
     fn the_row_of_the_length_limit_stands_first_and_opens_its_window() {
         let mut picker = shipped(Some("whitespace"));
-        let row = picker.rows()[0].clone();
+        let heading = picker.rows()[0].clone();
+        assert_eq!(heading.kind, RowKind::Heading, "under a heading of its own");
+        assert_eq!(heading.title, "Generators");
+        let row = picker.rows()[1].clone();
         assert_eq!(row.kind, RowKind::Limit);
         assert_eq!(row.title, "Length limit");
         assert_eq!(row.detail, "Values that test how much text a field takes");
@@ -126,8 +129,8 @@ mod tests {
             "Whitespace",
             "the window still opens on the pack in use"
         );
-        assert_eq!(picker.click(0), Chosen::Limit { most: None });
-        assert_eq!(picker.toggle(0), Folding::Nothing);
+        assert_eq!(picker.click(1), Chosen::Limit { most: None });
+        assert_eq!(picker.toggle(1), Folding::Nothing);
         assert_eq!(picker.fold(), Folding::Nothing);
         assert_eq!(picker.unfold(), Folding::Nothing);
     }
@@ -139,10 +142,11 @@ mod tests {
         let mut picker = shipped(Some("whitespace"));
         type_in(&mut picker, "50");
         let rows = picker.rows();
-        assert_eq!(rows[0].kind, RowKind::Limit);
-        assert_eq!(rows[0].title, "Length limit: at most 50 graphemes");
-        assert!(!rows[0].tree, "a search is a flat list");
-        assert_eq!(picker.selected(), Some(0), "Enter opens the window");
+        assert_eq!(rows[0].title, "Generators");
+        assert_eq!(rows[1].kind, RowKind::Limit);
+        assert_eq!(rows[1].title, "Length limit: at most 50 graphemes");
+        assert!(!rows[1].tree, "a search is a flat list");
+        assert_eq!(picker.selected(), Some(1), "Enter opens the window");
         assert_eq!(picker.enter(), Chosen::Limit { most: Some(50) });
 
         // Also when the row selected before the next digit is still listed:
@@ -194,6 +198,11 @@ mod tests {
         let last = rows.len() - 1;
         assert_eq!(rows[last].kind, RowKind::Limit);
         assert_eq!(rows[last].title, "Length limit", "words suggest no number");
+        assert_eq!(
+            (rows[last - 1].kind, rows[last - 1].title.as_str()),
+            (RowKind::Heading, "Generators"),
+            "under its heading at the end too"
+        );
         assert_eq!(picker.click(last), Chosen::Limit { most: None });
 
         // Words find packs and values first: a tester typing the start of a
@@ -218,7 +227,7 @@ mod tests {
             Limit::new(nkb_core::boundary::Unit::Bytes, Some(8), Some(50)).expect("a limit");
         let mut picker =
             PackPicker::new(Ok(listing()), TODAY, None, Some("empty")).with_limit(Some(limit));
-        assert_eq!(picker.selected(), Some(0));
+        assert_eq!(picker.selected(), Some(1));
         let row = selected_row(&picker);
         assert_eq!(row.title, "Length limit: 8 to 50 bytes");
         assert!(row.current, "the row of the limit in use does not say so");
@@ -235,7 +244,7 @@ mod tests {
         );
         // Another number in the search offers that one, and is not in use.
         type_in(&mut picker, "64");
-        let row = picker.rows()[0].clone();
+        let row = picker.rows()[1].clone();
         assert_eq!(row.title, "Length limit: at most 64 graphemes");
         assert!(!row.current);
     }

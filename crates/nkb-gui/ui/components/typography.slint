@@ -26,9 +26,71 @@
 
 import { Tokens } from "../tokens.slint";
 
+// The whole of a text, in a box that stands by the pointer while it rests on
+// the text (the owner's point 5, 2026-11-16) - what `CutText` shows where an
+// ellipsis cut the text short. Wraps at `Tokens.tip-width` and is as narrow as
+// a short text, so one name and a whole sentence of a pack both read.
+//
+// A plain `Text` inside rather than one of the roles below: every role carries
+// a tip of its own, and a tip inside a tip would be a component made of itself.
+// The colour and the size are `TextSmall`'s.
+export component TipBox inherits Rectangle {
+    in property <string> text;
+
+    background: Tokens.surface-raised;
+    border-width: Tokens.hairline;
+    border-color: Tokens.border-strong;
+    border-radius: Tokens.radius-small;
+
+    VerticalLayout {
+        padding: Tokens.space-2;
+        Text {
+            text: root.text;
+            wrap: word-wrap;
+            color: Tokens.text-primary;
+            font-size: Tokens.type-small;
+            font-weight: Tokens.weight-regular;
+        }
+    }
+}
+
+// The base of every role below: a text that an ellipsis cut short shows its
+// whole on hover - `PORADNIK-GUI.md`: a text that may not fit has an ellipsis
+// and a tip with the whole of it. In one place, so every window has it and no
+// screen has to remember it (GUI rule 5).
+//
+// Cut means what the toolkit draws: a one-line text wider than its room, or a
+// wrapping one taller than the height it was given. A text that is not elided
+// is never cut here - it is whole, or clipped on purpose.
+//
+// Slint's own `Tooltip` (1.17) shows the box: it waits half a second, follows
+// the pointer and takes no click, so a row under it is clicked as before. Its
+// own frame is the std-widgets style's, light whatever the palette is, and it
+// is as wide as what it holds prefers - so the box of ours fills it, and a
+// layout around the box is what keeps it to `Tokens.tip-width` (measured on a
+// render without a screen, 2026-11-16: a box given only a width left the
+// light frame as wide as the window around it).
+component CutText inherits Text {
+    // A pixel of rounding is no cut: a text exactly as wide as its room is
+    // laid out within that pixel.
+    property <bool> cut: self.overflow == TextOverflow.elide
+        && (self.wrap == TextWrap.no-wrap
+            ? self.preferred-width > self.width + Tokens.hairline
+            : self.preferred-height > self.height + Tokens.hairline);
+
+    if root.cut: Tooltip {
+        HorizontalLayout {
+            TipBox {
+                text: root.text;
+                max-width: Tokens.tip-width;
+            }
+        }
+    }
+}
+
 // The title of a window, in its header - and the palette's pack, which is
 // what the palette is titled by.
-export component TextTitle inherits Text {
+export component TextTitle inherits CutText {
     color: Tokens.text-primary;
     font-size: Tokens.type-title;
     font-weight: Tokens.weight-strong;
@@ -39,7 +101,7 @@ export component TextTitle inherits Text {
 // pack's name in a list, an action in the shortcuts list. Prose size, the
 // strong weight and the primary colour - set apart from prose by those two,
 // not by a size of its own.
-export component TextName inherits Text {
+export component TextName inherits CutText {
     color: Tokens.text-primary;
     font-size: Tokens.type-body;
     font-weight: Tokens.weight-strong;
@@ -48,7 +110,7 @@ export component TextName inherits Text {
 
 // Ordinary interface prose: the shape line under a preview, a step of the
 // welcome, a sentence the tool says.
-export component TextBody inherits Text {
+export component TextBody inherits CutText {
     color: Tokens.text-secondary;
     font-size: Tokens.type-body;
     font-weight: Tokens.weight-regular;
@@ -56,7 +118,7 @@ export component TextBody inherits Text {
 }
 
 // The word on a button or a switch: readable, and quieter than prose.
-export component TextSmall inherits Text {
+export component TextSmall inherits CutText {
     color: Tokens.text-primary;
     font-size: Tokens.type-small;
     font-weight: Tokens.weight-regular;
@@ -69,7 +131,7 @@ export component TextSmall inherits Text {
 //
 // ⚠️ Never in the resting palette: `text-muted` loses 4.5:1 over a white window
 // under the dimmed background (D53).
-export component TextSmallMuted inherits Text {
+export component TextSmallMuted inherits CutText {
     color: Tokens.text-muted;
     font-size: Tokens.type-small;
     font-weight: Tokens.weight-regular;
@@ -78,7 +140,7 @@ export component TextSmallMuted inherits Text {
 
 // Counts, positions, references. Monospaced so that a changing number does not
 // shift the characters around it - the counter is glanced at, not read.
-export component TextMono inherits Text {
+export component TextMono inherits CutText {
     color: Tokens.text-muted;
     font-size: Tokens.type-small;
     font-family: Tokens.font-mono;
@@ -87,7 +149,7 @@ export component TextMono inherits Text {
 
 // The position within the pack. Accent-coloured, and it is the only accent on
 // the screen: one accent per view, or it stops meaning anything.
-export component TextCounter inherits Text {
+export component TextCounter inherits CutText {
     color: Tokens.accent;
     font-size: Tokens.type-body;
     font-family: Tokens.font-mono;
@@ -100,7 +162,7 @@ export component TextCounter inherits Text {
 // ⚠️ ux-spec.md 2 requires this size to be ADJUSTABLE by the tester, since some
 // values are unreadable at interface size. Not built yet. When it is, the
 // adjustment multiplies this role and no other.
-export component TextPreview inherits Text {
+export component TextPreview inherits CutText {
     color: Tokens.text-primary;
     font-size: Tokens.type-preview;
     font-family: Tokens.font-mono;
@@ -109,7 +171,7 @@ export component TextPreview inherits Text {
 
 // Stand-ins printed where an invisible character sits. Same size as the
 // preview so the substitution does not change the value's apparent length.
-export component TextPreviewInvisible inherits Text {
+export component TextPreviewInvisible inherits CutText {
     color: Tokens.invisible;
     font-size: Tokens.type-preview;
     font-family: Tokens.font-mono;

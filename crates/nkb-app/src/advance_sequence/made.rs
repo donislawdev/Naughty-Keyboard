@@ -108,7 +108,7 @@ mod tests {
         let Some(UpcomingValue::Value {
             index,
             name,
-            reference,
+            key,
             within,
             ..
         }) = advance.upcoming()
@@ -117,7 +117,10 @@ mod tests {
         };
         assert_eq!(index, 1);
         assert_eq!(name, "name of empty");
-        assert_eq!(reference, "boundary/empty");
+        assert_eq!(
+            (key.pack.as_str(), key.value.as_str()),
+            ("boundary", "empty")
+        );
         assert_eq!(within, Some(true));
     }
 

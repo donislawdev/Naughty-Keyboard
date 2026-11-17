@@ -176,6 +176,26 @@ fn specimen() -> Vec<PickRow> {
     ]
 }
 
+/// The top of the tree as the product opens it: the rows that make values
+/// under a heading of their own (the owner's point 4, 2026-11-16), then the
+/// fold of the values used last and the packs - so the length limit no longer
+/// reads as one more pack.
+fn with_generators() -> Vec<PickRow> {
+    let mut rows = vec![
+        heading("Generators"),
+        PickRow {
+            foldable: false,
+            detail_wraps: false,
+            ..pack(
+                "Length limit",
+                "Values that test how much text a field takes",
+            )
+        },
+    ];
+    rows.extend(specimen());
+    rows
+}
+
 /// The window with a query typed: the values found, each with its pack and
 /// where the query hit beside it, then a pack found by a tag.
 fn search() -> Vec<PickRow> {
@@ -783,5 +803,41 @@ fn a_value_in_a_pair_says_its_half_beside_its_name() {
         whole.abs_diff(kept) <= 1,
         "in the narrowest window what the value types is {kept} px wide, where whole it is          {whole} px - the value was cut before the name gave way. Look at {}",
         narrow_path.display()
+    );
+}
+
+/// The owner's point 4 (2026-11-16): the row of the length limit stands under
+/// a heading of its own, drawn in the heading's look above it - not as a pack
+/// among the packs.
+#[test]
+fn the_generators_stand_under_a_heading_of_their_own() {
+    let surface = offscreen::start(WIDTH, HEIGHT);
+    let window = PacksWindow::new().expect("the pack window must build");
+    fill(&window, with_generators());
+    window.set_query("".into());
+    // The next value, as in the specimen - two rows further down.
+    window.set_selected((NEXT_ROW + 2) as i32);
+    window.show().expect("the pack window must show");
+    let shown = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let path = offscreen::save(&shown, WIDTH, HEIGHT, "packs-generators.png");
+    let ink_of = |row: usize| {
+        let mut rows = with_generators();
+        rows[row].title = "".into();
+        rows[row].detail = "".into();
+        window.set_rows(ModelRc::new(VecModel::from(rows)));
+        offscreen::added(
+            &offscreen::draw(&surface, WIDTH, HEIGHT),
+            &shown,
+            WIDTH,
+            HEIGHT,
+        )
+        .unwrap_or_else(|| panic!("row {row} is not drawn. Look at {}", path.display()))
+    };
+    let (heading, limit, packs) = (ink_of(0), ink_of(1), ink_of(4));
+    assert!(
+        heading.bottom < limit.top && limit.bottom < packs.top,
+        "the heading, the limit and the packs' heading are not one under another: \
+         {heading:?}, {limit:?}, {packs:?}. Look at {}",
+        path.display()
     );
 }

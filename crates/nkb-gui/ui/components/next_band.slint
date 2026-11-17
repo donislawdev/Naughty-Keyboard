@@ -19,6 +19,15 @@ import { TextName, TextPreview, TextSmallMuted } from "typography.slint";
 import { Spacer, Zone, Marker, MarkerRow } from "chrome.slint";
 import { SmallButton, ButtonArrow } from "button.slint";
 
+// The lines under the next value that say what two other shortcuts type from
+// here: the one that steps back and types (the owner's point 6, 2026-10-14)
+// and the one that repeats (point 1, 2026-11-16). Each empty where its
+// shortcut would type nothing, and drawn anyway, so the band keeps its height.
+export struct KeyLines {
+    previous: string,
+    repeat: string,
+}
+
 // What the next press sends (UX-GUI-001). One line each, ELIDED rather than
 // wrapped, and every line kept at the end of a pack, where there is no value -
 // drawn empty rather than taken away: the band changes with every press, and a
@@ -39,6 +48,9 @@ export component NextBand inherits Zone {
     in property <bool> has-value;
     in property <string> name;
     in property <string> preview;
+    // What the value breaks, as the pack says it (the owner's point 2,
+    // 2026-11-16): read before the press, not in the report block after it.
+    in property <string> breaks;
     in property <[Marker]> markers;
     // The Copy button's word and what it does in UI Automation's words.
     in property <string> copy-label;
@@ -50,10 +62,9 @@ export component NextBand inherits Zone {
     in property <bool> copied;
     in property <bool> sending;
     callback copy();
-    // Under the value: which value the shortcut that steps back types (the
-    // owner's point 6, 2026-10-14). Empty with nothing behind, and drawn
-    // anyway, so the band keeps its height.
-    in property <string> previous-line;
+    // Under the value: which values the shortcuts that step back and that
+    // repeat type.
+    in property <KeyLines> key-lines;
     // The two arrows that walk the pack without typing (`D120`), the number of
     // the value each steps to (the owner's point 1) and what each does. Back stands faded on the first value, where it would
     // move nothing. Skip always moves - from the end of the pack to its first
@@ -78,7 +89,7 @@ export component NextBand inherits Zone {
         // word beside it, in the first render.
         VerticalLayout {
             alignment: center;
-            TextSmallMuted {
+            heading-line := TextSmallMuted {
                 text: root.heading;
                 overflow: elide;
             }
@@ -148,8 +159,28 @@ export component NextBand inherits Zone {
         overflow: elide;
         visible: root.has-value;
     }
+    // What the value breaks: as many lines of it as `Tokens.breaks-lines`
+    // whatever its length, so the band keeps its height from value to value
+    // (`D110`) - and the whole sentence where it is cut, on hover. A line is
+    // as tall as the heading's, which is the same role and always one line:
+    // measured from the typeface, not written down (GUI rule 14). Drawn empty
+    // at the end of a pack, like the lines above it. From the top: the role
+    // centres its text, and a sentence taller than its lines, centred, lost
+    // its first line instead of its last (measured on the render, 2026-11-16).
     TextSmallMuted {
-        text: root.previous-line;
+        // Emptied by the worker at the end of a pack, like the name above.
+        text: root.breaks;
+        wrap: word-wrap;
+        overflow: elide;
+        vertical-alignment: top;
+        height: Tokens.breaks-lines * heading-line.preferred-height;
+    }
+    TextSmallMuted {
+        text: root.key-lines.previous;
+        overflow: elide;
+    }
+    TextSmallMuted {
+        text: root.key-lines.repeat;
         overflow: elide;
     }
 }

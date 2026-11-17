@@ -12,10 +12,16 @@ The palette is `nkb-gui`, a window that stays beside the application you are tes
 ## What does it show?
 
 - **The pack** at the top, with how far through it you are. Clicking its name opens the window for finding a value.
-- **The next value**, the one the next press types, drawn so you can see it. A character nobody can see is drawn as a marker, a box open at the top, instead of as nothing. When the value is one half of a pair, `pair 1 of 2` or `pair 2 of 2` stands beside its name.
+- **The next value**, the one the next press types, drawn so you can see it. A character nobody can see is drawn as a marker, a box open at the top, instead of as nothing. When the value is one half of a pair, `pair 1 of 2` or `pair 2 of 2` stands beside its name. Under it are two lines of what the value breaks, so you know what to look for before you type it, and the values that {{< kbd "Alt+Shift+P" >}} and {{< kbd "Alt+Shift+R" >}} would type.
 - **The last value it typed**, folded until you open it, with four counts: graphemes, code points, bytes and UTF-16 units. The four differ exactly for the values most likely to break a field.
 - **How each value goes in**: typed from the keyboard, or put on the clipboard for you to paste, and whether the line is cleared first or the value goes in at the cursor.
 - **The keys** of every shortcut that works, along the bottom, under a heading that folds them away.
+
+A name or a sentence too long for its place ends in `...`. Rest the pointer on it and the whole text appears beside it. The windows the palette opens, such as the value window and the shortcuts window, open beside it, on the side of the screen that has room for them.
+
+## Can I type the same value into many fields?
+
+Yes. Type it once with {{< kbd "Alt+Shift+N" >}}, then click into each of the other fields and press {{< kbd "Alt+Shift+R" >}}. It types the same value again and the counter stays where it is, so the next {{< kbd "Alt+Shift+N" >}} types the value that comes after it. The line under the next value says which value {{< kbd "Alt+Shift+R" >}} types. Before the first value of a pack there is nothing to repeat, and the palette says so.
 
 ## How does a value reach the field?
 
@@ -44,9 +50,9 @@ A pack in your own folder is used instead of a team pack of the same name, and a
 
 ## Can it make values for a length limit?
 
-Yes. **Length limit** is the first row of the value window. It opens a window where you type the limit your field states: **At most**, **At least** or both, counted in graphemes, code points, UTF-16 units or bytes. The values are listed as you type: the empty value, and one under, exactly at and one over each bound, in letters, in characters of two, three and four bytes, in a family emoji and as a counterstring. Each row says how long the value is and whether that length is inside the limit. **Use these values** hands them to the palette, and the shortcuts walk them the way they walk a pack.
+Yes. **Length limit** stands at the top of the value window, under **Generators**. It opens a window where you type the limit your field states: **At most**, **At least** or both, counted in graphemes, code points, UTF-16 units or bytes. The values are listed as you type: the empty value, and one under, exactly at and one over each bound, in letters, in characters of two, three and four bytes, in a family emoji and as a counterstring. Each row says how long the value is and whether that length is inside the limit. **Use these values** hands them to the palette, and the shortcuts walk them the way they walk a pack.
 
-Typing a number in the search of the value window puts the row first with that number as the most, so `50` and Enter is the short way in. The whole window works from the keyboard: Tab moves between the two numbers, the left and right arrows change the unit, and up and down choose the value to start from.
+Typing a number in the search of the value window puts the row at the top with that number as the most, so `50` and Enter is the short way in. The whole window works from the keyboard: Tab moves between the two numbers, the left and right arrows change the unit, and up and down choose the value to start from.
 
 In the palette each of these values wears `inside the limit` or `outside the limit`, and its report block names the command that makes the same values, for example `nkb boundary --max-length 50 --unit bytes`. The values are the ones [nkb boundary](/docs/cli/boundary/) prints, and that page says why there are six kinds. The palette does not keep them: after a restart it opens the pack you used last.
 

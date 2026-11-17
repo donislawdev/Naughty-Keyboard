@@ -65,6 +65,10 @@ pub enum PacksLabel {
     Recent,
     /// The section heading over the packs.
     PacksSection,
+    /// The section heading over the rows that make values rather than read
+    /// them from a pack - the length limit today (the owner's point 4,
+    /// 2026-11-16), and every one that comes after it.
+    Generators,
     /// Said in the palette when the value chosen in the window is not in the
     /// pack the palette holds - the window read the catalogue on its own.
     ValueGone,
@@ -118,6 +122,7 @@ pub(super) fn pattern_packs_label(label: PacksLabel) -> &'static str {
         PacksLabel::FoundValues => "Values",
         PacksLabel::Recent => "Recent ({count})",
         PacksLabel::PacksSection => "Packs",
+        PacksLabel::Generators => "Generators",
         PacksLabel::ValueGone => {
             "Value \"{value}\" is not in {pack} any more, so the next value did not change."
         }

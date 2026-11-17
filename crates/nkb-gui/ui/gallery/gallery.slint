@@ -587,7 +587,10 @@ export component Gallery inherits Window {
             back-label: "7";
             skip-label: "9";
             can-go-back: true;
-            previous-line: "Alt+Shift+P goes back and types value 6";
+            key-lines: {
+                previous: "Alt+Shift+P goes back and types value 6",
+                repeat: "Alt+Shift+R types value 7 again",
+            };
         }
         NextBand {
             heading: "Alt+Shift+N: end of pack (34/34)";
@@ -596,7 +599,10 @@ export component Gallery inherits Window {
             back-label: "34";
             skip-label: "1";
             can-go-back: true;
-            previous-line: "Alt+Shift+P goes back and types value 33";
+            key-lines: {
+                previous: "Alt+Shift+P goes back and types value 33",
+                repeat: "Alt+Shift+R types value 34 again",
+            };
         }
         NextBand {
             heading: "Alt+Shift+N types: value 1 of 34";

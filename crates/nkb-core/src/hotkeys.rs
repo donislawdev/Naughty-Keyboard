@@ -135,6 +135,7 @@ impl HotkeyAction {
     pub const READING_ORDER: [HotkeyAction; Self::COUNT] = [
         HotkeyAction::NextValue,
         HotkeyAction::PreviousValue,
+        HotkeyAction::RepeatLast,
         HotkeyAction::SkipValue,
         HotkeyAction::BackOneValue,
         HotkeyAction::RestartPack,
@@ -143,7 +144,6 @@ impl HotkeyAction {
         HotkeyAction::OpenPacks,
         HotkeyAction::CopyReport,
         HotkeyAction::ToggleVisibility,
-        HotkeyAction::RepeatLast,
         HotkeyAction::MarkOk,
         HotkeyAction::MarkProblem,
         HotkeyAction::MarkSuspect,

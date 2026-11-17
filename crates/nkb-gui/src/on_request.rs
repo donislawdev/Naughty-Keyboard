@@ -31,14 +31,102 @@
 //!
 //! About and the shortcuts window are made the first time the tester opens
 //! them, not at start: [`Later`] says why, and why the pack window is not.
+//!
+//! # Beside the palette
+//!
+//! A window that is not on the screen opens beside the palette, not where the
+//! system puts a new window - at its first opening that was often the other
+//! end of the screen (the owner's point 3, 2026-11-16). Where exactly is the
+//! core's rule, `nkb_core::screens::beside`. A window already open stays where
+//! the tester has it, and one the tester moved is put back beside the palette
+//! at its next opening: it is a window opened for one choice, and it closes
+//! when it is left (`OBS-147`).
 
-use std::cell::{Cell, OnceCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::rc::Rc;
 use std::time::Duration;
 
 use nkb_adapters::i18n::{self, Startup};
+use nkb_core::screens::{Rect, beside};
+use slint::ComponentHandle;
 use slint::winit_030::WinitWindowAccessor;
 use slint::winit_030::winit::window::WindowButtons;
+
+/// The room between the palette and a window opened beside it, in logical
+/// pixels - the space between two sections of a window (`Tokens.space-2`), so
+/// the two read as two windows and not as one.
+const GAP: f32 = 8.0;
+
+thread_local! {
+    /// The palette the windows opened on request stand beside, on the main
+    /// thread, where every window lives. Named once at start (`main.rs`).
+    static PALETTE: RefCell<Option<slint::Weak<crate::Palette>>> = const { RefCell::new(None) };
+}
+
+/// Names the palette the windows opened on request open beside.
+pub fn open_beside(palette: &crate::Palette) {
+    PALETTE.with(|named| *named.borrow_mut() = Some(palette.as_weak()));
+}
+
+/// Puts `window` beside the palette, unless it is on the screen already.
+///
+/// In physical pixels, the unit the toolkit reports the palette and its screen
+/// in, and the screen is the one winit says the palette stands on - on every
+/// system, which `nkb_sys::screens` is not yet (Linux answers it with `None`).
+/// Without a palette, a screen or a native window - the tests' windows have
+/// none - the window opens where the system puts it, as it did before.
+///
+/// The OUTER frames, title bar and borders included: a window is placed by the
+/// corner of its frame, and its inner size alone would let a window pushed to
+/// the bottom of the screen hang off it by its title bar.
+fn place_beside_palette(window: &slint::Window) -> Option<slint::PhysicalPosition> {
+    if window.is_visible() {
+        return None;
+    }
+    let palette = PALETTE.with(|named| named.borrow().as_ref().and_then(slint::Weak::upgrade))?;
+    let anchor = palette.window();
+    let screen = anchor
+        .with_winit_window(|window| window.current_monitor())
+        .flatten()?;
+    let (at, size) = (anchor.position(), outer_size(anchor));
+    let (corner, extent) = (screen.position(), screen.size());
+    let gap = (GAP * anchor.scale_factor()).round();
+    let place = beside(
+        Rect {
+            x: at.x,
+            y: at.y,
+            width: size.0,
+            height: size.1,
+        },
+        outer_size(window),
+        Rect {
+            x: corner.x,
+            y: corner.y,
+            width: extent.width,
+            height: extent.height,
+        },
+        // A scale is a small positive number, so the gap is a few pixels.
+        if gap.is_finite() && gap >= 0.0 {
+            gap as u32
+        } else {
+            0
+        },
+    );
+    let at = slint::PhysicalPosition::new(place.x, place.y);
+    window.set_position(at);
+    Some(at)
+}
+
+/// A window's size with its frame, in physical pixels - its inner size where
+/// winit does not back it or cannot say.
+fn outer_size(window: &slint::Window) -> (u32, u32) {
+    window
+        .with_winit_window(|window| window.outer_size())
+        .map_or_else(
+            || (window.size().width, window.size().height),
+            |outer| (outer.width, outer.height),
+        )
+}
 
 /// Shows `window` - or, already shown, brings it back - as a window opened on
 /// request stands: on the screen rather than in the taskbar, with Close as its
@@ -48,7 +136,22 @@ use slint::winit_030::winit::window::WindowButtons;
 ///
 /// The toolkit's own, when the window cannot be shown.
 pub(crate) fn bring_up(window: &slint::Window) -> Result<(), slint::PlatformError> {
+    // Before `show()`, while it is still off the screen: shown first, it would
+    // flash where the system put it.
+    let place = place_beside_palette(window);
     window.show()?;
+    // And again once it is on the screen, on Linux: a window manager places a
+    // window it maps by its own rule and keeps only a move of a window already
+    // mapped. Measured 2026-11-16 under openbox (`tools/sondy/linux/dymek-x11.py`):
+    // the value window stood in the middle of the free part of the screen, the
+    // place given before `show()` ignored. The window may show at the manager's
+    // place for a moment before it moves.
+    #[cfg(target_os = "linux")]
+    if let Some(at) = place {
+        window.set_position(at);
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = place;
     // After `show()`, never before: bringing a hidden window back from the
     // taskbar shows it, and a window that is not minimized is left as it is.
     window.set_minimized(false);

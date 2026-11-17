@@ -18,9 +18,9 @@ pub(in crate::live) fn an_upcoming() -> UpcomingValue {
             value: "trailing-nbsp".to_owned(),
         },
         name: "Trailing no-break space".to_owned(),
-        reference: "unicode-text/trailing-nbsp".to_owned(),
         preview: ValuePreview::Text(nkb_core::preview::preview("Kowalski\u{A0}")),
         offensive: true,
+        breaks: Some("A trailing no-break space survives most trimming.".into()),
         halves: Vec::new(),
         within: None,
     }

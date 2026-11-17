@@ -255,13 +255,15 @@ pub enum UpcomingValue {
         /// and both are what the Copy button beside it copies (`D98`).
         key: ValueKey,
         name: String,
-        /// `pack-id/value-id`, as in a [`ValueFacts`].
-        reference: String,
         /// The same preview the value band shows once the value is in - from
         /// the recipe, so a million-character value is not built to show it.
         preview: ValuePreview,
         /// The effective risk, as a [`Sent`] carries it.
         offensive: bool,
+        /// What the value breaks, as the pack says it - so the tester knows
+        /// before typing it (the owner's point 2, 2026-11-16). As written: the
+        /// caller escapes and cuts it like any prose of a pack (`D173`).
+        breaks: Option<Box<str>>,
         /// Which half of a pair the value is, once for each pair it stands in
         /// and in the order of the pairs in the file - usually none or one.
         /// `pack-format.md` 9 has the palette say which half is next.
@@ -344,6 +346,9 @@ pub enum Message {
     /// A step back that types found nothing behind: nothing typed yet, or
     /// only the first value (the owner's point 6, 2026-10-14).
     NothingBefore,
+    /// A repeat found no value of this pack before the next one: nothing typed
+    /// from it yet, or the first value next after a restart or a walk.
+    NothingToRepeat,
     /// No pack has been chosen yet.
     NoPack,
     /// Nothing holds the keyboard focus, so nothing was sent.
@@ -633,9 +638,9 @@ impl AdvanceSequence {
                         value: value.id.clone(),
                     },
                     name: value.name.clone(),
-                    reference: format!("{}/{}", loaded.pack.id, value.id),
                     preview: preview_of(&value.definition.on(self.clock.today())),
                     offensive: offensive(&loaded.pack, value),
+                    breaks: value.breaks.as_deref().map(Box::from),
                     halves: halves.collect(),
                     within: loaded.within(index),
                 })
@@ -741,6 +746,7 @@ impl AdvanceSequence {
             action,
             HotkeyAction::NextValue
                 | HotkeyAction::PreviousValue
+                | HotkeyAction::RepeatLast
                 | HotkeyAction::RestartPack
                 | HotkeyAction::CopyReport
                 | HotkeyAction::SkipValue
@@ -758,6 +764,7 @@ impl AdvanceSequence {
         let event = match action {
             HotkeyAction::NextValue => Event::Next,
             HotkeyAction::PreviousValue => Event::Previous,
+            HotkeyAction::RepeatLast => Event::Repeat,
             HotkeyAction::RestartPack => Event::Restart,
             // Walking the pack without typing (`D120`): the next value moves,
             // nothing is sent, so the path below that sends is never taken.
@@ -1157,6 +1164,7 @@ fn announce(effect: &Effect) -> Option<Message> {
             total: *total,
         }),
         Effect::AnnounceNothingBefore => Some(Message::NothingBefore),
+        Effect::AnnounceNothingToRepeat => Some(Message::NothingToRepeat),
         Effect::AnnounceNoPack => Some(Message::NoPack),
         Effect::AnnounceNoTarget => Some(Message::NoTarget),
         // These arise only while sending, and the send path builds a richer
@@ -1789,25 +1797,18 @@ mod tests {
         let kit = Kit::ready();
         let mut promised = advance.upcoming();
         for _ in 0..3 {
-            let Some(UpcomingValue::Value {
-                reference,
-                name,
-                key,
-                ..
-            }) = promised.clone()
-            else {
+            let Some(UpcomingValue::Value { name, key, .. }) = promised.clone() else {
                 panic!(
                     "a three-value pack has a value upcoming before each of three presses: {promised:?}"
                 );
             };
             let outcome = advance.on_action(HotkeyAction::NextValue, &kit.ports());
             let sent = outcome.sent.as_ref().expect("a value goes out");
-            assert_eq!(sent.facts.reference, reference);
+            assert_eq!(sent.facts.reference, format!("{}/{}", key.pack, key.value));
             assert_eq!(sent.facts.name, name);
             // `D98`: the Copy button beside the next value copies the value the
             // press sends, and the one beside the value sent copies that value.
             assert_eq!(sent.key, key);
-            assert_eq!(format!("{}/{}", key.pack, key.value), reference);
             // What the outcome carries is what the sequence says AFTER the press.
             assert_eq!(outcome.upcoming, advance.upcoming());
             promised = outcome.upcoming;
@@ -2070,6 +2071,29 @@ mod tests {
         let outcome = advance.on_action(HotkeyAction::PreviousValue, &Kit::ready().ports());
         assert_eq!(outcome.messages, vec![Message::NothingBefore]);
         assert!(outcome.sent.is_none());
+    }
+
+    /// The owner's point 1 (2026-11-16): the same value in field after field.
+    /// Each repeat types the value the last press typed, the counter stays, and
+    /// "next" then types the value it would have typed. Before any value there
+    /// is nothing to repeat, and the press says so.
+    #[test]
+    fn a_repeat_types_the_last_value_again_and_leaves_the_counter() {
+        let mut advance = chosen(Risk::Normal);
+        let kit = Kit::ready();
+        let nothing = advance.on_action(HotkeyAction::RepeatLast, &kit.ports());
+        assert_eq!(nothing.messages, vec![Message::NothingToRepeat]);
+        assert!(nothing.sent.is_none());
+        let first = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        let typed = first.sent.expect("the first value goes out").key;
+        for _ in 0..2 {
+            let again = advance.on_action(HotkeyAction::RepeatLast, &kit.ports());
+            assert_eq!(again.sent.expect("a repeat goes out").key, typed);
+            assert_eq!(advance.counter(), Some((1, 3)));
+        }
+        let next = advance.on_action(HotkeyAction::NextValue, &kit.ports());
+        assert_ne!(next.sent.expect("the next value goes out").key, typed);
+        assert_eq!(advance.counter(), Some((2, 3)));
     }
 
     // ---- the report block: one of the two doors to the clipboard -----------

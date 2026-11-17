@@ -156,6 +156,10 @@ enum Item {
 /// Which section a heading opens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Section {
+    /// The rows that make values rather than read them from a pack (the
+    /// owner's point 4, 2026-11-16): set apart from the packs by a heading of
+    /// their own, wherever they stand.
+    Generators,
     /// The values a query found.
     Found,
     /// The packs.
@@ -630,6 +634,7 @@ impl PackPicker {
             Some(_) => None,
         };
         if limit == Some(Place::First) {
+            visible.push(Item::Heading(Section::Generators));
             visible.push(Item::Limit);
         }
         if words.is_empty() {
@@ -684,6 +689,7 @@ impl PackPicker {
             }
         }
         if limit == Some(Place::Last) {
+            visible.push(Item::Heading(Section::Generators));
             visible.push(Item::Limit);
         }
         self.visible = visible;
@@ -752,6 +758,7 @@ impl PackPicker {
             Item::Heading(section) => Row {
                 kind: RowKind::Heading,
                 title: i18n::packs_label(match section {
+                    Section::Generators => PacksLabel::Generators,
                     Section::Found => PacksLabel::FoundValues,
                     Section::Packs => PacksLabel::PacksSection,
                 })
@@ -1037,9 +1044,11 @@ mod tests {
         let next = value_id("whitespace", 3);
         let picker = PackPicker::new(Ok(listing()), TODAY, Some("whitespace"), Some(&next));
         let rows = picker.rows();
-        assert_eq!(rows[0].kind, RowKind::Limit, "the limit's row stands first");
-        assert_eq!(rows[1].kind, RowKind::Heading);
-        assert_eq!(rows[1].title, "Packs");
+        assert_eq!(rows[0].kind, RowKind::Heading);
+        assert_eq!(rows[0].title, "Generators");
+        assert_eq!(rows[1].kind, RowKind::Limit, "the limit's row stands first");
+        assert_eq!(rows[2].kind, RowKind::Heading);
+        assert_eq!(rows[2].title, "Packs");
         assert!(
             of_kind(&picker, RowKind::Value).is_empty(),
             "no value is spread out on opening"
@@ -1244,10 +1253,10 @@ mod tests {
     fn a_pack_not_in_the_list_starts_on_the_first_that_can_be_chosen() {
         let picker = shipped(Some("no-such-pack"));
         let rows = picker.rows();
-        assert_eq!(rows[1].kind, RowKind::Heading, "only the packs section");
+        assert_eq!(rows[2].kind, RowKind::Heading, "only the packs section");
         assert_eq!(
             picker.selected(),
-            Some(2),
+            Some(3),
             "the first pack, past its heading - not the row of the limit above it"
         );
     }
@@ -1523,14 +1532,14 @@ mod tests {
                 recent_key("unicode-text", &value_id("unicode-text", 2)),
             ]);
         let rows = picker.rows();
-        assert_eq!(rows[1].kind, RowKind::Fold);
+        assert_eq!(rows[2].kind, RowKind::Fold);
         assert_eq!(
-            rows[1].title, "Recent (3)",
+            rows[2].title, "Recent (3)",
             "a value of the pack in use is here too"
         );
-        assert_eq!(rows[1].fold, Some(false));
+        assert_eq!(rows[2].fold, Some(false));
         assert_eq!(
-            rows[2].title, "Packs",
+            rows[3].title, "Packs",
             "closed: nothing between it and the packs"
         );
         assert_eq!(
@@ -1540,21 +1549,21 @@ mod tests {
         );
 
         assert_eq!(
-            picker.click(1),
+            picker.click(2),
             Chosen::Folded,
             "a click on the fold opens it"
         );
         let rows = picker.rows();
-        assert_eq!(rows[1].fold, Some(true));
-        assert_eq!(rows[2].title, "PESEL with a valid checksum");
-        assert_eq!(rows[2].aside.as_deref(), Some("Polish locale"));
-        assert!(rows[2].child);
-        assert_eq!(rows[3].title, "Trailing space");
-        assert_eq!(rows[3].aside.as_deref(), Some("Whitespace"));
-        assert_eq!(rows[3].badge, None, "value one, and value three is next");
-        assert_eq!(rows[4].aside.as_deref(), Some("Unicode and text"));
+        assert_eq!(rows[2].fold, Some(true));
+        assert_eq!(rows[3].title, "PESEL with a valid checksum");
+        assert_eq!(rows[3].aside.as_deref(), Some("Polish locale"));
+        assert!(rows[3].child);
+        assert_eq!(rows[4].title, "Trailing space");
+        assert_eq!(rows[4].aside.as_deref(), Some("Whitespace"));
+        assert_eq!(rows[4].badge, None, "value one, and value three is next");
+        assert_eq!(rows[5].aside.as_deref(), Some("Unicode and text"));
         assert_eq!(
-            picker.click(2),
+            picker.click(3),
             Chosen::Value {
                 pack: String::from("locale-pl"),
                 value: String::from("pesel-valid")
@@ -1563,18 +1572,18 @@ mod tests {
         );
         // Left from a recent value steps out to its fold, Enter folds it.
         assert_eq!(picker.fold(), Folding::Moved);
-        assert_eq!(picker.selected(), Some(1));
+        assert_eq!(picker.selected(), Some(2));
         assert_eq!(picker.enter(), Chosen::Folded);
-        assert_eq!(picker.rows()[2].title, "Packs");
+        assert_eq!(picker.rows()[3].title, "Packs");
 
         // A recent value that is the next one wears the pill, as it does
         // under its own pack.
         let first = value_id("whitespace", 1);
         let mut on_first = PackPicker::new(Ok(listing()), TODAY, Some("whitespace"), Some(&first))
             .with_recent(&[recent_key("whitespace", &first)]);
-        on_first.click(1);
+        on_first.click(2);
         assert_eq!(
-            on_first.rows()[2].badge,
+            on_first.rows()[3].badge,
             Some(Badge {
                 text: String::from("next"),
                 risky: false,
@@ -1586,7 +1595,7 @@ mod tests {
         // each choosing it.
         let mut both =
             shipped(Some("whitespace")).with_recent(&[recent_key("locale-pl", "pesel-valid")]);
-        both.click(1);
+        both.click(2);
         let locale = both
             .rows()
             .iter()
@@ -1624,13 +1633,13 @@ mod tests {
         ];
         let picker = mixed().with_recent(&gone);
         assert_eq!(
-            picker.rows()[1].title,
+            picker.rows()[2].title,
             "Recent (1)",
             "the one value the catalogue still has"
         );
 
         let picker = mixed().with_recent(&gone[..3]);
-        assert_eq!(picker.rows()[1].title, "Packs", "no fold over nothing");
+        assert_eq!(picker.rows()[2].title, "Packs", "no fold over nothing");
     }
 
     /// A query searches the whole catalogue, so the fold is gone while one is
@@ -1639,12 +1648,12 @@ mod tests {
     fn a_query_hides_the_recent_values_and_erasing_it_brings_the_tree_back() {
         let mut picker =
             shipped(Some("whitespace")).with_recent(&[recent_key("locale-pl", "pesel-valid")]);
-        picker.click(1);
+        picker.click(2);
         type_in(&mut picker, "p");
         assert!(picker.rows().iter().all(|row| row.kind != RowKind::Fold));
         picker.press(key("\u{8}"));
         assert_eq!(
-            picker.rows()[1].fold,
+            picker.rows()[2].fold,
             Some(true),
             "the fold as the tester left it"
         );
@@ -1685,30 +1694,34 @@ mod tests {
         let mut picker = shipped(None);
         assert_eq!(
             picker.selected(),
-            Some(2),
+            Some(3),
             "the first pack, under its heading"
         );
-        assert_eq!(picker.click(1), Chosen::Nothing);
+        assert_eq!(picker.click(2), Chosen::Nothing);
         assert_eq!(
             picker.selected(),
-            Some(2),
+            Some(3),
             "a click on a heading moves nothing"
         );
         assert_eq!(
-            picker.toggle(1),
+            picker.toggle(2),
             Folding::Nothing,
             "a heading does not fold"
         );
         picker.previous();
         assert_eq!(
             picker.selected(),
-            Some(0),
+            Some(1),
             "the heading is skipped on the way to the row above it"
         );
         picker.previous();
-        assert_eq!(picker.selected(), Some(0), "and there is no wrap");
+        assert_eq!(
+            picker.selected(),
+            Some(1),
+            "the heading of the generators is skipped too, and there is no wrap"
+        );
         picker.next();
-        assert_eq!(picker.selected(), Some(2), "skipped on the way down too");
+        assert_eq!(picker.selected(), Some(3), "skipped on the way down too");
     }
 
     #[test]
@@ -1718,44 +1731,44 @@ mod tests {
         let titles: Vec<&str> = rows.iter().map(|row| row.title.as_str()).collect();
         assert_eq!(
             titles.len(),
-            7,
-            "the limit's row, a heading and five packs, nothing vanished: {titles:?}"
+            8,
+            "the limit's heading and row, a heading and five packs, nothing vanished: {titles:?}"
         );
-        assert_eq!((titles[3], titles[6]), ("broken", "gone"));
-        assert!(!rows[3].enabled && !rows[6].enabled);
+        assert_eq!((titles[4], titles[7]), ("broken", "gone"));
+        assert!(!rows[4].enabled && !rows[7].enabled);
         assert_eq!(
-            rows[3].fold, None,
+            rows[4].fold, None,
             "a pack that does not load does not fold"
         );
-        assert_eq!(rows[3].detail, "broken, does not load");
+        assert_eq!(rows[4].detail, "broken, does not load");
         assert_eq!(
-            rows[3].badge,
+            rows[4].badge,
             Some(Badge {
                 text: String::from("problems: 3"),
                 risky: true,
                 current: false
             })
         );
-        assert_eq!(rows[6].detail, "gone, cannot be read");
-        assert_eq!(picker.toggle(3), Folding::Nothing);
+        assert_eq!(rows[7].detail, "gone, cannot be read");
+        assert_eq!(picker.toggle(4), Folding::Nothing);
 
-        assert_eq!(picker.selected(), Some(2));
+        assert_eq!(picker.selected(), Some(3));
         picker.next();
-        assert_eq!(picker.selected(), Some(4), "the refused row is skipped");
+        assert_eq!(picker.selected(), Some(5), "the refused row is skipped");
         picker.next();
         picker.next();
         assert_eq!(
             picker.selected(),
-            Some(5),
+            Some(6),
             "the unreadable last row is skipped and the selection stays"
         );
         picker.previous();
         picker.previous();
-        assert_eq!(picker.selected(), Some(2), "skipped on the way up too");
+        assert_eq!(picker.selected(), Some(3), "skipped on the way up too");
         picker.previous();
         assert_eq!(
             picker.selected(),
-            Some(0),
+            Some(1),
             "the heading is skipped, and the row of the limit is the top"
         );
     }
@@ -1763,11 +1776,11 @@ mod tests {
     #[test]
     fn a_click_on_a_row_that_cannot_be_chosen_chooses_nothing() {
         let mut picker = mixed();
-        assert_eq!(picker.click(3), Chosen::Nothing);
-        assert_eq!(picker.selected(), Some(2), "and moves nothing");
-        assert_eq!(picker.click(99), Chosen::Nothing);
-        assert_eq!(picker.toggle(99), Folding::Nothing);
-        assert_eq!(picker.click(4), Chosen::Pack(String::from("unicode-text")));
+        assert_eq!(picker.click(4), Chosen::Nothing);
+        assert_eq!(picker.selected(), Some(3), "and moves nothing");
+        assert_eq!(picker.click(100), Chosen::Nothing);
+        assert_eq!(picker.toggle(100), Folding::Nothing);
+        assert_eq!(picker.click(5), Chosen::Pack(String::from("unicode-text")));
     }
 
     #[test]

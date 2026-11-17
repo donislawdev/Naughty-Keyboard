@@ -195,6 +195,7 @@ chords that work today:
 |---|---|
 | `Alt+Shift+N` | Clear the line, then type the next value |
 | `Alt+Shift+P` | Type the previous value |
+| `Alt+Shift+R` | Type the last value again, the counter stays where it is |
 | `Alt+Shift+0` | Go back to the first value of the pack |
 | `Alt+Shift+B` | Copy the report block for the last value |
 | `Alt+Shift+Space` | Open the value window, to find a value or change the pack |
@@ -204,9 +205,8 @@ The table gives the Windows chords. On macOS the pair is `Option+Command` in pla
 Find a value is `Option+Command+F`. On Linux the pair is `Ctrl+Alt`, and under Wayland the desktop decides
 which keys a shortcut gets, so the palette names the keys the desktop gave.
 
-Four more chords are registered and do nothing yet, and the shortcuts window marks them as not
-available yet: typing the current value again, `Alt+Shift+R`, and marking the last result as works, a
-problem or suspect, `Alt+Shift+1`, `2` and `3`.
+Three more chords are registered and do nothing yet, and the shortcuts window marks them as not
+available yet: marking the last result as works, a problem or suspect, `Alt+Shift+1`, `2` and `3`.
 
 Every chord can be changed in the shortcuts window, or in `settings.toml` under `[shortcuts]`:
 

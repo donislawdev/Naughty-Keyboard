@@ -138,11 +138,21 @@ fn fill(palette: &Palette) {
     palette.set_skip_label("9".into());
     palette.set_can_go_back(true);
     // What the shortcut that steps back types (the owner's point 6).
-    palette.set_previous_line("Alt+Shift+P goes back and types value 6".into());
+    // And what the shortcut that repeats types (the owner's point 1,
+    // 2026-11-16).
+    palette.set_key_lines(nkb_gui::KeyLines {
+        previous: "Alt+Shift+P goes back and types value 6".into(),
+        repeat: "Alt+Shift+R types value 7 again".into(),
+    });
     // The links in the header (the owner's points of 2026-10-14).
     nkb_gui::header_links::show(palette);
     palette.set_next_name("Trailing no-break space".into());
     palette.set_next_preview("Kowalski\u{2423}".into());
+    // What it breaks, before it is typed (the owner's point 2, 2026-11-16): a
+    // sentence of the median length of the shipped catalogue's, two lines.
+    palette.set_next_breaks(
+        "A no-break space at the end survives the trim of most forms, so the name is saved with it and no search finds it.".into(),
+    );
     palette.set_next_markers(ModelRc::new(VecModel::from(vec![Marker {
         text: "offensive".into(),
         risky: true,
@@ -232,6 +242,46 @@ fn surface_edge(buffer: &[offscreen::Pixel]) -> usize {
 /// no text and no control reaches it.
 const SURFACE_PROBE_INSET: u32 = 6;
 
+/// The tallest run of rows down to the surface's edge on which nothing is
+/// drawn between the gutters: no text, no control, one colour across. A window
+/// taller than its content (`D110`) keeps its room as such a run, wherever the
+/// layout puts it.
+fn tallest_blank_run(buffer: &[offscreen::Pixel]) -> usize {
+    let inset = SURFACE_PROBE_INSET as usize;
+    let (mut tallest, mut run) = (0, 0);
+    for row in buffer.chunks(WIDTH as usize).take(surface_edge(buffer) + 1) {
+        let inner = &row[inset..WIDTH as usize - inset];
+        run = if inner.iter().all(|pixel| *pixel == inner[0]) {
+            run + 1
+        } else {
+            0
+        };
+        tallest = tallest.max(run);
+    }
+    tallest
+}
+
+/// The tallest blank run the compact palette may have: a band of one row of
+/// text and a button, as `PACK_BAND` in `palette_collapse.rs`. Measured
+/// 2026-11-17: 25 rows, the gaps between its rows.
+const COMPACT_BLANK_LIMIT: usize = 48;
+
+/// Saves the compact palette's picture and checks that the window is as tall
+/// as what it shows. The shortest state is where a floor under the window
+/// shows first: the expanded palette is taller than any floor one might pick,
+/// the compact one is a header and a status line (`D110`).
+fn saved_compact(resting: &[offscreen::Pixel]) -> std::path::PathBuf {
+    let path = offscreen::save_cropped(resting, WIDTH, HEIGHT, "palette-resting.png");
+    let blank = tallest_blank_run(resting);
+    assert!(
+        blank < COMPACT_BLANK_LIMIT,
+        "the compact palette has {blank} blank rows in a row, so the window is taller than \
+         what it shows - the floor D110 removed. Look at {}",
+        path.display()
+    );
+    path
+}
+
 /// `surface` and `surface-raised`: the content's ground, and the ground of the
 /// header, the footer and the status line - copied, for the reason the colours
 /// above are copies.
@@ -303,7 +353,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
         "two renders of an unchanged palette differ, so comparing appearance between \
          runs is impossible and the loop this test supports does not work"
     );
-    let resting_path = offscreen::save_cropped(&resting, WIDTH, HEIGHT, "palette-resting.png");
+    let resting_path = saved_compact(&resting);
 
     // ---- showing: the positive control, and the rest of the window ---------
     palette.set_compact(false);
@@ -891,4 +941,123 @@ fn the_report_block_folds_and_opens_inside_the_palette() {
         "the opened report block did not draw its ten lines ({edge_folded} -> {edge_opened}). Look at {}",
         report_path.display()
     );
+}
+
+/// The owner's point 5 (2026-11-16): a text the band cut short shows its whole
+/// in a tip while the pointer rests on it - the name of the next value and
+/// what it breaks alike - and a text that fits shows none. Measured on the
+/// render, through the toolkit's own pointer and timers: a tip written in the
+/// view and never drawn looks exactly like one that works (GUI rule 10).
+#[test]
+fn a_text_cut_short_shows_its_whole_on_hover_and_one_that_fits_does_not() {
+    let window = offscreen::start(WIDTH, HEIGHT);
+    let palette = Palette::new().expect("the palette must build");
+    fill(&palette);
+    palette.show().expect("the palette must show");
+    let away = slint::LogicalPosition::new(WIDTH as f32 - 2.0, HEIGHT as f32 - 2.0);
+    let rest_on = |at: slint::LogicalPosition| {
+        offscreen::point(palette.window(), away);
+        let before = render(&window);
+        offscreen::point(palette.window(), at);
+        // Slint's tip waits half a second after the pointer stops.
+        std::thread::sleep(std::time::Duration::from_millis(700));
+        slint::platform::update_timers_and_animations();
+        let after = render(&window);
+        offscreen::point(palette.window(), away);
+        (before, after)
+    };
+    // Where a text of the band is drawn: the ink it takes away when emptied.
+    let ink_of = |empty: &dyn Fn()| {
+        let full = render(&window);
+        empty();
+        let without = render(&window);
+        fill(&palette);
+        offscreen::added(&full, &without, WIDTH, HEIGHT).expect("the text is not drawn")
+    };
+
+    let long_name =
+        "A name long enough to be cut short in a palette this wide, and then some more words";
+    let long_breaks = "Four characters that String.length in JavaScript, .NET and Java counts as eight, \
+        because each takes two UTF-16 units, while Python, PostgreSQL and NIST SP 800-63B count \
+        four. A page and a server written in different languages disagree about the minimum length.";
+    // What a value breaks reads from its first line when it is cut: a long
+    // sentence starts where its own first words alone do. Centred, as the
+    // role draws text, the long one lost its first line instead of its last.
+    let first_line_top = |sentence: &str| {
+        fill(&palette);
+        palette.set_next_breaks(sentence.into());
+        let full = render(&window);
+        palette.set_next_breaks("".into());
+        let without = render(&window);
+        offscreen::added(&full, &without, WIDTH, HEIGHT)
+            .expect("what the value breaks is not drawn")
+            .top
+    };
+    assert_eq!(
+        first_line_top(long_breaks),
+        first_line_top("Four characters"),
+        "a sentence cut short does not start from its first line"
+    );
+
+    // The text, how to set it, how to empty it, and whether the band cuts it.
+    type Case<'a> = (&'a str, &'a dyn Fn(&str), &'a dyn Fn(), bool);
+    let cases: [Case<'_>; 3] = [
+        (
+            long_name,
+            &|text: &str| palette.set_next_name(text.into()),
+            &|| palette.set_next_name("".into()),
+            true,
+        ),
+        (
+            long_breaks,
+            &|text: &str| palette.set_next_breaks(text.into()),
+            &|| palette.set_next_breaks("".into()),
+            true,
+        ),
+        (
+            "Trailing no-break space",
+            &|text: &str| palette.set_next_name(text.into()),
+            &|| palette.set_next_name("".into()),
+            false,
+        ),
+    ];
+    for (case, (text, set, empty, cut)) in cases.into_iter().enumerate() {
+        fill(&palette);
+        set(text);
+        let text_ink = ink_of(&|| {
+            set(text);
+            empty();
+        });
+        set(text);
+        let (before, after) = rest_on(text_ink.centre());
+        let path =
+            offscreen::save_cropped(&after, WIDTH, HEIGHT, &format!("palette-tip-{case}.png"));
+        let tip = offscreen::added(&after, &before, WIDTH, HEIGHT);
+        if !cut {
+            assert!(
+                tip.is_none(),
+                "{text:?} fits, and still a tip came: {tip:?}. Look at {}",
+                path.display()
+            );
+            continue;
+        }
+        let tip = tip.unwrap_or_else(|| {
+            panic!(
+                "no tip over {text:?}, cut short. Look at {}",
+                path.display()
+            )
+        });
+        assert!(
+            tip.top > text_ink.top && tip.bottom > text_ink.bottom,
+            "the tip over {text:?} does not stand under the pointer: {tip:?} against \
+             {text_ink:?}. Look at {}",
+            path.display()
+        );
+        assert!(
+            tip.bottom - tip.top > text_ink.bottom - text_ink.top,
+            "the tip over {text:?} is no taller than the text it should show whole: {tip:?} \
+             against {text_ink:?}. Look at {}",
+            path.display()
+        );
+    }
 }

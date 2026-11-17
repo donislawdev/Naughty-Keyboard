@@ -179,6 +179,17 @@ export global Tokens {
     // its thumb says so. A count, not a length: the line is measured from the
     // typeface in the window itself.
     out property <int> shortcuts-message-lines: 2;
+    // Lines of the palette's next band given to what the value breaks (the
+    // owner's point 2, 2026-11-16). Two hold the median sentence of the
+    // shipped catalogue (107 characters, measured 2026-11-16) at the palette's
+    // width, and the longest (260) is cut and whole on hover. A count, for the
+    // shortcuts window's reason: the line is measured from the typeface.
+    out property <int> breaks-lines: 2;
+    // The most a tip with the whole of a cut text grows wide before it wraps
+    // (the owner's point 5, 2026-11-16): narrower than the palette with its
+    // margins, the narrowest window a tip stands in, and wide enough that a
+    // name of the catalogue reads on two lines at most.
+    out property <length> tip-width: 360px;
     // The welcome window (UX7, `ux-spec.md` 5.1): the width of the shortcuts
     // window, so the two read as one family, and room for each step's sentence
     // on two lines. No height, for the shortcuts window's reason: it is as tall

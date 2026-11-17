@@ -18,8 +18,8 @@ Changes wait under Unreleased until then.
   of two, three and four bytes and a family emoji. `--unit` counts the limit in graphemes, code
   points, UTF-16 units or bytes, and in the last two the limit falls inside the last character of the
   value one over it. The formats are those of `nkb emit`.
-- The palette makes the values for a length limit. **Length limit**, the first row of the value
-  window, opens a window where you type the most a field takes, the least, or both, counted in
+- The palette makes the values for a length limit. **Length limit**, at the top of the value window
+  under **Generators**, opens a window where you type the most a field takes, the least, or both, counted in
   graphemes, code points, UTF-16 units or bytes. The values `nkb boundary` prints are listed as you
   type, and Use these values hands them to the palette, where each says whether it is inside or
   outside the limit. A number typed in the value window's search opens it with that number. The
@@ -76,8 +76,18 @@ Changes wait under Unreleased until then.
   extension in capitals, an Office lock file name, `.htaccess`, `web.config`, `.env` and `desktop.ini`,
   an accent written as a character of its own, an extension in full-width letters, a percent-encoded
   NUL and line break, and a name of 101 bytes, one past the name field of a tar archive.
+- The palette types the same value into field after field. Type it once, then press Alt+Shift+R in
+  each of the other fields: **Repeat last value** types it again and the counter stays where it is,
+  so the next value is still the one after it. A line under the next value says which value
+  Alt+Shift+R types.
+- The palette shows what the next value breaks before you type it, in two lines under the value.
+- A name or a sentence that ends in `...` because it is too long for its place shows its whole text
+  when you rest the pointer on it, in the palette and in every window it opens.
 
 ### Changed
+
+- The windows the palette opens, such as the value window and the shortcuts window, open beside it,
+  on the side of the screen that has room for them, instead of where the system puts a new window.
 
 - `nkb lint` points at the line that holds the problem. A character written out instead of escaped,
   a `breaks` too short and a field kind outside the list are reported on the line of `value`,
@@ -112,6 +122,9 @@ Changes wait under Unreleased until then.
 
 ### Fixed
 
+- **Go back one value and type it** no longer moves the counter two values back when nothing could
+  take the value, for example when no field had the focus. The counter now stays where it was, as it
+  does for the next value.
 - On Windows a value typed into an application that stops responding is no longer counted one
   character short. The system had already taken the next key, and the application typed it once it
   responded again, while `nkb send` and the palette said that nothing of the value, or only the
