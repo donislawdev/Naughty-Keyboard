@@ -1079,8 +1079,11 @@ fn a_text_cut_short_shows_its_whole_on_hover_and_one_that_fits_does_not() {
 /// what never scrolls.
 const SHORT_ROOM: f32 = 560.0;
 
-/// More room than the palette with the last value folded needs.
-const ROOM_ENOUGH: f32 = 700.0;
+/// More room than the palette with the last value folded needs: the whole
+/// buffer, which no state drawn here outgrows. Not a number of its own, because
+/// the palette is as tall as its prose in the system's typeface, so a number
+/// that is enough on one machine falls short on another.
+const ROOM_ENOUGH: f32 = HEIGHT as f32;
 
 /// Less room than what never scrolls - a palette put low on its screen.
 const NO_ROOM: f32 = 100.0;

@@ -61,17 +61,26 @@ pub fn assets_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("assets")
 }
 
-slint::slint! {
-    export component Canvas inherits Window {
-        in property <image> drawing;
-        background: transparent;
-        Image {
-            source: root.drawing;
-            width: parent.width;
-            height: parent.height;
+// Slint's macro warns at every edition older than its own release, and the
+// warning stops a build under `-D warnings`. The views stay at the product's
+// edition (build.rs says why), so the warning is expected here, on the module
+// that holds the macro and nothing else.
+#[expect(deprecated, reason = "the views keep the edition of the product")]
+mod drawn {
+    slint::slint! {
+        #[edition = "1.18"]
+        export component Canvas inherits Window {
+            in property <image> drawing;
+            background: transparent;
+            Image {
+                source: root.drawing;
+                width: parent.width;
+                height: parent.height;
+            }
         }
     }
 }
+use drawn::Canvas;
 
 /// A pixel as the renderer blends it: the colour already multiplied by the
 /// opacity, and an opacity that starts at nothing.

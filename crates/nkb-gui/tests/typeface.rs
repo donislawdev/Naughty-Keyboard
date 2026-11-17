@@ -202,27 +202,36 @@ fn the_dictionary_names_exactly_the_typeface_the_product_ships() {
 // Does it actually render monospaced?
 // ---------------------------------------------------------------------------
 
-slint::slint! {
-    // Deliberately not part of the product's own screens: this is a measuring
-    // instrument, and putting it in ui/ would make the gallery hold a test
-    // fixture. It takes the family by property so the same component can draw
-    // the shipped face and the control.
-    export component Ruler inherits Window {
-        in property <string> sample;
-        in property <string> family;
-        width: 900px;
-        height: 90px;
-        background: #000000;
-        Text {
-            x: 4px;
-            y: 4px;
-            text: root.sample;
-            font-family: root.family;
-            font-size: 40px;
-            color: #FFFFFF;
+// Slint's macro warns at every edition older than its own release, and the
+// warning stops a build under `-D warnings`. The views stay at the product's
+// edition (build.rs says why), so the warning is expected here, on the module
+// that holds the macro and nothing else.
+#[expect(deprecated, reason = "the views keep the edition of the product")]
+mod ruler_view {
+    slint::slint! {
+        #[edition = "1.18"]
+        // Deliberately not part of the product's own screens: this is a measuring
+        // instrument, and putting it in ui/ would make the gallery hold a test
+        // fixture. It takes the family by property so the same component can draw
+        // the shipped face and the control.
+        export component Ruler inherits Window {
+            in property <string> sample;
+            in property <string> family;
+            width: 900px;
+            height: 90px;
+            background: #000000;
+            Text {
+                x: 4px;
+                y: 4px;
+                text: root.sample;
+                font-family: root.family;
+                font-size: 40px;
+                color: #FFFFFF;
+            }
         }
     }
 }
+use ruler_view::Ruler;
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 struct Pixel {

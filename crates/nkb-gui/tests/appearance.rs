@@ -104,8 +104,9 @@ const WIDTH: u32 = 480;
 /// the palette's own frame and its status line came in (`D145` point 51), 4100
 /// until the folder sections of the pack folders window came in (`D175`: 4133 px
 /// with the wider DejaVu Sans of the Linux runner), 4400 until the windows that
-/// scroll on a short screen came in (`WindowScroll`, 4517 px here).
-const HEIGHT: u32 = 4700;
+/// scroll on a short screen came in (`WindowScroll`, 4517 px here), 4700 until
+/// Slint 1.19 drew the prose in the system's interface typeface (4789 px here).
+const HEIGHT: u32 = 5100;
 
 fn draw(window: &Rc<MinimalSoftwareWindow>) -> Vec<Pixel> {
     let mut buffer = vec![Pixel::default(); (WIDTH * HEIGHT) as usize];

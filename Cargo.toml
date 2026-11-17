@@ -75,8 +75,8 @@ windows-sys = "0.61.2"
 #
 # Only nkb-gui depends on this. `nkb` links no graphical toolkit at all, and that
 # is a property of the artefact rather than of anyone's discipline - D25.
-slint = "1.18.1"
-slint-build = "1.18.1"
+slint = "1.19.0"
+slint-build = "1.19.0"
 
 # The window-handle vocabulary. Not a second toolkit: it is the set of types
 # through which every Rust windowing library reports "here is the native window",

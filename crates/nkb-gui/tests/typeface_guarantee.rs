@@ -212,22 +212,31 @@ fn the_oracle_is_the_same_reader_the_renderer_uses() {
 // family is the one the product names. White on black and no dictionary colours:
 // this is a measuring instrument, not a view, and maximum contrast is what makes
 // "no ink at all" an unambiguous reading.
-slint::slint! {
-    import { TextPreview } from "ui/components.slint";
+// Slint's macro warns at every edition older than its own release, and the
+// warning stops a build under `-D warnings`. The views stay at the product's
+// edition (build.rs says why), so the warning is expected here, on the module
+// that holds the macro and nothing else.
+#[expect(deprecated, reason = "the views keep the edition of the product")]
+mod ink_view {
+    slint::slint! {
+        #[edition = "1.18"]
+        import { TextPreview } from "ui/components.slint";
 
-    export component InkGrid inherits Window {
-        in property <[string]> cells;
-        in property <int> columns;
-        in property <length> cell;
-        background: black;
-        for text[i] in cells: TextPreview {
-            x: mod(i, columns) * cell + cell / 2;
-            y: floor(i / columns) * cell + cell / 4;
-            text: text;
-            color: white;
+        export component InkGrid inherits Window {
+            in property <[string]> cells;
+            in property <int> columns;
+            in property <length> cell;
+            background: black;
+            for text[i] in cells: TextPreview {
+                x: mod(i, columns) * cell + cell / 2;
+                y: floor(i / columns) * cell + cell / 4;
+                text: text;
+                color: white;
+            }
         }
     }
 }
+use ink_view::InkGrid;
 
 /// Characters in the table whose glyph legitimately draws nothing ON ITS OWN.
 ///
