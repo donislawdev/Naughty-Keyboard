@@ -28,7 +28,7 @@ mod offscreen;
 use std::cell::Cell;
 use std::rc::Rc;
 
-use nkb_gui::{Marker, Palette};
+use nkb_gui::{Marker, Palette, SentValue};
 use slint::platform::WindowEvent;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
@@ -90,6 +90,13 @@ fn longest_counts() -> String {
 /// of pack, forty-eight of value, and no space anywhere to break at.
 const LONGEST_REFERENCE: &str = "abcdefghijklmnopqrstuvwxyzabcdefghijklmn/\
                                  abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuv";
+/// Changes the value that went out last the way Rust hands it to the palette:
+/// one struct (`SentValue`), read, changed and written back.
+fn sent(palette: &Palette, change: impl FnOnce(&mut SentValue)) {
+    let mut value = palette.get_sent_value();
+    change(&mut value);
+    palette.set_sent_value(value);
+}
 
 /// Specimen data. The literals are the test's own - the test is not the product,
 /// and what it feeds in is a sample to look at, the same job the gallery's
@@ -98,26 +105,27 @@ fn fill(palette: &Palette) {
     palette.set_window_title("Naughty Keyboard".into());
     palette.set_pack("unicode-text".into());
     palette.set_counter("7 / 34".into());
-    palette.set_value_name("Three zero-width spaces".into());
-    // Where it was typed, read at the press (UX8, D104).
-    palette.set_value_sent_to("to chrome.exe, a text field".into());
-    palette.set_has_sent_to(true);
-    palette.set_value_reference("unicode-text/zero-width-spaces".into());
-    palette.set_value_counts("graphemes: 7, code points: 7, bytes: 13, UTF-16 units: 7".into());
-    // The preview and the shape, exactly as the sketch in `ux-spec.md` 2 draws
-    // them. The marker is U+2423, whose glyph is IN the shipped typeface -
-    // measured from the file's `cmap`, so the marker cannot itself render as the
-    // empty rectangle it exists to prevent.
-    palette.set_value_preview("ab\u{2423}\u{2423}\u{2423}cd".into());
-    palette.set_value_shape("zero-width \u{D7} 3".into());
-    palette.set_has_shape(true);
-    // No elision for a seven-code-point value, and the render proves the band
-    // does not draw an empty line for it.
-    palette.set_has_elided(false);
-    // Latin letters and the marker are all inside the typeface guarantee, so
-    // the specimen of the sketch has no note - the note is measured on its own
-    // below, with a value that earns one.
-    palette.set_has_not_guaranteed(false);
+    palette.set_sent_value(SentValue {
+        name: "Three zero-width spaces".into(),
+        // Where it was typed, read at the press (UX8, D104).
+        sent_to: "to chrome.exe, a text field".into(),
+        has_sent_to: true,
+        reference: "unicode-text/zero-width-spaces".into(),
+        counts: "graphemes: 7, code points: 7, bytes: 13, UTF-16 units: 7".into(),
+        // The preview and the shape, exactly as the sketch in `ux-spec.md` 2
+        // draws them. The marker is U+2423, whose glyph is IN the shipped
+        // typeface - measured from the file's `cmap`, so the marker cannot
+        // itself render as the empty rectangle it exists to prevent.
+        preview: "ab\u{2423}\u{2423}\u{2423}cd".into(),
+        shape: "zero-width \u{D7} 3".into(),
+        has_shape: true,
+        // No elision for a seven-code-point value, and the render proves the
+        // band does not draw an empty line for it. Latin letters and the
+        // marker are all inside the typeface guarantee, so the specimen of the
+        // sketch has no note - the note is measured on its own below, with a
+        // value that earns one.
+        ..SentValue::default()
+    });
     palette.set_clipboard_mode_label("clipboard mode".into());
     // The way out of clipboard mode on its bar (D99).
     palette.set_turn_off_label("Turn off".into());
@@ -374,9 +382,9 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     // work - the value's name is that colour too, so the count would stay
     // non-zero with the preview gone.
     let with_preview = offscreen::count_exactly(&showing, TEXT_PRIMARY);
-    palette.set_value_preview("".into());
-    palette.set_value_shape("".into());
-    palette.set_has_shape(false);
+    sent(&palette, |v| v.preview = "".into());
+    sent(&palette, |v| v.shape = "".into());
+    sent(&palette, |v| v.has_shape = false);
     let without_preview = offscreen::count_exactly(&render(&window), TEXT_PRIMARY);
     assert!(
         with_preview > without_preview,
@@ -385,7 +393,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     );
     // The marker is the point: U+2423 must leave ink of its own, or the preview
     // shows a value with a hole where the invisible character was.
-    palette.set_value_preview(MARKER_ONLY.into());
+    sent(&palette, |v| v.preview = MARKER_ONLY.into());
     let marker_only = offscreen::count_exactly(&render(&window), TEXT_PRIMARY);
     assert!(
         marker_only > without_preview,
@@ -397,11 +405,11 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     // note under the preview. It is a muted line, so switching it on must ADD
     // muted ink - the same difference-of-two-renders shape as above, because a
     // line that the view silently drops looks exactly like a line never asked for.
-    palette.set_value_preview(NOT_GUARANTEED_PREVIEW.into());
-    palette.set_value_not_guaranteed(NOT_GUARANTEED_NOTE.into());
-    palette.set_has_not_guaranteed(false);
+    sent(&palette, |v| v.preview = NOT_GUARANTEED_PREVIEW.into());
+    sent(&palette, |v| v.not_guaranteed = NOT_GUARANTEED_NOTE.into());
+    sent(&palette, |v| v.has_not_guaranteed = false);
     let muted_without_note = offscreen::count_exactly(&render(&window), TEXT_MUTED);
-    palette.set_has_not_guaranteed(true);
+    sent(&palette, |v| v.has_not_guaranteed = true);
     let with_note = render(&window);
     let muted_with_note = offscreen::count_exactly(&with_note, TEXT_MUTED);
     let note_path =
@@ -430,11 +438,11 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     // One line, so the longest counters have a line to add: at the scale's
     // smallest step (12 px since 2026-10-07) the specimen's own counters
     // already take two.
-    palette.set_value_counts("graphemes: 7".into());
+    sent(&palette, |v| v.counts = "graphemes: 7".into());
     let edge_short = bottom_edge(&render(&window));
-    palette.set_value_counts(longest_counts().into());
+    sent(&palette, |v| v.counts = longest_counts().into());
     let edge_counts = bottom_edge(&render(&window));
-    palette.set_value_reference(LONGEST_REFERENCE.into());
+    sent(&palette, |v| v.reference = LONGEST_REFERENCE.into());
     let long_lines = render(&window);
     let edge_reference = bottom_edge(&long_lines);
     let long_path = offscreen::save_cropped(&long_lines, WIDTH, HEIGHT, "palette-long-lines.png");
@@ -659,7 +667,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
         surface_edge(&folded),
         folded_path.display()
     );
-    palette.set_value_preview("".into());
+    sent(&palette, |v| v.preview = "".into());
     assert!(
         render(&window) == folded,
         "blanking the preview changed the folded palette, so the folded band still draws the \

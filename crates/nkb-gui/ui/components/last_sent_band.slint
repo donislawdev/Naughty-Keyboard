@@ -19,6 +19,43 @@ import { Zone, Marker, MarkerRow } from "chrome.slint";
 import { SmallButton } from "button.slint";
 import { Disclosure } from "disclosure.slint";
 
+// The value that went out last, as the band shows it: one property from Rust
+// to the band, where the palette used to pass twelve on one by one (the Slint
+// ceiling of `D113`, 2026-11-17). Every string is finished text from `i18n`.
+//
+// 🔴 A switch beside each optional line rather than comparing its string to
+// "" in the view, and that is not a detour: `ui_guard.rs` refuses a quoted
+// string in a view (untouchable rule 9, D58) and it caught exactly this - the
+// empty literal is not a sentence, but an exception carved into a guard is a
+// door, so the view gets a boolean instead. Rust reads each switch before its
+// string moves into the struct.
+export struct SentValue {
+    name: string,
+    // Where the value was typed, read at the press (UX8, `D104`): the program
+    // and the kind of control. Never for a value put on the clipboard.
+    sent-to: string,
+    has-sent-to: bool,
+    reference: string,
+    counts: string,
+    // The value as a person can see it: invisible characters stand in as
+    // `nkb_core::preview::MARKER`. `ux-spec.md` 2 calls this the line without
+    // which the whole unicode category is unreportable.
+    preview: string,
+    // Said only when the preview is a fragment. Never implied: a fragment
+    // presented as the whole is the silence rule 1 forbids.
+    elided: string,
+    has-elided: bool,
+    // Said only when the preview draws a character the shipped typeface does
+    // not guarantee (`D52`, `D66`). What the tester sees of that character
+    // depends on the machine, and the tool cannot tell what the machine drew -
+    // so it says where its own promise ends.
+    not-guaranteed: string,
+    has-not-guaranteed: bool,
+    // What the value is made of, already joined into one line by `i18n`.
+    shape: string,
+    has-shape: bool,
+}
+
 // The value that went out last. It stays until the next one.
 //
 // FOLDED at every start (the owner's point 7, 2026-10-07): the heading and the
@@ -42,28 +79,8 @@ export component LastSentBand inherits Zone {
     callback toggle();
     // Whether a value has gone out yet.
     in property <bool> has-value;
-    in property <string> name;
-    // Where the value was typed, read at the press (UX8, `D104`): the program
-    // and the kind of control. Never for a value put on the clipboard.
-    in property <string> sent-to;
-    in property <bool> has-sent-to;
-    in property <string> reference;
-    in property <string> counts;
-    // The value as a person can see it: invisible characters stand in as
-    // `nkb_core::preview::MARKER`. `ux-spec.md` 2 calls this the line without
-    // which the whole unicode category is unreportable.
-    in property <string> preview;
-    // Said only when the preview is a fragment. Never implied: a fragment
-    // presented as the whole is the silence rule 1 forbids.
-    in property <string> elided;
-    in property <bool> has-elided;
-    // Said only when the preview draws a character the shipped typeface does
-    // not guarantee (`D52`, `D66`).
-    in property <string> not-guaranteed;
-    in property <bool> has-not-guaranteed;
-    // What the value is made of, already joined into one line by `i18n`.
-    in property <string> shape;
-    in property <bool> has-shape;
+    // The value itself - `SentValue` above says what each line is.
+    in property <SentValue> value;
     in property <[Marker]> markers;
     in property <string> copy-label;
     in property <string> copy-action;
@@ -100,7 +117,7 @@ export component LastSentBand inherits Zone {
             horizontal-stretch: 1;
             Disclosure {
                 text: root.label;
-                detail: root.name;
+                detail: root.value.name;
                 open: root.open && root.has-value;
                 enabled: root.has-value;
                 action: root.action;
@@ -121,14 +138,14 @@ export component LastSentBand inherits Zone {
         }
     }
     if root.open && root.has-value: TextName {
-        text: root.name;
+        text: root.value.name;
         wrap: word-wrap;
     }
     // Under the name, because "which value went where" is the question this
     // band answers - and a tester who switched windows a moment before the
     // press sees it here, not in a ticket a day later (`UX-GUI-013`).
-    if root.open && root.has-value && root.has-sent-to: TextBody {
-        text: root.sent-to;
+    if root.open && root.has-value && root.value.has-sent-to: TextBody {
+        text: root.value.sent-to;
         wrap: word-wrap;
     }
     // The preview, in the order the sketch draws: name, preview, shape,
@@ -141,22 +158,22 @@ export component LastSentBand inherits Zone {
     // `TextPreviewInvisible` therefore stays unused for now. The marker is told
     // apart by its SHAPE, which is a visible box, rather than by colour.
     if root.open && root.has-value: TextPreview {
-        text: root.preview;
+        text: root.value.preview;
         wrap: char-wrap;
     }
-    if root.open && root.has-value && root.has-elided: TextSmallMuted {
-        text: root.elided;
+    if root.open && root.has-value && root.value.has-elided: TextSmallMuted {
+        text: root.value.elided;
     }
     // Under the preview because it qualifies the preview, and in the muted role
     // because it is a note about the tool's display rather than a fact about
     // the value. Wrapped: a list of code points is somebody else's data and has
     // no fixed length.
-    if root.open && root.has-value && root.has-not-guaranteed: TextSmallMuted {
-        text: root.not-guaranteed;
+    if root.open && root.has-value && root.value.has-not-guaranteed: TextSmallMuted {
+        text: root.value.not-guaranteed;
         wrap: word-wrap;
     }
-    if root.open && root.has-value && root.has-shape: TextBody {
-        text: root.shape;
+    if root.open && root.has-value && root.value.has-shape: TextBody {
+        text: root.value.shape;
         wrap: word-wrap;
     }
     // Both wrap, and both did not until 2026-09-23: a render with the shipped
@@ -165,11 +182,11 @@ export component LastSentBand inherits Zone {
     // 7), so it breaks anywhere. The counters have spaces, so they break between
     // words.
     if root.open && root.has-value: TextMono {
-        text: root.reference;
+        text: root.value.reference;
         wrap: char-wrap;
     }
     if root.open && root.has-value: TextMono {
-        text: root.counts;
+        text: root.value.counts;
         wrap: word-wrap;
     }
     if root.open && root.has-value: MarkerRow {

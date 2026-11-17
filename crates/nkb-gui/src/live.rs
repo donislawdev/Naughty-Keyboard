@@ -1189,28 +1189,37 @@ mod tests {
         );
         assert_eq!(palette.get_pack(), "Unicode & text");
         assert_eq!(palette.get_counter(), "7 / 34");
-        assert_eq!(palette.get_value_name(), "Three zero-width spaces");
+        assert_eq!(palette.get_sent_value().name, "Three zero-width spaces");
         // Where it was typed, read at the press (UX8, `D104`).
-        assert!(palette.get_has_sent_to());
-        assert_eq!(palette.get_value_sent_to(), "to notepad.exe, a text field");
-        assert_eq!(palette.get_value_reference(), "unicode-text/zero-width");
+        assert!(palette.get_sent_value().has_sent_to);
         assert_eq!(
-            palette.get_value_counts(),
+            palette.get_sent_value().sent_to,
+            "to notepad.exe, a text field"
+        );
+        assert_eq!(
+            palette.get_sent_value().reference,
+            "unicode-text/zero-width"
+        );
+        assert_eq!(
+            palette.get_sent_value().counts,
             "graphemes: 7, code points: 7, bytes: 13, UTF-16 units: 7"
         );
         // The preview and the shape, checked against the sketch in `ux-spec.md` 2
         // rather than against whatever the code happens to produce.
-        assert_eq!(palette.get_value_preview(), "ab\u{2423}\u{2423}\u{2423}cd");
-        assert_eq!(palette.get_value_shape(), "zero-width \u{D7} 3");
         assert_eq!(
-            palette.get_value_elided(),
+            palette.get_sent_value().preview,
+            "ab\u{2423}\u{2423}\u{2423}cd"
+        );
+        assert_eq!(palette.get_sent_value().shape, "zero-width \u{D7} 3");
+        assert_eq!(
+            palette.get_sent_value().elided,
             "",
             "a short value is shown whole, so nothing is said about eliding"
         );
         // The marker is inside the guarantee, so a value made of Latin letters
         // and invisible characters has nothing to confess.
-        assert_eq!(palette.get_value_not_guaranteed(), "");
-        assert!(!palette.get_has_not_guaranteed());
+        assert_eq!(palette.get_sent_value().not_guaranteed, "");
+        assert!(!palette.get_sent_value().has_not_guaranteed);
         assert_eq!(
             slint::Model::row_count(&palette.get_markers()),
             3,
@@ -1309,7 +1318,7 @@ mod tests {
             ),
         );
         assert!(palette.get_has_value(), "the previous value was blanked");
-        assert_eq!(palette.get_value_name(), "Three zero-width spaces");
+        assert_eq!(palette.get_sent_value().name, "Three zero-width spaces");
         assert_eq!(
             slint::Model::row_count(&palette.get_messages()),
             1,
@@ -1330,10 +1339,10 @@ mod tests {
             ),
         );
         assert_eq!(
-            palette.get_value_not_guaranteed(),
+            palette.get_sent_value().not_guaranteed,
             "not guaranteed by the bundled font: U+540D U+524D U+1F600"
         );
-        assert!(palette.get_has_not_guaranteed());
+        assert!(palette.get_sent_value().has_not_guaranteed);
 
         // ---- ... but only what the preview actually DRAWS ------------------
         // The emoji sits in the middle of a value long enough to be elided, so
@@ -1351,8 +1360,8 @@ mod tests {
                 &nkb_adapters::default_bindings(),
             ),
         );
-        assert_eq!(palette.get_value_not_guaranteed(), "");
-        assert!(!palette.get_has_not_guaranteed());
+        assert_eq!(palette.get_sent_value().not_guaranteed, "");
+        assert!(!palette.get_sent_value().has_not_guaranteed);
 
         // ---- a generated value shows its recipe ----------------------------
         // `length-bombs/emoji-truncation`, as the core previews it. The recipe
@@ -1373,11 +1382,11 @@ mod tests {
                 &nkb_adapters::default_bindings(),
             ),
         );
-        assert_eq!(palette.get_value_preview(), "64 \u{D7} \"\u{1F600}\"");
-        assert_eq!(palette.get_value_elided(), "");
-        assert!(!palette.get_has_elided());
+        assert_eq!(palette.get_sent_value().preview, "64 \u{D7} \"\u{1F600}\"");
+        assert_eq!(palette.get_sent_value().elided, "");
+        assert!(!palette.get_sent_value().has_elided);
         assert_eq!(
-            palette.get_value_not_guaranteed(),
+            palette.get_sent_value().not_guaranteed,
             "not guaranteed by the bundled font: U+1F600"
         );
 
@@ -1639,12 +1648,15 @@ mod tests {
         assert_eq!(palette.get_sending_hint(), "Press Esc to stop.");
         assert!((palette.get_sending_fraction() - 0.25).abs() < f32::EPSILON);
         assert!(palette.get_has_value());
-        assert_eq!(palette.get_value_name(), "Three zero-width spaces");
-        assert_eq!(palette.get_value_reference(), "unicode-text/zero-width");
+        assert_eq!(palette.get_sent_value().name, "Three zero-width spaces");
+        assert_eq!(
+            palette.get_sent_value().reference,
+            "unicode-text/zero-width"
+        );
         assert!(
-            palette.get_value_counts().contains("UTF-16 units: 12"),
+            palette.get_sent_value().counts.contains("UTF-16 units: 12"),
             "the counts name the whole value's size: {}",
-            palette.get_value_counts()
+            palette.get_sent_value().counts
         );
         assert_eq!(
             palette.get_messages().row_count(),

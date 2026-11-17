@@ -373,8 +373,8 @@
       "id": "M63",
       "why": "the preview row binds to an empty property - Rust still sets the real one, so the code looks right and the value is not on screen (GUI rule 10: caught by pixels)",
       "file": "crates/nkb-gui/ui/components/last_sent_band.slint",
-      "find": "        text: root.preview;\n        wrap: char-wrap;",
-      "replace": "        text: root.elided;\n        wrap: char-wrap;",
+      "find": "        text: root.value.preview;\n        wrap: char-wrap;",
+      "replace": "        text: root.value.elided;\n        wrap: char-wrap;",
       "test": "the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one",
       "runner": "rust:nkb-gui:palette_appearance"
     },
@@ -831,8 +831,8 @@
       "id": "M71",
       "why": "the palette view does not draw the typeface note though it receives it - a property set and silently ignored looks like one that works (GUI rule 10)",
       "file": "crates/nkb-gui/ui/components/last_sent_band.slint",
-      "find": "    if root.open && root.has-value && root.has-not-guaranteed: TextSmallMuted {",
-      "replace": "    if root.open && root.has-value && root.has-not-guaranteed && false: TextSmallMuted {",
+      "find": "    if root.open && root.has-value && root.value.has-not-guaranteed: TextSmallMuted {",
+      "replace": "    if root.open && root.has-value && root.value.has-not-guaranteed && false: TextSmallMuted {",
       "test": "the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one",
       "runner": "rust:nkb-gui:palette_appearance"
     },
@@ -3135,8 +3135,8 @@
       "id": "M541",
       "why": "the line saying where it went is never shown (D104)",
       "file": "crates/nkb-gui/src/live/view.rs",
-      "find": "    palette.set_has_sent_to(!value.sent_to.is_empty());",
-      "replace": "    palette.set_has_sent_to(false);",
+      "find": "        has_sent_to: !value.sent_to.is_empty(),",
+      "replace": "        has_sent_to: false,",
       "test": "live::tests::a_view_reaches_the_window_field_by_field",
       "runner": "rust:nkb-gui:lib"
     },
@@ -3945,8 +3945,8 @@
       "id": "M635",
       "why": "the ceiling of Slint files one above the measurement - free room nobody granted",
       "file": ".github/shape.toml",
-      "find": "[files.slint]\nceiling = 283",
-      "replace": "[files.slint]\nceiling = 284",
+      "find": "[files.slint]\nceiling = 272",
+      "replace": "[files.slint]\nceiling = 273",
       "test": "no_file_has_grown_past_its_ceiling_and_each_ceiling_is_the_measurement",
       "runner": "rust:nkb-adapters:shape"
     },

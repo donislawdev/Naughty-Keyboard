@@ -133,6 +133,7 @@ import {
     Disclosure,
     ValueKey,
     KeyLines,
+    SentValue,
 } from "../components.slint";
 
 // Which Copy button says "Copied" now, if any (`D121`).
@@ -195,35 +196,8 @@ export component Palette inherits Window {
     // Each click only hands on to its callback - one call, no logic.
     callback toggle-report();
     callback copy-report();
-    in property <string> value-name;
-    // Where the value was typed, read at the press (UX8, `D104`): the program
-    // and the kind of control. Never for a value put on the clipboard.
-    in property <string> value-sent-to;
-    in property <bool> has-sent-to;
-    in property <string> value-reference;
-    in property <string> value-counts;
-    // The value as a person can see it: invisible characters stand in as
-    // `nkb_core::preview::MARKER`. `ux-spec.md` 2 calls this the line without
-    // which the whole unicode category is unreportable.
-    in property <string> value-preview;
-    // Said only when the preview is a fragment. Never implied: a fragment
-    // presented as the whole is the silence rule 1 forbids.
-    in property <string> value-elided;
-    // Said only when the preview draws a character the shipped typeface does
-    // not guarantee (`D52`, `D66`). What the tester sees of that character
-    // depends on the machine, and the tool cannot tell what the machine drew -
-    // so it says where its own promise ends.
-    in property <string> value-not-guaranteed;
-    // What the value is made of, already joined into one line by `i18n`.
-    in property <string> value-shape;
-    // 🔴 Two switches rather than comparing the strings to "" in the view, and
-    // that is not a detour: `ui_guard.rs` refuses a quoted string in a view
-    // (untouchable rule 9, D58) and it caught exactly this - the empty literal
-    // is not a sentence, but an exception carved into a guard is a door, so the
-    // view gets a boolean instead. The same shape as `has-value` above.
-    in property <bool> has-elided;
-    in property <bool> has-not-guaranteed;
-    in property <bool> has-shape;
+    // The value that went out last (`components/last_sent_band.slint`).
+    in property <SentValue> sent-value;
     in property <[Marker]> markers;
 
     // ---- the Copy buttons (UX-GUI-003, D98) ---------------------------------
@@ -498,18 +472,7 @@ export component Palette inherits Window {
                 open: root.last-sent-open;
                 action: root.last-sent-action;
                 has-value: root.has-value;
-                name: root.value-name;
-                sent-to: root.value-sent-to;
-                has-sent-to: root.has-sent-to;
-                reference: root.value-reference;
-                counts: root.value-counts;
-                preview: root.value-preview;
-                elided: root.value-elided;
-                has-elided: root.has-elided;
-                not-guaranteed: root.value-not-guaranteed;
-                has-not-guaranteed: root.has-not-guaranteed;
-                shape: root.value-shape;
-                has-shape: root.has-shape;
+                value: root.sent-value;
                 markers: root.markers;
                 copy-label: root.copy-label;
                 copy-action: root.copy-last-action;

@@ -12,7 +12,7 @@ use nkb_core::sequence::Sequence;
 use nkb_core::text::{SHOWN_EXPLANATION, SHOWN_NAME, shown_prose};
 use slint::ComponentHandle;
 
-use crate::KeyLines;
+use crate::{KeyLines, SentValue};
 
 use super::*;
 
@@ -721,20 +721,21 @@ fn fill_value(palette: &Palette, value: ValueView) {
     if let Some(key) = &value.key {
         palette.set_last_key(shown_key(key));
     }
-    palette.set_value_name(value.name.into());
-    // The switch is read BEFORE the string moves into its property.
-    palette.set_has_sent_to(!value.sent_to.is_empty());
-    palette.set_value_sent_to(value.sent_to.into());
-    palette.set_value_reference(value.reference.into());
-    palette.set_value_counts(value.counts.into());
-    palette.set_value_preview(value.preview.into());
-    // The switches are read BEFORE the strings move into the properties.
-    palette.set_has_elided(!value.elided.is_empty());
-    palette.set_has_not_guaranteed(!value.not_guaranteed.is_empty());
-    palette.set_has_shape(!value.shape.is_empty());
-    palette.set_value_elided(value.elided.into());
-    palette.set_value_not_guaranteed(value.not_guaranteed.into());
-    palette.set_value_shape(value.shape.into());
+    // Each switch is read BEFORE its string moves into the struct.
+    palette.set_sent_value(SentValue {
+        name: value.name.into(),
+        has_sent_to: !value.sent_to.is_empty(),
+        sent_to: value.sent_to.into(),
+        reference: value.reference.into(),
+        counts: value.counts.into(),
+        preview: value.preview.into(),
+        has_elided: !value.elided.is_empty(),
+        elided: value.elided.into(),
+        has_not_guaranteed: !value.not_guaranteed.is_empty(),
+        not_guaranteed: value.not_guaranteed.into(),
+        has_shape: !value.shape.is_empty(),
+        shape: value.shape.into(),
+    });
     palette.set_markers(markers_model(value.markers));
     // The switch is read BEFORE the string moves into its property.
     palette.set_has_report(!value.report.is_empty());
@@ -1348,8 +1349,8 @@ mod tests {
     fn another_pack_takes_every_line_of_the_old_value_off_the_window() {
         let palette = a_palette();
         show_value(&palette, value_view(&a_sent()));
-        assert!(!palette.get_value_name().is_empty());
-        assert!(!palette.get_value_preview().is_empty());
+        assert!(!palette.get_sent_value().name.is_empty());
+        assert!(!palette.get_sent_value().preview.is_empty());
         assert!(palette.get_has_report());
 
         let mut view = view_of(
@@ -1364,20 +1365,20 @@ mod tests {
 
         assert!(!palette.get_has_value());
         for (line, what) in [
-            (palette.get_value_name(), "name"),
-            (palette.get_value_sent_to(), "where it went"),
-            (palette.get_value_reference(), "reference"),
-            (palette.get_value_counts(), "counts"),
-            (palette.get_value_preview(), "preview"),
-            (palette.get_value_elided(), "elision"),
-            (palette.get_value_not_guaranteed(), "typeface note"),
-            (palette.get_value_shape(), "shape"),
+            (palette.get_sent_value().name, "name"),
+            (palette.get_sent_value().sent_to, "where it went"),
+            (palette.get_sent_value().reference, "reference"),
+            (palette.get_sent_value().counts, "counts"),
+            (palette.get_sent_value().preview, "preview"),
+            (palette.get_sent_value().elided, "elision"),
+            (palette.get_sent_value().not_guaranteed, "typeface note"),
+            (palette.get_sent_value().shape, "shape"),
             (palette.get_report(), "report block"),
         ] {
             assert!(line.is_empty(), "the old pack's {what} stayed: {line:?}");
         }
-        assert!(!palette.get_has_sent_to());
-        assert!(!palette.get_has_shape());
+        assert!(!palette.get_sent_value().has_sent_to);
+        assert!(!palette.get_sent_value().has_shape);
         assert!(!palette.get_has_report(), "the old pack's block stayed");
         assert_eq!(slint::Model::row_count(&palette.get_markers()), 0);
     }

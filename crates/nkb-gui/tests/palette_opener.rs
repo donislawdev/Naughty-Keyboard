@@ -24,7 +24,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use nkb_adapters::i18n::{self, PaletteLabel};
-use nkb_gui::{HeaderLinkKind, HintRow, Palette};
+use nkb_gui::{HeaderLinkKind, HintRow, Palette, SentValue};
 use slint::platform::{PointerEventButton, WindowEvent};
 use slint::{ComponentHandle, LogicalPosition, ModelRc, VecModel};
 
@@ -91,6 +91,15 @@ fn accent_in(buffer: &[offscreen::Pixel], at: &Ink) -> usize {
 
 fn pointer(palette: &Palette, event: WindowEvent) {
     palette.window().dispatch_event(event);
+}
+
+/// A value that went out last with only its name - all the band needs for its
+/// folded heading.
+fn named(name: &str) -> SentValue {
+    SentValue {
+        name: name.into(),
+        ..SentValue::default()
+    }
 }
 
 #[test]
@@ -225,7 +234,7 @@ fn the_palette_links_answer_the_pointer_and_open_their_windows() {
     let count = Rc::clone(&folds);
     palette.on_toggle_last_sent(move || count.set(count.get() + 1));
     palette.set_has_value(true);
-    palette.set_value_name("Three zero-width spaces".into());
+    palette.set_sent_value(named("Three zero-width spaces"));
     palette.set_last_sent_label("".into());
     let no_words = offscreen::draw(&surface, WIDTH, HEIGHT);
     palette.set_last_sent_label("Last sent".into());
