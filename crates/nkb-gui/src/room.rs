@@ -59,17 +59,45 @@ pub fn refit_on_move(palette: &crate::Palette) {
 }
 
 /// The room from the top of the window's content to the bottom of the work
-/// area of the screen it stands on, in the window's logical pixels - at least
-/// one, because zero is what a view reads as not known. `None` when the system
-/// does not say where the window or the work area is.
+/// area of the screen it stands on, less the window manager's frame under the
+/// content ([`frame_below`]), in the window's logical pixels - at least one,
+/// because zero is what a view reads as not known. `None` when the system does
+/// not say where the window or the work area is.
 #[must_use]
 pub fn below(window: &slint::Window) -> Option<f32> {
     let top = window
         .with_winit_window(|window| window.inner_position().ok())
         .flatten()?;
     let area = work_area_of(window)?;
-    let room = room_below(top.y, area);
+    let room = room_below(top.y, area).saturating_sub(frame_below(window));
     Some(logical(room, window.scale_factor()).max(1.0))
+}
+
+/// The window manager's frame under the window's content, in physical pixels -
+/// on Linux, where a window manager keeps the whole frame of a window inside
+/// the work area and moves a window whose frame reaches past it. Measured
+/// 2026-11-17 under openbox (Xvfb at 1280 x 800, `_NET_FRAME_EXTENTS` 1, 1, 22,
+/// 1): with its content reaching the bottom of the work area, the palette had
+/// its 1 px border below it, openbox moved it up a pixel as it grew, the move
+/// fitted it a pixel taller, and it crept up the screen some 15 px a second
+/// until it was as tall as its content. Zero before the window manager has
+/// framed the window, and zero elsewhere: on Windows the outer size counts 7 px
+/// of invisible border that may lie over the taskbar (`slint.md` 2.89), and on
+/// macOS nothing frames the content from below.
+fn frame_below(window: &slint::Window) -> u32 {
+    if !cfg!(target_os = "linux") {
+        return 0;
+    }
+    window
+        .with_winit_window(|window| {
+            let (Ok(outer), Ok(inner)) = (window.outer_position(), window.inner_position()) else {
+                return 0;
+            };
+            let outer_bottom = i64::from(outer.y) + i64::from(window.outer_size().height);
+            let inner_bottom = i64::from(inner.y) + i64::from(window.inner_size().height);
+            u32::try_from(outer_bottom - inner_bottom).unwrap_or(0)
+        })
+        .unwrap_or(0)
 }
 
 /// The height a window opened beside `anchor` may have whole, in its logical
