@@ -25,7 +25,11 @@
 #[allow(dead_code)]
 mod offscreen;
 
+use std::cell::Cell;
+use std::rc::Rc;
+
 use nkb_gui::{Marker, Palette};
+use slint::platform::WindowEvent;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 const WIDTH: u32 = 480;
@@ -1060,4 +1064,242 @@ fn a_text_cut_short_shows_its_whole_on_hover_and_one_that_fits_does_not() {
             path.display()
         );
     }
+}
+
+/// The room a small laptop leaves above its taskbar, give or take
+/// (`frame.slint`): less than the palette with the last value opened, more than
+/// what never scrolls.
+const SHORT_ROOM: f32 = 560.0;
+
+/// More room than the palette with the last value folded needs.
+const ROOM_ENOUGH: f32 = 700.0;
+
+/// Less room than what never scrolls - a palette put low on its screen.
+const NO_ROOM: f32 = 100.0;
+
+/// `border` and `border-strong`: the rule that opens a band, and the scroll
+/// thumb - copied for the reason the colours above are copies.
+const BORDER: (u8, u8, u8) = (0x2A, 0x2F, 0x3A);
+const THUMB: (u8, u8, u8) = (0x45, 0x4C, 0x5C);
+
+/// Rows at each end of the thumb that its rounding blends: half its width.
+const THUMB_ROUNDING: usize = 2;
+
+/// How far a scroll asks to go - further than any content reaches, so the
+/// view stops at the end.
+const FAR: f32 = 10_000.0;
+
+fn rgb(pixel: offscreen::Pixel) -> (u8, u8, u8) {
+    (pixel.r, pixel.g, pixel.b)
+}
+
+/// The rows the scroll thumb is drawn on, in the strip it stands in at the
+/// right edge.
+fn thumb_rows(buffer: &[offscreen::Pixel]) -> Vec<usize> {
+    let strip = (WIDTH - 4) as usize..WIDTH as usize;
+    buffer
+        .chunks(WIDTH as usize)
+        .enumerate()
+        .filter(|(_, row)| row[strip.clone()].iter().any(|pixel| rgb(*pixel) == THUMB))
+        .map(|(y, _)| y)
+        .collect()
+}
+
+/// How many rows the status line takes at the bottom of the surface: its
+/// raised ground in the probe column, and the rule above it.
+fn status_rows(buffer: &[offscreen::Pixel]) -> usize {
+    let column = (WIDTH - SURFACE_PROBE_INSET) as usize;
+    let edge = surface_edge(buffer);
+    let raised = buffer
+        .chunks(WIDTH as usize)
+        .take(edge + 1)
+        .rev()
+        .take_while(|row| rgb(row[column]) == RAISED)
+        .count();
+    raised + 1
+}
+
+/// Rows `from..to` of one buffer against rows starting at `at` of another,
+/// left of the thumb's strip - the first that differs, if any.
+fn first_difference(
+    one: &[offscreen::Pixel],
+    from: usize,
+    to: usize,
+    other: &[offscreen::Pixel],
+    at: usize,
+) -> Option<usize> {
+    let row = |buffer: &[offscreen::Pixel], y: usize| {
+        let start = y * WIDTH as usize;
+        buffer[start..start + (WIDTH - 4) as usize].to_vec()
+    };
+    (from..to).find(|&y| row(one, y) != row(other, at + y - from))
+}
+
+/// 🔴 The palette on a screen shorter than it (`frame.slint`, `palette.slint`):
+/// bound to the room, the next value and the status line where they were, and
+/// the rest scrolling under the wheel to its very end. Then the scrolled part
+/// folding back in bounds, and a room too small for what never scrolls.
+#[test]
+fn on_a_screen_too_short_the_next_value_and_the_status_stay_and_the_rest_scrolls() {
+    let window = offscreen::start(WIDTH, HEIGHT);
+    let palette = Palette::new().expect("the palette must build");
+    fill(&palette);
+    let asked = Rc::new(Cell::new(0));
+    palette.on_content_resized({
+        let asked = Rc::clone(&asked);
+        move || asked.set(asked.get() + 1)
+    });
+    palette.show().expect("the palette must show");
+
+    // ---- the palette as tall as its content, folded and opened -------------
+    palette.set_last_sent_open(false);
+    let folded = render(&window);
+    palette.set_last_sent_open(true);
+    let whole = render(&window);
+    assert!(
+        thumb_rows(&whole).is_empty(),
+        "with no room given the palette scrolls"
+    );
+    let asked_before = asked.get();
+    assert!(
+        asked_before > 0,
+        "the palette's content changed height and nobody was told - the room \
+         would not be asked again"
+    );
+
+    // ---- bound to the room: a thumb, the top and the bottom kept -----------
+    palette.set_room(SHORT_ROOM);
+    let short = render(&window);
+    let path = offscreen::save_cropped(&short, WIDTH, HEIGHT, "palette-short.png");
+    let picture = path.display();
+    assert_eq!(
+        surface_edge(&short) + 1,
+        SHORT_ROOM as usize,
+        "the palette is not as tall as the room it was given. Look at {picture}"
+    );
+    assert_nothing_escapes_the_surface(&short, "short", &picture.to_string());
+    let thumb = thumb_rows(&short);
+    let Some(&first) = thumb.first() else {
+        panic!("the palette is shorter than its content and shows no thumb. Look at {picture}");
+    };
+    // The scrolled part starts where the last value's band does: its rule.
+    // The thumb's rounded end blends its first rows, so the rule is looked for
+    // within that rounding above the first row in the thumb's own colour.
+    let is_rule = |y: usize| {
+        whole[y * WIDTH as usize..(y + 1) * WIDTH as usize]
+            .iter()
+            .all(|pixel| rgb(*pixel) == BORDER)
+    };
+    let Some(rule) = (first.saturating_sub(THUMB_ROUNDING)..=first).find(|&y| is_rule(y)) else {
+        panic!(
+            "the thumb starts at row {first}, and no rule above the last value stands there - \
+             the next value scrolls too, or the last value's band does not. Look at {picture}"
+        );
+    };
+    // Everything down to the rule stays, and the view that scrolls starts
+    // under it.
+    let top = rule + 1;
+    assert_eq!(
+        first_difference(&short, 0, top, &whole, 0),
+        None,
+        "the header or the next value changed when the room ran out. Look at {picture}"
+    );
+    let status = status_rows(&whole);
+    assert_eq!(
+        status_rows(&short),
+        status,
+        "the status line changed. Look at {picture}"
+    );
+    let (short_status, whole_status) = (
+        surface_edge(&short) + 1 - status,
+        surface_edge(&whole) + 1 - status,
+    );
+    assert_eq!(
+        first_difference(
+            &short,
+            short_status,
+            short_status + status,
+            &whole,
+            whole_status
+        ),
+        None,
+        "the status line is not the one the whole palette shows. Look at {picture}"
+    );
+
+    // ---- the wheel moves the middle, to its very end -----------------------
+    let middle = slint::LogicalPosition::new(WIDTH as f32 / 2.0, (top + 40) as f32);
+    palette
+        .window()
+        .dispatch_event(WindowEvent::PointerScrolled {
+            position: middle,
+            delta_x: 0.0,
+            delta_y: -FAR,
+        });
+    let scrolled = render(&window);
+    let path = offscreen::save_cropped(&scrolled, WIDTH, HEIGHT, "palette-short-scrolled.png");
+    let picture = path.display();
+    assert_eq!(
+        first_difference(&scrolled, 0, top, &whole, 0),
+        None,
+        "the wheel moved the header, the next value or the rule under it - what scrolled up \
+         stands cut against the next value with nothing between. Look at {picture}"
+    );
+    assert_ne!(
+        first_difference(&scrolled, top, short_status, &short, top),
+        None,
+        "the wheel did not move the scrolled part. Look at {picture}"
+    );
+    // What stands just above the status line, scrolled to the end, is the
+    // end of the keys - the same rows the whole palette has there.
+    let end = short_status - top;
+    assert_eq!(
+        first_difference(&scrolled, top, short_status, &whole, whole_status - end),
+        None,
+        "scrolled to the end, the palette does not show the end of its content above the \
+         status line. Look at {picture}"
+    );
+
+    // ---- a band folded while scrolled: back in bounds, no room opens ------
+    palette.set_last_sent_open(false);
+    let refolded = render(&window);
+    let path = offscreen::save_cropped(&refolded, WIDTH, HEIGHT, "palette-short-folded.png");
+    let picture = path.display();
+    assert!(
+        asked.get() > asked_before,
+        "the last value folded and nobody was told the content's height changed"
+    );
+    let folded_status = surface_edge(&folded) + 1 - status;
+    assert_eq!(
+        first_difference(&refolded, top, short_status, &folded, folded_status - end),
+        None,
+        "folded while scrolled, the palette does not end where its content ends - room \
+         opened under the keys. Look at {picture}"
+    );
+    palette.set_room(ROOM_ENOUGH);
+    let fits = render(&window);
+    assert_eq!(
+        fits,
+        folded,
+        "with room for all of it the palette is not the palette as tall as its content - \
+         the scrolled part kept an offset or a thumb. Look at {}",
+        offscreen::save_cropped(&fits, WIDTH, HEIGHT, "palette-short-fits.png").display()
+    );
+
+    // ---- less room than what never scrolls: that much stays whole ----------
+    palette.set_last_sent_open(true);
+    palette.set_room(NO_ROOM);
+    let cramped = render(&window);
+    let path = offscreen::save_cropped(&cramped, WIDTH, HEIGHT, "palette-no-room.png");
+    let picture = path.display();
+    assert_eq!(
+        surface_edge(&cramped) + 1,
+        top + status,
+        "with less room than the header, the next value and the status line, the palette is \
+         not exactly those. Look at {picture}"
+    );
+    assert_eq!(
+        first_difference(&cramped, 0, top, &whole, 0),
+        None,
+        "with no room the next value is cut. Look at {picture}"
+    );
 }

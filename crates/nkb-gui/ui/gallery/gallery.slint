@@ -37,6 +37,7 @@ import {
     ZoneFill,
     WindowFrame,
     WindowHeader,
+    WindowScroll,
     WindowFooter,
     WindowStatus,
     ProgressBar,
@@ -275,6 +276,51 @@ export component Gallery inherits Window {
                 TextBody { text: "The dimmed status line, as the resting palette shows it."; wrap: word-wrap; }
             }
         }
+        // A window given less room than it holds (`WindowScroll`): the middle
+        // gives way and scrolls, with the thumb that says there is more, and
+        // the header and the status line keep their place and height - the
+        // palette on a small laptop screen. Then the same with room enough:
+        // as tall as what it holds, no thumb.
+        WindowFrame {
+            packed: true;
+            room: Tokens.sample-height * 4;
+            height: self.fitted-height;
+            WindowHeader {
+                title: "WindowScroll";
+            }
+            WindowScroll {
+                divided: false;
+                Zone {
+                    divided: false;
+                    TextBody { text: "WindowScroll - sections that scroll when the screen is too short."; wrap: word-wrap; }
+                }
+                Zone {
+                    TextSmallMuted { text: "A second section, under the fold."; }
+                }
+                Zone {
+                    TextSmallMuted { text: "A third, further down."; }
+                }
+            }
+            WindowStatus {
+                TextBody { text: "The status line stays in view."; wrap: word-wrap; }
+            }
+        }
+        WindowFrame {
+            packed: true;
+            room: Tokens.sample-height * 10;
+            height: self.fitted-height;
+            WindowHeader {
+                title: "WindowScroll with room enough";
+            }
+            WindowScroll {
+                divided: false;
+                Zone {
+                    divided: false;
+                    TextSmallMuted { text: "As tall as what it holds."; }
+                }
+            }
+        }
+
         // A section that takes the room left - the value window's list.
         HorizontalLayout {
             height: Tokens.sample-height;

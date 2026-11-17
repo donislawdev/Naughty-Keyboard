@@ -18,6 +18,7 @@
 //       WindowHeader    the title, and what belongs beside it
 //       Zone ...        the content, section by section (`chrome.slint`)
 //       ZoneFill        or one section that takes the room left
+//       WindowScroll    or sections that scroll when the screen is too short
 //       WindowFooter    the keys the window answers, or its main action
 //       WindowStatus    what the tool has to say - the last thing in the
 //                       window, so a sentence that comes and goes moves only
@@ -25,6 +26,18 @@
 //
 // The gutter is one value for all of them, so every line of every window
 // starts in one column.
+//
+// # A window as tall as its content, on a screen shorter than that
+//
+// The palette and the shortcuts window are as tall as what they hold (`D110`,
+// `D92`). On a small screen that was taller than the screen: the palette with
+// the last value opened reached 831 px, 1009 with its report, and the shortcuts
+// window 865 - while a laptop at 1366 x 768, or at 1920 x 1080 scaled to 150 %,
+// has some 670 to 720 px above its taskbar. So such a window is told the room
+// the screen has for it (`room`), takes `fitted-height` rather than its
+// content's height, and what it holds in `WindowScroll` - or its list - gives
+// way and scrolls. Where the room is not known the window is as tall as its
+// content, as it always was.
 //
 // # Why the status line is at the very bottom
 //
@@ -37,7 +50,7 @@
 
 import { Tokens } from "../tokens.slint";
 import { TextTitle } from "typography.slint";
-import { ChromeBand, Spacer } from "chrome.slint";
+import { ChromeBand, Hairline, Spacer, ScrollThumb } from "chrome.slint";
 import { PickerOpener } from "list.slint";
 
 // The ground of a window and the column its pieces stand in.
@@ -61,6 +74,16 @@ export component WindowFrame inherits Rectangle {
     // point 38): without it the palette's edge is the difference between its
     // ground and whatever lies under it, which on a dark desktop is nothing.
     in property <bool> outlined;
+    // How tall the window may be: the room from the top of its content to the
+    // bottom of the part of the screen windows may use - above the taskbar, the
+    // Dock or a panel. The program works it out from the system, and zero means
+    // it does not know.
+    in property <length> room;
+    // The height for a window as tall as its content: what it holds, but no
+    // more than the room - and never less than what does not scroll, which a
+    // shorter window would cut off. That window then stands past the bottom of
+    // the screen, as any window does that was put too low on it.
+    out property <length> fitted-height: root.room > 0 ? max(root.min-height, min(root.preferred-height, root.room)) : root.preferred-height;
 
     background: root.dimmed ? Tokens.surface.with-alpha(Tokens.alpha-resting) : Tokens.surface;
 
@@ -139,6 +162,75 @@ export component WindowHeader inherits Rectangle {
             Spacer { }
             @children
         }
+    }
+}
+
+// The sections of a window as tall as its content that give way when the
+// screen is too short for all of it (the frame's header says when): as tall as
+// what they hold while the window has room, and scrolling inside what is left
+// when it has not. The parts above and below keep their place and their height,
+// so what must stay in view - the palette's next value and its status line -
+// stands outside it.
+//
+// The wheel scrolls it, and a press goes to what it was meant for at once:
+// dragging with the mouse does not scroll, as in the toolkit's own scroll view.
+// A Flickable that may pan holds a press back for 100 ms to see whether it turns
+// into a drag (i-slint-core 1.18.1, `items/flickable.rs`, `FORWARD_DELAY`), and a
+// switch would then answer late, or the sections move under the pointer.
+//
+// Content that shrinks while scrolled - a band folded - is put back in bounds
+// by the Flickable itself (the same file, its change tracker), so no room opens
+// at the bottom.
+//
+// `divided`: the rule above the first section is the scrolled part's own, and
+// stays where it is - the sections inside take none. Drawn by the first
+// section, it scrolled away with it, and what came up under the part above
+// stood cut against it with nothing between (measured in the render, 2026-11-17).
+//
+// The Flickable is placed by hand, not in a layout: one without a `width` of
+// its own takes the `max-width` and `preferred-width` of the layout inside it
+// (i-slint-compiler 1.18.1, `passes/flickable.rs`, `fixup_geometry`), and the
+// sections stood as narrow as their widest line - 288 px of a 480 px palette in
+// the render, until something in them was longer than the window.
+export component WindowScroll inherits Rectangle {
+    in property <bool> divided: true;
+
+    property <length> rule: root.divided ? Tokens.hairline : 0px;
+
+    preferred-height: root.rule + column.preferred-height;
+    // It gives way first, down to its rule: everything around it in a window
+    // states its own height.
+    min-height: root.rule;
+    vertical-stretch: 1;
+
+    if root.divided: Hairline {
+        x: 0;
+        y: 0;
+        width: root.width;
+    }
+
+    flick := Flickable {
+        x: 0;
+        y: root.rule;
+        width: root.width;
+        height: root.height - root.rule;
+        mouse-drag-pan-enabled: false;
+        content-width: self.width;
+        content-height: column.preferred-height;
+
+        column := VerticalLayout {
+            width: flick.width;
+            alignment: start;
+            @children
+        }
+    }
+
+    if column.preferred-height > flick.height: ScrollThumb {
+        x: root.width - self.width;
+        y: flick.y;
+        height: flick.height;
+        content: column.preferred-height;
+        offset: flick.content-y;
     }
 }
 

@@ -55,7 +55,7 @@ import {
     TextSmallMuted,
     HintRow,
     HintBar,
-    Zone,
+    ZoneFill,
     WindowFrame,
     WindowHeader,
     WindowFooter,
@@ -111,8 +111,15 @@ export component ShortcutsWindow inherits Window {
     // rows and the room kept under them for sentences
     // (`Tokens.shortcuts-message-lines`), and a sentence longer than that room
     // does not make it grow.
+    //
+    // Never taller than the room the screen has for it (`frame.slint`): 865 px
+    // of rows and sentences do not fit above the taskbar of a small laptop, so
+    // the list gives way and scrolls, and the selected row is kept in view.
     width: Tokens.shortcuts-width;
-    height: body.preferred-height;
+    height: body.fitted-height;
+    // The room, set by Rust at every opening, from the screen the window opens
+    // on.
+    in property <length> room;
     // Above the palette, which is always on top itself - the same reason as
     // the pack window.
     always-on-top: true;
@@ -120,6 +127,7 @@ export component ShortcutsWindow inherits Window {
     keys := KeyScope {
         body := WindowFrame {
             packed: true;
+            room: root.room;
 
             WindowHeader {
                 title: root.heading;
@@ -131,7 +139,10 @@ export component ShortcutsWindow inherits Window {
                 }
             }
 
-            Zone {
+            // The section that gives way when the screen is too short, as the
+            // pack window's list does: no height of its own, so the list
+            // inside scrolls.
+            ZoneFill {
                 divided: false;
 
                 // Wrapped, for the reason the pack window's notes give: a text

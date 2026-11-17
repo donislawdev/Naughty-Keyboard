@@ -10,7 +10,7 @@
 
 import { Tokens } from "../tokens.slint";
 import { TextTitle, TextName, TextBody, TextSmallMuted } from "typography.slint";
-import { Pill } from "chrome.slint";
+import { Pill, ScrollThumb } from "chrome.slint";
 import { Chevron } from "chevron.slint";
 import { Heart } from "heart.slint";
 
@@ -361,13 +361,12 @@ export component PickList inherits Rectangle {
     }
 
     // The thumb: a sign that there is more below, drawn only when there is.
-    if stack.preferred-height > flick.height: Rectangle {
-        x: root.width - Tokens.scroll-thumb;
-        y: -flick.content-y * flick.height / stack.preferred-height;
-        width: Tokens.scroll-thumb;
-        height: flick.height * flick.height / stack.preferred-height;
-        border-radius: Tokens.scroll-thumb / 2;
-        background: Tokens.border-strong;
+    if stack.preferred-height > flick.height: ScrollThumb {
+        x: root.width - self.width;
+        y: 0;
+        height: flick.height;
+        content: stack.preferred-height;
+        offset: flick.content-y;
     }
 
     // Always built and shown only when empty, so its height can be read above.

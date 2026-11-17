@@ -58,6 +58,25 @@
 // holds: the value stays until the next one, no timer changes anything, and
 // collapsing is the tester's alone.
 //
+// # On a screen too short for it
+//
+// Followed to the end, the content was taller than a small screen: 831 px with
+// the last value opened, 1009 with its report, where a laptop has some 670 to
+// 720 above its taskbar. So the window is never taller than the room from its
+// top to the bottom of the part of the screen windows may use (`room`, worked
+// out in Rust from the system - `frame.slint` says the rest), and what does not
+// fit scrolls in the middle:
+//
+//     stays       the header, the next value, the status line - what the next
+//                 press sends and what the tool says never leave the view
+//     scrolls     the last value sent, the switches, the keys
+//
+// The room is asked again whenever the content wants another height, from
+// where the window stands then (`content-resized`). Not while the tester moves
+// the window: a window that changed its size under the pointer dragging it
+// would be the jump point 1 forbids, and one put too low stands past the
+// screen's edge as any window does.
+//
 // # Two axes, not five states
 //
 // `OBS-94` settled this for the core and it holds for the window: clipboard mode
@@ -98,6 +117,7 @@ import {
     HeaderActions,
     HeaderLink,
     HeaderLinkKind,
+    WindowScroll,
     WindowFooter,
     PaletteStatus,
     NextBand,
@@ -352,6 +372,12 @@ export component Palette inherits Window {
     callback drag-header(length, length, length, length);
     callback close-palette();
 
+    // The room the screen has for the window, from its top down (`frame.slint`),
+    // set by Rust - and the word that the content wants another height, so
+    // Rust can tell the room again from where the window stands now.
+    in property <length> room;
+    callback content-resized();
+
     title: root.window-title;
     icon: Tokens.app-icon;
     // The colour lives on the frame below, which takes the resting alpha
@@ -361,11 +387,12 @@ export component Palette inherits Window {
     no-frame: root.own-frame;
     always-on-top: true;
     width: Tokens.palette-width;
-    // The palette follows its own content, in both states. Measured 2026-09-22:
-    // Slint does NOT resize a window when what is inside it changes, so
-    // without this binding the window keeps whatever size it had - see the
-    // header for why there is no floor under it any more (`D110`).
-    height: frame.preferred-height;
+    // The palette follows its own content, in both states, as far as the room
+    // the screen has for it. Measured 2026-09-22: Slint does NOT resize a
+    // window when what is inside it changes, so without this binding the
+    // window keeps whatever size it had - see the header for why there is no
+    // floor under it any more (`D110`).
+    height: frame.fitted-height;
 
     // A sentence about clipboard mode, where the switch cannot say it: in the
     // compact state, which shows no switches, and for the window in front,
@@ -379,6 +406,11 @@ export component Palette inherits Window {
         dimmed: root.compact && root.translucency-allowed;
         packed: true;
         outlined: root.own-frame;
+        room: root.room;
+        // One call, no logic: Rust asks the system.
+        changed preferred-height => {
+            root.content-resized();
+        }
 
         // The pack and the counter: the palette's title, and at rest the one
         // band besides the status line. A pack name is somebody else's string
@@ -449,92 +481,97 @@ export component Palette inherits Window {
                 root.skip-value();
             }
         }
-        if !root.compact: LastSentBand {
+        // What may scroll when the screen is too short (the header says why
+        // the next value above and the status line below do not).
+        if !root.compact: WindowScroll {
             divided: root.has-next;
-            label: root.last-sent-label;
-            open: root.last-sent-open;
-            action: root.last-sent-action;
-            has-value: root.has-value;
-            name: root.value-name;
-            sent-to: root.value-sent-to;
-            has-sent-to: root.has-sent-to;
-            reference: root.value-reference;
-            counts: root.value-counts;
-            preview: root.value-preview;
-            elided: root.value-elided;
-            has-elided: root.has-elided;
-            not-guaranteed: root.value-not-guaranteed;
-            has-not-guaranteed: root.has-not-guaranteed;
-            shape: root.value-shape;
-            has-shape: root.has-shape;
-            markers: root.markers;
-            copy-label: root.copy-label;
-            copy-action: root.copy-last-action;
-            copied-label: root.copied-label;
-            copied: root.copied == CopiedButton.last;
-            report-label: root.report-label;
-            report-action: root.report-action;
-            report-open: root.report-open;
-            report: root.report;
-            has-report: root.has-report;
-            copy-report-action: root.copy-report-action;
-            report-copied: root.copied == CopiedButton.report;
-            sending: root.sending;
-            toggle => {
-                root.toggle-last-sent();
-            }
-            copy => {
-                root.copy-last();
-            }
-            toggle-report => {
-                root.toggle-report();
-            }
-            copy-report => {
-                root.copy-report();
-            }
-        }
-
-        // The two switches and the link to the shortcuts window
-        // (`components/switches.slint`, where the reasons for their shape
-        // stand). Faded while a value goes, the second also in clipboard mode.
-        if !root.compact: SwitchesBand {
-            route-label: root.route-label;
-            route-options: root.route-options;
-            route-selected: root.route-selected;
-            route-enabled: !root.sending;
-            clearing-label: root.clearing-label;
-            clearing-options: root.clearing-options;
-            clearing-selected: root.clearing-selected;
-            clearing-enabled: !root.sending && !root.clipboard-mode-on;
-            shortcuts-links: root.shortcuts-links;
-            choose-route(index) => {
-                root.choose-route(index);
-            }
-            choose-clearing(index) => {
-                root.choose-clearing(index);
-            }
-            open-shortcuts(place) => {
-                root.open-shortcuts(place);
-            }
-        }
-
-        // The keys, in the footer as every window of the product lists them.
-        // Hidden in the compact state, which is meant to take little room and
-        // no attention - and the keys are muted (D53). Under a heading that
-        // folds them (`D123`): a tester who knows them takes back the list's
-        // height, and the heading stays where it was, so folding moves only
-        // what stands below it.
-        if !root.compact: WindowFooter {
-            Disclosure {
-                text: root.hints-label;
-                open: root.hints-open;
-                action: root.hints-action;
-                clicked => {
-                    root.toggle-hints();
+            LastSentBand {
+                divided: false;
+                label: root.last-sent-label;
+                open: root.last-sent-open;
+                action: root.last-sent-action;
+                has-value: root.has-value;
+                name: root.value-name;
+                sent-to: root.value-sent-to;
+                has-sent-to: root.has-sent-to;
+                reference: root.value-reference;
+                counts: root.value-counts;
+                preview: root.value-preview;
+                elided: root.value-elided;
+                has-elided: root.has-elided;
+                not-guaranteed: root.value-not-guaranteed;
+                has-not-guaranteed: root.has-not-guaranteed;
+                shape: root.value-shape;
+                has-shape: root.has-shape;
+                markers: root.markers;
+                copy-label: root.copy-label;
+                copy-action: root.copy-last-action;
+                copied-label: root.copied-label;
+                copied: root.copied == CopiedButton.last;
+                report-label: root.report-label;
+                report-action: root.report-action;
+                report-open: root.report-open;
+                report: root.report;
+                has-report: root.has-report;
+                copy-report-action: root.copy-report-action;
+                report-copied: root.copied == CopiedButton.report;
+                sending: root.sending;
+                toggle => {
+                    root.toggle-last-sent();
+                }
+                copy => {
+                    root.copy-last();
+                }
+                toggle-report => {
+                    root.toggle-report();
+                }
+                copy-report => {
+                    root.copy-report();
                 }
             }
-            if root.hints-open: HintBar {
-                rows: root.hints;
+
+            // The two switches and the link to the shortcuts window
+            // (`components/switches.slint`, where the reasons for their shape
+            // stand). Faded while a value goes, the second also in clipboard mode.
+            SwitchesBand {
+                route-label: root.route-label;
+                route-options: root.route-options;
+                route-selected: root.route-selected;
+                route-enabled: !root.sending;
+                clearing-label: root.clearing-label;
+                clearing-options: root.clearing-options;
+                clearing-selected: root.clearing-selected;
+                clearing-enabled: !root.sending && !root.clipboard-mode-on;
+                shortcuts-links: root.shortcuts-links;
+                choose-route(index) => {
+                    root.choose-route(index);
+                }
+                choose-clearing(index) => {
+                    root.choose-clearing(index);
+                }
+                open-shortcuts(place) => {
+                    root.open-shortcuts(place);
+                }
+            }
+
+            // The keys, in the footer as every window of the product lists them.
+            // Hidden in the compact state, which is meant to take little room and
+            // no attention - and the keys are muted (D53). Under a heading that
+            // folds them (`D123`): a tester who knows them takes back the list's
+            // height, and the heading stays where it was, so folding moves only
+            // what stands below it.
+            WindowFooter {
+                Disclosure {
+                    text: root.hints-label;
+                    open: root.hints-open;
+                    action: root.hints-action;
+                    clicked => {
+                        root.toggle-hints();
+                    }
+                }
+                if root.hints-open: HintBar {
+                    rows: root.hints;
+                }
             }
         }
 
