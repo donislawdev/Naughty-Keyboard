@@ -622,6 +622,10 @@ fn show_palette(
             }
         }
     });
+    // And at every move on Linux, where the window manager places the window
+    // after this first fit (`palette.slint` says why).
+    #[cfg(target_os = "linux")]
+    room::refit_on_move(palette);
     focus::refuse_focus(palette, kept, standing, || {});
     // A click takes the front on macOS all the same, and is answered (`focus`).
     #[cfg(target_os = "macos")]

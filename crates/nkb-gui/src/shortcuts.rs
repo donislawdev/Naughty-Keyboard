@@ -181,6 +181,16 @@ impl Shortcuts {
         // Before the first press can reach the view: the filter on the window's
         // own events is what tells `chord_held` the key, where the system cannot.
         shortcuts.keys.watch(shortcuts.window.window());
+        // On Linux its frame comes after its first showing (`on_request`).
+        #[cfg(target_os = "linux")]
+        on_request::keep_room_beside(shortcuts.window.window(), {
+            let weak = Rc::downgrade(&shortcuts);
+            move |room| {
+                if let Some(shortcuts) = weak.upgrade() {
+                    shortcuts.window.set_room(room);
+                }
+            }
+        });
         let weak = Rc::downgrade(&shortcuts);
         shortcuts
             .window

@@ -68,7 +68,7 @@ pub fn open_beside(palette: &crate::Palette) {
     PALETTE.with(|named| *named.borrow_mut() = Some(palette.as_weak()));
 }
 
-/// Puts `window` beside the palette, unless it is on the screen already.
+/// Where `window` goes beside the palette, as tall as winit reports it now.
 ///
 /// In physical pixels, the unit the toolkit reports the palette and its screen
 /// in, and the screen is the one winit says the palette stands on - on every
@@ -79,10 +79,7 @@ pub fn open_beside(palette: &crate::Palette) {
 /// The OUTER frames, title bar and borders included: a window is placed by the
 /// corner of its frame, and its inner size alone would let a window pushed to
 /// the bottom of the screen hang off it by its title bar.
-fn place_beside_palette(window: &slint::Window) -> Option<slint::PhysicalPosition> {
-    if window.is_visible() {
-        return None;
-    }
+fn beside_palette(window: &slint::Window) -> Option<slint::PhysicalPosition> {
     let palette = PALETTE.with(|named| named.borrow().as_ref().and_then(slint::Weak::upgrade))?;
     let anchor = palette.window();
     // The part of the screen windows may use, where the system says it, so a
@@ -103,9 +100,6 @@ fn place_beside_palette(window: &slint::Window) -> Option<slint::PhysicalPositio
     })?;
     let (at, size) = (anchor.position(), outer_size(anchor));
     let gap = (GAP * anchor.scale_factor()).round();
-    // A window told its room a moment ago may not have taken that height yet,
-    // and is placed as tall as it will be: no taller than the screen.
-    let (width, height) = outer_size(window);
     let place = beside(
         Rect {
             x: at.x,
@@ -113,7 +107,7 @@ fn place_beside_palette(window: &slint::Window) -> Option<slint::PhysicalPositio
             width: size.0,
             height: size.1,
         },
-        (width, height.min(screen.height)),
+        outer_size(window),
         screen,
         // A scale is a small positive number, so the gap is a few pixels.
         if gap.is_finite() && gap >= 0.0 {
@@ -122,9 +116,7 @@ fn place_beside_palette(window: &slint::Window) -> Option<slint::PhysicalPositio
             0
         },
     );
-    let at = slint::PhysicalPosition::new(place.x, place.y);
-    window.set_position(at);
-    Some(at)
+    Some(slint::PhysicalPosition::new(place.x, place.y))
 }
 
 /// The height a window opened beside the palette may have whole (`D190`): the
@@ -136,6 +128,28 @@ pub(crate) fn room_beside(window: &slint::Window) -> f32 {
         .with(|named| named.borrow().as_ref().and_then(slint::Weak::upgrade))
         .and_then(|palette| crate::room::beside(palette.window(), window))
         .unwrap_or(0.0)
+}
+
+/// Tells a window opened beside the palette its room again - through `tell` -
+/// whenever winit reports it moved or resized: on Linux, where a window's title
+/// bar and frame are known only once the window manager has framed it, after
+/// its first showing, and the room told before counted none. Measured
+/// 2026-11-17 on GNOME 50 at 1280 x 800
+/// (`tools/sondy/linux/niski-ekran-wayland.py`): the shortcuts window got
+/// 768 px of content in a work area 768 px tall, and its title bar ran 37 px
+/// past the bottom.
+///
+/// The window's one filter of winit events on Linux (`slint.md` 2.81).
+#[cfg(target_os = "linux")]
+pub(crate) fn keep_room_beside(window: &slint::Window, tell: impl Fn(f32) + 'static) {
+    use slint::winit_030::EventResult;
+    use slint::winit_030::winit::event::WindowEvent;
+    window.on_winit_window_event(move |window, event| {
+        if matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
+            tell(room_beside(window));
+        }
+        EventResult::Propagate
+    });
 }
 
 /// A window's size with its frame, in physical pixels - its inner size where
@@ -158,21 +172,46 @@ fn outer_size(window: &slint::Window) -> (u32, u32) {
 /// The toolkit's own, when the window cannot be shown.
 pub(crate) fn bring_up(window: &slint::Window) -> Result<(), slint::PlatformError> {
     // Before `show()`, while it is still off the screen: shown first, it would
-    // flash where the system put it.
-    let place = place_beside_palette(window);
-    window.show()?;
-    // And again once it is on the screen, on Linux: a window manager places a
-    // window it maps by its own rule and keeps only a move of a window already
-    // mapped. Measured 2026-11-16 under openbox (`tools/sondy/linux/dymek-x11.py`):
-    // the value window stood in the middle of the free part of the screen, the
-    // place given before `show()` ignored. The window may show at the manager's
-    // place for a moment before it moves.
-    #[cfg(target_os = "linux")]
-    if let Some(at) = place {
+    // flash where the system put it. A window on the screen already stays
+    // where the tester has it.
+    let placed = if window.is_visible() {
+        None
+    } else {
+        beside_palette(window).map(|at| (at, outer_size(window)))
+    };
+    if let Some((at, _)) = placed {
         window.set_position(at);
     }
-    #[cfg(not(target_os = "linux"))]
-    let _ = place;
+    window.show()?;
+    // And again once it is on the screen, where it is not the size it was
+    // placed at: the toolkit lays out rows made a moment before, and gives the
+    // window the height of its view, only when it shows it (i-slint-core
+    // 1.18.1, `WindowInner::show`). Measured 2026-11-17
+    // (`tools/sondy/niski-ekran.ps1`, Windows Server 2025): the shortcuts
+    // window, which takes its rows and its room just before it opens, read
+    // 316 px of content before its first showing and showed 869 px, and with
+    // the palette low on a 975 px screen it was placed level with it and ran
+    // to 1387 px. It may stand at the first place for a moment before it
+    // moves - at its first opening, and only where the two places differ.
+    //
+    // And on Linux always: a window manager places a window it maps by its own
+    // rule and keeps only a move of a window already mapped. Measured
+    // 2026-11-16 under openbox (`tools/sondy/linux/dymek-x11.py`): the value
+    // window stood in the middle of the free part of the screen, the place
+    // given before `show()` ignored. The window may show at the manager's
+    // place for a moment before it moves.
+    if let Some((first, size)) = placed {
+        let again = if outer_size(window) == size {
+            Some(first)
+        } else {
+            beside_palette(window)
+        };
+        if let Some(at) = again
+            && (cfg!(target_os = "linux") || at != first)
+        {
+            window.set_position(at);
+        }
+    }
     // After `show()`, never before: bringing a hidden window back from the
     // taskbar shows it, and a window that is not minimized is left as it is.
     window.set_minimized(false);

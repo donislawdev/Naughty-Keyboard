@@ -72,10 +72,17 @@
 //     scrolls     the last value sent, the switches, the keys
 //
 // The room is asked again whenever the content wants another height, from
-// where the window stands then (`content-resized`). Not while the tester moves
-// the window: a window that changed its size under the pointer dragging it
-// would be the jump point 1 forbids, and one put too low stands past the
-// screen's edge as any window does.
+// where the window stands then (`content-resized`). On Windows and macOS not
+// while the tester moves the window: a window that changed its size under the
+// pointer dragging it would be the jump point 1 forbids, and one put too low
+// stands past the screen's edge as any window does. On Linux at every move as
+// well (`room::refit_on_move`): there the window manager decides where a window
+// stands only after it is shown, so the first room counts from the wrong top.
+// Measured 2026-11-17 on GNOME 50 at 1280 x 800
+// (`tools/sondy/linux/niski-ekran-wayland.py`): mutter put the palette at the
+// top of the work area, 32 px below the top bar, after the first fit had
+// counted from the corner of the screen - 800 px of content from y = 32, the
+// status line off the screen. The toolkit cannot tell that move from a drag.
 //
 // # Two axes, not five states
 //

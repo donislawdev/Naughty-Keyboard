@@ -27,12 +27,35 @@ use slint::winit_030::WinitWindowAccessor;
 use crate::place;
 
 /// Tells the palette the room it has: from the top of its content to the
-/// bottom of its screen's work area, asked at start and whenever its content
-/// wants another height (`content-resized`). Zero - what the view reads as "not
+/// bottom of its screen's work area, asked at start, whenever its content
+/// wants another height (`content-resized`) and, on Linux, at every move
+/// ([`refit_on_move`]). Zero - what the view reads as "not
 /// known" - where the system does not say, and the palette is then as tall as
 /// its content, as it always was.
 pub fn fit_palette(palette: &crate::Palette) {
     palette.set_room(below(palette.window()).unwrap_or(0.0));
+}
+
+/// Fits the palette again whenever winit reports it moved - on Linux, where the
+/// window manager decides where a window stands only once it is shown, and may
+/// move it again at any time (the reason, measured: `palette.slint`).
+///
+/// The palette's one filter of winit events on Linux: a second one would
+/// silently replace it (`slint.md` 2.81). On macOS the palette's filter is
+/// `focus::hand_back_on_press`.
+#[cfg(target_os = "linux")]
+pub fn refit_on_move(palette: &crate::Palette) {
+    use slint::winit_030::EventResult;
+    use slint::winit_030::winit::event::WindowEvent;
+    let palette_weak = palette.as_weak();
+    palette.window().on_winit_window_event(move |_, event| {
+        if let WindowEvent::Moved(_) = event
+            && let Some(palette) = palette_weak.upgrade()
+        {
+            fit_palette(&palette);
+        }
+        EventResult::Propagate
+    });
 }
 
 /// The room from the top of the window's content to the bottom of the work
