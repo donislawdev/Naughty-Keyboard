@@ -92,8 +92,8 @@ Changes wait under Unreleased until then.
 - A shortcut without Ctrl, Alt or Win, or one a keyboard layout types a character with (AltGr on
   Windows, Option on a Mac), is no longer refused. The shortcuts window keeps it, marks its row and
   says what it takes from every other application, and the palette says the same when it starts
-  with such a shortcut in `settings.toml`. On Linux the palette types a character whose key it holds
-  as such a shortcut through another key, so the values still arrive whole.
+  with such a shortcut in `settings.toml`. When the palette holds a key alone as a shortcut, it types
+  the values through other keys on Linux and on a Mac, so they still arrive whole.
 
 - `nkb lint` points at the line that holds the problem. A character written out instead of escaped,
   a `breaks` too short and a field kind outside the list are reported on the line of `value`,

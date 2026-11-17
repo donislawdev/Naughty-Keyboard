@@ -40,4 +40,6 @@ A chord that takes something away from every other application is kept. The shor
 - a chord without Ctrl, Alt or Win (Control, Option or Command on a Mac): while the palette runs, that key no longer types or works in any application, the palette's own windows included,
 - `Ctrl+Alt` with a key that one of the installed keyboard layouts types as a character with AltGr, or on a Mac `Option` with a key a layout types a character with: while the palette runs, that character cannot be typed that way.
 
-On Linux the palette types a character whose key it holds as a shortcut through another key, so the values it types still arrive whole.
+When the palette holds a key alone as a shortcut, it types the values through other keys on Linux and on a Mac, so they still arrive whole.
+
+`nkb send` runs apart from the palette and does not know which keys it holds. While the palette holds a key alone, a value `nkb send` types loses the characters of that key on Linux with X11, and on a Mac a shortcut on the A key alone takes every character `nkb send` types. `nkb send` cannot see this and still says the application took every keystroke.
