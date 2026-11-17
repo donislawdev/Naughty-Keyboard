@@ -27,7 +27,7 @@
 
 use std::mem::{Discriminant, discriminant};
 
-use nkb_core::hotkeys::{Bindings, HotkeyAction, HotkeyChord, Refusal, Refused};
+use nkb_core::hotkeys::{Bindings, ChordRisk, HotkeyAction, HotkeyChord, Refusal, Refused, Risky};
 use nkb_core::identity::ValueKey;
 use nkb_core::screens::{Layout, Point};
 
@@ -56,6 +56,10 @@ pub enum SettingsMessage {
     /// A shortcut the tester wrote reads, and still cannot be used - the
     /// action keeps its default. Why is in the refusal.
     ShortcutNotUsed(Refused),
+    /// A shortcut the tester wrote is in use and takes a key or a character
+    /// from every application while the palette runs (`D189`). Said at every
+    /// start, because the file may be one the tester never saw this said about.
+    ShortcutRisky(Risky),
     /// The place remembered for this layout of screens is off every one of
     /// them, so the system placed the palette (UX7).
     PositionOffScreen { at: Point },
@@ -161,26 +165,27 @@ impl KeptSettings {
     }
 
     /// The shortcuts for this run: `defaults` with the tester's own on top,
-    /// and a message for each one that could not be used.
+    /// a message for each one that could not be used, and one for each one in
+    /// use that takes a key or a character from every application (`D189`).
     ///
     /// Asked once, at start: the file is not read again while the palette
     /// runs (`settings-format.md` 8), so the answer holds for the whole run.
     /// `types` is the system's answer to which character a `Ctrl+Alt` chord
-    /// types as `AltGr` - see [`Bindings::with`], which decides when to ask.
+    /// types as `AltGr` - see [`Bindings::risk`], which decides when to ask.
     #[must_use]
     pub fn bindings(
         &self,
         defaults: Bindings,
         types: &dyn Fn(HotkeyChord) -> Option<char>,
     ) -> (Bindings, Vec<SettingsMessage>) {
-        let (bindings, refused) = defaults.with(&self.settings.shortcuts, types);
-        (
-            bindings,
-            refused
-                .into_iter()
-                .map(SettingsMessage::ShortcutNotUsed)
-                .collect(),
-        )
+        let (bindings, refused) = defaults.with(&self.settings.shortcuts);
+        let messages = bindings
+            .risky(types)
+            .into_iter()
+            .map(SettingsMessage::ShortcutRisky)
+            .chain(refused.into_iter().map(SettingsMessage::ShortcutNotUsed))
+            .collect();
+        (bindings, messages)
     }
 
     /// Remembers one change - in effect at once, saved when it can be.
@@ -309,11 +314,12 @@ impl KeptSettings {
     /// rule, [`Bindings::with`] over the file's wishes. What may be refused is
     /// decided BEFORE that, against the table in use NOW:
     ///
-    /// - a chord that is no global shortcut, or that a keyboard layout types
-    ///   as `AltGr` - the reasons the palette gives about the settings file.
     /// - a chord another action answers to now - recorded, or the default a
     ///   restore asks for - refused, naming that action, rather than taken from
     ///   it. The tester gives the other action something else first.
+    ///
+    /// A chord that takes a key or a character from every application is
+    /// given: the caller says what it takes ([`Bindings::risk`], `D189`).
     ///
     /// 🔴 Not left to [`Bindings::with`], and measured why: it sends back the
     /// later of two wishes in the order of [`HotkeyAction::ALL`], not the
@@ -334,20 +340,11 @@ impl KeptSettings {
     pub fn consider(
         &self,
         defaults: Bindings,
-        types: &dyn Fn(HotkeyChord) -> Option<char>,
         action: HotkeyAction,
         chord: Option<HotkeyChord>,
     ) -> Considered {
         let refuse = |chord, why| Considered::Refused(Refused { action, chord, why });
-        if let Some(chord) = chord {
-            if let Some(problem) = chord.problem() {
-                return refuse(chord, Refusal::Problem(problem));
-            }
-            if let Some(why) = defaults.typing_refusal(chord, types) {
-                return refuse(chord, why);
-            }
-        }
-        let (now, _) = defaults.with(&self.settings.shortcuts, types);
+        let (now, _) = defaults.with(&self.settings.shortcuts);
         let default = defaults.chord(action);
         let wanted = chord.unwrap_or(default);
         if let Some(holder) = HotkeyAction::ALL
@@ -359,7 +356,7 @@ impl KeptSettings {
         }
         let mut after = self.settings.shortcuts.clone();
         wish(&mut after, action, chord);
-        let (next, _) = defaults.with(&after, types);
+        let (next, _) = defaults.with(&after);
         let in_file = self
             .settings
             .shortcuts
@@ -416,7 +413,7 @@ impl KeptSettings {
         chord: Option<HotkeyChord>,
     ) -> (ShortcutChange, Option<SettingsMessage>) {
         let change = SettingChange::Shortcut { action, chord };
-        let (bindings, also) = match self.consider(defaults, types, action, chord) {
+        let (bindings, also) = match self.consider(defaults, action, chord) {
             Considered::Refused(refused) => return (ShortcutChange::Refused(refused), None),
             Considered::AlreadySo => {
                 let said = chord.is_none().then(|| self.keep(store, change)).flatten();
@@ -425,7 +422,7 @@ impl KeptSettings {
             Considered::Gives { bindings, also } => (bindings, also),
         };
         let wanted = bindings.chord(action);
-        let (now, _) = defaults.with(&self.settings.shortcuts, types);
+        let (now, _) = defaults.with(&self.settings.shortcuts);
         let unchecked = if wanted == now.chord(action) {
             None
         } else {
@@ -450,6 +447,7 @@ impl KeptSettings {
                 bindings,
                 also,
                 unchecked,
+                risk: defaults.risk(wanted, types),
             },
             said,
         )
@@ -673,11 +671,14 @@ pub enum ShortcutChange {
     /// table the palette registers when the shortcuts window closes, `also`
     /// every other action whose chord moves with it. `unchecked` names why the
     /// system could not be asked whether the chord is free - `None` when it
-    /// was asked, or when the action already answered to the chord.
+    /// was asked, or when the action already answered to the chord. `risk`
+    /// is what the action's new chord takes from every application, if
+    /// anything - said in the colour of a risk (`D189`).
     Changed {
         bindings: Bindings,
         also: Vec<HotkeyAction>,
         unchecked: Option<ShortcutsUnavailable>,
+        risk: Option<ChordRisk>,
     },
 }
 
@@ -1170,15 +1171,15 @@ mod tests {
         );
     }
     #[test]
-    fn the_shortcuts_of_a_run_are_the_files_on_top_of_the_defaults_and_a_refusal_is_said() {
-        use nkb_core::hotkeys::{Convention, HotkeyAction, HotkeyChord, Refusal};
+    fn the_shortcuts_of_a_run_are_the_files_on_top_of_the_defaults_and_a_risk_is_said() {
+        use nkb_core::hotkeys::{ChordRisk, Convention, HotkeyAction, HotkeyChord, Refusal, Risky};
         let chord = |text: &str| HotkeyChord::parse(text).unwrap_or_else(|e| panic!("{e:?}"));
         let store = FakeStore::loading(SettingsLoad::Read {
             settings: Settings {
                 shortcuts: vec![
                     (HotkeyAction::NextValue, chord("Alt+Shift+M")),
-                    (HotkeyAction::PreviousValue, chord("Alt+Shift+R")),
                     (HotkeyAction::RepeatLast, chord("Ctrl+Alt+A")),
+                    (HotkeyAction::RestartPack, chord("Alt+Shift+P")),
                 ],
                 ..Settings::default()
             },
@@ -1194,24 +1195,29 @@ mod tests {
             bindings.chord(HotkeyAction::NextValue),
             chord("Alt+Shift+M")
         );
+        // Used, because the tester asked for it, and said, because it takes a
+        // character from every application.
         assert_eq!(
-            bindings.chord(HotkeyAction::PreviousValue),
-            defaults.chord(HotkeyAction::PreviousValue),
-            "Alt+Shift+R is Repeat last value's"
+            bindings.chord(HotkeyAction::RepeatLast),
+            chord("Ctrl+Alt+A")
         );
-        // Repeat last keeps Alt+Shift+R, so the clash names the true holder.
+        assert_eq!(
+            bindings.chord(HotkeyAction::RestartPack),
+            defaults.chord(HotkeyAction::RestartPack),
+            "Alt+Shift+P is Previous value's"
+        );
         assert_eq!(
             messages,
             vec![
-                SettingsMessage::ShortcutNotUsed(Refused {
+                SettingsMessage::ShortcutRisky(Risky {
                     action: HotkeyAction::RepeatLast,
                     chord: chord("Ctrl+Alt+A"),
-                    why: Refusal::TypesCharacter('\u{105}'),
+                    risk: ChordRisk::TypesCharacter('\u{105}'),
                 }),
                 SettingsMessage::ShortcutNotUsed(Refused {
-                    action: HotkeyAction::PreviousValue,
-                    chord: chord("Alt+Shift+R"),
-                    why: Refusal::SameAs(HotkeyAction::RepeatLast),
+                    action: HotkeyAction::RestartPack,
+                    chord: chord("Alt+Shift+P"),
+                    why: Refusal::SameAs(HotkeyAction::PreviousValue),
                 }),
             ]
         );
@@ -1247,7 +1253,7 @@ mod tests {
         let (mut kept, _) = KeptSettings::open(&store);
         let wanted = chord("Alt+Shift+M");
         let Considered::Gives { bindings, also } =
-            kept.consider(DEFAULTS, &no_layout, HotkeyAction::NextValue, Some(wanted))
+            kept.consider(DEFAULTS, HotkeyAction::NextValue, Some(wanted))
         else {
             panic!("a free chord was not given");
         };
@@ -1262,7 +1268,7 @@ mod tests {
         assert_eq!(store.saves(), vec![change]);
         assert_eq!(kept.bindings(DEFAULTS, &no_layout).0, bindings);
         assert_eq!(
-            kept.consider(DEFAULTS, &no_layout, HotkeyAction::NextValue, Some(wanted)),
+            kept.consider(DEFAULTS, HotkeyAction::NextValue, Some(wanted)),
             Considered::AlreadySo
         );
     }
@@ -1281,12 +1287,7 @@ mod tests {
             ("Alt+Shift+M", HotkeyAction::PreviousValue),
         ] {
             assert_eq!(
-                kept.consider(
-                    DEFAULTS,
-                    &no_layout,
-                    HotkeyAction::NextValue,
-                    Some(chord(wanted))
-                ),
+                kept.consider(DEFAULTS, HotkeyAction::NextValue, Some(chord(wanted))),
                 Considered::Refused(Refused {
                     action: HotkeyAction::NextValue,
                     chord: chord(wanted),
@@ -1298,34 +1299,36 @@ mod tests {
     }
 
     #[test]
-    fn a_chord_that_is_no_global_shortcut_is_refused_for_its_own_reason() {
-        let kept = wishing(Vec::new());
+    fn a_chord_that_takes_a_key_or_a_character_is_given_and_says_what_it_takes() {
         let polish = |wanted: HotkeyChord| (wanted == chord("Ctrl+Alt+A")).then_some('\u{105}');
-        assert!(matches!(
-            kept.consider(
+        for (wanted, risk) in [
+            ("Shift+Q", ChordRisk::NoCommandModifier),
+            ("Ctrl+Alt+A", ChordRisk::TypesCharacter('\u{105}')),
+        ] {
+            let registrar = FakeRegistrar::answering(Ok(ShortcutRegistration::Registered));
+            let store = FakeStore::loading(SettingsLoad::Absent);
+            let (mut kept, _) = KeptSettings::open(&store);
+            let (change, said) = kept.change_shortcut(
+                &store,
+                &registrar,
                 DEFAULTS,
                 &polish,
                 HotkeyAction::MarkOk,
-                Some(chord("Shift+Q"))
-            ),
-            Considered::Refused(Refused {
-                why: Refusal::Problem(_),
+                Some(chord(wanted)),
+            );
+            let ShortcutChange::Changed {
+                bindings,
+                risk: named,
                 ..
-            })
-        ));
-        assert_eq!(
-            kept.consider(
-                DEFAULTS,
-                &polish,
-                HotkeyAction::MarkOk,
-                Some(chord("Ctrl+Alt+A"))
-            ),
-            Considered::Refused(Refused {
-                action: HotkeyAction::MarkOk,
-                chord: chord("Ctrl+Alt+A"),
-                why: Refusal::TypesCharacter('\u{105}'),
-            })
-        );
+            } = change
+            else {
+                panic!("{wanted} was not given: {change:?}");
+            };
+            assert_eq!(bindings.chord(HotkeyAction::MarkOk), chord(wanted));
+            assert_eq!(named, Some(risk), "{wanted}");
+            assert_eq!(said, None);
+            assert_eq!(store.saves().len(), 1, "{wanted} is kept like any other");
+        }
     }
 
     #[test]
@@ -1336,7 +1339,7 @@ mod tests {
             (HotkeyAction::PreviousValue, chord("Alt+Shift+N")),
         ]);
         assert_eq!(
-            kept.consider(DEFAULTS, &no_layout, HotkeyAction::NextValue, None),
+            kept.consider(DEFAULTS, HotkeyAction::NextValue, None),
             Considered::Refused(Refused {
                 action: HotkeyAction::NextValue,
                 chord: chord("Alt+Shift+N"),
@@ -1352,7 +1355,6 @@ mod tests {
         let kept = wishing(vec![(HotkeyAction::PreviousValue, chord("Alt+Shift+N"))]);
         let Considered::Gives { bindings, also } = kept.consider(
             DEFAULTS,
-            &no_layout,
             HotkeyAction::NextValue,
             Some(chord("Alt+Shift+M")),
         ) else {
@@ -1369,13 +1371,12 @@ mod tests {
     fn what_the_file_already_says_is_already_so_and_a_stale_wish_is_not() {
         let kept = wishing(Vec::new());
         assert_eq!(
-            kept.consider(DEFAULTS, &no_layout, HotkeyAction::RepeatLast, None),
+            kept.consider(DEFAULTS, HotkeyAction::RepeatLast, None),
             Considered::AlreadySo
         );
         assert_eq!(
             kept.consider(
                 DEFAULTS,
-                &no_layout,
                 HotkeyAction::RepeatLast,
                 Some(chord("Alt+Shift+R"))
             ),
@@ -1388,7 +1389,6 @@ mod tests {
         assert!(matches!(
             stale.consider(
                 DEFAULTS,
-                &no_layout,
                 HotkeyAction::RepeatLast,
                 Some(chord("Alt+Shift+R"))
             ),
@@ -1432,7 +1432,7 @@ mod tests {
                     for action in actions {
                         for request in &choices {
                             cases += 1;
-                            let considered = kept.consider(DEFAULTS, &no_layout, action, *request);
+                            let considered = kept.consider(DEFAULTS, action, *request);
                             let mut after = kept.clone();
                             after.apply(SettingChange::Shortcut {
                                 action,
@@ -1473,14 +1473,13 @@ mod tests {
                                 }
                                 Considered::Refused(refused) => {
                                     assert_eq!(refused.action, action);
-                                    if let Refusal::SameAs(holder) = refused.why {
-                                        assert_ne!(holder, action);
-                                        assert_eq!(
-                                            now.chord(holder),
-                                            refused.chord,
-                                            "{file:?} {action:?} {request:?} {refused:?}"
-                                        );
-                                    }
+                                    let Refusal::SameAs(holder) = refused.why;
+                                    assert_ne!(holder, action);
+                                    assert_eq!(
+                                        now.chord(holder),
+                                        refused.chord,
+                                        "{file:?} {action:?} {request:?} {refused:?}"
+                                    );
                                 }
                             }
                         }
@@ -1599,6 +1598,7 @@ mod tests {
             bindings,
             also,
             unchecked,
+            risk,
         } = change
         else {
             panic!("a free chord was not given: {change:?}");
@@ -1606,6 +1606,7 @@ mod tests {
         assert_eq!(bindings.chord(HotkeyAction::NextValue), wanted);
         assert!(also.is_empty());
         assert_eq!(unchecked, None, "the system was asked");
+        assert_eq!(risk, None, "an Alt+Shift chord takes nothing");
         assert_eq!(said, None);
         assert_eq!(
             *registrar.asked.borrow(),

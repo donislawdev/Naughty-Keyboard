@@ -61,6 +61,7 @@ import {
     WindowFooter,
     WindowStatus,
     KeyScope,
+    Marker,
     PickRow,
     PickList,
 } from "../components.slint";
@@ -79,8 +80,10 @@ export component ShortcutsWindow inherits Window {
     in property <string> current-label;
     in property <[HintRow]> hints;
     // What the last press came to - a shortcut kept, refused and why, or the
-    // combination recording is waiting for. Under the list, wrapped.
-    in property <[string]> messages;
+    // combination recording is waiting for. Under the list, wrapped. `risky`
+    // marks what a kept shortcut takes from every application (`D189`), and the
+    // view gives it the colour of a risk.
+    in property <[Marker]> messages;
 
     callback pressed <=> keys.pressed;
     callback released <=> keys.released;
@@ -104,8 +107,10 @@ export component ShortcutsWindow inherits Window {
     // the live window opened at its minimum, 400 x 360, four of the ten rows
     // showing, and so did a `preferred-height` bound to the content. A bound
     // `width` and `height` are what the backend follows, as the palette showed
-    // live. The cost: the tester cannot resize this window - it holds ten
-    // fixed rows, and it grows by itself when a longer sentence needs room.
+    // live. The cost: the tester cannot resize this window - it holds its
+    // rows and the room kept under them for sentences
+    // (`Tokens.shortcuts-message-lines`), and a sentence longer than that room
+    // does not make it grow.
     width: Tokens.shortcuts-width;
     height: body.preferred-height;
     // Above the palette, which is always on top itself - the same reason as
@@ -160,8 +165,9 @@ export component ShortcutsWindow inherits Window {
                 VerticalLayout {
                     min-height: Tokens.shortcuts-message-lines * line.preferred-height;
                     for message in root.messages: TextBody {
-                        text: message;
+                        text: message.text;
                         wrap: word-wrap;
+                        color: message.risky ? Tokens.risk : Tokens.text-secondary;
                     }
                 }
             }

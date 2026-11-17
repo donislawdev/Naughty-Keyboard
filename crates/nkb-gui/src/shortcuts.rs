@@ -57,7 +57,7 @@ use crate::on_request::{self, Later, Ready, Requested};
 use crate::packs::{Keyboard, SystemKeyboard, forget_held_modifiers};
 use crate::shortcut_list::{Act, ShortcutList, ShortcutRow, key_of};
 use crate::window_keys::KeyTracker;
-use crate::{HintRow, PickRow, ShortcutsWindow};
+use crate::{HintRow, Marker, PickRow, ShortcutsWindow};
 
 /// What the window asks of the system besides the keyboard focus: which chord
 /// is held (`D91`), and keeping its menu shut on `Alt+Space`. A trait, so what
@@ -406,7 +406,7 @@ impl Shortcuts {
             }
             return;
         }
-        let list = ShortcutList::new(default_bindings(), now);
+        let list = ShortcutList::new(default_bindings(), now, nkb_adapters::layout_character);
         describe(&self.window, list.read_only());
         *self.list.borrow_mut() = Some(list);
         self.show_all();
@@ -505,10 +505,15 @@ impl Shortcuts {
         self.window
             .set_selected(i32::try_from(list.selected()).unwrap_or(-1));
         self.window.set_summary(list.summary().into());
+        let said = |text: &str, risky| Marker {
+            text: SharedString::from(text),
+            risky,
+        };
         self.window.set_messages(ModelRc::new(VecModel::from(
             list.lines()
                 .iter()
-                .map(|line| SharedString::from(line.as_str()))
+                .map(|line| said(line, false))
+                .chain(list.warning().map(|warning| said(warning, true)))
                 .collect::<Vec<_>>(),
         )));
     }

@@ -31,7 +31,14 @@ Ten plik to ten, który nazywa [strona palety](/docs/palette/). Paleta czyta go 
 
 Kombinacja, której paleta nie może użyć, zostaje odrzucona z podaniem przyczyny, a akcja zachowuje kombinację, którą miała:
 
-- kombinacja bez Ctrl, Alt ani Win, która zabrałaby klawisz pisaniu,
 - klawisz inny niż litera od A do Z, cyfra od 0 do 9, F1 do F24 albo Space,
-- kombinacja, którą ma już inna akcja albo którą trzyma już inny program,
-- `Ctrl+Alt` z klawiszem, który któryś z zainstalowanych układów klawiatury pisze z AltGr jako znak - taki znak komunikat nazywa.
+- kombinacja, którą ma już inna akcja albo którą trzyma już inny program.
+
+## Przed którymi kombinacjami ostrzega?
+
+Kombinacja, która zabiera coś wszystkim innym aplikacjom, zostaje przyjęta. Okno skrótów oznacza jej wiersz i mówi pod listą, co zabiera, a paleta mówi to samo, gdy startuje z taką kombinacją w `settings.toml`:
+
+- kombinacja bez Ctrl, Alt ani Win (na Macu bez Control, Option ani Command): dopóki paleta działa, ten klawisz nie pisze i nie działa w żadnej aplikacji, także w oknach samej palety,
+- `Ctrl+Alt` z klawiszem, który któryś z zainstalowanych układów klawiatury pisze z AltGr jako znak, albo na Macu `Option` z klawiszem, który układ pisze jako znak: dopóki paleta działa, tego znaku nie da się tak napisać.
+
+Na Linuksie paleta pisze znak, którego klawisz trzyma jako skrót, innym klawiszem, więc wartości, które wpisuje, dochodzą w całości.

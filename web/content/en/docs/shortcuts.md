@@ -30,7 +30,14 @@ The file is the one [the palette's page](/docs/palette/) names. The palette read
 
 A chord the palette cannot use is refused with the reason, and the action keeps the chord it had:
 
-- a chord without Ctrl, Alt or Win, which would take a key away from typing,
 - a key other than a letter A to Z, a digit 0 to 9, F1 to F24 or Space,
-- a chord another action already has, or that another program already holds,
-- `Ctrl+Alt` with a key that one of the installed keyboard layouts types as a character with AltGr, named in the message.
+- a chord another action already has, or that another program already holds.
+
+## Which chords does it warn about?
+
+A chord that takes something away from every other application is kept. The shortcuts window marks its row and says under the list what it takes, and the palette says the same when it starts with such a chord in `settings.toml`:
+
+- a chord without Ctrl, Alt or Win (Control, Option or Command on a Mac): while the palette runs, that key no longer types or works in any application, the palette's own windows included,
+- `Ctrl+Alt` with a key that one of the installed keyboard layouts types as a character with AltGr, or on a Mac `Option` with a key a layout types a character with: while the palette runs, that character cannot be typed that way.
+
+On Linux the palette types a character whose key it holds as a shortcut through another key, so the values it types still arrive whole.

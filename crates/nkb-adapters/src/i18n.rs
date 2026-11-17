@@ -70,7 +70,7 @@ use nkb_app::ports::{
     ShortcutUnreadable, ShortcutsUnavailable,
 };
 use nkb_core::hotkeys::{
-    Bindings, ChordError, ChordProblem, HotkeyAction, HotkeyChord, Refusal, Refused,
+    Bindings, ChordError, ChordRisk, HotkeyAction, HotkeyChord, Refusal, Refused,
 };
 use nkb_core::preview::ShapeFact;
 use nkb_core::report::{ControlKind, Target};
@@ -120,8 +120,8 @@ pub use windows::{
     AboutLabel, MatchPlace, PacksLabel, ShortcutsLabel, WelcomeLabel, about_copyright, about_label,
     found_in, no_match, pack_problems, pack_refused, pack_unreadable, packs_label, packs_summary,
     packs_summary_filtered, pair_halves, recent_heading, shortcut_answer, shortcut_invite,
-    shortcuts_label, shortcuts_summary, value_aside, value_gone, welcome_label, welcome_ready,
-    welcome_try_it,
+    shortcut_risk, shortcut_risk_pill, shortcuts_label, shortcuts_summary, value_aside, value_gone,
+    welcome_label, welcome_ready, welcome_try_it,
 };
 
 // ---------------------------------------------------------------------------
@@ -827,16 +827,7 @@ fn pattern_settings_message(message: &SettingsMessage) -> Option<&'static str> {
         SettingsMessage::RememberedPackUnavailable { .. } => Some(
             "The remembered pack \"{remembered}\" could not be opened, so the palette opened \"{opened}\" for now. Press {shortcut} to choose another.",
         ),
-        SettingsMessage::ShortcutNotUsed(Refused {
-            why: Refusal::Problem(ChordProblem::NoCommandModifier),
-            ..
-        }) => Some(
-            "The settings file {file} gives \"{action}\" the shortcut {wanted}, which holds no {modifiers} - taken globally it would stop that key working in every application, so the default {shortcut} is used. Add {modifiers} to it.",
-        ),
-        SettingsMessage::ShortcutNotUsed(Refused {
-            why: why @ (Refusal::TypesCharacter(_) | Refusal::OptionTypesCharacter(_)),
-            ..
-        }) => typing::pattern_typing_refusal(*why),
+        SettingsMessage::ShortcutRisky(risky) => Some(typing::pattern_file_risk(risky.risk)),
         SettingsMessage::ShortcutNotUsed(Refused {
             why: Refusal::SameAs(_),
             ..
@@ -985,13 +976,7 @@ pub fn settings_message(
             })
         }
         SettingsMessage::ShortcutNotUsed(refused) => {
-            let (other, character) = match refused.why {
-                Refusal::SameAs(other) => (action_name(other), String::new()),
-                Refusal::TypesCharacter(character) | Refusal::OptionTypesCharacter(character) => {
-                    ("", shown_character(character))
-                }
-                Refusal::Problem(_) => ("", String::new()),
-            };
+            let Refusal::SameAs(other) = refused.why;
             pattern_settings_message(message).map(|pattern| {
                 fill(
                     pattern,
@@ -999,10 +984,27 @@ pub fn settings_message(
                         ("file", file),
                         ("action", action_name(refused.action)),
                         ("wanted", &chord(refused.chord)),
-                        ("other", other),
+                        ("other", action_name(other)),
+                        ("shortcut", &chord_text(bindings, refused.action)),
+                    ],
+                )
+            })
+        }
+        SettingsMessage::ShortcutRisky(risky) => {
+            let character = match risky.risk {
+                ChordRisk::NoCommandModifier => String::new(),
+                ChordRisk::TypesCharacter(character)
+                | ChordRisk::OptionTypesCharacter(character) => shown_character(character),
+            };
+            pattern_settings_message(message).map(|pattern| {
+                fill(
+                    pattern,
+                    &[
+                        ("file", file),
+                        ("action", action_name(risky.action)),
+                        ("wanted", &chord(risky.chord)),
                         ("character", &character),
                         ("modifiers", typing::command_modifiers()),
-                        ("shortcut", &chord_text(bindings, refused.action)),
                     ],
                 )
             })
@@ -2228,75 +2230,39 @@ mod tests {
         assert!(out.contains("...\" is not"), "{out}");
         assert!(out.len() < 300, "{out}");
 
-        for (why, named) in [
-            // The modifiers are named by the keyboard of the system (`OBS-196`).
-            (
-                Refusal::Problem(ChordProblem::NoCommandModifier),
-                format!("no {} - taken", typing::command_modifiers()).as_str(),
-            ),
-            (
-                Refusal::SameAs(HotkeyAction::PreviousValue),
-                "\"Go back one value and type it\"",
-            ),
-            (
-                Refusal::TypesCharacter('\u{105}'),
-                "types \"\u{105}\" as AltGr",
-            ),
-            // A quote from a layout cannot close the quotes around it.
-            (Refusal::TypesCharacter('"'), "types \"U+0022\" as AltGr"),
-            // A combining mark is named, not drawn onto the quote before it.
-            (
-                Refusal::TypesCharacter('\u{301}'),
-                "types \"U+0301\" as AltGr",
-            ),
-            // On the Mac the key is named Option, and the way out is Command.
-            (
-                Refusal::OptionTypesCharacter('\u{105}'),
-                "types \"\u{105}\" with Option",
-            ),
-            (
-                Refusal::OptionTypesCharacter('\u{301}'),
-                "types \"U+0301\" with Option",
-            ),
-        ] {
-            let out = settings_message(
-                &SettingsMessage::ShortcutNotUsed(Refused {
-                    action: HotkeyAction::NextValue,
-                    chord: chord("Shift+M"),
-                    why,
-                }),
-                "f",
-                &bindings,
-            )
-            .expect("said");
-            assert!(!out.contains('{'), "{out}");
-            assert!(
-                out.contains("\"Type the value shown\" the shortcut Shift+M"),
-                "{out}"
-            );
-            assert!(out.contains(named), "{out}");
-            assert!(
-                out.contains(&chord_text(&bindings, HotkeyAction::NextValue)),
-                "the default in use is named: {out}"
-            );
-        }
+        let held = settings_message(
+            &SettingsMessage::ShortcutNotUsed(Refused {
+                action: HotkeyAction::NextValue,
+                chord: chord("Shift+M"),
+                why: Refusal::SameAs(HotkeyAction::PreviousValue),
+            }),
+            "f",
+            &bindings,
+        )
+        .expect("said");
+        assert!(
+            held.contains("\"Type the value shown\" the shortcut Shift+M"),
+            "{held}"
+        );
+        assert!(held.contains("\"Go back one value and type it\""), "{held}");
+        assert!(
+            held.contains(&chord_text(&bindings, HotkeyAction::NextValue)),
+            "the default in use is named: {held}"
+        );
     }
 
     #[test]
     fn a_shortcut_set_in_the_settings_file_is_the_one_every_sentence_names() {
-        let (mine, refused) = defaults().with(
-            &[
-                (
-                    HotkeyAction::RestartPack,
-                    HotkeyChord::parse("Ctrl+Alt+Win+9").expect("reads"),
-                ),
-                (
-                    HotkeyAction::OpenPacks,
-                    HotkeyChord::parse("Ctrl+Alt+Win+F7").expect("reads"),
-                ),
-            ],
-            &|_| None,
-        );
+        let (mine, refused) = defaults().with(&[
+            (
+                HotkeyAction::RestartPack,
+                HotkeyChord::parse("Ctrl+Alt+Win+9").expect("reads"),
+            ),
+            (
+                HotkeyAction::OpenPacks,
+                HotkeyChord::parse("Ctrl+Alt+Win+F7").expect("reads"),
+            ),
+        ]);
         assert!(refused.is_empty());
         // The words of the system the tests run on, as the screen says them.
         let (nine, f7) = (
@@ -2361,9 +2327,11 @@ mod tests {
             ShortcutsLabel::AlreadySo,
             ShortcutsLabel::Also,
             ShortcutsLabel::Unchecked,
-            ShortcutsLabel::NoModifier,
-            ShortcutsLabel::TypesCharacter,
-            ShortcutsLabel::OptionTypesCharacter,
+            ShortcutsLabel::RiskNoModifier,
+            ShortcutsLabel::RiskTypesCharacter,
+            ShortcutsLabel::RiskOptionTypesCharacter,
+            ShortcutsLabel::BlocksKey,
+            ShortcutsLabel::BlocksCharacter,
             ShortcutsLabel::HeldBy,
             ShortcutsLabel::TakenElsewhere,
             ShortcutsLabel::NotRegisteredCode,
@@ -2380,9 +2348,9 @@ mod tests {
                 | ShortcutsLabel::AlreadySo
                 | ShortcutsLabel::Also
                 | ShortcutsLabel::Unchecked
-                | ShortcutsLabel::NoModifier
-                | ShortcutsLabel::TypesCharacter
-                | ShortcutsLabel::OptionTypesCharacter
+                | ShortcutsLabel::RiskNoModifier
+                | ShortcutsLabel::RiskTypesCharacter
+                | ShortcutsLabel::RiskOptionTypesCharacter
                 | ShortcutsLabel::HeldBy
                 | ShortcutsLabel::TakenElsewhere
                 | ShortcutsLabel::NotRegisteredCode => true,
@@ -2395,6 +2363,8 @@ mod tests {
                 | ShortcutsLabel::Taken
                 | ShortcutsLabel::NotRegistered
                 | ShortcutsLabel::NotAvailable
+                | ShortcutsLabel::BlocksKey
+                | ShortcutsLabel::BlocksCharacter
                 | ShortcutsLabel::KeyEnter
                 | ShortcutsLabel::Record
                 | ShortcutsLabel::KeyDelete
@@ -2433,16 +2403,14 @@ mod tests {
             Some(parsed("Alt+Shift+M")),
             &ShortcutChange::Changed {
                 bindings: Bindings::defaults(CONVENTION)
-                    .with(
-                        &[
-                            (HotkeyAction::NextValue, parsed("Alt+Shift+M")),
-                            (HotkeyAction::PreviousValue, parsed("Alt+Shift+N")),
-                        ],
-                        &|_| None,
-                    )
+                    .with(&[
+                        (HotkeyAction::NextValue, parsed("Alt+Shift+M")),
+                        (HotkeyAction::PreviousValue, parsed("Alt+Shift+N")),
+                    ])
                     .0,
                 also: vec![HotkeyAction::PreviousValue],
                 unchecked: Some(ShortcutsUnavailable::CouldNotStart),
+                risk: None,
             },
             parsed("Alt+Shift+N"),
         );
@@ -2476,6 +2444,7 @@ mod tests {
                 bindings: Bindings::defaults(CONVENTION),
                 also: Vec::new(),
                 unchecked: None,
+                risk: None,
             },
             n,
         );
@@ -2508,14 +2477,30 @@ mod tests {
             )
             .join(" ")
         };
-        assert!(
-            refused(Refusal::Problem(ChordProblem::NoCommandModifier))
-                .contains(&format!("holds no {} -", typing::command_modifiers()))
+        let z = parsed("Z");
+        assert_eq!(
+            shortcut_risk(z, ChordRisk::NoCommandModifier),
+            format!(
+                "Without {}, Z stops working in every application while the palette runs, its \
+                 own windows included.",
+                typing::command_modifiers()
+            )
         );
-        assert!(refused(Refusal::TypesCharacter('\u{105}')).contains("types \"\u{105}\" as AltGr"));
         assert!(
-            refused(Refusal::OptionTypesCharacter('\u{105}'))
-                .contains("types \"\u{105}\" with Option on a keyboard layout")
+            shortcut_risk(n, ChordRisk::TypesCharacter('\u{105}'))
+                .contains("types \"\u{105}\" as AltGr")
+        );
+        assert!(
+            shortcut_risk(n, ChordRisk::OptionTypesCharacter('\u{105}'))
+                .contains("types \"\u{105}\" with Option, so while")
+        );
+        assert_eq!(
+            shortcut_risk_pill(ChordRisk::NoCommandModifier),
+            "blocks the key"
+        );
+        assert_eq!(
+            shortcut_risk_pill(ChordRisk::OptionTypesCharacter('x')),
+            shortcut_risk_pill(ChordRisk::TypesCharacter('x'))
         );
         assert_eq!(
             refused(Refusal::SameAs(HotkeyAction::RepeatLast)),

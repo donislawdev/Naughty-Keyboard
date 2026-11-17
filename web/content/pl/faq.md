@@ -20,7 +20,7 @@ faq:
   - question: Czy mogę użyć wartości w testach automatycznych?
     answer: "Tak. `nkb emit` wypisuje każdą paczkę jako JSON, CSV albo jedną wartość na wiersz, w postaci escapowanej albo surowej, a każde polecenie ma kody wyjścia, według których pipeline może wybrać dalszą drogę. Jak, pokazuje [nkb emit](/docs/cli/emit/)."
   - question: Czy mogę zmienić skróty?
-    answer: "Tak, każdy z nich, w oknie skrótów albo w `settings.toml`. Kombinacja, która zabrałaby klawisz wszystkim aplikacjom, zostaje odrzucona z podaniem przyczyny. Listę mają [Skróty](/docs/shortcuts/)."
+    answer: "Tak, każdy z nich, w oknie skrótów albo w `settings.toml`. Kombinacja, która zabiera klawisz albo znak wszystkim aplikacjom, zostaje przyjęta z ostrzeżeniem, które mówi, co zabiera. Listę mają [Skróty](/docs/shortcuts/)."
   - question: Którą wersję mam?
     answer: "Mówi to odsyłacz About w palecie, razem z autorem i licencją. `nkb --version` ją wypisuje, a na Windows oba programy niosą ją w szczegółach pliku, we Właściwościach na karcie Szczegóły."
   - question: Czy mogę dodać własne wartości?

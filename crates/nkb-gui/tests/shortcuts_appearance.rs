@@ -23,7 +23,7 @@
 #[allow(dead_code)]
 mod offscreen;
 
-use nkb_gui::{HintRow, PickRow, ShortcutsWindow};
+use nkb_gui::{HintRow, Marker, PickRow, ShortcutsWindow};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 const WIDTH: u32 = 480;
@@ -36,6 +36,8 @@ const TALL: u32 = 900;
 const SURFACE: (u8, u8, u8) = (0x14, 0x16, 0x1A);
 const ACCENT: (u8, u8, u8) = (0x7A, 0xA2, 0xF7);
 const THUMB: (u8, u8, u8) = (0x45, 0x4C, 0x5C);
+/// `risk` - copied, for the reason the colours above are copies.
+const RISK: (u8, u8, u8) = (0xE0, 0xAF, 0x68);
 
 /// The ten actions of `ux-spec.md` 3 with the default combinations, one of
 /// them the tester's own and one taken by another application.
@@ -93,11 +95,19 @@ fn hints(rows: &[(&str, &str)]) -> ModelRc<HintRow> {
     ))
 }
 
-fn lines(lines: &[&str]) -> ModelRc<SharedString> {
+fn lines(lines: &[&str]) -> ModelRc<Marker> {
+    said(&lines.iter().map(|line| (*line, false)).collect::<Vec<_>>())
+}
+
+/// Lines under the list, each with whether it says a risk.
+fn said(lines: &[(&str, bool)]) -> ModelRc<Marker> {
     ModelRc::new(VecModel::from(
         lines
             .iter()
-            .map(|line| SharedString::from(*line))
+            .map(|(text, risky)| Marker {
+                text: SharedString::from(*text),
+                risky: *risky,
+            })
             .collect::<Vec<_>>(),
     ))
 }
@@ -358,4 +368,43 @@ fn the_shortcuts_window_keeps_its_promises() {
     // its content, because the live window ignored a preferred size and opened
     // at the minimum (`slint.md` 2.38). What size it asks for, and what it
     // shows at that size, is `shortcuts_size.rs`.
+}
+
+/// A line that says what a kept shortcut takes from every application is drawn
+/// in the colour of a risk, and the same words as a plain line are not
+/// (`D189`). Measured as a difference between two renders of the same sentence,
+/// because the list's own risky pill is that colour too (GUI rule 10).
+#[test]
+fn a_warning_under_the_list_is_drawn_in_the_colour_of_a_risk() {
+    let surface = offscreen::start(WIDTH, TALL);
+    let window = ShortcutsWindow::new().expect("the shortcuts window must build");
+    fill(&window);
+    window.show().expect("the shortcuts window must show");
+    let sentence = "Shift+F12 holds no Ctrl, Alt or Win, so while the palette runs, Shift+F12 \
+                    stops typing and working in every application.";
+    let everywhere = |buffer: &[offscreen::Pixel]| count(buffer, WIDTH, 0..TALL, 0..WIDTH, RISK);
+
+    window.set_messages(lines(&[]));
+    let quiet = everywhere(&offscreen::draw(&surface, WIDTH, TALL));
+    window.set_messages(said(&[(sentence, false)]));
+    let plain = everywhere(&offscreen::draw(&surface, WIDTH, TALL));
+    window.set_messages(said(&[
+        ("\"Previous value\" answers Shift+F12.", false),
+        (sentence, true),
+    ]));
+    let warned_buffer = offscreen::draw(&surface, WIDTH, TALL);
+    let warned = everywhere(&warned_buffer);
+    let path = offscreen::save(&warned_buffer, WIDTH, TALL, "shortcuts-warning.png");
+
+    assert_eq!(
+        plain, quiet,
+        "a plain sentence under the list drew the colour of a risk"
+    );
+    assert!(
+        warned > quiet + 20,
+        "the warning drew {} pixels of the colour of a risk more than none ({warned} against \
+         {quiet}), so it is not told apart from a plain sentence. Look at {}",
+        warned.saturating_sub(quiet),
+        path.display()
+    );
 }

@@ -348,6 +348,18 @@ impl LayoutKeys {
         }
     }
 
+    /// These keys without the characters typed through any of `held`: a key and
+    /// Shift (or no Shift) that this process grabs as a global shortcut. A key
+    /// event of the send on a grabbed key goes to the grab and never reaches the
+    /// application - measured 2026-11-17 on X11 (`tools/sondy/linux/goly-skrot-x11.sh`):
+    /// with `a` grabbed, a value of 72 letters `a` and a `1` arrived as `1`, and the
+    /// send said every keystroke was taken. Those characters go through a spare
+    /// key, which no shortcut grabs (`D189`). Return and Tab are no shortcut's.
+    pub(crate) fn without(mut self, held: &[LayoutKey]) -> Self {
+        self.characters.retain(|_, key| !held.contains(key));
+        self
+    }
+
     /// The key that is held down for the characters that need Shift.
     pub(crate) fn shift_key(&self) -> Option<u8> {
         self.shift_key
@@ -1273,6 +1285,33 @@ mod tests {
         ] {
             assert_eq!(character_keysym(keysym), None, "{keysym:#x}");
         }
+    }
+
+    /// A key this process grabs as a shortcut takes its character away from the
+    /// send's keys of the layout, with its own Shift and no other: `a` grabbed
+    /// leaves `A` on the layout, and Return stays whatever is grabbed (`D189`).
+    #[test]
+    fn a_key_held_as_a_shortcut_types_through_a_spare_key_and_only_its_own_level() {
+        let all = LayoutKeys::typing(&us_ru_keyboard(), Some(SHIFT_L), 0);
+        let held = all.clone().without(&[
+            bare_key(11).expect("a key"),
+            shifted_key(10).expect("a key"),
+        ]);
+        assert_eq!(key_of(&held, 'a'), None, "goes through a spare key");
+        assert_eq!(key_of(&held, '!'), None, "goes through a spare key");
+        assert_eq!(
+            key_of(&held, 'A'),
+            shifted_key(11),
+            "Shift+A is not grabbed"
+        );
+        assert_eq!(key_of(&held, '1'), bare_key(10), "1 is not grabbed");
+        assert_eq!(key_of(&held, '\u{20AC}'), bare_key(15));
+        assert_eq!(held.key_for(KEYSYM_RETURN), bare_key(16));
+        assert_eq!(
+            all.clone().without(&[]),
+            all,
+            "nothing grabbed takes nothing away"
+        );
     }
 
     #[test]

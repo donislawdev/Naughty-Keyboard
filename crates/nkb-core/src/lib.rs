@@ -47,8 +47,9 @@ pub use calendar::{Day, Weekday};
 pub use description::{BreaksFault, MIN_BREAKS_CODE_POINTS, check_breaks, looks_english};
 pub use graphemes::UNICODE_VERSION;
 pub use hotkeys::{
-    Bindings, ChordError, ChordProblem, Convention, DEFAULT_BINDINGS, HotkeyAction, HotkeyChord,
-    HotkeyKey, LINUX_DEFAULT_BINDINGS, MACOS_DEFAULT_BINDINGS, Refusal, Refused, default_bindings,
+    Bindings, ChordError, ChordRisk, Convention, DEFAULT_BINDINGS, HotkeyAction, HotkeyChord,
+    HotkeyKey, LINUX_DEFAULT_BINDINGS, MACOS_DEFAULT_BINDINGS, Refusal, Refused, Risky,
+    default_bindings,
 };
 pub use identity::{ValueKey, is_pack_id, is_value_id};
 pub use lint::{

@@ -146,7 +146,7 @@ fn messages(window: &ShortcutsWindow) -> Vec<String> {
     window
         .get_messages()
         .iter()
-        .map(|line| line.to_string())
+        .map(|line| line.text.to_string())
         .collect()
 }
 
@@ -258,12 +258,13 @@ fn the_shortcuts_window_pauses_records_and_always_takes_the_shortcuts_back() {
 
     // ---- the answer moves the row ------------------------------------------
     let bindings = default_bindings()
-        .with(&[(HotkeyAction::PreviousValue, wanted)], &|_| None)
+        .with(&[(HotkeyAction::PreviousValue, wanted)])
         .0;
     let change = ShortcutChange::Changed {
         bindings,
         also: Vec::new(),
         unchecked: None,
+        risk: None,
     };
     shortcuts.told(Told::Shortcut {
         action: HotkeyAction::PreviousValue,

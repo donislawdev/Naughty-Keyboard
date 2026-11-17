@@ -115,13 +115,25 @@ pub struct ShortcutList {
     waiting: Option<(HotkeyAction, Option<HotkeyChord>)>,
     /// What the last press came to, finished.
     messages: Vec<String>,
+    /// What the shortcut the last answer left takes from every application, in a
+    /// sentence of its own, which the window says in the colour of a risk
+    /// (`D189`).
+    warning: Option<String>,
+    /// Which character a keyboard layout types with a chord - the system's
+    /// answer, asked only about a chord that can type ([`Bindings::risk`]).
+    types: fn(HotkeyChord) -> Option<char>,
 }
 
 impl ShortcutList {
     /// The list over the table the worker told the window when it paused
-    /// (`live::Told::Paused`), the first row selected.
+    /// (`live::Told::Paused`), the first row selected. `types` is the system's
+    /// answer to which character a chord types (`nkb_adapters::layout_character`).
     #[must_use]
-    pub fn new(defaults: Bindings, now: ShortcutsNow) -> Self {
+    pub fn new(
+        defaults: Bindings,
+        now: ShortcutsNow,
+        types: fn(HotkeyChord) -> Option<char>,
+    ) -> Self {
         Self {
             defaults,
             now,
@@ -129,6 +141,8 @@ impl ShortcutList {
             recording: false,
             waiting: None,
             messages: Vec::new(),
+            warning: None,
+            types,
         }
     }
 
@@ -196,6 +210,19 @@ impl ShortcutList {
         }
         self.messages = i18n::shortcut_answer(action, asked, change, answers);
         self.messages.extend(not_saved);
+        self.warning = match change {
+            ShortcutChange::Changed {
+                risk: Some(risk), ..
+            } => Some(i18n::shortcut_risk(self.now.bindings.chord(action), *risk)),
+            _ => None,
+        };
+    }
+
+    /// What the shortcut the last answer left takes from every application, if
+    /// anything: a line under the others, in the colour of a risk (`D189`).
+    #[must_use]
+    pub fn warning(&self) -> Option<&str> {
+        self.warning.as_deref()
     }
 
     /// Whether a change waits for the worker's answer.
@@ -313,9 +340,11 @@ impl ShortcutList {
     }
 
     /// What the system said about `chord` at the last registration, when it
-    /// is still the chord registered - then whether the action does anything
-    /// in this version, then whether the chord is the tester's own. A risk
-    /// outranks the rest, and an action that does nothing outranks a change:
+    /// is still the chord registered - then what the chord takes from every
+    /// application (`D189`), then whether the action does anything in this
+    /// version, then whether the chord is the tester's own. A risk outranks the
+    /// rest - a chord that takes a key takes it whether or not the action does
+    /// anything yet - and an action that does nothing outranks a change:
     /// a row that looks like a working shortcut while it is not was
     /// `UX-GUI-006`. Still recordable - the chord stays registered so nobody
     /// else takes it, and the tester may want it elsewhere.
@@ -338,6 +367,13 @@ impl ShortcutList {
         if let Some(label) = risk {
             return Some(Badge {
                 text: i18n::shortcuts_label(label).to_owned(),
+                risky: true,
+                current: false,
+            });
+        }
+        if let Some(takes) = self.defaults.risk(chord, &self.types) {
+            return Some(Badge {
+                text: i18n::shortcut_risk_pill(takes).to_owned(),
                 risky: true,
                 current: false,
             });
@@ -369,6 +405,7 @@ impl ShortcutList {
         }
         self.recording = true;
         self.messages = vec![i18n::shortcut_invite(self.action())];
+        self.warning = None;
         Act::Handled
     }
 
@@ -377,6 +414,7 @@ impl ShortcutList {
             Key::Escape => {
                 self.recording = false;
                 self.messages.clear();
+                self.warning = None;
                 return Act::Handled;
             }
             // Half way through a chord: nothing to say yet.
@@ -411,6 +449,7 @@ impl ShortcutList {
 
     fn say(&mut self, label: ShortcutsLabel) -> Act {
         self.messages = vec![i18n::shortcuts_label(label).to_owned()];
+        self.warning = None;
         Act::Handled
     }
 }
@@ -423,7 +462,7 @@ impl ShortcutList {
 )]
 mod tests {
     use nkb_app::ports::{GivenShortcut, ShortcutsUnavailable};
-    use nkb_core::hotkeys::{Refusal, Refused};
+    use nkb_core::hotkeys::{ChordRisk, Refusal, Refused};
 
     use super::*;
 
@@ -447,7 +486,12 @@ mod tests {
                     .collect(),
                 desktop: None,
             },
+            no_layout,
         )
+    }
+
+    fn no_layout(_: HotkeyChord) -> Option<char> {
+        None
     }
 
     fn never() -> ChordHeld {
@@ -618,6 +662,7 @@ mod tests {
                 )],
                 desktop: None,
             },
+            no_layout,
         );
         // Found by its action, not by a number: the rows follow the reading
         // order, which moves when an action is added (`D120`).
@@ -650,6 +695,7 @@ mod tests {
                 )],
                 desktop: None,
             },
+            no_layout,
         );
         let at = HotkeyAction::READING_ORDER
             .iter()
@@ -680,6 +726,7 @@ mod tests {
                 )],
                 desktop: None,
             },
+            no_layout,
         );
         assert_eq!(
             list.rows()[1].badge,
@@ -695,13 +742,12 @@ mod tests {
         list.press(Key::Enter, &never);
         let wanted = chord("Alt+Shift+M");
         list.press(Key::Other, &|| ChordHeld::Chord(wanted));
-        let bindings = defaults()
-            .with(&[(HotkeyAction::PreviousValue, wanted)], &|_| None)
-            .0;
+        let bindings = defaults().with(&[(HotkeyAction::PreviousValue, wanted)]).0;
         let change = ShortcutChange::Changed {
             bindings,
             also: Vec::new(),
             unchecked: None,
+            risk: None,
         };
         list.answer(
             HotkeyAction::PreviousValue,
@@ -754,10 +800,96 @@ mod tests {
                 bindings: defaults(),
                 also: Vec::new(),
                 unchecked: Some(ShortcutsUnavailable::CouldNotStart),
+                risk: None,
             },
             None,
         );
         assert_eq!(unchecked.messages().len(), 2);
+    }
+
+    /// A chord that takes a key from every application is kept, its row says so
+    /// in a pill of the colour of a risk, and the warning stands under the
+    /// answer until the next press (`D189`).
+    #[test]
+    fn a_kept_chord_that_takes_a_key_is_named_in_its_row_and_warned_of() {
+        let mut list = a_list();
+        let bare = chord("Shift+Z");
+        list.press(Key::Enter, &never);
+        list.press(Key::Other, &|| ChordHeld::Chord(bare));
+        let bindings = defaults().with(&[(HotkeyAction::NextValue, bare)]).0;
+        list.answer(
+            HotkeyAction::NextValue,
+            &ShortcutChange::Changed {
+                bindings,
+                also: Vec::new(),
+                unchecked: None,
+                risk: Some(ChordRisk::NoCommandModifier),
+            },
+            None,
+        );
+        let row = row_of(&list, HotkeyAction::NextValue);
+        assert_eq!(row.key, i18n::chord(bare));
+        assert_eq!(
+            row.badge,
+            Some(Badge {
+                text: i18n::shortcut_risk_pill(ChordRisk::NoCommandModifier).to_owned(),
+                risky: true,
+                current: false,
+            })
+        );
+        assert_eq!(
+            list.warning(),
+            Some(i18n::shortcut_risk(bare, ChordRisk::NoCommandModifier).as_str())
+        );
+        assert!(
+            !list
+                .lines()
+                .iter()
+                .any(|line| Some(line.as_str()) == list.warning()),
+            "the warning is a line of its own, not one of the plain ones"
+        );
+
+        // The next press is about something else, and the warning goes.
+        list.press(Key::Enter, &never);
+        assert_eq!(list.warning(), None);
+        // The pill stays: it is about the chord, not about the last press.
+        assert!(
+            row_of(&list, HotkeyAction::NextValue)
+                .badge
+                .is_some_and(|pill| pill.risky)
+        );
+    }
+
+    /// The pill comes from the layout's answer too: a chord a layout types a
+    /// character with is named in its row, one it types nothing with is not.
+    #[test]
+    fn a_row_names_what_its_chord_takes_by_the_layouts_answer() {
+        fn every_key_types(_: HotkeyChord) -> Option<char> {
+            Some('x')
+        }
+        let typing = Bindings::defaults(nkb_core::hotkeys::Convention::Windows)
+            .with(&[(HotkeyAction::NextValue, chord("Ctrl+Alt+Q"))])
+            .0;
+        let now = |bindings| ShortcutsNow {
+            bindings,
+            registered: Vec::new(),
+            desktop: None,
+        };
+        let defaults = Bindings::defaults(nkb_core::hotkeys::Convention::Windows);
+        let warned = ShortcutList::new(defaults, now(typing), every_key_types);
+        assert_eq!(
+            row_of(&warned, HotkeyAction::NextValue)
+                .badge
+                .map(|pill| pill.text),
+            Some(i18n::shortcut_risk_pill(ChordRisk::TypesCharacter('x')).to_owned())
+        );
+        let quiet = ShortcutList::new(defaults, now(typing), no_layout);
+        assert_eq!(
+            row_of(&quiet, HotkeyAction::NextValue)
+                .badge
+                .map(|pill| pill.text),
+            Some(i18n::shortcuts_label(ShortcutsLabel::Changed).to_owned())
+        );
     }
 
     /// A list over a desktop that holds `given`, with a sentence standing.
@@ -773,6 +905,7 @@ mod tests {
                     standing: Some(String::from("A sentence stands.")),
                 }),
             },
+            no_layout,
         )
     }
 

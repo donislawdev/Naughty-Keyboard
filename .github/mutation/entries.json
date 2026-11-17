@@ -1378,11 +1378,11 @@
     },
     {
       "id": "M276",
-      "why": "the shortcut policy does not count Win as a command modifier - 'Win+N' is refused like a bare letter",
+      "why": "the shortcut policy does not count Win as a command modifier - 'Win+N' is warned of like a bare letter",
       "file": "crates/nkb-core/src/hotkeys.rs",
-      "find": "        if !(self.ctrl || self.alt || self.win) {",
-      "replace": "        if !(self.ctrl || self.alt) {",
-      "test": "hotkeys::tests::a_global_shortcut_needs_ctrl_alt_or_win",
+      "find": "        self.ctrl || self.alt || self.win\n",
+      "replace": "        self.ctrl || self.alt\n",
+      "test": "hotkeys::tests::a_shortcut_without_ctrl_alt_or_win_takes_its_key_and_says_so",
       "runner": "rust:nkb-core:lib"
     },
     {
@@ -1405,11 +1405,11 @@
     },
     {
       "id": "M279",
-      "why": "the resolution accepts a shortcut without Ctrl, Alt and Win - Shift+M from the file takes the letter from every application",
-      "file": "crates/nkb-core/src/hotkeys.rs",
-      "find": "            if let Some(problem) = chord.problem() {",
-      "replace": "            if let Some(problem) = chord.problem().filter(|_| false) {",
-      "test": "hotkeys::tests::a_chord_that_would_take_a_key_everywhere_is_refused",
+      "why": "a chord without Ctrl, Alt and Win is not named as a risk - Shift+M from the file takes the letter from every application and nobody is told (D189)",
+      "file": "crates/nkb-core/src/hotkeys/risk.rs",
+      "find": "        if !chord.holds_command_modifier() {",
+      "replace": "        if !chord.holds_command_modifier() && false {",
+      "test": "hotkeys::tests::a_chord_that_takes_a_key_everywhere_is_used_and_named_as_a_risk",
       "runner": "rust:nkb-core:lib"
     },
     {
@@ -1460,7 +1460,7 @@
     {
       "id": "M298",
       "why": "the core asks the layout about EVERY chord - Alt+Shift+A is refused because Ctrl+Alt+A types a character on that key",
-      "file": "crates/nkb-core/src/hotkeys.rs",
+      "file": "crates/nkb-core/src/hotkeys/risk.rs",
       "find": "        let may_type = self.convention.can_type(&chord);",
       "replace": "        let may_type = true;",
       "test": "hotkeys::tests::the_layout_is_asked_only_about_a_chord_that_can_be_altgr",
@@ -1468,11 +1468,11 @@
     },
     {
       "id": "M299",
-      "why": "the core does not refuse a chord the layout types as AltGr - the shortcut takes the character from every application (D82)",
-      "file": "crates/nkb-core/src/hotkeys.rs",
-      "find": "            if let Some(why) = self.typing_refusal(*chord, types) {",
-      "replace": "            if let Some(why) = None::<Refusal> {",
-      "test": "hotkeys::tests::a_ctrl_alt_chord_the_layout_types_on_is_refused_with_the_character",
+      "why": "the core does not name a chord the layout types as AltGr - the shortcut takes the character from every application unsaid (D82, D189)",
+      "file": "crates/nkb-core/src/hotkeys/risk.rs",
+      "find": "        self.typing_risk(chord, types)\n    }",
+      "replace": "        None\n    }",
+      "test": "hotkeys::tests::a_ctrl_alt_chord_the_layout_types_on_is_used_and_names_the_character",
       "runner": "rust:nkb-core:lib"
     },
     {
@@ -1603,11 +1603,11 @@
     },
     {
       "id": "M317",
-      "why": "a recorded chord the layout types a character on is not refused - it would take the character from every application",
+      "why": "a recorded chord that takes a key or a character is kept without a word - the shortcuts window warns of nothing (D189)",
       "file": "crates/nkb-app/src/keep_settings.rs",
-      "find": "            if let Some(why) = defaults.typing_refusal(chord, types) {",
-      "replace": "            if let Some(why) = None::<Refusal> {",
-      "test": "keep_settings::tests::a_chord_that_is_no_global_shortcut_is_refused_for_its_own_reason",
+      "find": "                risk: defaults.risk(wanted, types),",
+      "replace": "                risk: None,",
+      "test": "keep_settings::tests::a_chord_that_takes_a_key_or_a_character_is_given_and_says_what_it_takes",
       "runner": "rust:nkb-app:lib"
     },
     {
@@ -1776,8 +1776,8 @@
       "id": "M337",
       "why": "Esc while recording closes the window instead of stopping the recording",
       "file": "crates/nkb-gui/src/shortcut_list.rs",
-      "find": "                self.messages.clear();\n                return Act::Handled;",
-      "replace": "                self.messages.clear();\n                return Act::Close;",
+      "find": "                self.messages.clear();\n                self.warning = None;\n                return Act::Handled;",
+      "replace": "                self.messages.clear();\n                self.warning = None;\n                return Act::Close;",
       "test": "shortcut_list::tests::esc_stops_recording_first_and_closes_only_after",
       "runner": "rust:nkb-gui:lib"
     },
@@ -8422,20 +8422,20 @@
     },
     {
       "id": "M1148",
-      "why": "a refusal on a Mac is worded as AltGr - the settings file and the shortcuts window tell a Mac user about a key their keyboard does not have",
-      "file": "crates/nkb-core/src/hotkeys.rs",
-      "find": "            Convention::MacOs => Refusal::OptionTypesCharacter(character),",
-      "replace": "            Convention::MacOs => Refusal::TypesCharacter(character),",
-      "test": "hotkeys::tests::typing_refusal_is_worded_for_the_key_of_the_convention",
+      "why": "a risk on a Mac is worded as AltGr - the settings file and the shortcuts window tell a Mac user about a key their keyboard does not have",
+      "file": "crates/nkb-core/src/hotkeys/risk.rs",
+      "find": "            Convention::MacOs => ChordRisk::OptionTypesCharacter(character),",
+      "replace": "            Convention::MacOs => ChordRisk::TypesCharacter(character),",
+      "test": "hotkeys::tests::a_typing_risk_is_worded_for_the_key_of_the_convention",
       "runner": "rust:nkb-core:lib"
     },
     {
       "id": "M1149",
-      "why": "a refusal on Windows is worded as Option - the sentence names a key the keyboard does not have",
-      "file": "crates/nkb-core/src/hotkeys.rs",
-      "find": "            Convention::Windows | Convention::Linux => Refusal::TypesCharacter(character),",
-      "replace": "            Convention::Windows | Convention::Linux => Refusal::OptionTypesCharacter(character),",
-      "test": "hotkeys::tests::typing_refusal_is_worded_for_the_key_of_the_convention",
+      "why": "a risk on Windows is worded as Option - the sentence names a key the keyboard does not have",
+      "file": "crates/nkb-core/src/hotkeys/risk.rs",
+      "find": "            Convention::Windows | Convention::Linux => ChordRisk::TypesCharacter(character),",
+      "replace": "            Convention::Windows | Convention::Linux => ChordRisk::OptionTypesCharacter(character),",
+      "test": "hotkeys::tests::a_typing_risk_is_worded_for_the_key_of_the_convention",
       "runner": "rust:nkb-core:lib"
     },
     {
@@ -8494,10 +8494,10 @@
     },
     {
       "id": "M1156",
-      "why": "the shortcuts window words an Option refusal as AltGr - a Mac user is told to leave out Ctrl+Alt",
+      "why": "the shortcuts window words an Option risk as AltGr - a Mac user is told about a key their keyboard does not have",
       "file": "crates/nkb-adapters/src/i18n/windows.rs",
-      "find": "                    ShortcutsLabel::OptionTypesCharacter,\n                    \"\",",
-      "replace": "                    ShortcutsLabel::TypesCharacter,\n                    \"\",",
+      "find": "            ShortcutsLabel::RiskOptionTypesCharacter,\n            shown_character(character),",
+      "replace": "            ShortcutsLabel::RiskTypesCharacter,\n            shown_character(character),",
       "test": "i18n::tests::a_restore_already_so_and_every_refusal_have_their_own_words",
       "runner": "rust:nkb-adapters:lib"
     },
@@ -8611,10 +8611,10 @@
     },
     {
       "id": "M1169",
-      "why": "the shortcuts window leaves the modifiers of its refusal blank - the tester is told to add nothing",
+      "why": "the shortcuts window leaves the modifiers of its warning blank - the tester is told that a chord without nothing takes its key",
       "file": "crates/nkb-adapters/src/i18n/windows.rs",
-      "find": "                    (\"modifiers\", super::typing::command_modifiers()),",
-      "replace": "                    (\"modifiers\", \"\"),",
+      "find": "            (\"modifiers\", super::typing::command_modifiers()),\n        ],\n    )\n}",
+      "replace": "            (\"modifiers\", \"\"),\n        ],\n    )\n}",
       "test": "i18n::tests::a_restore_already_so_and_every_refusal_have_their_own_words",
       "runner": "rust:nkb-adapters:lib"
     },

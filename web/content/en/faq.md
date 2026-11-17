@@ -18,7 +18,7 @@ faq:
   - question: Can I use the values in automated tests?
     answer: "Yes. `nkb emit` prints any pack as JSON, CSV or one value per line, escaped or raw, and every command has exit codes a pipeline can branch on. [nkb emit](/docs/cli/emit/) shows how."
   - question: Can I change the shortcuts?
-    answer: "Yes, every one of them, in the shortcuts window or in `settings.toml`. A chord that would take a key away from every application is refused with the reason. [Shortcuts](/docs/shortcuts/) lists them."
+    answer: "Yes, every one of them, in the shortcuts window or in `settings.toml`. A chord that takes a key or a character away from every application is kept, with a warning that says what it takes. [Shortcuts](/docs/shortcuts/) lists them."
   - question: Which version do I have?
     answer: "The About link in the palette says, with the author and the licence. `nkb --version` prints it, and on Windows both programs carry it in their file details, under Properties and Details."
   - question: Can I add my own values?
