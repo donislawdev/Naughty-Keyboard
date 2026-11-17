@@ -131,13 +131,16 @@ pub(crate) fn room_beside(window: &slint::Window) -> f32 {
 }
 
 /// Tells a window opened beside the palette its room again - through `tell` -
-/// whenever winit reports it moved or resized: on Linux, where a window's title
-/// bar and frame are known only once the window manager has framed it, after
-/// its first showing, and the room told before counted none. Measured
-/// 2026-11-17 on GNOME 50 at 1280 x 800
+/// whenever winit reports it moved, resized or took the keyboard: on Linux,
+/// where a window's title bar and frame are known only once the window manager
+/// has framed it, after its first showing, and the room told before counted
+/// none. Measured 2026-11-17 on GNOME 50 at 1280 x 800
 /// (`tools/sondy/linux/niski-ekran-wayland.py`): the shortcuts window got
 /// 768 px of content in a work area 768 px tall, and its title bar ran 37 px
-/// past the bottom.
+/// past the bottom. A move and a resize alone fitted it in one run of two -
+/// in the other both came before the frame did. The keyboard comes to the
+/// window once it is mapped, framed by then, and this window takes it at every
+/// opening.
 ///
 /// The window's one filter of winit events on Linux (`slint.md` 2.81).
 #[cfg(target_os = "linux")]
@@ -145,7 +148,10 @@ pub(crate) fn keep_room_beside(window: &slint::Window, tell: impl Fn(f32) + 'sta
     use slint::winit_030::EventResult;
     use slint::winit_030::winit::event::WindowEvent;
     window.on_winit_window_event(move |window, event| {
-        if matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
+        if matches!(
+            event,
+            WindowEvent::Moved(_) | WindowEvent::Resized(_) | WindowEvent::Focused(true)
+        ) {
             tell(room_beside(window));
         }
         EventResult::Propagate
