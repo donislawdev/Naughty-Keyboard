@@ -368,8 +368,9 @@ impl HotkeyChord {
     /// `Control`, `Alt` or `Option`, `Win`, `Cmd`, `Command` or `Super` - and
     /// the key by its [`HotkeyKey::name`].
     ///
-    /// Only the grammar: whether the chord is a good shortcut is
-    /// [`HotkeyChord::problem`]'s question.
+    /// Only the grammar: what the chord takes from other applications is
+    /// [`Bindings::risk`]'s question, and whether another action has it is
+    /// [`Bindings::with`]'s.
     ///
     /// # Errors
     ///
