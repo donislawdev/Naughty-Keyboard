@@ -159,14 +159,17 @@ pub(crate) fn keep_room_beside(window: &slint::Window, tell: impl Fn(f32) + 'sta
 }
 
 /// A window's size with its frame, in physical pixels - its inner size where
-/// winit does not back it or cannot say.
+/// winit does not back it or cannot say (`room::content_and_frame`).
 fn outer_size(window: &slint::Window) -> (u32, u32) {
-    window
-        .with_winit_window(|window| window.outer_size())
-        .map_or_else(
-            || (window.size().width, window.size().height),
-            |outer| (outer.width, outer.height),
-        )
+    crate::room::content_and_frame(window).map_or_else(
+        || (window.size().width, window.size().height),
+        |(content, frame)| {
+            (
+                content.0.saturating_add(frame.0),
+                content.1.saturating_add(frame.1),
+            )
+        },
+    )
 }
 
 /// Shows `window` - or, already shown, brings it back - as a window opened on
@@ -205,7 +208,9 @@ pub(crate) fn bring_up(window: &slint::Window) -> Result<(), slint::PlatformErro
     // 2026-11-16 under openbox (`tools/sondy/linux/dymek-x11.py`): the value
     // window stood in the middle of the free part of the screen, the place
     // given before `show()` ignored. The window may show at the manager's
-    // place for a moment before it moves.
+    // place for a moment before it moves. Its size is asked for here while the
+    // manager may still be framing it, so a frame winit cannot know yet counts
+    // as none (`room::content_and_frame`, `OBS-262`).
     if let Some((first, size)) = placed {
         let again = if outer_size(window) == size {
             Some(first)

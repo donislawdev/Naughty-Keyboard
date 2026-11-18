@@ -20,7 +20,7 @@
 //! screen the window stands on - on every system, where it changes nothing.
 
 use nkb_adapters::screens::{IN_POINTS, work_area};
-use nkb_core::screens::{Point, Rect, room_below};
+use nkb_core::screens::{Point, Rect, frame, room_below};
 use slint::ComponentHandle;
 use slint::winit_030::WinitWindowAccessor;
 
@@ -88,14 +88,17 @@ fn frame_below(window: &slint::Window) -> u32 {
     if !cfg!(target_os = "linux") {
         return 0;
     }
+    let Some((_, (_, height))) = content_and_frame(window) else {
+        return 0;
+    };
     window
         .with_winit_window(|window| {
             let (Ok(outer), Ok(inner)) = (window.outer_position(), window.inner_position()) else {
                 return 0;
             };
-            let outer_bottom = i64::from(outer.y) + i64::from(window.outer_size().height);
-            let inner_bottom = i64::from(inner.y) + i64::from(window.inner_size().height);
-            u32::try_from(outer_bottom - inner_bottom).unwrap_or(0)
+            // What of the frame's height is not above the content is below it.
+            u32::try_from(i64::from(inner.y) - i64::from(outer.y))
+                .map_or(0, |above| height.saturating_sub(above))
         })
         .unwrap_or(0)
 }
@@ -107,16 +110,25 @@ fn frame_below(window: &slint::Window) -> u32 {
 #[must_use]
 pub fn beside(anchor: &slint::Window, window: &slint::Window) -> Option<f32> {
     let area = work_area_of(anchor)?;
-    let frame = window
-        .with_winit_window(|window| {
-            window
-                .outer_size()
-                .height
-                .saturating_sub(window.inner_size().height)
-        })
-        .unwrap_or(0);
+    let frame = content_and_frame(window).map_or(0, |(_, (_, height))| height);
     let room = area.height.saturating_sub(frame);
     Some(logical(room, anchor.scale_factor()).max(1.0))
+}
+
+/// The size of `window`'s content and what the window manager's frame adds to
+/// it on each axis, in physical pixels, as winit reports them - `None` where
+/// winit does not back the window. Every frame of a window that the palette's
+/// code reads comes from here: a frame winit's numbers cannot be counts as
+/// none yet, as before the window manager has framed the window
+/// (`nkb_core::screens::frame` says when winit gives such numbers - right after
+/// a window is shown on X11, which is when the windows opened beside the
+/// palette are placed and told their room).
+pub(crate) fn content_and_frame(window: &slint::Window) -> Option<((u32, u32), (u32, u32))> {
+    window.with_winit_window(|window| {
+        let (outer, inner) = (window.outer_size(), window.inner_size());
+        let content = (inner.width, inner.height);
+        (content, frame((outer.width, outer.height), content))
+    })
 }
 
 /// The work area of the screen `window` stands on, in physical pixels - the
