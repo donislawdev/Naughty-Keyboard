@@ -1246,6 +1246,11 @@ fn on_a_screen_too_short_the_next_value_and_the_status_stay_and_the_rest_scrolls
             delta_x: 0.0,
             delta_y: -FAR,
         });
+    // The wheel leaves the pointer over the palette, and what stands under it
+    // once scrolled depends on the typeface: in SF on macOS it is a band's fold
+    // mark, drawn hovered (measured 2026-11-18). The renders compared below
+    // have no pointer, so it leaves before the picture is taken.
+    palette.window().dispatch_event(WindowEvent::PointerExited);
     let scrolled = render(&window);
     let path = offscreen::save_cropped(&scrolled, WIDTH, HEIGHT, "palette-short-scrolled.png");
     let picture = path.display();

@@ -454,11 +454,19 @@ fn the_pack_window_shows_where_the_keyboard_is_and_which_row_it_reached() {
     );
     window.set_query("unicode".into());
 
-    let selected = accent_in(&focused, list_band.clone());
+    // The selection is the accent the list gains when a row is selected - a
+    // difference of two renders, because the selected row also carries the
+    // next value's pill, which wears the accent too and alone passed the count
+    // once Slint 1.19 drew it (mutation M227 missed, 2026-11-18).
+    window.set_selected(-1);
+    let unselected = accent_in(&offscreen::draw(&surface, WIDTH, HEIGHT), list_band.clone());
+    window.set_selected(NEXT_ROW as i32);
+    let selected = accent_in(&offscreen::draw(&surface, WIDTH, HEIGHT), list_band.clone())
+        .saturating_sub(unselected);
     assert!(
         selected > 200,
-        "the selected row carries {selected} accent pixels - the row the arrow keys reached \
-         is not visible. Look at {}",
+        "selecting a row adds {selected} accent pixels to the list - the row the arrow keys \
+         reached is not visible. Look at {}",
         path.display()
     );
 
