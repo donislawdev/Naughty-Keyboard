@@ -83,7 +83,7 @@ needs it finds out it exists.
 > [releases page](https://github.com/donislawdev/Naughty-Keyboard/releases).
 
 Every release has six archives, one for each program and system. `nkb` is the command line and
-`nkb-gui` the palette, and `VERSION` below stands for the version, such as `0.3.0`.
+`nkb-gui` the palette, and `VERSION` below stands for the version, such as `0.4.0`.
 
 | System | Command line | Palette |
 |---|---|---|
