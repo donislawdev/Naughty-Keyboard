@@ -34,6 +34,13 @@
 //! and the same window with the focus in an entry made it press the clearing keys into the
 //! stopped application, confirmed as a field by another program.
 //!
+//! 2026-11-18, the same machine, a GTK 3 window with WebKitGTK 2.52.6 in it and Firefox on
+//! the same pages (`tools/sondy/linux/atspi_lancuch.py`, `OBS-265`): WebKitGTK says `FOCUSED`
+//! of the view (`SCROLL_PANE`), of the page (`DOCUMENT_WEB`) and of the field, and the form,
+//! the paragraph and the label between the page and the field do not say it. With nothing on
+//! the page holding the focus it says it of nothing. Firefox says it of the field alone, and
+//! of the page when nothing on it holds the focus.
+//!
 //! # What is decided here
 //!
 //! The kind of control is claimed only from the role AND the states of the one element that
@@ -56,6 +63,14 @@
 //! for every so many elements and every level down, rather than one for every question. In
 //! each window the element with the focus is the first one met. A field above a long list
 //! is met after a few questions, where a walk a level at a time asks the whole list first.
+//!
+//! One kind of view marks the whole chain down to the focus ([`MARKS_THE_CHAIN`]), and there
+//! the first element met is the view, which says nothing of its kind. So when the first
+//! element met with the focus is such a view, the walk goes on under it alone to the next
+//! element with the focus, and on under that one while it says nothing too, and the deepest
+//! one is the answer. Every kind the walk names ends the chain, so an answer that was a text
+//! field, a terminal or a control without text before chains were followed is still that
+//! answer, and a chain changes only what would be `Unknown`.
 //!
 //! Nothing here reads a name, a description or text of any element: the questions are the
 //! children, the states and the role of an element, and `tests/atspi_reads_only_kinds.rs`
@@ -148,6 +163,7 @@ pub(crate) mod role {
     pub(crate) const RADIO_BUTTON: u32 = 44;
     pub(crate) const RADIO_MENU_ITEM: u32 = 45;
     pub(crate) const SCROLL_BAR: u32 = 48;
+    pub(crate) const SCROLL_PANE: u32 = 49;
     pub(crate) const SLIDER: u32 = 51;
     pub(crate) const SPIN_BUTTON: u32 = 52;
     pub(crate) const STATUS_BAR: u32 = 54;
@@ -207,6 +223,23 @@ const NOT_TEXT_ROLES: &[u32] = &[
     role::TOGGLE_BUTTON,
     role::TREE_ITEM,
 ];
+
+/// The roles of a view that marks with `FOCUSED` every element from itself down to the one
+/// that holds the focus, each measured (`tools/sondy/linux/atspi_lancuch.py`, 2026-11-18,
+/// `OBS-265`):
+///
+/// - `SCROLL_PANE` - the view of WebKitGTK 2.52.6 (WebKit2 4.1, GTK 3): the view, the page
+///   (`DOCUMENT_WEB`) and the field all say `FOCUSED`, with elements of the page that do not
+///   (a form, a paragraph, a label) between the page and the field. With nothing on the page
+///   holding the focus it marks nothing.
+///
+/// Firefox marks the field alone, and the page itself when nothing on it holds the focus, so
+/// a page is NOT here: a walk under it would ask the whole page to find nothing. A role
+/// missing here leaves such a focus `Unknown`, as it was before this list, and the only cost
+/// of a gap is a field not cleared, which the person is told. A role added on a guess may
+/// take the walk into a table cell, where the clearing keys reach the whole row (`D76`), so
+/// a new entry needs a measurement.
+const MARKS_THE_CHAIN: &[u32] = &[role::SCROLL_PANE];
 
 /// Whether the bit of `state` is set in the words `GetState` answered.
 pub(crate) fn has(states: &[u32], state: u32) -> bool {
@@ -305,8 +338,51 @@ pub(crate) trait Tree {
     fn role(&mut self, node: &Self::Node) -> Option<u32>;
 }
 
-/// The element that holds the focus in a window, with the states it answered.
-type Holder<N> = (N, Vec<u32>);
+/// Where the walk is in one window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Search {
+    /// No element with the focus met yet.
+    Looking,
+    /// The elements with the focus met so far are a chain in a view that marks the whole of
+    /// it ([`MARKS_THE_CHAIN`]), and the last of them says nothing of its kind: the walk goes
+    /// on under it alone, for an element with the focus deeper down.
+    Under,
+    /// The element that holds the focus, and its kind.
+    Found(FocusedInput),
+}
+
+impl Search {
+    /// Where the walk is once it met an element with the focus whose role is `role` and
+    /// whose kind is `kind`. Only a view on the list starts a chain, and a chain goes on
+    /// while its element says nothing: every kind the walk can name ends it, as it ended
+    /// the walk before chains were followed.
+    fn met(self, role: Option<u32>, kind: FocusedInput) -> Self {
+        let chain = match self {
+            Self::Looking => role.is_some_and(|code| MARKS_THE_CHAIN.contains(&code)),
+            Self::Under => true,
+            Self::Found(_) => false,
+        };
+        if chain && kind == FocusedInput::Unknown {
+            Self::Under
+        } else {
+            Self::Found(kind)
+        }
+    }
+
+    /// The kind of the element with the focus, when one was met. A chain that ended with
+    /// no deeper element is its last element, and that says nothing.
+    const fn kind(self) -> Option<FocusedInput> {
+        match self {
+            Self::Looking => None,
+            Self::Under => Some(FocusedInput::Unknown),
+            Self::Found(kind) => Some(kind),
+        }
+    }
+}
+
+/// The window an element waits in, and how many elements with the focus that window had
+/// met when the element was put in the wait.
+type Mark = (usize, usize);
 
 /// One question asked of many elements together, as [`Tree`] asks it.
 type Question<T, A> = fn(&mut T, &[<T as Tree>::Node]) -> Option<Vec<A>>;
@@ -337,18 +413,15 @@ pub(crate) fn find<T: Tree>(tree: &mut T) -> Found {
     let Some(applications) = tree.applications() else {
         return Found::NoWindow;
     };
-    let holders = match in_front(tree, &applications).and_then(|windows| walk(tree, windows)) {
-        Ok(holders) => holders,
+    let kinds = match in_front(tree, &applications).and_then(|windows| walk(tree, windows)) {
+        Ok(kinds) => kinds,
         Err(found) => return found,
     };
-    let mut holders = holders.into_iter();
-    match (holders.next(), holders.next()) {
+    let mut kinds = kinds.into_iter();
+    match (kinds.next(), kinds.next()) {
         (None, _) => Found::NoFocus,
         (Some(_), Some(_)) => Found::Several,
-        (Some((node, states)), None) => Found::Kind(
-            tree.role(&node)
-                .map_or(FocusedInput::Unknown, |role| kind_of(role, &states)),
-        ),
+        (Some(kind), None) => Found::Kind(kind),
     }
 }
 
@@ -395,22 +468,34 @@ fn ask<T: Tree, A>(
     question(tree, nodes).ok_or(Found::Spent)
 }
 
-/// Down `windows` in the order of the tree, the windows one after the other, to the first
-/// element with the focus in each. The elements not asked yet wait in that order, and the
-/// first [`AT_ONCE`] of them are asked together: their states, then the children of those
-/// without the focus, which take their place at the head of the wait. One at a time this is
-/// the walk depth first, and all at a time the walk a level at a time. A window whose
-/// element was found is not walked further, and the elements with the focus come back one
-/// per window that has one, in the order of the windows.
+/// Down `windows` in the order of the tree, the windows one after the other, to the element
+/// with the focus in each. The elements not asked yet wait in that order, and the first
+/// [`AT_ONCE`] of them are asked together: their states, then the children of those without
+/// the focus, which take their place at the head of the wait. One at a time this is the walk
+/// depth first, and all at a time the walk a level at a time.
+///
+/// The first element met with the focus in a window is asked its role, and its kind is the
+/// answer of that window, which is not walked further - unless it starts or goes on a chain
+/// ([`Search::met`]). Then whatever else waits in that window is dropped, being no part of
+/// the element, and the walk goes on under that element alone, to the next element with the
+/// focus. The kinds come back one per window that met an element with the focus, in the
+/// order of the windows.
 ///
 /// A field above a long list is met after a few questions, as it is depth first, where a walk
 /// a level at a time would ask the whole list first. The walk visits at most
 /// [`MAX_ELEMENTS`], and the look is [`Found::TooMany`] when that many were asked and a
-/// window without its element still has something waiting.
-fn walk<T: Tree>(tree: &mut T, windows: Vec<T::Node>) -> Result<Vec<Holder<T::Node>>, Found> {
-    let mut holders: Vec<Option<Holder<T::Node>>> = windows.iter().map(|_| None).collect();
-    // The elements not asked yet, each with the window it is in, in the order of the tree.
-    let mut waiting: VecDeque<(usize, T::Node)> = windows.into_iter().enumerate().collect();
+/// window still has something waiting.
+fn walk<T: Tree>(tree: &mut T, windows: Vec<T::Node>) -> Result<Vec<FocusedInput>, Found> {
+    let mut searches = vec![Search::Looking; windows.len()];
+    let mut met = vec![0_usize; windows.len()];
+    // The elements not asked yet, each with its mark, in the order of the tree. An element
+    // whose window met an element with the focus after it was put here is not under that
+    // element, and is dropped.
+    let mut waiting: VecDeque<(Mark, T::Node)> = windows
+        .into_iter()
+        .enumerate()
+        .map(|(window, node)| ((window, 0), node))
+        .collect();
     let mut left = MAX_ELEMENTS;
     while !waiting.is_empty() {
         if left == 0 {
@@ -418,35 +503,41 @@ fn walk<T: Tree>(tree: &mut T, windows: Vec<T::Node>) -> Result<Vec<Holder<T::No
         }
         let now = waiting.len().min(AT_ONCE).min(left);
         left -= now;
-        let (owners, nodes): (Vec<usize>, Vec<T::Node>) = waiting.drain(..now).unzip();
+        let (marks, nodes): (Vec<Mark>, Vec<T::Node>) = waiting.drain(..now).unzip();
         let replies = ask(tree, &nodes, T::states)?;
         let mut parents = Vec::new();
-        for ((owner, node), reply) in owners.into_iter().zip(nodes).zip(replies) {
+        for (((window, step), node), reply) in marks.into_iter().zip(nodes).zip(replies) {
             let Reply::Said(states) = reply else {
                 continue;
             };
-            if holders[owner].is_some() || has(&states, state::DEFUNCT) {
+            if step != met[window] || has(&states, state::DEFUNCT) {
                 continue;
             }
             if has(&states, state::FOCUSED) {
-                holders[owner] = Some((node, states));
+                let role = tree.role(&node);
+                let kind = role.map_or(FocusedInput::Unknown, |code| kind_of(code, &states));
+                searches[window] = searches[window].met(role, kind);
+                met[window] += 1;
+                if searches[window] == Search::Under {
+                    parents.push(((window, met[window]), node));
+                }
             } else {
-                parents.push((owner, node));
+                parents.push(((window, step), node));
             }
         }
-        parents.retain(|(owner, _)| holders[*owner].is_none());
-        waiting.retain(|(owner, _)| holders[*owner].is_none());
-        let (owners, nodes): (Vec<usize>, Vec<T::Node>) = parents.into_iter().unzip();
+        parents.retain(|((window, step), _)| *step == met[*window]);
+        waiting.retain(|((window, step), _)| *step == met[*window]);
+        let (marks, nodes): (Vec<Mark>, Vec<T::Node>) = parents.into_iter().unzip();
         let replies = ask(tree, &nodes, T::children)?;
-        let children: Vec<(usize, T::Node)> = owners
+        let children: Vec<(Mark, T::Node)> = marks
             .into_iter()
             .zip(replies)
-            .flat_map(|(owner, reply)| {
+            .flat_map(|(mark, reply)| {
                 reply
                     .said()
                     .into_iter()
                     .flatten()
-                    .map(move |child| (owner, child))
+                    .map(move |child| (mark, child))
             })
             .collect();
         // Where their parents were: ahead of everything that still waits.
@@ -454,7 +545,7 @@ fn walk<T: Tree>(tree: &mut T, windows: Vec<T::Node>) -> Result<Vec<Holder<T::No
             waiting.push_front(child);
         }
     }
-    Ok(holders.into_iter().flatten().collect())
+    Ok(searches.into_iter().filter_map(Search::kind).collect())
 }
 
 /// The answer in the words of the question, given whether the bus is switched on.
@@ -1018,6 +1109,122 @@ mod tests {
         let application = tree.add(75, &[], &[window]);
         tree.applications.push(application);
         tree.questions_allowed = 5;
+        assert_eq!(find(&mut tree), Found::Spent);
+    }
+
+    /// A window of WebKitGTK as `tools/sondy/linux/atspi_lancuch.py` read it (2026-11-18):
+    /// two fillers, the view and the page with the focus, then a form, a section and a label
+    /// without it, and `focus` at the bottom with the states `names`. Returns the page.
+    fn webkit_window_with(tree: &mut Fake, focus: u32, names: &[u32]) -> usize {
+        let field = tree.add(focus, names, &[]);
+        let label = tree.add(LABEL, &[], &[field]);
+        let section = tree.add(role::SECTION, &[], &[label]);
+        let form = tree.add(87, &[], &[section]);
+        let page = tree.add(role::DOCUMENT_WEB, &[state::FOCUSED], &[form]);
+        let view = tree.add(role::SCROLL_PANE, &[state::FOCUSED], &[page]);
+        let inner = tree.add(20, &[], &[view]);
+        let outer = tree.add(20, &[], &[inner]);
+        let window = tree.add(23, &[state::ACTIVE], &[outer]);
+        let application = tree.add(75, &[], &[window]);
+        tree.applications.push(application);
+        page
+    }
+
+    #[test]
+    fn a_view_that_marks_the_whole_chain_is_walked_down_to_the_field() {
+        // `OBS-265`: the first element met with the focus is the view, which says nothing.
+        let mut tree = Fake::new();
+        webkit_window_with(&mut tree, role::ENTRY, &[state::FOCUSED, state::EDITABLE]);
+        assert_eq!(find(&mut tree), Found::Kind(FocusedInput::TextField));
+    }
+
+    #[test]
+    fn a_chain_down_to_a_button_refuses_as_a_button_does() {
+        let mut tree = Fake::new();
+        webkit_window_with(&mut tree, role::PUSH_BUTTON, &[state::FOCUSED]);
+        assert_eq!(find(&mut tree), Found::Kind(FocusedInput::NotTextField));
+        let mut tree = Fake::new();
+        webkit_window_with(
+            &mut tree,
+            role::TERMINAL,
+            &[state::FOCUSED, state::EDITABLE],
+        );
+        assert_eq!(find(&mut tree), Found::Kind(FocusedInput::Terminal));
+    }
+
+    #[test]
+    fn a_chain_with_nothing_deeper_is_its_last_element_and_says_nothing() {
+        // The page with the focus and no element under it with the focus: the page.
+        let mut tree = Fake::new();
+        webkit_window_with(&mut tree, role::ENTRY, &[state::EDITABLE]);
+        assert_eq!(find(&mut tree), Found::Kind(FocusedInput::Unknown));
+    }
+
+    #[test]
+    fn a_chain_ends_at_the_first_element_whose_kind_is_known() {
+        // An editable section with the focus, and a stale state on a button inside it: the
+        // section is the answer, as it would be met first anywhere else.
+        let mut tree = Fake::new();
+        let page = webkit_window_with(&mut tree, role::PUSH_BUTTON, &[state::FOCUSED]);
+        let form = tree.elements[page].children[0];
+        let section = tree.elements[form].children[0];
+        tree.elements[section].states = states_of(&[state::FOCUSED, state::EDITABLE]);
+        assert_eq!(find(&mut tree), Found::Kind(FocusedInput::TextField));
+    }
+
+    #[test]
+    fn nothing_after_the_view_in_its_window_is_taken_for_the_focus() {
+        // A stale field with the focus next to the view: it is no part of the view, and the
+        // chain under the view ends at the page.
+        let mut tree = Fake::new();
+        let page = tree.add(role::DOCUMENT_WEB, &[state::FOCUSED], &[]);
+        let view = tree.add(role::SCROLL_PANE, &[state::FOCUSED], &[page]);
+        let stale = tree.add(role::ENTRY, &[state::FOCUSED, state::EDITABLE], &[]);
+        let window = tree.add(23, &[state::ACTIVE], &[view, stale]);
+        let application = tree.add(75, &[], &[window]);
+        tree.applications.push(application);
+        assert_eq!(find(&mut tree), Found::Kind(FocusedInput::Unknown));
+    }
+
+    #[test]
+    fn a_page_or_a_cell_with_the_focus_is_not_walked_into() {
+        // Firefox marks the page when nothing on it holds the focus, and a walk under it would
+        // ask the whole page. A cell with the focus takes the clearing keys to its row (`D76`).
+        for first in [role::DOCUMENT_WEB, 56] {
+            let mut tree = Fake::new();
+            let deep = tree.add(role::ENTRY, &[state::FOCUSED, state::EDITABLE], &[]);
+            let mut row = Vec::new();
+            for _ in 0..AT_ONCE * 3 {
+                row.push(tree.add(LABEL, &[], &[]));
+            }
+            row.push(deep);
+            let holder = tree.add(first, &[state::FOCUSED], &row);
+            let window = tree.add(23, &[state::ACTIVE], &[holder]);
+            let application = tree.add(75, &[], &[window]);
+            tree.applications.push(application);
+            assert_eq!(
+                find(&mut tree),
+                Found::Kind(FocusedInput::Unknown),
+                "{first}"
+            );
+            assert!(tree.asked < 10, "{first}: {} questions", tree.asked);
+        }
+    }
+
+    #[test]
+    fn a_chain_keeps_the_limits_of_the_walk() {
+        // Down a page longer than the walk may visit: too many, not the page.
+        let mut tree = Fake::new();
+        let page = webkit_window_with(&mut tree, role::ENTRY, &[state::FOCUSED, state::EDITABLE]);
+        for _ in 0..(MAX_ELEMENTS + 5) {
+            let item = tree.add(role::LIST_ITEM, &[], &[]);
+            tree.elements[page].children.insert(0, item);
+        }
+        assert_eq!(find(&mut tree), Found::TooMany);
+        // And a time that runs out under the view is spent, never the view's own answer.
+        let mut tree = Fake::new();
+        webkit_window_with(&mut tree, role::ENTRY, &[state::FOCUSED, state::EDITABLE]);
+        tree.questions_allowed = 12;
         assert_eq!(find(&mut tree), Found::Spent);
     }
 

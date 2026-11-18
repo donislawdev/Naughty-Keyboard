@@ -12,15 +12,15 @@
 //!    an address.
 //! 3. The applications are the children of the root of the registry, their windows the
 //!    children of those, and the window in front the one whose states hold `ACTIVE`. The
-//!    element with the focus is the first one in the windows in front whose states hold
-//!    `FOCUSED`, looked for a level of the tree at a time: the questions of one level go out
-//!    together on the one connection, at most `AT_ONCE` waiting, and the library files each
-//!    reply under the number of its question.
+//!    element with the focus is looked for down the windows in front by the walk of
+//!    `linux_atspi_rules.rs` (`find`): the questions of many elements go out together on the
+//!    one connection, at most `AT_ONCE` waiting, and the library files each reply under the
+//!    number of its question.
 //!
 //! # What this asks, and what it does not
 //!
-//! Three questions of an element: its children, its states, and, of the one element that
-//! holds the focus, its role. Never its name, its description, its text or its attributes.
+//! Three questions of an element: its children, its states, and, of an element whose states
+//! hold `FOCUSED`, its role. Never its name, its description, its text or its attributes.
 //! `tests/atspi_reads_only_kinds.rs` holds the list of every word this program says to the
 //! bus, and goes red when one is added. The look is made at a press and never in between,
 //! and it does not listen to what the person focuses.
@@ -243,8 +243,9 @@ impl Tree for Bus<'_> {
         })
     }
 
-    /// Asked of the one element found, whatever is left of the time: the question has its
-    /// own limit, and the element is not found again.
+    /// Asked of an element met with the focus, whatever is left of the time: the question has
+    /// its own limit, and the element is not met again. A walk meets one such element in a
+    /// window, or a few in a view that marks the whole chain.
     fn role(&mut self, node: &Element) -> Option<u32> {
         self.ask(std::slice::from_ref(node), "GetRole", || true)?
             .pop()?

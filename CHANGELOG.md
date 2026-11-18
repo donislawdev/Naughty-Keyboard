@@ -135,6 +135,12 @@ Changes wait under Unreleased until then.
 
 ### Fixed
 
+- A field on a web page shown inside an application is now cleared before the value is typed, in
+  applications built on WebView2 on Windows and on WebKitGTK on Linux. Before, `nkb send --clear`
+  and the palette said the system did not report the focus as a text field and typed the value after
+  the old text. In an application built on WebView2 a button, a link or the page itself with the
+  focus now refuses the value, as in a browser. Before, the value went to it, and a space in the
+  value pressed the button.
 - **Go back one value and type it** no longer moves the counter two values back when nothing could
   take the value, for example when no field had the focus. The counter now stays where it was, as it
   does for the next value.
