@@ -27,6 +27,20 @@
 //! minimized another way - by a program of somebody else's at least - and that
 //! is leaving like any other, which 1 and 2 make safe.
 //!
+//! # Left, as the system says it
+//!
+//! 🔴 Measured, not read (`OBS-268`, `tools/sondy/linux/okno-wartosci-x11.py`,
+//! 2026-11-18, Xorg with openbox, winit 0.30.13). The toolkit's report that a
+//! window went inactive is not always the keyboard moving away. On X11 a
+//! global shortcut is a grab of the keyboard, and its start and end reach the
+//! window holding the focus as a focus out and a focus in, which winit passes
+//! on without saying they came from a grab. The value window can open while
+//! its shortcut is still held - some 65 ms after the key went down - and then
+//! the tester letting go of the shortcut was the window "left": it closed as
+//! the keys came up, every time, with the focus of the server never leaving
+//! it. So a window asks the system, at the report, whether the tester really
+//! went elsewhere: `has_left`. Where the system is not asked, they did.
+//!
 //! # Made at the first opening
 //!
 //! About and the shortcuts window are made the first time the tester opens
@@ -427,6 +441,17 @@ pub(crate) fn when_backed<T: 'static>(
     {
         then(Err(slint::PlatformError::Other(error.to_string())));
     }
+}
+
+/// Whether the tester left `window`, which the toolkit has just reported
+/// inactive: unless the system says the window holds the keyboard still (the
+/// module header, "Left, as the system says it").
+///
+/// Asked at the report, not later: by the time the report arrives, a manager
+/// that gave the keyboard to another window has moved the server's focus
+/// already, and a grab never moved it.
+pub(crate) fn has_left(window: &slint::Window) -> bool {
+    nkb_adapters::holds_keyboard(crate::focus::window_handle(window)) != Some(true)
 }
 
 /// Hides the window of `owner` once the event that made it inactive is over -

@@ -29,8 +29,8 @@
 use nkb_sys::WindowRef;
 use nkb_sys::spaces::SpacesError;
 use nkb_sys::window::{
-    FocusError, KeyMenuError, can_refuse_focus, hand_back_foreground, refuse_activation,
-    take_foreground,
+    FocusError, KeyMenuError, can_refuse_focus, hand_back_foreground, holds_foreground,
+    refuse_activation, take_foreground,
 };
 
 /// Which window held the keyboard focus before the palette opened.
@@ -196,6 +196,15 @@ pub fn no_keyboard_menu(window: Option<u64>) -> Result<(), KeyMenuError> {
     nkb_sys::window::no_keyboard_menu(WindowRef(window.ok_or(KeyMenuError::HandleUnavailable)?))
 }
 
+/// Whether `window` - the raw handle of our own window, `None` while the
+/// library has none to give - holds the keyboard, as the system says it now.
+/// `None` where the system is not asked, which is everywhere but X11
+/// (`nkb_sys::window::holds_foreground` says why), and without a handle.
+#[must_use]
+pub fn holds_keyboard(window: Option<u64>) -> Option<bool> {
+    holds_foreground(WindowRef(window?))
+}
+
 /// What the palette's window stood as before it stepped aside, and how it can fail
 /// (`D145` point 77). Types of `nkb-sys` passed on as they are: the graphical package does
 /// not depend on it.
@@ -299,6 +308,14 @@ mod tests {
     #[test]
     fn a_keyboard_menu_with_no_handle_says_the_handle_is_missing_on_every_system() {
         assert_eq!(no_keyboard_menu(None), Err(KeyMenuError::HandleUnavailable));
+    }
+
+    #[test]
+    fn a_window_that_is_not_there_never_holds_the_keyboard() {
+        // No handle is not asked about, and a window that left is closed on that answer.
+        assert_eq!(holds_keyboard(None), None);
+        // Zero is no window: where the system is asked, it holds nothing.
+        assert_ne!(holds_keyboard(Some(0)), Some(true));
     }
 
     #[test]

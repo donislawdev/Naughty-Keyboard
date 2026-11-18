@@ -163,6 +163,36 @@ pub fn take_foreground(window: WindowRef) -> Result<(), FocusError> {
     platform::take_foreground(window)
 }
 
+/// Whether `window` - one of ours - holds the keyboard, as the system says it
+/// now: `None` where this build does not ask.
+///
+/// For a window the toolkit has just reported inactive, because on X11 that
+/// report is not always a move of the keyboard. A keyboard grab that starts
+/// or ends - a global shortcut pressed or let go - reaches the window with
+/// the focus as a focus out and a focus in, and winit 0.30.13 passes both on
+/// without their mode. Measured 2026-11-18 on Xorg with openbox
+/// (`OBS-268`): the value window, opened while its shortcut was still held,
+/// got a focus out and a focus in in the mode of an ended grab as the
+/// shortcut was let go, and took the first for the tester leaving it. The
+/// focus of the server never left it.
+///
+/// X11 alone answers. On XWayland the compositor may tell the window's state
+/// and the server's focus at different moments (`OBS-218`), so a read there
+/// could keep open a window the tester has left. Elsewhere nothing measured
+/// asks for it, and `None` leaves the caller doing what it did before.
+#[must_use]
+pub fn holds_foreground(window: WindowRef) -> Option<bool> {
+    #[cfg(target_os = "linux")]
+    {
+        crate::linux::window::holds_foreground(window)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = window;
+        None
+    }
+}
+
 /// Why a window could not leave the top of the other windows, or go back there.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StackingError {

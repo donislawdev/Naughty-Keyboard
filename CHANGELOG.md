@@ -135,6 +135,9 @@ Changes wait under Unreleased until then.
 
 ### Fixed
 
+- On Linux with X11 the value window no longer closes by itself when its shortcut is held down a
+  moment. It opened while the keys were still down and closed as they came up, and the letters
+  typed next went into the application under test.
 - A field on a web page shown inside an application is now cleared before the value is typed, in
   applications built on WebView2 on Windows and on WebKitGTK on Linux. Before, `nkb send --clear`
   and the palette said the system did not report the focus as a text field and typed the value after

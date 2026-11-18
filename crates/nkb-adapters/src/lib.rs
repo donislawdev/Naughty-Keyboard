@@ -37,8 +37,8 @@ pub use built_in::BUILT_IN_PACKS;
 pub use catalogue::{BuiltInCatalogue, FolderCatalogue, FolderHolds, PackFolders};
 pub use clipboard_delivery::ClipboardDelivery;
 pub use focus::{
-    Aside, KeptFocus, LentFocus, StackingError, no_keyboard_menu, stand_over_full_screen,
-    step_aside, step_back,
+    Aside, KeptFocus, LentFocus, StackingError, holds_keyboard, no_keyboard_menu,
+    stand_over_full_screen, step_aside, step_back,
 };
 pub use fs::{DirectoryPackSink, DirectoryPackSource, NotAPackFile, SystemClock};
 pub use keyboard::DirectInjection;
