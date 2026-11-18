@@ -174,9 +174,10 @@ fn start(request: Request) -> Result<ExitCode, Failure> {
             Ok(ExitCode::SUCCESS)
         }
         Request::Palette { pack, route } => {
-            // 🔴 Before the first window of the process: on macOS the process and
-            // every window are set so that the palette does not take the front.
-            #[cfg(target_os = "macos")]
+            // 🔴 Before the first window of the process: every window is made with
+            // the theme of its title bar, and on macOS the process and every
+            // window are set so that the palette does not take the front.
+            #[cfg(any(windows, target_os = "macos"))]
             focus::select_backend()?;
             // Whether the system gives the palette's window no frame, so it draws its own
             // (Linux on Wayland, `D145` point 38).

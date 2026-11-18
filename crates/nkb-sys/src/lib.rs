@@ -37,6 +37,7 @@
 //! `char`: the API takes one `u16` per event, so anything above the basic plane
 //! is two events and there is no way to make it one.
 
+pub mod appearance;
 // Windows feeds it, the tests run it everywhere. Elsewhere it would be dead code,
 // and `clippy -D warnings` refuses that on macOS and Linux (seen 2026-09-23).
 #[cfg(any(windows, target_os = "macos", target_os = "linux", test))]

@@ -31,6 +31,10 @@
 //! the same, by putting the application that had it back in front within a tenth
 //! of a second.
 //!
+//! On Windows `select_backend` sets nothing about the focus. It is here because
+//! the backend is selected here on every system, and there it only gives every
+//! window the theme of its title bar (`title_bar`).
+//!
 //! # macOS: the palette in the space of an application in full screen
 //!
 //! The same poll lets the palette's window stand in the space of an application
@@ -236,7 +240,8 @@ fn xlib_id(window: core::ffi::c_ulong) -> u64 {
 ///
 /// 🔴 Before the first window of the process. Windows made later get the same
 /// attributes, so a window opened on request takes the front itself, through
-/// `on_request::bring_up`.
+/// `on_request::bring_up`. Every window is also made with the theme of its
+/// title bar (`title_bar`, `D48`).
 ///
 /// # Errors
 ///
@@ -253,7 +258,31 @@ pub fn select_backend() -> Result<(), slint::PlatformError> {
     slint::BackendSelector::new()
         .backend_name("winit".into())
         .with_winit_event_loop_builder(builder)
-        .with_winit_window_attributes_hook(|attributes| attributes.with_active(false))
+        .with_winit_window_attributes_hook(|attributes| {
+            attributes
+                .with_active(false)
+                .with_theme(crate::title_bar::theme())
+        })
+        .select()
+}
+
+/// Selects the windowing backend so that every window is made with the theme of
+/// its title bar (`title_bar`, `D48`, `OBS-263`). Given at the making, winit
+/// keeps it when the system's settings change, where a theme set later would be
+/// asked of the system again at the next change.
+///
+/// 🔴 Before the first window of the process.
+///
+/// # Errors
+///
+/// The toolkit's own, when no backend can be selected.
+#[cfg(windows)]
+pub fn select_backend() -> Result<(), slint::PlatformError> {
+    slint::BackendSelector::new()
+        .backend_name("winit".into())
+        .with_winit_window_attributes_hook(|attributes| {
+            attributes.with_theme(crate::title_bar::theme())
+        })
         .select()
 }
 
