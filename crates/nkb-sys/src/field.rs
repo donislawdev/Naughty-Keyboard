@@ -63,8 +63,10 @@
 //! class name of the focused element, from a closed list of classes measured
 //! as terminals ([`TERMINAL_CLASSES`]). The classic console gives its element
 //! no class name, and its element comes from another process than its window
-//! (`OBS-139`), so it stays `Unknown` - and its row, `Document` with the Text
-//! pattern alone, is `Unknown` too, never a field.
+//! (`OBS-139`). Its row, `Document` with the Text pattern alone, is `Unknown`
+//! whichever process answers, never a field - measured again 2026-11-18 under
+//! the rule of a page another process draws (below): the clearing recipe
+//! stays out of it.
 //!
 //! # A window that shows nothing inside it
 //!
@@ -97,12 +99,30 @@
 //! with the Text pattern. A missing Value pattern says nothing about writing,
 //! so it changes nothing.
 //!
+//! # A page another process draws into the window
+//!
+//! Measured 2026-11-18 (`OBS-264`, a WinForms window with WebView2 on Windows
+//! Server 2025): in an application built on WebView2 the window in front
+//! belongs to the host, and the page is drawn by `msedgewebview2.exe` into a
+//! window of its own inside it. UI Automation hands over the focused element of
+//! that process - `Edit` for an input, `Group` with the Text pattern for
+//! `contenteditable`, as in Edge - and a rule that took only elements of the
+//! process of the window in front read that focus as one left in another
+//! application. So an element of another process is about the window in front
+//! when the system says the keyboard focus is in a window of THAT process
+//! inside the window in front: the window that holds the focus in the thread
+//! of the window in front (`GetGUIThreadInfo`), whose top-level window
+//! (`GetAncestor`, `GA_ROOT`) is the window in front. A focus left in another
+//! application is in no window inside the window in front, so its element
+//! still says nothing. The element is then classified as any other, and no
+//! other element of UI Automation is read for it.
+//!
 //! # Six answers, and the unknown is never folded into another
 //!
 //! [`FocusedInput::NotTextField`] is claimed only for control types that take no
 //! text by definition, and it is the only answer that stops a send. Everything
-//! the module does not recognise, every read that fails, and every element that
-//! belongs to another process than the window in front is
+//! the module does not recognise, every read that fails, and every element of a
+//! process that holds no focus in the window in front is
 //! [`FocusedInput::Unknown`] - and `Unknown` presses exactly as before this
 //! module existed. Guessing a cause the tool did not recognise is what
 //! `product-spec.md` 9.3 forbids. A window closed to accessibility, and a read
@@ -119,7 +139,10 @@
 //! [`CLOSED_TO_ACCESSIBILITY_CLASSES`] where it is read and dropped there, so
 //! nothing past that comparison ever holds it. A class name is set
 //! by whoever wrote the control, not by what the tester typed. Never its name,
-//! never its value, never its text, never any other element.
+//! never its value, never its text, never any other element. Of the system,
+//! before it: the window that holds the keyboard focus in the thread of the
+//! window in front, the top-level window that one lies in, and its process -
+//! compared and dropped (the section above), never what any window shows.
 //! `tests/field_reads_only_kinds.rs` holds the list and goes red when a
 //! property is added to it - the promise "does not read the contents of
 //! windows" (untouchable rule 17) rests on it.
@@ -239,8 +262,9 @@ enum Unread {
     /// A request ran out of [`TIMEOUT_MS`]: the application did not answer in
     /// time.
     Late,
-    /// Anything else - no client, a request refused at once, an element of
-    /// another process, a property that came back in another kind.
+    /// Anything else - no client, a request refused at once, an element of a
+    /// process that holds no focus in the window in front, a property that came
+    /// back in another kind.
     Other,
 }
 
@@ -285,6 +309,27 @@ struct Facts {
     /// Which closed list the element's class name is on, if any. The name
     /// itself is not kept.
     class: KnownClass,
+}
+
+/// The processes whose element is about the window in front - see the module
+/// text, "A page another process draws into the window".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(windows), allow(dead_code))]
+struct Owners {
+    /// The process of the window in front.
+    window: u32,
+    /// The process of the window that holds the keyboard focus in the thread of
+    /// the window in front, when the system names one and it lies inside the
+    /// window in front.
+    focus: Option<u32>,
+}
+
+impl Owners {
+    /// Whether an element of `process` is about the window in front.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    fn include(self, process: u32) -> bool {
+        process == self.window || self.focus == Some(process)
+    }
 }
 
 /// Class names of the focused element that mean a terminal, each measured
@@ -518,7 +563,7 @@ const fn field_unless_read_only(value: Option<bool>) -> FocusedInput {
 
 #[cfg(windows)]
 mod platform {
-    use super::{Facts, KnownClass, TIMEOUT_MS, Unread, known_class, unread_of};
+    use super::{Facts, KnownClass, Owners, TIMEOUT_MS, Unread, known_class, unread_of};
     use crate::WindowRef;
     use core::ffi::c_void;
     use core::ptr::{null, null_mut};
@@ -530,7 +575,9 @@ mod platform {
     };
     use windows_sys::Win32::System::Variant::{VARIANT, VT_BOOL, VT_BSTR, VT_I4, VariantClear};
     use windows_sys::Win32::UI::Accessibility::CUIAutomation8;
-    use windows_sys::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GA_ROOT, GUITHREADINFO, GetAncestor, GetGUIThreadInfo, GetWindowThreadProcessId,
+    };
     use windows_sys::core::{GUID, HRESULT};
 
     /// `IUIAutomation2`, which adds the two timeouts to `IUIAutomation`.
@@ -647,7 +694,7 @@ mod platform {
             })
         }
 
-        fn facts(&self, process: u32) -> Result<Facts, Unread> {
+        fn facts(&self, owners: Owners) -> Result<Facts, Unread> {
             let get_focused: unsafe extern "system" fn(Raw, *mut Raw) -> HRESULT =
                 unsafe { method(self.automation.0, SLOT_GET_FOCUSED_ELEMENT) };
             let mut raw: Raw = null_mut();
@@ -661,10 +708,11 @@ mod platform {
             let element = Com(raw);
             // The focus of the SYSTEM, which is not always inside the window in
             // front - a race, a focus left in another application. An element
-            // of another process says nothing about this window.
+            // of a process the window in front does not hold the focus for says
+            // nothing about this window.
             let owner = u32::try_from(int_property(&element, PROPERTY_PROCESS_ID)?)
                 .map_err(|_| Unread::Other)?;
-            if owner != process {
+            if !owners.include(owner) {
                 return Err(Unread::Other);
             }
             let control_type = int_property(&element, PROPERTY_CONTROL_TYPE)?;
@@ -758,17 +806,42 @@ mod platform {
         Ok(unsafe { inner.Anonymous.boolVal } != 0)
     }
 
-    pub fn facts(window: WindowRef) -> Result<Facts, Unread> {
+    /// The process of the window that holds the keyboard focus in `thread`, the
+    /// thread of `window`, when that window lies inside `window`: a page another
+    /// process draws into the window in front. Window handles and a number,
+    /// compared and dropped - nothing of what the window shows.
+    fn focus_process(window: HWND, thread: u32) -> Option<u32> {
+        let mut info = GUITHREADINFO {
+            cbSize: core::mem::size_of::<GUITHREADINFO>() as u32,
+            ..GUITHREADINFO::default()
+        };
+        if unsafe { GetGUIThreadInfo(thread, &mut info) } == 0 || info.hwndFocus.is_null() {
+            return None;
+        }
+        if unsafe { GetAncestor(info.hwndFocus, GA_ROOT) } != window {
+            return None;
+        }
         let mut process = 0u32;
-        unsafe { GetWindowThreadProcessId(window.0 as usize as HWND, &mut process) };
+        unsafe { GetWindowThreadProcessId(info.hwndFocus, &mut process) };
+        (process != 0).then_some(process)
+    }
+
+    pub fn facts(window: WindowRef) -> Result<Facts, Unread> {
+        let window = window.0 as usize as HWND;
+        let mut process = 0u32;
+        let thread = unsafe { GetWindowThreadProcessId(window, &mut process) };
         if process == 0 {
             return Err(Unread::Other);
         }
+        let owners = Owners {
+            window: process,
+            focus: focus_process(window, thread),
+        };
         CLIENT.with_borrow_mut(|slot| {
             if slot.is_none() {
                 *slot = Client::new();
             }
-            slot.as_ref().ok_or(Unread::Other)?.facts(process)
+            slot.as_ref().ok_or(Unread::Other)?.facts(owners)
         })
     }
 }
@@ -832,6 +905,33 @@ mod tests {
 
     const RW: Option<bool> = Some(false);
     const RO: Option<bool> = Some(true);
+
+    #[test]
+    fn an_element_is_about_the_window_in_front_only_through_a_process_holding_its_focus() {
+        // The host of a page and the engine that draws it (`OBS-264`): the window in
+        // front is the host's, the window with the keyboard focus inside it the engine's.
+        let page = Owners {
+            window: 100,
+            focus: Some(200),
+        };
+        assert!(page.include(100), "the window in front's own element");
+        assert!(
+            page.include(200),
+            "the element of the engine holding the focus"
+        );
+        assert!(
+            !page.include(300),
+            "a third process, the focus left elsewhere"
+        );
+        // No window with the focus inside the window in front: its process alone.
+        let alone = Owners {
+            window: 100,
+            focus: None,
+        };
+        assert!(alone.include(100));
+        assert!(!alone.include(200));
+        assert!(!alone.include(0));
+    }
 
     /// The probe of 2026-09-24, row for row: what UI Automation said with the
     /// probed window in front, and what the focus really was. A change to the

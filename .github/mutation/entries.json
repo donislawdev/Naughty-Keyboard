@@ -11106,8 +11106,8 @@
       "id": "M1446",
       "why": "an element that is gone can hold the focus, so a control that went away is classified",
       "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
-      "find": "if holders[owner].is_some() || has(&states, state::DEFUNCT) {",
-      "replace": "if holders[owner].is_some() {",
+      "find": "if step != met[window] || has(&states, state::DEFUNCT) {",
+      "replace": "if step != met[window] {",
       "test": "linux_atspi_rules::tests::an_element_that_is_gone_does_not_hold_the_focus",
       "runner": "rust:nkb-sys:lib"
     },
@@ -11115,8 +11115,8 @@
       "id": "M1447",
       "why": "two windows in front with a focus each are guessed between, so the kind of a stale window is taken",
       "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
-      "find": "    match (holders.next(), holders.next()) {",
-      "replace": "    match (holders.next(), None::<Holder<T::Node>>) {",
+      "find": "    match (kinds.next(), kinds.next()) {",
+      "replace": "    match (kinds.next(), None::<FocusedInput>) {",
       "test": "linux_atspi_rules::tests::two_windows_in_front_with_a_focus_each_are_not_guessed_between",
       "runner": "rust:nkb-sys:lib"
     },
@@ -14156,6 +14156,33 @@
       "find": "    if pressed.in_flight && pressed.taken == 0 {",
       "replace": "    if false {",
       "test": "confirm::tests::a_character_on_its_way_to_the_application_makes_the_count_a_floor",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1861",
+      "why": "any element with the focus starts a chain, so the walk goes under a table cell or a page and takes a stale field below it for the focus - the clearing keys then reach the row of a spreadsheet (D76, D193)",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "            Self::Looking => role.is_some_and(|code| MARKS_THE_CHAIN.contains(&code)),",
+      "replace": "            Self::Looking => true,",
+      "test": "linux_atspi_rules::tests::a_page_or_a_cell_with_the_focus_is_not_walked_into",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1862",
+      "why": "an element that waited before a view with the focus was met is still taken, so a stale field next to the view is cleared in place of the focus under the view (D193)",
+      "file": "crates/nkb-sys/src/linux_atspi_rules.rs",
+      "find": "            if step != met[window] || has(&states, state::DEFUNCT) {",
+      "replace": "            if has(&states, state::DEFUNCT) {",
+      "test": "linux_atspi_rules::tests::nothing_after_the_view_in_its_window_is_taken_for_the_focus",
+      "runner": "rust:nkb-sys:lib"
+    },
+    {
+      "id": "M1863",
+      "why": "an element of any process is about the window in front, so a focus left in another application is classified as the field the clearing keys go to (D73, D193)",
+      "file": "crates/nkb-sys/src/field.rs",
+      "find": "        process == self.window || self.focus == Some(process)",
+      "replace": "        process == self.window || true",
+      "test": "field::tests::an_element_is_about_the_window_in_front_only_through_a_process_holding_its_focus",
       "runner": "rust:nkb-sys:lib"
     }
   ]
