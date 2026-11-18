@@ -72,7 +72,7 @@ use nkb_gui::shortcuts::Shortcuts;
 use nkb_gui::welcome::Welcome;
 use nkb_gui::{
     Gallery, HeaderLinkKind, PacksWindow, Palette, WelcomeWindow, focus, header_links, live,
-    own_frame, place,
+    own_frame, place, room,
 };
 use slint::ComponentHandle;
 
@@ -611,6 +611,21 @@ fn show_palette(
     standing: &focus::Standing,
 ) -> Result<(), slint::PlatformError> {
     palette.show()?;
+    // The room its screen has for it, now that it stands somewhere, and again
+    // whenever its content wants another height (`D190`).
+    room::fit_palette(palette);
+    palette.on_content_resized({
+        let palette = palette.as_weak();
+        move || {
+            if let Some(palette) = palette.upgrade() {
+                room::fit_palette(&palette);
+            }
+        }
+    });
+    // And at every move on Linux, where the window manager places the window
+    // after this first fit (`palette.slint` says why).
+    #[cfg(target_os = "linux")]
+    room::refit_on_move(palette);
     focus::refuse_focus(palette, kept, standing, || {});
     // A click takes the front on macOS all the same, and is answered (`focus`).
     #[cfg(target_os = "macos")]

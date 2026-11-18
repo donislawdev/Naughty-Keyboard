@@ -202,6 +202,24 @@ fn count(
         .count()
 }
 
+/// How far a pixel's red has to outweigh its blue to count as warm.
+const WARM: i32 = 40;
+
+/// Pixels whose red outweighs their blue by more than [`WARM`]: the colour of a
+/// risk and the smoothed edges of its strokes, which no plain sentence and no
+/// surface of this window has. Counted this way, not by the exact colour,
+/// because how many pixels of a thin stroke reach the exact colour is up to the
+/// typeface the system draws prose in.
+fn warm(buffer: &[offscreen::Pixel], width: u32, height: u32) -> usize {
+    (0..height)
+        .flat_map(|y| (0..width).map(move |x| (x, y)))
+        .filter(|&(x, y)| {
+            let (r, _, b) = pixel(buffer, width, x, y);
+            i32::from(r) - i32::from(b) > WARM
+        })
+        .count()
+}
+
 #[test]
 fn the_shortcuts_window_keeps_its_promises() {
     let surface = offscreen::start(WIDTH, TALL);
@@ -376,13 +394,19 @@ fn the_shortcuts_window_keeps_its_promises() {
 /// because the list's own risky pill is that colour too (GUI rule 10).
 #[test]
 fn a_warning_under_the_list_is_drawn_in_the_colour_of_a_risk() {
+    // The measure has to see the colour it is about, and not the window's ground.
+    let lean = |(r, _, b): (u8, u8, u8)| i32::from(r) - i32::from(b);
+    assert!(
+        lean(RISK) > WARM && lean(SURFACE) <= WARM,
+        "the colour of a risk is not warm by this test's measure, or the surface is"
+    );
     let surface = offscreen::start(WIDTH, TALL);
     let window = ShortcutsWindow::new().expect("the shortcuts window must build");
     fill(&window);
     window.show().expect("the shortcuts window must show");
     let sentence = "Shift+F12 holds no Ctrl, Alt or Win, so while the palette runs, Shift+F12 \
                     stops typing and working in every application.";
-    let everywhere = |buffer: &[offscreen::Pixel]| count(buffer, WIDTH, 0..TALL, 0..WIDTH, RISK);
+    let everywhere = |buffer: &[offscreen::Pixel]| warm(buffer, WIDTH, TALL);
 
     window.set_messages(lines(&[]));
     let quiet = everywhere(&offscreen::draw(&surface, WIDTH, TALL));
@@ -400,10 +424,13 @@ fn a_warning_under_the_list_is_drawn_in_the_colour_of_a_risk() {
         plain, quiet,
         "a plain sentence under the list drew the colour of a risk"
     );
+    // A sentence of two lines in the colour of a risk drew some 1700 warm
+    // pixels (Windows, 2026-11-17). A third of that is still a sentence and
+    // not a stray pixel.
     assert!(
-        warned > quiet + 20,
-        "the warning drew {} pixels of the colour of a risk more than none ({warned} against \
-         {quiet}), so it is not told apart from a plain sentence. Look at {}",
+        warned > quiet + 500,
+        "the warning drew {} warm pixels more than none ({warned} against {quiet}), so it \
+         is not told apart from a plain sentence. Look at {}",
         warned.saturating_sub(quiet),
         path.display()
     );

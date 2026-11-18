@@ -50,6 +50,7 @@ mod shifted_chords;
 mod stream;
 mod watch;
 pub(crate) mod window;
+pub(crate) mod work_area;
 
 use core::sync::atomic::AtomicBool;
 

@@ -13,6 +13,35 @@ export component Hairline inherits Rectangle {
     background: Tokens.border;
 }
 
+// The sign that there is more than the view shows: a thin bar along the right
+// edge, as long as the share of the content in view and as far down as the view
+// has scrolled. A sign, not a control - it takes no pointer, and the wheel or the
+// keys move what it measures.
+//
+// One for every part of the product that scrolls - the pick list and the middle
+// of a window (`WindowScroll`) - so the two cannot drift apart. The part that
+// scrolls stands it at its right edge, as tall as its view, and draws it only
+// while the content is taller than the view.
+export component ScrollThumb inherits Rectangle {
+    // How tall what scrolls is, and how far it has scrolled: the Flickable's
+    // `content-height` and `content-y`, which is zero or less.
+    in property <length> content;
+    in property <length> offset;
+
+    width: Tokens.scroll-thumb;
+
+    Rectangle {
+        // Not centred, which is where an element with a size of its own stands
+        // in its parent by default.
+        x: 0;
+        y: -root.offset * root.height / root.content;
+        width: root.width;
+        height: root.height * root.height / root.content;
+        border-radius: Tokens.scroll-thumb / 2;
+        background: Tokens.border-strong;
+    }
+}
+
 // Pushes its neighbours apart inside a layout. Without this a screen would use
 // a bare `Rectangle { horizontal-stretch: 1; }`, which is the exact habit the
 // guard is there to break.

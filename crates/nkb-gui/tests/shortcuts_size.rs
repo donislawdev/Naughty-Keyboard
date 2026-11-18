@@ -52,6 +52,13 @@ const WIDTH: f32 = 480.0;
 const LIVE_MINIMUM: f32 = 360.0;
 const SURFACE: (u8, u8, u8) = (0x14, 0x16, 0x1A);
 const THUMB: (u8, u8, u8) = (0x45, 0x4C, 0x5C);
+/// The selected row's outline.
+const ACCENT: (u8, u8, u8) = (0x7A, 0xA2, 0xF7);
+/// The room a small laptop leaves above its taskbar, give or take - far less
+/// than the window's rows and sentences need.
+const SHORT_ROOM: f32 = 480.0;
+/// More presses than the list has rows, so the last one ends selected.
+const ROWS: usize = 20;
 
 /// A window adapter that remembers what the window asked of it.
 struct Asking {
@@ -205,6 +212,18 @@ const BOTTOM_PADDING: u32 = 4;
 fn blank_row(buffer: &[offscreen::Pixel], width: u32, y: u32) -> bool {
     let first = pixel(buffer, width, 2, y);
     (2..width - 2).all(|x| pixel(buffer, width, x, y) == first)
+}
+
+/// How many rows the selected row's outline spans: from the first row with its
+/// colour to the last.
+fn outline(buffer: &[offscreen::Pixel], width: u32, rows: std::ops::Range<u32>) -> u32 {
+    let drawn: Vec<u32> = rows
+        .filter(|&y| (0..width).any(|x| pixel(buffer, width, x, y) == ACCENT))
+        .collect();
+    match (drawn.first(), drawn.last()) {
+        (Some(first), Some(last)) => last - first + 1,
+        _ => 0,
+    }
 }
 
 fn thumb(buffer: &[offscreen::Pixel], width: u32, rows: std::ops::Range<u32>) -> usize {
@@ -396,4 +415,57 @@ fn the_shortcuts_window_asks_for_the_room_its_rows_and_sentences_need() {
             path.display()
         );
     }
+
+    // ---- on a screen too short for it (`frame.slint`) -------------------------
+    // The room a small laptop leaves above its taskbar: the window asks for
+    // exactly that, still bound, the list gives way with a thumb, and the row
+    // the arrows reach last stays in view - the footer and the room for
+    // sentences keep their height under it.
+    window.set_room(SHORT_ROOM);
+    let _ = adapter.draw();
+    let asked = adapter
+        .asked
+        .get()
+        .expect("the window told its backend nothing");
+    let short = asked.preferred;
+    assert!(
+        (short.height - SHORT_ROOM).abs() < 0.5
+            && asked.min == Some(short)
+            && asked.max == Some(short),
+        "given {SHORT_ROOM} of room, the window asks for {short:?} (min {:?}, max {:?}) - not \
+         that height, or not bound to it",
+        asked.min,
+        asked.max
+    );
+    let short_height = short.height.ceil() as u32;
+    adapter.resize(width, short_height);
+    for _ in 0..ROWS {
+        tap_key(window, Key::DownArrow);
+    }
+    let scrolled = adapter.draw();
+    let path = offscreen::save(&scrolled, width, short_height, "shortcuts-short.png");
+    let area = content(&scrolled, width, short_height);
+    assert!(
+        thumb(&scrolled, width, area.clone()) > 0,
+        "the list is cut by the room and shows no thumb. Look at {}",
+        path.display()
+    );
+    // The selected row whole: its outline as tall as at full height, where
+    // the first row is selected and nothing scrolls.
+    let open_area = content(&open, width, height);
+    let whole = outline(&open, width, open_area.clone());
+    let seen = outline(&scrolled, width, area.clone());
+    assert!(
+        whole > 0 && seen == whole,
+        "the last row was selected and {seen} rows of its outline are in view, of {whole} - the \
+         list did not bring it whole into view. Look at {}",
+        path.display()
+    );
+    assert_eq!(
+        short_height - area.end,
+        height - open_area.end,
+        "the footer and the room for sentences under the list are not as tall as at full \
+         height - they gave way instead of the list. Look at {}",
+        path.display()
+    );
 }

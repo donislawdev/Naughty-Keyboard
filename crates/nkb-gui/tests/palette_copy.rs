@@ -23,7 +23,7 @@ mod offscreen;
 use std::cell::Cell;
 use std::rc::Rc;
 
-use nkb_gui::{CopiedButton, Palette};
+use nkb_gui::{CopiedButton, Palette, SentValue};
 use offscreen::{Ink, added, click, point};
 use slint::platform::software_renderer::MinimalSoftwareWindow;
 use slint::{ComponentHandle, LogicalPosition};
@@ -103,7 +103,10 @@ fn each_copy_button_answers_the_pointer_and_asks_for_its_own_band() {
     palette.set_last_sent_label("Last sent".into());
     palette.set_next_heading("Next: value 4 of 12".into());
     palette.set_next_name("Leading space".into());
-    palette.set_value_name("Trailing space".into());
+    palette.set_sent_value(SentValue {
+        name: "Trailing space".into(),
+        ..SentValue::default()
+    });
     // The arrows stand in the next band's row with their words, as on screen.
     palette.set_back_label("Back".into());
     palette.set_skip_label("Skip".into());
@@ -409,7 +412,10 @@ fn the_report_block_copy_asks_for_the_report_and_nothing_else() {
     palette.set_pack("whitespace".into());
     palette.set_counter("3 / 12".into());
     palette.set_last_sent_label("Last sent".into());
-    palette.set_value_name("Trailing space".into());
+    palette.set_sent_value(SentValue {
+        name: "Trailing space".into(),
+        ..SentValue::default()
+    });
     palette.set_report_label("Report block".into());
     palette.set_report("Value:    whitespace/trailing-space @ pack 1.0".into());
     palette.set_has_report(true);

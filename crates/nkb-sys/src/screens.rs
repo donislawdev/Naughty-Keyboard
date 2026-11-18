@@ -48,6 +48,20 @@ pub fn monitors() -> Option<Vec<Monitor>> {
     platform::monitors()
 }
 
+/// The part of the screen holding the point `(x, y)` that windows may use: the
+/// screen less the taskbar, the menu bar, the Dock or a panel (`D190`). In the
+/// unit of [`Monitor`], and on Linux in the pixels of the X server the windows
+/// of this program stand on.
+///
+/// On Linux the answer is the work area of the whole desktop, which is all the
+/// window manager says, and the caller meets it with the screen its window
+/// stands on. `None` where the system does not say, or where the point is on no
+/// screen it lists.
+#[must_use]
+pub fn work_area(x: i32, y: i32) -> Option<Monitor> {
+    platform::work_area(x, y)
+}
+
 /// More screens than any machine this tool has met. A longer list is not
 /// trusted, the same rule as `layout::LAYOUT_LIMIT`.
 #[cfg(any(windows, target_os = "macos"))]
@@ -77,10 +91,58 @@ fn monitor_of_rect(x: f64, y: f64, width: f64, height: f64) -> Option<Monitor> {
     monitor_of(whole(x)?, whole(y)?, whole(x + width)?, whole(y + height)?)
 }
 
+/// One screen as AppKit lists it, in AppKit's space - the origin at the BOTTOM
+/// left corner of the first screen, `y` growing up: its frame and its visible
+/// frame, each as x, y, width and height.
+#[cfg(any(target_os = "macos", test))]
+#[derive(Debug, Clone, Copy)]
+struct AppKitScreen {
+    frame: [f64; 4],
+    visible: [f64; 4],
+}
+
+/// The visible frame of the screen whose frame holds the point, in the layout's
+/// space - the origin at the top left corner of the first screen, which is the
+/// one with the menu bar, `y` growing down. A rectangle turns over against that
+/// screen's height. `None` when the point is on no screen.
+#[cfg(any(target_os = "macos", test))]
+fn visible_frame_at(screens: &[AppKitScreen], x: i32, y: i32) -> Option<Monitor> {
+    let first = screens.first()?.frame[3];
+    let turned = |[left, bottom, width, height]: [f64; 4]| {
+        monitor_of_rect(left, first - (bottom + height), width, height)
+    };
+    screens.iter().find_map(|screen| {
+        let frame = turned(screen.frame)?;
+        let (x, y) = (i64::from(x), i64::from(y));
+        let holds = x >= i64::from(frame.x)
+            && y >= i64::from(frame.y)
+            && x < i64::from(frame.x) + i64::from(frame.width)
+            && y < i64::from(frame.y) + i64::from(frame.height);
+        if holds { turned(screen.visible) } else { None }
+    })
+}
+
+/// The work area of `desktop` from the numbers of `_NET_WORKAREA`: four for each
+/// desktop - x, y, width and height. `None` when the hint holds fewer than that
+/// desktop's four, or a rectangle that does not fit or has no area.
+#[cfg(any(target_os = "linux", test))]
+pub(crate) fn work_area_of_desktop(values: &[u32], desktop: u32) -> Option<Monitor> {
+    let start = usize::try_from(desktop).ok()?.checked_mul(4)?;
+    let four = values.get(start..start.checked_add(4)?)?;
+    let [x, y, width, height] = <[u32; 4]>::try_from(four).ok()?;
+    let (left, top) = (i32::try_from(x).ok()?, i32::try_from(y).ok()?);
+    monitor_of(
+        left,
+        top,
+        left.checked_add(i32::try_from(width).ok()?)?,
+        top.checked_add(i32::try_from(height).ok()?)?,
+    )
+}
+
 /// The screen a rectangle given by its edges is - or `None` for one with no
 /// area, which no window can stand on. Apart from the system call, so it is
 /// checked on every system.
-#[cfg(any(windows, target_os = "macos", test))]
+#[cfg(any(windows, target_os = "macos", target_os = "linux", test))]
 fn monitor_of(left: i32, top: i32, right: i32, bottom: i32) -> Option<Monitor> {
     let width = u32::try_from(i64::from(right) - i64::from(left)).ok()?;
     let height = u32::try_from(i64::from(bottom) - i64::from(top)).ok()?;
@@ -94,8 +156,11 @@ fn monitor_of(left: i32, top: i32, right: i32, bottom: i32) -> Option<Monitor> {
 
 #[cfg(windows)]
 mod platform {
-    use windows_sys::Win32::Foundation::{LPARAM, RECT};
-    use windows_sys::Win32::Graphics::Gdi::{EnumDisplayMonitors, HDC, HMONITOR};
+    use windows_sys::Win32::Foundation::{LPARAM, POINT, RECT};
+    use windows_sys::Win32::Graphics::Gdi::{
+        EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO,
+        MonitorFromPoint,
+    };
     use windows_sys::Win32::UI::HiDpi::{
         DPI_AWARENESS_PER_MONITOR_AWARE, GetAwarenessFromDpiAwarenessContext,
         GetThreadDpiAwarenessContext,
@@ -111,10 +176,47 @@ mod platform {
         broken: bool,
     }
 
-    pub fn monitors() -> Option<Vec<Monitor>> {
+    /// Whether this thread is told rectangles in physical pixels - the module
+    /// header says why nothing is answered otherwise.
+    fn per_monitor_aware() -> bool {
         let awareness =
             unsafe { GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext()) };
-        if awareness != DPI_AWARENESS_PER_MONITOR_AWARE {
+        awareness == DPI_AWARENESS_PER_MONITOR_AWARE
+    }
+
+    /// The work area of the screen nearest the point: `rcWork`, the screen less
+    /// the taskbar and the bars docked to its edges (Microsoft Learn,
+    /// `MONITORINFO`).
+    pub fn work_area(x: i32, y: i32) -> Option<Monitor> {
+        if !per_monitor_aware() {
+            return None;
+        }
+        let monitor = unsafe { MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST) };
+        if monitor.is_null() {
+            return None;
+        }
+        let empty = RECT {
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+        };
+        let mut info = MONITORINFO {
+            cbSize: u32::try_from(size_of::<MONITORINFO>()).ok()?,
+            rcMonitor: empty,
+            rcWork: empty,
+            dwFlags: 0,
+        };
+        // `info` is a `MONITORINFO` with its size written, as the call requires.
+        if unsafe { GetMonitorInfoW(monitor, &raw mut info) } == 0 {
+            return None;
+        }
+        let work = info.rcWork;
+        monitor_of(work.left, work.top, work.right, work.bottom)
+    }
+
+    pub fn monitors() -> Option<Vec<Monitor>> {
+        if !per_monitor_aware() {
             return None;
         }
         let mut found = Found {
@@ -156,8 +258,29 @@ mod platform {
 
 #[cfg(target_os = "macos")]
 mod platform {
-    use super::{MONITOR_LIMIT, Monitor, monitor_of_rect};
-    use crate::macos::ffi::{CGDisplayBounds, CGGetActiveDisplayList};
+    use super::{AppKitScreen, MONITOR_LIMIT, Monitor, monitor_of_rect, visible_frame_at};
+    use crate::macos::ffi::{CGDisplayBounds, CGGetActiveDisplayList, CgRect};
+
+    /// The visible frame of the screen the point is on, as AppKit lists the
+    /// screens (`macos/work_area.rs`), in the layout's space of points.
+    pub fn work_area(x: i32, y: i32) -> Option<Monitor> {
+        let four = |rect: CgRect| {
+            [
+                rect.origin.x,
+                rect.origin.y,
+                rect.size.width,
+                rect.size.height,
+            ]
+        };
+        let screens: Vec<AppKitScreen> = crate::macos::work_area::screens()?
+            .iter()
+            .map(|screen| AppKitScreen {
+                frame: four(screen.frame),
+                visible: four(screen.visible),
+            })
+            .collect();
+        visible_frame_at(&screens, x, y)
+    }
 
     pub fn monitors() -> Option<Vec<Monitor>> {
         // One more than the limit, so a list that was cut short shows as longer
@@ -194,6 +317,19 @@ mod platform {
     // keep apart. `None` is "nothing to remember a place for", said by the
     // caller as such.
     pub fn monitors() -> Option<Vec<super::Monitor>> {
+        None
+    }
+
+    /// The work area of the current desktop, from the X server the windows
+    /// stand on (`linux/work_area.rs`) - the point is the caller's to meet with
+    /// its screen.
+    #[cfg(target_os = "linux")]
+    pub fn work_area(_x: i32, _y: i32) -> Option<super::Monitor> {
+        crate::linux::work_area::work_area()
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub fn work_area(_x: i32, _y: i32) -> Option<super::Monitor> {
         None
     }
 }
@@ -278,6 +414,88 @@ mod tests {
         assert_eq!(monitor_of_rect(3.0e9, 0.0, 100.0, 100.0), None);
         // A sliver under half a point rounds to nothing.
         assert_eq!(monitor_of_rect(0.0, 0.0, 0.4, 100.0), None);
+    }
+
+    /// A MacBook's screen with the menu bar (37 points) and the Dock (70) - the
+    /// first, at AppKit's origin - and a screen above it and to its left, with
+    /// its own menu bar (25).
+    const MAIN: AppKitScreen = AppKitScreen {
+        frame: [0.0, 0.0, 1512.0, 982.0],
+        visible: [0.0, 70.0, 1512.0, 875.0],
+    };
+    const ABOVE: AppKitScreen = AppKitScreen {
+        frame: [-1920.0, 982.0, 1920.0, 1080.0],
+        visible: [-1920.0, 982.0, 1920.0, 1055.0],
+    };
+
+    #[test]
+    fn appkit_frames_turn_over_into_the_layouts_space_and_the_point_picks_the_screen() {
+        let screens = [MAIN, ABOVE];
+        // On the main screen: below the menu bar, above the Dock.
+        assert_eq!(
+            visible_frame_at(&screens, 700, 500),
+            Some(Monitor {
+                x: 0,
+                y: 37,
+                width: 1512,
+                height: 875
+            })
+        );
+        // On the screen above: negative in the layout, as `CGDisplayBounds`
+        // has it, and below its own menu bar.
+        assert_eq!(
+            visible_frame_at(&screens, -100, -500),
+            Some(Monitor {
+                x: -1920,
+                y: -1055,
+                width: 1920,
+                height: 1055
+            })
+        );
+        // The frame decides, not the visible part: a point on the menu bar is
+        // on its screen.
+        assert_eq!(
+            visible_frame_at(&screens, 700, 10).map(|area| area.y),
+            Some(37)
+        );
+    }
+
+    #[test]
+    fn a_point_on_no_screen_or_no_screen_at_all_has_no_work_area() {
+        assert_eq!(visible_frame_at(&[MAIN, ABOVE], 5000, 5000), None);
+        // Right and bottom edges are outside, as everywhere.
+        assert_eq!(visible_frame_at(&[MAIN], 1512, 500), None);
+        assert_eq!(visible_frame_at(&[], 0, 0), None);
+    }
+
+    #[test]
+    fn the_work_area_hint_gives_four_numbers_for_each_desktop() {
+        // GNOME on a 1280 x 800 screen, a top bar of 32, two desktops.
+        let hint = [0, 32, 1280, 768, 0, 0, 1280, 800];
+        assert_eq!(
+            work_area_of_desktop(&hint, 0),
+            Some(Monitor {
+                x: 0,
+                y: 32,
+                width: 1280,
+                height: 768
+            })
+        );
+        assert_eq!(
+            work_area_of_desktop(&hint, 1).map(|area| area.height),
+            Some(800)
+        );
+    }
+
+    #[test]
+    fn a_hint_too_short_or_with_no_area_or_out_of_range_says_nothing() {
+        let hint = [0, 32, 1280, 768];
+        assert_eq!(work_area_of_desktop(&hint, 1), None);
+        assert_eq!(work_area_of_desktop(&hint[..3], 0), None);
+        assert_eq!(work_area_of_desktop(&[0, 0, 0, 768], 0), None);
+        assert_eq!(work_area_of_desktop(&[u32::MAX, 0, 10, 10], 0), None);
+        assert_eq!(work_area_of_desktop(&[0, 0, u32::MAX, 10], 0), None);
+        assert_eq!(work_area_of_desktop(&hint, u32::MAX), None);
     }
 
     /// Asks the real display list, on the system that has one. Not what the

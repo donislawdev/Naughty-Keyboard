@@ -31,6 +31,7 @@ pub(crate) mod spaces;
 mod text_services;
 mod trust;
 pub(crate) mod window;
+pub(crate) mod work_area;
 
 pub(crate) use ax::focused_input;
 pub(crate) use front::{foreground_window, image_path, send_target};

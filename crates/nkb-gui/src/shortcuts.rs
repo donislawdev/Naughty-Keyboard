@@ -49,7 +49,7 @@ use nkb_adapters::i18n::{self, Environment, ShortcutsLabel, Startup};
 use nkb_adapters::{ChordHeld, default_bindings};
 use nkb_app::{Ended, ShortcutChange};
 use nkb_core::hotkeys::HotkeyAction;
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::focus::{HANDLE_WAIT, POLL, window_handle};
 use crate::live::{Command, ShortcutsNow, Tell, Told};
@@ -181,6 +181,16 @@ impl Shortcuts {
         // Before the first press can reach the view: the filter on the window's
         // own events is what tells `chord_held` the key, where the system cannot.
         shortcuts.keys.watch(shortcuts.window.window());
+        // On Linux its frame comes after its first showing (`on_request`).
+        #[cfg(target_os = "linux")]
+        on_request::keep_room_beside(shortcuts.window.window(), {
+            let weak = Rc::downgrade(&shortcuts);
+            move |room| {
+                if let Some(shortcuts) = weak.upgrade() {
+                    shortcuts.window.set_room(room);
+                }
+            }
+        });
         let weak = Rc::downgrade(&shortcuts);
         shortcuts
             .window
@@ -410,6 +420,10 @@ impl Shortcuts {
         describe(&self.window, list.read_only());
         *self.list.borrow_mut() = Some(list);
         self.show_all();
+        // Never taller than the screen the palette stands on has room for
+        // (`D190`), told at every opening - the palette may have moved.
+        self.window
+            .set_room(on_request::room_beside(self.window.window()));
         if let Err(error) = on_request::bring_up(self.window.window()) {
             self.cannot_show(&error);
             return;
@@ -499,9 +513,10 @@ impl Shortcuts {
         let Some(list) = list.as_ref() else {
             return;
         };
-        self.window.set_rows(ModelRc::new(VecModel::from(
+        show_rows(
+            &self.window,
             list.rows().iter().map(pick_row).collect::<Vec<_>>(),
-        )));
+        );
         self.window
             .set_selected(i32::try_from(list.selected()).unwrap_or(-1));
         self.window.set_summary(list.summary().into());
@@ -578,6 +593,30 @@ fn describe(window: &ShortcutsWindow, desktop_chooses: bool) {
 
 /// One row as the window draws it. The only place a [`ShortcutRow`] becomes a
 /// [`PickRow`].
+/// Puts `rows` on the window, changing only the rows that differ: the rows the
+/// list draws stay, and with them where it is scrolled to, so a press that
+/// moves the selection changes no row at all. A new model only when the number
+/// of rows changed or there was none.
+///
+/// A model replaced at every press made every row anew, and the selected one
+/// brought itself into view before the list had placed it: on a screen too
+/// short for the whole list the last row stood 22 px under the list's edge,
+/// cut in half (measured in the render, 2026-11-17, `shortcuts_size.rs`).
+fn show_rows(window: &ShortcutsWindow, rows: Vec<PickRow>) {
+    let current = window.get_rows();
+    if let Some(model) = current.as_any().downcast_ref::<VecModel<PickRow>>()
+        && model.row_count() == rows.len()
+    {
+        for (index, row) in rows.into_iter().enumerate() {
+            if model.row_data(index).as_ref() != Some(&row) {
+                model.set_row_data(index, row);
+            }
+        }
+        return;
+    }
+    window.set_rows(ModelRc::new(VecModel::from(rows)));
+}
+
 fn pick_row(row: &ShortcutRow) -> PickRow {
     PickRow {
         title: row.title.as_str().into(),

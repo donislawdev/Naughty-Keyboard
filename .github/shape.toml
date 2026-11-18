@@ -150,7 +150,10 @@ near = 7
 # to a file of their own rather than take ui/components/chrome.slint into the
 # band. 306 since the header's links became one list (2026-10-14), and 283
 # since the palette's status line went to a file of its own to make room for
-# the header's own frame (2026-10-23).
+# the header's own frame (2026-10-23), and 272 since the twelve lines of the
+# value sent last became one struct, passed from Rust to the band in one
+# property, to make room for the scroll part of a short screen (2026-11-17).
+# The palette is still the largest.
 [files.slint]
-ceiling = 283
+ceiling = 272
 near = 2

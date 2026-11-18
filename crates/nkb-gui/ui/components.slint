@@ -58,7 +58,7 @@ import {
     ProgressBar,
 } from "components/chrome.slint";
 import { Chevron } from "components/chevron.slint";
-import { WindowFrame, WindowHeader, WindowFooter, WindowStatus } from "components/frame.slint";
+import { WindowFrame, WindowHeader, WindowScroll, WindowFooter, WindowStatus } from "components/frame.slint";
 import { Fact, FactGrid } from "components/facts.slint";
 import { FolderAction, FolderPlace, FolderSection } from "components/folder_section.slint";
 import { QueryField, PickerKeys, KeyScope } from "components/field.slint";
@@ -66,7 +66,7 @@ import { PickRow, PickList, PickerOpener } from "components/list.slint";
 import { Disclosure } from "components/disclosure.slint";
 import { SmallButton, Segmented, ButtonArrow } from "components/button.slint";
 import { NextBand, KeyLines } from "components/next_band.slint";
-import { LastSentBand } from "components/last_sent_band.slint";
+import { LastSentBand, SentValue } from "components/last_sent_band.slint";
 import { SwitchesBand } from "components/switches.slint";
 import { Heart } from "components/heart.slint";
 import { Cross } from "components/cross.slint";
@@ -103,6 +103,7 @@ export {
     ZoneFill,
     WindowFrame,
     WindowHeader,
+    WindowScroll,
     WindowFooter,
     WindowStatus,
     ProgressBar,
@@ -120,6 +121,7 @@ export {
     NextBand,
     KeyLines,
     LastSentBand,
+    SentValue,
     SwitchesBand,
     Heart,
     Cross,

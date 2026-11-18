@@ -41,3 +41,7 @@ reason = "zvariant_derive is unmaintained, and no vulnerability is reported agai
 [[IgnoredVulns]]
 id = "RUSTSEC-2026-0441"
 reason = "pin-utils is unmaintained, and no vulnerability is reported against it. It is reached only through spin_on, which Slint's macro crate and slint-build use while a build compiles the windows, so it runs on the build machine and is not part of the program: cargo tree --invert spin_on --edges normal names only slint-macros, a proc-macro, on Windows, macOS and Linux. The twin entry in deny.toml says the same."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0543"
+reason = "chrono is unmaintained, and no vulnerability is reported against it. Slint's core links it on every system for the date functions behind its DatePicker widget (the days in a month, today's date, reading and writing a date as text). No window here has a date picker, so the program never calls them. Slint 1.19.0 still depends on it. The twin entry in deny.toml says the same."

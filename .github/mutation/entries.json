@@ -373,8 +373,8 @@
       "id": "M63",
       "why": "the preview row binds to an empty property - Rust still sets the real one, so the code looks right and the value is not on screen (GUI rule 10: caught by pixels)",
       "file": "crates/nkb-gui/ui/components/last_sent_band.slint",
-      "find": "        text: root.preview;\n        wrap: char-wrap;",
-      "replace": "        text: root.elided;\n        wrap: char-wrap;",
+      "find": "        text: root.value.preview;\n        wrap: char-wrap;",
+      "replace": "        text: root.value.elided;\n        wrap: char-wrap;",
       "test": "the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one",
       "runner": "rust:nkb-gui:palette_appearance"
     },
@@ -399,8 +399,8 @@
       "id": "M52",
       "why": "the palette shows the text-muted role at REST, which does not hold 4.5:1 over a white window under the palette (D53) - caught by measuring the pixels of a headless render",
       "file": "crates/nkb-gui/ui/screens/palette.slint",
-      "find": "        if !root.compact: LastSentBand {\n            divided: root.has-next;",
-      "replace": "        if true: LastSentBand {\n            divided: root.has-next;",
+      "find": "        if !root.compact: WindowScroll {\n            divided: root.has-next;",
+      "replace": "        if true: WindowScroll {\n            divided: root.has-next;",
       "test": "the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one",
       "runner": "rust:nkb-gui:palette_appearance"
     },
@@ -831,8 +831,8 @@
       "id": "M71",
       "why": "the palette view does not draw the typeface note though it receives it - a property set and silently ignored looks like one that works (GUI rule 10)",
       "file": "crates/nkb-gui/ui/components/last_sent_band.slint",
-      "find": "    if root.open && root.has-value && root.has-not-guaranteed: TextSmallMuted {",
-      "replace": "    if root.open && root.has-value && root.has-not-guaranteed && false: TextSmallMuted {",
+      "find": "    if root.open && root.has-value && root.value.has-not-guaranteed: TextSmallMuted {",
+      "replace": "    if root.open && root.has-value && root.value.has-not-guaranteed && false: TextSmallMuted {",
       "test": "the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one",
       "runner": "rust:nkb-gui:palette_appearance"
     },
@@ -1499,7 +1499,7 @@
       "file": "crates/nkb-adapters/src/i18n.rs",
       "find": "    if character.escape_debug().eq(core::iter::once(character)) {",
       "replace": "    if true {",
-      "test": "i18n::tests::every_sentence_about_a_shortcut_in_the_settings_file_is_whole_and_names_it",
+      "test": "i18n::typing::tests::the_settings_file_is_told_what_a_shortcut_in_use_takes",
       "runner": "rust:nkb-adapters:lib"
     },
     {
@@ -1524,8 +1524,8 @@
       "id": "M308",
       "why": "the list draws no scroll bar - a value window with a list longer than its room hides the rows below with no sign there are more",
       "file": "crates/nkb-gui/ui/components/list.slint",
-      "find": "    if stack.preferred-height > flick.height: Rectangle {",
-      "replace": "    if false: Rectangle {",
+      "find": "    if stack.preferred-height > flick.height: ScrollThumb {",
+      "replace": "    if false: ScrollThumb {",
       "test": "the_pack_window_shows_where_the_keyboard_is_and_which_row_it_reached",
       "runner": "rust:nkb-gui:packs_appearance"
     },
@@ -1848,8 +1848,8 @@
       "id": "M345",
       "why": "the link under the hint bar asks for the pack window instead of the shortcuts window - it lights up under the pointer and opens the wrong one",
       "file": "crates/nkb-gui/ui/screens/palette.slint",
-      "find": "            open-shortcuts(place) => {\n                root.open-shortcuts(place);",
-      "replace": "            open-shortcuts(place) => {\n                root.open-packs();",
+      "find": "                open-shortcuts(place) => {\n                    root.open-shortcuts(place);",
+      "replace": "                open-shortcuts(place) => {\n                    root.open-packs();",
       "test": "the_palette_links_answer_the_pointer_and_open_their_windows",
       "runner": "rust:nkb-gui:palette_opener"
     },
@@ -1857,8 +1857,8 @@
       "id": "M356",
       "why": "the height of the Shortcuts window is only PREFERRED from the content, not bound - the live window keeps its size from the start, without rows (measured 400 x 360)",
       "file": "crates/nkb-gui/ui/screens/shortcuts.slint",
-      "find": "    height: body.preferred-height;",
-      "replace": "    preferred-height: body.preferred-height;",
+      "find": "    height: body.fitted-height;",
+      "replace": "    preferred-height: body.fitted-height;",
       "test": "the_shortcuts_window_asks_for_the_room_its_rows_and_sentences_need",
       "runner": "rust:nkb-gui:shortcuts_size"
     },
@@ -3135,8 +3135,8 @@
       "id": "M541",
       "why": "the line saying where it went is never shown (D104)",
       "file": "crates/nkb-gui/src/live/view.rs",
-      "find": "    palette.set_has_sent_to(!value.sent_to.is_empty());",
-      "replace": "    palette.set_has_sent_to(false);",
+      "find": "        has_sent_to: !value.sent_to.is_empty(),",
+      "replace": "        has_sent_to: false,",
       "test": "live::tests::a_view_reaches_the_window_field_by_field",
       "runner": "rust:nkb-gui:lib"
     },
@@ -3702,8 +3702,8 @@
       "id": "M607",
       "why": "the palette keeps a height larger than its content again - a sentence goes and its room stays empty under the content (D110)",
       "file": "crates/nkb-gui/ui/screens/palette.slint",
-      "find": "    height: frame.preferred-height;",
-      "replace": "    height: max(frame.preferred-height, 640px);",
+      "find": "    height: frame.fitted-height;",
+      "replace": "    height: max(frame.fitted-height, 640px);",
       "test": "the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one",
       "runner": "rust:nkb-gui:palette_appearance"
     },
@@ -3711,8 +3711,8 @@
       "id": "M609",
       "why": "the Last sent band is missing before the first value - the first press puts the band in and moves the switches under the pointer (D110)",
       "file": "crates/nkb-gui/ui/screens/palette.slint",
-      "find": "        if !root.compact: LastSentBand {\n            divided: root.has-next;",
-      "replace": "        if !root.compact && root.has-value: LastSentBand {\n            divided: root.has-next;",
+      "find": "            LastSentBand {\n                divided: false;",
+      "replace": "            if root.has-value: LastSentBand {\n                divided: false;",
       "test": "the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one",
       "runner": "rust:nkb-gui:palette_appearance"
     },
@@ -3945,8 +3945,8 @@
       "id": "M635",
       "why": "the ceiling of Slint files one above the measurement - free room nobody granted",
       "file": ".github/shape.toml",
-      "find": "[files.slint]\nceiling = 283",
-      "replace": "[files.slint]\nceiling = 284",
+      "find": "[files.slint]\nceiling = 272",
+      "replace": "[files.slint]\nceiling = 273",
       "test": "no_file_has_grown_past_its_ceiling_and_each_ceiling_is_the_measurement",
       "runner": "rust:nkb-adapters:shape"
     },
@@ -6354,7 +6354,7 @@
       "id": "M904",
       "why": "the gallery back in a 2000 px buffer - the catalogue runs past the image and its last entries disappear without a word",
       "file": "crates/nkb-gui/tests/appearance.rs",
-      "find": "const HEIGHT: u32 = 4400;\n",
+      "find": "const HEIGHT: u32 = 5100;\n",
       "replace": "const HEIGHT: u32 = 2000;\n",
       "test": "the_gallery_renders_off_screen_and_renders_the_same_way_twice",
       "runner": "rust:nkb-gui:appearance"
@@ -6624,8 +6624,8 @@
       "id": "M934",
       "why": "Copy of the block asks for the last value instead of the block (D121)",
       "file": "crates/nkb-gui/ui/screens/palette.slint",
-      "find": "            copy-report => {\n                root.copy-report();",
-      "replace": "            copy-report => {\n                root.copy-last();",
+      "find": "                copy-report => {\n                    root.copy-report();",
+      "replace": "                copy-report => {\n                    root.copy-last();",
       "test": "the_report_block_copy_asks_for_the_report_and_nothing_else",
       "runner": "rust:nkb-gui:palette_copy"
     },
@@ -8606,7 +8606,7 @@
       "file": "crates/nkb-adapters/src/i18n.rs",
       "find": "                        (\"modifiers\", typing::command_modifiers()),",
       "replace": "                        (\"modifiers\", \"\"),",
-      "test": "i18n::tests::every_sentence_about_a_shortcut_in_the_settings_file_is_whole_and_names_it",
+      "test": "i18n::typing::tests::the_settings_file_is_told_what_a_shortcut_in_use_takes",
       "runner": "rust:nkb-adapters:lib"
     },
     {

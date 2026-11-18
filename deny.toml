@@ -33,15 +33,18 @@ yanked = "deny"
 # reported against these crates and there is no fixed release to move to, which
 # is why the solution line in the report says "no safe upgrade is available".
 # They sit inside Slint's own tree, so the one who can drop them is Slint, and
-# the next Slint release is the moment to look again. The three zbus crates
-# went into zbus 6 itself, so they go when Slint and the crates under it move
-# to zbus 6. `pin-utils` goes when Slint stops building with `spin_on`.
+# every Slint release is the moment to look again. Slint 1.19.0 still holds all
+# of them. The three zbus crates went into zbus 6 itself, so they go when Slint
+# and the crates under it move to zbus 6. `pin-utils` goes when Slint stops
+# building with `spin_on`. `chrono` goes when Slint's date functions move to
+# another crate.
 ignore = [
     { id = "RUSTSEC-2026-0192", reason = "`ttf-parser` is reached only through the window decorations that Slint's winit backend draws itself under Wayland on Linux (sctk-adwaita, then ab_glyph). It reads a font the toolkit ships and never a file the tester supplies. No vulnerability is reported against it." },
     { id = "RUSTSEC-2026-0370", reason = "`zvariant` is unmaintained. It is reached only on Linux, through zbus 5, which Slint and crates under it (accessibility, the tray icon) use to talk over the session bus. It moved into zbus 6, released on 2026-10-16, and nothing in Slint's tree uses zbus 6 yet. No vulnerability is reported against it." },
     { id = "RUSTSEC-2026-0371", reason = "`zbus_names` is unmaintained. It is reached only on Linux, through zbus 5, which Slint and crates under it (accessibility, the tray icon) use to talk over the session bus. It moved into zbus 6, released on 2026-10-16, and nothing in Slint's tree uses zbus 6 yet. No vulnerability is reported against it." },
     { id = "RUSTSEC-2026-0372", reason = "`zvariant_derive` is unmaintained. It is the derive macro of `zvariant`, runs only while a Linux build compiles and is not part of the program. It moved into zbus 6 with `zvariant`. No vulnerability is reported against it." },
     { id = "RUSTSEC-2026-0441", reason = "`pin-utils` is unmaintained. It is reached only through `spin_on`, which Slint's macro crate and `slint-build` use while a build compiles the windows, so it runs on the build machine and is not part of the program. No vulnerability is reported against it." },
+    { id = "RUSTSEC-2026-0543", reason = "`chrono` is unmaintained. Slint's core links it on every system for the date functions behind its DatePicker widget (the days in a month, today's date, reading and writing a date as text). No window here has a date picker, so the program never calls them. No vulnerability is reported against it." },
 ]
 
 [licenses]

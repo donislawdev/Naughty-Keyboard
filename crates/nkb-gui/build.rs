@@ -15,7 +15,16 @@
 mod file_details;
 
 fn main() {
-    slint_build::compile("ui/all.slint").expect("the interface must compile");
+    // The language behaviour of Slint 1.18, named. A Slint release that changes
+    // how the language behaves applies the change only to a project that asks
+    // for that release's edition. Edition 1.19 sizes elements made with `if`
+    // and `for` like any other and lets a size that only some states set keep
+    // its default, which moves layouts the renders and the window measurements
+    // were taken on, so taking it is a change of its own with renders of its
+    // own. Without an edition the compiler prints a note on every build. The
+    // `slint!` blocks in the tests name the same edition.
+    let config = slint_build::CompilerConfiguration::new().with_edition((1, 18));
+    slint_build::compile_with_config("ui/all.slint", config).expect("the interface must compile");
     embed_resources();
 }
 

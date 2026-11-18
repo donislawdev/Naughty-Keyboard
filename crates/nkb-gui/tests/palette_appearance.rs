@@ -25,7 +25,11 @@
 #[allow(dead_code)]
 mod offscreen;
 
-use nkb_gui::{Marker, Palette};
+use std::cell::Cell;
+use std::rc::Rc;
+
+use nkb_gui::{Marker, Palette, SentValue};
+use slint::platform::WindowEvent;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 const WIDTH: u32 = 480;
@@ -86,6 +90,13 @@ fn longest_counts() -> String {
 /// of pack, forty-eight of value, and no space anywhere to break at.
 const LONGEST_REFERENCE: &str = "abcdefghijklmnopqrstuvwxyzabcdefghijklmn/\
                                  abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuv";
+/// Changes the value that went out last the way Rust hands it to the palette:
+/// one struct (`SentValue`), read, changed and written back.
+fn sent(palette: &Palette, change: impl FnOnce(&mut SentValue)) {
+    let mut value = palette.get_sent_value();
+    change(&mut value);
+    palette.set_sent_value(value);
+}
 
 /// Specimen data. The literals are the test's own - the test is not the product,
 /// and what it feeds in is a sample to look at, the same job the gallery's
@@ -94,26 +105,27 @@ fn fill(palette: &Palette) {
     palette.set_window_title("Naughty Keyboard".into());
     palette.set_pack("unicode-text".into());
     palette.set_counter("7 / 34".into());
-    palette.set_value_name("Three zero-width spaces".into());
-    // Where it was typed, read at the press (UX8, D104).
-    palette.set_value_sent_to("to chrome.exe, a text field".into());
-    palette.set_has_sent_to(true);
-    palette.set_value_reference("unicode-text/zero-width-spaces".into());
-    palette.set_value_counts("graphemes: 7, code points: 7, bytes: 13, UTF-16 units: 7".into());
-    // The preview and the shape, exactly as the sketch in `ux-spec.md` 2 draws
-    // them. The marker is U+2423, whose glyph is IN the shipped typeface -
-    // measured from the file's `cmap`, so the marker cannot itself render as the
-    // empty rectangle it exists to prevent.
-    palette.set_value_preview("ab\u{2423}\u{2423}\u{2423}cd".into());
-    palette.set_value_shape("zero-width \u{D7} 3".into());
-    palette.set_has_shape(true);
-    // No elision for a seven-code-point value, and the render proves the band
-    // does not draw an empty line for it.
-    palette.set_has_elided(false);
-    // Latin letters and the marker are all inside the typeface guarantee, so
-    // the specimen of the sketch has no note - the note is measured on its own
-    // below, with a value that earns one.
-    palette.set_has_not_guaranteed(false);
+    palette.set_sent_value(SentValue {
+        name: "Three zero-width spaces".into(),
+        // Where it was typed, read at the press (UX8, D104).
+        sent_to: "to chrome.exe, a text field".into(),
+        has_sent_to: true,
+        reference: "unicode-text/zero-width-spaces".into(),
+        counts: "graphemes: 7, code points: 7, bytes: 13, UTF-16 units: 7".into(),
+        // The preview and the shape, exactly as the sketch in `ux-spec.md` 2
+        // draws them. The marker is U+2423, whose glyph is IN the shipped
+        // typeface - measured from the file's `cmap`, so the marker cannot
+        // itself render as the empty rectangle it exists to prevent.
+        preview: "ab\u{2423}\u{2423}\u{2423}cd".into(),
+        shape: "zero-width \u{D7} 3".into(),
+        has_shape: true,
+        // No elision for a seven-code-point value, and the render proves the
+        // band does not draw an empty line for it. Latin letters and the
+        // marker are all inside the typeface guarantee, so the specimen of the
+        // sketch has no note - the note is measured on its own below, with a
+        // value that earns one.
+        ..SentValue::default()
+    });
     palette.set_clipboard_mode_label("clipboard mode".into());
     // The way out of clipboard mode on its bar (D99).
     palette.set_turn_off_label("Turn off".into());
@@ -370,9 +382,9 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     // work - the value's name is that colour too, so the count would stay
     // non-zero with the preview gone.
     let with_preview = offscreen::count_exactly(&showing, TEXT_PRIMARY);
-    palette.set_value_preview("".into());
-    palette.set_value_shape("".into());
-    palette.set_has_shape(false);
+    sent(&palette, |v| v.preview = "".into());
+    sent(&palette, |v| v.shape = "".into());
+    sent(&palette, |v| v.has_shape = false);
     let without_preview = offscreen::count_exactly(&render(&window), TEXT_PRIMARY);
     assert!(
         with_preview > without_preview,
@@ -381,7 +393,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     );
     // The marker is the point: U+2423 must leave ink of its own, or the preview
     // shows a value with a hole where the invisible character was.
-    palette.set_value_preview(MARKER_ONLY.into());
+    sent(&palette, |v| v.preview = MARKER_ONLY.into());
     let marker_only = offscreen::count_exactly(&render(&window), TEXT_PRIMARY);
     assert!(
         marker_only > without_preview,
@@ -393,11 +405,11 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     // note under the preview. It is a muted line, so switching it on must ADD
     // muted ink - the same difference-of-two-renders shape as above, because a
     // line that the view silently drops looks exactly like a line never asked for.
-    palette.set_value_preview(NOT_GUARANTEED_PREVIEW.into());
-    palette.set_value_not_guaranteed(NOT_GUARANTEED_NOTE.into());
-    palette.set_has_not_guaranteed(false);
+    sent(&palette, |v| v.preview = NOT_GUARANTEED_PREVIEW.into());
+    sent(&palette, |v| v.not_guaranteed = NOT_GUARANTEED_NOTE.into());
+    sent(&palette, |v| v.has_not_guaranteed = false);
     let muted_without_note = offscreen::count_exactly(&render(&window), TEXT_MUTED);
-    palette.set_has_not_guaranteed(true);
+    sent(&palette, |v| v.has_not_guaranteed = true);
     let with_note = render(&window);
     let muted_with_note = offscreen::count_exactly(&with_note, TEXT_MUTED);
     let note_path =
@@ -426,11 +438,11 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
     // One line, so the longest counters have a line to add: at the scale's
     // smallest step (12 px since 2026-10-07) the specimen's own counters
     // already take two.
-    palette.set_value_counts("graphemes: 7".into());
+    sent(&palette, |v| v.counts = "graphemes: 7".into());
     let edge_short = bottom_edge(&render(&window));
-    palette.set_value_counts(longest_counts().into());
+    sent(&palette, |v| v.counts = longest_counts().into());
     let edge_counts = bottom_edge(&render(&window));
-    palette.set_value_reference(LONGEST_REFERENCE.into());
+    sent(&palette, |v| v.reference = LONGEST_REFERENCE.into());
     let long_lines = render(&window);
     let edge_reference = bottom_edge(&long_lines);
     let long_path = offscreen::save_cropped(&long_lines, WIDTH, HEIGHT, "palette-long-lines.png");
@@ -655,7 +667,7 @@ fn the_palette_renders_every_state_and_keeps_muted_text_out_of_the_resting_one()
         surface_edge(&folded),
         folded_path.display()
     );
-    palette.set_value_preview("".into());
+    sent(&palette, |v| v.preview = "".into());
     assert!(
         render(&window) == folded,
         "blanking the preview changed the folded palette, so the folded band still draws the \
@@ -1060,4 +1072,250 @@ fn a_text_cut_short_shows_its_whole_on_hover_and_one_that_fits_does_not() {
             path.display()
         );
     }
+}
+
+/// The room a small laptop leaves above its taskbar, give or take
+/// (`frame.slint`): less than the palette with the last value opened, more than
+/// what never scrolls.
+const SHORT_ROOM: f32 = 560.0;
+
+/// More room than the palette with the last value folded needs: the whole
+/// buffer, which no state drawn here outgrows. Not a number of its own, because
+/// the palette is as tall as its prose in the system's typeface, so a number
+/// that is enough on one machine falls short on another.
+const ROOM_ENOUGH: f32 = HEIGHT as f32;
+
+/// Less room than what never scrolls - a palette put low on its screen.
+const NO_ROOM: f32 = 100.0;
+
+/// `border` and `border-strong`: the rule that opens a band, and the scroll
+/// thumb - copied for the reason the colours above are copies.
+const BORDER: (u8, u8, u8) = (0x2A, 0x2F, 0x3A);
+const THUMB: (u8, u8, u8) = (0x45, 0x4C, 0x5C);
+
+/// Rows at each end of the thumb that its rounding blends: half its width.
+const THUMB_ROUNDING: usize = 2;
+
+/// How far a scroll asks to go - further than any content reaches, so the
+/// view stops at the end.
+const FAR: f32 = 10_000.0;
+
+fn rgb(pixel: offscreen::Pixel) -> (u8, u8, u8) {
+    (pixel.r, pixel.g, pixel.b)
+}
+
+/// The rows the scroll thumb is drawn on, in the strip it stands in at the
+/// right edge.
+fn thumb_rows(buffer: &[offscreen::Pixel]) -> Vec<usize> {
+    let strip = (WIDTH - 4) as usize..WIDTH as usize;
+    buffer
+        .chunks(WIDTH as usize)
+        .enumerate()
+        .filter(|(_, row)| row[strip.clone()].iter().any(|pixel| rgb(*pixel) == THUMB))
+        .map(|(y, _)| y)
+        .collect()
+}
+
+/// How many rows the status line takes at the bottom of the surface: its
+/// raised ground in the probe column, and the rule above it.
+fn status_rows(buffer: &[offscreen::Pixel]) -> usize {
+    let column = (WIDTH - SURFACE_PROBE_INSET) as usize;
+    let edge = surface_edge(buffer);
+    let raised = buffer
+        .chunks(WIDTH as usize)
+        .take(edge + 1)
+        .rev()
+        .take_while(|row| rgb(row[column]) == RAISED)
+        .count();
+    raised + 1
+}
+
+/// Rows `from..to` of one buffer against rows starting at `at` of another,
+/// left of the thumb's strip - the first that differs, if any.
+fn first_difference(
+    one: &[offscreen::Pixel],
+    from: usize,
+    to: usize,
+    other: &[offscreen::Pixel],
+    at: usize,
+) -> Option<usize> {
+    let row = |buffer: &[offscreen::Pixel], y: usize| {
+        let start = y * WIDTH as usize;
+        buffer[start..start + (WIDTH - 4) as usize].to_vec()
+    };
+    (from..to).find(|&y| row(one, y) != row(other, at + y - from))
+}
+
+/// 🔴 The palette on a screen shorter than it (`frame.slint`, `palette.slint`):
+/// bound to the room, the next value and the status line where they were, and
+/// the rest scrolling under the wheel to its very end. Then the scrolled part
+/// folding back in bounds, and a room too small for what never scrolls.
+#[test]
+fn on_a_screen_too_short_the_next_value_and_the_status_stay_and_the_rest_scrolls() {
+    let window = offscreen::start(WIDTH, HEIGHT);
+    let palette = Palette::new().expect("the palette must build");
+    fill(&palette);
+    let asked = Rc::new(Cell::new(0));
+    palette.on_content_resized({
+        let asked = Rc::clone(&asked);
+        move || asked.set(asked.get() + 1)
+    });
+    palette.show().expect("the palette must show");
+
+    // ---- the palette as tall as its content, folded and opened -------------
+    palette.set_last_sent_open(false);
+    let folded = render(&window);
+    palette.set_last_sent_open(true);
+    let whole = render(&window);
+    assert!(
+        thumb_rows(&whole).is_empty(),
+        "with no room given the palette scrolls"
+    );
+    let asked_before = asked.get();
+    assert!(
+        asked_before > 0,
+        "the palette's content changed height and nobody was told - the room \
+         would not be asked again"
+    );
+
+    // ---- bound to the room: a thumb, the top and the bottom kept -----------
+    palette.set_room(SHORT_ROOM);
+    let short = render(&window);
+    let path = offscreen::save_cropped(&short, WIDTH, HEIGHT, "palette-short.png");
+    let picture = path.display();
+    assert_eq!(
+        surface_edge(&short) + 1,
+        SHORT_ROOM as usize,
+        "the palette is not as tall as the room it was given. Look at {picture}"
+    );
+    assert_nothing_escapes_the_surface(&short, "short", &picture.to_string());
+    let thumb = thumb_rows(&short);
+    let Some(&first) = thumb.first() else {
+        panic!("the palette is shorter than its content and shows no thumb. Look at {picture}");
+    };
+    // The scrolled part starts where the last value's band does: its rule.
+    // The thumb's rounded end blends its first rows, so the rule is looked for
+    // within that rounding above the first row in the thumb's own colour.
+    let is_rule = |y: usize| {
+        whole[y * WIDTH as usize..(y + 1) * WIDTH as usize]
+            .iter()
+            .all(|pixel| rgb(*pixel) == BORDER)
+    };
+    let Some(rule) = (first.saturating_sub(THUMB_ROUNDING)..=first).find(|&y| is_rule(y)) else {
+        panic!(
+            "the thumb starts at row {first}, and no rule above the last value stands there - \
+             the next value scrolls too, or the last value's band does not. Look at {picture}"
+        );
+    };
+    // Everything down to the rule stays, and the view that scrolls starts
+    // under it.
+    let top = rule + 1;
+    assert_eq!(
+        first_difference(&short, 0, top, &whole, 0),
+        None,
+        "the header or the next value changed when the room ran out. Look at {picture}"
+    );
+    let status = status_rows(&whole);
+    assert_eq!(
+        status_rows(&short),
+        status,
+        "the status line changed. Look at {picture}"
+    );
+    let (short_status, whole_status) = (
+        surface_edge(&short) + 1 - status,
+        surface_edge(&whole) + 1 - status,
+    );
+    assert_eq!(
+        first_difference(
+            &short,
+            short_status,
+            short_status + status,
+            &whole,
+            whole_status
+        ),
+        None,
+        "the status line is not the one the whole palette shows. Look at {picture}"
+    );
+
+    // ---- the wheel moves the middle, to its very end -----------------------
+    let middle = slint::LogicalPosition::new(WIDTH as f32 / 2.0, (top + 40) as f32);
+    palette
+        .window()
+        .dispatch_event(WindowEvent::PointerScrolled {
+            position: middle,
+            delta_x: 0.0,
+            delta_y: -FAR,
+        });
+    // The wheel leaves the pointer over the palette, and what stands under it
+    // once scrolled depends on the typeface: in SF on macOS it is a band's fold
+    // mark, drawn hovered (measured 2026-11-18). The renders compared below
+    // have no pointer, so it leaves before the picture is taken.
+    palette.window().dispatch_event(WindowEvent::PointerExited);
+    let scrolled = render(&window);
+    let path = offscreen::save_cropped(&scrolled, WIDTH, HEIGHT, "palette-short-scrolled.png");
+    let picture = path.display();
+    assert_eq!(
+        first_difference(&scrolled, 0, top, &whole, 0),
+        None,
+        "the wheel moved the header, the next value or the rule under it - what scrolled up \
+         stands cut against the next value with nothing between. Look at {picture}"
+    );
+    assert_ne!(
+        first_difference(&scrolled, top, short_status, &short, top),
+        None,
+        "the wheel did not move the scrolled part. Look at {picture}"
+    );
+    // What stands just above the status line, scrolled to the end, is the
+    // end of the keys - the same rows the whole palette has there.
+    let end = short_status - top;
+    assert_eq!(
+        first_difference(&scrolled, top, short_status, &whole, whole_status - end),
+        None,
+        "scrolled to the end, the palette does not show the end of its content above the \
+         status line. Look at {picture}"
+    );
+
+    // ---- a band folded while scrolled: back in bounds, no room opens ------
+    palette.set_last_sent_open(false);
+    let refolded = render(&window);
+    let path = offscreen::save_cropped(&refolded, WIDTH, HEIGHT, "palette-short-folded.png");
+    let picture = path.display();
+    assert!(
+        asked.get() > asked_before,
+        "the last value folded and nobody was told the content's height changed"
+    );
+    let folded_status = surface_edge(&folded) + 1 - status;
+    assert_eq!(
+        first_difference(&refolded, top, short_status, &folded, folded_status - end),
+        None,
+        "folded while scrolled, the palette does not end where its content ends - room \
+         opened under the keys. Look at {picture}"
+    );
+    palette.set_room(ROOM_ENOUGH);
+    let fits = render(&window);
+    assert_eq!(
+        fits,
+        folded,
+        "with room for all of it the palette is not the palette as tall as its content - \
+         the scrolled part kept an offset or a thumb. Look at {}",
+        offscreen::save_cropped(&fits, WIDTH, HEIGHT, "palette-short-fits.png").display()
+    );
+
+    // ---- less room than what never scrolls: that much stays whole ----------
+    palette.set_last_sent_open(true);
+    palette.set_room(NO_ROOM);
+    let cramped = render(&window);
+    let path = offscreen::save_cropped(&cramped, WIDTH, HEIGHT, "palette-no-room.png");
+    let picture = path.display();
+    assert_eq!(
+        surface_edge(&cramped) + 1,
+        top + status,
+        "with less room than the header, the next value and the status line, the palette is \
+         not exactly those. Look at {picture}"
+    );
+    assert_eq!(
+        first_difference(&cramped, 0, top, &whole, 0),
+        None,
+        "with no room the next value is cut. Look at {picture}"
+    );
 }
