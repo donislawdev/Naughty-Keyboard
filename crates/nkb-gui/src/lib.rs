@@ -126,3 +126,8 @@ pub mod own_frame;
 // the shortcuts window on a short screen (`D190`). The conversions need no
 // window, so they are tested without a screen.
 pub mod room;
+
+// The theme every window is made with, so that the title bar the system draws
+// over a dark window is dark too (`D48`, `OBS-263`). One place, read by the
+// backend selection in `focus` for every window the toolkit makes.
+pub mod title_bar;

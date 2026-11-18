@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod appearance;
 pub(crate) mod atomic_write;
 pub mod boundary_text;
 pub mod built_in;
