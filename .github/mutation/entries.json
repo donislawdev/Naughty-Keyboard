@@ -1326,8 +1326,8 @@
       "id": "M270",
       "why": "the tester walking away closes the window WITH a keyboard hand-back - it takes the keyboard from the window the tester just clicked (OBS-147)",
       "file": "crates/nkb-gui/src/packs.rs",
-      "find": "    fn left(self: &Rc<Self>) {\n        *self.picker.borrow_mut() = None;",
-      "replace": "    fn left(self: &Rc<Self>) {\n        self.close();\n        *self.picker.borrow_mut() = None;",
+      "find": "    fn left(self: &Rc<Self>) {\n        if !on_request::has_left(self.window.window()) {\n            return;\n        }\n        *self.picker.borrow_mut() = None;",
+      "replace": "    fn left(self: &Rc<Self>) {\n        if !on_request::has_left(self.window.window()) {\n            return;\n        }\n        self.close();\n        *self.picker.borrow_mut() = None;",
       "test": "the_pack_window_chooses_closes_and_always_hands_the_keyboard_back",
       "runner": "rust:nkb-gui:packs_window"
     },
@@ -1821,8 +1821,8 @@
       "id": "M342",
       "why": "walking away to another window hands the keyboard back - it takes it from where the tester put it (OBS-147)",
       "file": "crates/nkb-gui/src/shortcuts.rs",
-      "find": "    fn left(self: &Rc<Self>) {\n        if self.is_open() {\n            self.take_shortcuts_back();",
-      "replace": "    fn left(self: &Rc<Self>) {\n        if self.is_open() {\n            self.close();",
+      "find": "    fn left(self: &Rc<Self>) {\n        if !on_request::has_left(self.window.window()) {\n            return;\n        }\n        if self.is_open() {\n            self.take_shortcuts_back();",
+      "replace": "    fn left(self: &Rc<Self>) {\n        if !on_request::has_left(self.window.window()) {\n            return;\n        }\n        if self.is_open() {\n            self.close();",
       "test": "the_shortcuts_window_pauses_records_and_always_takes_the_shortcuts_back",
       "runner": "rust:nkb-gui:shortcuts_window"
     },
@@ -8253,8 +8253,8 @@
       "id": "M1129",
       "why": "leaving a pack window that stands on the screen while closed does not hide it (OBS-183)",
       "file": "crates/nkb-gui/src/packs.rs",
-      "find": "    fn left(self: &Rc<Self>) {\n        *self.picker.borrow_mut() = None;",
-      "replace": "    fn left(self: &Rc<Self>) {\n        if self.picker.borrow_mut().take().is_none() {\n            return;\n        }",
+      "find": "    fn left(self: &Rc<Self>) {\n        if !on_request::has_left(self.window.window()) {\n            return;\n        }\n        *self.picker.borrow_mut() = None;",
+      "replace": "    fn left(self: &Rc<Self>) {\n        if !on_request::has_left(self.window.window()) {\n            return;\n        }\n        if self.picker.borrow_mut().take().is_none() {\n            return;\n        }",
       "test": "a_minimized_window_is_left_and_comes_back_on_the_screen",
       "runner": "rust:nkb-gui:packs_window"
     },

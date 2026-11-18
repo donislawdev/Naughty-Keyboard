@@ -208,6 +208,9 @@ impl LengthLimit {
     /// The window stopped being the active one: the tester is elsewhere. It
     /// closes without handing the keyboard back, as the value window does.
     fn left(self: &Rc<Self>) {
+        if !on_request::has_left(self.window.window()) {
+            return;
+        }
         *self.form.borrow_mut() = None;
         self.value_window_gives_way();
         on_request::hide_once_left(

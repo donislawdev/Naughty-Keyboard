@@ -342,6 +342,20 @@ pub(crate) fn take_foreground(window: WindowRef) -> Result<(), FocusError> {
     }
 }
 
+/// Whether `window`, ours, holds the keyboard on X11: the server's input focus is in
+/// its frame - the same read that tells [`hand_back_foreground`] whether there is
+/// anything to give back. `None` on XWayland, for the reason `crate::window` gives, and
+/// when the server cannot be asked.
+pub(crate) fn holds_foreground(window: WindowRef) -> Option<bool> {
+    let Windows { server, display } = windows().ok()?;
+    if display != Display::X11 {
+        return None;
+    }
+    let id = id_of(window).ok()?;
+    let frame = toplevel(&server.conn, server.root, id).ok()?;
+    Some(focused_toplevel(&server.conn, server.root).ok()? == Some(frame))
+}
+
 /// The atoms the stacking of a window is read and told in.
 struct StackAtoms {
     kind: u32,

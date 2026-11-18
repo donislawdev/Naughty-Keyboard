@@ -40,7 +40,10 @@
 //! query line losing focus for `window-activation`, the only reason the view
 //! passes on. Minimizing the window is leaving it too - and why it then hides
 //! a moment later rather than at once, and comes back on the screen and not
-//! in the taskbar, is `on_request`'s (`OBS-183`).
+//! in the taskbar, is `on_request`'s (`OBS-183`). So is why the report alone
+//! is not taken for leaving: on X11 the window opened by its shortcut got it
+//! as the shortcut was let go, and closed with the keyboard still in it
+//! (`OBS-268`).
 //!
 //! # Coming in while the shortcut is still held
 //!
@@ -449,6 +452,9 @@ impl Packs {
     /// the window inactive too, and whenever that report arrives, this finds a
     /// window already closed and hidden, and nothing changes.
     fn left(self: &Rc<Self>) {
+        if !on_request::has_left(self.window.window()) {
+            return;
+        }
         *self.picker.borrow_mut() = None;
         on_request::hide_once_left(
             self,

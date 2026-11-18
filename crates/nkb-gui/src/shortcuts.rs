@@ -309,6 +309,9 @@ impl Shortcuts {
     /// once, and the window hides once the event is over, for the reason
     /// `on_request` gives.
     fn left(self: &Rc<Self>) {
+        if !on_request::has_left(self.window.window()) {
+            return;
+        }
         if self.is_open() {
             self.take_shortcuts_back();
         }

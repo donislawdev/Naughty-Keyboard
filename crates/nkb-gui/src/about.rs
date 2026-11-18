@@ -205,6 +205,9 @@ impl About {
     /// the keyboard stays where they put it. Hidden once the event is over,
     /// for the reason `on_request` gives.
     fn left(self: &Rc<Self>) {
+        if !on_request::has_left(self.window.window()) {
+            return;
+        }
         self.open.set(false);
         on_request::hide_once_left(
             self,
