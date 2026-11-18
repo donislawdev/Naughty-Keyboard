@@ -12,7 +12,7 @@ Tak. Każde wydanie, razem z plikami, jest na [stronie wydań](https://github.co
 
 ## Którego pliku potrzebuję?
 
-`nkb-gui` to paleta, okno, które wpisuje wartość w pole, w którym jesteś. `nkb` to wiersz poleceń. Każde wydanie ma jedno archiwum na każdy program i system, a `VERSION` niżej oznacza wersję, na przykład `0.3.0`:
+`nkb-gui` to paleta, okno, które wpisuje wartość w pole, w którym jesteś. `nkb` to wiersz poleceń. Każde wydanie ma jedno archiwum na każdy program i system, a `VERSION` niżej oznacza wersję, na przykład `0.4.0`:
 
 {{< downloads >}}
 

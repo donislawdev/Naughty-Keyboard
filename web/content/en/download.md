@@ -11,7 +11,7 @@ Yes. Every release, with its files, is on [the releases page](https://github.com
 
 ## Which file do I need?
 
-`nkb-gui` is the palette, the window that types a value into the field you are in. `nkb` is the command line. Every release has one archive for each program and system, and `VERSION` below stands for the version, such as `0.3.0`:
+`nkb-gui` is the palette, the window that types a value into the field you are in. `nkb` is the command line. Every release has one archive for each program and system, and `VERSION` below stands for the version, such as `0.4.0`:
 
 {{< downloads >}}
 

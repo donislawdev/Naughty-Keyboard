@@ -10,6 +10,13 @@ Changes wait under Unreleased until then.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-18
+
+This release reads packs from a folder of your own and from a team folder, makes the values that test
+the length limit of a field, and brings four new packs: passwords, search queries, injections and JSON
+request bodies. As before, the Linux routes were measured on Ubuntu 26.04 only, with GNOME 50 for
+Wayland and openbox for X11, so another desktop may behave differently.
+
 ### Added
 
 - `nkb boundary` makes the values that test the length limit of a field. Give `--max-length`,
@@ -95,13 +102,17 @@ Changes wait under Unreleased until then.
 - The windows the palette opens, such as the value window and the shortcuts window, open beside it,
   on the side of the screen that has room for them, instead of where the system puts a new window.
   They now stay above the taskbar, the Dock or a panel.
-
 - A shortcut without Ctrl, Alt or Win, or one a keyboard layout types a character with (AltGr on
   Windows, Option on a Mac), is no longer refused. The shortcuts window keeps it, marks its row and
   says what it takes from every other application, and the palette says the same when it starts
   with such a shortcut in `settings.toml`. When the palette holds a key alone as a shortcut, it types
   the values through other keys on Linux and on a Mac, so they still arrive whole.
-
+- When the system takes too long to say what has the keyboard, `nkb send --clear` and the palette
+  now say that the system did not identify the focus in time, and that the next send may find the
+  application ready. The value still goes in without clearing the line first. Before, they said that
+  the system does not report the focus as a text field. On Linux the look at the focus asks the
+  accessibility bus 32 questions at a time and takes about a quarter as long, so a page Firefox has
+  just opened is now cleared too.
 - `nkb lint` points at the line that holds the problem. A character written out instead of escaped,
   a `breaks` too short and a field kind outside the list are reported on the line of `value`,
   `unit`, `breaks` or `fields`, not on the first line of the value. A wrong field kind names the
@@ -144,6 +155,9 @@ Changes wait under Unreleased until then.
   the old text. In an application built on WebView2 a button, a link or the page itself with the
   focus now refuses the value, as in a browser. Before, the value went to it, and a space in the
   value pressed the button.
+- On Windows the title bar of the palette's windows is now dark, like the windows. On Windows 11 it
+  could come out white over a dark window. Under high contrast the system draws it in the colours of
+  the contrast theme. On a Mac the windows ask for a dark title bar too.
 - **Go back one value and type it** no longer moves the counter two values back when nothing could
   take the value, for example when no field had the focus. The counter now stays where it was, as it
   does for the next value.
@@ -157,6 +171,14 @@ Changes wait under Unreleased until then.
   shortcut pressed then reached the application with Shift added, such as Ctrl+Alt+Shift+N, while
   the palette never heard of it. The palette now takes that press and says it came while the
   previous value was still going out, as it does for any press during a send.
+- On a Wayland desktop a clearing key no longer stays down in the application when the palette's
+  shortcut is pressed while a field is being cleared. The application kept Home down and repeated it
+  until another key came. The palette now also keeps the words of the send that was interrupted and
+  adds that the second press was dropped.
+- On X11 a value no longer gets one of its characters typed once more at the start of the field. A
+  send taps a spare key once before it begins, and an application that read that tap late, such as a
+  Firefox just started, typed it as the first character of the value the keyboard layout has no key
+  for. The tap now goes to a key the send never rewrites, so it types nothing.
 - On Windows a value typed into a WPF application no longer loses characters. While `nkb send` and
   the palette followed the pace of a WPF window, the application dropped some of the keys, most
   often a few of a long value, and the send still said it took every keystroke. A WPF window now
@@ -422,6 +444,7 @@ a later release may still change it, and its notes will say how.
   statements of how it was built and of what each archive holds, which `gh attestation verify` checks.
   The README shows the commands.
 
-[Unreleased]: https://github.com/donislawdev/Naughty-Keyboard/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/donislawdev/Naughty-Keyboard/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/donislawdev/Naughty-Keyboard/releases/tag/v0.4.0
 [0.3.0]: https://github.com/donislawdev/Naughty-Keyboard/releases/tag/v0.3.0
 [0.2.0]: https://github.com/donislawdev/Naughty-Keyboard/releases/tag/v0.2.0
