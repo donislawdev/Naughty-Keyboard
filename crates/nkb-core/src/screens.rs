@@ -149,6 +149,35 @@ pub fn room_below(top: i32, area: Rect) -> u32 {
     u32::try_from(room).unwrap_or(u32::MAX)
 }
 
+/// The most a window manager's frame may add to a window's content on one
+/// axis, in pixels: the largest width or height a window can have on X11,
+/// whose protocol carries both in 16 bits. More than that is no frame.
+pub const FRAME_MOST: u32 = 65_535;
+
+/// What a window manager's frame - its title bar and borders - adds to a
+/// window's content on each axis: the size the toolkit reports with the frame
+/// (`outer`) less the size without it (`inner`), in one unit.
+///
+/// Nothing, as before a window manager has framed the window, where the two
+/// cannot be a window and its frame: an outer size smaller than the content,
+/// or more than [`FRAME_MOST`] added on either axis. Measured 2026-11-18
+/// (`OBS-262`, Xvfb and openbox, every X request recorded at the server):
+/// asked right after the value window was shown, winit 0.30.13 guessed the
+/// frame from the window's position before openbox moved its new frame and
+/// the frame's position after, and placed by the size it reported, the window
+/// opened at the top of the screen. How that size comes out more than four
+/// billion pixels tall is read in winit's source: the guess takes the negative
+/// difference of the two positions as an unsigned number.
+#[must_use]
+pub fn frame(outer: (u32, u32), inner: (u32, u32)) -> (u32, u32) {
+    match (outer.0.checked_sub(inner.0), outer.1.checked_sub(inner.1)) {
+        (Some(width), Some(height)) if width <= FRAME_MOST && height <= FRAME_MOST => {
+            (width, height)
+        }
+        _ => (0, 0),
+    }
+}
+
 impl Rect {
     /// The part two rectangles share, or `None` where they do not overlap -
     /// edges that only touch share nothing, as with every rectangle the window
@@ -311,6 +340,27 @@ mod tests {
             room_below(i32::MIN, rect(i32::MAX, i32::MAX, u32::MAX, u32::MAX)),
             u32::MAX
         );
+    }
+
+    #[test]
+    fn a_frame_is_what_the_outer_size_adds_to_the_content() {
+        // The value window under openbox: 1 px on each side, 22 above, 5 below.
+        assert_eq!(frame((522, 627), WINDOW), (2, 27));
+        assert_eq!(frame(WINDOW, WINDOW), (0, 0));
+        let most = (WINDOW.0 + FRAME_MOST, WINDOW.1 + FRAME_MOST);
+        assert_eq!(frame(most, WINDOW), (FRAME_MOST, FRAME_MOST));
+    }
+
+    #[test]
+    fn what_cannot_be_a_frame_counts_as_no_frame_yet() {
+        // The size winit 0.30.13 reported while openbox framed the window.
+        assert_eq!(frame((522, u32::MAX), WINDOW), (0, 0));
+        // One axis past the most a frame adds takes the other one with it.
+        assert_eq!(frame((WINDOW.0 + FRAME_MOST + 1, 627), WINDOW), (0, 0));
+        assert_eq!(frame((522, WINDOW.1 + FRAME_MOST + 1), WINDOW), (0, 0));
+        // An outer size smaller than the content on either axis.
+        assert_eq!(frame((518, 627), WINDOW), (0, 0));
+        assert_eq!(frame((522, 599), WINDOW), (0, 0));
     }
 
     #[test]
