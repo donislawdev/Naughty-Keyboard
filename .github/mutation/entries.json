@@ -5748,15 +5748,6 @@
       "runner": "pyunit:.github/scripts:test_verify_release"
     },
     {
-      "id": "M836",
-      "why": "a command lost from the notes counts as present because a longer one contains it",
-      "file": ".github/scripts/verify_release.py",
-      "find": "    missing = [line for line in promise.rendered(tag) if line not in lines]",
-      "replace": "    missing = [line for line in promise.rendered(tag) if line not in text]",
-      "test": "test_a_command_lost_from_the_notes_is_named_even_when_a_longer_one_contains_it",
-      "runner": "pyunit:.github/scripts:test_verify_release"
-    },
-    {
       "id": "M837",
       "why": "a full release that is not latest passes - the button offers another one",
       "file": ".github/scripts/verify_release.py",

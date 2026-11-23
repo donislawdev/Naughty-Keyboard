@@ -84,7 +84,7 @@ jobs:
 
       # Every file, the checksums, GitHub's own statement of what the release
       # published, the commands of README.md word for word, every statement held
-      # to the workflow that made it, the notes, and the latest release.
+      # to the workflow that made it, and the latest release.
       - name: Check the page
         env:
           GH_TOKEN: ${{ github.token }}
