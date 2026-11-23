@@ -1970,12 +1970,20 @@ mod tests {
     /// held to what a press really does - for every action, both ways: an
     /// action it claims is never answered `Unhandled`, and one it does not
     /// claim always is. Through fakes, so a send here types into nothing.
+    ///
+    /// 🔴 So is `HotkeyAction::types_a_value`, which the palette asks before a
+    /// press, to close a window of its own that holds the keyboard first
+    /// (`OBS-269`) - after two values went, so going back and repeating have
+    /// something to send.
     #[test]
-    fn handles_says_exactly_which_actions_are_carried_out() {
-        let kit = Kit::ready();
+    fn handles_and_types_a_value_say_exactly_what_a_press_does() {
+        let (kit, next) = (Kit::ready(), HotkeyAction::NextValue);
         for action in HotkeyAction::ALL {
             let mut advance = chosen(Risk::Normal);
+            let went = [(); 2].map(|()| advance.on_action(next, &kit.ports()).attempted_send);
+            assert_eq!(went, [true; 2], "two values went first");
             let outcome = advance.on_action(action, &kit.ports());
+            assert_eq!(action.types_a_value(), outcome.attempted_send, "{action:?}");
             let unhandled = outcome.messages.contains(&Message::Unhandled { action });
             assert_eq!(
                 AdvanceSequence::handles(action),

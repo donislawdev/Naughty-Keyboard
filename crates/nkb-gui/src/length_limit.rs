@@ -506,6 +506,21 @@ fn selected(form: &LimitForm) -> i32 {
         .unwrap_or(-1)
 }
 
+impl on_request::InTheWay for LengthLimit {
+    /// Open means holding the keyboard: the window closes when the tester
+    /// leaves it (`OBS-147`).
+    fn at_a_send(&self) -> on_request::AtASend {
+        if self.is_open() {
+            on_request::AtASend::Holds
+        } else {
+            on_request::AtASend::Closed
+        }
+    }
+    fn close(&self) {
+        Self::close(self);
+    }
+}
+
 impl Requested for LengthLimit {
     fn open(self: &Rc<Self>) {
         Self::open(self);

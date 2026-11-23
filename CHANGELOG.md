@@ -4,11 +4,17 @@ What changed for someone who uses Naughty Keyboard, newest first. The format fol
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-A release is made from a dated section of this file. That section becomes the top of its release notes
-word for word, followed by the same few lines on every release about downloading and checking a file.
-Changes wait under Unreleased until then.
+Changes wait under Unreleased until a release, which then gets a dated section of its own.
 
 ## [Unreleased]
+
+### Fixed
+
+- A shortcut that types a value, pressed while the value window, the length limit window, About or
+  the pack folders window had the keyboard, typed the value into that window, and the palette listed
+  it as sent. Now that window closes first, the keyboard goes back to the field you were in, and the
+  value goes there. While the system window for choosing a pack folder is open, nothing is sent and
+  the palette says why.
 
 ## [0.4.0] - 2026-11-18
 

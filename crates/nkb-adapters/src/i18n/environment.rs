@@ -109,3 +109,30 @@ fn pattern_environment(limit: Environment) -> &'static str {
 pub fn environment(limit: Environment, reason: &str) -> String {
     fill(pattern_environment(limit), &[("reason", reason)])
 }
+
+/// Why a press that types a value sent nothing: a window of the tool's own
+/// had the keyboard and could not be closed first (`OBS-269`, `ux-spec.md`
+/// 6 A). A window that could be closed was closed, and the value went to the
+/// field the tester was in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OwnWindow {
+    /// The system's window for choosing a pack folder stands, and the tester
+    /// is choosing there - it is not closed under them.
+    ChoosingFolder,
+    /// A window of the tool's had the keyboard and did not close in time.
+    DidNotClose,
+}
+
+/// What the palette says when a press that types a value sent nothing,
+/// because a window of the tool's own had the keyboard.
+#[must_use]
+pub fn nothing_sent_for(why: OwnWindow) -> &'static str {
+    match why {
+        OwnWindow::ChoosingFolder => {
+            "The window for choosing a pack folder has the keyboard, so nothing was sent. Choose a folder or cancel, then press the shortcut again."
+        }
+        OwnWindow::DidNotClose => {
+            "A Naughty Keyboard window has the keyboard and did not close in time, so nothing was sent. Close it and press the shortcut again."
+        }
+    }
+}

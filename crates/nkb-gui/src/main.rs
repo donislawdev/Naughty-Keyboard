@@ -192,6 +192,24 @@ fn start(request: Request) -> Result<ExitCode, Failure> {
 
 /// The clicks of the palette that only ask the worker for something.
 ///
+/// The windows a press that types a value closes first, when they hold the
+/// keyboard, so the value goes to the field the tester was in and never into
+/// a window of ours (`OBS-269`). The length limit and folders windows before
+/// the value window, whose keyboard they take over.
+fn out_of_the_way(
+    length_limit: &Rc<Later<LengthLimit>>,
+    pack_folders: &Rc<Later<Folders>>,
+    packs: &Rc<Packs>,
+    about: &Rc<Later<About>>,
+) {
+    nkb_gui::on_request::in_the_way_of_a_value(vec![
+        Rc::clone(length_limit) as Rc<dyn nkb_gui::on_request::InTheWay>,
+        Rc::clone(pack_folders) as _,
+        Rc::clone(packs) as _,
+        Rc::clone(about) as _,
+    ]);
+}
+
 /// The pack folders window (`D175`): made at its first opening, the About
 /// window's way, and opened by the value window's link, which hands it the
 /// keyboard it lent. Its choices go to the worker, which keeps the settings.
@@ -397,6 +415,7 @@ fn run_palette(
     // The About window (the owner's point 4): made at its first opening, the
     // shortcuts window's way.
     let about = About::later(say_in(&palette));
+    out_of_the_way(&length_limit, &pack_folders, &packs, &about);
     // The links in the header (the owner's points of 2026-10-14): two pages in
     // the browser, and the About window.
     palette.on_open_link({

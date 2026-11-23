@@ -665,6 +665,25 @@ fn label(window: &FoldersWindow) {
     window.set_close_action(i18n::folders_label(FoldersLabel::CloseAction).into());
 }
 
+impl on_request::InTheWay for Folders {
+    /// The one window that stays when the tester goes elsewhere (the module
+    /// header): it holds the keyboard only while they are still here.
+    fn at_a_send(&self) -> on_request::AtASend {
+        if !self.open.get() {
+            on_request::AtASend::Closed
+        } else if self.picking.get() {
+            on_request::AtASend::Choosing
+        } else if self.away.get() {
+            on_request::AtASend::Away
+        } else {
+            on_request::AtASend::Holds
+        }
+    }
+    fn close(&self) {
+        Self::close(self);
+    }
+}
+
 impl Requested for Folders {
     fn open(self: &Rc<Self>) {
         Self::open(self);

@@ -149,6 +149,22 @@ impl HotkeyAction {
         HotkeyAction::MarkSuspect,
     ];
 
+    /// Whether the action types a value into the field in front: the three
+    /// that send. Restarting and walking the pack move the next value and type
+    /// nothing, and the report goes to the clipboard.
+    ///
+    /// Asked by the palette before such a press, so a window of its own that
+    /// holds the keyboard closes first and the value goes to the field the
+    /// tester was in, not into that window (`OBS-269`). A test in `app` holds
+    /// this answer to what the sequence really sends.
+    #[must_use]
+    pub const fn types_a_value(self) -> bool {
+        matches!(
+            self,
+            HotkeyAction::NextValue | HotkeyAction::PreviousValue | HotkeyAction::RepeatLast
+        )
+    }
+
     /// The action's name where a tester writes it - a key of the `[shortcuts]`
     /// table in the settings file (`settings-format.md` 2).
     ///
