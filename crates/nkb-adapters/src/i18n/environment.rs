@@ -127,6 +127,12 @@ pub enum OwnWindow {
 /// because a window of the tool's own had the keyboard.
 #[must_use]
 pub fn nothing_sent_for(why: OwnWindow) -> &'static str {
+    pattern_own_window(why)
+}
+
+/// The pattern for a press a window of the tool's own kept. `ux-spec.md` 6,
+/// section A, byte for byte.
+fn pattern_own_window(why: OwnWindow) -> &'static str {
     match why {
         OwnWindow::ChoosingFolder => {
             "The window for choosing a pack folder has the keyboard, so nothing was sent. Choose a folder or cancel, then press the shortcut again."
