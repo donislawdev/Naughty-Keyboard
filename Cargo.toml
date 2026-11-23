@@ -187,7 +187,7 @@ embed-resource = "=3.0.12"
 # Only the tests of nkb-cli and nkb-gui use it, each on its own binary, because
 # a package's integration tests are the only place Cargo hands over the path of
 # the binary it has just built.
-object = { version = "0.40.0", default-features = false, features = ["read_core", "elf", "macho", "pe"] }
+object = { version = "0.41.0", default-features = false, features = ["read_core", "elf", "macho", "pe"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
