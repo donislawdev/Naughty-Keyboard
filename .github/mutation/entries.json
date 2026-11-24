@@ -2606,7 +2606,7 @@
       "file": "crates/nkb-app/src/advance_sequence.rs",
       "find": "                | HotkeyAction::RestartPack\n                | HotkeyAction::CopyReport",
       "replace": "                | HotkeyAction::CopyReport",
-      "test": "advance_sequence::tests::handles_says_exactly_which_actions_are_carried_out",
+      "test": "advance_sequence::tests::handles_and_types_a_value_say_exactly_what_a_press_does",
       "runner": "rust:nkb-app:lib"
     },
     {
@@ -5748,15 +5748,6 @@
       "runner": "pyunit:.github/scripts:test_verify_release"
     },
     {
-      "id": "M836",
-      "why": "a command lost from the notes counts as present because a longer one contains it",
-      "file": ".github/scripts/verify_release.py",
-      "find": "    missing = [line for line in promise.rendered(tag) if line not in lines]",
-      "replace": "    missing = [line for line in promise.rendered(tag) if line not in text]",
-      "test": "test_a_command_lost_from_the_notes_is_named_even_when_a_longer_one_contains_it",
-      "runner": "pyunit:.github/scripts:test_verify_release"
-    },
-    {
       "id": "M837",
       "why": "a full release that is not latest passes - the button offers another one",
       "file": ".github/scripts/verify_release.py",
@@ -6435,7 +6426,7 @@
       "id": "M913",
       "why": "Next pack goes to the sequence instead of the palette - the pack shortcut does nothing",
       "file": "crates/nkb-gui/src/live/presses.rs",
-      "find": "                Wait::Pressed(HotkeyAction::NextPack) => (self.on_pack)(Direction::Next),\n",
+      "find": "                Wait::Pressed(HotkeyAction::NextPack) => {\n                    (self.later)(Command::Pack(Direction::Next))\n                }\n",
       "replace": "",
       "test": "live::presses::tests::a_shortcut_is_wired_when_the_sequence_or_the_palette_answers_it",
       "runner": "rust:nkb-gui:lib"

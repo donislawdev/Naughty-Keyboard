@@ -15,6 +15,10 @@ a person ever sees, and that is the gap this fills: it downloads what a person
 downloads and does what a person is told to do, with the commands of README.md
 run word for word rather than written again here.
 
+The notes on the page are not checked. They are written by hand when the
+release is published, and what a person is told to run stands in README.md,
+which is what runs here.
+
 Every check is asked, and every problem is listed, before the answer is given:
 a person reads a release page once and wants the whole list of what is wrong
 with it, not the first line. It only reads. A verifier that can publish is not
@@ -178,18 +182,6 @@ def command_problems(directory, tag, promise, run):
     return problems
 
 
-def notes_problems(body, tag, promise):
-    """The page tells a person what was just checked. Only the commands and the
-    name of the checksums are asked for, so a sentence added to the notes later,
-    such as the one that withdraws a release, changes nothing here."""
-    text = body or ""
-    lines = [line.strip() for line in text.splitlines()]
-    missing = [line for line in promise.rendered(tag) if line not in lines]
-    if release.SUMS not in text:
-        missing.append(release.SUMS)
-    return ["the notes of %s do not say: %s" % (tag, line) for line in missing]
-
-
 def latest_problems(view, tag, latest):
     """The download button aims at the latest release, so a full release has to
     be it. A pre-release never is, and that includes a withdrawn one."""
@@ -202,7 +194,7 @@ def latest_problems(view, tag, latest):
 def command_page(args, run=subprocess.run):
     promise = release.load_promise()
     repository = release.repository_name(contents.load_workspace())
-    view = gh_json(["release", "view", args.tag, "--json", "assets,body,isDraft,isImmutable,isPrerelease"],
+    view = gh_json(["release", "view", args.tag, "--json", "assets,isDraft,isImmutable,isPrerelease"],
                    "the release %s" % args.tag, run)
     problems = release_problems(view, args.tag)
     say("downloading every file of %s" % args.tag)
@@ -218,7 +210,6 @@ def command_page(args, run=subprocess.run):
         problems += command_problems(args.dir, args.tag, promise, run)
         say("every statement, held to who made it")
         problems += statement_problems(args.dir, args.tag, promise, repository, run)
-    problems += notes_problems(view.get("body"), args.tag, promise)
     latest = release.gh(["api", "repos/%s/releases/latest" % repository, "--jq", ".tag_name"], run)
     problems += latest_problems(view, args.tag, latest.stdout.strip() if latest.returncode == 0 else "")
     return verdict("the page of %s" % args.tag, problems)

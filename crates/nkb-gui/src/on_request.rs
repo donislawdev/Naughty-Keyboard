@@ -46,6 +46,21 @@
 //! About and the shortcuts window are made the first time the tester opens
 //! them, not at start: [`Later`] says why, and why the pack window is not.
 //!
+//! # Out of the way of a value
+//!
+//! A press that types a value is meant for the field the tester works in. With
+//! a window of ours holding the keyboard it went into that window instead: on
+//! X11 the value window's search took it, and the palette counted it as sent
+//! (`OBS-269`). So such a press first closes the windows that hold the
+//! keyboard, each the way its Esc does - handing the keyboard back to the field
+//! it came from - and the value goes there: [`make_way`]. Every hand-back reads
+//! the system until the field's window is in front, so the value does not
+//! overtake it. The welcome window is not among them: its box is where the
+//! first value is meant to go. Nor is the shortcuts window: while it is open
+//! the palette holds no shortcut. And while the system's folder window stands,
+//! the tester is choosing there - nothing is closed under them, and the press
+//! sends nothing and says why.
+//!
 //! # Beside the palette
 //!
 //! A window that is not on the screen opens beside the palette, not where the
@@ -75,6 +90,10 @@ thread_local! {
     /// The palette the windows opened on request stand beside, on the main
     /// thread, where every window lives. Named once at start (`main.rs`).
     static PALETTE: RefCell<Option<slint::Weak<crate::Palette>>> = const { RefCell::new(None) };
+
+    /// The windows a press that types a value closes first, in the order
+    /// [`make_way`] closes them. Named once at start (`main.rs`).
+    static IN_THE_WAY: RefCell<Vec<Rc<dyn InTheWay>>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Names the palette the windows opened on request open beside.
@@ -454,6 +473,95 @@ pub(crate) fn has_left(window: &slint::Window) -> bool {
     nkb_adapters::holds_keyboard(crate::focus::window_handle(window)) != Some(true)
 }
 
+/// Where the keyboard is, as a window opened on request finds it when a press
+/// that types a value comes (the module header, "Out of the way of a value").
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AtASend {
+    /// Not open.
+    Closed,
+    /// Open with the keyboard in it, as far as the window knows: the value
+    /// would go into it.
+    Holds,
+    /// Open, and the tester went to another window, where the value goes -
+    /// the pack folders window, which stays for a drop.
+    Away,
+    /// The system's folder window stands over it, and the tester is choosing
+    /// there.
+    Choosing,
+}
+
+/// A window opened on request, as a press that types a value finds it.
+pub trait InTheWay {
+    /// Where the keyboard is, as this window knows it now.
+    fn at_a_send(&self) -> AtASend;
+    /// Closes the window the way its Esc does: the keyboard goes back to the
+    /// field it came from, then the window hides.
+    fn close(&self);
+}
+
+/// What making way for a press that types a value came to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MadeWay {
+    /// No window of ours holds the keyboard now: the press goes on.
+    Clear,
+    /// The system's folder window stands. Nothing was closed, and the press
+    /// sends nothing.
+    Choosing,
+    /// The main thread did not answer in time. The press sends nothing, so a
+    /// value cannot go into a window of ours that is still there.
+    NoAnswer,
+}
+
+/// Closes, in the order given, every window that holds the keyboard - unless
+/// the tester is choosing a folder, when nothing is closed.
+///
+/// Each window is asked when its turn comes, not all of them first: closing
+/// the length limit window hides the value window that gave way to it, and
+/// that one then has nothing left to close.
+pub fn make_way(windows: &[&dyn InTheWay]) -> MadeWay {
+    if windows
+        .iter()
+        .any(|window| window.at_a_send() == AtASend::Choosing)
+    {
+        return MadeWay::Choosing;
+    }
+    for window in windows {
+        if window.at_a_send() == AtASend::Holds {
+            window.close();
+        }
+    }
+    MadeWay::Clear
+}
+
+/// Names the windows a press that types a value closes first, in the order
+/// they are closed: the one that takes the keyboard from another before it.
+pub fn in_the_way_of_a_value(windows: Vec<Rc<dyn InTheWay>>) {
+    IN_THE_WAY.with(|named| *named.borrow_mut() = windows);
+}
+
+/// [`make_way`] over the windows named at start. On the main thread, where
+/// they live - the worker asks for it through the event loop.
+#[must_use]
+pub fn make_way_now() -> MadeWay {
+    // A copy of the list, so a window that closes is not asked while the list
+    // is borrowed.
+    let windows = IN_THE_WAY.with(|named| named.borrow().clone());
+    let windows: Vec<&dyn InTheWay> = windows.iter().map(|window| &**window).collect();
+    make_way(&windows)
+}
+
+impl<T: Requested + InTheWay + 'static> InTheWay for Later<T> {
+    fn at_a_send(&self) -> AtASend {
+        self.made
+            .get()
+            .map_or(AtASend::Closed, |window| window.at_a_send())
+    }
+
+    fn close(&self) {
+        Later::close(self);
+    }
+}
+
 /// Hides the window of `owner` once the event that made it inactive is over -
 /// if `closed` still says so then, because a window opened again in between
 /// stays where it is.
@@ -603,5 +711,90 @@ mod tests {
             failure("no native window")[..],
             "a window never ready said nothing"
         );
+    }
+
+    /// A window as a press that types a value finds it, with a count of its
+    /// closings - and what closing it does to another, as the length limit
+    /// window's does to the value window behind it.
+    struct Standing {
+        at: Cell<AtASend>,
+        closed: Cell<u32>,
+        closes_too: Option<Rc<Standing>>,
+    }
+
+    impl Standing {
+        fn new(at: AtASend) -> Rc<Self> {
+            Rc::new(Self {
+                at: Cell::new(at),
+                closed: Cell::new(0),
+                closes_too: None,
+            })
+        }
+    }
+
+    impl InTheWay for Standing {
+        fn at_a_send(&self) -> AtASend {
+            self.at.get()
+        }
+        fn close(&self) {
+            self.closed.set(self.closed.get() + 1);
+            self.at.set(AtASend::Closed);
+            if let Some(other) = &self.closes_too {
+                other.at.set(AtASend::Closed);
+            }
+        }
+    }
+
+    /// Every window with the keyboard closes, once. One the tester left for
+    /// another window stays, and so does one that is not open.
+    #[test]
+    fn a_press_that_types_closes_each_window_with_the_keyboard_and_no_other() {
+        let holds = Standing::new(AtASend::Holds);
+        let away = Standing::new(AtASend::Away);
+        let shut = Standing::new(AtASend::Closed);
+        let also = Standing::new(AtASend::Holds);
+        let windows: [&dyn InTheWay; 4] = [&*holds, &*away, &*shut, &*also];
+        assert_eq!(make_way(&windows), MadeWay::Clear);
+        assert_eq!(
+            [
+                holds.closed.get(),
+                away.closed.get(),
+                shut.closed.get(),
+                also.closed.get()
+            ],
+            [1, 0, 0, 1]
+        );
+        assert_eq!(
+            away.at.get(),
+            AtASend::Away,
+            "the folders window stays for a drop"
+        );
+    }
+
+    /// While the system's folder window stands, the tester is choosing: no
+    /// window closes under them, the ones before it included.
+    #[test]
+    fn nothing_closes_while_a_folder_is_being_chosen() {
+        let holds = Standing::new(AtASend::Holds);
+        let choosing = Standing::new(AtASend::Choosing);
+        let windows: [&dyn InTheWay; 2] = [&*holds, &*choosing];
+        assert_eq!(make_way(&windows), MadeWay::Choosing);
+        assert_eq!(holds.closed.get(), 0);
+    }
+
+    /// A window is asked when its turn comes: the value window that gave way
+    /// to the length limit window is hidden with it, and is not closed again -
+    /// a second close would hand the keyboard back a second time.
+    #[test]
+    fn a_window_closed_by_the_one_before_it_is_not_closed_again() {
+        let value_window = Standing::new(AtASend::Holds);
+        let limit = Rc::new(Standing {
+            at: Cell::new(AtASend::Holds),
+            closed: Cell::new(0),
+            closes_too: Some(Rc::clone(&value_window)),
+        });
+        let windows: [&dyn InTheWay; 2] = [&*limit, &*value_window];
+        assert_eq!(make_way(&windows), MadeWay::Clear);
+        assert_eq!((limit.closed.get(), value_window.closed.get()), (1, 0));
     }
 }

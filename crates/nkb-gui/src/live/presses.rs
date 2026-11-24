@@ -6,6 +6,8 @@
 use nkb_app::ports::GivenShortcut;
 
 use super::*;
+use crate::on_request::MadeWay;
+use nkb_adapters::i18n::OwnWindow;
 
 /// Whether the loop goes on: no while the window is closing, and no while a
 /// command waits - which is then kept in `pending` for [`drive`] to carry out.
@@ -60,10 +62,17 @@ pub(super) struct PaletteShortcuts<'a> {
     /// window. A press during a send is answered after it, like a toggle: the
     /// window opens once the value is in, and no value is replayed.
     pub(super) on_open: &'a dyn Fn(),
-    /// What a `NextPack` or `PreviousPack` press does - leaves the step for the
-    /// worker, which holds the pack in use (`D120`). Answered after a send,
-    /// like the two above.
-    pub(super) on_pack: &'a dyn Fn(Direction),
+    /// What a press taken here comes to later, as a command the worker carries
+    /// out between presses: a `NextPack` or `PreviousPack` press leaves the
+    /// step for the worker, which holds the pack in use (`D120`), answered
+    /// after a send like the two above - and a press that types a value and
+    /// may not go on leaves the sentence that says why ([`Command::NotSent`]).
+    pub(super) later: &'a dyn Fn(Command),
+    /// Asked before a press that types a value goes on: closes a window of
+    /// the palette that holds the keyboard, so the value goes to the field the
+    /// tester was in and not into that window (`OBS-269`), and answers whether
+    /// the press may go on. Through the main thread, where the windows live.
+    pub(super) make_way: &'a dyn Fn() -> MadeWay,
 }
 
 impl LiveShortcuts for PaletteShortcuts<'_> {
@@ -82,10 +91,61 @@ impl LiveShortcuts for PaletteShortcuts<'_> {
             match self.inner.next(left) {
                 Wait::Pressed(HotkeyAction::ToggleVisibility) => (self.on_toggle)(),
                 Wait::Pressed(HotkeyAction::OpenPacks) => (self.on_open)(),
-                Wait::Pressed(HotkeyAction::NextPack) => (self.on_pack)(Direction::Next),
-                Wait::Pressed(HotkeyAction::PreviousPack) => (self.on_pack)(Direction::Previous),
+                Wait::Pressed(HotkeyAction::NextPack) => {
+                    (self.later)(Command::Pack(Direction::Next))
+                }
+                Wait::Pressed(HotkeyAction::PreviousPack) => {
+                    (self.later)(Command::Pack(Direction::Previous));
+                }
+                Wait::Pressed(action) if action.types_a_value() => match (self.make_way)() {
+                    MadeWay::Clear => return Wait::Pressed(action),
+                    refused => (self.later)(Command::NotSent(refusal(refused))),
+                },
                 other => return other,
             }
+        }
+    }
+}
+
+/// How long a press that types a value waits for the main thread to close a
+/// window of the palette that holds the keyboard (`OBS-269`): five times the
+/// longest a hand-back reads the system for the field's window to come to the
+/// front (400 ms on X11, `nkb-sys`).
+pub(super) const MAKE_WAY_WAIT: Duration = Duration::from_secs(2);
+
+/// Asks the main thread to close the windows of the palette that hold the
+/// keyboard (`on_request::make_way_now`) and waits for its answer. No answer
+/// in [`MAKE_WAY_WAIT`] - the event loop gone, or held up - sends nothing:
+/// a window of ours may still have the keyboard.
+pub(super) fn make_way_for_a_value() -> MadeWay {
+    let (answer, answered) = std::sync::mpsc::channel();
+    let asked = slint::invoke_from_event_loop(move || {
+        let _ = answer.send(crate::on_request::make_way_now());
+    });
+    if asked.is_err() {
+        return MadeWay::NoAnswer;
+    }
+    answered
+        .recv_timeout(MAKE_WAY_WAIT)
+        .unwrap_or(MadeWay::NoAnswer)
+}
+
+/// What the palette says for a press that may not go on.
+const fn refusal(why: MadeWay) -> OwnWindow {
+    match why {
+        MadeWay::Choosing => OwnWindow::ChoosingFolder,
+        MadeWay::Clear | MadeWay::NoAnswer => OwnWindow::DidNotClose,
+    }
+}
+
+impl Worker<'_> {
+    /// A press that types a value sent nothing (`OBS-269`): the palette says why.
+    pub(super) fn not_sent(&self, why: OwnWindow) -> Carried {
+        let line = nkb_adapters::i18n::nothing_sent_for(why).to_owned();
+        Carried {
+            view: Some(self.view(vec![line], ValueBand::Keep, None)),
+            told: None,
+            toggled: None,
         }
     }
 }
@@ -191,12 +251,13 @@ mod tests {
             let queued = Queued(std::cell::RefCell::new([action].into()));
             let taken = std::cell::Cell::new(false);
             let on_own = || taken.set(true);
-            let on_pack = |_| taken.set(true);
+            let later = |_| taken.set(true);
             let shortcuts = PaletteShortcuts {
                 inner: &queued,
                 on_toggle: &on_own,
                 on_open: &on_own,
-                on_pack: &on_pack,
+                later: &later,
+                make_way: &|| MadeWay::Clear,
             };
             let passed_on = shortcuts.next(Duration::ZERO) == Wait::Pressed(action);
             assert_eq!(
@@ -233,12 +294,13 @@ mod tests {
         let opens = std::cell::Cell::new(0);
         let on_open = || opens.set(opens.get() + 1);
         let packs = std::cell::RefCell::new(Vec::new());
-        let on_pack = |direction| packs.borrow_mut().push(direction);
+        let later = |command| packs.borrow_mut().push(command);
         let shortcuts = PaletteShortcuts {
             inner: &queued,
             on_toggle: &on_toggle,
             on_open: &on_open,
-            on_pack: &on_pack,
+            later: &later,
+            make_way: &|| MadeWay::Clear,
         };
         // A zero wait, as the drain after a send asks: the toggle in front must
         // not hide the NextValue behind it.
@@ -255,8 +317,76 @@ mod tests {
         assert_eq!(opens.get(), 1, "the pack window was asked for, once");
         assert_eq!(
             *packs.borrow(),
-            vec![Direction::Next, Direction::Previous],
+            vec![
+                Command::Pack(Direction::Next),
+                Command::Pack(Direction::Previous)
+            ],
             "each press for another pack was answered, in its own direction"
+        );
+    }
+
+    /// A press that types a value asks for the way first and goes on only
+    /// when it is clear (`OBS-269`). One that could not be cleared sends
+    /// nothing, says why, and the presses behind it are still answered. A
+    /// press that types nothing never asks: walking the pack must not close
+    /// the value window the tester walks it with.
+    #[test]
+    fn a_press_that_types_goes_on_only_once_no_window_of_ours_holds_the_keyboard() {
+        let queued = Queued(std::cell::RefCell::new(
+            [
+                HotkeyAction::NextValue,
+                HotkeyAction::SkipValue,
+                HotkeyAction::PreviousValue,
+                HotkeyAction::RepeatLast,
+                HotkeyAction::CopyReport,
+            ]
+            .into(),
+        ));
+        let answers = std::cell::RefCell::new(std::collections::VecDeque::from([
+            MadeWay::Clear,
+            MadeWay::Choosing,
+            MadeWay::NoAnswer,
+        ]));
+        let make_way = || {
+            answers
+                .borrow_mut()
+                .pop_front()
+                .expect("asked once for each press that types, and for no other")
+        };
+        let refused = std::cell::RefCell::new(Vec::new());
+        let later = |command| refused.borrow_mut().push(command);
+        let nothing = || {};
+        let shortcuts = PaletteShortcuts {
+            inner: &queued,
+            on_toggle: &nothing,
+            on_open: &nothing,
+            later: &later,
+            make_way: &make_way,
+        };
+        assert_eq!(
+            shortcuts.next(Duration::ZERO),
+            Wait::Pressed(HotkeyAction::NextValue)
+        );
+        assert_eq!(
+            shortcuts.next(Duration::ZERO),
+            Wait::Pressed(HotkeyAction::SkipValue)
+        );
+        assert_eq!(
+            shortcuts.next(Duration::ZERO),
+            Wait::Pressed(HotkeyAction::CopyReport),
+            "a refused press reached the sequence, or cut the drain short"
+        );
+        assert_eq!(shortcuts.next(Duration::ZERO), Wait::Nothing);
+        assert!(
+            answers.borrow().is_empty(),
+            "a press that types did not ask"
+        );
+        assert_eq!(
+            *refused.borrow(),
+            vec![
+                Command::NotSent(OwnWindow::ChoosingFolder),
+                Command::NotSent(OwnWindow::DidNotClose)
+            ]
         );
     }
 }

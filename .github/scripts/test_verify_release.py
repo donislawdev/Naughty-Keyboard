@@ -204,31 +204,6 @@ class Commands(unittest.TestCase):
         self.assertIn("no attestation", problems[0])
 
 
-class Notes(unittest.TestCase):
-    def setUp(self):
-        self.promise = release.load_promise()
-        with open(release.NOTES_FOOTER, encoding="utf-8") as handle:
-            self.notes = release.release_notes("- A thing.", TAG, self.promise, handle.read())
-
-    def test_the_notes_phase_a_writes_say_everything_this_asks_for(self):
-        self.assertEqual(verify_release.notes_problems(self.notes, TAG, self.promise), [])
-
-    def test_line_ends_from_the_web_editor_and_a_sentence_added_on_top_change_nothing(self):
-        edited = "Withdrawn: use v0.1.1.\r\n\r\n" + self.notes.replace("\n", "\r\n")
-        self.assertEqual(verify_release.notes_problems(edited, TAG, self.promise), [])
-
-    def test_a_command_lost_from_the_notes_is_named_even_when_a_longer_one_contains_it(self):
-        lines = self.promise.rendered(TAG)
-        # The API command is the start of the offline one, so a check by
-        # substring would find it in the line that is left.
-        api = next(l for l in lines if "--predicate-type" in l and "--bundle" not in l)
-        cut = self.notes.replace(api + "\n", "")
-        self.assertEqual(verify_release.notes_problems(cut, TAG, self.promise),
-                         [f"the notes of v{VERSION} do not say: " + api])
-        self.assertTrue(verify_release.notes_problems(self.notes.replace(release.SUMS, "the sums"), TAG, self.promise))
-        self.assertEqual(len(verify_release.notes_problems("", TAG, self.promise)), len(lines) + 1)
-
-
 class Latest(unittest.TestCase):
     def test_a_full_release_has_to_be_the_latest_and_a_pre_release_must_not_be(self):
         self.assertEqual(verify_release.latest_problems({"isPrerelease": False}, TAG, TAG), [])

@@ -604,6 +604,21 @@ impl Packs {
     }
 }
 
+impl on_request::InTheWay for Packs {
+    /// Open means holding the keyboard: the window closes when the tester
+    /// leaves it (the module header, "Leaving it for another window").
+    fn at_a_send(&self) -> on_request::AtASend {
+        if self.is_open() {
+            on_request::AtASend::Holds
+        } else {
+            on_request::AtASend::Closed
+        }
+    }
+    fn close(&self) {
+        Self::close(self);
+    }
+}
+
 /// Every modifier key Slint keeps a pressed state for - `InternalKeyboardModifierState`
 /// in i-slint-core 1.18.1, read, not guessed. A key missing here would stay
 /// stuck, so the list is all of them rather than the shortcut's own.

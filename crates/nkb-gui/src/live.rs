@@ -263,6 +263,11 @@ pub enum Command {
     /// sequence and carried out here, where the pack in use and the settings
     /// that remember it live.
     Pack(Direction),
+    /// A press that types a value sent nothing, because a window of the
+    /// palette's own held the keyboard and could not be closed first
+    /// (`OBS-269`): the palette says why. Made by the worker itself, as
+    /// `Pack` is, and carried out between presses.
+    NotSent(nkb_adapters::i18n::OwnWindow),
     /// The tester closed the welcome window - remember it, so it does not open
     /// again (`[welcome] done`, UX7, `D103`, `D105`), and start the pack over
     /// from its first value (`D109`). Here, because the worker owns the
@@ -558,16 +563,17 @@ pub fn drive(
                 // The worker's own switch, the one a click reaches as a
                 // command between presses - built here because the loop below
                 // borrows the sequence beside it.
-                let collapse = &worker.collapse;
-                let on_toggle = || draw_toggle(palette, collapse.toggle());
-                // A press for another pack waits as a command does, and the
-                // loop below carries it out as soon as the wait ends.
-                let on_pack = |direction| pending.set(Some(Command::Pack(direction)));
+                let on_toggle = || draw_toggle(palette, worker.collapse.toggle());
+                // A press for another pack, or one that types a value and may
+                // not go on (`OBS-269`), waits as a command does, and the loop
+                // below carries it out as soon as the wait ends.
+                let later = |command| pending.set(Some(command));
                 let shortcuts = PaletteShortcuts {
                     inner: live,
                     on_toggle: &on_toggle,
                     on_open: &on_open,
-                    on_pack: &on_pack,
+                    later: &later,
+                    make_way: &presses::make_way_for_a_value,
                 };
                 // Captured on every way in, because `drive_sequence` borrows
                 // the sequence for the whole loop and the closure that builds
@@ -784,6 +790,7 @@ impl Worker<'_> {
             Command::Skip => self.step(HotkeyAction::SkipValue),
             Command::Back => self.step(HotkeyAction::BackOneValue),
             Command::Pack(direction) => self.step_pack(direction),
+            Command::NotSent(why) => self.not_sent(why),
             // Here, on the thread that holds the pack and the clipboard: the
             // value is built from the pack in memory (`W5`), and on Linux the
             // process that set the clipboard is the one serving it.

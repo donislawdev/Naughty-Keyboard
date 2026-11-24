@@ -97,7 +97,7 @@ pub use catalogue::{
     catalogue_notes, choose_error, folder_not_read, pack_overrides, pack_source, source_badge,
 };
 pub use causes::closed_window as closed_window_cause;
-pub use environment::{Environment, environment};
+pub use environment::{Environment, OwnWindow, environment, nothing_sent_for};
 pub(crate) use fill::fill;
 pub use folders::{
     FoldersLabel, file_manager_failed, folder_state, folder_window_failed, folders_label,

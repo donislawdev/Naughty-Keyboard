@@ -272,6 +272,21 @@ fn label(window: &AboutWindow) {
     window.set_close_action(i18n::about_label(AboutLabel::CloseAction).into());
 }
 
+impl on_request::InTheWay for About {
+    /// Open means holding the keyboard: the window closes when the tester
+    /// leaves it (`OBS-147`).
+    fn at_a_send(&self) -> on_request::AtASend {
+        if self.is_open() {
+            on_request::AtASend::Holds
+        } else {
+            on_request::AtASend::Closed
+        }
+    }
+    fn close(&self) {
+        Self::close(self);
+    }
+}
+
 impl Requested for About {
     fn open(self: &Rc<Self>) {
         Self::open(self);
