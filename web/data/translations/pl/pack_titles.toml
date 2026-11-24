@@ -1,0 +1,29 @@
+# Polish titles a search result shows for the pages of the packs listed in data/pack_titles.toml.
+# Every pack listed there needs one here, or the build stops.
+
+[whitespace]
+title = "Spacja o zerowej szerokości i białe znaki - wartości testowe"
+
+[dates-impossible]
+title = "Rok przestępny i niemożliwe daty - przypadki testowe"
+
+[export-breakers]
+title = "Formuły w CSV i Excelu - wartości testowe eksportu"
+
+[filenames-paths]
+title = "Niepoprawne nazwy plików i ścieżki do testów"
+
+[encoding-mojibake]
+title = "Krzaki (mojibake) i kodowanie - wartości testowe"
+
+[time-zones]
+title = "Testowanie stref czasowych - zmiana czasu i przesunięcia"
+
+[pseudolocalization]
+title = "Pseudolokalizacja - napisy testowe"
+
+[passwords]
+title = "Przypadki testowe pola hasła - rejestracja i logowanie"
+
+[search-queries]
+title = "Przypadki testowe wyszukiwarki - wartości, które ją psują"
