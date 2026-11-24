@@ -30,7 +30,7 @@ pub use advance_sequence::{
 };
 pub use browse_packs::{Listing, PackEntry, ShowOutcome, list_packs, show_pack};
 pub use drive_sequence::{Ended, drive_sequence};
-pub use emit_values::{Emission, EmitOutcome, EmittedValue, emit_values};
+pub use emit_values::{Emission, EmitOutcome, EmittedValue, NotBuilt, emit_values};
 pub use format_pack::{FormatOutcome, format_pack};
 pub use keep_settings::{
     Considered, KeptSettings, Opened, Opening, SettingsMessage, ShortcutChange, TeamFolderSaved,
