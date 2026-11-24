@@ -1092,8 +1092,8 @@
       "id": "M127",
       "why": "a read-only page counts as a field - letters go to the single-key shortcuts of the application under test, and the clearing to the page background",
       "file": "crates/nkb-sys/src/field.rs",
-      "find": "            (Some(true), _) => FocusedInput::NotTextField,",
-      "replace": "            (Some(true), _) => FocusedInput::TextField,",
+      "find": "            Some(true) => FocusedInput::NotTextField,",
+      "replace": "            Some(true) => FocusedInput::TextField,",
       "test": "field::tests::every_measured_focus_is_answered_as_it_was",
       "runner": "rust:nkb-sys:lib"
     },
@@ -1263,8 +1263,8 @@
       "id": "M160",
       "why": "a console line is a 'field' again - the trap waits for OBS-139 to be fixed and clears under a TUI program",
       "file": "crates/nkb-sys/src/field.rs",
-      "find": "            (Some(false), _) => FocusedInput::TextField,",
-      "replace": "            (Some(false), _) | (None, true) => FocusedInput::TextField,",
+      "find": "            None => FocusedInput::Unknown,",
+      "replace": "            None => FocusedInput::TextField,",
       "test": "field::tests::every_measured_focus_is_answered_as_it_was",
       "runner": "rust:nkb-sys:lib"
     },

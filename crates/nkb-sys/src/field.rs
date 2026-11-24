@@ -133,8 +133,10 @@
 //!
 //! Seven properties of ONE element, the one holding the focus: its process, its
 //! control type, whether it has the Value pattern and whether that is
-//! read-only, whether it has the Text pattern, whether it is a window of its
-//! own (only compared with zero, for the second look above), and its class
+//! read-only, whether it has the Text pattern (asked of a `Group` and a
+//! `ComboBox` only, the two types decided by it - see the cost below), whether
+//! it is a window of its own (only compared with zero, for the second look
+//! above), and its class
 //! name - compared with [`TERMINAL_CLASSES`] and
 //! [`CLOSED_TO_ACCESSIBILITY_CLASSES`] where it is read and dropped there, so
 //! nothing past that comparison ever holds it. A class name is set
@@ -156,6 +158,18 @@
 //! request that runs out of it (`UIA_E_TIMEOUT`) is
 //! [`FocusedInput::Unanswered`], never a frozen palette. Only that code: a
 //! request refused at once says nothing about time, and is `Unknown`.
+//!
+//! A question also costs the application asked. Chromium turns on its
+//! accessibility for the pages of a browser when a client first asks about an
+//! element of a page, and keeps it on until the browser closes - which modes,
+//! it decides by what is asked (`ax_platform_node_win.cc`, Chromium 158). The
+//! control type and the class name switch on the extended properties, and
+//! nothing here can do without the type. A request for the Text pattern
+//! switches on inline text boxes, the layout of every line of text on the
+//! page, so that request is made only where the answer depends on it
+//! (`asks_text_pattern`). Measured 2026-11-24 in Chrome 158 on Windows Server
+//! 2025, one question about an `<input>`: `chrome://accessibility` lists text
+//! metrics on when every element was asked for the pattern, and off since.
 
 // On macOS the question is answered by accessibility (`macos/ax.rs`), on Linux by the
 // bus of accessibility (`linux/atspi.rs`), and the machinery below is what Windows and
@@ -534,10 +548,11 @@ fn classify(facts: &Facts) -> FocusedInput {
         // so it is not claimed as a field. Its element comes from another
         // process than its window, so today it never gets this far (`OBS-139`),
         // and this arm keeps that from turning into clearing if it ever does.
-        control::DOCUMENT => match (facts.value, facts.text) {
-            (Some(true), _) => FocusedInput::NotTextField,
-            (Some(false), _) => FocusedInput::TextField,
-            (None, _) => FocusedInput::Unknown,
+        // Decided by the Value pattern alone, so the Text pattern is not asked.
+        control::DOCUMENT => match facts.value {
+            Some(true) => FocusedInput::NotTextField,
+            Some(false) => FocusedInput::TextField,
+            None => FocusedInput::Unknown,
         },
         // `contenteditable` in Chromium. A group without text is a container
         // of something else, and the module does not know of what.
@@ -549,6 +564,21 @@ fn classify(facts: &Facts) -> FocusedInput {
         other if NOT_TEXT.contains(&other) => FocusedInput::NotTextField,
         _ => FocusedInput::Unknown,
     }
+}
+
+/// Whether [`classify`] reads the Text pattern for this control type - the
+/// two types where it tells a field from a container or a closed list.
+///
+/// Every other type is decided without it, so it is not asked there: in
+/// Chromium a request for the Text pattern of a page element switches on the
+/// browser's inline text boxes for the whole page (`AXMode::kInlineTextBoxes`,
+/// `ax_platform_node_win.cc` in Chromium 158), and the browser keeps that mode
+/// until it closes. An `<input>` or a `<textarea>` is an `Edit`, so the field
+/// testers meet most often no longer asks it. A test holds this list to the
+/// arms of the decision.
+#[cfg_attr(not(windows), allow(dead_code))]
+const fn asks_text_pattern(control_type: i32) -> bool {
+    matches!(control_type, control::GROUP | control::COMBO_BOX)
 }
 
 /// A control whose type and patterns take text: a field, unless its Value
@@ -563,7 +593,9 @@ const fn field_unless_read_only(value: Option<bool>) -> FocusedInput {
 
 #[cfg(windows)]
 mod platform {
-    use super::{Facts, KnownClass, Owners, TIMEOUT_MS, Unread, known_class, unread_of};
+    use super::{
+        Facts, KnownClass, Owners, TIMEOUT_MS, Unread, asks_text_pattern, known_class, unread_of,
+    };
     use crate::WindowRef;
     use core::ffi::c_void;
     use core::ptr::{null, null_mut};
@@ -721,7 +753,12 @@ mod platform {
             } else {
                 None
             };
-            let text = bool_property(&element, PROPERTY_IS_TEXT_PATTERN_AVAILABLE)?;
+            // Asked only where the decision reads it: see `asks_text_pattern`.
+            let text = if asks_text_pattern(control_type) {
+                bool_property(&element, PROPERTY_IS_TEXT_PATTERN_AVAILABLE)?
+            } else {
+                false
+            };
             // Compared with zero and dropped - the handle itself is not kept.
             let windowed = int_property(&element, PROPERTY_NATIVE_WINDOW_HANDLE)? != 0;
             let class = class_of(&element);
@@ -931,6 +968,69 @@ mod tests {
         assert!(alone.include(100));
         assert!(!alone.include(200));
         assert!(!alone.include(0));
+    }
+
+    /// The control types, among every type UI Automation defines and a few past
+    /// them, whose answer changes with the Text pattern while `asks` says it is
+    /// not asked for them - each with every Value pattern and every class list.
+    fn text_decides_where_not_asked(asks: impl Fn(i32) -> bool) -> Vec<i32> {
+        let mut wrong = Vec::new();
+        for control_type in 49_990..50_060 {
+            for value in [None, RW, RO] {
+                for class in [
+                    KnownClass::Other,
+                    KnownClass::Terminal,
+                    KnownClass::ClosedToAccessibility,
+                ] {
+                    let with = |text| Facts {
+                        control_type,
+                        value,
+                        text,
+                        windowed: false,
+                        class,
+                    };
+                    if !asks(control_type)
+                        && classify(&with(true)) != classify(&with(false))
+                        && !wrong.contains(&control_type)
+                    {
+                        wrong.push(control_type);
+                    }
+                }
+            }
+        }
+        wrong
+    }
+
+    #[test]
+    fn the_text_pattern_is_asked_for_every_type_whose_answer_reads_it() {
+        // Not asked means read as absent. A type whose answer depends on it and
+        // is missing from the list would be decided as if it had no Text pattern.
+        assert_eq!(
+            text_decides_where_not_asked(asks_text_pattern),
+            Vec::<i32>::new()
+        );
+        // The check can fail: a list without `ComboBox` must be caught.
+        assert_eq!(
+            text_decides_where_not_asked(|control_type| control_type == control::GROUP),
+            vec![control::COMBO_BOX]
+        );
+        // And the list asks nothing the decision does not read.
+        for control_type in 49_990..50_060 {
+            if asks_text_pattern(control_type) {
+                let with = |text| Facts {
+                    control_type,
+                    value: RW,
+                    text,
+                    windowed: false,
+                    class: KnownClass::Other,
+                };
+                assert_ne!(
+                    classify(&with(true)),
+                    classify(&with(false)),
+                    "{control_type} is asked for a pattern its answer does not read"
+                );
+            }
+        }
     }
 
     /// The probe of 2026-09-24, row for row: what UI Automation said with the
