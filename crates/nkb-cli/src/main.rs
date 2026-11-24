@@ -561,17 +561,7 @@ fn emit(args: &[String], folders: &PackFolders) -> ExitCode {
     let catalogue = folders.catalogue();
 
     match emit_values(&catalogue, &TomlPackFormat, &SystemClock, wanted) {
-        EmitOutcome::Emitted(emission) => {
-            let rendered = emit_output::render(&emission, format, form, base64);
-            let mut err = crate::output::err();
-            for note in &rendered.notes {
-                let _ = writeln!(err, "nkb emit: {note}");
-            }
-            // A closed pipe - `nkb emit pack | head -1` - ends the run quietly
-            // with 0, a full disk under `> file` ends it with 5 (`output`).
-            out!("{}", rendered.data);
-            ExitCode::Ok
-        }
+        EmitOutcome::Emitted(emission) => emit_output::print(&emission, format, form, base64),
         EmitOutcome::Refused { errors } => {
             let mut err = crate::output::err();
             let _ = writeln!(err, "{}", browse_report::not_loaded("emit", wanted, errors));

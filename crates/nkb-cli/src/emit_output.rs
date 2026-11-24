@@ -24,13 +24,17 @@
 //! # Which stream
 //!
 //! `ux-spec.md` 10: values on standard output, everything else on the error
-//! stream. That is why [`Rendered`] keeps `data` and `notes` apart instead of
-//! returning one block of text - a note about lost information inside the data
-//! file would be the exact fault it warns about.
+//! stream. That is why [`write()`] puts the values through one door and hands
+//! every note to another, and [`notes()`] are told apart from the values before
+//! the first one - a note about lost information inside the data file would be
+//! the exact fault it warns about.
 
 use crate::english::plural;
+use crate::exit::ExitCode;
 use crate::json::Json;
-use nkb_app::emit_values::{Emission, EmittedValue};
+use crate::output::{is_open, out};
+use nkb_app::emit_values::{Emission, EmittedValue, NotBuilt};
+use std::io::Write as _;
 
 /// Version of the JSON THIS command prints.
 ///
@@ -89,52 +93,165 @@ pub enum Form {
     Escaped,
 }
 
-/// What a run of `emit` produced, split by the stream it belongs on.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Rendered {
-    /// Values, and nothing else. Standard output.
-    pub data: String,
-    /// The account, and every warning. The error stream.
-    pub notes: Vec<String>,
+/// What the account on the error stream is made of: the size of everything,
+/// counted from the recipes before any value is built.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Account {
+    pub values: usize,
+    pub code_points: usize,
+    pub bytes: usize,
+    /// Warnings the pack carries.
+    pub warnings: usize,
 }
 
-/// Renders one emission.
+impl Account {
+    /// The account of one emission.
+    #[must_use]
+    pub fn of(emission: &Emission) -> Self {
+        Self {
+            values: emission.len(),
+            code_points: emission.code_points,
+            bytes: emission.bytes,
+            warnings: emission.warnings,
+        }
+    }
+}
+
+/// What the error stream is told before the first value: the account, the
+/// warnings, and what the chosen shape costs. Every one of them is known before
+/// anything is built, which is the point - it is what a person reads before
+/// deciding whether to let the rest arrive.
 #[must_use]
-pub fn render(
-    emission: &Emission,
+pub fn notes(
+    account: &Account,
     format: EmitFormat,
     form: Option<Form>,
     base64: bool,
-) -> Rendered {
+) -> Vec<String> {
     let form = form.unwrap_or_else(|| format.default_form());
-    let mut notes = Vec::new();
-
-    // The account comes first, because it is the thing a person reads before
-    // deciding whether to let the rest arrive.
-    notes.push(format!(
+    let mut notes = vec![format!(
         "{}, {}, {}",
-        plural(emission.values.len(), "value"),
-        plural(emission.code_points, "code point"),
-        plural(emission.bytes, "byte")
-    ));
-    if emission.warnings > 0 {
+        plural(account.values, "value"),
+        plural(account.code_points, "code point"),
+        plural(account.bytes, "byte")
+    )];
+    if account.warnings > 0 {
         notes.push(format!(
             "the pack carries {} warning{} - run `nkb lint` to read them",
-            emission.warnings,
-            if emission.warnings == 1 { "" } else { "s" }
+            account.warnings,
+            if account.warnings == 1 { "" } else { "s" }
         ));
     }
     if base64 {
         notes.push("values are base64 encoded".to_owned());
     }
+    if format == EmitFormat::Csv && form == Form::Literal && !base64 {
+        notes.push(
+            "--raw prints values literally, so a value containing a comma, a quotation mark \
+             or a line break is quoted rather than escaped - the file stays valid CSV and the \
+             cells hold characters no editor will show you. A spreadsheet opening it also runs \
+             every value that starts with =, +, - or @ as a formula"
+                .to_owned(),
+        );
+    }
+    notes
+}
 
-    let data = match format {
-        EmitFormat::Json => as_json(emission, base64),
-        EmitFormat::Csv => as_csv(emission, form, base64, &mut notes),
-        EmitFormat::Lines => as_lines(emission, form, base64, &mut notes),
+/// Prints one emission: the notes on the error stream, then the values on
+/// standard output one at a time, each built when reached (`emit_values`). A
+/// closed pipe - `nkb emit pack | head -1` - ends the run quietly with 0 and
+/// builds nothing more, a full disk under `> file` ends it with 5 (`output`).
+pub(crate) fn print(
+    emission: &Emission,
+    format: EmitFormat,
+    form: Option<Form>,
+    base64: bool,
+) -> ExitCode {
+    for note in notes(&Account::of(emission), format, form, base64) {
+        let _ = writeln!(crate::output::err(), "nkb emit: {note}");
+    }
+    let written = write(
+        emission.values(),
+        format,
+        form,
+        base64,
+        |piece| {
+            out!("{piece}");
+            is_open()
+        },
+        |note| {
+            let _ = writeln!(crate::output::err(), "nkb emit: {note}");
+        },
+    );
+    let Err(not_built) = written else {
+        return ExitCode::Ok;
     };
+    let mut err = crate::output::err();
+    let _ = writeln!(
+        err,
+        "nkb emit: value '{}' passed validation and could not be built ({}).",
+        not_built.id, not_built.code
+    );
+    let _ = writeln!(
+        err,
+        "This is a fault in the tool, not in the pack. What was printed before it is incomplete."
+    );
+    ExitCode::ValidationFailed
+}
 
-    Rendered { data, notes }
+/// Writes the values through `put`, one at a time, each built as it is reached
+/// and let go once written - memory holds one value however many the pack has
+/// (`nkb_app::emit_values`). `put` answers whether there is still somebody to
+/// write for, and the first no ends the work. `note` hears what a format could
+/// not carry, when it is met.
+///
+/// # Errors
+///
+/// [`NotBuilt`] when a value could not be built after all - the run stops there
+/// and the caller says so. Unreachable while the size rules hold
+/// ([`Emission::values`]).
+pub fn write<I>(
+    values: I,
+    format: EmitFormat,
+    form: Option<Form>,
+    base64: bool,
+    mut put: impl FnMut(&str) -> bool,
+    mut note: impl FnMut(String),
+) -> Result<(), NotBuilt>
+where
+    I: IntoIterator<Item = Result<EmittedValue, NotBuilt>>,
+{
+    let form = form.unwrap_or_else(|| format.default_form());
+    let opening = match format {
+        EmitFormat::Json => {
+            Json::open_stream(&[("schema".to_owned(), Json::Number(SCHEMA))], "values")
+        }
+        EmitFormat::Csv => format!("{CSV_HEADER}\n"),
+        EmitFormat::Lines => String::new(),
+    };
+    if !opening.is_empty() && !put(&opening) {
+        return Ok(());
+    }
+    let mut any = false;
+    for value in values {
+        let value = value?;
+        let piece = match format {
+            EmitFormat::Json => Some(as_json(&value, base64).stream_item(!any)),
+            EmitFormat::Csv => Some(csv_row(&value, form, base64)),
+            EmitFormat::Lines => as_line(&value, form, base64, &mut note),
+        };
+        let Some(piece) = piece else {
+            continue;
+        };
+        any = true;
+        if !put(&piece) {
+            return Ok(());
+        }
+    }
+    if format == EmitFormat::Json {
+        put(&Json::close_stream(any));
+    }
+    Ok(())
 }
 
 /// The characters a spreadsheet reads as the start of a formula when a cell
@@ -153,10 +270,16 @@ const FORMULA_STARTS: [char; 4] = ['=', '+', '-', '@'];
 /// whether a spreadsheet looks for a formula before or after it removes the
 /// quotes was not measured, and an escape does not depend on the answer.
 ///
-/// Only the escaped form. `--raw` is literal because somebody asked for it, and
-/// its note says what that costs. Base64 cannot start with any of these: `+`
-/// and `/` would need a first byte from 0xF8 up, which UTF-8 never has, `=`
-/// only pads the end, and `-` and `@` are not in the alphabet.
+/// Every cell of a row goes through this, the value in its escaped form only:
+/// `--raw` is literal because somebody asked for it, and its note says what that
+/// costs. The other cells - name, breaks, expect, source and the rest - come
+/// from a pack file, which may be somebody else's, so a name that starts with
+/// `=` must not reach a spreadsheet as a formula either (report of 2026-11-20).
+/// A tab or a carriage return in front, which OWASP lists too, never begins a
+/// cell here: the escaped form writes both as escapes and the prose of a pack
+/// refuses them (`E035`). Base64 cannot start with any of these: `+` and `/`
+/// would need a first byte from 0xF8 up, which UTF-8 never has, `=` only pads
+/// the end, and `-` and `@` are not in the alphabet.
 pub(crate) fn not_a_formula(escaped: &str) -> String {
     let mut rest = escaped.chars();
     match rest.next() {
@@ -180,49 +303,38 @@ fn body_of(value: &EmittedValue, form: Form, base64: bool) -> String {
     }
 }
 
-fn as_json(emission: &Emission, base64: bool) -> String {
-    let values = emission
-        .values
-        .iter()
-        .map(|value| {
-            Json::Object(vec![
-                ("pack".to_owned(), Json::text(&value.pack)),
-                ("ref".to_owned(), Json::text(&value.reference)),
-                ("id".to_owned(), Json::text(&value.id)),
-                ("name".to_owned(), Json::text(&value.name)),
-                // Both forms, always. A consumer that wants one takes one, and
-                // one that wants to compare them has them side by side.
-                (
-                    "value".to_owned(),
-                    Json::Text(body_of(value, Form::Literal, base64)),
-                ),
-                (
-                    "escaped".to_owned(),
-                    Json::Text(body_of(value, Form::Escaped, base64)),
-                ),
-                ("breaks".to_owned(), optional(value.breaks.as_deref())),
-                ("expect".to_owned(), optional(value.expect.as_deref())),
-                (
-                    "fields".to_owned(),
-                    Json::Array(value.fields.iter().map(Json::text).collect()),
-                ),
-                (
-                    "tags".to_owned(),
-                    Json::Array(value.tags.iter().map(Json::text).collect()),
-                ),
-                ("risk".to_owned(), Json::text(value.risk.as_str())),
-                ("since".to_owned(), optional(value.since.as_deref())),
-                ("source".to_owned(), optional(value.source.as_deref())),
-                ("generated".to_owned(), Json::Bool(value.generated)),
-            ])
-        })
-        .collect();
-
+/// One value as the object `nkb emit` prints for it.
+fn as_json(value: &EmittedValue, base64: bool) -> Json {
     Json::Object(vec![
-        ("schema".to_owned(), Json::Number(SCHEMA)),
-        ("values".to_owned(), Json::Array(values)),
+        ("pack".to_owned(), Json::text(&value.pack)),
+        ("ref".to_owned(), Json::text(&value.reference)),
+        ("id".to_owned(), Json::text(&value.id)),
+        ("name".to_owned(), Json::text(&value.name)),
+        // Both forms, always. A consumer that wants one takes one, and
+        // one that wants to compare them has them side by side.
+        (
+            "value".to_owned(),
+            Json::Text(body_of(value, Form::Literal, base64)),
+        ),
+        (
+            "escaped".to_owned(),
+            Json::Text(body_of(value, Form::Escaped, base64)),
+        ),
+        ("breaks".to_owned(), optional(value.breaks.as_deref())),
+        ("expect".to_owned(), optional(value.expect.as_deref())),
+        (
+            "fields".to_owned(),
+            Json::Array(value.fields.iter().map(Json::text).collect()),
+        ),
+        (
+            "tags".to_owned(),
+            Json::Array(value.tags.iter().map(Json::text).collect()),
+        ),
+        ("risk".to_owned(), Json::text(value.risk.as_str())),
+        ("since".to_owned(), optional(value.since.as_deref())),
+        ("source".to_owned(), optional(value.source.as_deref())),
+        ("generated".to_owned(), Json::Bool(value.generated)),
     ])
-    .render()
 }
 
 /// A field the format allows to be absent. `null` rather than an empty string,
@@ -234,44 +346,33 @@ fn optional(value: Option<&str>) -> Json {
 const CSV_HEADER: &str =
     "pack,ref,id,name,value,breaks,expect,fields,tags,risk,since,source,generated";
 
-fn as_csv(emission: &Emission, form: Form, base64: bool, notes: &mut Vec<String>) -> String {
-    if form == Form::Literal && !base64 {
-        notes.push(
-            "--raw prints values literally, so a value containing a comma, a quotation mark \
-             or a line break is quoted rather than escaped - the file stays valid CSV and the \
-             cells hold characters no editor will show you. A spreadsheet opening it also runs \
-             every value that starts with =, +, - or @ as a formula"
-                .to_owned(),
-        );
-    }
-
-    let mut out = String::from(CSV_HEADER);
+/// One row: every cell guarded against a spreadsheet formula, the value only in
+/// its escaped form ([`not_a_formula`]), then quoted where it has to be.
+fn csv_row(value: &EmittedValue, form: Form, base64: bool) -> String {
+    let body = body_of(value, form, base64);
+    let value_cell = if form == Form::Escaped && !base64 {
+        not_a_formula(&body)
+    } else {
+        body
+    };
+    let row = [
+        not_a_formula(&value.pack),
+        not_a_formula(&value.reference),
+        not_a_formula(&value.id),
+        not_a_formula(&value.name),
+        value_cell,
+        not_a_formula(value.breaks.as_deref().unwrap_or_default()),
+        not_a_formula(value.expect.as_deref().unwrap_or_default()),
+        not_a_formula(&value.fields.join(" ")),
+        not_a_formula(&value.tags.join(" ")),
+        not_a_formula(value.risk.as_str()),
+        not_a_formula(value.since.as_deref().unwrap_or_default()),
+        not_a_formula(value.source.as_deref().unwrap_or_default()),
+        value.generated.to_string(),
+    ];
+    let cells: Vec<String> = row.iter().map(|cell| csv_cell(cell)).collect();
+    let mut out = cells.join(",");
     out.push('\n');
-    for value in &emission.values {
-        let body = body_of(value, form, base64);
-        let row = [
-            value.pack.clone(),
-            value.reference.clone(),
-            value.id.clone(),
-            value.name.clone(),
-            if form == Form::Escaped && !base64 {
-                not_a_formula(&body)
-            } else {
-                body
-            },
-            value.breaks.clone().unwrap_or_default(),
-            value.expect.clone().unwrap_or_default(),
-            value.fields.join(" "),
-            value.tags.join(" "),
-            value.risk.as_str().to_owned(),
-            value.since.clone().unwrap_or_default(),
-            value.source.clone().unwrap_or_default(),
-            value.generated.to_string(),
-        ];
-        let cells: Vec<String> = row.iter().map(|cell| csv_cell(cell)).collect();
-        out.push_str(&cells.join(","));
-        out.push('\n');
-    }
     out
 }
 
@@ -297,25 +398,27 @@ pub(crate) fn csv_cell(text: &str) -> String {
     out
 }
 
-fn as_lines(emission: &Emission, form: Form, base64: bool, notes: &mut Vec<String>) -> String {
-    let mut out = String::new();
-    for value in &emission.values {
-        let body = body_of(value, form, base64);
-        if body.contains(['\n', '\r']) {
-            // 🔴 The refusal that gives this format its meaning. Splitting the
-            // value across two rows would hand somebody a file whose row count
-            // disagrees with the catalogue, silently.
-            notes.push(format!(
-                "{}: not printed - the value contains a line break, which this format cannot \
-                 carry. Use --escaped, --base64, or --format json",
-                value.reference
-            ));
-            continue;
-        }
-        out.push_str(&body);
-        out.push('\n');
+/// One value as one line, or nothing and a note when the value holds a line break.
+fn as_line(
+    value: &EmittedValue,
+    form: Form,
+    base64: bool,
+    note: &mut impl FnMut(String),
+) -> Option<String> {
+    let mut body = body_of(value, form, base64);
+    if body.contains(['\n', '\r']) {
+        // 🔴 The refusal that gives this format its meaning. Splitting the
+        // value across two rows would hand somebody a file whose row count
+        // disagrees with the catalogue, silently.
+        note(format!(
+            "{}: not printed - the value contains a line break, which this format cannot \
+             carry. Use --escaped, --base64, or --format json",
+            value.reference
+        ));
+        return None;
     }
-    out
+    body.push('\n');
+    Some(body)
 }
 
 /// Standard base64, written out rather than taken from a crate.
@@ -378,15 +481,53 @@ mod tests {
         }
     }
 
-    fn emission(values: Vec<EmittedValue>) -> Emission {
-        let code_points = values.iter().map(|v| v.literal.chars().count()).sum();
-        let bytes = values.iter().map(|v| v.literal.len()).sum();
-        Emission {
+    /// Values already built, and the warnings of the pack they came from.
+    struct Sample {
+        values: Vec<EmittedValue>,
+        warnings: usize,
+    }
+
+    fn emission(values: Vec<EmittedValue>) -> Sample {
+        Sample {
             values,
-            code_points,
-            bytes,
             warnings: 0,
         }
+    }
+
+    /// Both streams of one run, the way `nkb emit` writes them.
+    struct Rendered {
+        data: String,
+        notes: Vec<String>,
+    }
+
+    fn render(sample: &Sample, format: EmitFormat, form: Option<Form>, base64: bool) -> Rendered {
+        let account = Account {
+            values: sample.values.len(),
+            code_points: sample
+                .values
+                .iter()
+                .map(|v| v.literal.chars().count())
+                .sum(),
+            bytes: sample.values.iter().map(|v| v.literal.len()).sum(),
+            warnings: sample.warnings,
+        };
+        let mut told = notes(&account, format, form, base64);
+        let mut data = String::new();
+        let mut later = Vec::new();
+        write(
+            sample.values.iter().cloned().map(Ok),
+            format,
+            form,
+            base64,
+            |piece| {
+                data.push_str(piece);
+                true
+            },
+            |note| later.push(note),
+        )
+        .expect("every value is built");
+        told.extend(later);
+        Rendered { data, notes: told }
     }
 
     #[test]
@@ -613,6 +754,127 @@ mod tests {
             "a warned pack must not look identical to a clean one: {:?}",
             rendered.notes
         );
+    }
+
+    #[test]
+    fn csv_guards_every_cell_from_the_pack_file_not_only_the_value() {
+        // The report of 2026-11-20: a pack of somebody else's is read like any
+        // other, and its name, breaks or source starting with `=` reached the
+        // spreadsheet as a formula. Every cell is guarded in both forms. Only
+        // the value keeps `--raw` literal, because that is what was asked for.
+        let bs = '\\';
+        let mut hostile = value("v", "=1+1", "=1+1");
+        hostile.name = "=HYPERLINK(1)".to_owned();
+        hostile.breaks = Some("+cmd".to_owned());
+        hostile.expect = Some("-1".to_owned());
+        hostile.source = Some("@someone".to_owned());
+        hostile.tags = vec!["=tag".to_owned()];
+        for (form, value_cell) in [
+            (Form::Escaped, format!("{bs}u003D1+1")),
+            (Form::Literal, "=1+1".to_owned()),
+        ] {
+            let rendered = render(
+                &emission(vec![hostile.clone()]),
+                EmitFormat::Csv,
+                Some(form),
+                false,
+            );
+            let row = rendered.data.lines().nth(1).expect("one row");
+            let cells: Vec<&str> = row.split(',').collect();
+            assert_eq!(cells[3], format!("{bs}u003DHYPERLINK(1)"), "{row}");
+            assert_eq!(cells[4], value_cell, "{row}");
+            assert_eq!(cells[5], format!("{bs}u002Bcmd"), "{row}");
+            assert_eq!(cells[6], format!("{bs}u002D1"), "{row}");
+            assert_eq!(cells[8], format!("{bs}u003Dtag"), "{row}");
+            assert_eq!(cells[11], format!("{bs}u0040someone"), "{row}");
+            assert!(
+                cells
+                    .iter()
+                    .skip(5)
+                    .all(|cell| !cell.starts_with(['=', '+', '-', '@'])),
+                "{row}"
+            );
+        }
+    }
+
+    #[test]
+    fn json_written_one_value_at_a_time_is_the_document_it_always_was() {
+        // Until 2026-11-24 the whole document was built as one tree and rendered
+        // at once. Written piece by piece it must be the same bytes, empty,
+        // with one value and with several.
+        for values in [
+            Vec::new(),
+            vec![value("a", "x", "x")],
+            vec![value("a", "x", "x"), value("b", "a\nb", "a\\nb")],
+        ] {
+            let whole = Json::Object(vec![
+                ("schema".to_owned(), Json::Number(SCHEMA)),
+                (
+                    "values".to_owned(),
+                    Json::Array(values.iter().map(|v| as_json(v, false)).collect()),
+                ),
+            ])
+            .render();
+            let streamed = render(&emission(values), EmitFormat::Json, None, false);
+            assert_eq!(streamed.data, whole);
+        }
+    }
+
+    #[test]
+    fn a_reader_that_left_stops_the_building() {
+        // `nkb emit pack | head -1`: once nobody reads, no further value is
+        // built, which matters when each is a million characters.
+        let mut asked = 0;
+        let values = (0..5).map(|n| {
+            asked += 1;
+            Ok(value(&format!("v{n}"), "x", "x"))
+        });
+        let mut pieces = 0;
+        let written = write(
+            values,
+            EmitFormat::Lines,
+            None,
+            false,
+            |_| {
+                pieces += 1;
+                pieces < 2
+            },
+            |_| {},
+        );
+        assert_eq!(written, Ok(()));
+        assert_eq!((pieces, asked), (2, 2));
+    }
+
+    #[test]
+    fn a_value_that_could_not_be_built_stops_the_run_and_is_named() {
+        let values = vec![
+            Ok(value("a", "x", "x")),
+            Err(NotBuilt {
+                id: "bomb".to_owned(),
+                code: "E026",
+            }),
+            Ok(value("c", "y", "y")),
+        ];
+        let mut data = String::new();
+        let written = write(
+            values,
+            EmitFormat::Lines,
+            None,
+            false,
+            |piece| {
+                data.push_str(piece);
+                true
+            },
+            |_| {},
+        );
+        assert_eq!(
+            written,
+            Err(NotBuilt {
+                id: "bomb".to_owned(),
+                code: "E026"
+            })
+        );
+        assert_eq!(data, "x\n", "nothing after the value that failed");
     }
 
     #[test]

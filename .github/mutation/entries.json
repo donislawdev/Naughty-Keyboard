@@ -166,8 +166,8 @@
       "id": "M201",
       "why": "the summary of nkb emit without inflection - a pack of one value is '1 values'",
       "file": "crates/nkb-cli/src/emit_output.rs",
-      "find": "        plural(emission.values.len(), \"value\"),",
-      "replace": "        format!(\"{} values\", emission.values.len()),",
+      "find": "        plural(account.values, \"value\"),",
+      "replace": "        format!(\"{} values\", account.values),",
       "test": "emit_output::tests::the_account_goes_to_the_notes_and_never_into_the_data",
       "runner": "rust:nkb-cli:bin=nkb"
     },
@@ -175,8 +175,8 @@
       "id": "M202",
       "why": "the escaped CSV form lets =1+1 out as a bare cell again - a spreadsheet computes the formula, and the expect of formula-equals says otherwise",
       "file": "crates/nkb-cli/src/emit_output.rs",
-      "find": "            if form == Form::Escaped && !base64 {",
-      "replace": "            if false {",
+      "find": "    let value_cell = if form == Form::Escaped && !base64 {",
+      "replace": "    let value_cell = if false {",
       "test": "emit_output::tests::csv_escapes_a_first_character_a_spreadsheet_would_run_as_a_formula",
       "runner": "rust:nkb-cli:bin=nkb"
     },

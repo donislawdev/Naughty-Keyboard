@@ -25,6 +25,7 @@ pub(crate) mod folders;
 mod front;
 pub(crate) mod hotkey;
 pub(crate) mod layout;
+mod pool;
 mod pulse;
 mod send;
 pub(crate) mod spaces;

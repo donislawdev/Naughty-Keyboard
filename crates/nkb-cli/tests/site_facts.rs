@@ -668,14 +668,18 @@ fn catalogue_facts() -> Json {
         else {
             panic!("{} does not emit", pack.id);
         };
+        let emitted_values: Vec<_> = emission
+            .values()
+            .map(|value| value.expect("a shipped value can be built"))
+            .collect();
         assert_eq!(
-            emission.values.len(),
+            emitted_values.len(),
             pack.values.len(),
             "{} emits another list",
             pack.id
         );
         let mut values = Vec::new();
-        for (value, emitted) in pack.values.iter().zip(&emission.values) {
+        for (value, emitted) in pack.values.iter().zip(&emitted_values) {
             assert_eq!(value.id, emitted.id, "{} emits in another order", pack.id);
             let body = value.definition.on(day.today());
             let metrics = body.metrics().expect("a shipped value can be measured");

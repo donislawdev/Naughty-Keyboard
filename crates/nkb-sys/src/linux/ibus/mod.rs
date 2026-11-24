@@ -191,16 +191,27 @@ impl Session {
             "RegisterComponent",
             &(component(&name)?,),
         )?;
-        let previous = global_engine(connection);
+        // Asked before ours is made the global one: a send that could not give the
+        // person's engine back does not take it.
+        let previous = global_engine(connection)?;
         // Blocking is safe here: the factory is served by the executor thread of the
         // connection, not by the thread that waits.
-        connection.call_method(
+        if let Err(error) = connection.call_method(
             Some(BUS),
             BUS_PATH,
             Some(BUS),
             "SetGlobalEngine",
             &(name.as_str(),),
-        )?;
+        ) {
+            // The answer may be what was lost while the daemon did switch. Ours goes
+            // with this connection and the daemon drops the global engine with it, so
+            // the person's is asked for again, as at the end of every send.
+            drop(opened);
+            if let Some(engine) = engine_to_restore(previous.as_deref()) {
+                put_back(socket, engine);
+            }
+            return Err(error.into());
+        }
         Ok(Self {
             opened,
             events,
@@ -358,27 +369,35 @@ fn put_back(socket: &str, name: &str) {
     let connection = &opened.connection;
     let deadline = Instant::now() + FORGET_WAIT;
     while Instant::now() < deadline
-        && global_engine(connection).is_some_and(|name| is_our_engine(&name))
+        && global_engine(connection).is_ok_and(|name| name.is_some_and(|name| is_our_engine(&name)))
     {
         std::thread::sleep(FORGET_LOOK);
     }
     let _ = connection.call_method(Some(BUS), BUS_PATH, Some(BUS), "SetGlobalEngine", &(name,));
 }
 
-/// The engine the daemon has set, if it has one.
-fn global_engine(connection: &Connection) -> Option<String> {
-    let reply = connection
-        .call_method(
-            Some(BUS),
-            BUS_PATH,
-            Some("org.freedesktop.DBus.Properties"),
-            "Get",
-            &(BUS, "GlobalEngine"),
-        )
-        .ok()?;
+/// The engine the daemon has set: `Ok(None)` when it has none, `Err` when that is not known.
+///
+/// The daemon says "none" with an error: IBus 1.5.34 answers this question with "No global
+/// engine." when no engine is set, which is the usual state of GNOME with keyboard layouts
+/// only (`OBS-220` point 3). So an error that came back FROM the daemon is an answer. A call
+/// that failed on the way, or an answer that cannot be read, is not one: the person may have
+/// an engine that a send would take away and could not give back (report of 2026-11-20).
+fn global_engine(connection: &Connection) -> Result<Option<String>, Failed> {
+    let reply = match connection.call_method(
+        Some(BUS),
+        BUS_PATH,
+        Some("org.freedesktop.DBus.Properties"),
+        "Get",
+        &(BUS, "GlobalEngine"),
+    ) {
+        Ok(reply) => reply,
+        Err(zbus::Error::MethodError(..)) => return Ok(None),
+        Err(_) => return Err(Failed),
+    };
     let body = reply.body();
-    let value: Value<'_> = body.deserialize().ok()?;
-    name_of_engine(&value)
+    let value: Value<'_> = body.deserialize()?;
+    name_of_engine(&value).map(Some).ok_or(Failed)
 }
 
 pub(crate) fn send_text(

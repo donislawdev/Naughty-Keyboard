@@ -34,6 +34,7 @@ use std::sync::mpsc::{self, Sender};
 use std::time::Duration;
 
 use super::ffi::{self, MutRef};
+use super::pool::in_a_pool;
 use crate::folders::{FAULT, PickAnswer, PickError, PickRequest, Picked, ShowError};
 
 /// `NSModalResponseOK`.
@@ -122,16 +123,6 @@ impl Messages {
             )
         }
     }
-}
-
-/// Runs `work` inside an autorelease pool of its own, so what AppKit hands back
-/// for a moment is released when it is done. What `work` returns must not point
-/// into the pool: it is copied out first.
-fn in_a_pool<T>(work: impl FnOnce() -> T) -> T {
-    let pool = unsafe { ffi::objc_autoreleasePoolPush() };
-    let result = work();
-    unsafe { ffi::objc_autoreleasePoolPop(pool) };
-    result
 }
 
 /// `path` as the C string the system takes, or `None` for a path with a zero in

@@ -20,6 +20,16 @@
 //! coming before it comes. A warning that arrives after the memory is gone is
 //! not a warning.
 //!
+//! # One value at a time
+//!
+//! The size rules bound one value (a million code points) and one file (4 MiB),
+//! and nothing bounds their product: a pack of one's own or a team's can hold
+//! thousands of recipes of a million characters each, tens of gigabytes once
+//! built. So nothing is built here. [`Emission`] holds the pack, every value's
+//! size rules are checked up front, and [`Emission::values`] builds each value
+//! when the caller reaches it - the caller writes it and lets it go, and memory
+//! holds one value however many the pack has.
+//!
 //! # What this does NOT do
 //!
 //! It does not render. JSON, CSV and one-value-per-line are three public
@@ -29,7 +39,7 @@
 //! the facts about them.
 
 use nkb_core::calendar::Day;
-use nkb_core::pack::{Pack, Risk};
+use nkb_core::pack::{Pack, PackValue, Risk};
 use nkb_core::value::ValueProblem;
 
 use crate::ports::{Clock, PackFormat, PackSource, SourceError};
@@ -74,10 +84,13 @@ pub struct EmittedValue {
     pub generated: bool,
 }
 
-/// Everything one run of `emit` produced, and what it cost.
+/// Everything one run of `emit` will produce, and what it costs, before any of
+/// it is built. The values come from [`Emission::values`], one at a time.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Emission {
-    pub values: Vec<EmittedValue>,
+    pack: Pack,
+    /// The day a `next-date` value is worked out for.
+    today: Day,
     /// Total size, counted from the recipes BEFORE anything was built.
     ///
     /// 🔴 The number the account on the error stream is made of. Counted first
@@ -90,6 +103,76 @@ pub struct Emission {
     /// them the one exception to all-or-nothing - and staying silent about them
     /// would let a warned pack look identical to a clean one.
     pub warnings: usize,
+}
+
+impl Emission {
+    /// How many values the pack holds - the count of the account, known
+    /// before any is built.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.pack.values.len()
+    }
+
+    /// Whether the pack holds no values at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.pack.values.is_empty()
+    }
+
+    /// Every value, in the pack's order, each built when it is reached.
+    ///
+    /// 🔴 An `Err` should be unreachable: [`emit_values`] checked the size rules
+    /// of every value before this existed, and building asks the same rules
+    /// again. It is an item rather than a panic for the reason
+    /// [`EmitOutcome::ValueTooLarge`] gives - the two halves of the format
+    /// disagreeing is the fault this project keeps finding - and the caller
+    /// stops at it and says so.
+    pub fn values(&self) -> impl Iterator<Item = Result<EmittedValue, NotBuilt>> + '_ {
+        self.pack.values.iter().map(|value| self.built(value))
+    }
+
+    fn built(&self, value: &PackValue) -> Result<EmittedValue, NotBuilt> {
+        let pack = &self.pack;
+        let literal = value
+            .definition
+            .on(self.today)
+            .materialise()
+            .map_err(|problem| NotBuilt {
+                id: value.id.clone(),
+                code: problem.code(),
+            })?;
+        // Escaped from the materialised text rather than copied out of the file,
+        // so it describes the value instead of its author's spelling - the same
+        // rule `nkb show` follows.
+        let escaped = nkb_core::text::LiteralText::new(literal.clone())
+            .escape()
+            .as_str()
+            .to_owned();
+        Ok(EmittedValue {
+            pack: pack.id.clone(),
+            reference: format!("{}/{}", pack.id, value.id),
+            id: value.id.clone(),
+            name: value.name.clone(),
+            literal,
+            escaped,
+            breaks: value.breaks.clone(),
+            expect: value.expect.clone(),
+            fields: pack.fields_of(value).to_vec(),
+            tags: value.tags.clone(),
+            risk: pack.risk_of(value),
+            since: value.since.clone(),
+            source: pack.source_of(value).map(ToOwned::to_owned),
+            generated: value.definition.is_generated(),
+        })
+    }
+}
+
+/// A value that passed every check and could not be built anyway - the value
+/// and the rule, as [`EmitOutcome::ValueTooLarge`] names them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotBuilt {
+    pub id: String,
+    pub code: &'static str,
 }
 
 /// What came of asking for a pack's values.
@@ -148,7 +231,7 @@ pub fn emit_values(
     // The order lives in `load_pack` rather than here, so that it is one rule
     // rather than one rule per use case.
     match crate::load_pack::load(format, id, &text) {
-        Ok(loaded) => build(&loaded.pack, loaded.warnings, clock.today()),
+        Ok(loaded) => build(loaded.pack, loaded.warnings, clock.today()),
         // Reported as a refusal rather than as an empty catalogue, for the same
         // reason the listing does it: a pack must never vanish quietly.
         Err(refused) => EmitOutcome::Refused {
@@ -157,8 +240,9 @@ pub fn emit_values(
     }
 }
 
-/// Counts everything from the recipes, then builds. Never the other way round.
-fn build(pack: &Pack, warnings: usize, today: Day) -> EmitOutcome {
+/// Counts everything from the recipes and asks every value's size rules, and
+/// builds nothing - [`Emission::values`] does that, one value at a time.
+fn build(pack: Pack, warnings: usize, today: Day) -> EmitOutcome {
     let mut code_points = 0usize;
     let mut bytes = 0usize;
     for value in &pack.values {
@@ -168,49 +252,21 @@ fn build(pack: &Pack, warnings: usize, today: Day) -> EmitOutcome {
                 code: ValueProblem::RepeatProductUnmeasurable.code(),
             };
         };
+        // The rules building asks, asked before the first value is printed, so a
+        // value that will not build stops the run while nothing is out yet.
+        if let Err(problem) = value.definition.check_size() {
+            return EmitOutcome::ValueTooLarge {
+                id: value.id.clone(),
+                code: problem.code(),
+            };
+        }
         code_points = code_points.saturating_add(metrics.code_points);
         bytes = bytes.saturating_add(metrics.bytes);
     }
 
-    let mut values = Vec::with_capacity(pack.values.len());
-    for value in &pack.values {
-        let literal = match value.definition.on(today).materialise() {
-            Ok(text) => text,
-            Err(problem) => {
-                return EmitOutcome::ValueTooLarge {
-                    id: value.id.clone(),
-                    code: problem.code(),
-                };
-            }
-        };
-        // Escaped from the materialised text rather than copied out of the file,
-        // so it describes the value instead of its author's spelling - the same
-        // rule `nkb show` follows.
-        let escaped = nkb_core::text::LiteralText::new(literal.clone())
-            .escape()
-            .as_str()
-            .to_owned();
-
-        values.push(EmittedValue {
-            pack: pack.id.clone(),
-            reference: format!("{}/{}", pack.id, value.id),
-            id: value.id.clone(),
-            name: value.name.clone(),
-            literal,
-            escaped,
-            breaks: value.breaks.clone(),
-            expect: value.expect.clone(),
-            fields: pack.fields_of(value).to_vec(),
-            tags: value.tags.clone(),
-            risk: pack.risk_of(value),
-            since: value.since.clone(),
-            source: pack.source_of(value).map(ToOwned::to_owned),
-            generated: value.definition.is_generated(),
-        });
-    }
-
     EmitOutcome::Emitted(Box::new(Emission {
-        values,
+        pack,
+        today,
         code_points,
         bytes,
         warnings,
@@ -228,7 +284,6 @@ mod tests {
     use crate::ports::{Date, TranslationCheck, TranslationTarget};
     use crate::test_support::StoppedClock;
     use nkb_core::lint::{LintProblem, RuleCode};
-    use nkb_core::pack::{PackValue, Risk};
     use nkb_core::text::LiteralText;
     use nkb_core::value::ValueBody;
     use std::collections::BTreeMap;
@@ -335,9 +390,26 @@ mod tests {
         }
     }
 
-    fn emitted(outcome: EmitOutcome) -> Emission {
+    /// An emission with its values built, the way a caller that writes them
+    /// all would see them.
+    struct Built {
+        values: Vec<EmittedValue>,
+        code_points: usize,
+        bytes: usize,
+        warnings: usize,
+    }
+
+    fn emitted(outcome: EmitOutcome) -> Built {
         match outcome {
-            EmitOutcome::Emitted(emission) => *emission,
+            EmitOutcome::Emitted(emission) => Built {
+                values: emission
+                    .values()
+                    .map(|value| value.expect("every value builds"))
+                    .collect(),
+                code_points: emission.code_points,
+                bytes: emission.bytes,
+                warnings: emission.warnings,
+            },
             other => panic!("expected values, got {other:?}"),
         }
     }
@@ -617,6 +689,43 @@ mod tests {
             }
             other => panic!("expected the bomb to be named, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_pack_far_larger_than_memory_is_counted_and_built_one_value_at_a_time() {
+        // The report of 2026-11-20: the size rules bound one value and one file,
+        // not their product. Five thousand recipes of a million characters each
+        // are five billion code points - built all at once before printing, as
+        // until 2026-11-24, this test does not finish on any machine it runs on.
+        let values: Vec<PackValue> = (0..5000)
+            .map(|n| {
+                value(
+                    &format!("big-{n}"),
+                    ValueBody::Repeat {
+                        unit: LiteralText::new("a".to_owned()),
+                        count: 1_000_000,
+                    },
+                )
+            })
+            .collect();
+        let outcome = emit_values(
+            &Shelf::of("sample"),
+            &scripted(a_pack(values)),
+            &StoppedClock::default(),
+            "sample",
+        );
+        let EmitOutcome::Emitted(emission) = outcome else {
+            panic!("expected values, got {outcome:?}");
+        };
+        assert_eq!(emission.len(), 5000);
+        assert_eq!(emission.code_points, 5_000_000_000);
+        let first = emission
+            .values()
+            .next()
+            .expect("a first value")
+            .expect("it builds");
+        assert_eq!(first.literal.len(), 1_000_000);
+        assert_eq!(first.id, "big-0");
     }
 
     #[test]
