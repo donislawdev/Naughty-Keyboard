@@ -485,7 +485,7 @@ other = "W pliku {{ .file }}:"
 [mistake_lint_says]
 other = "Co mówi nkb lint:"
 
-# ---- tekst testowy do limitu długości (nkb boundary) ----------------------------
+# ---- test text for a length limit (nkb boundary) -------------------------------
 
 [limit_text_within]
 one = "{{ .count }} znak, w limicie"
