@@ -54,10 +54,7 @@ pub(crate) fn screens() -> Option<Vec<Frames>> {
     }
     // The list and the screens come back autoreleased: their pool is drained
     // once the frames are copied out.
-    let pool = unsafe { ffi::objc_autoreleasePoolPush() };
-    let found = listed(class);
-    unsafe { ffi::objc_autoreleasePoolPop(pool) };
-    found
+    super::pool::in_a_pool(|| listed(class))
 }
 
 fn listed(class: MutRef) -> Option<Vec<Frames>> {
