@@ -24,9 +24,10 @@
 //! # Which stream
 //!
 //! `ux-spec.md` 10: values on standard output, everything else on the error
-//! stream. That is why [`Rendered`] keeps `data` and `notes` apart instead of
-//! returning one block of text - a note about lost information inside the data
-//! file would be the exact fault it warns about.
+//! stream. That is why [`write()`] puts the values through one door and hands
+//! every note to another, and [`notes()`] are told apart from the values before
+//! the first one - a note about lost information inside the data file would be
+//! the exact fault it warns about.
 
 use crate::english::plural;
 use crate::exit::ExitCode;
