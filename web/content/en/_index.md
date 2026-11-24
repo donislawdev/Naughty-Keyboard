@@ -33,7 +33,7 @@ examples = [
   "whitespace/zwsp-only",
   "length-bombs/len-65535",
 ]
-link = { page = "/test-cases-for-a-text-field", text = "Test cases for a text field, value by value" }
+link = { page = "/test-cases-for-a-text-field", text = "Text box test cases, value by value" }
 
 [steps]
 eyebrow = "How it works"

@@ -51,19 +51,16 @@ needs it finds out it exists.
 - **Never takes the keyboard** - the palette is a display driven by shortcuts and does not take focus,
   so the cursor never leaves the field you are testing.
 - **Clipboard mode** - put values on the clipboard to paste yourself, for one window or for all of them.
-- **Packs of your own and of your team** - a pack file in your own folder, or in a folder your team keeps
-  in its repository, is offered beside the built-in packs, in the palette and on the command line. A pack
-  of the same name as a built-in one is used instead of it, and both say so. The palette's Pack folders
-  window sets the team folder and opens either folder in your file manager. `nkb lint` checks a pack
-  against the format rules, `nkb fmt` puts it in canonical shape and `nkb new-pack` writes the skeleton.
+- **Your own packs** - the values your own application keeps tripping over, one shortcut away. Put them
+  in a short text file in your packs folder and they show up beside the built-in packs. Start from
+  [a template](https://naughtykeyboard.donislawdev.com/docs/pack-templates/), `nkb lint` points at
+  anything to fix, and a team can share its packs from a folder in its repository.
 - **Made for scripts too** - `nkb emit` prints a pack as JSON, CSV or one value per line, escaped or
   raw, optionally as base64. Every command has exit codes you can branch on.
-- **Values for the limit your field states** - `nkb boundary --max-length 50` makes the empty value and
-  values of 49, 50 and 51, in letters, in characters of two, three and four bytes, in a family emoji and
-  as a counterstring that shows where a field cut it. The limit can be counted in characters, code
-  points, UTF-16 units or bytes. The palette makes the same values: **Length limit**, the first row of
-  the value window, opens a window where you type the limit, and the shortcuts then walk its values.
-  `nkb send` types one of them.
+- **Length limit values** - give a limit, such as 50 characters or bytes, and get the values just under,
+  at and over it, in letters, multi-byte characters and emoji, plus a counterstring that shows where the
+  field cut the text. In the palette it is **Length limit** in the value window, on the command line
+  `nkb boundary --max-length 50`.
 - **Offline, free, no telemetry** - GPL-3.0, no account, and it opens no network connection.
 
 <p align="center">

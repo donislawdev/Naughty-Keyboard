@@ -455,3 +455,41 @@ other = "In {{ .file }}:"
 
 [mistake_lint_says]
 other = "What nkb lint says:"
+
+# ---- test text for a length limit (nkb boundary) -------------------------------
+
+[limit_text_within]
+one = "{{ .count }} character, within the limit"
+other = "{{ .count }} characters, within the limit"
+
+[limit_text_over]
+one = "{{ .count }} character, one over the limit"
+other = "{{ .count }} characters, one over the limit"
+
+[limit_fill]
+other = "Fill"
+
+[limit_fill_text]
+one = "{{ .count }} character of it"
+other = "{{ .count }} characters of it"
+
+[limit_fill_sizes]
+other = "How long it is to a program"
+
+[fill_letters]
+other = "The letter a"
+
+[fill_counterstring]
+other = "Counterstring"
+
+[fill_two_byte]
+other = "A letter of two bytes"
+
+[fill_three_byte]
+other = "A sign of three bytes"
+
+[fill_four_byte]
+other = "An emoji of four bytes"
+
+[fill_cluster]
+other = "A family emoji"

@@ -1,12 +1,12 @@
 ---
-title: Test cases for a text field
+title: Text box test cases
 url: /guides/test-cases-for-a-text-field/
-seoTitle: Test cases for a text field - values that break forms
-description: Test cases for a text input field, value by value - empty and invisible input, length limits, Unicode, numbers, dates, words a parser misreads, and exports.
-lead: "A text field is tested with the values it will meet, not only with the one the form was designed for. These are the cases, each with a real value and what it usually breaks."
+seoTitle: Text box test cases - values that break a text field
+description: Text box test cases, value by value - empty and invisible input, length limits, Unicode, numbers, dates, words a parser misreads, and exports.
+lead: "A text box, or any text field of a form, is tested with the values it will meet, not only with the one the form was designed for. These are the cases, each with a real value and what it usually breaks."
 ---
 
-## What should a text field be tested with?
+## What should a text box be tested with?
 
 With what users and data really put into it, beyond the name the form was designed around: nothing at all, spaces nobody can see, a value at the length limit and one past it, letters outside ASCII, numbers and dates written another way, words a parser reads as something else, and characters that only cause trouble in an export. The sections below take them one at a time. Every value comes from [the catalogue](/packs/), with what it usually breaks, and leads to what a correct application does instead.
 

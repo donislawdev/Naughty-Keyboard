@@ -10,10 +10,30 @@
 {{- end }}
 {{- $name := partial "pack-text.html" (dict "pack" $pack "field" "name") }}
 {{- $about := partial "pack-text.html" (dict "pack" $pack "field" "description") }}
+{{- $title := T "pack_title" (dict "name" $name) }}
+{{- /*
+  What a search result shows. A pack whose subject people search for in other
+  words has those words (data/pack_titles.toml), and every other language its
+  own, or the build stops: an English title on a Polish page is a page a
+  search engine reads as English.
+*/ -}}
+{{- $searchTitle := $title }}
+{{- with index hugo.Data.pack_titles $id }}
+  {{- $searchTitle = .title }}
+  {{- if ne site.Language.Lang "en" }}
+    {{- $own := false }}
+    {{- with index hugo.Data.translations site.Language.Lang }}{{ with index . "pack_titles" }}{{ $own = index . $id }}{{ end }}{{ end }}
+    {{- if not $own }}
+      {{- errorf "the pack %s has a search title in English and none in %s: add it to data/translations/%s/pack_titles.toml" $id site.Language.Lang site.Language.Lang }}
+    {{- end }}
+    {{- $searchTitle = $own.title }}
+  {{- end }}
+{{- end }}
 {{- return (dict
   "pack" $pack
   "name" $name
   "about" $about
-  "title" (T "pack_title" (dict "name" $name))
+  "title" $title
+  "searchTitle" $searchTitle
   "description" (T "pack_description" (dict "about" $about "count" (int $pack.value_count)))
 ) }}

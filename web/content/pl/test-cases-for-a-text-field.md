@@ -1,7 +1,7 @@
 ---
 title: Przypadki testowe pola tekstowego
 url: /pl/poradniki/przypadki-testowe-pola-tekstowego/
-seoTitle: Przypadki testowe pola tekstowego i formularza
+seoTitle: Przypadki testowe pola tekstowego - przykłady wartości
 description: "Przypadki testowe pola tekstowego, wartość po wartości: puste i niewidoczne dane, limity długości, Unicode, liczby, daty, słowa mylące parser i eksport."
 lead: "Pole tekstowe testuje się wartościami, które naprawdę w nie trafią, a nie tylko tą, pod którą zaprojektowano formularz. Oto przypadki testowe, każdy z prawdziwą wartością i tym, co zwykle psuje."
 ---

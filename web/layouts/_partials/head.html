@@ -12,7 +12,7 @@
 {{- /* A page of a pack is made from the facts, and so are its title and description. */ -}}
 {{- with .Params.pack }}
   {{- $meta := partial "pack-meta.html" . }}
-  {{- $title = $meta.title }}
+  {{- $title = $meta.searchTitle }}
   {{- $description = $meta.description }}
 {{- end }}
 {{- /*

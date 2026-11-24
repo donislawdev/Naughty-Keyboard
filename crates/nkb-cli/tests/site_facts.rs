@@ -20,6 +20,10 @@
 //! - `pack-mistakes.json` - what `nkb lint` says about each file in
 //!   `web/assets/pack-mistakes/`, a pack with one mistake in it, so the page
 //!   that explains the mistakes quotes the program rather than a memory of it.
+//! - `boundary.json` - what `nkb boundary` makes for the limits a field most
+//!   often states, from the function the command and the palette's length
+//!   limit window call, so the page of test text of a given length gives
+//!   exactly the text the program would type.
 //!
 //! With `NKB_WRITE_SITE=1` it writes the files. Without it, it compares them
 //! with what the program says now and fails on any difference, so a new option,
@@ -42,6 +46,7 @@ use nkb_adapters::{BuiltInCatalogue, FOLDER_WAIT, TomlPackFormat};
 use nkb_app::{
     Clock, EmitOutcome, PACK_FILE_LIMIT, PackEntry, ValueFacts, emit_values, list_packs,
 };
+use nkb_core::boundary::{self, BoundaryValue, Fill, Limit, Unit};
 use nkb_core::calendar::{Day, Weekday};
 use nkb_core::description::MIN_BREAKS_CODE_POINTS;
 use nkb_core::lint::MAX_VALUES_PER_PACK;
@@ -873,6 +878,76 @@ fn pack_mistake_facts() -> Json {
     Json::Object(vec![("mistakes", Json::List(mistakes))])
 }
 
+// ---- boundary.json -----------------------------------------------------------
+
+/// The limits a field most often states, in characters. Each is a section of
+/// the page of test text of a given length.
+const COMMON_LIMITS: [u32; 6] = [10, 50, 100, 255, 500, 1000];
+
+/// The limit at which that page shows one length in every fill, and so that
+/// "50 characters" is four different numbers.
+const UNITS_EXAMPLE: u32 = 50;
+
+fn boundary_value_json(value: &BoundaryValue) -> Json {
+    let sizes = value.sizes();
+    Json::Object(vec![
+        ("id", text(&value.id())),
+        ("fill", maybe_text(value.fill().map(Fill::id))),
+        ("length", count(value.length() as usize)),
+        ("within", Json::Bool(value.within())),
+        ("text", text(&value.materialise())),
+        (
+            "counts",
+            Json::Object(vec![
+                ("graphemes", count(sizes.graphemes)),
+                ("code_points", count(sizes.code_points)),
+                ("utf16_units", count(sizes.utf16_units)),
+                ("bytes", count(sizes.bytes)),
+            ]),
+        ),
+    ])
+}
+
+/// The answer of `nkb boundary --max-length N` for each common limit, from
+/// the same [`boundary::values`] the command calls: the counterstrings one
+/// under, at and one over every limit, and every fill at [`UNITS_EXAMPLE`].
+fn boundary_facts() -> Json {
+    let answer = |max: u32| {
+        let limit = Limit::new(Unit::Graphemes, None, Some(max))
+            .unwrap_or_else(|problem| panic!("{max} is not a limit: {problem:?}"));
+        boundary::values(limit)
+    };
+    let limits = COMMON_LIMITS
+        .iter()
+        .map(|&max| {
+            let counterstrings = answer(max)
+                .iter()
+                .filter(|value| value.fill() == Some(Fill::Counterstring))
+                .map(boundary_value_json)
+                .collect();
+            Json::Object(vec![
+                ("max", count(max as usize)),
+                ("counterstrings", Json::List(counterstrings)),
+            ])
+        })
+        .collect();
+    let every_fill = answer(UNITS_EXAMPLE)
+        .iter()
+        .filter(|value| value.fill().is_some() && value.length() == UNITS_EXAMPLE)
+        .map(boundary_value_json)
+        .collect();
+    Json::Object(vec![
+        ("limits", Json::List(limits)),
+        (
+            "every_fill",
+            Json::Object(vec![
+                ("max", count(UNITS_EXAMPLE as usize)),
+                ("values", Json::List(every_fill)),
+            ]),
+        ),
+    ])
+}
+
 // ---- the files -------------------------------------------------------------
 
 fn facts_dir() -> PathBuf {
@@ -941,6 +1016,11 @@ fn the_site_teaches_the_lists_and_limits_the_validator_checks() {
 #[test]
 fn the_site_quotes_what_nkb_lint_says_about_each_mistake() {
     keep("pack-mistakes.json", &pack_mistake_facts());
+}
+
+#[test]
+fn the_site_gives_the_text_nkb_boundary_makes_for_common_limits() {
+    keep("boundary.json", &boundary_facts());
 }
 
 #[test]

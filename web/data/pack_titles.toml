@@ -1,0 +1,34 @@
+# The title a search result shows for the page of a pack, where people search for its subject in
+# other words than the pack's name. A pack not listed here keeps "<name> test values".
+#
+# The words come from what search engines suggest as people type, not from a guess. Every other
+# language needs its own title for each pack listed here, in
+# data/translations/<language>/pack_titles.toml, or the build stops. The page's heading stays the
+# pack's name.
+
+[whitespace]
+title = "Zero width space and whitespace test values"
+
+[dates-impossible]
+title = "Leap year test cases and impossible dates"
+
+[export-breakers]
+title = "CSV and Excel formula injection test values"
+
+[filenames-paths]
+title = "Invalid file names and paths for testing"
+
+[encoding-mojibake]
+title = "Mojibake examples and encoding test values"
+
+[time-zones]
+title = "Time zone testing - DST, offsets and leap seconds"
+
+[pseudolocalization]
+title = "Pseudolocalization test strings"
+
+[passwords]
+title = "Password field test cases for sign-up and login"
+
+[search-queries]
+title = "Test cases for search functionality and search boxes"

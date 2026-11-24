@@ -1,0 +1,15 @@
+{{- /*
+  One length in every fill nkb boundary makes, with the four sizes of each, so
+  a page can show that "50 characters" is several numbers. From
+  data/facts/boundary.json. A fill with no words in the language file stops the
+  build.
+*/ -}}
+{{- $answer := hugo.Data.facts.boundary.every_fill }}
+<div class="table-wrap"><table>
+  <thead><tr><th>{{ T "limit_fill" }}</th><th>{{ T "limit_fill_text" (dict "count" (int $answer.max)) }}</th><th>{{ T "limit_fill_sizes" }}</th></tr></thead>
+  <tbody>
+    {{- range $answer.values }}
+    <tr><td>{{ T (printf "fill_%s" (replace .fill "-" "_")) }}</td><td><code class="limit-text">{{ .text }}</code></td><td>{{ partial "counts.html" . }}</td></tr>
+    {{- end }}
+  </tbody>
+</table></div>
