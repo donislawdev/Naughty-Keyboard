@@ -67,6 +67,7 @@ pages = [
   "/unicode-test-strings",
   "/character-limit-test-text",
   "/big-list-of-naughty-strings",
+  "/bug-magnet",
 ]
 
 [[sidebar]]
@@ -96,6 +97,7 @@ pages = [
   "/unicode-test-strings",
   "/character-limit-test-text",
   "/big-list-of-naughty-strings",
+  "/bug-magnet",
 ]
 
 # Addresses outside the site. The repository is the only place they point.
