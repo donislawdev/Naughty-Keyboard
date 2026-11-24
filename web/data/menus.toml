@@ -60,7 +60,13 @@ catalogue = true
 # people search for.
 [[sidebar]]
 key = "side_guides"
-pages = ["/test-cases-for-a-text-field", "/big-list-of-naughty-strings"]
+pages = [
+  "/test-cases-for-a-text-field",
+  "/email-field-test-cases",
+  "/names-with-special-characters",
+  "/unicode-test-strings",
+  "/big-list-of-naughty-strings",
+]
 
 [[sidebar]]
 key = "side_trust"
@@ -82,7 +88,13 @@ pages = [
 
 [[footer]]
 key = "footer_guides"
-pages = ["/test-cases-for-a-text-field", "/big-list-of-naughty-strings"]
+pages = [
+  "/test-cases-for-a-text-field",
+  "/email-field-test-cases",
+  "/names-with-special-characters",
+  "/unicode-test-strings",
+  "/big-list-of-naughty-strings",
+]
 
 # Addresses outside the site. The repository is the only place they point.
 [[project]]
