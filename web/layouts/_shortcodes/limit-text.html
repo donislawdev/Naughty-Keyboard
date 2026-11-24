@@ -1,0 +1,19 @@
+{{- /*
+  The test text for one limit a field states: limit-text 50. The counterstrings
+  nkb boundary makes one under, exactly at and one over the limit, read from
+  the facts the program's own test writes (data/facts/boundary.json), so each
+  is the text the palette and nkb send would type. A limit the facts do not
+  have stops the build.
+*/ -}}
+{{- $max := int (.Get 0) }}
+{{- $limit := false }}
+{{- range hugo.Data.facts.boundary.limits }}{{ if eq (int .max) $max }}{{ $limit = . }}{{ end }}{{ end }}
+{{- if not $limit }}
+  {{- errorf "%s: data/facts/boundary.json has no texts for a limit of %d" .Position $max }}
+{{- end }}
+<div class="limit-texts">
+  {{- range $limit.counterstrings }}
+  <p class="limit-label">{{ T (cond .within "limit_text_within" "limit_text_over") (dict "count" (int .length)) }}</p>
+  <pre class="limit-text"><code>{{ .text }}</code></pre>
+  {{- end }}
+</div>

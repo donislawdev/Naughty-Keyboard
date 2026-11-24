@@ -65,6 +65,7 @@ pages = [
   "/email-field-test-cases",
   "/names-with-special-characters",
   "/unicode-test-strings",
+  "/character-limit-test-text",
   "/big-list-of-naughty-strings",
 ]
 
@@ -93,6 +94,7 @@ pages = [
   "/email-field-test-cases",
   "/names-with-special-characters",
   "/unicode-test-strings",
+  "/character-limit-test-text",
   "/big-list-of-naughty-strings",
 ]
 

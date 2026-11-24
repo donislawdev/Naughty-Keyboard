@@ -1130,6 +1130,24 @@ pre .stderr {
   overflow-wrap: anywhere;
 }
 
+/* A test text of a given length is one long word, so it wraps anywhere
+   instead of running off the side of a phone. Wrapping adds no character. */
+.limit-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* In a table, one box for the whole text rather than one per wrapped line. */
+code.limit-text {
+  display: inline-block;
+}
+
+.limit-label {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--size-meta);
+  color: var(--text-secondary);
+}
+
 .breadcrumbs {
   display: flex;
   flex-wrap: wrap;

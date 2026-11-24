@@ -484,3 +484,47 @@ other = "W pliku {{ .file }}:"
 
 [mistake_lint_says]
 other = "Co mówi nkb lint:"
+
+# ---- tekst testowy do limitu długości (nkb boundary) ----------------------------
+
+[limit_text_within]
+one = "{{ .count }} znak, w limicie"
+few = "{{ .count }} znaki, w limicie"
+many = "{{ .count }} znaków, w limicie"
+other = "{{ .count }} znaku, w limicie"
+
+[limit_text_over]
+one = "{{ .count }} znak, o jeden za dużo"
+few = "{{ .count }} znaki, o jeden za dużo"
+many = "{{ .count }} znaków, o jeden za dużo"
+other = "{{ .count }} znaku, o jeden za dużo"
+
+[limit_fill]
+other = "Wypełnienie"
+
+[limit_fill_text]
+one = "{{ .count }} znak"
+few = "{{ .count }} znaki"
+many = "{{ .count }} znaków"
+other = "{{ .count }} znaku"
+
+[limit_fill_sizes]
+other = "Ile to dla programu"
+
+[fill_letters]
+other = "Litera a"
+
+[fill_counterstring]
+other = "Tekst-licznik"
+
+[fill_two_byte]
+other = "Litera dwubajtowa"
+
+[fill_three_byte]
+other = "Znak trzybajtowy"
+
+[fill_four_byte]
+other = "Emoji czterobajtowe"
+
+[fill_cluster]
+other = "Emoji rodziny"
