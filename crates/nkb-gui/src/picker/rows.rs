@@ -3,14 +3,46 @@
 //! ceiling of `D113`.
 
 use nkb_adapters::i18n::{self, MatchPlace, PacksLabel};
-use nkb_app::browse_packs::PackEntry;
+use nkb_app::browse_packs::{Listing, PackEntry};
+use nkb_app::ports::SourceError;
 use nkb_core::calendar::Day;
 use nkb_core::pack::{Pack, PackValue, Risk};
 use nkb_core::preview::preview_of;
 use nkb_core::text::{SHOWN_DESCRIPTION, SHOWN_NAME, shown_prose};
 
-use super::{Badge, Haystack, PackChoice, ValueChoice};
+use super::{Badge, Empty, Haystack, PackChoice, ValueChoice};
 use crate::live::preview_line;
+
+/// The packs as the window offers them, made from what `list_packs` found:
+/// the part of a list that does not depend on the pack in use, and the part
+/// that takes time - a preview of every value. Made where the packs are read,
+/// so the main thread only puts the list together (`packs/reading.rs`).
+pub struct PackChoices {
+    pub(super) packs: Vec<PackChoice>,
+    pub(super) empty: Option<Empty>,
+}
+
+impl PackChoices {
+    /// The choices over `listing`, the previews of `today`.
+    #[must_use]
+    pub fn of(listing: Result<Listing, SourceError>, today: Day) -> Self {
+        match listing {
+            Ok(listing) => {
+                let packs: Vec<PackChoice> = listing
+                    .entries
+                    .iter()
+                    .map(|entry| choice_of(entry, today))
+                    .collect();
+                let empty = packs.is_empty().then_some(Empty::NoPacks);
+                Self { packs, empty }
+            }
+            Err(_) => Self {
+                packs: Vec::new(),
+                empty: Some(Empty::Unavailable),
+            },
+        }
+    }
+}
 
 /// A row of the list. `today` is the day a `next-date` value names in its
 /// preview - the date the window shows is the date a press would type.
@@ -20,7 +52,7 @@ use crate::live::preview_line;
 /// name cannot reorder the row, and cut, so a description of megabytes - which
 /// `nkb lint` accepts - cannot freeze the window. A pack from a folder says so
 /// before its description, and what it is used instead of.
-pub(super) fn choice_of(entry: &PackEntry, today: Day) -> PackChoice {
+fn choice_of(entry: &PackEntry, today: Day) -> PackChoice {
     let source = i18n::pack_source(entry.origin());
     let with_source = |detail: String| match &source {
         Some(source) => format!("{source} {detail}"),
@@ -83,6 +115,26 @@ pub(super) fn choice_of(entry: &PackEntry, today: Day) -> PackChoice {
             haystack: Haystack::new(&[id], []),
             values: Vec::new(),
         },
+    }
+}
+
+/// The one pill of a value row: "next" over "offensive" - the palette's next
+/// band already marks the risk of the next value.
+pub(super) fn value_badge(choice: &ValueChoice, is_next: bool) -> Option<Badge> {
+    if is_next {
+        Some(Badge {
+            text: i18n::packs_label(PacksLabel::Next).to_owned(),
+            risky: false,
+            current: true,
+        })
+    } else if choice.offensive {
+        Some(Badge {
+            text: i18n::packs_label(PacksLabel::Offensive).to_owned(),
+            risky: true,
+            current: false,
+        })
+    } else {
+        None
     }
 }
 

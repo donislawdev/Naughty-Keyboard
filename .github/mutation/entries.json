@@ -1326,8 +1326,8 @@
       "id": "M270",
       "why": "the tester walking away closes the window WITH a keyboard hand-back - it takes the keyboard from the window the tester just clicked (OBS-147)",
       "file": "crates/nkb-gui/src/packs.rs",
-      "find": "    fn left(self: &Rc<Self>) {\n        if !on_request::has_left(self.window.window()) {\n            return;\n        }\n        *self.picker.borrow_mut() = None;",
-      "replace": "    fn left(self: &Rc<Self>) {\n        if !on_request::has_left(self.window.window()) {\n            return;\n        }\n        self.close();\n        *self.picker.borrow_mut() = None;",
+      "find": "    fn left(self: &Rc<Self>) {\n        if !on_request::has_left(self.window.window()) {\n            return;\n        }\n        *self.shown.borrow_mut() = None;",
+      "replace": "    fn left(self: &Rc<Self>) {\n        if !on_request::has_left(self.window.window()) {\n            return;\n        }\n        self.close();\n        *self.shown.borrow_mut() = None;",
       "test": "the_pack_window_chooses_closes_and_always_hands_the_keyboard_back",
       "runner": "rust:nkb-gui:packs_window"
     },
@@ -2711,9 +2711,9 @@
     {
       "id": "M479",
       "why": "the value window loses the restart shortcut - a command row without its chord (D100)",
-      "file": "crates/nkb-gui/src/packs.rs",
-      "find": "            .with_restart_key(now.restart.map(i18n::chord))\n",
-      "replace": "            .with_restart_key(None)\n",
+      "file": "crates/nkb-gui/src/packs/reading.rs",
+      "find": "    .with_restart_key(now.restart.map(i18n::chord))\n",
+      "replace": "    .with_restart_key(None)\n",
       "test": "the_pack_window_chooses_closes_and_always_hands_the_keyboard_back",
       "runner": "rust:nkb-gui:packs_window"
     },
@@ -6408,8 +6408,8 @@
       "id": "M911",
       "why": "the neighbouring pack without wrapping - Next pack at the end of the list does nothing",
       "file": "crates/nkb-app/src/browse_packs.rs",
-      "find": "            (Some(at), Direction::Next) => (at + 1) % count,\n",
-      "replace": "            (Some(at), Direction::Next) => (at + 1).min(count - 1),\n",
+      "find": "        (Some(at), Direction::Next) => (1..count).map(|step| (at + step) % count).collect(),\n",
+      "replace": "        (Some(at), Direction::Next) => (1..count).map(|step| at + step).collect(),\n",
       "test": "browse_packs::tests::the_next_pack_skips_what_does_not_load_and_wraps_both_ways",
       "runner": "rust:nkb-app:lib"
     },
@@ -6417,8 +6417,8 @@
       "id": "M912",
       "why": "the neighbouring pack can be an unreadable pack",
       "file": "crates/nkb-app/src/browse_packs.rs",
-      "find": "                PackEntry::Loaded { pack, .. } => Some(pack.id.as_str()),\n                PackEntry::Refused { .. } | PackEntry::Unreadable { .. } => None,",
-      "replace": "                PackEntry::Loaded { pack, .. } => Some(pack.id.as_str()),\n                PackEntry::Refused { id, .. } | PackEntry::Unreadable { id, .. } => Some(id.as_str()),",
+      "find": "        .is_some_and(|found| matches!(load(format, id, found), PackEntry::Loaded { .. }))\n",
+      "replace": "        .is_some_and(|found| found.text.is_ok())\n",
       "test": "browse_packs::tests::the_next_pack_skips_what_does_not_load_and_wraps_both_ways",
       "runner": "rust:nkb-app:lib"
     },
@@ -8244,8 +8244,8 @@
       "id": "M1129",
       "why": "leaving a pack window that stands on the screen while closed does not hide it (OBS-183)",
       "file": "crates/nkb-gui/src/packs.rs",
-      "find": "    fn left(self: &Rc<Self>) {\n        if !on_request::has_left(self.window.window()) {\n            return;\n        }\n        *self.picker.borrow_mut() = None;",
-      "replace": "    fn left(self: &Rc<Self>) {\n        if !on_request::has_left(self.window.window()) {\n            return;\n        }\n        if self.picker.borrow_mut().take().is_none() {\n            return;\n        }",
+      "find": "    fn left(self: &Rc<Self>) {\n        if !on_request::has_left(self.window.window()) {\n            return;\n        }\n        *self.shown.borrow_mut() = None;",
+      "replace": "    fn left(self: &Rc<Self>) {\n        if !on_request::has_left(self.window.window()) {\n            return;\n        }\n        if self.shown.borrow_mut().take().is_none() {\n            return;\n        }",
       "test": "a_minimized_window_is_left_and_comes_back_on_the_screen",
       "runner": "rust:nkb-gui:packs_window"
     },
@@ -13027,9 +13027,9 @@
     {
       "id": "M1670",
       "why": "the value window says nothing under its list - not where own packs go, not which folder was not read (D173)",
-      "file": "crates/nkb-gui/src/packs.rs",
-      "find": "            .with_notes(notes)\n",
-      "replace": "",
+      "file": "crates/nkb-gui/src/packs/reading.rs",
+      "find": "        .with_notes(read.notes)\n",
+      "replace": "        .with_notes(Vec::new())\n",
       "test": "the_pack_window_chooses_closes_and_always_hands_the_keyboard_back",
       "runner": "rust:nkb-gui:packs_window"
     },
@@ -13901,8 +13901,8 @@
       "id": "M1767",
       "why": "a number typed in the search leaves the selection on a value its digits found - Enter does not take the limit (D178)",
       "file": "crates/nkb-gui/src/picker.rs",
-      "find": "            self.selected = suggested\n",
-      "replace": "            self.selected = suggested\n                .filter(|_| false)\n",
+      "find": "        self.selected = suggested\n",
+      "replace": "        self.selected = suggested\n            .filter(|_| false)\n",
       "test": "picker::limit::tests::a_number_in_the_search_suggests_the_limit_with_that_number",
       "runner": "rust:nkb-gui:lib"
     },

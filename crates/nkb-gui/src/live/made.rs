@@ -71,16 +71,17 @@ impl Worker<'_> {
     /// row stands above the packs. It is entered through its window alone,
     /// which is where its limit is typed.
     pub(super) fn step_pack(&mut self, direction: Direction) -> Carried {
-        let listing = list_packs(&self.memory.folders.catalogue(), &TomlPackFormat).ok();
         // No pack is called nothing, so a made set is beside every one of them.
         let from = match self.sequence.made_for() {
             Some(_) => "",
             None => self.pack.as_str(),
         };
-        let other = listing
-            .as_ref()
-            .and_then(|listing| listing.neighbour(from, direction))
-            .map(str::to_owned);
+        let other = neighbour(
+            &self.memory.folders.catalogue(),
+            &TomlPackFormat,
+            from,
+            direction,
+        );
         let view = match other {
             Some(pack) => choose(
                 &mut self.sequence,
@@ -113,6 +114,7 @@ impl Worker<'_> {
 mod tests {
     use super::*;
     use crate::live::tests::{Registrar, a_store, with_worker};
+    use nkb_app::browse_packs::{PackEntry, list_packs};
     use nkb_core::boundary::{self, Unit};
 
     fn at_most(most: u32, unit: Unit) -> Limit {
@@ -213,14 +215,14 @@ mod tests {
         with_worker(&store, &Registrar::default(), false, |worker, memory| {
             let listing = list_packs(&memory.folders.catalogue(), &TomlPackFormat)
                 .expect("the built-in catalogue");
-            let first = listing
-                .neighbour("", Direction::Next)
-                .expect("a first pack")
-                .to_owned();
-            let last = listing
-                .neighbour("", Direction::Previous)
-                .expect("a last pack")
-                .to_owned();
+            let loaded: Vec<&str> = listing
+                .entries
+                .iter()
+                .filter(|entry| matches!(entry, PackEntry::Loaded { .. }))
+                .map(PackEntry::id)
+                .collect();
+            let first = (*loaded.first().expect("a first pack")).to_owned();
+            let last = (*loaded.last().expect("a last pack")).to_owned();
             assert_ne!(first, last);
             for (direction, wanted) in [(Direction::Next, &first), (Direction::Previous, &last)] {
                 worker.carry_out(Command::UseLimit {

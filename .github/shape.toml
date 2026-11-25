@@ -120,7 +120,7 @@ near = 13
 # shortcut that takes a key or a character went from i18n.rs to i18n/typing.rs
 # beside the sentences.
 [files.rust-whole]
-ceiling = 2120
+ceiling = 2116
 # 5 since 2026-10-10, the owner's choice twice that day: the ceiling came down
 # from 2907 to 2481, 2408, 2407 and 2363 as live.rs moved code into modules, the
 # band came down with it, and it reached advance_sequence.rs, settings_file.rs
@@ -141,7 +141,10 @@ ceiling = 2120
 # the same day, the owner's choice: nkb-app/src/keep_settings.rs, which did not
 # grow, joined the band at 1561. 7 since 2026-11-17, the owner's choice: the
 # ceiling came down to 2120 and nkb-core/src/sequence.rs, which did not grow,
-# joined the band at 1486.
+# joined the band at 1486. 2116 since 2026-11-25, when the test of the pack
+# window's labels moved from nkb-adapters/src/i18n.rs, which a new label had
+# taken past the ceiling, to the file that defines the labels, and
+# nkb-app/src/advance_sequence.rs is the largest.
 near = 7
 
 # A Slint file, the gallery excepted. ui/screens/palette.slint since the fold

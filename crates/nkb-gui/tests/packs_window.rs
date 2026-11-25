@@ -29,6 +29,7 @@ mod offscreen;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 use nkb_core::hotkeys::HotkeyChord;
 use nkb_gui::PacksWindow;
@@ -124,6 +125,20 @@ fn titles(window: &PacksWindow) -> Vec<String> {
         .collect()
 }
 
+/// Lets the main thread take the list once it is read - what the event loop
+/// does for the tester.
+fn wait_for_the_list(packs: &Packs) {
+    let started = Instant::now();
+    while packs.is_reading() {
+        assert!(
+            started.elapsed() < Duration::from_secs(30),
+            "the list never came"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+        slint::platform::update_timers_and_animations();
+    }
+}
+
 fn selected_title(window: &PacksWindow) -> String {
     let at = usize::try_from(window.get_selected()).expect("a row is selected");
     titles(window)[at].clone()
@@ -160,6 +175,8 @@ fn the_pack_window_chooses_closes_and_always_hands_the_keyboard_back() {
         )),
     );
     let window = packs.window();
+    // The list with the window, however slow the build reading it.
+    packs.set_list_wait(Duration::from_secs(60));
     let weak = std::rc::Rc::downgrade(&packs);
     *keyboard.window_shown.borrow_mut() = Some(Box::new(move || {
         weak.upgrade()
@@ -539,6 +556,8 @@ fn the_row_of_the_length_limit_asks_for_its_window_and_gives_way() {
         nkb_gui::pack_folders::FolderLink::new(nkb_adapters::PackFolders::none()),
     );
     let window = packs.window();
+    // The list with the window, however slow the build reading it.
+    packs.set_list_wait(Duration::from_secs(60));
     let asked: Rc<RefCell<Vec<Option<u32>>>> = Rc::default();
     packs.set_open_limit(Box::new({
         let asked = Rc::clone(&asked);
@@ -645,6 +664,8 @@ fn a_minimized_window_is_left_and_comes_back_on_the_screen() {
         nkb_gui::pack_folders::FolderLink::new(nkb_adapters::PackFolders::none()),
     );
     let window = packs.window();
+    // The list with the window, however slow the build reading it.
+    packs.set_list_wait(Duration::from_secs(60));
     let shown = || window.window().is_visible();
 
     // ---- minimized: left, and hidden once the event is over ----------------
@@ -726,4 +747,84 @@ fn a_minimized_window_is_left_and_comes_back_on_the_screen() {
     );
     assert!(!packs.is_open(), "standing is not opening");
     assert!(said.borrow().is_empty(), "{:?}", said.borrow());
+}
+
+/// The urgent report's point 9: a list that takes longer than the opening
+/// waits for it comes when it is read. Meanwhile the window says it reads,
+/// keeps what the tester types and chooses nothing - and a list read for a
+/// window closed since goes nowhere.
+#[test]
+fn a_list_read_late_comes_with_what_was_typed_meanwhile() {
+    let _surface = offscreen::start(440, 560);
+    let keyboard = Rc::new(Recorded::default());
+    let (choose, commands) = mpsc::channel();
+    let in_use = live::in_use();
+    in_use.lock().expect("a fresh lock").pack = Some(String::from("whitespace"));
+    let packs = Packs::new(
+        PacksWindow::new().expect("the pack window must build"),
+        Box::new(Shared(Rc::clone(&keyboard))),
+        choose,
+        in_use,
+        Box::new(|_| {}),
+        nkb_gui::pack_folders::FolderLink::new(nkb_adapters::PackFolders::none()),
+    );
+    let window = packs.window();
+    // No wait at all: the window shows before any catalogue is read.
+    packs.set_list_wait(Duration::ZERO);
+
+    // ---- shown while it reads: the sentence, the query, no choice -----------
+    packs.open();
+    assert!(packs.is_open() && packs.is_reading());
+    assert_eq!(window.get_rows().row_count(), 0);
+    assert_eq!(
+        window.get_empty_text(),
+        "Reading the packs. A pack folder on a network share can take a few seconds."
+    );
+    type_text(window, "unicode-text");
+    assert_eq!(window.get_query(), "unicode-text", "typed while it reads");
+    tap(window, DOWN);
+    tap(window, RETURN);
+    assert_eq!(
+        commands.try_recv(),
+        Err(mpsc::TryRecvError::Empty),
+        "nothing to choose before the list"
+    );
+    assert!(packs.is_open(), "Enter with no list closes nothing");
+
+    // ---- the list comes, filtered by what was typed -------------------------
+    wait_for_the_list(&packs);
+    assert_eq!(window.get_query(), "unicode-text");
+    assert_eq!(
+        titles(window),
+        vec![String::from("Packs"), String::from("Unicode and text")],
+        "the list took the query typed while it was read"
+    );
+    assert_eq!(window.get_empty_text(), "");
+    tap(window, RETURN);
+    assert_eq!(
+        commands.try_recv(),
+        Ok(Command::Choose(String::from("unicode-text")))
+    );
+
+    // ---- closed while it reads: the list read for it goes nowhere -----------
+    packs.open();
+    assert!(packs.is_reading());
+    tap(window, ESCAPE);
+    assert!(!packs.is_open());
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_secs(1) {
+        std::thread::sleep(Duration::from_millis(10));
+        slint::platform::update_timers_and_animations();
+    }
+    assert!(
+        !packs.is_open() && !window.window().is_visible(),
+        "a list read for a closed window opened it"
+    );
+
+    // ---- an opening that waits long enough opens with its list --------------
+    packs.set_list_wait(Duration::from_secs(60));
+    packs.open();
+    assert!(!packs.is_reading());
+    assert_eq!(titles(window).len(), 3 + 22);
+    assert_eq!(window.get_query(), "", "a new opening starts with no query");
 }

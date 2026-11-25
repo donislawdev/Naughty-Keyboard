@@ -86,6 +86,10 @@ pub enum PacksLabel {
     NoPacks,
     /// The catalogue itself could not be read.
     ListUnavailable,
+    /// The packs are still being read: the window shows before its list when
+    /// that takes longer than a moment - a pack folder on a share that answers
+    /// slowly (the urgent report's point 9).
+    Reading,
     /// The footer: each key, and what it does here.
     KeyEnter,
     UseSelected,
@@ -136,6 +140,9 @@ pub(super) fn pattern_packs_label(label: PacksLabel) -> &'static str {
         }
         PacksLabel::ListUnavailable => {
             "The pack list could not be read, so there is nothing to choose from. Close this window and start the palette with a pack name."
+        }
+        PacksLabel::Reading => {
+            "Reading the packs. A pack folder on a network share can take a few seconds."
         }
         PacksLabel::KeyEnter => "Enter",
         PacksLabel::UseSelected => "Use the selected value or pack",
@@ -821,6 +828,103 @@ pub fn shortcut_risk_pill(risk: ChordRisk) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The pack window's labels divide the same way as the palette's.
+    ///
+    /// Exhaustive on the takes-a-value side, so a new variant must be placed
+    /// before this compiles. The array can still miss one, and the contract
+    /// bridge (`sprawdz-kontrakt.py`) is the second net, as for the palette.
+    #[test]
+    fn a_pack_window_label_carrying_a_value_has_a_typed_function() {
+        for label in [
+            PacksLabel::Title,
+            PacksLabel::Heading,
+            PacksLabel::Summary,
+            PacksLabel::SummaryFiltered,
+            PacksLabel::Search,
+            PacksLabel::InUse,
+            PacksLabel::Next,
+            PacksLabel::FoundIn,
+            PacksLabel::ValueFound,
+            PacksLabel::PlaceId,
+            PacksLabel::PlaceTags,
+            PacksLabel::PlaceFields,
+            PacksLabel::PlacePair,
+            PacksLabel::PlacesTwo,
+            PacksLabel::PlacesThree,
+            PacksLabel::PlacesFour,
+            PacksLabel::Halves,
+            PacksLabel::FoundValues,
+            PacksLabel::Recent,
+            PacksLabel::PacksSection,
+            PacksLabel::Generators,
+            PacksLabel::ValueGone,
+            PacksLabel::Offensive,
+            PacksLabel::Refused,
+            PacksLabel::Problems,
+            PacksLabel::Unreadable,
+            PacksLabel::NoMatch,
+            PacksLabel::NoPacks,
+            PacksLabel::ListUnavailable,
+            PacksLabel::Reading,
+            PacksLabel::KeyEnter,
+            PacksLabel::UseSelected,
+            PacksLabel::KeyEscape,
+            PacksLabel::Close,
+            PacksLabel::KeyArrows,
+            PacksLabel::Move,
+            PacksLabel::KeyFold,
+            PacksLabel::Fold,
+        ] {
+            let takes_values = match label {
+                PacksLabel::Summary
+                | PacksLabel::SummaryFiltered
+                | PacksLabel::FoundIn
+                | PacksLabel::ValueFound
+                | PacksLabel::Recent
+                | PacksLabel::PlacesTwo
+                | PacksLabel::PlacesThree
+                | PacksLabel::PlacesFour
+                | PacksLabel::Halves
+                | PacksLabel::ValueGone
+                | PacksLabel::Refused
+                | PacksLabel::Problems
+                | PacksLabel::Unreadable
+                | PacksLabel::NoMatch => true,
+                PacksLabel::Title
+                | PacksLabel::Heading
+                | PacksLabel::Search
+                | PacksLabel::InUse
+                | PacksLabel::Next
+                | PacksLabel::FoundValues
+                | PacksLabel::PlaceId
+                | PacksLabel::PlaceTags
+                | PacksLabel::PlaceFields
+                | PacksLabel::PlacePair
+                | PacksLabel::PacksSection
+                | PacksLabel::Generators
+                | PacksLabel::Offensive
+                | PacksLabel::NoPacks
+                | PacksLabel::ListUnavailable
+                | PacksLabel::Reading
+                | PacksLabel::KeyEnter
+                | PacksLabel::UseSelected
+                | PacksLabel::KeyEscape
+                | PacksLabel::Close
+                | PacksLabel::KeyArrows
+                | PacksLabel::Move
+                | PacksLabel::KeyFold
+                | PacksLabel::Fold => false,
+            };
+            let pattern = pattern_packs_label(label);
+            assert_eq!(
+                pattern.contains('{'),
+                takes_values,
+                "{label:?}: pattern was {pattern:?}"
+            );
+            assert!(!pattern.is_empty(), "{label:?} produced nothing");
+        }
+    }
 
     #[test]
     fn the_shortcuts_window_counts_and_invites_in_its_own_words() {

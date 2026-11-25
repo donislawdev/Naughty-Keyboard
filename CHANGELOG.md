@@ -15,6 +15,15 @@ Changes wait under Unreleased until a release, which then gets a dated section o
   it as sent. Now that window closes first, the keyboard goes back to the field you were in, and the
   value goes there. While the system window for choosing a pack folder is open, nothing is sent and
   the palette says why.
+- With a team folder on a network share that answers slowly, opening the value window froze it and
+  the palette until every pack was read, and the next pack and previous pack shortcuts waited as
+  long. Now the value window opens at once and says it is reading the packs, what you type goes into
+  the search, and the list comes when the packs are read. The pack shortcuts read only the packs they
+  step past.
+- Looking at a field on a web page in Chrome, Edge or another Chromium browser turned on an
+  accessibility mode in which the browser works out the layout of every line of text on the page,
+  and it stayed on until the browser closed. The palette no longer asks the page the question that
+  turns it on.
 
 ## [0.4.0] - 2026-11-18
 
