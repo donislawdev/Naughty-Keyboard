@@ -77,7 +77,7 @@ mod reading;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use nkb_adapters::LentFocus;
 use nkb_adapters::i18n::{self, Environment, FoldersLabel, PacksLabel, Startup};
@@ -93,7 +93,7 @@ use crate::query::{KeyPress, Pressed};
 use crate::{HintRow, PacksWindow, PickRow};
 
 pub use reading::LIST_WAIT;
-use reading::Shown;
+use reading::{Reader, Shown};
 
 /// Moving the keyboard to the pack window and back.
 ///
@@ -171,11 +171,8 @@ pub struct Packs {
     /// `Some` while the window is open. Read fresh on every opening, so the
     /// list says what is on disk now and the query starts empty.
     shown: RefCell<Option<Shown>>,
-    /// How many openings had to wait for their list - the number of the last.
-    openings: Cell<u64>,
-    /// How long an opening waits for its list: [`LIST_WAIT`], or what a test
-    /// sets.
-    list_wait: Cell<Duration>,
+    /// How the packs are read for an opening (`packs/reading.rs`).
+    reader: Reader,
     keyboard: Box<dyn Keyboard>,
     commands: Sender<Command>,
     in_use: InUse,
@@ -218,8 +215,7 @@ impl Packs {
         let packs = Rc::new(Self {
             window,
             shown: RefCell::new(None),
-            openings: Cell::new(0),
-            list_wait: Cell::new(LIST_WAIT),
+            reader: Reader::default(),
             keyboard,
             commands,
             in_use,

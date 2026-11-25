@@ -97,7 +97,8 @@ mod rows;
 
 use haystack::{Haystack, words_of};
 use limit::{LimitRow, Place};
-use rows::{choice_of, value_badge};
+pub use rows::PackChoices;
+use rows::value_badge;
 
 /// One pack as the window offers it.
 #[derive(Debug, Clone)]
@@ -302,20 +303,14 @@ impl PackPicker {
         in_use: Option<&str>,
         next: Option<&str>,
     ) -> Self {
-        let (packs, empty, notes) = match listing {
-            Ok(listing) => {
-                let packs: Vec<PackChoice> = listing
-                    .entries
-                    .iter()
-                    .map(|entry| choice_of(entry, today))
-                    .collect();
-                let empty = packs.is_empty().then_some(Empty::NoPacks);
-                // The notes need the folders, which only the window knows
-                // (`with_notes`, `D173`).
-                (packs, empty, Vec::new())
-            }
-            Err(_) => (Vec::new(), Some(Empty::Unavailable), Vec::new()),
-        };
+        Self::over(PackChoices::of(listing, today), in_use, next)
+    }
+
+    /// The picker over packs made into choices already - on the thread that
+    /// read them (`packs/reading.rs`) - as [`PackPicker::new`] opens.
+    #[must_use]
+    pub fn over(choices: PackChoices, in_use: Option<&str>, next: Option<&str>) -> Self {
+        let PackChoices { packs, empty } = choices;
         let mut picker = Self {
             packs,
             in_use: in_use.map(str::to_owned),
@@ -324,7 +319,9 @@ impl PackPicker {
             visible: Vec::new(),
             selected: None,
             empty,
-            notes,
+            // The notes need the folders, which only the window knows
+            // (`with_notes`, `D173`).
+            notes: Vec::new(),
             restart_key: None,
             recent: Vec::new(),
             recent_open: false,

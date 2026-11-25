@@ -6417,8 +6417,8 @@
       "id": "M912",
       "why": "the neighbouring pack can be an unreadable pack",
       "file": "crates/nkb-app/src/browse_packs.rs",
-      "find": "        .is_some_and(|text| crate::load_pack::load(format, id, &text).is_ok())\n",
-      "replace": "        .is_some_and(|text| !text.is_empty())\n",
+      "find": "        .is_some_and(|found| matches!(load(format, id, found), PackEntry::Loaded { .. }))\n",
+      "replace": "        .is_some_and(|found| found.text.is_ok())\n",
       "test": "browse_packs::tests::the_next_pack_skips_what_does_not_load_and_wraps_both_ways",
       "runner": "rust:nkb-app:lib"
     },
@@ -13028,8 +13028,8 @@
       "id": "M1670",
       "why": "the value window says nothing under its list - not where own packs go, not which folder was not read (D173)",
       "file": "crates/nkb-gui/src/packs/reading.rs",
-      "find": "    picker_of(listing, now).with_notes(notes)\n",
-      "replace": "    let _ = notes;\n    picker_of(listing, now)\n",
+      "find": "        .with_notes(read.notes)\n",
+      "replace": "        .with_notes(Vec::new())\n",
       "test": "the_pack_window_chooses_closes_and_always_hands_the_keyboard_back",
       "runner": "rust:nkb-gui:packs_window"
     },

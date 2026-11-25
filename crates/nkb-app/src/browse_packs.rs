@@ -147,12 +147,11 @@ pub fn neighbour(
 }
 
 /// Whether the pack `id` loads now - the question a listing answers with
-/// [`PackEntry::Loaded`], asked of one pack.
+/// [`PackEntry::Loaded`], asked of one pack the way a listing asks it.
 fn loads(catalogue: &dyn PackCatalogue, format: &dyn PackFormat, id: &str) -> bool {
     catalogue
         .find(id)
-        .and_then(|found| found.text.ok())
-        .is_some_and(|text| crate::load_pack::load(format, id, &text).is_ok())
+        .is_some_and(|found| matches!(load(format, id, found), PackEntry::Loaded { .. }))
 }
 
 /// Which way [`neighbour`] steps.
