@@ -98,7 +98,7 @@ use nkb_adapters::{
     SystemClock, TomlPackFormat, default_bindings, i18n, layout_character,
 };
 use nkb_app::advance_sequence::{InFlight, Ports, RouteRequest, Sent};
-use nkb_app::browse_packs::{Direction, list_packs};
+use nkb_app::browse_packs::{Direction, neighbour};
 use nkb_app::ports::{
     Clearing, GivenShortcut, LiveShortcuts, Progress, SettingChange, Settings,
     ShortcutRegistration, Wait, Waiting,

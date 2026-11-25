@@ -6408,8 +6408,8 @@
       "id": "M911",
       "why": "the neighbouring pack without wrapping - Next pack at the end of the list does nothing",
       "file": "crates/nkb-app/src/browse_packs.rs",
-      "find": "            (Some(at), Direction::Next) => (at + 1) % count,\n",
-      "replace": "            (Some(at), Direction::Next) => (at + 1).min(count - 1),\n",
+      "find": "        (Some(at), Direction::Next) => (1..count).map(|step| (at + step) % count).collect(),\n",
+      "replace": "        (Some(at), Direction::Next) => (1..count).map(|step| at + step).collect(),\n",
       "test": "browse_packs::tests::the_next_pack_skips_what_does_not_load_and_wraps_both_ways",
       "runner": "rust:nkb-app:lib"
     },
@@ -6417,8 +6417,8 @@
       "id": "M912",
       "why": "the neighbouring pack can be an unreadable pack",
       "file": "crates/nkb-app/src/browse_packs.rs",
-      "find": "                PackEntry::Loaded { pack, .. } => Some(pack.id.as_str()),\n                PackEntry::Refused { .. } | PackEntry::Unreadable { .. } => None,",
-      "replace": "                PackEntry::Loaded { pack, .. } => Some(pack.id.as_str()),\n                PackEntry::Refused { id, .. } | PackEntry::Unreadable { id, .. } => Some(id.as_str()),",
+      "find": "        .is_some_and(|text| crate::load_pack::load(format, id, &text).is_ok())\n",
+      "replace": "        .is_some_and(|text| !text.is_empty())\n",
       "test": "browse_packs::tests::the_next_pack_skips_what_does_not_load_and_wraps_both_ways",
       "runner": "rust:nkb-app:lib"
     },

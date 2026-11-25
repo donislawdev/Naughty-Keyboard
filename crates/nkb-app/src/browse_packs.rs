@@ -102,41 +102,60 @@ impl Listing {
     pub fn unusable(&self) -> usize {
         self.entries.len() - self.loaded()
     }
-
-    /// The pack one step from `current` among the packs that loaded, in the
-    /// order of this listing and wrapping at either end - what "next pack" and
-    /// "previous pack" open (`D120`). The order is the value window's, which
-    /// lists the same entries, so the shortcut walks the list the tester sees.
-    ///
-    /// `None` when no pack besides `current` loaded: there is nothing to switch
-    /// to, and the caller says so. A `current` the listing does not hold - a
-    /// pack that stopped loading since it was opened - starts the walk at the
-    /// first pack, or at the last one for a step back.
-    #[must_use]
-    pub fn neighbour(&self, current: &str, direction: Direction) -> Option<&str> {
-        let loaded: Vec<&str> = self
-            .entries
-            .iter()
-            .filter_map(|entry| match entry {
-                PackEntry::Loaded { pack, .. } => Some(pack.id.as_str()),
-                PackEntry::Refused { .. } | PackEntry::Unreadable { .. } => None,
-            })
-            .collect();
-        if loaded.iter().all(|id| *id == current) {
-            return None;
-        }
-        let count = loaded.len();
-        let index = match (loaded.iter().position(|id| *id == current), direction) {
-            (Some(at), Direction::Next) => (at + 1) % count,
-            (Some(at), Direction::Previous) => (at + count - 1) % count,
-            (None, Direction::Next) => 0,
-            (None, Direction::Previous) => count - 1,
-        };
-        loaded.get(index).copied()
-    }
 }
 
-/// Which way [`Listing::neighbour`] steps.
+/// The pack one step from `current` among the packs that load, in the order
+/// of the catalogue's list and wrapping at either end - what "next pack" and
+/// "previous pack" open (`D120`). The order is the value window's, which
+/// lists the same packs, so the shortcut walks the list the tester sees.
+///
+/// Loads only what the step passes: the packs past `current`, one at a time,
+/// until one loads - as a rule one pack, where a listing loads all of them. A
+/// team folder on a share pays a read per pack loaded, and the palette steps
+/// on the thread that carries the shortcuts, so a step that read the whole
+/// catalogue held every press behind it for as long.
+///
+/// `None` when no pack besides `current` loads, or the catalogue cannot be
+/// listed: there is nothing to switch to, and the caller says so. A `current`
+/// the list does not hold - a set made for a limit, or a pack whose file is
+/// gone - starts the walk at the first pack, or at the last one for a step
+/// back. A pack that stopped loading since it was opened is stepped from where
+/// it stands in the list, which is where the window shows it.
+#[must_use]
+pub fn neighbour(
+    catalogue: &dyn PackCatalogue,
+    format: &dyn PackFormat,
+    current: &str,
+    direction: Direction,
+) -> Option<String> {
+    let listed = catalogue.list().ok()?;
+    let count = listed.len();
+    let at = listed.iter().position(|listed| listed.id == current);
+    let walk: Vec<usize> = match (at, direction) {
+        (Some(at), Direction::Next) => (1..count).map(|step| (at + step) % count).collect(),
+        (Some(at), Direction::Previous) => {
+            (1..count).map(|step| (at + count - step) % count).collect()
+        }
+        (None, Direction::Next) => (0..count).collect(),
+        (None, Direction::Previous) => (0..count).rev().collect(),
+    };
+    walk.into_iter()
+        .filter_map(|index| listed.get(index))
+        .map(|listed| &listed.id)
+        .find(|id| loads(catalogue, format, id))
+        .cloned()
+}
+
+/// Whether the pack `id` loads now - the question a listing answers with
+/// [`PackEntry::Loaded`], asked of one pack.
+fn loads(catalogue: &dyn PackCatalogue, format: &dyn PackFormat, id: &str) -> bool {
+    catalogue
+        .find(id)
+        .and_then(|found| found.text.ok())
+        .is_some_and(|text| crate::load_pack::load(format, id, &text).is_ok())
+}
+
+/// Which way [`neighbour`] steps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
     /// Further down the list.
@@ -648,66 +667,137 @@ mod tests {
         }
     }
 
-    fn listing_of(entries: &[(&str, bool)]) -> Listing {
-        Listing {
-            entries: entries
-                .iter()
-                .map(|(id, loads)| {
-                    if *loads {
-                        PackEntry::Loaded {
-                            pack: Box::new(a_pack(id)),
-                            warnings: 0,
-                            origin: PackOrigin::built_in(),
-                        }
-                    } else {
-                        PackEntry::Refused {
-                            id: (*id).to_owned(),
-                            errors: 1,
-                            origin: PackOrigin::built_in(),
-                        }
-                    }
-                })
-                .collect(),
-            coverage: CatalogueCoverage {
-                consulted: vec![CatalogueSource::BuiltIn],
-                skipped: Vec::new(),
-                misnamed: Vec::new(),
-            },
+    /// A format that refuses a pack whose text starts with `!` and writes down
+    /// every pack it was asked to check - how much a step loads is read here.
+    #[derive(Default)]
+    struct Marked {
+        checked: std::cell::RefCell<Vec<String>>,
+    }
+
+    impl PackFormat for Marked {
+        fn check(&self, text: &str, expected_id: &str) -> Vec<LintProblem> {
+            self.checked.borrow_mut().push(expected_id.to_owned());
+            if text.starts_with('!') {
+                vec![LintProblem::new(RuleCode::PackWithoutValues)]
+            } else {
+                Vec::new()
+            }
         }
+        fn translated_pack(&self, _text: &str) -> TranslationTarget {
+            TranslationTarget::NotATranslation
+        }
+        fn check_translation(&self, _text: &str, _translated: &str) -> TranslationCheck {
+            TranslationCheck::Compared(Vec::new())
+        }
+        fn parse(&self, text: &str) -> Option<Pack> {
+            Some(a_pack(text))
+        }
+        fn skeleton(&self, _id: &str, _today: Date) -> String {
+            String::new()
+        }
+        fn canonical(&self, _text: &str) -> Option<String> {
+            None
+        }
+        fn same_insertions(&self, _before: &str, _after: &str) -> bool {
+            true
+        }
+    }
+
+    /// A shelf of `ids`, in that order, where an id starting with `!` names a
+    /// pack that does not load.
+    fn marked(ids: &[&str]) -> Shelf {
+        let entries: Vec<(String, String)> = ids
+            .iter()
+            .map(|id| (id.trim_start_matches('!').to_owned(), (*id).to_owned()))
+            .collect();
+        let borrowed: Vec<(&str, &str)> = entries
+            .iter()
+            .map(|(id, text)| (id.as_str(), text.as_str()))
+            .collect();
+        Shelf::of(&borrowed)
+    }
+
+    fn step(shelf: &Shelf, current: &str, direction: Direction) -> Option<String> {
+        neighbour(shelf, &Marked::default(), current, direction)
     }
 
     #[test]
     fn the_next_pack_skips_what_does_not_load_and_wraps_both_ways() {
-        let listing = listing_of(&[("a", true), ("b", false), ("c", true), ("d", true)]);
-        assert_eq!(listing.neighbour("a", Direction::Next), Some("c"));
-        assert_eq!(listing.neighbour("c", Direction::Next), Some("d"));
+        let shelf = marked(&["a", "!b", "c", "d"]);
+        assert_eq!(step(&shelf, "a", Direction::Next).as_deref(), Some("c"));
+        assert_eq!(step(&shelf, "c", Direction::Next).as_deref(), Some("d"));
         assert_eq!(
-            listing.neighbour("d", Direction::Next),
+            step(&shelf, "d", Direction::Next).as_deref(),
             Some("a"),
             "wraps at the end"
         );
         assert_eq!(
-            listing.neighbour("a", Direction::Previous),
+            step(&shelf, "a", Direction::Previous).as_deref(),
             Some("d"),
             "wraps at the start"
         );
-        assert_eq!(listing.neighbour("c", Direction::Previous), Some("a"));
+        assert_eq!(step(&shelf, "c", Direction::Previous).as_deref(), Some("a"));
     }
 
     #[test]
     fn with_no_other_pack_that_loads_there_is_nowhere_to_go() {
-        let alone = listing_of(&[("a", true), ("b", false)]);
-        assert_eq!(alone.neighbour("a", Direction::Next), None);
-        assert_eq!(alone.neighbour("a", Direction::Previous), None);
-        assert_eq!(listing_of(&[]).neighbour("a", Direction::Next), None);
+        let alone = marked(&["a", "!b"]);
+        assert_eq!(step(&alone, "a", Direction::Next), None);
+        assert_eq!(step(&alone, "a", Direction::Previous), None);
+        assert_eq!(step(&marked(&[]), "a", Direction::Next), None);
+        assert_eq!(step(&marked(&["!a", "!b"]), "a", Direction::Next), None);
     }
 
     #[test]
     fn a_pack_no_longer_in_the_list_starts_the_walk_at_an_end() {
-        let listing = listing_of(&[("a", true), ("b", true), ("c", false)]);
-        assert_eq!(listing.neighbour("gone", Direction::Next), Some("a"));
-        assert_eq!(listing.neighbour("gone", Direction::Previous), Some("b"));
-        // A pack that stopped loading is not a pack to step from in its place.
-        assert_eq!(listing.neighbour("c", Direction::Next), Some("a"));
+        let shelf = marked(&["a", "b", "!c"]);
+        assert_eq!(step(&shelf, "gone", Direction::Next).as_deref(), Some("a"));
+        assert_eq!(
+            step(&shelf, "gone", Direction::Previous).as_deref(),
+            Some("b")
+        );
+    }
+
+    /// The window lists a pack that stopped loading where it stands, so the
+    /// step goes on from there - not from an end of the list.
+    #[test]
+    fn a_pack_that_stopped_loading_is_stepped_from_where_it_stands() {
+        let shelf = marked(&["a", "!b", "c", "d"]);
+        assert_eq!(step(&shelf, "b", Direction::Next).as_deref(), Some("c"));
+        assert_eq!(step(&shelf, "b", Direction::Previous).as_deref(), Some("a"));
+    }
+
+    /// Report point 4: a step loads the packs it passes, not the catalogue.
+    #[test]
+    fn a_step_loads_only_the_packs_it_passes() {
+        let ids: Vec<String> = (0..20).map(|at| format!("p{at:02}")).collect();
+        let mut with_a_refusal: Vec<String> = ids.clone();
+        with_a_refusal[6] = "!p06".to_owned();
+        for (shelf_ids, current, direction, wanted) in [
+            (&ids, "p05", Direction::Next, vec!["p06"]),
+            (&ids, "p05", Direction::Previous, vec!["p04"]),
+            (&with_a_refusal, "p05", Direction::Next, vec!["p06", "p07"]),
+            (&ids, "gone", Direction::Previous, vec!["p19"]),
+        ] {
+            let borrowed: Vec<&str> = shelf_ids.iter().map(String::as_str).collect();
+            let format = Marked::default();
+            let _ = neighbour(&marked(&borrowed), &format, current, direction);
+            assert_eq!(
+                *format.checked.borrow(),
+                wanted,
+                "from {current} {direction:?}"
+            );
+        }
+    }
+
+    /// The canary of the test above: the listing it replaced for the step
+    /// checks every pack, and the count tells the two apart.
+    #[test]
+    fn a_listing_loads_every_pack_and_the_count_says_so() {
+        let ids: Vec<String> = (0..20).map(|at| format!("p{at:02}")).collect();
+        let borrowed: Vec<&str> = ids.iter().map(String::as_str).collect();
+        let format = Marked::default();
+        let _ = list_packs(&marked(&borrowed), &format).expect("the shelf can be listed");
+        assert_eq!(format.checked.borrow().len(), 20);
     }
 }
