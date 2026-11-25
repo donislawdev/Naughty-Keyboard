@@ -19,9 +19,12 @@
 //!
 //! # What runs where
 //!
-//! All of it on the MAIN thread, like `focus`. The worker asks for the window
-//! through the palette's `open-packs` callback and learns the choice through
-//! [`Command`]. The pack in use comes the other way, through [`InUse`].
+//! All of it on the MAIN thread, like `focus` - but the reading of the packs,
+//! which `packs/reading.rs` does on a helper thread, so that a team folder on
+//! a share that answers slowly does not freeze the window and the palette with
+//! it. The worker asks for the window through the palette's `open-packs`
+//! callback and learns the choice through [`Command`]. The pack in use comes
+//! the other way, through [`InUse`].
 //!
 //! # What is decided here, and what is not
 //!
@@ -69,24 +72,28 @@
 //! (`OBS-154`). So the constructor builds the tree before the loop starts: see
 //! `build_before_the_loop`.
 
+mod reading;
+
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::mpsc::Sender;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
+use nkb_adapters::LentFocus;
 use nkb_adapters::i18n::{self, Environment, FoldersLabel, PacksLabel, Startup};
-use nkb_adapters::{LentFocus, SystemClock, TomlPackFormat};
-use nkb_app::Clock;
-use nkb_app::{Ended, list_packs};
+use nkb_app::Ended;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::focus::{HANDLE_WAIT, POLL, window_handle};
-use crate::live::{Command, InUse, in_use_now};
+use crate::live::{Command, InUse};
 use crate::on_request;
 use crate::pack_folders::{FolderLink, HandedOver, SharedFolders};
 use crate::picker::{Chosen, Folding, PackPicker, Row, RowKind};
 use crate::query::{KeyPress, Pressed};
 use crate::{HintRow, PacksWindow, PickRow};
+
+pub use reading::LIST_WAIT;
+use reading::Shown;
 
 /// Moving the keyboard to the pack window and back.
 ///
@@ -161,9 +168,14 @@ impl Keyboard for SystemKeyboard {
 /// The pack window and what it shows while it is open.
 pub struct Packs {
     window: PacksWindow,
-    /// `Some` while the window is open. Built fresh on every opening, so the
+    /// `Some` while the window is open. Read fresh on every opening, so the
     /// list says what is on disk now and the query starts empty.
-    picker: RefCell<Option<PackPicker>>,
+    shown: RefCell<Option<Shown>>,
+    /// How many openings had to wait for their list - the number of the last.
+    openings: Cell<u64>,
+    /// How long an opening waits for its list: [`LIST_WAIT`], or what a test
+    /// sets.
+    list_wait: Cell<Duration>,
     keyboard: Box<dyn Keyboard>,
     commands: Sender<Command>,
     in_use: InUse,
@@ -205,7 +217,9 @@ impl Packs {
         build_before_the_loop(window.window());
         let packs = Rc::new(Self {
             window,
-            picker: RefCell::new(None),
+            shown: RefCell::new(None),
+            openings: Cell::new(0),
+            list_wait: Cell::new(LIST_WAIT),
             keyboard,
             commands,
             in_use,
@@ -309,7 +323,7 @@ impl Packs {
     /// Whether the window is open.
     #[must_use]
     pub fn is_open(&self) -> bool {
-        self.picker.borrow().is_some()
+        self.shown.borrow().is_some()
     }
 
     /// Opens the window on the pack in use, or brings it back to the front.
@@ -323,31 +337,12 @@ impl Packs {
     pub fn open(self: &Rc<Self>) {
         if !self.is_open() {
             self.keyboard.remember();
-            let now = in_use_now(&self.in_use);
-            let folders = self.folders.borrow().clone();
-            let listing = list_packs(&folders.catalogue(), &TomlPackFormat);
-            let notes = listing.as_ref().map_or_else(
-                |_| Vec::new(),
-                |listing| i18n::catalogue_notes(&listing.coverage, &folders),
-            );
-            let picker = PackPicker::new(
-                listing,
-                SystemClock.today(),
-                now.pack.as_deref(),
-                now.next.as_deref(),
-            )
-            .with_limit(now.made)
-            .with_notes(notes)
-            .with_restart_key(now.restart.map(i18n::chord))
-            .with_recent(&now.recent);
-            self.window.set_notes(strings(picker.notes()));
-            *self.picker.borrow_mut() = Some(picker);
-            self.show_list();
+            self.read();
         }
         // On every opening, the first and the next ones alike: a window that
         // never got the keyboard can be minimized while it stays open.
         if let Err(error) = on_request::bring_up(self.window.window()) {
-            *self.picker.borrow_mut() = None;
+            *self.shown.borrow_mut() = None;
             (self.say)(i18n::startup_failure(
                 Startup::WindowFailed,
                 &error.to_string(),
@@ -374,7 +369,7 @@ impl Packs {
             (self.say)(i18n::environment(Environment::FocusNotReturned, &reason));
         }
         let _ = self.window.hide();
-        *self.picker.borrow_mut() = None;
+        *self.shown.borrow_mut() = None;
     }
 
     /// What opens the pack folders window from this one's link.
@@ -390,7 +385,7 @@ impl Packs {
             return;
         };
         self.handed_over.set(self.keyboard.pass_on());
-        *self.picker.borrow_mut() = None;
+        *self.shown.borrow_mut() = None;
         let _ = self.window.hide();
         open();
         *self.open_folders.borrow_mut() = Some(open);
@@ -440,7 +435,7 @@ impl Packs {
         if !self.is_open() {
             return;
         }
-        *self.picker.borrow_mut() = None;
+        *self.shown.borrow_mut() = None;
         let _ = self.window.hide();
     }
 
@@ -455,7 +450,7 @@ impl Packs {
         if !on_request::has_left(self.window.window()) {
             return;
         }
-        *self.picker.borrow_mut() = None;
+        *self.shown.borrow_mut() = None;
         on_request::hide_once_left(
             self,
             |packs| !packs.is_open(),
@@ -496,9 +491,13 @@ impl Packs {
         }
     }
 
+    /// A key press for the query - kept for the list while it is still
+    /// being read.
     fn press(&self, press: KeyPress<'_>) -> bool {
-        let Some(pressed) = self.with_picker(|picker| picker.press(press)) else {
-            return false;
+        let pressed = match self.shown.borrow_mut().as_mut() {
+            Some(Shown::Picking(picker)) => picker.press(press),
+            Some(Shown::Reading { query, .. }) => query.press(press),
+            None => return false,
         };
         if pressed == Pressed::Changed {
             self.show_list();
@@ -570,15 +569,32 @@ impl Packs {
         self.close();
     }
 
+    /// Acts on the list - `None` while there is none: the window is closed,
+    /// or its packs are still being read.
     fn with_picker<T>(&self, act: impl FnOnce(&mut PackPicker) -> T) -> Option<T> {
-        self.picker.borrow_mut().as_mut().map(act)
+        match self.shown.borrow_mut().as_mut() {
+            Some(Shown::Picking(picker)) => Some(act(picker)),
+            Some(Shown::Reading { .. }) | None => None,
+        }
     }
 
-    /// The query, the rows and everything that follows them.
+    /// The query, the rows and everything that follows them - or, while the
+    /// packs are being read, the query and the sentence that says so.
     fn show_list(&self) {
-        let picker = self.picker.borrow();
-        let Some(picker) = picker.as_ref() else {
-            return;
+        let shown = self.shown.borrow();
+        let picker = match shown.as_ref() {
+            Some(Shown::Picking(picker)) => picker,
+            Some(Shown::Reading { query, .. }) => {
+                self.window.set_query(query.as_str().into());
+                self.window
+                    .set_rows(ModelRc::new(VecModel::from(Vec::<PickRow>::new())));
+                self.window.set_selected(-1);
+                self.window.set_summary(SharedString::new());
+                self.window
+                    .set_empty_text(i18n::packs_label(PacksLabel::Reading).into());
+                return;
+            }
+            None => return,
         };
         self.window.set_query(picker.query().into());
         self.window.set_rows(ModelRc::new(VecModel::from(
@@ -592,7 +608,7 @@ impl Packs {
     /// The selection alone - the rows stay as they are, and so does the
     /// list's scroll position.
     fn show_selected(&self) {
-        if let Some(picker) = self.picker.borrow().as_ref() {
+        if let Some(Shown::Picking(picker)) = self.shown.borrow().as_ref() {
             self.window.set_selected(selected(picker));
         }
     }

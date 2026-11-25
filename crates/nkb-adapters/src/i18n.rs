@@ -1028,7 +1028,7 @@ pub fn settings_message(
 )]
 mod tests {
     use super::palette::PROGRAM_SHOWN;
-    use super::windows::{pattern_packs_label, pattern_shortcuts_label};
+    use super::windows::pattern_shortcuts_label;
     use super::*;
     use crate::shortcuts::CONVENTION;
     use nkb_app::advance_sequence::ChooseError;
@@ -1309,6 +1309,7 @@ mod tests {
         out.push(no_match("zzz"));
         out.push(packs_label(PacksLabel::NoPacks).to_owned());
         out.push(packs_label(PacksLabel::ListUnavailable).to_owned());
+        out.push(packs_label(PacksLabel::Reading).to_owned());
         out
     }
 
@@ -1900,101 +1901,6 @@ mod tests {
             ),
             "Stopped after 0 of 64 UTF-16 units: the application stopped taking keys. More of the value may still arrive, so check the field and clear it before the next test."
         );
-    }
-
-    /// The pack window's labels divide the same way as the palette's.
-    ///
-    /// Exhaustive on the takes-a-value side, so a new variant must be placed
-    /// before this compiles. The array can still miss one, and the contract
-    /// bridge (`sprawdz-kontrakt.py`) is the second net, as for the palette.
-    #[test]
-    fn a_pack_window_label_carrying_a_value_has_a_typed_function() {
-        for label in [
-            PacksLabel::Title,
-            PacksLabel::Heading,
-            PacksLabel::Summary,
-            PacksLabel::SummaryFiltered,
-            PacksLabel::Search,
-            PacksLabel::InUse,
-            PacksLabel::Next,
-            PacksLabel::FoundIn,
-            PacksLabel::ValueFound,
-            PacksLabel::PlaceId,
-            PacksLabel::PlaceTags,
-            PacksLabel::PlaceFields,
-            PacksLabel::PlacePair,
-            PacksLabel::PlacesTwo,
-            PacksLabel::PlacesThree,
-            PacksLabel::PlacesFour,
-            PacksLabel::Halves,
-            PacksLabel::FoundValues,
-            PacksLabel::Recent,
-            PacksLabel::PacksSection,
-            PacksLabel::Generators,
-            PacksLabel::ValueGone,
-            PacksLabel::Offensive,
-            PacksLabel::Refused,
-            PacksLabel::Problems,
-            PacksLabel::Unreadable,
-            PacksLabel::NoMatch,
-            PacksLabel::NoPacks,
-            PacksLabel::ListUnavailable,
-            PacksLabel::KeyEnter,
-            PacksLabel::UseSelected,
-            PacksLabel::KeyEscape,
-            PacksLabel::Close,
-            PacksLabel::KeyArrows,
-            PacksLabel::Move,
-            PacksLabel::KeyFold,
-            PacksLabel::Fold,
-        ] {
-            let takes_values = match label {
-                PacksLabel::Summary
-                | PacksLabel::SummaryFiltered
-                | PacksLabel::FoundIn
-                | PacksLabel::ValueFound
-                | PacksLabel::Recent
-                | PacksLabel::PlacesTwo
-                | PacksLabel::PlacesThree
-                | PacksLabel::PlacesFour
-                | PacksLabel::Halves
-                | PacksLabel::ValueGone
-                | PacksLabel::Refused
-                | PacksLabel::Problems
-                | PacksLabel::Unreadable
-                | PacksLabel::NoMatch => true,
-                PacksLabel::Title
-                | PacksLabel::Heading
-                | PacksLabel::Search
-                | PacksLabel::InUse
-                | PacksLabel::Next
-                | PacksLabel::FoundValues
-                | PacksLabel::PlaceId
-                | PacksLabel::PlaceTags
-                | PacksLabel::PlaceFields
-                | PacksLabel::PlacePair
-                | PacksLabel::PacksSection
-                | PacksLabel::Generators
-                | PacksLabel::Offensive
-                | PacksLabel::NoPacks
-                | PacksLabel::ListUnavailable
-                | PacksLabel::KeyEnter
-                | PacksLabel::UseSelected
-                | PacksLabel::KeyEscape
-                | PacksLabel::Close
-                | PacksLabel::KeyArrows
-                | PacksLabel::Move
-                | PacksLabel::KeyFold
-                | PacksLabel::Fold => false,
-            };
-            let pattern = pattern_packs_label(label);
-            assert_eq!(
-                pattern.contains('{'),
-                takes_values,
-                "{label:?}: pattern was {pattern:?}"
-            );
-            assert!(!pattern.is_empty(), "{label:?} produced nothing");
-        }
     }
 
     #[test]

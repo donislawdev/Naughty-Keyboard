@@ -856,3 +856,29 @@ fn the_generators_stand_under_a_heading_of_their_own() {
         path.display()
     );
 }
+
+/// The urgent report's point 9: the window shows before its packs are read
+/// when reading them takes longer than a moment. The sentence stands where the
+/// list will, under the query typed so far, and no count stands under it - a
+/// count of nothing would say the catalogue is empty.
+#[test]
+fn the_window_reading_its_packs_says_so_where_the_list_will_be() {
+    let surface = offscreen::start(WIDTH, HEIGHT);
+    let window = PacksWindow::new().expect("the pack window must build");
+    fill(&window, Vec::new());
+    window.set_selected(-1);
+    window.show().expect("the pack window must show");
+    let found_nothing = offscreen::draw(&surface, WIDTH, HEIGHT);
+
+    window.set_summary("".into());
+    window.set_empty_text(
+        "Reading the packs. A pack folder on a network share can take a few seconds.".into(),
+    );
+    let reading = offscreen::draw(&surface, WIDTH, HEIGHT);
+    let reading_path = offscreen::save(&reading, WIDTH, HEIGHT, "packs-reading.png");
+    assert!(
+        reading != found_nothing,
+        "the window reading its packs looks like one that found nothing. Look at {}",
+        reading_path.display()
+    );
+}

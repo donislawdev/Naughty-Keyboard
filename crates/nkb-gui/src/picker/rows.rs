@@ -86,6 +86,26 @@ pub(super) fn choice_of(entry: &PackEntry, today: Day) -> PackChoice {
     }
 }
 
+/// The one pill of a value row: "next" over "offensive" - the palette's next
+/// band already marks the risk of the next value.
+pub(super) fn value_badge(choice: &ValueChoice, is_next: bool) -> Option<Badge> {
+    if is_next {
+        Some(Badge {
+            text: i18n::packs_label(PacksLabel::Next).to_owned(),
+            risky: false,
+            current: true,
+        })
+    } else if choice.offensive {
+        Some(Badge {
+            text: i18n::packs_label(PacksLabel::Offensive).to_owned(),
+            risky: true,
+            current: false,
+        })
+    } else {
+        None
+    }
+}
+
 /// A pack is offensive when it says so, or when any one of its values does.
 fn is_offensive(pack: &Pack) -> bool {
     pack.risk == Risk::Offensive

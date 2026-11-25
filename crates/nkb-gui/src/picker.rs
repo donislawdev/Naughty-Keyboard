@@ -97,7 +97,7 @@ mod rows;
 
 use haystack::{Haystack, words_of};
 use limit::{LimitRow, Place};
-use rows::choice_of;
+use rows::{choice_of, value_badge};
 
 /// One pack as the window offers it.
 #[derive(Debug, Clone)]
@@ -398,17 +398,36 @@ impl PackPicker {
     pub fn press(&mut self, press: KeyPress<'_>) -> Pressed {
         let pressed = self.query.press(press);
         if pressed == Pressed::Changed {
-            let kept = self.selected_item();
-            self.filter();
-            // A number is most likely a limit: its row is the one Enter takes,
-            // whatever else the digits find (`D178`).
-            let suggested = LimitRow::suggested(self.query.as_str())
-                .and_then(|_| self.visible.iter().position(|&at| at == Item::Limit));
-            self.selected = suggested
-                .or_else(|| kept.and_then(|item| self.position_or_parent(item)))
-                .or_else(|| self.first_enabled());
+            self.requery();
         }
         pressed
+    }
+
+    /// The same picker with `query` typed already - what the tester typed
+    /// while the window was still reading the packs (the urgent report's
+    /// point 9). The list and the selection are what one press bringing the
+    /// whole query would have made of them.
+    #[must_use]
+    pub fn with_query(mut self, query: Query) -> Self {
+        if query != self.query {
+            self.query = query;
+            self.requery();
+        }
+        self
+    }
+
+    /// Filters the list again for a query that changed, and selects the row
+    /// the change leads to.
+    fn requery(&mut self) {
+        let kept = self.selected_item();
+        self.filter();
+        // A number is most likely a limit: its row is the one Enter takes,
+        // whatever else the digits find (`D178`).
+        let suggested = LimitRow::suggested(self.query.as_str())
+            .and_then(|_| self.visible.iter().position(|&at| at == Item::Limit));
+        self.selected = suggested
+            .or_else(|| kept.and_then(|item| self.position_or_parent(item)))
+            .or_else(|| self.first_enabled());
     }
 
     /// Moves the selection down, past rows that cannot be chosen. Stays on the
@@ -908,26 +927,6 @@ impl PackPicker {
 
     fn selected_item(&self) -> Option<Item> {
         self.selected.map(|at| self.visible[at])
-    }
-}
-
-/// The one pill of a value row: "next" over "offensive" - the palette's next
-/// band already marks the risk of the next value.
-fn value_badge(choice: &ValueChoice, is_next: bool) -> Option<Badge> {
-    if is_next {
-        Some(Badge {
-            text: i18n::packs_label(PacksLabel::Next).to_owned(),
-            risky: false,
-            current: true,
-        })
-    } else if choice.offensive {
-        Some(Badge {
-            text: i18n::packs_label(PacksLabel::Offensive).to_owned(),
-            risky: true,
-            current: false,
-        })
-    } else {
-        None
     }
 }
 
